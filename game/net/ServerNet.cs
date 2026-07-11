@@ -49,7 +49,7 @@ public sealed class ServerNet : IDisposable
     private readonly GameWorld _world;
     private readonly string _serverName;
 
-    // S5 (sv_threaded, default OFF): the cross-thread serialisation gate for the listen/host worker-thread path.
+    // S5 (sv_threaded, DEFAULT ON since 2026-07-11): the cross-thread serialisation gate for the listen/host worker-thread path.
     // NULL by default (single-threaded) — when null Tick runs with NO lock, byte-for-byte as today. The host
     // installs a shared lock object here AND takes the SAME object around the main thread's prediction span in
     // NetGame._Process; the ServerThread worker's Tick then locks it, so the sim and the main-thread prediction
@@ -119,7 +119,10 @@ public sealed class ServerNet : IDisposable
 
     // Small stable per-player net ids (humans AND bots), decoupled from the large/random ENet peer id and kept
     // below EntityNetBase so the player and non-player id spaces never collide.
-    private readonly Dictionary<Player, int> _playerNetIds = new(ReferenceEqualityComparer.Instance);
+    // WS1 stage 3: ConcurrentDictionary — NetGame.LocalServerPlayer resolves PlayerByNetId from the RENDER
+    // thread while the sim worker assigns/removes ids on join/leave; a plain Dictionary enumerated mid-resize
+    // is undefined. Single logical writer (the sim thread); render-side readers are enumeration/TryGetValue.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Player, int> _playerNetIds = new(ReferenceEqualityComparer.Instance);
     private int _nextPlayerNetId = 1;
     private float[] _moveVars = System.Array.Empty<float>();         // this tick's movement cvars
     private uint _moveVarsHash;
@@ -172,6 +175,7 @@ public sealed class ServerNet : IDisposable
     private readonly List<IPEndPoint> _masters = new();
     private float _heartbeatAccum;
     private const float HeartbeatInterval = 180f; // DP re-registers every ~3 minutes
+    private float _masterPollAccum; // wall time since the last master pump (WS4: pumped on tick frames + a 0.25s pause fallback)
 
     /// <summary>An origin jump beyond this in a single tick is a teleport/respawn, not movement → set the teleport bit
     /// so the client snaps instead of lerping (normal play moves &lt;~20u/tick at 72 Hz).</summary>
@@ -421,34 +425,115 @@ public sealed class ServerNet : IDisposable
     //  WHICH thread touches the Godot objects. This is strictly more faithful to S5's stated intent.
     // =====================================================================================
 
-    /// <summary>WORKER thread: advance the authoritative sim under the gate. NO Godot transport here.</summary>
+    /// <summary>WORKER thread: advance the authoritative sim under the gate, then ENCODE the fresh state into
+    /// the outbox (WS1 stage 1 — the world-reading encode belongs to the world-owning thread; pre-Stage-1 it
+    /// ran on main under the gate, double-loading tick frames). NO Godot transport here.</summary>
     public void StepSimThreaded(float realDelta)
     {
         if (_simGate is null) { StepWorld(realDelta); return; } // defensive; threaded path always has the gate
+        // WS1 per-tick gating: the gate is held in SHORT units (inbound drain / each tick via
+        // SimulationLoop.TickGate / encode) instead of one hold across the whole step — a render-thread
+        // per-trace reader now waits at most one unit, never a multi-tick catch-up + encode.
         lock (_simGate)
         {
-            // Drain main→server commands (chat / bot_add/remove / changelevel) on the thread that owns the world.
+            // WS1 stage 2: process the transport events main marshaled over (connect → handshake → input, in
+            // arrival order), THEN the main→server command actions (chat / bot_add / changelevel), so this
+            // thread is the only one that ever touches peers/world.
+            while (_inboundNet.TryDequeue(out (InboundKind Kind, int Peer, int Channel, byte[]? Data) ev))
+            {
+                switch (ev.Kind)
+                {
+                    case InboundKind.Packet: OnPacketCore(ev.Peer, ev.Channel, ev.Data!); break;
+                    case InboundKind.Connected: OnPeerConnectedCore(ev.Peer); break;
+                    case InboundKind.Disconnected: OnPeerDisconnectedCore(ev.Peer); break;
+                }
+            }
             while (_inbound.TryDequeue(out Action? a)) a();
-            int ticksRan = StepWorld(realDelta);
-            if (ticksRan > 0) _pendingBroadcast = true; // main's PumpTransportThreaded sends the fresh state
+        }
+        int ticksRan = StepWorld(realDelta); // each tick locks the gate itself (SimulationLoop.TickGate)
+        if (ticksRan > 0)
+        {
+            lock (_simGate)
+                using (Prof.Sample("net.send")) EncodeGameState(); // → SendPacket stages (OnSimWorker)
+            System.Threading.Interlocked.Exchange(ref _pendingBroadcastFlag, 1); // flush/master cadence signal
         }
     }
 
-    /// <summary>MAIN thread (threaded path): service the Godot transport under the gate — receive input the
-    /// worker's next StepSim will consume, and send the snapshot of whatever the worker last produced.</summary>
+    /// <summary>MAIN thread (threaded path): pure Godot transport work, NO sim gate anywhere on the common
+    /// path (WS1 stages 2+3) — Poll's handlers only enqueue (the worker processes them), staged packets drain
+    /// to the ENet peer lock-free, and only the rare master-server pump (probe answers read world info) takes
+    /// the gate, on the WS4 cadence. The render thread never waits on a mid-flight sim tick here.</summary>
     public void PumpTransportThreaded(float realDelta)
     {
         if (_simGate is null) return;
-        lock (_simGate) // reentrant: NetGame._Process already holds it across the prediction span
+        TransportReceive(); // handlers marshal to _inboundNet — no world access on this thread
+        bool advanced = System.Threading.Interlocked.Exchange(ref _pendingBroadcastFlag, 0) != 0;
+
+        _masterPollAccum += realDelta;
+        if (advanced || _masterPollAccum >= 0.25f)
         {
-            TransportReceive();
-            bool advanced = _pendingBroadcast;
-            _pendingBroadcast = false;
-            TransportSend(realDelta, advanced);
+            // Gate ONLY when a master link exists (probe answers read world info via BuildServerInfo). An
+            // unregistered LAN listen server (_master null — the common case) must never block the render
+            // thread behind a worker tick for what would be a no-op pump.
+            if (_master is not null)
+                lock (_simGate)
+                    PumpMasterServer(_masterPollAccum);
+            _masterPollAccum = 0f;
         }
+
+        bool sent = DrainOutbox();
+        if (sent)
+            using (Prof.Sample("net.flush")) _transport.Flush();
     }
 
-    private bool _pendingBroadcast; // worker sets when the sim advanced; main consumes when it sends. Gate-guarded.
+    private int _pendingBroadcastFlag; // worker sets when it encoded fresh state (Interlocked; flush/master cadence)
+
+    // ---- WS1 stage 1 (variance program 2026-07-11): worker-side snapshot ENCODE -----------------------
+    // The per-peer encode (BroadcastSnapshots + the Send* world-readers + event bundles) reads world state,
+    // so it belongs on the thread that OWNS the world. Pre-Stage-1 it ran on MAIN under the gate — every
+    // tick-frame paid sim (worker) + encode (main) serialised back-to-back, and a long tick stalled the
+    // render thread at the gate before it could even send. Now the WORKER encodes right after its ticks
+    // (already under its gate hold, world consistent), staging finished packets here; the MAIN thread hands
+    // them to the Godot ENet peer (main-thread-affine) with NO gate. Pooled copies: the encode writers are
+    // reused per peer, so the staged bytes must own their memory.
+    /// <summary>Set on the sim worker (ServerThread.Run): sends stage into the outbox instead of touching
+    /// the main-thread-affine Godot transport. Main-thread sends (handshake replies, the whole unthreaded
+    /// path) pass straight through.</summary>
+    [ThreadStatic] internal static bool OnSimWorker;
+
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(int Peer, byte[] Buf, int Len, bool Reliable)> _outbox = new();
+
+    /// <summary>Every ServerNet send funnels here (the 17 former direct <c>_transport.Send</c> sites).</summary>
+    private void SendPacket(int peerId, ReadOnlySpan<byte> payload, bool reliable)
+    {
+        if (!OnSimWorker)
+        {
+            _transport.Send(peerId, payload, reliable);
+            return;
+        }
+        byte[] buf = System.Buffers.ArrayPool<byte>.Shared.Rent(payload.Length);
+        payload.CopyTo(buf);
+        _outbox.Enqueue((peerId, buf, payload.Length, reliable));
+    }
+
+    /// <summary>MAIN thread: hand worker-staged packets to the Godot transport. Lock-free vs the worker
+    /// (ConcurrentQueue); per-peer FIFO order is preserved. Returns true when anything was sent.</summary>
+    private bool DrainOutbox()
+    {
+        bool any = false;
+        while (_outbox.TryDequeue(out (int Peer, byte[] Buf, int Len, bool Reliable) p))
+        {
+            // Drop packets staged for a peer that disconnected in the marshaling window (ENet spams a native
+            // "Invalid target peer" error otherwise). _livePeerIds is main-thread-owned, same thread as here.
+            if (_livePeerIds.Contains(p.Peer))
+            {
+                _transport.Send(p.Peer, new ReadOnlySpan<byte>(p.Buf, 0, p.Len), p.Reliable);
+                any = true;
+            }
+            System.Buffers.ArrayPool<byte>.Shared.Return(p.Buf);
+        }
+        return any;
+    }
 
     /// <summary>Receive handshakes + input frames (fills each peer's input queue). GODOT TRANSPORT — main thread
     /// only on the threaded path.</summary>
@@ -466,6 +551,26 @@ public sealed class ServerNet : IDisposable
         // (replicated) value so prediction stays in lockstep — the time-mapping that makes movement fps-independent.
         _world.Simulation.TimeScale = ResolveSlowmo(_world.Services.Cvars);
 
+        // DP overload semantics (frametime parity audit 2026-07-11), read live for in-session A/B:
+        //   sv_overload_timedrop 1 (default) — cap the owed-tick backlog at DP's 0.1 s and SHED the excess
+        //     (sv_main.c:2604 / perf_acc_lost): sustained overload becomes brief uniform slow-motion instead of
+        //     burst catch-up ticks spiking the already-slow frames (the r16 cost-wave oscillator). 0 = legacy
+        //     preserve-and-burst (spiral guard only).
+        //   sv_catchup_wallbudget_ms (default 0 = off) — stop starting catch-up ticks once a frame has spent this
+        //     much wall time ticking (DP aborttime, sv_main.c:2676; the first owed tick always runs). Kept as an
+        //     opt-in knob: the 2026-07-11 playtest found no felt benefit and timedrop + the soft cap already
+        //     bound catch-up cost.
+        var cv = _world.Services.Cvars;
+        // The engine keeps wall-clock APIs out of the sim source (DeterminismTests) — the host injects the clock.
+        _world.Simulation.WallClock ??= static () =>
+            System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+        _world.Simulation.BacklogDropSeconds =
+            (string.IsNullOrWhiteSpace(cv.GetString("sv_overload_timedrop")) || cv.GetFloat("sv_overload_timedrop") != 0f)
+                ? 0.1f : 0f;
+        string budgetMs = cv.GetString("sv_catchup_wallbudget_ms");
+        _world.Simulation.CatchupWallBudgetSeconds =
+            (string.IsNullOrWhiteSpace(budgetMs) ? 0f : MathF.Max(0f, cv.GetFloat("sv_catchup_wallbudget_ms"))) / 1000f;
+
         // The world runs its fixed ticks, pulling each client's queued input via ProvideInput and firing
         // effect/notification emissions into our sinks. ticksRan == 0 when the host renders faster than 72 Hz.
         int ticksRan = _world.Frame(realDelta);
@@ -475,7 +580,12 @@ public sealed class ServerNet : IDisposable
         // Observer/join lifecycle: a human connects as an OBSERVER (ClientConnect → TRANSMUTE(Observer)) and only
         // enters the match via Join — on +jump/+attack or the delayed autojoin. The headless world doesn't drive
         // this on the real-client path, so we run it here per accepted peer from its last input. (Bots autojoin.)
-        DriveObserverJoins();
+        // WS1 per-tick gating: this MUTATES the world (join → spawn), and StepWorld no longer runs under one big
+        // gate hold — take a short hold of its own when threaded (null gate = unthreaded, lock-free as before).
+        if (_simGate is { } g)
+            lock (g) DriveObserverJoins();
+        else
+            DriveObserverJoins();
         return ticksRan;
     }
 
@@ -490,8 +600,25 @@ public sealed class ServerNet : IDisposable
         return v < 0f ? 0f : v;
     }
 
+    /// <summary>Encode + queue one game-state update per peer: the snapshot, the per-peer side channels, and
+    /// the event bundles. READS WORLD STATE — call only on the thread that owns the world at the time (the
+    /// main thread on the unthreaded path; the WORKER, under its gate hold, on the threaded path — WS1 stage 1).
+    /// All sends route through <see cref="SendPacket"/>, which stages to the outbox on the worker.</summary>
+    private void EncodeGameState()
+    {
+        BroadcastSnapshots();
+        SendMinigameState(); // [T38] push per-peer minigame session snapshots (reliable channel)
+        SendMatchState();    // global match clock (GAMESTARTTIME/TIMELIMIT/warmup) → TIMER panel
+        SendMapVote();       // per-peer end-of-match map/gametype ballot (QC ENT_CLIENT_MAPVOTE) → MapVotePanel
+        SendWaypoints(); // per-peer waypoint sprites (CTF flags + player pings…) → 3D markers + radar icons
+        SendRadarLinks(); // Onslaught control-point/generator connection lines (QC ENT_CLIENT_RADARLINK) → radar
+        SendItemsTime(); // per-peer item respawn-time table (QC itemstime IT_Write) → ItemsTimePanel countdowns
+        FlushEventBundles();
+    }
+
     /// <summary>Broadcast the snapshot (when the world advanced) + master-server pump + flush. GODOT TRANSPORT —
-    /// main thread only on the threaded path. Reads world state, which the gate keeps consistent vs the worker.</summary>
+    /// unthreaded path only (the threaded path splits this: worker encodes in StepSimThreaded, main sends in
+    /// PumpTransportThreaded). Reads world state.</summary>
     private void TransportSend(float realDelta, bool worldAdvanced)
     {
         // Send one snapshot per client + the shared event bundles, but ONLY when the world actually advanced.
@@ -501,24 +628,28 @@ public sealed class ServerNet : IDisposable
         // after a hitch recover a frame sooner. Events/minigame state are only produced inside a tick.
         using (Prof.Sample("net.send"))
         if (worldAdvanced)
-        {
-            BroadcastSnapshots();
-            SendMinigameState(); // [T38] push per-peer minigame session snapshots (reliable channel)
-            SendMatchState();    // global match clock (GAMESTARTTIME/TIMELIMIT/warmup) → TIMER panel
-            SendMapVote();       // per-peer end-of-match map/gametype ballot (QC ENT_CLIENT_MAPVOTE) → MapVotePanel
-            SendWaypoints(); // per-peer waypoint sprites (CTF flags + player pings…) → 3D markers + radar icons
-            SendRadarLinks(); // Onslaught control-point/generator connection lines (QC ENT_CLIENT_RADARLINK) → radar
-            SendItemsTime(); // per-peer item respawn-time table (QC itemstime IT_Write) → ItemsTimePanel countdowns
-            FlushEventBundles();
-        }
+            EncodeGameState();
 
-        // Master-server registration: answer browser probes + re-heartbeat periodically.
-        PumpMasterServer(realDelta);
+        // Master-server registration: answer browser probes + re-heartbeat periodically. Variance program WS4:
+        // not every render frame — at 144+ fps ~2/3 of frames run 0 ticks and polling the master socket on each
+        // was pure per-frame overhead. Pump on tick frames, with a 0.25s wall fallback so probes still get
+        // answered while the sim is paused (autopause/slowmo 0). The ACCUMULATED delta is passed through so the
+        // ~180s heartbeat keeps wall time across skipped frames.
+        _masterPollAccum += realDelta;
+        if (worldAdvanced || _masterPollAccum >= 0.25f)
+        {
+            PumpMasterServer(_masterPollAccum);
+            _masterPollAccum = 0f;
+        }
 
         // Flush: push the snapshots/bundles queued above onto the wire NOW (send-only) instead of letting them
         // wait for the next Poll(). On the in-process listen loop the client's Poll() later this SAME frame then
         // receives the snapshot, so the fire/knockback the server just simulated reconciles a render-frame sooner.
-        using (Prof.Sample("net.flush")) _transport.Flush();
+        // Variance program WS4: only on tick frames — snapshots/bundles are only queued when the world advanced,
+        // so a 0-tick flush had nothing to push; the rare 0-tick queued reply (a handshake accept from this
+        // frame's TransportReceive) departs on the NEXT frame's Poll (enet service sends too) — ≤1 render frame.
+        if (worldAdvanced)
+            using (Prof.Sample("net.flush")) _transport.Flush();
     }
 
     /// <summary>
@@ -671,7 +802,32 @@ public sealed class ServerNet : IDisposable
     //  Connection lifecycle
     // =====================================================================================
 
+    // ---- WS1 stage 2: inbound marshaling (threaded path) -----------------------------------------------
+    // Transport events fire on MAIN (Godot ENet is polled there), but their handlers mutate peers/world — the
+    // reason main used to take the sim gate to receive, and so could stall behind a mid-flight worker tick.
+    // Now, when threaded, the events just enqueue here (the payload byte[] is already an owned copy from
+    // GetPacket) and the WORKER processes them at the top of its next step, in arrival order (one queue keeps
+    // connect → handshake → input ordering). Replies those handlers send route through SendPacket, which is
+    // already worker-aware (stage 1). Unthreaded: handlers run inline exactly as before.
+    private enum InboundKind : byte { Packet, Connected, Disconnected }
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(InboundKind Kind, int Peer, int Channel, byte[]? Data)> _inboundNet = new();
+
+    // MAIN-thread-owned view of which ENet peer ids are currently live — maintained in the connect/disconnect
+    // handlers (which always fire on main, BEFORE marshaling), consumed by DrainOutbox to drop worker-staged
+    // packets addressed to a peer that disconnected in the marshaling window (ENet rejects the target with a
+    // native "Invalid target peer" error spam otherwise — caught by the 2026-07-11 two-instance test).
+    private readonly HashSet<int> _livePeerIds = new();
+
+    private bool MarshalInbound => _simGate is not null && !OnSimWorker;
+
     private void OnPeerConnected(int peerId)
+    {
+        _livePeerIds.Add(peerId); // main-thread view for the outbox drain filter
+        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Connected, peerId, 0, null)); return; }
+        OnPeerConnectedCore(peerId);
+    }
+
+    private void OnPeerConnectedCore(int peerId)
     {
         // ENet-level connect only — we wait for the client's HandshakeRequest (build-parity) before admitting
         // it as a player. Track the slot so we can attach the player on accept.
@@ -681,13 +837,20 @@ public sealed class ServerNet : IDisposable
 
     private void OnPeerDisconnected(int peerId)
     {
+        _livePeerIds.Remove(peerId); // main-thread view for the outbox drain filter
+        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Disconnected, peerId, 0, null)); return; }
+        OnPeerDisconnectedCore(peerId);
+    }
+
+    private void OnPeerDisconnectedCore(int peerId)
+    {
         if (_peers.Remove(peerId, out PeerState? st) && st.Player is not null)
         {
             _byPlayer.Remove(st.Player);
             _antilag.Remove(st.Player);
             _lastSnapOrigin.Remove(st.Player);
             _statusBlob.Remove(st.Player);
-            _playerNetIds.Remove(st.Player);
+            _playerNetIds.TryRemove(st.Player, out _);
             _world.Commands.ForgetPlayer(st.Player); // drop the per-client replicated-cvar/autoswitch tables
             _world.Clients.ClientDisconnect(st.Player);
             GD.Print($"[ServerNet] peer {peerId} disconnected ({st.Player.NetName}).");
@@ -695,6 +858,12 @@ public sealed class ServerNet : IDisposable
     }
 
     private void OnPacket(int from, int channel, byte[] data)
+    {
+        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Packet, from, channel, data)); return; }
+        OnPacketCore(from, channel, data);
+    }
+
+    private void OnPacketCore(int from, int channel, byte[] data)
     {
         var r = new BitReader(data);
         var control = (NetControl)r.ReadByte();
@@ -817,7 +986,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.Reset();
         _scratchWriter.WriteByte((byte)NetControl.ServerPrint);
         _scratchWriter.WriteString(text);
-        _transport.Send(peerId, _scratchWriter.WrittenSpan, reliable: true);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
     /// <summary>
@@ -834,7 +1003,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.WriteString(text);
         foreach (PeerState st in _peers.Values)
             if (st.Accepted)
-                _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
     // =============================================================================================
@@ -927,7 +1096,7 @@ public sealed class ServerNet : IDisposable
         PatchCount(_scratchWriter, countPos, 1);
         // Use reliable delivery — QC's soundto MSG_ONE goes on the reliable channel so the cue arrives
         // even when unreliable packets are lost. Mirrors SendChatToPlayer's reliable send pattern.
-        _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+        SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
     /// <summary>[T38] Push each changed minigame session's snapshot to its participating peers (QC
@@ -948,7 +1117,7 @@ public sealed class ServerNet : IDisposable
                 _scratchWriter.Reset();
                 _scratchWriter.WriteByte((byte)NetControl.MinigameState);
                 MinigameNetState.EncodeEnvelope(_scratchWriter, s, team);
-                _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
             }
         }
 
@@ -960,7 +1129,7 @@ public sealed class ServerNet : IDisposable
             _scratchWriter.Reset();
             _scratchWriter.WriteByte((byte)NetControl.MinigameState);
             MinigameNetState.EncodeEnvelope(_scratchWriter, null, 0);
-            _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+            SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
         }
     }
 
@@ -1012,7 +1181,7 @@ public sealed class ServerNet : IDisposable
 
         foreach (PeerState st in _peers.Values)   // real network peers (matches BroadcastSnapshots; excludes bots)
             if (st.Accepted && st.Player is not null)
-                _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
     private float _nextMapVoteSend;
@@ -1098,7 +1267,7 @@ public sealed class ServerNet : IDisposable
                 _scratchWriter.WriteString(c.Suggester ?? "");
             }
 
-            _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+            SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
         }
     }
 
@@ -1135,7 +1304,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.WriteString(fog ?? "");
         // QC g_nexball_meter_period (the nexball powershot meter cycle period).
         _scratchWriter.WriteFloat(cvars.GetFloat("g_nexball_meter_period"));
-        _transport.Send(peerId, _scratchWriter.WrittenSpan, reliable: true);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
     /// <summary>Push the item respawn-time table to each peer — the C# port of QC's CSQC <c>itemstime</c> net
@@ -1191,7 +1360,7 @@ public sealed class ServerNet : IDisposable
                 // port's table only ever holds present items, so the reset value is the panel's "hide" sentinel -1.
                 _scratchWriter.WriteFloat(sendFull ? kv.Value : -1f);
             }
-            _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+            SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
         }
     }
 
@@ -1259,7 +1428,7 @@ public sealed class ServerNet : IDisposable
                 _scratchWriter.WriteFloat(wp.MaxDistance);
                 _scratchWriter.WriteBool(wp.Hideable);
             }
-            _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: false);
+            SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: false);
         }
     }
 
@@ -1299,7 +1468,7 @@ public sealed class ServerNet : IDisposable
 
         foreach (PeerState st in _peers.Values)
             if (st.Accepted && st.Player is not null)
-                _transport.Send(st.PeerId, _scratchWriter.WrittenSpan, reliable: false);
+                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: false);
     }
 
     private static byte Clamp255(float c) => (byte)System.Math.Clamp((int)(c * 255f), 0, 255);
@@ -1367,7 +1536,7 @@ public sealed class ServerNet : IDisposable
     /// </summary>
     public void ForgetPlayer(Player p)
     {
-        _playerNetIds.Remove(p);
+        _playerNetIds.TryRemove(p, out _);
         _byPlayer.Remove(p);
         _antilag.Remove(p);
         _lastSnapOrigin.Remove(p);
@@ -1381,7 +1550,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.Reset();
         _scratchWriter.WriteByte((byte)NetControl.HandshakeReject);
         _scratchWriter.WriteString(reason);
-        _transport.Send(peerId, _scratchWriter.WrittenSpan, reliable: true);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
         _transport.Disconnect(peerId);
     }
 
@@ -1411,7 +1580,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.WriteByte((byte)NetControl.HandshakeChallenge);
         _scratchWriter.WriteUShort(st.AuthChallenge.Length);
         _scratchWriter.WriteBytes(st.AuthChallenge);
-        _transport.Send(peerId, _scratchWriter.WrittenSpan, reliable: true);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
     private void HandleAuth(int peerId, ref BitReader r)
@@ -1450,7 +1619,7 @@ public sealed class ServerNet : IDisposable
         // these two strings in this exact order, right after the server name.
         _scratchWriter.WriteString(_world.Services.Cvars.GetString("mapname"));
         _scratchWriter.WriteString(_world.GameType?.RegistryName ?? "dm");
-        _transport.Send(peerId, _scratchWriter.WrittenSpan, reliable: true);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
 
         // [W14a-QW4] QC ClientInit_misc (server/client.qc:907): right after the accept, send the one-shot per-server
         // gameplay-constant bundle (the welcome/accept handshake leg) so a pure remote client has the constants the
@@ -1994,7 +2163,7 @@ public sealed class ServerNet : IDisposable
             // the leading control byte regardless of channel, so this is transparent. Steady-state deltas stay
             // unreliable, so this adds no head-of-line blocking once the first ack shrinks the frame.
             ReadOnlySpan<byte> snapshot = _snapshotWriter.WrittenSpan;
-            _transport.Send(st.PeerId, snapshot, reliable: snapshot.Length > NetProtocol.MaxUnreliablePayload);
+            SendPacket(st.PeerId, snapshot, reliable: snapshot.Length > NetProtocol.MaxUnreliablePayload);
         }
     }
 
@@ -3178,7 +3347,7 @@ public sealed class ServerNet : IDisposable
                 }
                 PatchCount(_eventWriter, cpos, m);
                 if (m > 0)
-                    _transport.Send(st.PeerId, _eventWriter.WrittenSpan, reliable: false);
+                    SendPacket(st.PeerId, _eventWriter.WrittenSpan, reliable: false);
             }
         }
 
@@ -3312,7 +3481,7 @@ public sealed class ServerNet : IDisposable
             }
             PatchCount(_reliableWriter, cpos, n);
             if (n > 0)
-                _transport.Send(st.PeerId, _reliableWriter.WrittenSpan, reliable: true);
+                SendPacket(st.PeerId, _reliableWriter.WrittenSpan, reliable: true);
         }
 
         _notifyQueue.Clear();

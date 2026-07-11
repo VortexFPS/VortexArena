@@ -241,7 +241,9 @@ public sealed partial class NetGame : Node3D
                 if (byId is not null)
                     return byId;
             }
-            foreach (Player p in _serverWorld.Clients.Players)
+            // WS1 stage 3: enumerate the COW roster snapshot — this property is read from the render thread
+            // (HUD mirrors, feeds) while the sim worker may be mutating the live List on a join/leave.
+            foreach (Player p in _serverWorld.Clients.PlayersSnapshot)
                 if (!p.IsBot)
                     return p;
             return null;
@@ -340,10 +342,20 @@ public sealed partial class NetGame : Node3D
     private const float ClockSlewGain = 1.5f;
     private const float ClockSlewMax = 0.05f;
     private const float MaxClockResync = 0.25f;
-    // Slew target sits HALF A TICK behind the newest snapshot so interpolation samples mid-window rather
-    // than riding the f=1 clamp edge (the r16 uninterpolated-remotes finding; pairs with the hard upper
-    // bound at LatestServerTime in _Process).
+    // Slew-target offset behind the newest snapshot (pairs with the hard upper bound at LatestServerTime in
+    // _Process). Frametime parity audit 2026-07-11: Base (cl_nettimesyncboundmode 5, cl_parse.c:3354) targets
+    // cl.mtime[1] — the PREVIOUS snapshot's time, a full MEASURED interval behind newest, so the cushion grows
+    // adaptively exactly when snapshot production runs late (the loaded listen server) and interpolation never
+    // rides the f=1 clamp edge. cl_interp_cushion 1 (default) = that DP parity via _snapInterval; 0 = the r16
+    // half-tick constant bias below (legacy, ~7ms from the edge).
     private const float InterpBias = 0.5f / 72f;
+    // Measured spacing between the last two snapshots (DP cl.mtime[0] - cl.mtime[1]), clamped to [1 tick, 0.1s];
+    // the cl_interp_cushion slew/step target offset. Seeded at one tick until two snapshots have arrived.
+    private float _snapInterval = 1f / 72f;
+
+    /// <summary>How far behind the newest snapshot the render clock aims (see <see cref="InterpBias"/>):
+    /// the measured snapshot interval (DP boundmode-5 parity, default) or the legacy half-tick bias.</summary>
+    private float InterpCushion() => _interpCushionCv ? _snapInterval : InterpBias;
 
     // Fix B: a render frame longer than this (a stall on the shared listen-server thread — GC / heavy map streaming,
     // ~3.6+ ticks) arms the reconciler's post-hitch hold so a transient server-behind correction glides/holds rather
@@ -605,12 +617,14 @@ public sealed partial class NetGame : Node3D
         //     (DP's one engine cvar table). A host's console `set g_balance_…`/physics tweak is then live in the
         //     match with no bridge, and client prediction (also on the shared store) and server authority read
         //     identical values. The menu already loaded the cfg tree into it, so GameWorld.Boot skips the reload.
-        //   • sv_threaded 1 (experimental, non-headless only): keep a PRIVATE per-world store, isolated from the
-        //     main-thread menu/console writes and fed one-way by the bridge below — the sim runs on a worker
-        //     thread, so a shared mutable store would race. sv_threaded is read from the shared store (where the
-        //     menu/console writes it); with no shared store we stay single-threaded + private.
+        //   • sv_threaded 1 (the DEFAULT since 2026-07-11, non-headless only): keep a PRIVATE per-world store,
+        //     isolated from the main-thread menu/console writes and fed one-way by the bridge below — the sim
+        //     runs on a worker thread, so a shared mutable store would race. sv_threaded is read from the shared
+        //     store (where the menu/console writes it; unset → ON); with no shared store (the degenerate bare
+        //     host) we stay single-threaded + private.
         bool wantThreaded =
-            (_sharedCvars is not null && _sharedCvars.Has("sv_threaded") ? _sharedCvars.GetFloat("sv_threaded") : 0f) != 0f
+            _sharedCvars is not null
+            && (!_sharedCvars.Has("sv_threaded") || _sharedCvars.GetFloat("sv_threaded") != 0f)
             && DisplayServer.GetName() != "headless";
         bool unifyStore = _sharedCvars is not null && !wantThreaded;
 
@@ -664,11 +678,12 @@ public sealed partial class NetGame : Node3D
         // console/menu override in the SHARED store wins over the world default (the menu writes there). Threading
         // is GATED to non-headless hosts: a headless dedicated server already keeps the full catch-up cap and has
         // no render frame to unblock, so it stays on the stock single-threaded drive even with sv_threaded 1.
-        // (§13.5) Default OFF (user choice, 2026-06-12). The transport-split fix made a PLAYED threaded
-        // session clean — 0 PREDICTION DESYNC events over ~3 min, 0 errors — so `sv_threaded 1` is now SAFE to
-        // experiment with (it moves the 4-12 ms server tick off the render thread). Kept default-off for now;
-        // flip to 1 to enable. See §13.5.
-        _serverWorld.Services.Cvars.Register("sv_threaded", "0");
+        // (§13.5 → WS1) DEFAULT ON since 2026-07-11 (user decision, after the WS1 rework): the worker owns
+        // tick+ENCODE, the render thread never blocks on the gate on the common path (per-tick holds; the
+        // sv.gatewait_ms counter measures the residue), and the full validation battery is clean (soaks,
+        // mid-match remote joins, 2989 tests). `sv_threaded 0` restores the single-threaded drive (and the
+        // UNIFIED cvar store — see the store-model comment above).
+        _serverWorld.Services.Cvars.Register("sv_threaded", "1");
         // wantThreaded + unifyStore were resolved above (before the world was built) since they pick the
         // cvar-store model; the worker/gate setup below reuses that one decision so the two never disagree.
 
@@ -946,6 +961,14 @@ public sealed partial class NetGame : Node3D
             // threaded soak's NRE storm). Gate every trace entry point on the SAME object; the worker holds it
             // around its whole tick (Monitor is reentrant), the single-threaded default path stays lock-free.
             _serverWorld!.Services.TraceImpl.ConcurrencyGate = _simGate;
+            // WS1 stage 3: the main thread's display/feed reads of the PRIVATE server store (music cdtrack,
+            // endscreen cvars, slowmo autopause…) run ungated against the worker's writes — swap the store to
+            // its thread-safe backing BEFORE the worker exists. The unthreaded default path never pays this
+            // (the plain-Dictionary backing measured 32% faster per tick at 4 players).
+            _serverWorld!.Services.CvarsImpl.EnableConcurrentReads();
+            // WS1 per-tick gating: the worker holds the gate around EACH tick (not the whole step), so a
+            // render-thread per-trace wait is bounded by one tick.
+            _serverWorld!.Simulation.TickGate = _simGate;
             _serverThread = new ServerThread(
                 _serverWorld!, _server!,
                 static () => XonoticGodot.Engine.Simulation.SimulationLoop.TicRate);
@@ -2941,6 +2964,7 @@ public sealed partial class NetGame : Node3D
             // it attached and every retired world would keep re-deriving weapon balance on every future cvar change.
             _serverWorld.Shutdown();
             _serverWorld.Services.TraceImpl.ConcurrencyGate = null;   // traces revert to lock-free
+            _serverWorld.Simulation.TickGate = null;                  // per-tick gating off with the worker gone
         }
         _simGate = null;
         _server?.Dispose();
@@ -2972,6 +2996,8 @@ public sealed partial class NetGame : Node3D
     private int _netTraceTick;             // throttle counter for the net_input_trace log
     private bool _hitchHoldCv = true;      // cl_movement_hitch_hold: Fix B post-hitch stall-aware reconcile (see docs/TROUBLESHOOTING.md)
     private bool _smoothDtCv = true;       // cl_smoothdt: conditioned client-motion dt (the r16 variance fix; see ConditionDt)
+    private bool _interpCushionCv = true;  // cl_interp_cushion: full measured-interval slew target (DP boundmode-5 parity; see InterpBias)
+    private bool _netClockDp5Cv;           // cl_netclock_dp5: DP boundmode-5 stepped correction law instead of the rate slew (A/B)
     private bool _frameGovernorCv = false; // cl_frame_governor: adaptive frame pacing (r16; default OFF — opt-in experiment)
     private bool _clMovementCv = true;     // DP cl_movement: 0 = no client prediction (view rides the server owner state)
     private bool _noLerpCv;                // DP cl_nolerp: 1 = remote entities render raw newest snapshots
@@ -3037,6 +3063,10 @@ public sealed partial class NetGame : Node3D
         _hitchHoldCv = (_sharedCvars?.GetString("cl_movement_hitch_hold") ?? "") != "0";
         // cl_smoothdt defaults ON (unset → on): the r16 conditioned-motion-dt fix; 0 = raw Godot delta (A/B).
         _smoothDtCv = (_sharedCvars?.GetString("cl_smoothdt") ?? "") != "0";
+        // cl_interp_cushion defaults ON (unset → on): DP boundmode-5 full-interval slew target; 0 = half-tick bias.
+        _interpCushionCv = (_sharedCvars?.GetString("cl_interp_cushion") ?? "") != "0";
+        // cl_netclock_dp5 defaults OFF: opt-in A/B of Base's stepped correction law vs the r16 rate slew.
+        _netClockDp5Cv = (_sharedCvars?.GetString("cl_netclock_dp5") ?? "") == "1";
         // cl_frame_governor defaults ON (unset → on): adaptive frame pacing; 0 = off (A/B).
         _frameGovernorCv = (_sharedCvars?.GetString("cl_frame_governor") ?? "0") == "1"; // default OFF (r16: a workaround, not the fix — the variance program is)
         // DP cl_movement (default 1 = client prediction) / cl_nolerp (default 0 = interpolate) — r16 A/B.
@@ -3091,6 +3121,17 @@ public sealed partial class NetGame : Node3D
         float dt = ConditionDt(rawDt);
         FrameGovernor(rawDt); // adaptive frame pacing (r16) — see the method's rationale block
 
+        // WS1 instrumentation: how long the RENDER thread spent waiting on the sim gate last frame (per-trace
+        // ConcurrencyGate acquisitions — prediction/particle/crosshair traces). Read+reset here so the counter
+        // covers a whole frame; attributed one frame late like the other lagged counters. ~0 when unthreaded.
+        if (_serverThread is not null)
+        {
+            double gateWaitMs = XonoticGodot.Engine.Collision.TraceService.GateWaitTicks
+                * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            XonoticGodot.Engine.Collision.TraceService.GateWaitTicks = 0;
+            XonoticGodot.Common.Diagnostics.Prof.Mark("sv.gatewait_ms", gateWaitMs);
+        }
+
         // DP CL_Input: apply the frame's accumulated mouse-look FIRST (raw wall-clock dt — cl.realframetime),
         // so everything below (input sampling, camera, radar) sees this frame's view angles.
         FlushMouseLook(dt);
@@ -3129,18 +3170,23 @@ public sealed partial class NetGame : Node3D
             using (XonoticGodot.Game.Client.FrameProfiler.Scope("server.tick"))
                 _server?.Tick(rawDt); // RAW wall time: the tick accumulator integrates variance harmlessly
 
-        // S5: from here to the end of _Process we read/mutate server-world state (the music/HUD feeds,
-        // LocalServerPlayer, the carrier reconcile) AND run the client prediction replay (inside _client.SendInput
-        // → EntityMovementStep.Step). When threaded, all of that must be serialised against the worker's
-        // ServerNet.Tick, so take the SAME gate the worker locks. A single try/finally spans the whole remainder
-        // (incl. the one early `return` at "_client is null") so the gate is always released. When NOT threaded
-        // (_simGate null) this is a plain pass-through with no lock — byte-for-byte the old path.
-        object? simGate = _simGate;
-        bool simGateTaken = false;
-        try
-        {
-            if (simGate is not null)
-                System.Threading.Monitor.Enter(simGate, ref simGateTaken);
+        // WS1 stage 3 (2026-07-11): the S5 whole-remainder gate span is GONE. It serialised the worker's ticks
+        // against the entire rest of _Process — a long tick stalled the render thread at the Enter, and a long
+        // frame stalled the sim (why sv_threaded never actually flattened frames). What replaced it:
+        //   • transport: stage-2 inbound marshaling (main only Polls; the WORKER processes packets/connects at
+        //     its step top) + the stage-1 worker-encode outbox — PumpTransportThreaded takes no gate on the
+        //     common path;
+        //   • world MUTATIONS from main (bench spectate, host auto-join, map-vote impulse, chat/console sinks)
+        //     ride ServerNet.RunOnSimThread;
+        //   • crash-capable read races closed structurally: CvarService → ConcurrentDictionary,
+        //     ClientManager.PlayersSnapshot (COW roster) for cross-thread enumeration, _playerNetIds →
+        //     ConcurrentDictionary;
+        //   • prediction/particle traces serialise per-trace via TraceService.ConcurrencyGate (waits are
+        //     bounded by the WS-BOT tick budgets, p99 ~2.5ms);
+        //   • the remaining display reads of live Player/world fields (HUD mirrors, feeds, carrier mirroring)
+        //     are tolerated stale/torn-per-field — the SAME class of ungated read the standalone HUD panels
+        //     (scoreboard/radar/NetHud) have always done on the threaded path. Wrong-for-a-frame display data
+        //     self-corrects; the reconcile absorbs a rare odd prediction seed.
 
         // S5 (§13.5): when threaded, the worker runs ONLY the pure-C# sim — the MAIN thread services the Godot
         // ENet transport here (receive the client input the worker's next step consumes; send the snapshot of
@@ -3151,8 +3197,13 @@ public sealed partial class NetGame : Node3D
                 _server?.PumpTransportThreaded(rawDt); // RAW wall time (see the server Tick note above)
 
         // Demo/benchmark camera: keep the host observing a living bot (no-op unless cl_bench_spectate is set;
-        // throttled to 2 Hz). Under the gate — it mutates server-side spectator state.
-        BenchSpectateThink();
+        // throttled to 2 Hz). WS1 stage 3: it MUTATES server-side spectator state — run it on the sim thread
+        // when threaded (RunOnSimThread is inline when not). Its 2 Hz throttle field is then written only by
+        // whichever thread owns the mode — never both.
+        if (_serverThread is null)
+            BenchSpectateThink();
+        else if (BenchSpectateActive)
+            _server?.RunOnSimThread(BenchSpectateThink);
 
         // (perf 2.0) ng.feeds: the music/announcer/host-mutator HUD-feed run — sub-scoped so the ng.process
         // residual shrinks to genuinely-unattributed work (frame-budget decomposition, perf-campaign doc).
@@ -3310,25 +3361,51 @@ public sealed partial class NetGame : Node3D
         // time — frame rate and sim tick batching fully decouple from interpolation speed. Snap only on
         // the FIRST snapshot or a discontinuity beyond MaxClockResync (respawn / level change / a huge
         // hitch). cl_netclock_smooth 0 = the old hard per-snapshot rebase, for A/B.
+        // cl_netclock_dp5 (parity-audit A/B): 1 = Base's exact boundmode-5 STEPPED law, applied per snapshot
+        // arrival below (snap >0.5s / 50% step >0.1s / ±1..2ms creep), free-running at wall rate between
+        // snapshots like DP's cl.time += clframetime. 0 (default) = the r16 continuous rate slew here.
+        bool dp5 = _netClockDp5Cv && _netClockSmoothCv;
         float slew = 0f;
-        if (_lastSeenServerTime >= 0f && _netClockSmoothCv)
-            slew = Math.Clamp((_client.LatestServerTime - InterpBias - _renderClock) * ClockSlewGain,
+        if (_lastSeenServerTime >= 0f && _netClockSmoothCv && !dp5)
+            slew = Math.Clamp((_client.LatestServerTime - InterpCushion() - _renderClock) * ClockSlewGain,
                 -ClockSlewMax, ClockSlewMax);
         _renderClock += dt * slowmo * (1f + slew); // slowmo: stay aligned with the (time-scaled) server clock
         // DP cl_nettimesyncboundmode invariant (r16 trace finding): the clock must NEVER run past the newest
         // snapshot — sampling beyond the interp window clamps the two-snapshot lerp at f=1, rendering every
         // remote entity at its raw newest pose (uninterpolated tick-lumps: the felt combat rubberbanding; the
-        // motion trace measured the clock ~9ms PAST latest on average). Hard upper bound here; the slew above
-        // targets half a tick behind (InterpBias) so typical sampling sits mid-window, and falling far behind
-        // still hard-snaps via MaxClockResync below.
+        // motion trace measured the clock ~9ms PAST latest on average). Hard upper bound here; the slew/step
+        // above targets InterpCushion() behind (default: a full measured snapshot interval, DP mode-5 parity —
+        // the DP-equivalent bound, since Base's target cl.mtime[1] also sits one interval below its window edge
+        // cl.mtime[0]), so this clamp only engages a full cushion past target. Falling far behind still
+        // hard-snaps via MaxClockResync below.
         if (_lastSeenServerTime >= 0f && _renderClock > _client.LatestServerTime)
             _renderClock = _client.LatestServerTime;
         if (_client.LatestServerTime != _lastSeenServerTime)
         {
             bool firstSnapshot = _lastSeenServerTime < 0f;
+            // Measured snapshot spacing (DP cl.mtime[0] - cl.mtime[1]): feeds the cl_interp_cushion full-interval
+            // target, which is what lets the cushion GROW when the loaded listen server produces snapshots late.
+            if (!firstSnapshot)
+                _snapInterval = Math.Clamp(_client.LatestServerTime - _lastSeenServerTime, 1f / 72f, 0.1f);
             _lastSeenServerTime = _client.LatestServerTime;
             float err = _client.LatestServerTime - _renderClock;
-            if (firstSnapshot || !_netClockSmoothCv || MathF.Abs(err) > MaxClockResync)
+            if (firstSnapshot || !_netClockSmoothCv)
+                _renderClock = _client.LatestServerTime;
+            else if (dp5)
+            {
+                // Base cl_nettimesyncboundmode 5, verbatim (cl_parse.c:3354-3361), against the cushioned target
+                // (DP's cl.mtime[1]): snap on a discontinuity, halve big errors per snapshot, else creep at
+                // -2ms/+1ms per snapshot (asymmetric: falls behind faster than it catches up — never overshoots).
+                float target = _client.LatestServerTime - InterpCushion();
+                float terr = _renderClock - target;
+                if (MathF.Abs(terr) > 0.5f)
+                    _renderClock = target;
+                else if (MathF.Abs(terr) > 0.1f)
+                    _renderClock += 0.5f * (target - _renderClock);
+                else
+                    _renderClock = Math.Clamp(target, _renderClock - 0.002f * slowmo, _renderClock + 0.001f * slowmo);
+            }
+            else if (MathF.Abs(err) > MaxClockResync)
                 _renderClock = _client.LatestServerTime;
             // (no per-snapshot step otherwise — the rate slew above owns convergence)
             if (firstSnapshot)
@@ -3380,8 +3457,16 @@ public sealed partial class NetGame : Node3D
                     if (nowMsec >= _hostJoinNextRetryMsec)
                     {
                         _hostJoinNextRetryMsec = nowMsec + 1000f; // bounded: a blocked spawn no-ops, so don't spam
-                        joinWorld.Commands.Execute("join", isServerConsole: false, caller: LocalServerPlayer);
-                        // If the join spawned us this frame, IsObserver is now false → next frame latches done.
+                        // WS1 stage 3: the join MUTATES the world — run it on the sim thread (inline when
+                        // unthreaded). The retry-until-spawned loop already tolerates the deferred execution:
+                        // IsObserver stays true until the worker runs it, so we just retry/latch next frame.
+                        Player? joinCaller = LocalServerPlayer;
+                        if (_server is { } joinSrv)
+                            joinSrv.RunOnSimThread(() =>
+                                joinWorld.Commands.Execute("join", isServerConsole: false, caller: joinCaller));
+                        else
+                            joinWorld.Commands.Execute("join", isServerConsole: false, caller: joinCaller);
+                        // If the join spawned us this frame (unthreaded path), IsObserver is now false → latch.
                         if (LocalServerPlayer is not { IsObserver: true })
                             _hostJoinDone = true;
                     }
@@ -3868,14 +3953,6 @@ public sealed partial class NetGame : Node3D
         // r16 rubberband diagnostic — last so it records this frame's FINAL camera/prediction state.
         MotionTrace(dt, slew);
 
-        } // end try (S5 sim-gate span)
-        finally
-        {
-            // S5: release the sim gate taken at the top of _Process (no-op when not threaded). Always runs, incl.
-            // the early `_client is null` return and any throw in the body above.
-            if (simGateTaken)
-                System.Threading.Monitor.Exit(simGate!);
-        }
     }
 
     // ---- cl_frame_governor (r16): adaptive frame pacing — "reliable frame time while the rate varies" ---
@@ -6155,7 +6232,12 @@ public sealed partial class NetGame : Node3D
         Player? me = LocalServerPlayer;
         if (me is null)
             return;
-        _serverWorld.Commands.Execute($"impulse {index + 1}", isServerConsole: false, caller: me);
+        // WS1 stage 3: world mutation from a main-thread input event — sim thread when threaded (inline when not).
+        GameWorld w = _serverWorld;
+        if (_server is { } srv)
+            srv.RunOnSimThread(() => w.Commands.Execute($"impulse {index + 1}", isServerConsole: false, caller: me));
+        else
+            w.Commands.Execute($"impulse {index + 1}", isServerConsole: false, caller: me);
     }
 
     /// <summary>

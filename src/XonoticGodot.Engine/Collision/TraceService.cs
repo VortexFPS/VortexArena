@@ -126,13 +126,26 @@ public sealed class TraceService : ITraceService
     /// </summary>
     public object? ConcurrencyGate;
 
+    /// <summary>
+    /// WS1 instrumentation: per-thread Stopwatch ticks spent WAITING to acquire <see cref="ConcurrencyGate"/>
+    /// (an uncontended entry adds ~ns; a contended one adds the real wait — at most one worker tick under the
+    /// per-tick gating). NetGame reads+resets the MAIN thread's value each frame into the <c>sv.gatewait_ms</c>
+    /// profiler counter — the number that says whether prediction traces actually stall behind the sim worker.
+    /// Zero-cost on the unthreaded default path (gate null → the clock is never read).
+    /// </summary>
+    [ThreadStatic] public static long GateWaitTicks;
+
     public TraceResult Trace(Vector3 start, Vector3 mins, Vector3 maxs, Vector3 end, MoveFilter filter, Entity? ignore)
     {
         object? gate = ConcurrencyGate;
         if (gate is null)
             return TraceUnlocked(start, mins, maxs, end, filter, ignore);
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (gate)
+        {
+            GateWaitTicks += System.Diagnostics.Stopwatch.GetTimestamp() - t0;
             return TraceUnlocked(start, mins, maxs, end, filter, ignore);
+        }
     }
 
     private TraceResult TraceUnlocked(Vector3 start, Vector3 mins, Vector3 maxs, Vector3 end, MoveFilter filter, Entity? ignore)
@@ -195,8 +208,12 @@ public sealed class TraceService : ITraceService
         object? gate = ConcurrencyGate;
         if (gate is null)
             return PointContentsUnlocked(point);
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (gate)
+        {
+            GateWaitTicks += System.Diagnostics.Stopwatch.GetTimestamp() - t0;
             return PointContentsUnlocked(point);
+        }
     }
 
     private int PointContentsUnlocked(Vector3 point)

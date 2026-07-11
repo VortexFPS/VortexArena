@@ -52,6 +52,17 @@ public abstract class NetTransport : IDisposable
         if (Peer is null)
             return;
 
+        // A DEAD peer (a connect attempt that timed out/was refused, or a torn-down link) isn't pollable —
+        // Godot's ENet layer prints a native "The multiplayer instance isn't currently active" ERROR on every
+        // Poll (the 2026-07-11 join-test storm: a client whose connect expired spammed stderr for its whole
+        // session). Drain the connection events one last time so PeerDisconnected/loss detection still fires,
+        // then go quiet; the host's reconnect logic (ClientNet) re-creates the peer, it never revives this one.
+        if (Peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Disconnected)
+        {
+            DrainConnectionEvents();
+            return;
+        }
+
         Peer.Poll();
 
         DrainConnectionEvents();

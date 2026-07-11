@@ -84,6 +84,17 @@ public sealed class ClientManager
     /// <summary>The connected players (the <see cref="Player"/> view of <see cref="Clients"/>).</summary>
     public IReadOnlyList<Player> Players => _players;
 
+    // WS1 stage 3 (sv_threaded): a copy-on-write roster snapshot for CROSS-THREAD readers. The live _players
+    // List is mutated only on the sim thread (join/leave/bot add-remove); the render thread's display reads
+    // (NetGame.LocalServerPlayer, HUD mirrors) enumerate THIS immutable array instead — a List being resized
+    // mid-foreach throws, an old array is merely one roster-change stale. Rebuilt at the two mutation sites.
+    private volatile Player[] _playersSnapshot = System.Array.Empty<Player>();
+
+    /// <summary>Immutable roster snapshot, safe to enumerate from any thread (may be one change stale).</summary>
+    public Player[] PlayersSnapshot => _playersSnapshot;
+
+    private void RefreshPlayersSnapshot() => _playersSnapshot = _players.ToArray();
+
     /// <summary>QC <c>player_count</c>: how many clients are connected.</summary>
     public int PlayerCount => _clients.Count;
 
@@ -195,6 +206,7 @@ public sealed class ClientManager
         var info = new ClientInfo(p, isBot);
         _clients.Add(info);
         _players.Add(p);
+        RefreshPlayersSnapshot();
 
         // engine sim: clients are simulated first each tick (SimulationLoop.Clients / ClientMove).
         p.Flags |= EntFlags.Client;
@@ -879,6 +891,7 @@ public sealed class ClientManager
 
         _clients.RemoveAt(idx);
         _players.Remove(p);
+        RefreshPlayersSnapshot();
         _sim.Clients.Remove(p);
         _match.RemovePlayer(p);
         _scores.Unregister(p);

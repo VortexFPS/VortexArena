@@ -40,13 +40,10 @@ common/max_physics_steps_per_frame=1
 
 [rendering]
 
-; r16 queue-elasticity EXPERIMENT (the DP-vs-port present difference candidate): Godot's flip-model
-; swapchain queues 2-3 frames; producing faster than the 143Hz compositor consumes makes queue occupancy
-; (= view latency) oscillate continuously - a rubberband MECHANISM that doesn't require DP to be
-; "cheaper", just unqueued (DP presents immediately: GDI copy / immediate flip). Minimal queue = minimal
-; elasticity. Revert both if this regresses throughput.
-rendering_device/vsync/frame_queue_size=1
-rendering_device/vsync/swapchain_image_count=2
+; (r16 ran a minimal-swapchain EXPERIMENT here — frame_queue_size=1 / swapchain_image_count=2, the
+; queue-elasticity candidate. Feel-inconclusive, and a 1-deep queue couples CPU frame time directly to any
+; GPU cost ripple, confounding the variance-elimination measurements — reverted to engine defaults
+; 2026-07-11. History: commit 391396f + planning/frametime-parity-audit-2026-07-11.md.)
 
 textures/default_filters/anisotropic_filtering_level=3
 anti_aliasing/quality/msaa_3d=2

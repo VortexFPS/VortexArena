@@ -106,6 +106,13 @@ public sealed class BotPopulation
     {
         float time = _world.Time;
 
+        // Variance program 2026-07-11: re-arm the per-tick STRATEGY tracewalk budget (see BotTracewalk).
+        // One tick's worth of budgeted walks (seed search + goal rating + straight-shot checks, across ALL
+        // bots) may spend at most this many traces; the overflow reports unreachable and the pass retries on
+        // its normal interval. This is the hard bound that turns the bot-tick tail (Release p99 6.2ms /
+        // max 17.1ms, all strategy walks) into a flat O(budget) cost.
+        BotTracewalk.ResetTickBudget();
+
         // (a) intermission (bot.qc:691-702): after the match ends bots STAY unless every human left — then all
         // bots are dropped (so an abandoned server empties out).
         if (_world.Intermission.Running && _currentBots > 0)

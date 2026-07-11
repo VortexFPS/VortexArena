@@ -32,14 +32,40 @@ public static class BotTracewalk
 
     private enum NavAction { Walk, SwimOnWater, SwimUnderwater }
 
+    // ---- per-tick strategy trace budget (variance program 2026-07-11) ------------------------------------
+    // BUDGETED walks (maxWalkDistance > 0 — strategy-time seed/rating/straight-shot checks) share one pool of
+    // hull traces per server tick, re-armed by BotPopulation.ServerFrame at StartFrame. When the pool runs
+    // dry the remaining budgeted walks report UNREACHABLE: the strategy layer already treats a failed pass as
+    // retry-on-interval (the 2s expire from the melt fixes), so the cost of a hot tick is capped at
+    // ~TickTraceBudget × trace-cost (~1.5ms) instead of an unbounded pass (measured Release tails: 17-19ms).
+    // UNBUDGETED walks (AutoLink graph building, offline tools) never touch the pool. Sim-thread only.
+    // int.MaxValue until first armed: harness/bench callers without a world loop keep full QC behavior.
+    internal const int TickTraceBudget = 96;
+    // Per-WALK iteration cap in budgeted mode: 48 steps ≈ 1536qu of actual walking — full coverage for the
+    // common nearby-seed case (most entry walks are < 750qu ≈ 24 steps), while clipping the expensive failure
+    // mode where a walk WANDERS its whole flat distance before failing arrival (the all-candidates-unreachable
+    // pass: 12 walks × ~70 steps × ~20-80µs/step was the measured 15-18ms bot.seed tail). Unbudgeted mode keeps
+    // the full QC-scale MaxIterations.
+    private const int BudgetedMaxIterations = 48;
+    private static int _tickTracesLeft = int.MaxValue;
+    internal static void ResetTickBudget() => _tickTracesLeft = TickTraceBudget;
+
     /// <summary>
     /// QC <c>tracewalk(e, start, m1, m2, end, end_height, movemode)</c>: can a player hull
     /// (<paramref name="mins"/>/<paramref name="maxs"/>) walk/step/swim from <paramref name="start"/> to
     /// <paramref name="end"/>? <paramref name="endHeight"/> &gt; 0 makes the destination the vertical segment
     /// [end, end + endHeight·z] (a box-waypoint target). Ignores <paramref name="ignore"/> in the traces.
+    ///
+    /// <paramref name="maxWalkDistance"/> &gt; 0 = STRATEGY-BUDGETED mode (variance program, bot-tick tail):
+    /// (1) a target farther than this on the flat is rejected up front — a "direct walk" beyond it is never a
+    /// useful strategy answer (the waypoint router owns long routes), and the full walk there is exactly the
+    /// 256-step × 4-trace melt the r16 sessions measured; (2) the per-step find-the-floor down-trace is bounded
+    /// to a jumpable-descent reach instead of QC's 65536u full-map column sweep — a deeper fall reports
+    /// UNREACHABLE (conservative: big-drop routes ride waypoint links, which are built in unbounded mode).
+    /// Graph building (AutoLink) MUST keep the default 0 = exact QC semantics, or cached waypoint links change.
     /// </summary>
     public static bool CanWalk(Vector3 start, Vector3 end, Vector3 mins, Vector3 maxs,
-        float endHeight = 0f, Entity? ignore = null)
+        float endHeight = 0f, Entity? ignore = null, float maxWalkDistance = 0f)
     {
         if (Api.Services is null)
             return true; // no collision world: optimistically reachable (offline graph build)
@@ -55,6 +81,17 @@ public static class BotTracewalk
         float flatDist = flatDir.Length();
         flatDir = flatDist > 0f ? flatDir / flatDist : Vector3.Zero;
 
+        bool budgeted = maxWalkDistance > 0f;
+        if (budgeted && flatDist > maxWalkDistance)
+            return false; // strategy pre-gate: too far for a direct walk to ever be the right answer
+        if (budgeted && _tickTracesLeft <= 0)
+            return false; // this tick's strategy trace pool is spent — the pass retries on its interval
+        // Budgeted floor search: enough for stairs and jumpable-scale descents along a sane direct path —
+        // and deliberately SHORT: this sweep runs once per step and its length dominates the step's trace cost
+        // (the 65536u column sweep was the single most expensive query in the measured strategy tails).
+        // Unbounded keeps QC's full column drop (auto-link parity — long falls ARE valid link paths).
+        float downReach = budgeted ? 200f : 65536f;
+
         Vector3 end2 = end;
         if (endHeight > 0f) end2.Z += endHeight;
         Vector3 fixedEnd = end;
@@ -63,24 +100,42 @@ public static class BotTracewalk
         var jumpStepVec = new Vector3(0f, 0f, JumpStepHeight);
         var jumpVec = new Vector3(0f, 0f, JumpHeight);
 
+        // Budgeted walks charge every collision query to the per-tick strategy pool (see TickTraceBudget) —
+        // hull traces AND the per-step water PointContents pair (uncharged, those were the pool leak: the
+        // budget-1 vs budget-200 A/B put ~half the measured iteration cost outside the hull traces).
+        TraceResult BoxC(Vector3 from, Vector3 to)
+        {
+            if (budgeted) _tickTracesLeft--;
+            return Box(from, mins, maxs, to, ignore);
+        }
+        NavAction WaterState(Vector3 at)
+        {
+            if (budgeted) _tickTracesLeft -= 2;
+            return WetFeet(at) ? (Submerged(at) ? NavAction.SwimUnderwater : NavAction.SwimOnWater) : NavAction.Walk;
+        }
+
         // Pick the initial nav action from the start's water state.
         NavAction action = WetFeet(org) ? (Submerged(org) ? NavAction.SwimUnderwater : NavAction.Walk) : NavAction.Walk;
 
-        for (int iter = 0; iter < MaxIterations; iter++)
+        int iterCap = budgeted ? BudgetedMaxIterations : MaxIterations;
+        for (int iter = 0; iter < iterCap; iter++)
         {
+            if (budgeted && _tickTracesLeft <= 0)
+                return false; // tick pool spent mid-walk — conservative unreachable (the pass retries on interval)
+
             // --- arrival check (the flatdist<=0 block in QC) ---
             if (flatDist <= 0f)
             {
                 bool success = true;
                 if (org.Z > end2.Z + 1f)
                 {
-                    TraceResult t = Box(org, mins, maxs, end2, ignore);
+                    TraceResult t = BoxC(org, end2);
                     org = t.EndPos;
                     if (org.Z > end2.Z + 1f) success = false;
                 }
                 else if (org.Z < end.Z - 1f)
                 {
-                    TraceResult t = Box(org, mins, maxs, org - jumpVec, ignore);
+                    TraceResult t = BoxC(org, org - jumpVec);
                     org = t.EndPos;
                     if (org.Z < end.Z - 1f) success = false;
                 }
@@ -114,15 +169,15 @@ public static class BotTracewalk
             // --- WALK ---
             if (action == NavAction.Walk)
             {
-                TraceResult t = Box(org, mins, maxs, move, ignore);
+                TraceResult t = BoxC(org, move);
                 if (t.Fraction < 1f)
                 {
                     // wall: try stepping up by stepheight (a stair).
-                    TraceResult ts = Box(org + stepVec, mins, maxs, move + stepVec, ignore);
+                    TraceResult ts = BoxC(org + stepVec, move + stepVec);
                     if (ts.Fraction < 1f || ts.StartSolid)
                     {
                         // try a bigger jumpstep lip.
-                        TraceResult tj = Box(org + jumpStepVec, mins, maxs, move + jumpStepVec, ignore);
+                        TraceResult tj = BoxC(org + jumpStepVec, move + jumpStepVec);
                         if (tj.Fraction < 1f && !tj.StartSolid)
                             return false; // genuinely blocked (no ladder/door handling in this slice)
                         move = tj.StartSolid ? ts.EndPos : tj.EndPos;
@@ -132,20 +187,23 @@ public static class BotTracewalk
                 else move = t.EndPos;
 
                 // stand on the ground: trace straight down as far as possible (QC walkmove logic).
-                TraceResult down = Box(move, mins, maxs, move - new Vector3(0f, 0f, 65536f), ignore);
+                TraceResult down = BoxC(move, move - new Vector3(0f, 0f, downReach));
+                if (budgeted && down.Fraction >= 1f)
+                    return false; // no floor within the budgeted reach: a deeper-than-jumpable fall — not a strategy walk
                 org = down.EndPos;
 
                 // entered water while walking? switch to swimming.
-                if (WetFeet(org))
-                    action = Submerged(org) ? NavAction.SwimUnderwater : NavAction.SwimOnWater;
+                NavAction ws = WaterState(org);
+                if (ws != NavAction.Walk)
+                    action = ws;
                 continue;
             }
 
             // --- SWIM (on/under water): step toward the clamped target, stepswim over small obstacles ---
-            TraceResult sw = Box(org, mins, maxs, move, ignore);
+            TraceResult sw = BoxC(org, move);
             if (sw.Fraction < 1f)
             {
-                TraceResult ss = Box(org + stepVec, mins, maxs, move + stepVec, ignore);
+                TraceResult ss = BoxC(org + stepVec, move + stepVec);
                 if (ss.Fraction < 1f || ss.StartSolid)
                     return false; // can't jump the obstacle out of water
                 org = ss.EndPos;
@@ -153,8 +211,7 @@ public static class BotTracewalk
             else org = sw.EndPos;
 
             // resolve the new water state after the swim step.
-            action = WetFeet(org) ? (Submerged(org) ? NavAction.SwimUnderwater : NavAction.SwimOnWater)
-                                   : NavAction.Walk;
+            action = WaterState(org);
             if (flatDist <= 0f && Approximately(org, end, end2))
                 return true;
         }

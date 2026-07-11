@@ -157,6 +157,20 @@ public static class ClientSettings
         // time (Base cl_nettimesyncboundmode), 0 = hard-rebase to the latest server time every snapshot (the old
         // behaviour, which jolts the camera/decay timeline when snapshots arrive in lumps). For A/B isolation.
         c.Register("cl_netclock_smooth", "1");
+        // (parity audit 2026-07-11) Render-clock cushion: 1 (default) = DP boundmode-5 parity — the slew/step
+        // target sits a full MEASURED snapshot interval behind the newest state (Base targets cl.mtime[1], the
+        // previous snapshot's time), so the cushion grows exactly when a loaded listen server produces snapshots
+        // late and interpolation never rides the f=1 clamp edge (raw tick-lumps). 0 = the r16 half-tick bias.
+        c.Register("cl_interp_cushion", "1");
+        // (parity audit 2026-07-11) Correction-law A/B: 1 = Base's exact cl_nettimesyncboundmode 5 stepped law
+        // (snap >0.5s / halve >0.1s / creep -2ms/+1ms per SNAPSHOT, free-run between snapshots — cl_parse.c:3354),
+        // 0 (default) = the r16 continuous rate slew (±5% playback-rate band). Both respect cl_interp_cushion.
+        c.Register("cl_netclock_dp5", "0");
+        // (WS1, 2026-07-11) sv_threaded — the listen-host threading decision, READ FROM THIS SHARED STORE at
+        // StartListenServer (prefix = authority, not reader: it decides the SERVER's drive). DEFAULT ON: the
+        // sim worker owns tick+encode with per-tick gate holds; the render thread never blocks on the common
+        // path. 0 = single-threaded drive + the unified cvar store. Headless hosts ignore it (always inline).
+        c.Register("sv_threaded", "1");
         // Post-hitch stall-aware reconcile (default ON). After a frame HITCH (GC / heavy streaming stalls the shared
         // listen-server thread), the server is transiently behind; this HOLDS a moderate reconcile correction for a
         // few snapshots instead of snapping the camera back, then resumes. Defensive (NOT the cause of any observed
@@ -309,6 +323,80 @@ public static class ClientSettings
     }
 
     /// <summary>
+    /// Apply <c>vid_vsync</c> onto the window and describe the resulting behavior in the console. DP applies
+    /// vsync INSTANTLY on set — no vid_restart needed — so this is both the vid_restart slice and the live
+    /// Changed-hook target (see <see cref="InstallLiveVideoCvars"/>; the 2026-07-11 "vid_restart didn't apply
+    /// vsync mid-game" report: the apply worked but Mailbox is uncapped by design, so nothing VISIBLY changed —
+    /// the mode's meaning is now spelled out).
+    /// Vsync modes (vid_vsync, extended beyond DP's 0/1 — planning/PERFORMANCE_REPORT.md B1):
+    ///   0 = off      — no sync; lowest latency, tears.
+    ///   1 = on       — classic double-buffered vsync; fps LOCKS to refresh (a missed vblank halves it).
+    ///   2 = mailbox  — triple-buffered: renders UNCAPPED, presents the newest frame at vblank. No tearing,
+    ///                  no beat-doubling, and deliberately NO fps cap. Recommended for high-refresh displays.
+    ///   3 = adaptive — vsync when fast enough, tears instead of stuttering when late.
+    /// Drivers that don't support a mode fall back gracefully.
+    /// </summary>
+    public static void ApplyVsync(CvarService c)
+    {
+        int mode = (int)c.GetFloat("vid_vsync");
+        DisplayServer.VSyncMode vsync = mode switch
+        {
+            <= 0 => DisplayServer.VSyncMode.Disabled,
+            1 => DisplayServer.VSyncMode.Enabled,
+            2 => DisplayServer.VSyncMode.Mailbox,
+            _ => DisplayServer.VSyncMode.Adaptive,
+        };
+        DisplayServer.WindowSetVsyncMode(vsync);
+        string meaning = vsync switch
+        {
+            DisplayServer.VSyncMode.Enabled => "classic vsync — fps locks to the refresh rate",
+            DisplayServer.VSyncMode.Mailbox => "mailbox — no tearing, fps stays UNCAPPED by design",
+            DisplayServer.VSyncMode.Adaptive => "adaptive — syncs when fast enough, tears when late",
+            _ => "off — uncapped, may tear",
+        };
+        // Log the REQUESTED vs ACTUAL vsync mode — drivers can silently reject a mode (esp. Mailbox in windowed
+        // mode), and the FrameProfiler env banner reads the mode BEFORE this runs, so this is the authoritative line.
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"[video] vid_vsync {mode} → requested {vsync}, actual {DisplayServer.WindowGetVsyncMode()} ({meaning})");
+    }
+
+    /// <summary>Apply <c>cl_maxfps</c> onto <see cref="Godot.Engine.MaxFps"/> (DP applies this live too).</summary>
+    public static void ApplyMaxFps(CvarService c)
+    {
+        // Framerate cap (DP cl_maxfps): 0 = unlimited. Guidance (B1): with vsync off, a cap slightly UNDER the
+        // worst-case sustainable rate is smoother than uncapped, and it bounds the per-frame Godot-interop alloc
+        // rate (godot#105750). With vid_vsync 2 (mailbox) leave it at 0 (uncapped).
+        int maxFps = (int)c.GetFloat("cl_maxfps");
+        // "Auto" = the DP-shipped default (256) ONLY: not an fps target anyone chose, and it lets the CPU
+        // outrun the swapchain on a fast GPU -> present-jitter hitches, so it gets the engaging ceiling
+        // max(144, refresh). Every EXPLICIT choice is the player's and is honored as-is — including the
+        // menu's "Unlimited" (0 -> Engine.MaxFps 0, truly uncapped). (2026-07-06: 0 was previously folded
+        // into the auto case, silently capping "Unlimited" at 144 — Bryan's uncap request; the perf harness
+        // also captures uncapped now so peak frame time and its dips are measured, not masked by the cap.)
+        int appliedFps = maxFps == 256
+            ? System.Math.Max(144, (int)DisplayServer.ScreenGetRefreshRate())
+            : maxFps;
+        Godot.Engine.MaxFps = appliedFps;
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"[video] cl_maxfps {maxFps} -> Engine.MaxFps {appliedFps} (refresh {DisplayServer.ScreenGetRefreshRate():0}Hz)");
+    }
+
+    /// <summary>
+    /// DP parity: <c>vid_vsync</c> and <c>cl_maxfps</c> take effect IMMEDIATELY when set (console `vid_vsync 1`,
+    /// a cfg exec, a menu widget) — no <c>vid_restart</c> required. Resolution/fullscreen/borderless still go
+    /// through vid_restart (they resize/recreate the window). Wire ONCE after boot-config load (Shell), so the
+    /// bulk cfg exec doesn't re-apply per line.
+    /// </summary>
+    public static void InstallLiveVideoCvars(CvarService c)
+    {
+        c.Changed += name =>
+        {
+            if (string.Equals(name, "vid_vsync", StringComparison.Ordinal)) ApplyVsync(c);
+            else if (string.Equals(name, "cl_maxfps", StringComparison.Ordinal)) ApplyMaxFps(c);
+        };
+    }
+
+    /// <summary>
     /// Resolution + fullscreen + borderless + vsync from the <c>vid_*</c> cvars onto the window (QC vid_restart).
     /// </summary>
     public static void ApplyVideo()
@@ -343,29 +431,7 @@ public static class ClientSettings
         if (!fullscreen)
             DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, borderless);
 
-        // Vsync mode (vid_vsync, extended beyond DP's 0/1 — planning/PERFORMANCE_REPORT.md B1):
-        //   0 = off            — no sync; lowest latency, tears.
-        //   1 = on             — classic double-buffered vsync; on a high-refresh display the per-frame work sits
-        //                        right at the vblank budget, so any jitter pushes a frame past it → it waits for
-        //                        the NEXT vblank → the frame time DOUBLES (the measured "drops to 60 from 160"
-        //                        beat).
-        //   2 = mailbox        — triple-buffered: on Vulkan (Forward+) the GPU renders UNCAPPED and PRESENTS the
-        //                        latest complete frame at vblank. No tearing AND no beat-doubling — the single
-        //                        best pacing fix for high-refresh displays. Recommended.
-        //   3 = adaptive       — vsync when fast enough, off (tear) when a frame is late, instead of stuttering.
-        // Drivers that don't support a mode fall back gracefully.
-        DisplayServer.VSyncMode vsync = (int)c.GetFloat("vid_vsync") switch
-        {
-            <= 0 => DisplayServer.VSyncMode.Disabled,
-            1 => DisplayServer.VSyncMode.Enabled,
-            2 => DisplayServer.VSyncMode.Mailbox,
-            _ => DisplayServer.VSyncMode.Adaptive,
-        };
-        DisplayServer.WindowSetVsyncMode(vsync);
-        // Log the REQUESTED vs ACTUAL vsync mode — drivers can silently reject a mode (esp. Mailbox in windowed
-        // mode), and the FrameProfiler env banner reads the mode BEFORE this runs, so this is the authoritative line.
-        XonoticGodot.Common.Diagnostics.Log.Info(
-            $"[video] vid_vsync {(int)c.GetFloat("vid_vsync")} → requested {vsync}, actual {DisplayServer.WindowGetVsyncMode()}");
+        ApplyVsync(c);
 
         // Framerate cap (DP cl_maxfps): 0 = unlimited. Previously read by the menu but never enforced, so the
         // game ran uncapped — variable frame times beat against the fixed 72 Hz input/prediction tick and showed
@@ -380,19 +446,7 @@ public static class ClientSettings
         // display refresh is the ideal ceiling, but Godot under-reports it in borderless mode (reads 60 on this
         // box), so for the "auto" case (the DP-shipped 256) we apply max(144, detected-refresh). Every OTHER
         // explicit choice -- the menu's 128 / 512 / 1024 / 2048 or "Unlimited" (0) -- is the player's, honored as-is.
-        int maxFps = (int)c.GetFloat("cl_maxfps");
-        // "Auto" = the DP-shipped default (256) ONLY: not an fps target anyone chose, and it lets the CPU
-        // outrun the swapchain on a fast GPU -> present-jitter hitches, so it gets the engaging ceiling
-        // max(144, refresh). Every EXPLICIT choice is the player's and is honored as-is — including the
-        // menu's "Unlimited" (0 -> Engine.MaxFps 0, truly uncapped). (2026-07-06: 0 was previously folded
-        // into the auto case, silently capping "Unlimited" at 144 — Bryan's uncap request; the perf harness
-        // also captures uncapped now so peak frame time and its dips are measured, not masked by the cap.)
-        int appliedFps = maxFps == 256
-            ? System.Math.Max(144, (int)DisplayServer.ScreenGetRefreshRate())
-            : maxFps;
-        Godot.Engine.MaxFps = appliedFps;
-        XonoticGodot.Common.Diagnostics.Log.Info(
-            $"[video] cl_maxfps {maxFps} -> Engine.MaxFps {appliedFps} (refresh {DisplayServer.ScreenGetRefreshRate():0}Hz)");
+        ApplyMaxFps(c);
 
         // (§12.7) OS-stall resistance: lift the process to ABOVE_NORMAL so background work (AV scans, the
         // indexer, browsers) can't preempt the game's main/render threads mid-frame — the CPU-side half of

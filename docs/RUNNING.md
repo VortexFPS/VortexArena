@@ -74,9 +74,9 @@ ci\ci.ps1             # PowerShell wrapper around the same script
 
 ---
 
-## Dedicated server (v1 = headless listen server)
+## Dedicated server (v1 = headless listen server, dedicated-slim asset load)
 
-There is no separate server binary yet — `--headless --host <map>` runs the full host with a dummy
+There is no separate server binary yet — `--headless --host <map>` runs the host with a dummy
 renderer (the same `NetGame` listen server `--host` uses; a true client-less host like DP's
 `ca_dedicated` is a deferred Shell/NetGame seam — ADR-0014). From the repo:
 
@@ -86,7 +86,18 @@ renderer (the same `NetGame` listen server `--host` uses; a true client-less hos
 "$GODOT" --path . --connect 127.0.0.1
 ```
 
-A healthy boot prints `[MapLoader] '<map>' surfaces: …`, `[bots] waypoints for '<map>': nodes=N` (once the
+**Dedicated-slim (default on a headless/exported-dedicated host):** DP's dedicated server keeps
+sounds/models as precache *names* and only map/model collision data in RAM — the port now matches that.
+A headless host skips the whole client asset pipeline (textured worldmodel build, weapon/player-model
+precache, every sound decode, map music, the idle asset warmer, entity render nodes) and keeps only the
+server-relevant loads: BSP collision + entities, waypoints, per-weapon muzzle-tag offsets, `.sounds`
+manifests. Measured on stormkeep + 2 bots (Debug): peak working set **4.9 GB → 0.58 GB**. The host's
+self-client also stays an **observer** (no phantom idle player auto-joining the match). Set
+`sv_dedicated_slim 0` (e.g. `--cvar sv_dedicated_slim 0`) to restore the old full-client load;
+`--camera-trace` captures keep the full pipeline automatically.
+
+A healthy boot prints `[MapLoader] '<map>' dedicated slim: render geometry skipped …` (or
+`[MapLoader] '<map>' surfaces: …` with slim off), `[bots] waypoints for '<map>': nodes=N` (once the
 bot fill kicks in at sim time 2.5 s), and `handshake accepted`. For scripted/CI runs add
 `--quit-after-seconds <s>` so the host exits on its own — Windows `timeout` does NOT kill the Godot child,
 and an orphaned host keeps UDP 26000 bound (the next run then fails with "Couldn't create an ENet host";

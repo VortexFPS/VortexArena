@@ -134,6 +134,16 @@ public sealed partial class NetGame : Node3D
     private string _equippedVmOverride = "";       // per-weapon wr_viewmodel override (Tuba note model); rebuild on change
     private bool _viewmodelReloading;              // last-frame reload state (clip_load==-1) — play the reload anim on the rising edge
     private bool _weaponsPrecached;             // PrecacheWeaponModels ran once (warm the per-weapon asset caches)
+    // DEDICATED-SLIM: a headless listen server IS the v1 dedicated server (RUNNING.md "Dedicated server"), and it
+    // used to pay the FULL client asset pipeline for a renderer that draws nothing — the textured worldmodel
+    // (MapLoader.BuildMap), all 24 weapon v_ models + hand rigs, every combat-sound OGG decode, the player-model
+    // roster, the idle warm of the ENTIRE sound set, and the map music (measured ~4.9 GB peak working set on
+    // stormkeep+2 bots). DP's dedicated server loads NONE of that: sounds/models are precached as NAMES for the
+    // network tables; only BSP collision + entity data live in RAM. When this flag is on, the client-side asset
+    // loads are skipped (server-relevant pieces — muzzle-offset header parses, .sounds manifests, waypoints,
+    // collision — still run). True on a headless/exported-dedicated listen server; a camera-trace capture run
+    // keeps the full pipeline (its determinism baseline predates the slim path); sv_dedicated_slim 0 opts out.
+    private bool _dedicatedSlim;
     private bool _readyComplete;                // _Ready finished — _Process can run its full body (before this, fields are half-built)
     private bool _captureMarked;                // one-shot guard: CaptureGate.MarkReady() fired at first spawn (--screenshot)
     private HandshakeStage _handshakeStage;     // last sub-stage announced to the LoadingScreen (so we only BeginStage on a transition)
@@ -456,6 +466,20 @@ public sealed partial class NetGame : Node3D
             PlayerSoundResolver.Install(_vfs);
         }
 
+        // Resolve the dedicated-slim decision ONCE, before any load stage (see the field doc). sv_dedicated_slim
+        // follows the sv_threaded read pattern: unset → ON (only an explicit 0 keeps the old full-client load).
+        // OS.HasFeature("dedicated_server") covers the linux-dedicated export preset (ADR-0014), which can run
+        // with its own DisplayServer name; --headless covers the v1 dev/CI dedicated path. CameraTrace captures
+        // run headless too but dump the RENDERED camera — they keep the full pipeline they were baselined on.
+        _dedicatedSlim = _isListenServer
+            && (DisplayServer.GetName() == "headless" || OS.HasFeature("dedicated_server"))
+            && !CameraTrace.Active
+            && (_sharedCvars is null || !_sharedCvars.Has("sv_dedicated_slim")
+                || _sharedCvars.GetFloat("sv_dedicated_slim") != 0f);
+        if (_dedicatedSlim)
+            GD.Print("[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped " +
+                "(server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.");
+
         // The load sequence runs as a coroutine: each BeginStage sets the bar's target and per-stage expected
         // time (the LoadingScreen animates asymptotically from where it is now toward that target), then we
         // yield one frame so the bar can repaint with the new status text BEFORE the synchronous work begins.
@@ -521,7 +545,10 @@ public sealed partial class NetGame : Node3D
         if (!IsInsideTree()) return;
 
         // Map music: read the cdtrack from the mapinfo file (VFS) and wire a MusicPlayer into the render tree.
-        SetupMusic();
+        // Dedicated-slim: skipped — music playback is pure client presentation (a decoded music track alone is
+        // tens of MB), and connecting clients resolve the cdtrack from their OWN mapinfo parse.
+        if (!_dedicatedSlim)
+            SetupMusic();
 
         LoadingScreen?.BeginStage("Precaching weapon models…", 0.82f, 3.0f);
         await YieldForLoadingFrame();
@@ -536,11 +563,15 @@ public sealed partial class NetGame : Node3D
 
         // Warm the combat-sound decode cache + common player models (A3) so the first shot/explosion and the
         // first player render don't stall on an OGG decode / skeletal-model texture build mid-combat.
-        LoadingScreen?.BeginStage("Precaching sounds…", 0.87f, 1.5f);
-        await YieldForLoadingFrame();
-        if (!IsInsideTree()) return;
-        await PrecacheCombatSoundsAndModelsAsync();
-        if (!IsInsideTree()) return;
+        // Dedicated-slim: pure client warm — the server plays no audio and renders no players; skip it all.
+        if (!_dedicatedSlim)
+        {
+            LoadingScreen?.BeginStage("Precaching sounds…", 0.87f, 1.5f);
+            await YieldForLoadingFrame();
+            if (!IsInsideTree()) return;
+            await PrecacheCombatSoundsAndModelsAsync();
+            if (!IsInsideTree()) return;
+        }
 
         // S3: a low-priority idle warmer mops up the long tail (announcer/pickup voices, the OTHER stock player
         // models) so the whole asset set goes hot within the first minute. (Fix C) DEFER its start past the critical
@@ -549,7 +580,10 @@ public sealed partial class NetGame : Node3D
         // contributor to the spawn-rubberband: Fix A/B stop it TELEPORTing, this keeps it SMOOTH). By go-live the
         // local model + map are already hot and the player is moving; any model that appears sooner still resolves
         // on-demand at High priority. cl_idle_warmup 0 still disables it entirely (checked in StartIdleWarmup).
-        GetTree().CreateTimer(IdleWarmupDelaySeconds).Timeout += () => { if (IsInsideTree()) StartIdleWarmup(); };
+        // Dedicated-slim: never — the idle warmer would decode the ENTIRE registered sound set + 5 player models
+        // into a server that plays/renders none of it.
+        if (!_dedicatedSlim)
+            GetTree().CreateTimer(IdleWarmupDelaySeconds).Timeout += () => { if (IsInsideTree()) StartIdleWarmup(); };
 
         LoadingScreen?.BeginStage("Connecting…", 0.90f, 0.5f);
 
@@ -686,6 +720,9 @@ public sealed partial class NetGame : Node3D
         _serverWorld.Services.Cvars.Register("sv_threaded", "1");
         // wantThreaded + unifyStore were resolved above (before the world was built) since they pick the
         // cvar-store model; the worker/gate setup below reuses that one decision so the two never disagree.
+        // Dedicated-slim opt-out knob (read in _Ready from the SHARED store, same pattern as sv_threaded —
+        // unset → ON). Registered here for cvarlist/status visibility; no Save flag (port A/B knob).
+        _serverWorld.Services.Cvars.Register("sv_dedicated_slim", "1");
 
         // [#44] sv_spectate stays at Base's shipped `1` (spectating allowed). The old port set it to 0 here to
         // make the host auto-spawn — which as a side effect made spectating impossible for EVERYONE (and armed
@@ -1341,7 +1378,10 @@ public sealed partial class NetGame : Node3D
         _render = new ClientWorld { Name = "Render" };
         // Resolve models/sounds straight from the mounted content VFS so remote players render as real skeletal
         // IQM models + positional sounds resolve (else the placeholder box + the res:// fallback).
-        if (_assets is not null)
+        // Dedicated-slim: leave ALL of it unwired — with no resolvers the render layer would only ever build
+        // placeholder boxes, and even those are skipped (no ClientEntityView below). The node itself stays (the
+        // rest of NetGame assumes a live _render), but it never touches the asset pipeline.
+        if (_assets is not null && !_dedicatedSlim)
         {
             _render.AudioLoader = _assets.LoadSound;
             _render.Assets = _assets.Assets;   // material facade → textured world/vehicle models (ModelResolver path)
@@ -1370,7 +1410,7 @@ public sealed partial class NetGame : Node3D
         // Networked projectiles draw their REAL model (rocket.md3 with its additive RocketThrust flame cone,
         // grenademodel.md3) through the same VFS loader the world/weapon models use. Set after AddChild since
         // ClientWorld._Ready (which built _render.Projectiles) ran synchronously on it.
-        if (_assets is not null)
+        if (_assets is not null && !_dedicatedSlim)
         {
             _render.Projectiles.ModelFactory = m => _assets.LoadModel(m);
             // (engine-perf 2026-06-16) Wire the SAME loader into the gib + casing systems so they render their
@@ -1390,16 +1430,20 @@ public sealed partial class NetGame : Node3D
         // parsing effectinfo.txt + decoding the atlas on its render frame (DP precaches these at client init,
         // cl_particles.c). The Assets setter above already wired the texture/text loaders via WireEffectAssets,
         // and _render.Effects is live (ClientWorld._Ready ran synchronously on AddChild). Idempotent + invisible.
-        _render.Effects.Warmup();
-        // Likewise pre-build the shared per-type projectile-trail Resources so the first rocket/plasma/grenade
-        // doesn't construct its trail material on its render frame (see ProjectileRenderer.WarmupTrails).
-        _render.Projectiles.WarmupTrails();
-        // A2: render one hidden instance of every effect/projectile material family in a tiny offscreen viewport
-        // so the GPU compiles their shader pipelines NOW (during load) — the first real explosion/rocket/gib in
-        // play then hits a warm pipeline instead of stalling the frame. Self-frees after a few frames.
-        // The map-item / pickup MD3 models render through the entity feed (PVS-culled until first-seen), so warm
-        // them here too — built from the item registry + the same AssetLoader the live entity build uses.
-        XonoticGodot.Game.Client.GpuWarmPass.Run(_render, _render.Effects, _render.Projectiles, BuildItemWarmupInstances());
+        // Dedicated-slim: no effects will ever spawn (OnEffectReceived isn't subscribed) — skip the warm entirely.
+        if (!_dedicatedSlim)
+        {
+            _render.Effects.Warmup();
+            // Likewise pre-build the shared per-type projectile-trail Resources so the first rocket/plasma/grenade
+            // doesn't construct its trail material on its render frame (see ProjectileRenderer.WarmupTrails).
+            _render.Projectiles.WarmupTrails();
+            // A2: render one hidden instance of every effect/projectile material family in a tiny offscreen viewport
+            // so the GPU compiles their shader pipelines NOW (during load) — the first real explosion/rocket/gib in
+            // play then hits a warm pipeline instead of stalling the frame. Self-frees after a few frames.
+            // The map-item / pickup MD3 models render through the entity feed (PVS-culled until first-seen), so warm
+            // them here too — built from the item registry + the same AssetLoader the live entity build uses.
+            XonoticGodot.Game.Client.GpuWarmPass.Run(_render, _render.Effects, _render.Projectiles, BuildItemWarmupInstances());
+        }
 
         // CSQC appearance context (FORCEMODEL/FORCECOLORS need the local player + gametype): read live each frame.
         _render.AppearanceProvider = BuildAppearanceContext;
@@ -1413,7 +1457,10 @@ public sealed partial class NetGame : Node3D
         // attaches this later — once the server's map name arrives — via LoadClientMapFromServer. No-op until then.
         AttachWorldRender();
 
-        if (_client is not null)
+        // Dedicated-slim: no entity render nodes (ClientEntityView would rebuild a placeholder per networked
+        // entity every snapshot) and no effect/sound playback — the handlers stay unsubscribed, so every
+        // broadcast effect/sound costs the dedicated host nothing beyond the packet decode.
+        if (_client is not null && !_dedicatedSlim)
         {
             _entityView = new ClientEntityView(_client, _render);
             // Third-person carried weapons: build each remote player's held weapon from the asset pipeline
@@ -1446,6 +1493,18 @@ public sealed partial class NetGame : Node3D
     {
         if (_bsp is null || _render is null || _assets?.Assets is null)
             return;
+
+        // Dedicated-slim: the server ships no geometry and draws none either. Skip the textured worldmodel build
+        // (MapLoader.BuildMap decodes every map texture + lightmap page into RAM), the render-side PVS, the
+        // DUPLICATE effects/decal collision world, and the SDF bake — the authoritative collision GameWorld traces
+        // was already built in StartListenServer. The one MapLoader-shaped line below keeps the ci.sh host smoke's
+        // "map actually loaded" signal alive (it greps for MapLoader).
+        if (_dedicatedSlim)
+        {
+            GD.Print($"[MapLoader] '{_map}' dedicated slim: render geometry skipped " +
+                $"(collision brushes + entities only; {_bsp.Models.Length} bsp models).");
+            return;
+        }
 
         // The client draws the worldmodel it loaded locally (DP VF_DRAWWORLD=1 + renderscene(); the server ships
         // no geometry). Reuses the SAME BSP + gametype submodel filter the collision was built from — render and
@@ -1627,7 +1686,8 @@ public sealed partial class NetGame : Node3D
 
         // Bridge the HUD's texture cache to the mounted game data so weapon icons / crosshairs / kill-notify
         // icons draw the REAL Xonotic art instead of colored-box fallbacks (mirrors GameDemo.SetupHud).
-        if (_assets is not null)
+        // Dedicated-slim: skipped — the font loads are eager, and headless HUD panels never draw anyway.
+        if (_assets is not null && !_dedicatedSlim)
         {
             XonoticGodot.Game.Hud.TextureCache.VfsResolver = _assets.LoadTexture;
             // Xolonium HUD font (the menu skin font), so HUD text matches Xonotic instead of Godot's fallback.
@@ -1679,13 +1739,13 @@ public sealed partial class NetGame : Node3D
 
         // Hit-confirmation sound (QC HitSound): non-positional beep on the SFX bus, pitch varies by cl_hitsound mode.
         _hitSound = new XonoticGodot.Game.Client.HitSound(_sharedCvars);
-        if (_assets is not null)
+        if (_assets is not null && !_dedicatedSlim)
             _hitSound.AudioLoader = _assets.LoadSound;
         _hitSound.Attach(_fullHud);
 
         // In-vehicle low-health/shield alarm (QC vehicle_alarm, cl_vehicles.qc): feed the VehicleHud the VFS sound
         // loader so it can play SND_VEH_ALARM / SND_VEH_ALARM_SHIELD (gated by cl_vehicles_alarm, default 0).
-        if (_assets is not null)
+        if (_assets is not null && !_dedicatedSlim)
             _fullHud.Vehicle.AudioLoader = _assets.LoadSound;
 
         // The lightweight crosshair + health/armor readout + radar + networked scoreboard, on a layer ABOVE the
@@ -1721,7 +1781,7 @@ public sealed partial class NetGame : Node3D
             if (_sharedCvars.Has("cl_announcer_antispam"))
                 _notifications.AntiSpamInterval = _sharedCvars.GetFloat("cl_announcer_antispam");
         }
-        if (_assets is not null)
+        if (_assets is not null && !_dedicatedSlim) // slim: announcer voices would lazily decode per frag event
         {
             _notifications.AudioLoader = _assets.LoadSound; // sound/announcer/<voice>/<snd>.ogg from the mounted VFS
             string fallbackVoice = _notifications.AnnouncerVoice;
@@ -2469,7 +2529,9 @@ public sealed partial class NetGame : Node3D
             // The heavy bit: full mesh + material/texture build of the v_ model, plus the hand rig. Warmed for
             // every weapon by default (warmAll); the smart path restricts it to this match's expected loadout.
             // An unanticipated pickup under the smart path just lazy-loads (one-frame hitch, then cached).
-            if (warmAll || expected.Contains(w.NetName))
+            // Dedicated-slim: the server only needs the muzzle offsets registered above (projectile spawn
+            // origins) — the mesh/texture build is client-only, so every weapon stays "skipped (lazy)".
+            if (!_dedicatedSlim && (warmAll || expected.Contains(w.NetName)))
             {
                 // Build once to fill the parse + material/texture caches; keep the node to render it for pipeline
                 // warm below (instead of freeing it unrendered). A miss just caches the failure.
@@ -2608,7 +2670,7 @@ public sealed partial class NetGame : Node3D
     /// minute of play. The loaders cache, so anything the eager precache already warmed is a cheap no-op here.</summary>
     private void StartIdleWarmup()
     {
-        if (_assets is null)
+        if (_assets is null || _dedicatedSlim)
             return;
         // `set cl_idle_warmup 0` disables the background warm (A/B switch — the concurrent player-model parse was
         // implicated in an early gen2 GC stall). Unset/unregistered → on (only an explicit "0" disables).
@@ -3445,7 +3507,11 @@ public sealed partial class NetGame : Node3D
             // at sv_spectate 1 relies on this same path (its CmdJoin succeeds on stock campaign maps).
             // cl_bench_spectate: the host is a CAMERA — stand down so BenchSpectateThink can glue it to a bot
             // (without the gate the join would land once, then bench pulls it back: a one-spawn flicker on capture).
-            if (_isListenServer && !_hostJoinDone && !BenchSpectateActive && _serverWorld is { } joinWorld)
+            // Dedicated-slim: never auto-join — the headless host's self-client has no human behind it, and the
+            // auto-join used to spawn an idle phantom player into the match (bots duly hunted it). It stays a
+            // connected OBSERVER (the v1 "server console user"); DP's dedicated has no local client at all.
+            if (_isListenServer && !_hostJoinDone && !BenchSpectateActive && !_dedicatedSlim
+                && _serverWorld is { } joinWorld)
             {
                 if (LocalServerPlayer is not { IsObserver: true })
                 {

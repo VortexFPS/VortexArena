@@ -90,10 +90,13 @@ if $do_smoke; then
                 powershell -Command "Get-Process Godot* -ErrorAction SilentlyContinue | Stop-Process -Force" >/dev/null 2>&1 || true
             hard_errors=$(grep -cE '^ERROR:|SCRIPT ERROR|Unhandled exception' "$log" || true)
             echo "hard errors: $hard_errors | warnings: $(grep -c 'WARNING:' "$log" || true)"
-            grep -aE "MapLoader|waypoints for|handshake accepted" "$log" || true
+            grep -aE "MapLoader|waypoints for|handshake accepted|dedicated slim" "$log" || true
             grep -aq "MapLoader"          "$log" || { tail -40 "$log"; fail "host smoke: map never loaded ([MapLoader] missing)"; }
             grep -aq "waypoints for"      "$log" || { tail -40 "$log"; fail "host smoke: bots never filled ([bots] waypoints missing)"; }
             grep -aq "handshake accepted" "$log" || { tail -40 "$log"; fail "host smoke: client never connected (handshake missing)"; }
+            # Dedicated-slim (docs/RUNNING.md "Dedicated server"): a headless host must NOT pay the client asset
+            # pipeline (measured 4.9 GB -> 0.58 GB peak WS). If this line vanishes, the slim gate regressed silently.
+            grep -aq "dedicated slim"     "$log" || { tail -40 "$log"; fail "host smoke: dedicated-slim gate did not engage"; }
             [ "${hard_errors:-1}" -eq 0 ] || { echo "--- $log ---"; tail -40 "$log"; fail "host smoke had $hard_errors hard error(s)"; }
             rm -f "$log"
         else

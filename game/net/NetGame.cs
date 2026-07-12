@@ -90,6 +90,12 @@ public sealed partial class NetGame : Node3D
     // DS-3: cached "is this the dummy (headless/dedicated) display server" — read every frame by the frame
     // governor and once at host start by the loop-cap. DisplayServer is a live singleton at construction time.
     private readonly bool _isHeadless = DisplayServer.GetName() == "headless";
+    // DS-4: a live listen server registers a notice-broadcast here so Main's SIGTERM/SIGINT handler can tell
+    // connected clients the link is going away just before the process quits. Null when no server is hosting.
+    public static Action? GracefulShutdownHook;
+    // DS-4: process exit codes a supervisor (the host agent) keys its restart policy on. 0 = clean.
+    public const int ExitPortBindFailed = 2;   // the game UDP port was already in use
+    public const int ExitMapNotFound = 3;       // --host <map> named a map the VFS doesn't contain
     private ClientNet? _client;
     private ClientWorld _render = null!;
     private DevHarness? _devHarness;            // dev capture (--fx-demo), inert unless a dev flag was passed
@@ -638,6 +644,18 @@ public sealed partial class NetGame : Node3D
         }
         else
         {
+            // DS-4: on a headless/dedicated host, a NAMED map that doesn't resolve is a boot failure, not a
+            // silent flat-floor fallback — an operator who typed `--host nonsuch` wants to know, and a supervisor
+            // needs a non-zero exit to alert/stop rather than run a useless empty server. A bare `--host` (no map)
+            // still gets the test floor (that's the intentional dev/bring-up path), and a windowed listen server
+            // keeps the soft fallback (the player can pick another map from the menu).
+            if (_isHeadless && !string.IsNullOrWhiteSpace(_map))
+            {
+                GD.PrintErr($"[NetGame] FATAL: map '{_map}' not found in the VFS — a dedicated host cannot start. " +
+                    "Check the map name and that its pk3 is mounted (docs/RUNNING.md).");
+                Callable.From(() => GetTree()?.Quit(ExitMapNotFound)).CallDeferred();
+                return;
+            }
             collision = BuildTestFloor();
             if (!string.IsNullOrWhiteSpace(_map))
                 GD.PrintErr($"[NetGame] map '{_map}' not found in the VFS — listen server runs on a flat floor.");
@@ -840,9 +858,16 @@ public sealed partial class NetGame : Node3D
         if (server is null)
         {
             GD.PrintErr($"[NetGame] could not start the listen server on UDP {_port} (port in use?).");
+            // DS-4: a dedicated/headless host that can't bind its port is DEAD — there is no operator to notice
+            // the error and no client to fall back to. Exit with a distinct code so a supervisor restarts/alerts
+            // instead of leaving a zombie. A windowed listen server keeps the old soft return (the menu is still up).
+            if (_isHeadless)
+                Callable.From(() => GetTree()?.Quit(ExitPortBindFailed)).CallDeferred();
             return;
         }
         _server = server;
+        // DS-4: register the client shutdown-notice broadcast for Main's signal handler (cleared in Shutdown).
+        GracefulShutdownHook = () => _server?.BroadcastPrint("^1Server is shutting down.^7\n");
         // Answer server-browser getinfo probes so this host shows up in the LAN list (no master heartbeat —
         // the port's transport is ENet, so registering with the public DP masters would only mislead DP clients).
         server.EnableLanDiscovery(_port);
@@ -3048,6 +3073,10 @@ public sealed partial class NetGame : Node3D
         if (_shutDown)
             return;
         _shutDown = true;
+
+        // DS-4: this server is going away — drop the signal-handler's client-notice hook so it can't fire against
+        // a torn-down transport (and a rehost re-registers a fresh one for the new _server).
+        GracefulShutdownHook = null;
 
         // #19: if we tore down while the solo-local auto-pause was holding slowmo at 0, restore it so the engine
         // doesn't stay frozen for the next map (mirrors TimeoutController.ResetSlowmoOnShutdown).

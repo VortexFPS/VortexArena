@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Godot;
 using XonoticGodot.Common.Diagnostics;
 using XonoticGodot.Common.Gameplay;
@@ -172,6 +173,43 @@ public partial class Main : Node
         {
             GetTree().CreateTimer(quitSecs).Timeout += () => GetTree().Quit();
         }
+
+        // DS-4: graceful shutdown on SIGTERM/SIGINT (systemd `stop`, Ctrl+C, a supervisor stop). Without this a
+        // signal HARD-kills the process mid-frame — the ENet host never closes (peers hang until they time out)
+        // and the UDP port isn't released (the next host then fails to bind, the RUNNING.md orphaned-port trap).
+        // We cancel the default terminate and instead post a clean quit to the MAIN thread (the handler runs on a
+        // threadpool thread, so every Godot touch must be deferred): notify connected clients, then Quit(0) —
+        // which runs the normal teardown (NetGame._ExitTree → Shutdown → transport Close, releasing the port, and
+        // the config-save guard). On Windows SIGINT is Ctrl+C; SIGTERM is best-effort (the CLR catches what the OS
+        // delivers). Registrations are stored so the GC can't collect them (that would silently drop the handler).
+        RegisterShutdownSignals();
+    }
+
+    // Kept alive for the process lifetime — a collected PosixSignalRegistration removes its handler.
+    private PosixSignalRegistration? _sigTerm, _sigInt;
+    private int _shuttingDown; // 0/1 latch so a repeated signal (impatient Ctrl+C) doesn't re-enter the quit
+
+    private void RegisterShutdownSignals()
+    {
+        void Handle(PosixSignalContext ctx)
+        {
+            ctx.Cancel = true; // don't let the runtime hard-terminate — we quit gracefully below
+            if (System.Threading.Interlocked.Exchange(ref _shuttingDown, 1) != 0)
+                return; // already quitting (a second Ctrl+C) — ignore
+            GD.Print($"[Main] received {ctx.Signal}; shutting down gracefully.");
+            Callable.From(GracefulQuit).CallDeferred();
+        }
+
+        try { _sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, Handle); } catch { /* unsupported on this OS */ }
+        try { _sigInt = PosixSignalRegistration.Create(PosixSignal.SIGINT, Handle); } catch { /* unsupported on this OS */ }
+    }
+
+    /// <summary>Runs on the MAIN thread (posted via CallDeferred): tell any live server its clients are about to
+    /// lose the link, then quit cleanly with success. The normal tree teardown does the ENet close + port release.</summary>
+    private void GracefulQuit()
+    {
+        try { NetGame.GracefulShutdownHook?.Invoke(); } catch { /* best-effort client notice */ }
+        GetTree().Quit(0);
     }
 
     /// <summary>

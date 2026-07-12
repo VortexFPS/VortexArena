@@ -32,6 +32,38 @@ public static class MenuState
     /// (under <see cref="UserPaths.BaseDir"/>, i.e. <c>~/XonData/config.cfg</c> by default).</summary>
     public static string UserConfigPath => UserPaths.Resolve("config.cfg");
 
+    /// <summary>
+    /// DS-5: exec the operator's <c>server.cfg</c> (or <paramref name="fileName"/> from <c>--serverconfig</c>) over
+    /// the loaded config tree — DP's dedicated-server convention. Runs AFTER the stock tree + <c>config.cfg</c>
+    /// (so the operator's server settings override both) and, by the caller, BEFORE the <c>--cvar</c> pins (so a
+    /// CLI override is still the last word). Read from the user dir (<c>~/XonData/server.cfg</c>), NOT the pk3 VFS,
+    /// because it's operator-authored, not shipped. Uses the FULL interpreter (server.cfg legitimately contains
+    /// <c>set</c>/<c>seta</c>/<c>alias</c>/<c>exec</c>, unlike the menu's own set-only config.cfg). No-op — and no
+    /// error — when the file is absent (the stock install ships only <c>server.cfg.example</c>, so nobody who
+    /// hasn't opted in pays anything). Returns the number of lines executed (0 = file absent/empty).
+    /// </summary>
+    public static int ExecServerConfig(string fileName = "server.cfg")
+    {
+        if (_interp is null)
+            return 0;
+        string path = UserPaths.Resolve(fileName);
+        using FileAccess? f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+        if (f is null)
+            return 0; // no server.cfg — operator hasn't created one (the common/default case)
+
+        int executed = 0;
+        foreach (string raw in f.GetAsText().Split('\n'))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith("//"))
+                continue;
+            _interp.ExecuteLine(line);
+            executed++;
+        }
+        GD.Print($"[MenuState] server config: {executed} line(s) from {path}.");
+        return executed;
+    }
+
     private static CvarService? _cvars;
     private static VirtualFileSystem? _vfs;
     private static AssetLoader? _sharedAssets;

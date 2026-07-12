@@ -1,0 +1,50 @@
+// ==========================================================================
+//  Vortex Arena — example dedicated server config  (DS-5)
+// ==========================================================================
+// Copy this file to your user data dir as "server.cfg" to have the dedicated
+// server exec it at boot:
+//
+//     ~/XonData/server.cfg              (Linux/macOS)
+//     %APPDATA%\..\XonData\server.cfg   (Windows — see docs/RUNNING.md)
+//
+// It is exec'd AFTER the shipped config tree + your config.cfg, and BEFORE any
+// --cvar pins on the command line (so a CLI --cvar is always the final word).
+// Pick a different filename with  --serverconfig <name>.
+//
+// Every line here is a normal console command — set / seta / alias / exec all
+// work, exactly as if typed at the server console.
+// --------------------------------------------------------------------------
+
+// --- identity -------------------------------------------------------------
+set hostname "Vortex Arena Server"        // shown in the server browser
+set sv_motd "Welcome!  Have fun."          // message of the day
+
+// --- networking -----------------------------------------------------------
+set port 26000                             // game port (also --port <n> on the CLI)
+set sv_public 1                            // 1 = announce to the master (server browser); 0 = private/LAN
+// set sv_master_url ""                    // (DS-7) our master; empty = built-in default
+
+// --- slots / gameplay -----------------------------------------------------
+set g_maxplayers 16                        // 0 = engine max
+set minplayers 2                           // bots fill up to this many active players
+set bot_number 4                           // bots to add when hosting
+set skill 5                                // bot skill (0..10)
+set timelimit_override 20                  // per-map time limit (minutes); -1 = map default
+set fraglimit_override 30                  // -1 = map default
+
+// --- map rotation ---------------------------------------------------------
+set g_maplist "stormkeep courtfun trident leave_em_behind"
+set g_maplist_shuffle 1                     // shuffle the rotation order
+
+// --- admin ----------------------------------------------------------------
+// rcon (DS-6): remote console. Leave the password EMPTY to keep rcon OFF.
+// set rcon_password "change-me"           // required for any remote rcon
+// set rcon_secure 1                        // 0 = plaintext (localhost only), 1 = time+HMAC, 2 = challenge+HMAC
+
+// --- logging (DS-8) -------------------------------------------------------
+// set sv_eventlog 1                        // write join/part/kill/end events to XonData/logs/
+// set sv_eventlog_console 0                // also echo eventlog lines to the console
+
+// --- performance ----------------------------------------------------------
+// set sv_dedicated_slim 1                  // headless host skips the client asset pipeline (default on)
+// set sv_dedicated_fps 0                   // 0 = clamp the engine loop to the sim tickrate (72 Hz)

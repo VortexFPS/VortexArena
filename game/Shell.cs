@@ -102,6 +102,22 @@ public partial class Shell : Node
         }
     }
 
+    /// <summary>DS-5: exec the operator's server.cfg on a server-host boot only (a pure client / model viewer never
+    /// runs it). `--serverconfig &lt;name&gt;` overrides the filename (DP <c>-serverconfig</c>). The exec itself is a
+    /// no-op when the file is absent, so this gate is really just "don't even look for it on a non-host boot".</summary>
+    private void MaybeExecServerConfig()
+    {
+        bool hosting = BootHost || !string.IsNullOrWhiteSpace(BootMap);
+        if (!hosting)
+            return;
+        string[] args = OS.GetCmdlineArgs();
+        int sc = System.Array.IndexOf(args, "--serverconfig");
+        string fileName = (sc >= 0 && sc + 1 < args.Length && !args[sc + 1].StartsWith("--"))
+            ? args[sc + 1]
+            : "server.cfg";
+        MenuState.ExecServerConfig(fileName);
+    }
+
     public override void _Ready()
     {
         // The shell (and, by inheritance, the menu layer) keeps processing while the tree is paused, so Escape
@@ -110,6 +126,12 @@ public partial class Shell : Node
 
         // --- one-time client bootstrap: mount assets, load the cvar config tree + user prefs, publish Api ---
         MenuState.Boot(DataPath);
+        // DS-5: on a server-host boot (--host / --map / --dedicated), exec the operator's server.cfg AFTER the
+        // stock tree + config.cfg (so operator settings override both) and BEFORE the --cvar pins below (so a CLI
+        // override is still the last word). Absent by default (the install ships only server.cfg.example), so a
+        // pure client / capture / smoke run that hasn't opted in is unaffected. `--serverconfig <name>` picks a
+        // different file (DP -serverconfig).
+        MaybeExecServerConfig();
         // --cvar NAME VALUE (repeatable): pin a cvar at boot AFTER the config tree loads and BEFORE ApplyAll, so a
         // test/automation/A-B run can force e.g. `--cvar vid_vsync 2 --cvar cl_frameprofiler 2` without editing a
         // config. Overrides the loaded config.cfg value (last writer wins), exactly like a console `set` would.

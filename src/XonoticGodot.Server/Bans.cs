@@ -89,6 +89,16 @@ public sealed class Bans
     /// <summary>Diagnostics sink (QC bprint/LOG_INFO). Defaults to swallowing; a host/test can capture.</summary>
     public Action<string>? Log { get; set; }
 
+    /// <summary>
+    /// DS-8: server-side ban persistence hook. Invoked by <see cref="Save"/> with the serialized ban string (the
+    /// same value stored in <c>g_banned_list</c>) every time the ban set changes, so the host can mirror it to a
+    /// file (e.g. <c>~/XonData/bans.cfg</c>) — making bans survive a dedicated-server restart independent of the
+    /// client <c>config.cfg</c>, which a dedicated host doesn't reliably write. Null = cvar-only (tests / a
+    /// transient listen client). The host seeds <c>g_banned_list</c> from that file at boot before the first
+    /// <see cref="Load"/>, so nothing extra is needed on the read path.
+    /// </summary>
+    public Action<string>? PersistSink { get; set; }
+
     /// <summary>The ban slots (read-only) — empty slots included, to keep <c>unban #N</c> indices stable.</summary>
     public IReadOnlyList<BanEntry> Slots => _bans;
 
@@ -381,7 +391,9 @@ public sealed class Bans
             sb.Append(' ').Append(b.Ip).Append(' ')
               .Append((b.Expire - now).ToString("0", System.Globalization.CultureInfo.InvariantCulture));
         }
-        Cvars.Set("g_banned_list", sb.Length <= 1 ? "" : sb.ToString());
+        string serialized = sb.Length <= 1 ? "" : sb.ToString();
+        Cvars.Set("g_banned_list", serialized);
+        PersistSink?.Invoke(serialized); // DS-8: mirror to the host's ban file (survives a dedicated restart)
     }
 
     /// <summary>

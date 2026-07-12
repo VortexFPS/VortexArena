@@ -723,6 +723,12 @@ public sealed partial class NetGame : Node3D
         // entities (spawn points + jump-pads/items/doors), registers brush models + surfaces + PVS.
         _serverWorld.Boot(_gametype);
 
+        // DS-8: on a dedicated/headless host, back the ban list with a file so bans survive a restart (g_banned_list
+        // has no Save flag and a dedicated host doesn't reliably write config.cfg). Seeds the cvar from the file
+        // BEFORE any client connects (so the first ban check sees persisted bans), then mirrors every change back.
+        if (_isHeadless)
+            WireBanPersistence();
+
         // Expose the map name as a cvar so the server-browser infostring (ServerNet.BuildServerInfo) and the
         // pure-client map-name handshake (follow-up) have the real value; GameWorld.MapName is set, but the cvar
         // is independent (DP keeps mapname as an engine cvar available to serverinfo).
@@ -1067,6 +1073,49 @@ public sealed partial class NetGame : Node3D
             _serverConsole = new ServerConsole { Name = "ServerConsole", CommandSink = RunServerConsoleLine };
             AddChild(_serverConsole);
         }
+    }
+
+    /// <summary>
+    /// DS-8: file-back the server ban list so bans persist across a dedicated-server restart. The ban store
+    /// serializes to the <c>g_banned_list</c> cvar (QC-faithful, seconds-remaining) but that cvar has no Save flag
+    /// and a dedicated host doesn't write <c>config.cfg</c> — so without this a restart forgets every ban. Reads
+    /// <c>~/XonData/bans.cfg</c> and seeds the cvar BEFORE the first ban check, then wires <see cref="Bans.PersistSink"/>
+    /// to rewrite the file on every ban/unban. Uses <see cref="Bans.Load"/> after seeding so the in-memory store
+    /// reflects the persisted set immediately.
+    /// </summary>
+    private void WireBanPersistence()
+    {
+        if (_serverWorld is null)
+            return;
+        string path = UserPaths.Resolve("bans.cfg");
+
+        // Seed g_banned_list from the file (if any) before the store loads.
+        try
+        {
+            using Godot.FileAccess? f = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (f is not null)
+            {
+                string saved = f.GetAsText().Trim();
+                if (!string.IsNullOrEmpty(saved))
+                {
+                    _serverWorld.Services.Cvars.Set("g_banned_list", saved);
+                    _serverWorld.Bans.Load(); // rebuild the in-memory slots from the seeded cvar now
+                    GD.Print($"[NetGame] loaded persisted bans from {path}.");
+                }
+            }
+        }
+        catch (Exception ex) { GD.PrintErr($"[NetGame] could not read {path}: {ex.Message}"); }
+
+        // Mirror every future change back to the file (fires from Bans.Save on ban/unban/prolong).
+        _serverWorld.Bans.PersistSink = serialized =>
+        {
+            try
+            {
+                using Godot.FileAccess? w = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write);
+                w?.StoreString(serialized);
+            }
+            catch (Exception ex) { GD.PrintErr($"[NetGame] could not write {path}: {ex.Message}"); }
+        };
     }
 
     /// <summary>

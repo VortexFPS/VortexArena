@@ -39,6 +39,12 @@ public sealed class MasterServerLink : IDisposable
     /// <summary>A client asked this (server) for its info — answer with <see cref="SendInfoResponse"/>.</summary>
     public event Action<IPEndPoint, string>? GetInfoRequested;
 
+    /// <summary>DS-6: a connectionless <c>rcon</c>/<c>srcon</c>/<c>getchallenge</c> packet arrived. Arg is the RAW
+    /// OOB body (header already stripped) — passed as bytes, not a string, because a secure srcon packet embeds a
+    /// raw 16-byte HMAC that ASCII-decoding would corrupt. The server hands it to <see cref="RconProtocol"/> and
+    /// replies via <see cref="SendRaw"/>. Null handler = rcon disabled (the packet is ignored).</summary>
+    public event Action<IPEndPoint, byte[]>? RconReceived;
+
     // =====================================================================================
     //  Send (server + client)
     // =====================================================================================
@@ -116,6 +122,16 @@ public sealed class MasterServerLink : IDisposable
         {
             InfoReceived?.Invoke(from, MasterServerProtocol.ParseInfoResponse(data));
         }
+        // DS-6: rcon / srcon / getchallenge — the server-console-over-UDP verbs. Detected on the ASCII PREFIX
+        // (intact even in a binary srcon packet) but forwarded as RAW bytes so the embedded 16-byte HMAC survives.
+        // "getchallenge" is checked before "getinfo" (both start with "get") so a challenge request isn't mistaken
+        // for an info probe.
+        else if (text.StartsWith("getchallenge", StringComparison.Ordinal)
+              || text.StartsWith("srcon ", StringComparison.Ordinal)
+              || text.StartsWith("rcon ", StringComparison.Ordinal))
+        {
+            RconReceived?.Invoke(from, body.ToArray());
+        }
         else if (text.StartsWith("getinfo", StringComparison.Ordinal))
         {
             // a client probing this server — pass the challenge token (everything after "getinfo ").
@@ -124,6 +140,10 @@ public sealed class MasterServerLink : IDisposable
             GetInfoRequested?.Invoke(from, challenge);
         }
     }
+
+    /// <summary>DS-6: send a pre-built connectionless packet (rcon reply / challenge reply) to <paramref name="to"/>.
+    /// The bytes already include the OOB header (<see cref="RconProtocol"/> builds them).</summary>
+    public void SendRaw(IPEndPoint to, byte[] packet) => _udp.Send(packet, packet.Length, to);
 
     public void Dispose() => _udp.Dispose();
 }

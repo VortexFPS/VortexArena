@@ -752,6 +752,14 @@ public sealed partial class NetGame : Node3D
         _serverWorld.Services.Cvars.Register("sv_dedicated_fps", "0");
         ApplyDedicatedLoopCap();
 
+        // DS-6: rcon (DP srcon). rcon_password EMPTY (default) = rcon OFF — an operator opts in via server.cfg.
+        // rcon_secure 1 = time+HMAC-MD4 (remote-safe default; 0 = plaintext localhost-only, 2 = challenge+HMAC).
+        // These are operator secrets/policy, authored in server.cfg — no Save flag (never persisted to config.cfg).
+        _serverWorld.Services.Cvars.Register("rcon_password", "");
+        _serverWorld.Services.Cvars.Register("rcon_secure", "1");
+        _serverWorld.Services.Cvars.Register("rcon_secure_maxdiff", "5");
+        _serverWorld.Services.Cvars.Register("rcon_secure_challengetimeout", "5");
+
         // [#44] sv_spectate stays at Base's shipped `1` (spectating allowed). The old port set it to 0 here to
         // make the host auto-spawn — which as a side effect made spectating impossible for EVERYONE (and armed
         // the sv_spectate=0 spectator-kick). The host's "Create Game and play" UX is now the Base-faithful

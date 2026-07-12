@@ -172,6 +172,9 @@ public sealed class ServerNet : IDisposable
 
     // --- master-server registration (server browser): periodic heartbeat + answer getinfo probes ---
     private MasterServerLink? _master;
+    // DS-6: the rcon/srcon authenticator, wired to the same OOB socket that answers getinfo. Null until the
+    // master link exists (WireRcon). Reads rcon_* cvars live, executes authenticated commands on the server.
+    private RconServer? _rcon;
     private readonly List<IPEndPoint> _masters = new();
     private float _heartbeatAccum;
     private const float HeartbeatInterval = 180f; // DP re-registers every ~3 minutes
@@ -712,6 +715,7 @@ public sealed class ServerNet : IDisposable
             {
                 _master = new MasterServerLink(candidate);
                 _master.GetInfoRequested += (from, _) => _master!.SendInfoResponse(from, BuildServerInfo(gamePort));
+                WireRcon(candidate); // DS-6: rcon rides the same OOB socket
                 GD.Print($"[ServerNet] LAN discovery: answering getinfo on UDP {candidate} (game port {gamePort}).");
                 return;
             }
@@ -725,8 +729,10 @@ public sealed class ServerNet : IDisposable
 
     public void EnableMasterServer(IEnumerable<string> masters, int port)
     {
+        bool freshLink = _master is null;
         _master ??= new MasterServerLink();
         _master.GetInfoRequested += (from, _) => _master!.SendInfoResponse(from, BuildServerInfo(port));
+        if (freshLink) WireRcon(_master.LocalEndPoint.Port); // DS-6: only wire once per link (EnableLanDiscovery may have already)
         foreach (string addr in masters)
         {
             if (TryResolve(addr, out IPEndPoint? ep))
@@ -734,6 +740,50 @@ public sealed class ServerNet : IDisposable
         }
         _heartbeatAccum = HeartbeatInterval; // heartbeat on the next Tick
         GD.Print($"[ServerNet] master-server registration enabled for {_masters.Count} master(s).");
+    }
+
+    /// <summary>
+    /// DS-6: stand up the rcon authenticator on the OOB socket bound at <paramref name="oobPort"/>. Reads the
+    /// <c>rcon_*</c> cvars live (a console/server.cfg change applies to the next packet); an empty
+    /// <c>rcon_password</c> keeps rcon OFF. Authenticated commands run on the server-console path
+    /// (<c>isServerConsole:true</c> — full admin privilege) and the console output is sent back as the DP rcon
+    /// print reply. Runs on the master-pump thread; on the headless dedicated host that is the (single) main
+    /// thread, so executing against the world is safe — the same assumption the rest of the unthreaded pump makes.
+    /// </summary>
+    private void WireRcon(int oobPort)
+    {
+        if (_master is null || _rcon is not null)
+            return;
+
+        var cvars = _world.Services.Cvars;
+        _rcon = new RconServer(() => new RconConfig
+        {
+            Password = cvars.GetString("rcon_password") ?? "",
+            SecureLevel = (int)cvars.GetFloat("rcon_secure"),
+            MaxTimeDiffSeconds = cvars.GetFloat("rcon_secure_maxdiff") is float md and > 0f ? (int)md : 5,
+            ChallengeTimeoutSeconds = cvars.GetFloat("rcon_secure_challengetimeout") is float ct and > 0f ? ct : 5.0,
+        });
+
+        _master.RconReceived += (from, body) =>
+        {
+            bool isLocal = IPAddress.IsLoopback(from.Address);
+            RconServer.Result result = _rcon!.Handle(from, body, isLocal,
+                execute: cmd =>
+                {
+                    // Audit EVERY authenticated rcon command with its source (DP logs the same). Runs before the
+                    // command so a command that quits/rehosts is still attributed.
+                    GD.Print($"[rcon] {from.Address}: {cmd}");
+                    return _world.Commands.Execute(cmd, isServerConsole: true, caller: null).Output;
+                },
+                send: pkt => _master!.SendRaw(from, pkt));
+
+            if (result is RconServer.Result.Denied or RconServer.Result.RateLimited)
+                GD.Print($"[rcon] {result} from {from.Address}");
+        };
+
+        // Only announce rcon when it's actually enabled (a password is set) — else it's silently off.
+        if (!string.IsNullOrEmpty(cvars.GetString("rcon_password")))
+            GD.Print($"[ServerNet] rcon enabled on UDP {oobPort} (rcon_secure {(int)cvars.GetFloat("rcon_secure")}).");
     }
 
     private void PumpMasterServer(float realDelta)

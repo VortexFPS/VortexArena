@@ -105,6 +105,28 @@ clean up strays with `powershell "Get-Process Godot* | Stop-Process -Force"`). A
 (or explicit `--no-save-config`) run also **never writes `~/XonData/config.cfg`** — DP's `-benchmark`
 rule — so scripted runs and their `--cvar`/`--bots` pins can't pollute the player's saved settings.
 
+### Operating a dedicated host (v2)
+
+- **Console (DS-2):** the host reads commands from **stdin** — type `status`, `kick <n>`, `say …`,
+  `set g_… …`, `map <name>`, `quit`, etc., exactly as at DP's dedicated terminal. Pipe a control script in
+  (`printf 'status\nquit\n' | "$GODOT" --headless --host stormkeep`) or drive it from a supervisor. `--no-console`
+  disables the reader (e.g. a service with no stdin).
+- **server.cfg (DS-5):** on any host boot the server execs `~/XonData/server.cfg` (after the shipped config
+  tree + `config.cfg`, before `--cvar` pins). Copy `server.cfg.example` (repo root) to start. `--serverconfig
+  <name>` picks a different file. Absent by default, so nothing runs unless you opt in.
+- **rcon (DS-6):** DarkPlaces-compatible remote console on the discovery UDP port (`gamePort+1..+8`, logged as
+  `rcon enabled on UDP <n>`). Set `rcon_password` (empty = OFF) in server.cfg. `rcon_secure 1` = time+HMAC-MD4
+  (default, remote-safe), `2` = challenge+HMAC-MD4, `0` = plaintext (localhost only). Every authenticated
+  command is logged `[rcon] <addr>: <cmd>`; repeated failures per address are rate-limited.
+- **Bans persist (DS-8):** `ban`/`kickban` survive a restart — the list is mirrored to `~/XonData/bans.cfg`
+  and reloaded at boot (`[NetGame] loaded persisted bans …`), independent of `config.cfg`.
+- **Loop cap (DS-3):** a headless host clamps the engine loop to the sim tickrate (`Engine.MaxFps 72`) instead
+  of the cl_maxfps-derived ~144 — an idle box no longer spins the loop for a display that isn't there.
+  `sv_dedicated_fps <n>` pins an explicit cap.
+- **Signals + exit codes (DS-4):** `SIGTERM`/`SIGINT` (systemd `stop`, Ctrl+C) shut down cleanly — the ENet
+  host closes and the UDP port releases (no orphaned-port trap), and connected clients get a shutdown notice.
+  Boot-failure exit codes for a supervisor: **2** = UDP port in use, **3** = `--host <map>` not found.
+
 **Port collisions (agents, take note):** `--port <n>` (DP `-port`) binds the hosted listen server off the
 stock 26000. When 26000 is already held by ANOTHER live instance, the new host's `CreateServer` fails but
 its self-client then connects to the *squatter* and prints a plausible-looking `handshake accepted` — with

@@ -86,6 +86,10 @@ public sealed partial class NetGame : Node3D
     // no thread, no lock — so the default path is byte-for-byte unchanged.
     private ServerThread? _serverThread;        // listen server only, sv_threaded 1 only
     private object? _simGate;                    // the shared lock; non-null iff _serverThread is non-null
+    private ServerConsole? _serverConsole;      // DS-2: stdin command reader (headless/dedicated host only)
+    // DS-3: cached "is this the dummy (headless/dedicated) display server" — read every frame by the frame
+    // governor and once at host start by the loop-cap. DisplayServer is a live singleton at construction time.
+    private readonly bool _isHeadless = DisplayServer.GetName() == "headless";
     private ClientNet? _client;
     private ClientWorld _render = null!;
     private DevHarness? _devHarness;            // dev capture (--fx-demo), inert unless a dev flag was passed
@@ -723,6 +727,12 @@ public sealed partial class NetGame : Node3D
         // Dedicated-slim opt-out knob (read in _Ready from the SHARED store, same pattern as sv_threaded —
         // unset → ON). Registered here for cvarlist/status visibility; no Save flag (port A/B knob).
         _serverWorld.Services.Cvars.Register("sv_dedicated_slim", "1");
+        // DS-3: headless loop-cap knob. 0 (default) = clamp the engine frame loop to the sim tickrate (an idle
+        // dedicated box otherwise spins the loop at the cl_maxfps-derived rate, ~2× the 72 Hz sim, for nothing);
+        // >0 = an explicit cap (e.g. a busy box that wants the loop to drain net/console faster than the tick).
+        // No Save flag (port operator knob). Applied just below for a headless host.
+        _serverWorld.Services.Cvars.Register("sv_dedicated_fps", "0");
+        ApplyDedicatedLoopCap();
 
         // [#44] sv_spectate stays at Base's shipped `1` (spectating allowed). The old port set it to 0 here to
         // make the host auto-spawn — which as a side effect made spectating impossible for EVERYONE (and armed
@@ -1011,6 +1021,68 @@ public sealed partial class NetGame : Node3D
                 static () => XonoticGodot.Engine.Simulation.SimulationLoop.TicRate);
             _serverThread.Start();
             GD.Print("[NetGame] sv_threaded 1 — server simulation running on a dedicated worker thread (XG-ServerSim).");
+        }
+
+        // DS-2: the operator console. A headless/dedicated host has a real terminal (or a piped stdin for
+        // scripted control) but no in-game console, so without this an operator can't run a single runtime
+        // command. Gated to headless (a windowed listen server uses the in-game console) and off with
+        // `--no-console`. Created LAST so the command sinks above are already wired before a line can arrive.
+        bool wantConsole = DisplayServer.GetName() == "headless"
+            && Array.IndexOf(OS.GetCmdlineArgs(), "--no-console") < 0;
+        if (wantConsole)
+        {
+            _serverConsole = new ServerConsole { Name = "ServerConsole", CommandSink = RunServerConsoleLine };
+            AddChild(_serverConsole);
+        }
+    }
+
+    /// <summary>
+    /// DS-3: clamp the engine's frame loop to the sim tickrate on a headless/dedicated host. Godot's main loop
+    /// runs at <see cref="Godot.Engine.MaxFps"/> (the client sets that from cl_maxfps → ~144); a server sim ticks
+    /// at 72 Hz, so an idle dedicated box was spinning the loop ~2× the sim for no benefit (pure wasted CPU,
+    /// since there is no display to present). Set the cap to <c>sv_dedicated_fps</c> when the operator pinned one,
+    /// else the tickrate. Skipped when <c>--fixed-fps</c> is present (a deterministic capture owns the pacing).
+    /// No-op off a headless host. Called once at host start (post cvar-register) so server.cfg's value is live.
+    /// </summary>
+    private void ApplyDedicatedLoopCap()
+    {
+        if (!_isHeadless)
+            return;
+        if (Array.IndexOf(OS.GetCmdlineArgs(), "--fixed-fps") >= 0)
+            return; // deterministic capture: Godot's fixed frame delta owns the loop rate
+
+        int tickHz = (int)MathF.Round(1f / XonoticGodot.Engine.Simulation.SimulationLoop.TicRate); // 72
+        int pinned = (int)(_serverWorld?.Services.Cvars.GetFloat("sv_dedicated_fps") ?? 0f);
+        int target = pinned > 0 ? pinned : tickHz;
+        Godot.Engine.MaxFps = target;
+        GD.Print($"[NetGame] dedicated loop cap: Engine.MaxFps {target} " +
+            $"({(pinned > 0 ? "sv_dedicated_fps" : $"sim tickrate {tickHz} Hz")}).");
+    }
+
+    /// <summary>
+    /// DS-2: execute one operator-console line against the server, exactly as if it were typed at DP's dedicated
+    /// terminal (full server-console privilege — kick/ban/map/set/exec all reachable). Runs on the MAIN thread
+    /// (the <see cref="ServerConsole"/> drain); the sim-thread gate discipline mirrors the changelevel/bot sinks:
+    /// threaded → hop to the worker (and print the reply from there, since the result isn't ready synchronously),
+    /// unthreaded (the headless default) → execute inline and print the collected output now.
+    /// </summary>
+    private void RunServerConsoleLine(string line)
+    {
+        if (_serverWorld is null || string.IsNullOrWhiteSpace(line))
+            return;
+        XonoticGodot.Server.Commands cmds = _serverWorld.Commands;
+        if (_server is { SimGate: not null } threaded)
+        {
+            threaded.RunOnSimThread(() =>
+            {
+                string outp = cmds.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
+                if (!string.IsNullOrEmpty(outp)) GD.Print(outp.TrimEnd('\n'));
+            });
+        }
+        else
+        {
+            string outp = cmds.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
+            if (!string.IsNullOrEmpty(outp)) GD.Print(outp.TrimEnd('\n'));
         }
     }
 
@@ -4041,6 +4113,10 @@ public sealed partial class NetGame : Node3D
 
     private void FrameGovernor(float rawDt)
     {
+        // DS-3: a headless/dedicated host has no display to pace — frame-delivery smoothing is meaningless, and
+        // fighting the tickrate loop-cap (ApplyDedicatedLoopCap) would just re-raise Engine.MaxFps. Skip entirely.
+        if (_isHeadless)
+            return;
         if (!_frameGovernorCv)
         {
             if (_govSaved >= 0)

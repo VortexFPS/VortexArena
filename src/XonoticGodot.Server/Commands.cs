@@ -891,6 +891,12 @@ public sealed class Commands
         Register("settemp", "settemp <cvar> <value> — temporarily set a cvar (restored on map end)", CmdSettemp);
         Register("settemp_restore", "settemp_restore — restore all settemp cvars", CmdSettempRestore);
 
+        // ---- process control (DP engine `quit`/`shutdown`) — the dedicated operator console (DS-2) and rcon
+        //      (DS-6) need a way to stop the server; routes through the host-wired QuitHandler seam. Server-console
+        //      / rcon only (the privilege split already blocks a remote client from naming it). ----
+        Register("quit", "quit — shut the server down", CmdQuit);
+        Register("exit", "exit — shut the server down (alias of quit)", CmdQuit);
+
         // ---- introspection (QC GameCommand help / common/command help/who/teamstatus/time/info) ----
         Register("help", "help [command] — list commands or describe one", CmdHelp);
         Register("status", "status — print match/roster status", CmdStatus);
@@ -1299,6 +1305,21 @@ public sealed class Commands
         var names = new List<string>(_commands.Keys);
         names.Sort(StringComparer.OrdinalIgnoreCase);
         ctx.Print("commands: " + string.Join(", ", names));
+        return true;
+    }
+
+    /// <summary>DP engine <c>quit</c>: shut the server down via the host-wired <see cref="QuitHandler"/> (the same
+    /// deferred GetTree().Quit() the end-of-match <c>quit_when_empty</c> path uses). When unwired (a bare unit-test
+    /// world) it prints a notice instead — the process can't quit itself from the server library.</summary>
+    private bool CmdQuit(CommandContext ctx)
+    {
+        if (QuitHandler is null)
+        {
+            ctx.Print("quit: no host shutdown handler wired (nothing to do)");
+            return false;
+        }
+        ctx.Print("shutting down…");
+        QuitHandler();
         return true;
     }
 

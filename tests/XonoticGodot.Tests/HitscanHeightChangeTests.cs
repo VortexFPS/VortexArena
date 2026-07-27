@@ -64,7 +64,7 @@ public class HitscanHeightChangeTests
         return true;
     }
 
-    private static CollisionWorld? LoadShippedMap(out string mapName)
+    private static CollisionWorld? LoadShippedMap(string wanted, out string mapName)
     {
         mapName = "";
         if (!Directory.Exists(DataDir))
@@ -72,13 +72,11 @@ public class HitscanHeightChangeTests
         using var vfs = new VirtualFileSystem();
         if (!vfs.MountGameDir(DataDir))
             return null;
-        // Prefer a map with real vertical structure; fall back to whatever ships.
-        List<string> maps = vfs.Find("maps/", "bsp").ToList();
-        if (maps.Count == 0)
-            return null;
-        string pick = maps.FirstOrDefault(m => m.Contains("stormkeep", System.StringComparison.OrdinalIgnoreCase))
-                      ?? maps.FirstOrDefault(m => m.Contains("implosion", System.StringComparison.OrdinalIgnoreCase))
-                      ?? maps[0];
+        string? pick = vfs.Find("maps/", "bsp")
+            .FirstOrDefault(m => Path.GetFileNameWithoutExtension(m)
+                .Equals(wanted, System.StringComparison.OrdinalIgnoreCase));
+        if (pick is null)
+            return null;                  // this map isn't in the mounted set — self-skip
         mapName = Path.GetFileName(pick);
         BspData bsp = BspReader.Read(vfs.ReadBytes(pick));
         CollisionWorld world = BspCollisionBuilder.Build(bsp).World;
@@ -86,10 +84,19 @@ public class HitscanHeightChangeTests
         return world;
     }
 
-    [Fact]
-    public void RailShotsAcrossHeightChanges_NeverSkipASurfaceTheyPassThrough()
+    /// <summary>
+    /// Run across several shipped maps with different vertical vocabularies, because the bug's trigger is
+    /// geometric: stormkeep (towers + courtyards), implosion (the stacked-arena layout the 10-bot soaks
+    /// use), catharsis (the long sightlines that made it the perf-campaign's worst case). A broadphase
+    /// defect that shows on one layout and not another is exactly what a single-map test would miss.
+    /// </summary>
+    [Theory]
+    [InlineData("stormkeep")]
+    [InlineData("implosion")]
+    [InlineData("catharsis")]
+    public void RailShotsAcrossHeightChanges_NeverSkipASurfaceTheyPassThrough(string map)
     {
-        CollisionWorld? maybe = LoadShippedMap(out string mapName);
+        CollisionWorld? maybe = LoadShippedMap(map, out string mapName);
         if (maybe is null)
             return;                       // map data not mounted — self-skip
         CollisionWorld world = maybe;

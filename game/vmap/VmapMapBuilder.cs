@@ -33,14 +33,19 @@ public static class VmapMapBuilder
     /// </summary>
     /// <param name="doc">The truth document.</param>
     /// <param name="assets">Material facade (resolves shader names to Godot materials).</param>
-    /// <param name="includeSky">Keep sky-flagged faces as drawable geometry (the editor's Base/wireframe views).</param>
-    public static Node3D BuildMap(VmapDocument doc, AssetSystem assets, bool includeSky = false)
+    /// <param name="options">
+    /// Which brushes take part and whether buried faces are removed. Defaults to the editor's world view:
+    /// gametype-filtered, occlusion-culled, no sky.
+    /// </param>
+    public static Node3D BuildMap(VmapDocument doc, AssetSystem assets, VmapSurfaceOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(assets);
 
+        options ??= new VmapSurfaceOptions { CullOccludedFaces = true };
+
         var root = new Node3D { Name = "VmapWorld" };
-        IReadOnlyList<VmapSurface> surfaces = VmapGeometryBuilder.BuildSurfaces(doc, includeSky);
+        IReadOnlyList<VmapSurface> surfaces = VmapGeometryBuilder.BuildSurfaces(doc, options);
 
         // Bucket every triangle into its spatial cell, keyed by cell then material.
         var cells = new Dictionary<(int X, int Y, int Z), Dictionary<string, CellSurface>>();
@@ -81,7 +86,7 @@ public static class VmapMapBuilder
                 if (cell.Indices.Count == 0)
                     continue;
                 cell.Pack(mesh);
-                materials.Add(assets.ResolveMaterial(material));
+                materials.Add(EditorMaterial(assets, material));
             }
 
             if (mesh.GetSurfaceCount() == 0)
@@ -100,6 +105,43 @@ public static class VmapMapBuilder
 
         return root;
     }
+
+    /// <summary>Cache so a shared material is built once per map build, not once per cell.</summary>
+    private static readonly Dictionary<string, Material> EditorMaterials = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// FULLBRIGHT textured material for the editor world.
+    ///
+    /// The truth document carries no lightmap UVs — lighting is baked data derived FROM geometry, and the
+    /// geometry is what is being edited — so the game's normal lit materials resolve to unlit black here and
+    /// the map looks destroyed even though every surface is exactly where it should be. Editors solve this the
+    /// same way Radiant does: draw the world fullbright. You lose the lighting, which is meaningless mid-edit
+    /// anyway, and you can actually see what you are building.
+    /// </summary>
+    private static Material EditorMaterial(AssetSystem assets, string shaderName)
+    {
+        if (EditorMaterials.TryGetValue(shaderName, out Material? cached) && GodotObject.IsInstanceValid(cached))
+            return cached;
+
+        Texture2D? albedo = assets.ResolveLightmapDiffuse(shaderName).Texture ?? assets.LoadTexture(shaderName);
+
+        var mat = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            AlbedoTexture = albedo,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
+            // A shader we cannot resolve to an image becomes flat grey rather than invisible: unfound geometry
+            // must still be visible and clickable in an editor.
+            AlbedoColor = albedo is null ? new Color(0.55f, 0.55f, 0.58f) : Colors.White,
+            CullMode = BaseMaterial3D.CullModeEnum.Back,
+        };
+
+        EditorMaterials[shaderName] = mat;
+        return mat;
+    }
+
+    /// <summary>Drop cached materials (called when a session closes so textures are not pinned forever).</summary>
+    public static void ClearMaterialCache() => EditorMaterials.Clear();
 
     private static (int, int, int) CellKey(NVec3 quakePosition) => (
         (int)MathF.Floor(quakePosition.X / CellSize),

@@ -68,6 +68,13 @@ public sealed partial class EditorController : Node3D
     /// <summary>Cvar: show q3map2 TOOL brushes (hint/skip/clip/trigger/caulk) as editable geometry.</summary>
     public const string CvarShowToolBrushes = "cl_editor_show_tool_brushes";
 
+    /// <summary>
+    /// Drop face area buried inside other solids when building the editor world. On by default — without it
+    /// the view shows the mapper's overlapping solids rather than the level's visible skin. Off is a debugging
+    /// aid: it answers "is that hole real geometry, or did the culler eat it?" without a rebuild.
+    /// </summary>
+    public const string CvarCullOccluded = "cl_editor_cull_occluded";
+
     /// <summary>Maximum pick range in world units.</summary>
     private const float PickRange = 8192f;
 
@@ -168,6 +175,7 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarSnapRadius, "16", CvarFlags.Save);
         c.Register(CvarSnapEnabled, "1", CvarFlags.Save);
         c.Register(CvarShowToolBrushes, "0", CvarFlags.Save);
+        c.Register(CvarCullOccluded, "1", CvarFlags.Save);
     }
 
     /// <summary>
@@ -626,6 +634,9 @@ public sealed partial class EditorController : Node3D
     /// volumes instead of the wall behind them.
     /// </summary>
     public bool IncludeToolBrushes => Cvar(CvarShowToolBrushes, 0f) != 0f;
+
+    /// <summary>Whether the world build removes faces buried inside other solids.</summary>
+    public bool CullOccludedFaces => Cvar(CvarCullOccluded, 1f) != 0f;
 
     private static float Cvar(string name, float fallback)
     {

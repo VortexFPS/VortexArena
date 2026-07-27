@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 using XonoticGodot.Formats.Vfs;
+using XonoticGodot.Formats.Vmap;
 using XonoticGodot.Common;            // GameInit
 using XonoticGodot.Common.Framework;
 using XonoticGodot.Common.Gameplay;   // Player (LocalServerPlayer)
@@ -6841,7 +6842,12 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
-        if (_editorMapVersion == _editor.GeometryVersion)
+        // The gametype filter and the tool-brush toggle change what is drawn without touching the geometry
+        // version, so both have to be part of the key or flipping them would leave the old world on screen.
+        int viewKey = HashCode.Combine(
+            _editor.GeometryVersion, _editor.GametypeFilter, _editor.IncludeToolBrushes,
+            _editor.CullOccludedFaces);
+        if (_editorMapVersion == viewKey)
             return;
 
         using var _scope = XonoticGodot.Game.Client.FrameProfiler.Scope("editor.world");
@@ -6849,9 +6855,17 @@ public sealed partial class NetGame : Node3D
         if (_editorMapRoot is not null && GodotObject.IsInstanceValid(_editorMapRoot))
             _editorMapRoot.QueueFree();
 
-        _editorMapRoot = Vmap.VmapMapBuilder.BuildMap(_editor.Document!, _assets.Assets);
+        _editorMapRoot = Vmap.VmapMapBuilder.BuildMap(_editor.Document!, _assets.Assets, new VmapSurfaceOptions
+        {
+            // Same filter the picker uses, so what you can click is what you can see.
+            HiddenSubmodels = _editor.PickIndex.HiddenSubmodels,
+            IncludeToolBrushes = _editor.IncludeToolBrushes,
+            // Without this the editor draws the mapper's overlapping solids instead of the level's visible
+            // skin, and you end up looking at the inside of the masonry rather than at the room.
+            CullOccludedFaces = _editor.CullOccludedFaces,
+        });
         AddChild(_editorMapRoot);
-        _editorMapVersion = _editor.GeometryVersion;
+        _editorMapVersion = viewKey;
 
         // Hide the compiled world rather than freeing it, so leaving the editor restores it instantly.
         if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))

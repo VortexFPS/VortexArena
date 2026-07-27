@@ -18,11 +18,57 @@ public sealed class VmapSurface
     public List<Vector3> Normals { get; } = new();
     public List<Vector2> Uvs { get; } = new();
 
-    /// <summary>Triangle indices, counter-clockwise seen from OUTSIDE the solid (the front face).</summary>
+    /// <summary>
+    /// Triangle indices in the same winding a compiled Q3 face uses — CLOCKWISE seen from outside the solid.
+    /// That is what the renderer treats as front-facing, so it is the order both this builder and the BSP
+    /// loader must emit; the opposite order silently turns the world inside out.
+    /// </summary>
     public List<int> Indices { get; } = new();
 
     public int VertexCount => Positions.Count;
     public int TriangleCount => Indices.Count / 3;
+}
+
+/// <summary>
+/// What to include when generating geometry from a document. Different consumers want genuinely different
+/// answers: the editor's view wants only the brushes belonging to the selected gametype and only their visible
+/// skin, while collision wants every solid volume intact.
+/// </summary>
+public sealed class VmapSurfaceOptions
+{
+    /// <summary>Keep sky-flagged faces as drawable geometry (wireframe/Base render modes).</summary>
+    public bool IncludeSky { get; init; }
+
+    /// <summary>Bezier tessellation level.</summary>
+    public int PatchSubdivisions { get; init; } = VmapGeometryBuilder.DefaultPatchSubdivisions;
+
+    /// <summary>
+    /// Inline-model indices to hide (see <see cref="VmapBrush.SubmodelIndex"/>). A compiled map carries every
+    /// gametype's <c>func_wall</c> geometry at once; showing all of them at once fills the level with solid
+    /// slabs belonging to modes that are not running.
+    /// </summary>
+    public IReadOnlySet<int>? HiddenSubmodels { get; init; }
+
+    /// <summary>Draw caulk/hint/clip scaffolding volumes too (an explicit editor toggle).</summary>
+    public bool IncludeToolBrushes { get; init; }
+
+    /// <summary>
+    /// Remove face area buried inside other opaque solids (see <see cref="VmapFaceCulling"/>). On for the
+    /// editor's world view; off for collision, which needs whole volumes, and for single-brush picking, which
+    /// has no neighbours to be buried in.
+    /// </summary>
+    public bool CullOccludedFaces { get; init; }
+
+    /// <summary>Whether a brush belongs to the view these options describe.</summary>
+    public bool IsBrushVisible(VmapBrush brush)
+    {
+        ArgumentNullException.ThrowIfNull(brush);
+        if (brush.IsToolBrush && !IncludeToolBrushes)
+            return false;
+        return brush.SubmodelIndex == 0
+            || HiddenSubmodels is null
+            || !HiddenSubmodels.Contains(brush.SubmodelIndex);
+    }
 }
 
 /// <summary>
@@ -57,16 +103,37 @@ public static class VmapGeometryBuilder
         VmapDocument doc,
         bool includeSky = false,
         int patchSubdivisions = DefaultPatchSubdivisions)
+        => BuildSurfaces(doc, new VmapSurfaceOptions
+        {
+            IncludeSky = includeSky,
+            PatchSubdivisions = patchSubdivisions,
+        });
+
+    /// <summary>
+    /// Build every drawable surface, with control over which brushes participate and whether buried faces are
+    /// removed. The render path wants both; collision and single-brush picking want neither.
+    /// </summary>
+    public static IReadOnlyList<VmapSurface> BuildSurfaces(VmapDocument doc, VmapSurfaceOptions options)
     {
         ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(options);
 
         var byMaterial = new Dictionary<string, Builder>(StringComparer.OrdinalIgnoreCase);
+        bool Visible(VmapBrush b) => options.IsBrushVisible(b);
+
+        // Faces are only hidden by solids that are themselves part of the view, so the occluder set is built
+        // from the same visibility predicate the geometry is.
+        VmapFaceCulling? culling = options.CullOccludedFaces ? new VmapFaceCulling(doc, Visible) : null;
 
         foreach (VmapBrush brush in doc.Brushes)
-            AppendBrush(brush, byMaterial, includeSky);
+        {
+            if (!Visible(brush))
+                continue;
+            AppendBrush(brush, byMaterial, options.IncludeSky, culling);
+        }
 
         foreach (VmapPatch patch in doc.Patches)
-            AppendPatch(patch, byMaterial, includeSky, patchSubdivisions);
+            AppendPatch(patch, byMaterial, options.IncludeSky, options.PatchSubdivisions);
 
         var result = new List<VmapSurface>(byMaterial.Count);
         // Deterministic output order so two builds of the same document produce identical meshes.
@@ -75,12 +142,9 @@ public static class VmapGeometryBuilder
         return result;
     }
 
-    private static void AppendBrush(VmapBrush brush, Dictionary<string, Builder> byMaterial, bool includeSky)
+    private static void AppendBrush(
+        VmapBrush brush, Dictionary<string, Builder> byMaterial, bool includeSky, VmapFaceCulling? culling)
     {
-        // Whole scaffolding volumes never render.
-        if (brush.IsToolBrush)
-            return;
-
         Vector3[][] windings = VmapWinding.BuildBrushWindings(brush);
         for (int i = 0; i < windings.Length; i++)
         {
@@ -97,28 +161,49 @@ public static class VmapGeometryBuilder
             if (VmapBrush.IsToolMaterial(face.Material))
                 continue;
 
-            Builder b = Get(byMaterial, face.Material, face.SurfaceFlags);
-            int baseIndex = b.Positions.Count;
-            Vector3 n = face.Plane.Normal;
-            VmapTexProjection proj = face.Projection.IsValid
-                ? face.Projection
-                : VmapTexProjection.AxialFor(n);
-
-            for (int v = 0; v < w.Length; v++)
+            if (culling is null)
             {
-                b.Positions.Add(w[v]);
-                b.Normals.Add(n);
-                b.Uvs.Add(proj.Evaluate(w[v]));
+                AppendPolygon(byMaterial, face, w);
+                continue;
             }
 
-            // Fan-triangulate the convex polygon. VmapWinding yields vertices counter-clockwise seen from
-            // outside, which is exactly the front-face order the surface contract promises.
-            for (int v = 1; v + 1 < w.Length; v++)
-            {
-                b.Indices.Add(baseIndex);
-                b.Indices.Add(baseIndex + v);
-                b.Indices.Add(baseIndex + v + 1);
-            }
+            foreach (List<Vector3> fragment in culling.Subtract(brush, face.Plane, w))
+                AppendPolygon(byMaterial, face, fragment);
+        }
+    }
+
+    /// <summary>Emit one convex polygon of a face as a fan-triangulated run of vertices.</summary>
+    private static void AppendPolygon(
+        Dictionary<string, Builder> byMaterial, VmapFace face, IReadOnlyList<Vector3> polygon)
+    {
+        if (polygon.Count < 3)
+            return;
+
+        Builder b = Get(byMaterial, face.Material, face.SurfaceFlags);
+        int baseIndex = b.Positions.Count;
+        Vector3 n = face.Plane.Normal;
+        VmapTexProjection proj = face.Projection.IsValid
+            ? face.Projection
+            : VmapTexProjection.AxialFor(n);
+
+        for (int v = 0; v < polygon.Count; v++)
+        {
+            b.Positions.Add(polygon[v]);
+            b.Normals.Add(n);
+            b.Uvs.Add(proj.Evaluate(polygon[v]));
+        }
+
+        // Fan-triangulate the convex polygon, REVERSING the winding. VmapWinding yields vertices
+        // counter-clockwise seen from outside; compiled Q3 faces are the other way round, and that is the
+        // order the renderer treats as front-facing (measured: stormkeep's BSP faces wind opposed to their
+        // own vertex normals 19611 times against 52). Emitting the natural order instead makes every brush
+        // face back-facing, so the level renders inside out — near walls vanish and you see through them to
+        // whatever is behind, which is exactly what a hole in the floor looks like.
+        for (int v = 1; v + 1 < polygon.Count; v++)
+        {
+            b.Indices.Add(baseIndex);
+            b.Indices.Add(baseIndex + v + 1);
+            b.Indices.Add(baseIndex + v);
         }
     }
 

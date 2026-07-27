@@ -224,4 +224,39 @@ public class VmapGeometryTests
             area += Vector3.Cross(w[i] - w[0], w[i + 1] - w[0]).Length() * 0.5f;
         return area;
     }
+
+    /// <summary>
+    /// The emitted TRIANGLE order must match a compiled Q3 face's: clockwise seen from outside, i.e. opposed
+    /// to the face normal. The polygon winding is the other way round on purpose (see
+    /// <see cref="BoxBrush_WindingsAreCounterClockwiseSeenFromOutside"/>), so the triangulator reverses it.
+    ///
+    /// This is pinned because getting it wrong is invisible to every other check: the geometry is in the right
+    /// place, has the right area and the right normals, and simply renders inside out — near walls are
+    /// backface-culled and you see through the level into the skybox.
+    /// </summary>
+    [Fact]
+    public void EmittedTrianglesWindOpposedToTheFaceNormal()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(-64, -64, -16), new Vector3(64, 64, 16)));
+
+        IReadOnlyList<VmapSurface> surfaces = VmapGeometryBuilder.BuildSurfaces(doc, includeSky: true);
+        Assert.NotEmpty(surfaces);
+
+        int checkedTris = 0;
+        foreach (VmapSurface s in surfaces)
+        {
+            for (int i = 0; i + 2 < s.Indices.Count; i += 3)
+            {
+                Vector3 p0 = s.Positions[s.Indices[i]];
+                Vector3 p1 = s.Positions[s.Indices[i + 1]];
+                Vector3 p2 = s.Positions[s.Indices[i + 2]];
+                Vector3 cross = Vector3.Cross(p1 - p0, p2 - p0);
+                Assert.True(Vector3.Dot(cross, s.Normals[s.Indices[i]]) < 0,
+                    "triangle winds along its normal; the world would render inside out");
+                checkedTris++;
+            }
+        }
+        Assert.Equal(12, checkedTris);   // six quad faces, two triangles each
+    }
 }

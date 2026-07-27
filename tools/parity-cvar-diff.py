@@ -26,7 +26,7 @@ Outputs planning/parity/CVAR-DIFF.md (+ _cvar-diff.json full lists).
 Run: python tools/parity-cvar-diff.py
 """
 from __future__ import annotations
-import datetime, json, pathlib, re, sys
+import datetime, json, os, pathlib, re, sys
 try:
     import yaml
 except ImportError:
@@ -34,8 +34,10 @@ except ImportError:
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "planning" / "parity"
-PORT_DATA = ROOT / "assets" / "data" / "xonotic-data.pk3dir"
-BASE_DATA = ROOT.parent / "Base" / "data" / "xonotic-data.pk3dir"
+# Env overrides so the tool runs from a git worktree (whose ROOT has no assets/ junction and whose
+# parent is .claude/worktrees, not the Xonotic checkout): XON_PORT_DATA / XON_BASE_DATA.
+PORT_DATA = pathlib.Path(os.environ.get("XON_PORT_DATA", ROOT / "assets" / "data" / "xonotic-data.pk3dir"))
+BASE_DATA = pathlib.Path(os.environ.get("XON_BASE_DATA", ROOT.parent / "Base" / "data" / "xonotic-data.pk3dir"))
 KNOWN_FILE = OUT / "cvar-diff-known.yaml"
 
 # The port's real entry files (ConfigLoader.ServerEntry/NotificationsEntry + MenuState client boot).

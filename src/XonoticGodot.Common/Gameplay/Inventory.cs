@@ -11,6 +11,10 @@ public struct WepSet : IEquatable<WepSet>
 {
     private ulong _bits;
 
+    /// <summary>The raw 64-bit ownership bitmask — the wire form (the owner snapshot block replicates it so a
+    /// pure remote client's weapons panel knows which weapons are owned). Bit index == RegistryId.</summary>
+    public ulong Bits { readonly get => _bits; set => _bits = value; }
+
     public bool Has(int weaponId) => weaponId >= 0 && weaponId < 64 && (_bits & (1UL << weaponId)) != 0;
     public void Add(int weaponId) { if (weaponId is >= 0 and < 64) _bits |= 1UL << weaponId; }
     public void Remove(int weaponId) { if (weaponId is >= 0 and < 64) _bits &= ~(1UL << weaponId); }

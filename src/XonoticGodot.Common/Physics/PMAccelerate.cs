@@ -73,8 +73,12 @@ public static class PMAccelerate
     /// QC <c>PM_Accelerate</c>: the QuakeWorld-style accelerate used for ground, air (the common path),
     /// water and ladders. Mutates <c>player.Velocity</c> in place.
     /// </summary>
-    /// <param name="gameplayfixQ2AirAccelerate">QC <c>GAMEPLAYFIX_Q2AIRACCELERATE</c> — Xonotic default is
-    /// off (false), so <paramref name="wishspeed0"/> keeps the Q1 behaviour. Exposed for completeness.</param>
+    /// <param name="gameplayfixQ2AirAccelerate">QC <c>GAMEPLAYFIX_Q2AIRACCELERATE</c> — live Xonotic runs it
+    /// <b>ON</b> (autocvar inline default 1, stats.qh:396; xonotic-server.cfg:562; replicated to CSQC via
+    /// MOVEFLAG_Q2AIRACCELERATE): <paramref name="wishspeed0"/> is replaced by the clamped
+    /// <paramref name="wishspeed"/>, so the accel step shrinks with the strafe/duck clamps — the limiter on
+    /// mid-air strafe acceleration. The air branch passes <c>mp.GameplayFixQ2AirAccelerate</c>; call sites
+    /// where wishspeed == wishspeed0 (water/ladder/fly) may omit it (no-op).</param>
     public static void Accelerate(
         Entity player, float dt, Vector3 wishdir, float wishspeed, float wishspeed0,
         float accel, float accelqw, float stretchfactor, float sidefric, float speedlimit,

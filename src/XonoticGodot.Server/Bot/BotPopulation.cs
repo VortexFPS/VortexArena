@@ -106,6 +106,13 @@ public sealed class BotPopulation
     {
         float time = _world.Time;
 
+        // Variance program 2026-07-11: re-arm the per-tick STRATEGY tracewalk budget (see BotTracewalk).
+        // One tick's worth of budgeted walks (seed search + goal rating + straight-shot checks, across ALL
+        // bots) may spend at most this many traces; the overflow reports unreachable and the pass retries on
+        // its normal interval. This is the hard bound that turns the bot-tick tail (Release p99 6.2ms /
+        // max 17.1ms, all strategy walks) into a flat O(budget) cost.
+        BotTracewalk.ResetTickBudget();
+
         // (a) intermission (bot.qc:691-702): after the match ends bots STAY unless every human left — then all
         // bots are dropped (so an abandoned server empties out).
         if (_world.Intermission.Running && _currentBots > 0)
@@ -824,4 +831,155 @@ public sealed class BotPopulation
         if (s.Length == 0) return 0f;
         return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v * weight : 0f;
     }
+
+#if XG_BOTPLAYER
+    // =============================================================================================
+    //  BOT-PLAYER HARNESS (compile-gated — see Directory.Build.props / XgBotPlayer)
+    //
+    //  A brain bound to the LOCAL HUMAN player so an unattended run drives the real player pipeline.
+    //  The player is NOT a bot: IsBot stays false, so GameWorld keeps sourcing its command from the net
+    //  InputProvider — the brain's output travels the genuine client path (sample -> predict -> encode ->
+    //  ENet -> server authority -> snapshot -> reconcile) instead of shortcutting into the sim. That is
+    //  the whole point: spectating a bot exercises none of that.
+    //
+    //  The brain is kept OUT of _brains/_byPlayer so it cannot perturb population accounting, fixcount,
+    //  the strategy-token rotation, or bot_vs_human counting. It holds the strategy token permanently
+    //  instead (it is one extra actor in a test build; starving it of the token would leave it unable to
+    //  pick goals, which defeats the harness).
+    //
+    //  THREADING: ThinkBotPlayer runs on the SIM thread (GameWorld start-frame, per tick) because the
+    //  brain reads world state, waypoints and traces. The client reads the result from the RENDER thread,
+    //  so the command is published as an immutable box swapped atomically — no lock, no torn command.
+    // =============================================================================================
+
+    /// <summary>One frame of synthesised player input, already normalised to the ±1 wish-move an
+    /// <c>InputCommand</c> carries (the brain emits direction × <see cref="BotNavigation.MaxSpeed"/>).</summary>
+    public readonly record struct BotPlayerCommand(
+        Vector3 ViewAngles, float Forward, float Side, float Up,
+        bool Jump, bool Crouch, bool Attack1, bool Attack2, bool Hook, bool Jetpack);
+
+    private sealed class CommandBox { public BotPlayerCommand Cmd; }
+
+    private BotBrain? _botPlayerBrain;
+    private Player? _botPlayer;
+    private volatile CommandBox _botPlayerCmd = new();
+
+    /// <summary>True once a human player is under brain control.</summary>
+    public bool BotPlayerAttached => _botPlayerBrain is not null;
+
+    /// <summary>The latest synthesised command. Safe to read from any thread (immutable box).</summary>
+    public BotPlayerCommand BotPlayerCommandLatest => _botPlayerCmd.Cmd;
+
+    /// <summary>Bind a brain to <paramref name="p"/> (a REAL client). Idempotent per player.</summary>
+    public void AttachBotPlayer(Player p, float skill = 5f)
+    {
+        if (_botPlayerBrain is not null && ReferenceEquals(_botPlayer, p))
+            return;
+        _botPlayer = p;
+
+        // FORCED RESPAWN. A human slot normally lies dead until someone presses fire — with nobody at the
+        // keyboard the harness would die once and spend the rest of the run as a corpse, quietly measuring
+        // nothing. g_forced_respawn auto-respawns at g_respawn_delay_max instead, so an unattended session
+        // keeps playing. Set here rather than left to the caller so the harness cannot be run without it.
+        Cvars.Set("g_forced_respawn", "1");
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"[bot-player] g_forced_respawn 1 (max wait {Cvars.FloatOr("g_respawn_delay_max", 5f):0}s) — "
+            + "the harness respawns itself.");
+
+        _botPlayerBrain = new BotBrain(p, Network, skill, seed: 9999)
+        {
+            Role = BotRoles.ChooseRole(_world.GameType?.NetName),
+            PlayerProvider = () => _world.Clients.Players,
+            GameTypeNetName = _world.GameType?.NetName,
+            GameType = _world.GameType,
+            StrategyTokenHeld = true,   // never rotated into the bot token ring — see the note above
+            MovementHold = MovementHeld,
+        };
+    }
+
+    /// <summary>Drop the brain (player left / map change).</summary>
+    public void DetachBotPlayer()
+    {
+        _botPlayerBrain = null;
+        _botPlayer = null;
+        _botPlayerCmd = new CommandBox();
+    }
+
+    /// <summary>SIM THREAD, once per tick: think the bound brain and publish its command for the client.</summary>
+    public void ThinkBotPlayer(float dt)
+    {
+        BotBrain? brain = _botPlayerBrain;
+        Player? p = _botPlayer;
+        if (brain is null || p is null || p.IsFreed)
+            return;
+        // A dead/observing player has nothing to drive; publish neutral so nothing is held down through
+        // the respawn (a latched +attack would auto-fire the instant the player respawns). The alive↔dead
+        // edges are counted so the heartbeat can PROVE the forced-respawn cycle is turning over — a harness
+        // that dies once and stays down looks healthy in every other metric while measuring nothing.
+        bool dead = p.IsObserver || p.Health <= 0f;
+        if (dead != _botPlayerWasDead)
+        {
+            _botPlayerWasDead = dead;
+            if (dead) _botPlayerDeaths++;
+            else if (_botPlayerDeaths > 0) _botPlayerRespawns++;
+        }
+        if (dead)
+        {
+            _botPlayerCmd = new CommandBox();
+            _botPlayerOriginValid = false;   // respawn teleports; don't count the corpse→spawn jump as travel
+            return;
+        }
+
+        // The waypoint graph loads lazily on the first frame with bots; adopt it once it exists.
+        if (brain.Network is null && Network is not null)
+            brain.Network = Network;
+
+        MovementInput mi = brain.ThinkProduce(p, dt);
+
+        // The brain emits wish-move as direction × Nav.MaxSpeed; InputCommand carries ±1 (the client and
+        // server both re-scale it via WishMoveScaling), so normalise against the magnitude it emitted at.
+        float spd = brain.Nav.MaxSpeed > 0f ? brain.Nav.MaxSpeed : 320f;
+        static float Unit(float v, float s) => System.Math.Clamp(v / s, -1f, 1f);
+
+        _botPlayerCmd = new CommandBox
+        {
+            Cmd = new BotPlayerCommand(
+                mi.ViewAngles,
+                Unit(mi.MoveValues.X, spd), Unit(mi.MoveValues.Y, spd), Unit(mi.MoveValues.Z, spd),
+                mi.ButtonJump, mi.ButtonCrouch, mi.ButtonAttack1, mi.ButtonAttack2,
+                mi.ButtonHook, mi.ButtonJetpack),
+        };
+
+        // Heartbeat. An unattended run is worthless if the "player" is standing still against a wall, and
+        // "the brain attached" does not prove it is playing — so report what it actually did. Distance is
+        // integrated from the AUTHORITATIVE origin, i.e. it only moves if the synthesised input really made
+        // the round trip through predict → encode → net → server physics.
+        if (_botPlayerOriginValid)
+            _botPlayerDist += (p.Origin - _botPlayerLastOrigin).Length();
+        _botPlayerLastOrigin = p.Origin;
+        _botPlayerOriginValid = true;
+        if (mi.ButtonAttack1 || mi.ButtonAttack2) _botPlayerShots++;
+        float now2 = _world.Time;
+        if (now2 - _botPlayerLastReport >= 5f)
+        {
+            _botPlayerLastReport = now2;
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"[bot-player] t={now2:0}s travelled={_botPlayerDist:0}qu speed={p.Velocity.Length():0}qu/s "
+                + $"firing-ticks={_botPlayerShots} health={p.Health:0} frags={p.Frags} "
+                + $"deaths={_botPlayerDeaths} respawns={_botPlayerRespawns} "
+                + $"goal={(brain.Nav.HasGoal ? "yes" : "no")} enemy={(brain.Enemy is not null ? "yes" : "no")}");
+        }
+    }
+
+    private Vector3 _botPlayerLastOrigin;
+    private bool _botPlayerOriginValid;
+    // Starts true: the player is typically attached pre-spawn (observer), and that initial not-yet-alive
+    // state must not count as a death — the counters exist to prove the respawn cycle turns over.
+    private bool _botPlayerWasDead = true;
+    private int _botPlayerDeaths;
+    private int _botPlayerRespawns;
+    private float _botPlayerDist;
+    private int _botPlayerShots;
+    private float _botPlayerLastReport;
+#endif
 }

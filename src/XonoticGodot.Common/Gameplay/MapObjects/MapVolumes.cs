@@ -2,7 +2,7 @@
 //   conveyor.qc -> trigger_conveyor / func_conveyor  (mark overlapping pushables with a conveyor velocity)
 //   ladder.qc   -> func_ladder / func_water          (mark overlapping players as climbing a ladder)
 //
-// These are SELF-THINKING volumes: each frame they FindInRadius their own box and tag the overlapping
+// These are SELF-THINKING volumes: each frame they FindInBox their own AABB and tag the overlapping
 // entities with a per-entity field the MOVEMENT code then consumes. The CONSUMER side is ALREADY ported in
 // PlayerPhysics:
 //   - conveyor: PlayerPhysics subtracts Entity.ConveyorMoveDir before the slide-move and adds it back after
@@ -11,9 +11,10 @@
 //     func_water ladder to drive the waterlevel from the volume bounds.
 // Only the PRODUCER (this file) was missing: the spawnfunc + the per-frame think that assigns those fields.
 //
-// The volume-overlap pattern is copied from Triggers.SwampThink: FindInRadius on the box center/radius +
-// re-tag each frame + reschedule the think for the next frame. The CSQC draw/networking halves and the bot
-// waypoint tracetest tail of func_ladder_init (bot navigation only) are out of scope.
+// The volume-overlap pattern is shared with Triggers.SwampThink: FindInBox on the volume's AABB (the precise
+// overlap test lives inside the query) + re-tag each frame + reschedule the think for the next frame. The CSQC
+// draw/networking halves and the bot waypoint tracetest tail of func_ladder_init (bot navigation only) are out
+// of scope.
 
 using System.Numerics;
 using XonoticGodot.Common.Framework;
@@ -88,7 +89,7 @@ public static class MapVolumes
     private static readonly Dictionary<Entity, List<Entity>> _conveyed = new();
     private static readonly Dictionary<Entity, List<Entity>> _laddered = new();
 
-    /// <summary>Scratch buffer reused for the per-frame FindInRadius volume scan (replaces a per-think
+    /// <summary>Scratch buffer reused for the per-frame FindInBox volume scan (replaces a per-think
     /// <c>.ToList()</c>). The conveyor/ladder thinks run sequentially on the sim thread and never re-enter, and
     /// each fully drains the scan (into its per-producer held list) before the next think reuses this — so one
     /// shared static is safe. The result is iterated as a SNAPSHOT (the loop relinks entities via SetOrigin).</summary>
@@ -126,10 +127,12 @@ public static class MapVolumes
         if (self.Active != MapMover.ActiveActive)
             return;
 
-        // Snapshot the radius scan into the reused buffer (alloc-free); the loop relinks entities via SetOrigin
+        // Snapshot the box scan into the reused buffer (alloc-free); the loop relinks entities via SetOrigin
         // below, so iterating a snapshot (not the live grid result) is required, and `held` above is a distinct
-        // list so appending to it mid-loop doesn't disturb _volumeScratch.
-        Api.Entities.FindInRadius(BoxCenter(self), BoxRadius(self), _volumeScratch);
+        // list so appending to it mid-loop doesn't disturb _volumeScratch. FindInBox queries the volume's exact
+        // AABB (the precise overlap test lives inside it) — replaces the old bounding-SPHERE FindInRadius whose
+        // half-diagonal radius over-scanned, then a per-entity BoxesOverlap trimmed (upstream b6e02fe3 pattern).
+        Api.Entities.FindInBox(self.AbsMin, self.AbsMax, _volumeScratch);
         for (int i = 0; i < _volumeScratch.Count; i++)
         {
             Entity it = _volumeScratch[i];
@@ -137,8 +140,6 @@ public static class MapVolumes
             // conveyor (a null conveyor reads as world.active == ACTIVE_NOT, i.e. claimable).
             bool claimable = it.ConveyorEntity is null || it.ConveyorEntity.Active == MapMover.ActiveNot;
             if (!claimable || !MapMover.IsPushable(it))
-                continue;
-            if (!BoxesOverlap(self.AbsMin, self.AbsMax, it.AbsMin, it.AbsMax))
                 continue;
 
             it.ConveyorEntity = self;
@@ -237,9 +238,10 @@ public static class MapVolumes
                 it.LadderEntity = null;
         held.Clear();
 
-        // Snapshot the radius scan into the reused buffer (alloc-free); `held` above is a distinct list, so
+        // Snapshot the box scan into the reused buffer (alloc-free); `held` above is a distinct list, so
         // appending to it mid-loop doesn't disturb _volumeScratch (the conveyor think drained it first).
-        Api.Entities.FindInRadius(BoxCenter(self), BoxRadius(self), _volumeScratch);
+        // FindInBox queries the volume's exact AABB (precise overlap inside) — no follow-up BoxesOverlap needed.
+        Api.Entities.FindInBox(self.AbsMin, self.AbsMax, _volumeScratch);
         for (int i = 0; i < _volumeScratch.Count; i++)
         {
             Entity it = _volumeScratch[i];
@@ -252,15 +254,13 @@ public static class MapVolumes
                 continue;
             if (MapMover.IsDead(it))
                 continue;
-            if (!BoxesOverlap(self.AbsMin, self.AbsMax, it.AbsMin, it.AbsMax))
-                continue;
 
             it.LadderEntity = self;
             held.Add(it);
         }
     }
 
-    // ---- helpers (the SwampThink box center/radius + an AABB overlap, mirroring Teleporters) -------------
+    // ---- helpers ------------------------------------------------------------------------------------------
 
     /// <summary>The per-producer "currently held" list (the g_conveyed / g_ladderents IL analogue), created on demand.</summary>
     private static List<Entity> Held(Dictionary<Entity, List<Entity>> map, Entity producer)
@@ -269,13 +269,4 @@ public static class MapVolumes
             map[producer] = list = new List<Entity>();
         return list;
     }
-
-    private static Vector3 BoxCenter(Entity e) => (e.AbsMin + e.AbsMax) * 0.5f;
-    private static float BoxRadius(Entity e) => (e.AbsMax - e.AbsMin).Length() * 0.5f + 1f;
-
-    /// <summary>QC <c>WarpZoneLib_BoxTouchesBox</c> / the exact-trigger AABB test: do two AABBs overlap?</summary>
-    private static bool BoxesOverlap(Vector3 amin, Vector3 amax, Vector3 bmin, Vector3 bmax)
-        => amin.X <= bmax.X && amax.X >= bmin.X
-        && amin.Y <= bmax.Y && amax.Y >= bmin.Y
-        && amin.Z <= bmax.Z && amax.Z >= bmin.Z;
 }

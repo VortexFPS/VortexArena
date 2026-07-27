@@ -49,8 +49,9 @@ public partial class DialogMediaScreenshot : Control
 
         var topButtons = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         topButtons.AddThemeConstantOverride("separation", 10);
-        // QC: makeXonoticCheckBoxEx(2, 1, "cl_autoscreenshot", _("Auto screenshot scoreboard")) — bit 1, live.
-        var autoshot = Widgets.FlagCheckBox("cl_autoscreenshot", 1, "Auto screenshot scoreboard");
+        // QC: makeXonoticCheckBoxEx(2, 1, "cl_autoscreenshot", _("Auto screenshot scoreboard")) — checked
+        // stores 2 (shoot every scoreboard), unchecked 1 (the shipped default: only when a demo ends).
+        var autoshot = Widgets.ValueCheckBox("cl_autoscreenshot", 2f, 1f, "Auto screenshot scoreboard");
         autoshot.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         topButtons.AddChild(autoshot);
         // QC: makeXonoticButton(_("Refresh"), …) onClick=ScreenshotList_Refresh_Click → getScreenshots + select 0.

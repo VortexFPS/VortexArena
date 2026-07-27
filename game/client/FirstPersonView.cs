@@ -441,9 +441,10 @@ public sealed class FirstPersonView
             //   view_angles.z += CSQCPlayer_CalcRoll -> bank when strafing (cl_rollangle)
             //   vieworg += view_punchvector (origin recoil kick, first-person only)
             //   vieworg = CSQCPlayer_ApplyBobbing -> vertical/horizontal/fall view-bob
-            // All off by default in stock Xonotic (cl_bob 0 / cl_bob2 0 / cl_rollangle 0 / v_deathtilt 0), so a
-            // stock match shows none of them — opt-in only. ApplyDeathTilt/CalcRoll mutate the rendered angles
-            // BEFORE the event-chase forward is taken so the pull-back direction matches the rendered view.
+            // Mostly off by default in stock Xonotic (cl_bob 0 / cl_bob2 0 / cl_rollangle 0 / v_deathtilt 0) —
+            // the exception is the landing fall-bob (cl_bobfall 0.05, shipped ON). ApplyDeathTilt/CalcRoll mutate
+            // the rendered angles BEFORE the event-chase forward is taken so the pull-back direction matches the
+            // rendered view.
             ApplyDeathTilt(st, ref viewAngles);
             viewAngles.Z += CalcRoll(st);
 
@@ -633,9 +634,11 @@ public sealed class FirstPersonView
 
     /// <summary>
     /// View bobbing — port of <c>CSQCPlayer_ApplyBobbing</c> (cl_player.qc:321-428): vertical bob (<c>cl_bob</c>),
-    /// horizontal bob (<c>cl_bob2</c>) and fall-bob (<c>cl_bobfall</c>). All off by default (<c>cl_bob 0</c>,
-    /// <c>cl_bob2 0</c>) so a stock match shows no view-bob. Adds the bob offset to the eye/render origin
-    /// <paramref name="v"/> in Quake space. The <c>cl_bob_limit_heightcheck</c> trace path (default 0) is omitted.
+    /// horizontal bob (<c>cl_bob2</c>) and fall-bob (<c>cl_bobfall</c>). The walk bobs are off by default
+    /// (<c>cl_bob 0</c>, <c>cl_bob2 0</c>) but the fall-bob is ON in stock Xonotic (<c>cl_bobfall 0.05</c>,
+    /// xonotic-client.cfg:151) — the view dips and swings back up when you land from a jump. Adds the bob offset
+    /// to the eye/render origin <paramref name="v"/> in Quake space. The <c>cl_bob_limit_heightcheck</c> trace
+    /// path (default 0) is omitted.
     /// </summary>
     private NVec3 ApplyBobbing(in ViewState st, NVec3 v, in NVec3 viewAngles)
     {
@@ -702,8 +705,9 @@ public sealed class FirstPersonView
             v.Y += side * fwd.Y + front * right.Y;
         }
 
-        // fall bobbing: swing the view down and back up on landing.
-        float clBobfall = Cvar("cl_bobfall", 0f);
+        // fall bobbing: swing the view down and back up on landing. UNLIKE cl_bob/cl_bob2 this is ON by
+        // default — Base ships `cl_bobfall 0.05` in xonotic-client.cfg (the menu checkbox toggles 0.05/0).
+        float clBobfall = Cvar("cl_bobfall", 0.05f);
         float bobfallcycle = Cvar("cl_bobfallcycle", 3f);
         if (clBobfall != 0f && bobfallcycle != 0f)
         {

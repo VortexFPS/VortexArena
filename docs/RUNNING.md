@@ -94,6 +94,18 @@ clean up strays with `powershell "Get-Process Godot* | Stop-Process -Force"`). A
 (or explicit `--no-save-config`) run also **never writes `~/XonData/config.cfg`** — DP's `-benchmark`
 rule — so scripted runs and their `--cvar`/`--bots` pins can't pollute the player's saved settings.
 
+**Port collisions (agents, take note):** `--port <n>` (DP `-port`) binds the hosted listen server off the
+stock 26000. When 26000 is already held by ANOTHER live instance, the new host's `CreateServer` fails but
+its self-client then connects to the *squatter* and prints a plausible-looking `handshake accepted` — with
+a wrong world and an inflated netId (the real success signal is `netId 1` on a fresh host). Scripted runs
+should always pass a private `--port` instead of fighting over 26000.
+
+**Auto-pause vs background windows (agents, take note):** a solo local game **pauses when its window loses
+focus** (#19, `Shell.SyncAutoPause`) — and a `Start-Process` capture run usually never HAS focus, so the
+whole sim + every client animation freezes (e.g. the weapon raise stops mid-slide and the gun sits below
+the frame — screenshots then look like the viewmodel is missing). Scripted windowed runs should pass
+`--cvar cl_autopause 0`.
+
 For a packaged install, `tools/run-dedicated.sh` (shipped beside the exported `linux-dedicated`
 binary by `tools/package.sh`) `cd`s to its own directory first, matching upstream's
 `xonotic-linux-dedicated.sh`. The exported build resolves `assets/data` relative to the **executable**
@@ -136,6 +148,52 @@ that adds `[NetGame] listen server on 127.0.0.1:26000 …`, `[AssetSystem] loade
 `collision brushes`, and `handshake accepted` to the log (the heavier smoke; needs `assets/data`).
 Error patterns to grep for: `^ERROR:`, `SCRIPT ERROR`, `Unhandled exception`, `WARNING:`, `at XonoticGodot.` (managed
 stack frames). Godot prints managed exceptions with a `WARNING:`/`ERROR:` banner + a C# stack trace.
+
+---
+
+## Bot-player mode (unattended runs that exercise the PLAYER path)
+
+`cl_bench_spectate` watches a bot play. That covers rendering and the sim, but the whole player pipeline —
+input sampling, the client predictor, input encode/ack, the reconcile against authority, client fire
+prediction, weapon/viewmodel state — never runs, because nothing is producing local input. Perf and crash
+numbers gathered that way are blind to all of it.
+
+Bot-player mode hands the **local human player slot** to a bot brain, so an unattended run drives that code
+for real. The player stays a real client (`IsBot` is false): the brain only supplies what a pair of hands
+would, and the command still travels sample → predict → encode → ENet → server authority → snapshot →
+reconcile.
+
+It is **compile-gated and cannot be enabled any other way** — a brain steering a human player is mechanically
+an aimbot, so the gate is the compiler, not a cvar a config or server could set. Nothing is compiled in
+unless you ask for it, and even then it stays dormant until the CLI flag is passed:
+
+```bash
+dotnet build XonoticGodot.csproj -c Debug -p:XgBotPlayer=true
+```
+
+```bash
+"$GODOT" --path . --host stormkeep --gametype dm --bots 6 --bot-player --cvar cl_autopause 0 --quit-after-seconds 90
+```
+
+- `--bot-player [skill]` — skill is the QC bot rung (0..10), default 5.
+- **`--cvar cl_autopause 0` is required.** A solo match auto-pauses when the window loses focus, so an
+  unattended run silently idles and measures nothing.
+- The harness sets `g_forced_respawn 1` itself. Without it the slot dies once and stays a corpse for the rest
+  of the run — every other metric still looks healthy while nothing is being exercised.
+- It prints a heartbeat every 5 s so you can confirm it is actually playing rather than stuck on a wall:
+
+  ```
+  [bot-player] t=42s travelled=9991qu speed=0qu/s firing-ticks=51 health=100 frags=0 deaths=2 respawns=2 goal=no enemy=yes
+  ```
+
+  `travelled` is integrated from the **authoritative** origin, so it only advances if the synthesised input
+  really made the round trip through prediction, the wire, and server physics. `deaths`/`respawns` tracking
+  each other is the proof the respawn cycle is turning over.
+
+Never define `XgBotPlayer` for a release or export build. Keep every use inside `#if XG_BOTPLAYER`.
+
+Known limitation: the brain switches weapons server-side (as it does for bots), so the client's
+weapon-switch prediction is not driven by this; movement, aim, firing and the reconcile all are.
 
 ---
 

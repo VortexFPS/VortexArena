@@ -298,7 +298,11 @@ public partial class PortalRenderer : Node3D
             {
                 Name = "PortalCam",
                 Current = true,
-                CullMask = mainCamera.CullMask & ~PortalSurfaceLayerBit,
+                // Exclude the portal surfaces themselves (no portal-in-portal feedback) AND the first-person
+                // viewmodel layer: DP hides RENDER_VIEWMODEL entities in every reflection/refraction sub-view
+                // (gl_rmain.c R_View_UpdateEntityVisible renderimask), and the gun's short-depth-range remap
+                // would otherwise smear it across the whole portal image whenever a portal shows your position.
+                CullMask = mainCamera.CullMask & ~(PortalSurfaceLayerBit | ViewModelRenderFx.RenderLayerBit),
             };
             vp.AddChild(cam);
             cam.GlobalBasis = basis;

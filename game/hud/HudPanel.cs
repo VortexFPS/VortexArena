@@ -210,9 +210,15 @@ public abstract partial class HudPanel : Control
 
     private void OnCvarChanged(string name)
     {
-        if (name.StartsWith("hud_", System.StringComparison.Ordinal))
+        // `_hud_configure` doesn't share the hud_ prefix but flips the configure-mode resolve overrides
+        // (forced bg / min-alpha / disabled grey-out), so it must dirty the snapshot too.
+        if (name.StartsWith("hud_", System.StringComparison.Ordinal) || name == "_hud_configure")
             _configDirty = true;
     }
+
+    /// <summary>QC <c>autocvar__hud_configure</c> — the HUD configure-mode editor is active. Only editor-mode
+    /// resolve/draw paths key off this (never normal-draw layout logic).</summary>
+    protected static bool IsConfiguring => MenuState.Cvars.GetFloat("_hud_configure") != 0f;
 
     /// <summary>Force the next <see cref="LoadConfig"/> to fully re-resolve (e.g. on viewport resize).</summary>
     public void InvalidateConfig() => _configDirty = true;
@@ -278,6 +284,39 @@ public abstract partial class HudPanel : Control
 
         float fgAlpha = CvarF("fg_alpha", GlobalF("hud_panel_fg_alpha", 1f));
 
+        bool enabled = !ConfigFlags.HasFlag(PanelConfig.CanBeOff) ||
+                       MenuState.Cvars.GetFloat("hud_panel_" + PanelId) != 0f;
+
+        // ---- HUD configure-mode overrides (the QC hud.qh GetBg / GetBgAlpha / GetFgAlpha / GetColor
+        // configure branches) — the editor must SEE every panel: a "0"/inherited-0 background falls back to
+        // the skin border_default drawn at hud_configure_bg_minalpha (GetBg forces panel_bg_alpha_str "0",
+        // which the min-alpha floor then lifts), an enabled panel's bg alpha is floored at that minalpha, and
+        // a DISABLED panel draws bg+fg at a fixed 0.25 so it reads as greyed out. Editor-mode only: none of
+        // this touches the normal-draw resolve. ----
+        if (IsConfiguring)
+        {
+            if (bg == "0")
+            {
+                bg = "border_default"; // QC GetBg: "we probably want to see a background in config mode"
+                bgAlpha = 0f;          // QC GetBg: panel_bg_alpha_str = "0" for a "0" bg (floored below)
+            }
+            if (!enabled)
+            {
+                bgAlpha = 0.25f; // QC GetBgAlpha: disabled panels at a fixed 0.25
+                fgAlpha = 0.25f; // QC GetFgAlpha: "ALWAYS show disabled panels at 0.25 alpha"
+            }
+            else
+            {
+                bgAlpha = Mathf.Max(GlobalF("hud_configure_bg_minalpha", 0.25f), bgAlpha);
+            }
+
+            // QC GetColor: hud_configure_teamcolorforced + a positive team-color factor → the red test tint
+            // ('1 0 0' * panel_bg_color_team, the dialogs' "Test team color in configure mode" checkbox).
+            float bgColorTeam = CvarF("bg_color_team", GlobalF("hud_panel_bg_color_team", 0f));
+            if (bgColorTeam > 0f && GlobalF("hud_configure_teamcolorforced", 0f) != 0f)
+                bgCol = new Color(Mathf.Clamp(bgColorTeam, 0f, 1f), 0f, 0f);
+        }
+
         // QC HUD sizing: the HUD is drawn in the vid_conwidth × vid_conheight virtual canvas (Base defaults
         // 800×600; vid_conwidthauto widens conwidth for aspect, conheight stays fixed) and the engine scales that
         // canvas UNIFORMLY to the screen — so a hud_fontsize-tall glyph renders at hud_fontsize × screenH /
@@ -288,9 +327,6 @@ public abstract partial class HudPanel : Control
         float conHeight = GlobalF("vid_conheight", 600f);
         if (conHeight <= 0f) conHeight = 600f;
         int fontPx = Mathf.Max(8, Mathf.RoundToInt(baseFont * viewport.Y / conHeight));
-
-        bool enabled = !ConfigFlags.HasFlag(PanelConfig.CanBeOff) ||
-                       MenuState.Cvars.GetFloat("hud_panel_" + PanelId) != 0f;
 
         return new PanelConfig2(posPx, sizePx, bg, bgCol, bgAlpha, bgBorder, padding, fgAlpha, fontPx, enabled);
     }
@@ -369,7 +405,25 @@ public abstract partial class HudPanel : Control
         QueueRedraw();
     }
 
-    public override void _Draw() => DrawPanel();
+    /// <summary>Guards the configure-mode pre-pass against a double frame paint (see <see cref="_Draw"/>).</summary>
+    private bool _configureBgDrawn;
+
+    public override void _Draw()
+    {
+        // HUD configure-mode pre-pass: in the editor EVERY MAIN panel must show its frame (Base forces a
+        // border_default bg at hud_configure_bg_minalpha — the Resolve configure branch), but many panels bail
+        // out of DrawPanel before their own DrawBackground() when they have no live data (vote / racetimer /
+        // modicons / …). Paint the forced frame first; DrawBackground() then no-ops for this draw so panels
+        // that DO reach their own call don't double-paint. Editor-mode only — normal draws are unchanged.
+        _configureBgDrawn = false;
+        if (IsConfiguring && ConfigFlags.HasFlag(PanelConfig.Main))
+        {
+            DrawBackgroundRect(new Rect2(Vector2.Zero, Size2), LiveBgAlpha);
+            _configureBgDrawn = true;
+        }
+        DrawPanel();
+        _configureBgDrawn = false;
+    }
 
     /// <summary>Draw the panel contents in panel-local space (origin = top-left). Successor to each QC
     /// <c>HUD_&lt;Name&gt;(bool should_draw)</c> body. Bail early when there's nothing to show.</summary>
@@ -381,8 +435,13 @@ public abstract partial class HudPanel : Control
     // -------------------------------------------------------------------------------------------------
 
     /// <summary>Paint the panel chrome: the skin 9-slice border frame (QC <c>HUD_Panel_DrawBg</c>) around the
-    /// whole panel. No-op when the resolved bg is "0"/inherit-of-0.</summary>
-    protected void DrawBackground() => DrawBackgroundRect(new Rect2(Vector2.Zero, Size2), LiveBgAlpha);
+    /// whole panel. No-op when the resolved bg is "0"/inherit-of-0 — or when the configure-mode pre-pass
+    /// (<see cref="_Draw"/>) already painted the full-panel frame this draw.</summary>
+    protected void DrawBackground()
+    {
+        if (_configureBgDrawn) return;
+        DrawBackgroundRect(new Rect2(Vector2.Zero, Size2), LiveBgAlpha);
+    }
 
     /// <summary>Paint the skin 9-slice border frame (QC <c>HUD_Panel_DrawBg</c>) around an explicit panel-local
     /// <paramref name="panelRect"/> at <paramref name="bgAlpha"/>. The full-panel <see cref="DrawBackground()"/>

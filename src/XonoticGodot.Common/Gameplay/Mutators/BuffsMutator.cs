@@ -1048,12 +1048,20 @@ public sealed class BuffsMutator : MutatorBase
 
     // MagnetBuff.m_tick: pull nearby items in. QC uses boxesoverlap(player.absmin/absmax expanded by the reach,
     // item.absmin/absmax) — a box-vs-box test (so large/off-centre items are caught), with the reach selected by
-    // whether the item is a buff (range_buff) or a normal item (range_item). The FindInRadius is just a cheap
-    // broadphase over the larger of the two reaches plus the item half-extent; the per-item gate is the box test.
+    // whether the item is a buff (range_buff) or a normal item (range_item). The FindInBox is the broadphase:
+    // the player's box expanded by the LARGER of the two reaches (an exact superset of both per-reach gates, so
+    // the old origin-sphere + 256u item-extent pad is gone); the per-item gate below still applies the precise
+    // item-vs-buff reach.
     private void MagnetTick(Entity player)
     {
-        float broad = MathF.Max(_magnetRangeItem, _magnetRangeBuff) + 256f;
-        foreach (Entity it in Api.Entities.FindInRadius(player.Origin, broad))
+        float broad = MathF.Max(_magnetRangeItem, _magnetRangeBuff);
+        Vector3 pad = new(broad, broad, broad);
+        // Degenerate-bounds fallback (headless: AbsMin/AbsMax never linked): center the query on the origin,
+        // matching BoxesOverlapExpanded's own origin-distance fallback below (reach <= broad keeps the superset).
+        Vector3 aMin = player.AbsMin, aMax = player.AbsMax;
+        if (aMin == aMax) { aMin = player.Origin; aMax = player.Origin; }
+        Api.Entities.FindInBox(aMin - pad, aMax + pad, _magnetScratch);
+        foreach (Entity it in _magnetScratch)
         {
             if ((it.Flags & EntFlags.Item) == 0 || it.IsFreed || ReferenceEquals(it, player)) continue;
             float reach = it.ClassName == "item_buff" ? _magnetRangeBuff : _magnetRangeItem;
@@ -1061,6 +1069,13 @@ public sealed class BuffsMutator : MutatorBase
             it.Touch?.Invoke(it, player);
         }
     }
+
+    /// <summary>Scratch buffer reused for the per-tick <see cref="MagnetTick"/> item scan (replaces the
+    /// per-call list the enumerator overload materialized). Iterated as a SNAPSHOT: <c>it.Touch</c> (item
+    /// pickup) can free/relink entities mid-loop, which mutates the GRID but not this buffer — and no pickup
+    /// path re-enters MagnetTick (it runs only from the per-player buff tick), so one shared static is safe;
+    /// freed entries are skipped by the <c>it.IsFreed</c> check above.</summary>
+    private static readonly List<Entity> _magnetScratch = new();
 
     // QC boxesoverlap(a.absmin - r, a.absmax + r, b.absmin, b.absmax). Falls back to an origin distance test when
     // the bounds are degenerate (headless, no physics link maintaining AbsMin/AbsMax).

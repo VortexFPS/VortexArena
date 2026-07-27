@@ -145,6 +145,20 @@ public sealed class AssetLoader
         if (key.Length == 0)
             return null;
 
+        // [#48] Quake SPRITE models (.spr — the chat bubble models/misc/chatbubble.spr is the stock user): route
+        // through the real sprite pipeline (SpriteReader parses IDSP/IDS2 incl. the Half-Life embedded-palette
+        // chatbubble; SpriteBuilder sizes the quad from the frame, picks the billboard mode from the sprite type,
+        // applies the frame origin, animates multi-frame sprites, and caches). SpriteBuilder's DP external-frame
+        // override still prefers the shipped `<name>.spr_0.tga` when present. This replaced a hand-rolled 16×16
+        // quad that bypassed all of the above; LoadSprite returns null only when the container can't be parsed.
+        if (key.EndsWith(".spr", StringComparison.OrdinalIgnoreCase))
+        {
+            Node3D? sprite = LoadSprite(key);
+            if (sprite is not null)
+                return sprite;
+            // Unparseable container → fall through to the normal (placeholder) path.
+        }
+
         // Cache key includes the skin variant (different skins build different nodes).
         string cacheKey = skinIndex == 0 ? key : $"{key}#skin{skinIndex}";
         if (!_modelCache.TryGetValue(cacheKey, out Func<Node3D?>? factory))
@@ -576,7 +590,7 @@ public sealed class AssetLoader
             GD.PrintErr($"[AssetLoader] sprite '{key}' read/parse failed: {ex.Message}");
             return null;
         }
-        return () => SpriteBuilder.Build(spr, _assets);
+        return () => SpriteBuilder.Build(spr, _assets, key);
     }
 
     // =============================================================================================
@@ -748,7 +762,10 @@ public sealed class AssetLoader
     /// <summary>
     /// Load and parse the model's <c>.framegroups</c> sidecar (e.g. <c>player.iqm.framegroups</c>): the named
     /// animation ranges that carve the model's flat pose stack into clips. Returns null when there is no
-    /// sidecar (the builder then uses the model's own anims / a single default clip).
+    /// sidecar (the builder then uses the model's own anims / a single default clip). Weapon hand rigs
+    /// (<c>models/weapons/h_*</c>) get Base's slot-index clip names stamped onto their nameless groups
+    /// (all.qc:373-376: 0=fire, 1=fire2, 2=idle, 3=reload) so the ViewModel's idle/fire/reload lookups —
+    /// and the builders' idle autoplay — address the ranges Base plays by index.
     /// </summary>
     private List<FrameGroup>? LoadFrameGroups(string modelKey)
     {
@@ -758,7 +775,7 @@ public sealed class AssetLoader
             return null;
         try
         {
-            return FrameGroups.Parse(_vfs.ReadText(sidecar));
+            return WeaponRigAnims.NameGroups(modelKey, FrameGroups.Parse(_vfs.ReadText(sidecar)));
         }
         catch (Exception ex)
         {

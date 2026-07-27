@@ -265,6 +265,25 @@ public partial class TimerPanel : HudPanel
         return _localClock;
     }
 
+    /// <summary>
+    /// QC <c>HUD_Pickup_Time</c> (pickup.qc): the match-clock reading RIGHT NOW in this panel's own display
+    /// convention — <c>floor(time − gamestarttime)</c> when incrementing or no timelimit, else the count-down
+    /// <c>ceil(timelimit + gamestarttime − time)</c> — formatted <c>seconds_tostring</c>. The pickup panel
+    /// samples this ONCE per pickup and freezes it into the slot, so the readout is the game time the event
+    /// HAPPENED, not a running age. Null while the panel has no net feed yet (lets the caller fall back).
+    /// </summary>
+    public string? PickupTimeString()
+    {
+        if (!_fed) return null;
+        double current = CurrentTime();
+        float timelimit = ActiveTimeLimit();
+        bool increment = CountUp || GlobalBool("hud_panel_timer_increment");
+        float v = increment || timelimit <= 0f
+            ? (float)System.Math.Floor(current - MatchStartTime)
+            : (float)System.Math.Ceiling(timelimit + MatchStartTime - current);
+        return FormatSeconds(v);
+    }
+
     /// <summary>QC timelimit selection: warmup uses WARMUP_TIMELIMIT, otherwise TIMELIMIT*60 (seconds).</summary>
     private float ActiveTimeLimit() => WarmupStage ? WarmupTimeLimitSeconds : TimeLimitSeconds;
 

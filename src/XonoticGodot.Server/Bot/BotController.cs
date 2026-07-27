@@ -162,8 +162,12 @@ public sealed class BotController
         p.IsFreed = false;
         p.Flags = EntFlags.Client;
 
-        // place + load out via the shared spawn lifecycle (away from any roster players)
-        var sp = SpawnSystem.SelectSpawnPoint(p, _roster.FindAll(q => !q.IsDead));
+        // place + load out via the shared spawn lifecycle (away from any roster players).
+        // [R0c] targetCheck:true — Base runs Spawn_FilterOutBadSpots(..., targetcheck=true) for EVERYONE
+        // (spawnpoints.qc:419); the emergency re-filter re-admits the spots if a broken map rejects them all. Inert
+        // on stock DM (every spot active/untargeted); on Assault/Onslaught/Race it stops bots spawning on
+        // inactive/destroyed-objective spots and gives Race the previous-checkpoint prio.
+        var sp = SpawnSystem.SelectSpawnPoint(p, _roster.FindAll(q => !q.IsDead), targetCheck: true);
         if (sp is not null)
             SpawnSystem.PutPlayerInServer(p, sp.Value);
         else

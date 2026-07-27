@@ -126,13 +126,35 @@ public sealed class TraceService : ITraceService
     /// </summary>
     public object? ConcurrencyGate;
 
+    /// <summary>
+    /// WS1 instrumentation: per-thread Stopwatch ticks spent WAITING to acquire <see cref="ConcurrencyGate"/>
+    /// (an uncontended entry adds ~ns; a contended one adds the real wait — at most one worker tick under the
+    /// per-tick gating). NetGame reads+resets the MAIN thread's value each frame into the <c>sv.gatewait_ms</c>
+    /// profiler counter — the number that says whether prediction traces actually stall behind the sim worker.
+    /// Zero-cost on the unthreaded default path (gate null → the clock is never read).
+    /// </summary>
+    [ThreadStatic] public static long GateWaitTicks;
+
     public TraceResult Trace(Vector3 start, Vector3 mins, Vector3 maxs, Vector3 end, MoveFilter filter, Entity? ignore)
     {
         object? gate = ConcurrencyGate;
         if (gate is null)
             return TraceUnlocked(start, mins, maxs, end, filter, ignore);
+        // The wait clock is only ever read back into Prof.Mark("sv.gatewait_ms"), which is inert while the
+        // profiler is off — so don't pay two QueryPerformanceCounter reads per trace during normal play. A
+        // bot-heavy tick runs thousands of traces (the strategy pool alone budgets 96/tick), and sv_threaded
+        // is the DEFAULT, so this path is the common one. Numbers are unchanged whenever profiling is on.
+        if (!XonoticGodot.Common.Diagnostics.Prof.Enabled)
+        {
+            lock (gate)
+                return TraceUnlocked(start, mins, maxs, end, filter, ignore);
+        }
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (gate)
+        {
+            GateWaitTicks += System.Diagnostics.Stopwatch.GetTimestamp() - t0;
             return TraceUnlocked(start, mins, maxs, end, filter, ignore);
+        }
     }
 
     private TraceResult TraceUnlocked(Vector3 start, Vector3 mins, Vector3 maxs, Vector3 end, MoveFilter filter, Entity? ignore)
@@ -153,12 +175,16 @@ public sealed class TraceService : ITraceService
         };
 
         // --- clip to world brushes ---
-        // Broadphase: gather brushes overlapping the swept AABB of the move.
+        // Broadphase: gather brushes along the SWEPT CORRIDOR of the move (perf 2.1: a long diagonal
+        // trace's enclosing AABB used to hand the narrowphase every brush under half the grid — the
+        // catharsis shotgun/true-aim melts; QuerySwept marches cell-sized segments instead). The plain
+        // rectangle bounds are still computed for the ENTITY broadphase below (few entities — the
+        // rectangle is fine there).
         Vector3 sweepMins, sweepMaxs;
         SweptBounds(start, end, mins, maxs, out sweepMins, out sweepMaxs);
 
         _candidates.Clear();
-        _world.Query(sweepMins, sweepMaxs, _candidates);
+        _world.QuerySwept(start, end, mins, maxs, _candidates);
 
         for (int i = 0; i < _candidates.Count; i++)
             TraceBrushVsBrush(ref trace, box, start, end, _candidates[i], worldBrush: true, hitEnt: null);
@@ -191,8 +217,17 @@ public sealed class TraceService : ITraceService
         object? gate = ConcurrencyGate;
         if (gate is null)
             return PointContentsUnlocked(point);
+        if (!XonoticGodot.Common.Diagnostics.Prof.Enabled)   // see Trace: no clock unless it is read back
+        {
+            lock (gate)
+                return PointContentsUnlocked(point);
+        }
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (gate)
+        {
+            GateWaitTicks += System.Diagnostics.Stopwatch.GetTimestamp() - t0;
             return PointContentsUnlocked(point);
+        }
     }
 
     private int PointContentsUnlocked(Vector3 point)

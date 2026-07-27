@@ -86,7 +86,22 @@ public sealed class ClientNet : IDisposable
     public int PingMs => _transport.RoundTripMs();
 
     /// <summary>The current predicted local origin (Quake space) — what the camera follows.</summary>
-    public NVec3 PredictedOrigin => _reconciler.Predicted.Origin;
+    // ---- DP cl_movement / cl_nolerp (r16 A/B switches) -------------------------------------------------
+    // UseClientMovement=false (DP `cl_movement 0`): the VIEW rides the server-authoritative owner state —
+    // extrapolated by the owner velocity over the sub-snapshot remainder — instead of the local prediction.
+    // Commands still go to the server (movement stays server-authoritative); only the rendered origin
+    // switches. The DP-faithful no-prediction mode, and the clean discriminator for prediction-path bugs.
+    // NoLerp (DP `cl_nolerp 1`): remote entities render their raw newest snapshot state (no two-snapshot
+    // interpolation). NetGame pushes both flags + RenderNow (the interp-domain clock) each frame.
+    public bool UseClientMovement = true;
+    public bool NoLerp;
+    public float RenderNow;
+    private NVec3 _ownerOrigin, _ownerVelocity;
+    private float _ownerTime = -1f;
+
+    public NVec3 PredictedOrigin => UseClientMovement || _ownerTime < 0f
+        ? _reconciler.Predicted.Origin
+        : _ownerOrigin + _ownerVelocity * Math.Clamp(RenderNow - _ownerTime, 0f, 0.1f);
 
     /// <summary>The local player's own latest decoded entity state (kind/model/health/team/flags), captured from
     /// the snapshot before it is skipped for interpolation (we predict our own origin, not interpolate it). Lets
@@ -96,7 +111,9 @@ public sealed class ClientNet : IDisposable
     public NetEntityState? LocalState { get; private set; }
 
     /// <summary>The current predicted local velocity (Quake space).</summary>
-    public NVec3 PredictedVelocity => _reconciler.Predicted.Velocity;
+    public NVec3 PredictedVelocity => UseClientMovement || _ownerTime < 0f
+        ? _reconciler.Predicted.Velocity
+        : _ownerVelocity;
 
     /// <summary>Diagnostic (camera-trace): the magnitude (qu) of the last reconcile's prediction error — ~0 when
     /// client predict and server authority agree (the command-driven, fps-independent target); a steady nonzero
@@ -1086,6 +1103,9 @@ public sealed class ClientNet : IDisposable
 
     private void HandleSnapshot(ref BitReader r)
     {
+        // [r16 #5] cn.snapshot: the snapshot decode+apply is the heavy slice of ng.poll (4-5ms spikes at
+        // 150+ entities were landing in ng.process "(other)"); scoped so the census names it.
+        using var _snapScope = XonoticGodot.Common.Diagnostics.Prof.Sample("cn.snapshot");
         float serverTime = r.ReadFloat();
         uint ackedSeq = r.ReadULong();
 
@@ -1093,6 +1113,10 @@ public sealed class ClientNet : IDisposable
         // owner authoritative state (full precision) — the reconcile seed.
         NVec3 origin = r.ReadVector(NetPrecision.Float);
         NVec3 velocity = r.ReadVector(NetPrecision.Float);
+        // DP cl_movement 0 rides these directly (see UseClientMovement above).
+        _ownerOrigin = origin;
+        _ownerVelocity = velocity;
+        _ownerTime = serverTime;
         bool onGround = r.ReadBool();
         Health = r.ReadShort();
         Armor = r.ReadShort();
@@ -1358,6 +1382,13 @@ public sealed class ClientNet : IDisposable
     /// </summary>
     public bool SampleRemote(int netId, float now, out NVec3 origin, out NVec3 angles)
     {
+        if (NoLerp)
+        {
+            // DP cl_nolerp 1: no two-snapshot interpolation — callers fall back to the raw newest state.
+            origin = default;
+            angles = default;
+            return false;
+        }
         if (_remotes.TryGetValue(netId, out RemoteEntity? re) && re.Interp.HasData)
         {
             Snapshot s = re.Interp.Sample(now);

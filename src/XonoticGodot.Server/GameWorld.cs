@@ -1883,6 +1883,15 @@ public sealed class GameWorld
         using (Prof.Sample("start.bots"))
             Bots.ServerFrame();
 
+#if XG_BOTPLAYER
+        // Bot-player harness (compile-gated): think the brain bound to the local HUMAN player on the sim
+        // thread, right after the bot pass, and publish its command for the client to sample. Inert unless
+        // --bot-player attached one. The player itself is not a bot, so its command still arrives over the
+        // normal net InputProvider path below — this only produces the input a human's hands would.
+        using (Prof.Sample("start.botplayer"))
+            Bots.ThinkBotPlayer(Simulation.FrameTime);
+#endif
+
         // QC anticheat_startframe: advance the global evade phase walk (server/anticheat.qc).
         AntiCheat.StartFrame(Simulation.FrameTime);
 

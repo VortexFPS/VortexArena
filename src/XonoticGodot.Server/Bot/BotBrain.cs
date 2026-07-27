@@ -828,6 +828,21 @@ public sealed class BotBrain
         // also fold in the WepSet in case the inventory path granted any).
         EnsureWepSetSynced();
 
+        // bot_ai_weapon_rotate <seconds> (port benchmark/demo knob, default 0 = off): instead of the range
+        // pick, step through the owned loadout ONE WEAPON AT A TIME on a fixed clock, so a demo/capture run
+        // (g_weaponarena loadout + a spectated bot) exercises every carried weapon's fire/effect/render path.
+        // The bot's entity slot phases the cycle, so a match shows several different weapons at once while
+        // each bot still rotates through all of them. Deliberately overrides the combo hold — rotation must
+        // not stick to a favourite. Not a Base behavior; keep 0 outside benchmarks.
+        float rotateSecs = Cvars.FloatOr("bot_ai_weapon_rotate", 0f);
+        if (rotateSecs > 0f && PickRotating(rotateSecs) is { } rotated)
+        {
+            ChosenWeapon = rotated;
+            if (Bot.OwnedWeaponSet.Has(rotated))
+                Inventory.SwitchWeapon(Bot, rotated);
+            return;
+        }
+
         // QC bot_ai_weapon_combo: within combo_threshold seconds after our last attack, keep the current
         // (combo-capable splash) weapon for the follow-up combo shot rather than re-picking by range.
         if (enemy is not null && Cvars.Bool("bot_ai_weapon_combo") && ChosenWeapon is { } held
@@ -925,6 +940,32 @@ public sealed class BotBrain
             if (!Bot.OwnedWeapons.Contains(netName)) continue;
             Weapon? w = Weapons.ByName(netName);
             if (w is not null) return w; // first owned in priority order wins (QC's ordered list scan)
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The <c>bot_ai_weapon_rotate</c> pick: owned weapons in stable registry order, indexed by the rotation
+    /// clock plus this bot's entity slot (the per-bot phase). Time is the bot clock, so rotation pauses and
+    /// slows with the sim like every other think. Returns null when the bot owns nothing yet (pre-spawn).
+    /// </summary>
+    private Weapon? PickRotating(float secsPerWeapon)
+    {
+        int count = 0;
+        foreach (Weapon w in Weapons.All)
+            if (Bot.OwnedWeaponSet.Has(w))
+                count++;
+        if (count == 0)
+            return null;
+        // Bot entity slots are NEGATIVE (server-assigned), so take the magnitude for the phase — the modulo
+        // must see only non-negative terms or it returns a negative index and the pick silently misses.
+        int idx = ((int)(Now / secsPerWeapon) + System.Math.Abs(Bot.Index)) % count;
+        foreach (Weapon w in Weapons.All)
+        {
+            if (!Bot.OwnedWeaponSet.Has(w))
+                continue;
+            if (idx-- == 0)
+                return w;
         }
         return null;
     }

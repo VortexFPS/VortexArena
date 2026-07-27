@@ -126,6 +126,11 @@ public sealed partial class EditorGrid : MeshInstance3D
             }
         }
 
+        // The ortho view carries the geometry as a wireframe, so a full-strength grid competes with it there.
+        float alphaScale = _controller?.Ortho is { IsOpen: true } ? EditorOrthoView.GridAlphaScale : 1f;
+        _material.SetShaderParameter("minor_alpha", 0.20f * alphaScale);
+        _material.SetShaderParameter("major_alpha", 0.42f * alphaScale);
+
         _material.SetShaderParameter("hl_active", active ? 1f : 0f);
         _material.SetShaderParameter("hl_plane", plane);
         _material.SetShaderParameter("hl_color", tint);

@@ -49,6 +49,9 @@ public sealed partial class EditorController : Node3D
     /// <summary>Cvar: whether geometry-to-geometry snapping is active.</summary>
     public const string CvarSnapEnabled = "cl_editor_snap";
 
+    /// <summary>Cvar: show q3map2 TOOL brushes (hint/skip/clip/trigger/caulk) as editable geometry.</summary>
+    public const string CvarShowToolBrushes = "cl_editor_show_tool_brushes";
+
     /// <summary>Maximum pick range in world units.</summary>
     private const float PickRange = 8192f;
 
@@ -111,6 +114,7 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarGrabRadius, "12", CvarFlags.Save);
         c.Register(CvarSnapRadius, "16", CvarFlags.Save);
         c.Register(CvarSnapEnabled, "1", CvarFlags.Save);
+        c.Register(CvarShowToolBrushes, "0", CvarFlags.Save);
     }
 
     /// <summary>Point the controller at the scene camera it should pick along.</summary>
@@ -155,9 +159,10 @@ public sealed partial class EditorController : Node3D
             return;
         }
 
-        UpdateCrosshairHover();
-        if (_dragging)
-            UpdateDrag();
+        // The hover is frozen mid-drag: the crosshair is parked on the grabbed feature, and re-picking would
+        // let the highlight wander onto whatever the ghost happens to overlap.
+        if (!_dragging)
+            UpdateCrosshairHover();
     }
 
     // =============================================================================================
@@ -195,7 +200,7 @@ public sealed partial class EditorController : Node3D
         _lastPickVersion = GeometryVersion;
         _lastPickTool = Tool;
 
-        PickIndex.EnsureBuilt(_document!, GeometryVersion);
+        PickIndex.EnsureBuilt(_document!, GeometryVersion, IncludeToolBrushes);
         Hover = VmapPicking.Pick(PickIndex, origin, dir, PickMode(), GrabRadius, PickRange);
     }
 
@@ -235,35 +240,66 @@ public sealed partial class EditorController : Node3D
         _dragStartPoint = Hover.Point;
         _dragDistance = Hover.Distance;
         _dragDelta = NVec3.Zero;
+        _dragRaw = NVec3.Zero;
+        _dragAxis = Hover.Selection.Kind == VmapSelectionKind.Face ? Hover.Normal : NVec3.Zero;
         _dragSnap = default;
         _dragging = true;
     }
 
     /// <summary>
-    /// Track the grab. The grabbed point rides at its original camera distance, so looking around moves it in
-    /// a sphere about the eye; the result is then constrained by the tool and resolved through the snapping
-    /// policy (geometry inside its radius, else grid).
+    /// Feed a mouse motion into the active drag. The CAMERA IS FROZEN while dragging (the host stops feeding
+    /// mouse-look), so the pointer moves the geometry instead of the view.
+    ///
+    /// Dragging by turning your head was the first design and it felt awkward for exactly the reason you would
+    /// expect: the thing being placed and the frame you judge it against move together. Fixing the view and
+    /// moving the object against it is how editors do this, and it is what makes fine adjustment possible.
     /// </summary>
-    private void UpdateDrag()
+    public void ApplyDragMouse(Godot.Vector2 mouseDelta)
     {
-        (NVec3 origin, NVec3 dir) = CameraRay();
-        NVec3 target = origin + dir * _dragDistance;
+        if (!_dragging || _camera is null)
+            return;
 
+        // World units per pixel at the grab depth, so the drag tracks the pointer 1:1 on screen.
+        float viewportH = MathF.Max(1f, _camera.GetViewport().GetVisibleRect().Size.Y);
+        float unitsPerPixel = _camera.Projection == Camera3D.ProjectionType.Orthogonal
+            ? _camera.Size / viewportH
+            : 2f * MathF.Tan(Mathf.DegToRad(_camera.Fov) * 0.5f) * MathF.Max(1f, _dragDistance) / viewportH;
+
+        Transform3D t = _camera.GlobalTransform;
+        NVec3 screenRight = Coords.ToQuake(t.Basis.X);
+        NVec3 screenUp = Coords.ToQuake(t.Basis.Y);
+
+        // Screen Y grows downward, so an upward drag is -Y.
+        _dragRaw += screenRight * (mouseDelta.X * unitsPerPixel) - screenUp * (mouseDelta.Y * unitsPerPixel);
+        UpdateDragFromRaw();
+    }
+
+    /// <summary>Accumulated, unsnapped drag offset in world space.</summary>
+    private NVec3 _dragRaw;
+
+    /// <summary>The axis a face push is constrained to (its normal); zero for a free 3D drag.</summary>
+    private NVec3 _dragAxis;
+
+    /// <summary>The constrained drag axis, for the HUD/gizmo axis readout. Zero when the drag is free.</summary>
+    public NVec3 DragAxis => _dragAxis;
+
+    /// <summary>Resolve the raw drag into the committed delta: constrain to the axis, then snap.</summary>
+    private void UpdateDragFromRaw()
+    {
         // A face push is one-dimensional: only motion along the face normal means anything, and allowing the
-        // other two axes would let a careless look-around shear the wall sideways.
-        if (_dragSelection.Kind == VmapSelectionKind.Face)
+        // other two axes would let a careless drag shear the wall sideways.
+        if (_dragSelection.Kind == VmapSelectionKind.Face && _dragAxis != NVec3.Zero)
         {
-            NVec3 normal = Hover.Hit ? Hover.Normal : FaceNormal(_dragSelection);
-            float along = NVec3.Dot(target - _dragStartPoint, normal);
-            along = VmapEdit.SnapToGrid(along, GridSize);
-            _dragDelta = normal * along;
+            float along = VmapEdit.SnapToGrid(NVec3.Dot(_dragRaw, _dragAxis), GridSize);
+            _dragDelta = _dragAxis * along;
             _dragSnap = default;
             return;
         }
 
-        PickIndex.EnsureBuilt(_document!, GeometryVersion);
+        PickIndex.EnsureBuilt(_document!, GeometryVersion, IncludeToolBrushes);
         NVec3 resolved = VmapPicking.ResolveDragPosition(
-            PickIndex, target, GridSize, SnapRadius, _session!.SelectedBrushIds(), out _dragSnap);
+            PickIndex, _dragStartPoint + _dragRaw, GridSize, SnapRadius,
+            _session!.SelectedBrushIds(), out _dragSnap);
         _dragDelta = resolved - _dragStartPoint;
     }
 
@@ -308,6 +344,8 @@ public sealed partial class EditorController : Node3D
         _dragging = false;
         _dragSelection = VmapSelection.None;
         _dragDelta = NVec3.Zero;
+        _dragRaw = NVec3.Zero;
+        _dragAxis = NVec3.Zero;
         _dragSnap = default;
     }
 
@@ -431,6 +469,14 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>Geometry-snap radius currently in force (shown in the HUD).</summary>
     public float SnapRadiusDisplay => Cvar(CvarSnapRadius, 16f);
+
+    /// <summary>
+    /// Whether q3map2 TOOL brushes take part in picking. Off by default: hint/skip/clip/trigger/caulk brushes
+    /// are compiler and gameplay scaffolding, not level architecture, and on a real map they vastly outnumber
+    /// the visible geometry and sit in front of it — so with them pickable, the crosshair mostly grabs invisible
+    /// volumes instead of the wall behind them.
+    /// </summary>
+    public bool IncludeToolBrushes => Cvar(CvarShowToolBrushes, 0f) != 0f;
 
     private static float Cvar(string name, float fallback)
     {

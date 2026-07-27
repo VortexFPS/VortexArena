@@ -127,6 +127,7 @@ public sealed partial class EditorOrthoView : Node
         IsOpen = false;
         if (_gizmos is not null)
             _gizmos.ShowWorldWireframe = false;
+        SetSkyVisible(true);
 
         _camera.Projection = _savedIsPerspective
             ? Camera3D.ProjectionType.Perspective
@@ -188,6 +189,25 @@ public sealed partial class EditorOrthoView : Node
         Apply();
     }
 
+    /// <summary>
+    /// Pan using the movement axes, so the normal fly keys pan the view. Mouse-button panning depends on the
+    /// middle button reaching the handler; the movement keys always do, and while the ortho view owns the
+    /// cursor those keys are otherwise unused.
+    /// </summary>
+    /// <param name="forward">Forward axis in [-1,1] (screen up/down).</param>
+    /// <param name="side">Side axis in [-1,1] (screen left/right).</param>
+    /// <param name="dt">Frame time.</param>
+    public void PanByAxes(float forward, float side, float dt)
+    {
+        if (!IsOpen || (forward == 0f && side == 0f))
+            return;
+        // Pan speed scales with zoom so a keypress crosses the same FRACTION of the view at any zoom level.
+        float speed = Zoom * 0.9f * dt;
+        (NVec3 right, NVec3 up) = ScreenAxes();
+        Center += right * (side * speed) + up * (forward * speed);
+        Apply();
+    }
+
     /// <summary>Move the slab along the view axis — the floor filter.</summary>
     public void MoveSlab(float units)
     {
@@ -237,6 +257,11 @@ public sealed partial class EditorOrthoView : Node
         _camera.Projection = Camera3D.ProjectionType.Orthogonal;
         _camera.Size = Zoom;
 
+        // The skybox is drawn at effectively infinite distance for a PERSPECTIVE eye; under an orthographic
+        // projection that assumption breaks and it swims wildly across the frame. An elevation view wants a
+        // flat backdrop anyway, so replace it with one while the view is open.
+        SetSkyVisible(false);
+
         // The near/far pair IS the floor filter: geometry outside the slab is clipped away by the projection,
         // which costs nothing and is exactly what stops upper floors from drawing over the one being edited.
         _camera.Near = CameraStandoff * 0.5f;
@@ -249,6 +274,42 @@ public sealed partial class EditorOrthoView : Node
         Vector3 up = Axis == OrthoAxis.Top ? new Vector3(0, 0, -1) : new Vector3(0, 1, 0);
         _camera.GlobalTransform = new Transform3D(Basis.Identity, godotEye).LookingAt(godotTarget, up);
     }
+
+    /// <summary>
+    /// Swap the world environment's sky for a flat colour (and back). Kept as a saved/restored background mode
+    /// rather than hiding a node, so any sky source the map used comes back exactly as it was.
+    /// </summary>
+    private void SetSkyVisible(bool visible)
+    {
+        if (_camera?.GetViewport() is not Viewport vp || vp.World3D?.Environment is not Godot.Environment env)
+            return;
+
+        if (!visible)
+        {
+            if (_savedBg is null)
+            {
+                _savedBg = env.BackgroundMode;
+                _savedBgColor = env.BackgroundColor;
+            }
+            env.BackgroundMode = Godot.Environment.BGMode.Color;
+            env.BackgroundColor = new Color(0.07f, 0.08f, 0.10f);
+        }
+        else if (_savedBg is { } mode)
+        {
+            env.BackgroundMode = mode;
+            env.BackgroundColor = _savedBgColor;
+            _savedBg = null;
+        }
+    }
+
+    private Godot.Environment.BGMode? _savedBg;
+    private Color _savedBgColor;
+
+    /// <summary>
+    /// How much to dim the world grid while the ortho view is up. The wireframe already carries the geometry
+    /// there, so a full-strength grid competes with it instead of supporting it.
+    /// </summary>
+    public const float GridAlphaScale = 0.45f;
 
     /// <summary>The direction the view looks, in Quake space.</summary>
     public NVec3 ViewForward() => Axis switch

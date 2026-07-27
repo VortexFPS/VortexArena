@@ -5731,6 +5731,17 @@ public sealed partial class NetGame : Node3D
                 _editorOrtho.Close();   // dropping into playtest must not leave a flat wireframe camera
         }
 
+        // The editor aims along the crosshair, but an observer has no local player so the skinned crosshair is
+        // suppressed. Re-enable NetHud's lightweight one here — on the PER-FRAME path, because the player-setup
+        // path only runs when the local player REFERENCE changes and would never re-evaluate this.
+        if (_hud is not null && GodotObject.IsInstanceValid(_hud) && IsEditorGametype)
+            _hud.SuppressCrosshairAndHealth = !IsEditorFreeFly && LocalServerPlayer is not null;
+
+        // Ortho panning on the movement axes. The ortho view owns the cursor, so flying is suspended and those
+        // keys are free; this is also far more reliable than depending on the middle mouse button arriving.
+        if (_editorOrtho is { IsOpen: true } panOrtho)
+            panOrtho.PanByAxes(BindTable.Forward, BindTable.Side, (float)GetProcessDeltaTime());
+
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
         {
             editorPanel.IsEditorSession = IsEditorGametype;
@@ -6661,10 +6672,21 @@ public sealed partial class NetGame : Node3D
             return false;
         }
 
-        if (orthoOpen && @event is InputEventMouseMotion motion && _orthoPanning)
+        if (@event is InputEventMouseMotion motion)
         {
-            _editorOrtho!.PanByPixels(motion.Relative, GetViewport().GetVisibleRect().Size.Y);
-            return true;
+            if (orthoOpen && _orthoPanning)
+            {
+                _editorOrtho!.PanByPixels(motion.Relative, GetViewport().GetVisibleRect().Size.Y);
+                return true;
+            }
+
+            // While a grab is live the pointer moves the GEOMETRY, not the view: consuming the motion here is
+            // what freezes the camera, so the mapper judges the placement against a fixed frame.
+            if (_editor.IsDragging)
+            {
+                _editor.ApplyDragMouse(motion.Relative);
+                return true;
+            }
         }
 
         if (@event is InputEventKey { Pressed: true, Echo: false } key)

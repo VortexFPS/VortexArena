@@ -118,11 +118,32 @@ public partial class EditorPanel : HudPanel
                         lines.Add(($"ctr  {Coord(center)}", dim));
                 }
 
+                // What the crosshair is over: the shader/texture, its flags, and whether it is real architecture
+                // or compiler scaffolding. This is the information a mapper actually needs before touching a
+                // face, and it is otherwise invisible in-game.
+                VmapSelection info = c.IsDragging ? c.DragSelection : c.Hover.Selection;
+                if (!info.IsEmpty && c.Document?.FindBrush(info.BrushId) is { } infoBrush)
+                {
+                    if (info.FaceIndex >= 0 && info.FaceIndex < infoBrush.Faces.Count)
+                    {
+                        VmapFace face = infoBrush.Faces[info.FaceIndex];
+                        lines.Add(($"shader {Shorten(face.Material)}", new Color(0.85f, 0.8f, 0.6f)));
+
+                        string flags = DescribeFlags(face.SurfaceFlags, face.ContentFlags);
+                        if (flags.Length > 0)
+                            lines.Add(($"  {flags}", dim));
+                    }
+
+                    string kind = infoBrush.IsToolBrush ? "tool" : infoBrush.IsDetail ? "detail" : "structural";
+                    lines.Add(($"brush #{infoBrush.Id}  {infoBrush.Faces.Count} faces  {kind}", dim));
+                }
+
                 if (c.IsDragging)
                 {
                     NVec3 d = c.DragDelta;
+                    string axis = c.DragAxis != NVec3.Zero ? $"  axis {AxisName(c.DragAxis)}" : "";
                     string snapNote = c.DragSnap.Snapped ? $"  snap→{c.DragSnap.TargetKind}" : "";
-                    lines.Add(($"drag {Coord(d)}  |{d.Length():0.#}|{snapNote}", new Color(0.4f, 1f, 0.55f)));
+                    lines.Add(($"drag {Coord(d)}  |{d.Length():0.#}|{axis}{snapNote}", new Color(0.4f, 1f, 0.55f)));
                 }
                 else if (c.Hover.Hit)
                 {
@@ -172,6 +193,39 @@ public partial class EditorPanel : HudPanel
     private const string BindOrthoAxis = "weapon_group_5";
     private const string BindGridUp = "weapnext";
     private const string BindGridDown = "weapprev";
+
+    /// <summary>Trim a long shader path to its last two components, which is the part that identifies it.</summary>
+    private static string Shorten(string material)
+    {
+        if (string.IsNullOrEmpty(material))
+            return "(none)";
+        string[] parts = material.Split('/');
+        return parts.Length <= 2 ? material : string.Join('/', parts[^2], parts[^1]);
+    }
+
+    /// <summary>Name the dominant axis of a drag constraint, so the readout says WHICH way it is moving.</summary>
+    private static string AxisName(NVec3 a)
+    {
+        float ax = MathF.Abs(a.X), ay = MathF.Abs(a.Y), az = MathF.Abs(a.Z);
+        if (ax >= ay && ax >= az) return a.X >= 0 ? "+X" : "-X";
+        if (ay >= az) return a.Y >= 0 ? "+Y" : "-Y";
+        return a.Z >= 0 ? "+Z" : "-Z";
+    }
+
+    /// <summary>Human-readable Q3 surface/content flags — the ones a mapper cares about when picking a face.</summary>
+    private static string DescribeFlags(int surface, int contents)
+    {
+        var parts = new List<string>(4);
+        if ((surface & 0x0080) != 0) parts.Add("nodraw");
+        if ((surface & 0x0004) != 0) parts.Add("sky");
+        if ((surface & 0x0002) != 0) parts.Add("slick");
+        if ((surface & 0x0008) != 0) parts.Add("ladder");
+        if ((surface & 0x4000) != 0) parts.Add("nonsolid");
+        if ((contents & 0x08000000) != 0) parts.Add("detail");
+        if ((contents & 0x00010000) != 0) parts.Add("playerclip");
+        if ((contents & 0x40000000) != 0) parts.Add("trigger");
+        return string.Join(" · ", parts);
+    }
 
     /// <summary>
     /// Format a world position the way a mapper reads one: Quake units, integral, in the map's own coordinate

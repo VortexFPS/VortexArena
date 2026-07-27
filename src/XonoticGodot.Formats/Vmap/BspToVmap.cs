@@ -136,7 +136,10 @@ public static class BspToVmap
             });
         }
 
-        return brush.Faces.Count >= 4 ? brush : null;
+        if (brush.Faces.Count < 4)
+            return null;
+        brush.IsToolBrush = brush.ClassifyToolBrush();
+        return brush;
     }
 
     // =============================================================================================

@@ -215,6 +215,52 @@ public sealed class VmapBrush
     public int ContentFlags { get; set; }
 
     /// <summary>
+    /// True for a q3map2 TOOL brush — hint/skip/caulk/nodraw/clip/trigger/areaportal/origin. These are
+    /// compiler and gameplay scaffolding (vis hints, collision volumes, trigger bounds), not level
+    /// architecture: they render nothing, they outnumber the visible geometry on a real map, and they sit in
+    /// front of it. An editor that lets you grab them makes the visible world nearly unclickable, so they are
+    /// classified here and filtered out of picking by default.
+    /// </summary>
+    public bool IsToolBrush { get; set; }
+
+    /// <summary>
+    /// Classify from the faces: every face draws nothing (Q3 SURF_NODRAW) or names a <c>common/</c> tool
+    /// shader. "Every" rather than "any" matters — a normal brush may legitimately have caulked back faces.
+    /// </summary>
+    public bool ClassifyToolBrush()
+    {
+        if (Faces.Count == 0)
+            return false;
+        foreach (VmapFace f in Faces)
+        {
+            bool nodraw = (f.SurfaceFlags & 0x0080) != 0;   // Q3SURFACEFLAG_NODRAW
+            if (!nodraw && !IsToolMaterial(f.Material))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>True for the Q3 <c>common/</c> tool shader family (however the path is spelled).</summary>
+    public static bool IsToolMaterial(string material)
+    {
+        if (string.IsNullOrEmpty(material))
+            return false;
+        ReadOnlySpan<char> m = material.AsSpan();
+        int slash = m.LastIndexOf('/');
+        ReadOnlySpan<char> leaf = slash >= 0 ? m[(slash + 1)..] : m;
+
+        return material.Contains("common/", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("hint", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("skip", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("caulk", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("nodraw", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("clip", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("trigger", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("areaportal", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("origin", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Deep copy, used by the editor's undo journal to snapshot a brush before an op mutates it. Undo by
     /// snapshot rather than by inverse op: a vertex drag re-derives planes through a least-squares fit, so
     /// "drag back the other way" is not an exact inverse and would let geometry drift with every undo cycle.

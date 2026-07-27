@@ -48,6 +48,7 @@ public sealed class VmapPickIndex
 
     private readonly List<Entry> _entries = new();
     private VmapDocument? _doc;
+    private bool _includedTools;
 
     /// <summary>Geometry version this cache was built for; -1 when never built.</summary>
     public int Version { get; private set; } = -1;
@@ -56,11 +57,16 @@ public sealed class VmapPickIndex
     public IReadOnlyList<Entry> Entries => _entries;
 
     /// <summary>Rebuild if the document or version changed. Cheap no-op when already current.</summary>
-    public void EnsureBuilt(VmapDocument doc, int version)
+    /// <param name="includeToolBrushes">
+    /// Include q3map2 tool brushes (hint/skip/clip/trigger/caulk). Off by default: they are scaffolding rather
+    /// than architecture, and they sit in front of the geometry you actually want to grab.
+    /// </param>
+    public void EnsureBuilt(VmapDocument doc, int version, bool includeToolBrushes = false)
     {
         ArgumentNullException.ThrowIfNull(doc);
-        if (Version == version && ReferenceEquals(_doc, doc))
+        if (Version == version && ReferenceEquals(_doc, doc) && _includedTools == includeToolBrushes)
             return;
+        _includedTools = includeToolBrushes;
 
         _entries.Clear();
         _doc = doc;
@@ -68,6 +74,9 @@ public sealed class VmapPickIndex
 
         foreach (VmapBrush brush in doc.Brushes)
         {
+            if (brush.IsToolBrush && !includeToolBrushes)
+                continue;
+
             Vector3[][] windings = VmapWinding.BuildBrushWindings(brush);
 
             var mins = new Vector3(float.MaxValue);

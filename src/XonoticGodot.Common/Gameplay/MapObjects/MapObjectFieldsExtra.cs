@@ -53,6 +53,13 @@ namespace XonoticGodot.Common.Framework
         public float ModelScale;
         /// <summary>The raw <c>solid</c> map key (0 = unset; &lt;0 forces SOLID_NOT — models.qc:178-179).</summary>
         public float SolidOverride;
+        /// <summary>RENDER_COLORMAPPED (QC BIT(10)) — the marker bit on <see cref="ColorMapOverride"/> saying the
+        /// value is an authoritative colormap the renderer should apply. NOTE: numerically identical to QC's
+        /// <c>1024 +</c> packed-colormap bias (colormap ≥ 1024 = colormapped) — that overlap is QC's own encoding.
+        /// The ONE shared definition for every producer/consumer (WeaponThrowing, MonsterAI, MapModels, the
+        /// snapshot encode/decode, the client item paint) — do not re-declare locally.</summary>
+        public const int RenderColormapped = 1 << 10;
+
         /// <summary>QC <c>.colormap</c> as set by g_model_setcolormaptoactivator (models.qc:17-29). Render-side
         /// consumption is a follow-up; the field keeps the QC math observable.</summary>
         public int ColorMapOverride;

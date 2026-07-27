@@ -412,6 +412,10 @@ public sealed class WeaponPickup : Pickup
 {
     private readonly Weapon _weapon;
 
+    /// <summary>The weapon this pickup grants — the item's explicit identity (networked as RegistryId+1 so a
+    /// client can paint/classify a weapon pickup without guessing from the model filename).</summary>
+    public Weapon Weapon => _weapon;
+
     public WeaponPickup(Weapon w)
     {
         _weapon = w;

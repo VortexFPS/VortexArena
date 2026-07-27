@@ -266,6 +266,10 @@ public static class ClientSettings
         // budget) so the menu never hitches (Shell.StartMenuAssetWarm → MenuAssetWarmer). No effect when
         // persistence is off (a per-match loader wouldn't see the warmed cache). `set cl_warm_at_boot 0` disables.
         c.Register("cl_warm_at_boot", "1");
+        // Paint weapon PICKUPS with their weapon's registry color (a two-tone base/icon duotone) and dropped
+        // loot with the DROPPER's player colors (default ON). Port-only cosmetic: `set cl_weapon_item_colors 0`
+        // restores the stock untinted item look. Read per frame by the ClientWorld item pass.
+        c.Register("cl_weapon_item_colors", "1");
         // Off-screen / distant pose-cull for skeletal player models (3.3): when ON, PlayerModel.PushBones is
         // skipped for a REMOTE player whose model is off-screen, and distant on-screen players refresh the
         // Skeleton3D at half rate. The CPU locomotion clock keeps running every frame, so a model going

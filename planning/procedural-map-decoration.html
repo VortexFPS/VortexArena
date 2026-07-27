@@ -160,11 +160,11 @@ a { color: #e0a458; }
     <b>Status 2026-07-27</b> on <code>feature/map-editor</code> (pushed). <b>E0–E2 fully implemented</b>: the
     <code>.vmap</code> container + brush CSG kernel, the <code>.bsp</code> and <code>.map</code> importers, the
     editor gametype with the EDIT/PLAYTEST toggle, the world-space alignment grid.
-    <b>E3–E6 logic cores implemented and tested</b> (60 tests): the op model with snapshot undo/redo, ray
-    picking, the convex plane-refit behind vertex/edge drags, rotation, geometry snapping, box creation, the
-    clipper, and the co-editing wire format + per-brush locks + authoritative apply.
-    <b>Still to build</b>: the Godot-side interaction layer (gizmo rendering, mouse-drag→op, hover highlight),
-    the ortho viewport, and routing ops through the actual net channel. Marked
+    <b>E3–E5 implemented</b> (60 tests): the op model with snapshot undo/redo, ray picking, the convex
+    plane-refit behind vertex/edge drags, rotation, geometry snapping, box creation and the clipper — plus the
+    crosshair-driven interaction layer, the line-overlay gizmos and the orthographic viewport, all on the
+    game's own HUD/bind/cursor systems. <b>E6 core</b> (op wire format, per-brush locks, authoritative apply)
+    is built and tested; routing it through ServerNet/ClientNet is the one remaining piece. Marked
     <span class="pill rec">built</span> below where shipped.<br>
     Companion screenshots: the current renderer's output of the courtyard map vs. the decorated concept of the same shot (referenced throughout as <b>CURRENT</b> and <b>CONCEPT</b>).
   </div>
@@ -1150,18 +1150,18 @@ and can proceed in parallel.</p>
       <td>Fly around any imported map, flip render modes, and instantly playtest — already a useful tool before any
           editing lands.</td>
       <td>~1–2 wk</td></tr>
-  <tr><td><b>E3</b> <span class="pill rec">core built</span></td>
+  <tr><td><b>E3</b> <span class="pill rec">built</span></td>
       <td><b>Selection &amp; move</b> (§11.4): ray pick (face/edge/vert) with hover highlight, move handles + face
           drag, <b>convex plane-refit with validation</b>, grid + align-to-grid, coordinate readouts, op log with
           undo/redo, save to <code>.vmap</code>.</td>
       <td>The editor thesis — and it front-loads the convexity risk, the one genuinely unknown-shaped piece.</td>
       <td>~2–3 wk</td></tr>
-  <tr><td><b>E4</b> <span class="pill rec">core built</span></td>
+  <tr><td><b>E4</b> <span class="pill rec">built</span></td>
       <td><b>Rotation + snapping</b> (§11.4): rotation rings + angle snap, geometry-to-geometry snapping with
           visualization + HUD state, entity/prop gizmos, immediate incremental collision refit.</td>
       <td>Full manipulation vocabulary; PLAYTEST honest after every edit.</td>
       <td>~1–2 wk</td></tr>
-  <tr><td><b>E5</b> <span class="pill alt">part built</span></td>
+  <tr><td><b>E5</b> <span class="pill rec">built</span></td>
       <td><b>Ortho views + creation + clipper</b> (§11.4–11.5): single-pane top/front/side wireframe views with
           pan/zoom + floor-filter slab, axis-locked editing in-view, drag-out box brush creation, plane clipper.</td>
       <td>Precision alignment work and greyboxing from nothing — the "perfectly straight lines" workflow.</td>

@@ -1,13 +1,17 @@
-name: Deploy Upstream-Watch ledger to Pages
+name: Deploy docs to Pages
 
-# Publishes planning/upstream-watch/LEDGER.html as the GitHub Pages site.
-# The page is regenerated from LEDGER.yaml (the source of truth) on every deploy.
+# Publishes the GitHub Pages site:
+#   /                -> planning/upstream-watch/LEDGER.html (regenerated from LEDGER.yaml)
+#   /balance.html    -> planning/reference/xonotic-balance-history.html
+#   /physics.html    -> planning/reference/xonotic-physics-history.html
 
 on:
   push:
     branches: [main]
     paths:
       - planning/upstream-watch/LEDGER.yaml
+      - planning/reference/xonotic-balance-history.html
+      - planning/reference/xonotic-physics-history.html
       - tools/upstream-ledger-html.py
       - .github/workflows/pages.yml
   workflow_dispatch:
@@ -38,6 +42,8 @@ jobs:
         run: |
           mkdir -p _site
           cp planning/upstream-watch/LEDGER.html _site/index.html
+          cp planning/reference/xonotic-balance-history.html _site/balance.html
+          cp planning/reference/xonotic-physics-history.html _site/physics.html
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site

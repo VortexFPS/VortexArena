@@ -23,4 +23,21 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(XgDebugUnoptimized)' != 'true'">
     <Optimize>true</Optimize>
   </PropertyGroup>
+
+  <!-- (2026-07-27) BOT-PLAYER HARNESS - compile-time opt-in, never in a normal build.
+
+       Drives the LOCAL HUMAN player slot from a bot brain, so an unattended run exercises the real player
+       code path (client input sampling, prediction, input encode, net, server authority, snapshot,
+       reconcile) instead of only the spectate-a-bot path, which never touches any of it.
+
+       This is deliberately NOT a cvar. A brain steering a human player IS an aimbot: the code must not exist
+       in anything shippable, so the gate is the compiler, not a runtime flag a config could set. Nothing is
+       compiled in unless you ask for it here, and even then it stays dormant until the CLI flag is passed.
+       Build it with:  dotnet build XonoticGodot.csproj -c Debug -p:XgBotPlayer=true
+       Run it with the "bot-player" CLI flag (see BotPlayerMode / docs/RUNNING.md).
+
+       Keep every use of it inside #if XG_BOTPLAYER. Never define this for a release/export build. -->
+  <PropertyGroup Condition="'$(XgBotPlayer)' == 'true'">
+    <DefineConstants>$(DefineConstants);XG_BOTPLAYER</DefineConstants>
+  </PropertyGroup>
 </Project>

@@ -8,6 +8,7 @@ using XonoticGodot.Common.Services;
 using XonoticGodot.Engine.Collision;
 using XonoticGodot.Engine.Simulation;
 using XonoticGodot.Game.Console;
+using XonoticGodot.Game.Loaders;
 using FileAccess = Godot.FileAccess;
 
 namespace XonoticGodot.Game.Menu;
@@ -33,6 +34,7 @@ public static class MenuState
 
     private static CvarService? _cvars;
     private static VirtualFileSystem? _vfs;
+    private static AssetLoader? _sharedAssets;
     private static ConfigInterpreter? _interp;
     private static bool _booted;
 
@@ -44,6 +46,18 @@ public static class MenuState
 
     /// <summary>The mounted asset VFS (maps/models/configs/…), or null if the data dir didn't mount.</summary>
     public static VirtualFileSystem? Vfs => _vfs;
+
+    /// <summary>
+    /// The process-lifetime shared asset loader (parsed models, decoded sounds, compiled materials/textures,
+    /// and the parsed <c>scripts/*.shader</c> dictionary), built once at <see cref="Boot"/> over the shared
+    /// <see cref="Vfs"/>. Every match reuses this instance (injected into its <c>NetGame</c>) so those caches
+    /// persist across map changes and server switches — the stock assets are parsed and GPU-uploaded once per
+    /// session, not once per map. Null when no data dir mounted (matches then build a per-match loader). The
+    /// map-coupled lightmap atlas + its surface materials are deliberately NOT cached here (they live in the
+    /// per-match map render tree), so nothing map-specific leaks between maps. Treat returned resources as
+    /// read-only — they are shared across the whole session.
+    /// </summary>
+    public static AssetLoader? SharedAssets => _sharedAssets;
 
     /// <summary>
     /// The shared DP command interpreter (Cbuf/Cmd) the config tree loaded into — and the SAME buffer the
@@ -113,6 +127,20 @@ public static class MenuState
             XonoticGodot.Common.Diagnostics.Log.Severe($"[MenuState] failed to mount data dir '{dataPath}': {ex.Message}");
         }
 
+        // --- build the PROCESS-LIFETIME asset loader now (parses every scripts/*.shader ONCE, here at boot,
+        //     instead of re-parsing on every map load) so its model/sound/material/texture caches can persist
+        //     across every match this session. Only when a data dir actually mounted; a bare/CI run leaves it
+        //     null and matches fall back to a per-match loader. Construction touches only the VFS (no renderer),
+        //     so it is safe this early in boot. Phase 2 will warm the eager asset set into this loader here. ---
+        if (_vfs is not null)
+        {
+            try { _sharedAssets = new AssetLoader(_vfs); }
+            catch (Exception ex)
+            {
+                XonoticGodot.Common.Diagnostics.Log.Severe($"[MenuState] shared asset loader failed to build: {ex.Message}");
+            }
+        }
+
         // --- publish the process-wide facade so Api.Cvars resolves to the shared store at the menu ---
         Api.Services = new EngineServices(new CollisionWorld(), _cvars);
         XonoticGodot.Server.Cvars.RegisterDefaults();
@@ -165,11 +193,13 @@ public static class MenuState
         // LoadUserConfig below — so they become the locked DEFAULT (persisted only if the player moves them, and a
         // player's own config.cfg value still wins). vid_fullscreen 2 = EXCLUSIVE fullscreen (takes the desktop
         // compositor out of the present path — desktop-fullscreen 1 still composites on Windows, the missed-vblank
-        // double-frames in the hitch logs); vid_vsync 2 = mailbox (no FIFO cascade on a missed present). Either can
-        // be set 0/1 from the console or video menu. (Setting vid_vsync here, before the lock, also makes it a
-        // proper locked default instead of the post-lock "always-save" cvar RegisterEngineVideoDefaults created.)
+        // double-frames in the hitch logs). vid_vsync 0 = OFF (Bryan's 2026-07-06 call after the uncapped
+        // decomposition: vsync off measured −0.5 ms/frame AND better lows vs the previous mailbox default —
+        // perf-campaign doc Phase 1c; DP-style raw present, tearing accepted). 1/2/3 still selectable from the
+        // console or the video menu. (Setting vid_vsync here, before the lock, also makes it a proper locked
+        // default instead of the post-lock "always-save" cvar RegisterEngineVideoDefaults created.)
         _cvars.Set("vid_fullscreen", "2");
-        _cvars.Set("vid_vsync", "2");
+        _cvars.Set("vid_vsync", "0");
 
         // Lock the shipped baseline NOW — the full stock cfg tree is loaded but the user's saved overrides are
         // not yet applied. This is DP's Cvar_LockDefaults: it freezes each cvar's current value as its default so

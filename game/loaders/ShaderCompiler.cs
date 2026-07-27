@@ -532,6 +532,12 @@ public static class ShaderCompiler
         sb.Append("render_mode ").Append(string.Join(", ", modes)).Append(";\n\n");
 
         sb.Append("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic;\n");
+        // GPU MD3 vertex-morph hook (cl_gpu_morph — ModelAnimator): frameB streams ride CUSTOM0/1 and
+        // morph_amount blends toward them, so an ANIMATED-STAGE surface on a morphing model (the CTF flag's
+        // scrolling-energy surface — the r16 case that pinned the whole flag to the CPU rebuild path) morphs
+        // GPU-side too. Default 0.0 = exact no-op for every static/world use of this material. Per-material
+        // uniform (vertex-stage instance uniforms are inert); ModelAnimator drives a per-surface Duplicate().
+        sb.Append("uniform float morph_amount = 0.0;\n");
         // animMap frame cycling (playtest r14 D): one sampler per extra frame, selected below by
         // int(TIME*fps) % N (Q3 tr_shade.c R_BindAnimatedImage). Frame 0 stays albedo_tex so a map that
         // fails to resolve degrades to the old static look. Q3 caps animations at 8 frames.
@@ -547,14 +553,20 @@ public static class ShaderCompiler
             sb.Append("const float ALPHA_CUTOFF = ").Append(Flt(AlphaCutoff(stage.AlphaFunc!))).Append(";\n");
         sb.Append('\n');
 
-        // ---- vertex() : deformVertexes ----
+        // ---- vertex() : MD3 morph prelude + deformVertexes ----
+        // The morph mix runs FIRST (DP lerps the frames, THEN applies deforms — R_AliasLerpVerts before
+        // RSurf_PrepareVerticesForBatch); at the default morph_amount 0 the branch is an exact no-op.
+        sb.Append("void vertex() {\n");
+        sb.Append("    if (morph_amount > 0.0) {   // GPU MD3 vertex-morph (see uniform above)\n");
+        sb.Append("        VERTEX = mix(VERTEX, CUSTOM0.xyz, morph_amount);\n");
+        sb.Append("        NORMAL = normalize(mix(NORMAL, CUSTOM1.xyz, morph_amount));\n");
+        sb.Append("    }\n");
         if (def.Deforms.Count > 0 && HasWaveDeform(def))
         {
-            sb.Append("void vertex() {\n");
             foreach (DeformVertexes d in def.Deforms)
                 EmitDeform(sb, d);
-            sb.Append("}\n\n");
         }
+        sb.Append("}\n\n");
 
         // ---- fragment() : tcMod stack on UV, then sample ----
         sb.Append("void fragment() {\n");

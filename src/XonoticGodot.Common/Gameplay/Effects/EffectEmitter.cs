@@ -239,7 +239,10 @@ public static class EffectEmitter
     {
         if (effect is null) return;                          // QC: if (!eff) return;
         if (!effect.IsTrail && count == 0) return;           // QC: point effect has no count -> drop
-        Sink.Emit(new EffectRequest(effect, effect.NetName, origin, velocity, count, colorMin, colorMax, except));
+        // (perf 2.1) fx.emit: the listen host's in-process effect mirror runs INSIDE the sink — a cold
+        // per-effect first-use build here lands in the emitting gameplay scope (the mp.weapon melt hunt).
+        using (XonoticGodot.Common.Diagnostics.Prof.Sample("fx.emit"))
+            Sink.Emit(new EffectRequest(effect, effect.NetName, origin, velocity, count, colorMin, colorMax, except));
     }
 
     /// <summary>Emit by stable EFFECT_* name (e.g. "EXPLOSION_BIG"). Convenience over <see cref="Effects.ByName"/>.</summary>

@@ -40,6 +40,20 @@ public static class WeaponFireDriver
     /// <summary>QC <c>MAX_WEAPONSLOTS</c> (common/weapons/all.qh): independent weapon-entity slots per actor.</summary>
     public const int MaxWeaponSlots = 2;
 
+    // (perf 2.1) which weapon ids have logged their first attack this process — the melt-correlation
+    // breadcrumb above. Process-lifetime is fine: a fresh match in the same process has warm caches anyway.
+    private static readonly System.Collections.Generic.HashSet<int> _firstFireLogged = new();
+
+    // (perf 2.1) per-weapon WrThink scope names ("wf.hagar", …), cached so the per-tick sample never
+    // allocates — the melt trees then name the weapon directly instead of a generic stage.
+    private static readonly System.Collections.Generic.Dictionary<int, string> _wfScopeName = new();
+    private static string WfScopeName(Weapon w)
+    {
+        if (!_wfScopeName.TryGetValue(w.RegistryId, out string? n))
+            _wfScopeName[w.RegistryId] = n = "wf." + (string.IsNullOrEmpty(w.NetName) ? w.RegistryId.ToString() : w.NetName);
+        return n;
+    }
+
     /// <summary>
     /// Drive the player's weapon slots for one server tick (QC <c>W_WeaponFrame</c> per slot). Reads the
     /// current attack buttons from <paramref name="input"/>, advances the switch + fire state machine, and
@@ -120,7 +134,11 @@ public static class WeaponFireDriver
 
             // ---- weapon switch state machine (QC the "Change weapon" switch in W_WeaponFrame) ----
             // Resolves to the now-current weapon (after applying any raise/drop transition this tick).
-            Weapon? weapon = DriveWeaponSwitch(player, slot, st);
+            // (perf 2.1) wf.* stage scopes: the census's 90-146 ms mp.weapon melts needed the stage named
+            // (switch vs scheduled think vs the WrThink fire path) — see the perf-campaign doc.
+            Weapon? weapon;
+            using (XonoticGodot.Common.Diagnostics.Prof.Sample("wf.switch"))
+                weapon = DriveWeaponSwitch(player, slot, st);
 
             // No weapon equipped in this slot -> nothing to fire (QC m_weapon == WEP_Null branch).
             if (weapon is null)
@@ -149,7 +167,8 @@ public static class WeaponFireDriver
                 var think = st.WeaponThink;
                 st.WeaponThink = null;
                 st.WeaponNextThink = 0f;
-                think(player, slot);
+                using (XonoticGodot.Common.Diagnostics.Prof.Sample("wf.sched"))
+                    think(player, slot);
             }
 
             // ---- call wr_think with the held fire mode(s) (QC e.wr_think(..., button bits)) ----
@@ -164,9 +183,20 @@ public static class WeaponFireDriver
             //   * WrThink(Secondary) is called only when ATK2 is held, so the secondary acts without
             //     double-running the shared top-of-wr_think upkeep already done in the Primary call.
             // The recorded buttons are the authority PrepareAttack / the continuous weapons read.
-            weapon.WrThink(player, slot, FireMode.Primary);
-            if (buttonAtck2)
-                weapon.WrThink(player, slot, FireMode.Secondary);
+            // (perf 2.1) First-use breadcrumb: the mp.weapon melts cluster like one-per-weapon-per-match —
+            // a timestamped first-fire line correlates them with a specific weapon's cold path in the log.
+            // PER PROCESS, not per match, and deliberately so: the latch is static and never cleared, and
+            // the caches whose cold cost this is pointing at (effects, sounds, material pipelines) now
+            // persist across maps too (cl_persist_asset_cache). A second map's first fire is already warm,
+            // so re-arming this per match would just add a line with nothing behind it.
+            if (buttonAtck && _firstFireLogged.Add(weapon.RegistryId))
+                XonoticGodot.Common.Diagnostics.Log.Info($"[wf] first attack this session: {weapon.NetName}");
+            using (XonoticGodot.Common.Diagnostics.Prof.Sample(WfScopeName(weapon)))
+            {
+                weapon.WrThink(player, slot, FireMode.Primary);
+                if (buttonAtck2)
+                    weapon.WrThink(player, slot, FireMode.Secondary);
+            }
             ClearButtons(st);
         }
     }

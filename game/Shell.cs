@@ -57,6 +57,15 @@ public partial class Shell : Node
     /// <summary>Bot count for the <c>--host</c> listen server (CLI <c>--bots N</c>); 0 = no bots.</summary>
     public int BootBots { get; set; }
 
+#if XG_BOTPLAYER
+    /// <summary>Bot-player harness (CLI <c>--bot-player</c>): drive the LOCAL player from a bot brain so an
+    /// unattended run exercises the real player pipeline. Compile-gated — see Directory.Build.props.</summary>
+    public bool BootBotPlayer { get; set; }
+
+    /// <summary>Skill for the bot-player brain (CLI <c>--bot-player &lt;skill&gt;</c>); default mid-range.</summary>
+    public float BootBotPlayerSkill { get; set; } = 5f;
+#endif
+
     /// <summary>UDP port every listen server this process hosts binds (CLI <c>--port N</c>, DP <c>-port</c>).
     /// Defaults to the stock game port; override it so scripted/agent runs don't collide with a live instance
     /// already holding 26000 (a second host on a busy port otherwise self-connects to the WRONG server).</summary>
@@ -184,6 +193,15 @@ public partial class Shell : Node
         MouseCapture.SetWantCapture(false); // at the menu the cursor is free
 
         // Optional: boot straight into a match (smoke test / dev), bypassing the menu.
+#if XG_BOTPLAYER
+        // Bot-player harness: latch the request before any match starts, so NetGame binds the brain as soon
+        // as the local player exists. Compile-gated — see Directory.Build.props.
+        XonoticGodot.Game.Net.BotPlayerMode.Requested = BootBotPlayer;
+        XonoticGodot.Game.Net.BotPlayerMode.Skill = BootBotPlayerSkill;
+        if (BootBotPlayer)
+            GD.Print("[bot-player] --bot-player: the local player will be driven by a bot brain.");
+#endif
+
         if (!string.IsNullOrWhiteSpace(ConnectAddress))
             ConnectToServer(ConnectAddress!);               // --connect <addr>: join a real server
         else if (BootHost)
@@ -197,6 +215,34 @@ public partial class Shell : Node
             StartModelViewer(BootModel!);                   // --model: no-net player-model viewer (visual QA)
         else if (!string.IsNullOrWhiteSpace(DebugScreen))
             OpenDebugScreen(DebugScreen!);
+        else
+            // Plain menu boot (the real launch path): warm the map-independent eager asset set into the shared
+            // cache in the background NOW, so the first match's precache is a cache hit and the map loads fast.
+            // Skipped above for a direct --map/--host/--connect boot — that match runs its own precache.
+            StartMenuAssetWarm();
+    }
+
+    /// <summary>
+    /// Phase 2 of the loading-speed work: at a plain menu boot, warm the map-independent eager asset set (weapons,
+    /// stock player models, combat sounds) into MenuState's process-lifetime <see cref="MenuState.SharedAssets"/>
+    /// in the background (<see cref="Client.MenuAssetWarmer"/>), so the first match's precache collapses to cache
+    /// hits and the map loads fast. Gated on <c>cl_persist_asset_cache</c> (the warm is wasted if the match builds
+    /// its own loader) and <c>cl_warm_at_boot</c>, and skipped without a mounted data dir (no shared loader).
+    /// </summary>
+    private void StartMenuAssetWarm()
+    {
+        if (MenuState.SharedAssets is null)
+            return;
+        if (MenuState.Cvars.GetFloat("cl_persist_asset_cache") == 0f
+            || MenuState.Cvars.GetFloat("cl_warm_at_boot") == 0f)
+            return;
+        string localModel = MenuState.Cvars.GetString("_cl_playermodel");
+        var warmer = new Client.MenuAssetWarmer(MenuState.SharedAssets, localModel)
+        {
+            Name = "MenuAssetWarmer",
+            ProcessMode = ProcessModeEnum.Always,   // keep warming even if a match starts + pauses the tree mid-warm
+        };
+        AddChild(warmer);
     }
 
     /// <summary>Dev/CI: push a named sub-screen so a screenshot can capture that one dialog.</summary>
@@ -255,6 +301,10 @@ public partial class Shell : Node
         MenuCommand.ToggleMenu = HandleToggleMenu;
         MenuCommand.VideoRestart = ClientSettings.ApplyVideo;
         MenuCommand.AudioRestart = ClientSettings.ApplyAudio;
+        // DP parity (2026-07-11): `vid_vsync 1` / `cl_maxfps 144` typed in the console take effect INSTANTLY,
+        // like DP — no vid_restart needed for the non-window-mode video cvars. Wired after boot-config load so
+        // the bulk cfg exec doesn't re-apply per line.
+        ClientSettings.InstallLiveVideoCvars(MenuState.Cvars);
         // QC `map`/`devmap`: in a running match this is a changelevel (keep mode + bots); at the menu it starts a
         // fresh listen server on the map then self-connects (the real "start a game" path).
         MenuCommand.StartMap = ChangeLevel;
@@ -629,7 +679,7 @@ public partial class Shell : Node
             // would otherwise time out and prediction freeze). NetGame gates movement input on the pause itself.
             ProcessMode = ProcessModeEnum.Always,
         };
-        net.ConfigureClient(address, ResolvePlayerName(), MenuState.Vfs, MenuState.Cvars);
+        net.ConfigureClient(address, ResolvePlayerName(), MenuState.Vfs, MenuState.Cvars, MenuState.SharedAssets);
         net.LoadingScreen = _loadingScreen;
         net.DismissLoadingScreen = DismissLoadingScreen;
         WireConsoleToNet(net);
@@ -678,7 +728,8 @@ public partial class Shell : Node
             vfs: MenuState.Vfs,
             cvars: MenuState.Cvars,
             campaignName: config.CampaignId ?? "",   // non-empty → the server boots this as a campaign level
-            campaignIndex: config.CampaignIndex);
+            campaignIndex: config.CampaignIndex,
+            sharedAssets: MenuState.SharedAssets);   // persist the model/sound/material caches across maps & servers
         net.LoadingScreen = _loadingScreen;
         net.DismissLoadingScreen = DismissLoadingScreen;
         WireConsoleToNet(net);
@@ -816,14 +867,13 @@ public partial class Shell : Node
     /// </summary>
     private string? LocalRouteCommand(string line)
     {
-        GameWorld? world = _netGame?.ServerWorld;
-        if (world is null)
-            return null;
         // T47 integration wire-up: the listen-server operator's in-game console is the HOST, so it runs as the
         // server console (isServerConsole: true) — without this flag the new client-command privilege gate would
         // reject the host's own kick/map/set/endmatch/etc. (a regression vs pre-T47). caller stays LocalServerPlayer
         // so kill/say/team still act on the host's player; the remote-client path (ServerNet.cs) stays gated.
-        return world.Commands.Execute(line, isServerConsole: true, caller: _netGame?.LocalServerPlayer).Output;
+        // WS1: routed through NetGame so the execute takes the sim gate when sv_threaded is on — a bare
+        // Commands.Execute here mutated the worker-owned world from the main thread (`kill` mid-bot-combat).
+        return _netGame?.ExecuteHostConsoleCommand(line);
     }
 
     /// <summary>

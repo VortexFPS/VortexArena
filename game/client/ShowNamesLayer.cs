@@ -755,10 +755,15 @@ public partial class ShowNamesLayer : Control
             return true;
         ITraceService trace = Api.Trace;
         TraceResult tr = trace.Trace(from, NVec3.Zero, NVec3.Zero, to, MoveFilter.NoMonsters, null);
-        // QC hit = !(trace_fraction < 1 && trace_ent is not the player itself). The client can't match the remote
-        // player to a trace-set entnum (the remote isn't a distinct trace edict here), so treat "essentially
-        // reached the target" as a clear LOS — only real world geometry between the eye and the player blocks it.
-        return tr.Fraction >= 0.99f;
+        // QC shownames.qc:62-63 — `hit = !(trace_fraction < 1 && <the blocker isn't the target player>)`: ANY
+        // shortfall blocks. The target-player escape hatch Base needs does not apply here: MOVE_NOMONSTERS skips
+        // every non-SOLID_BSP entity (TraceService.ClipToEntities), so a player can never stop this trace and an
+        // unobstructed sweep returns Fraction exactly 1 (SweepState seeds 1f and only a real hit lowers it).
+        //
+        // This used to allow a 0.99 slop, which is not a constant epsilon but 1% OF THE TRACE LENGTH: an enemy
+        // standing within 1% of eye-distance behind cover kept their tag lit — ~20 u of see-through wall at 2000 u
+        // range, growing with distance. That is the "names visible through walls" leak; Base has no such tolerance.
+        return tr.Fraction >= 1f;
     }
 
     private static float Vlen(NVec3 v) => v.Length();

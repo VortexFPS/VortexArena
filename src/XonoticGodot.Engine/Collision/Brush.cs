@@ -550,4 +550,127 @@ public sealed class CollisionWorld
         => amins.X <= bmaxs.X && amaxs.X >= bmins.X
         && amins.Y <= bmaxs.Y && amaxs.Y >= bmins.Y
         && amins.Z <= bmaxs.Z && amaxs.Z >= bmins.Z;
+
+    /// <summary>
+    /// Gather candidates for a SWEPT box move [start→end] expanded by [boxMins,boxMaxs] — the long-trace
+    /// counterpart of <see cref="Query"/>. A long DIAGONAL trace's enclosing AABB covers O(length²) grid
+    /// cells: the 2026-06-14 clamp bounded the scan, but a cross-map shot still visited half the grid and
+    /// handed every brush under that rectangle to the narrowphase — the catharsis melts (a long shotgun
+    /// blast = 14 penetrating pellet traces = 70–305 ms in <c>wf.shotgun</c>; the <c>hud.trueaim</c> box
+    /// trace, bot line-of-sight — all the same rectangle). DP never sees this: its world trace recurses
+    /// the BSP tree and only touches the ray corridor. Here we march the sweep in cell-sized segments and
+    /// union each segment's small rectangle query. Correct by construction: the swept volume is contained
+    /// in the union of the per-segment AABBs, so every brush the sweep can touch overlaps at least one
+    /// segment's query box (the epoch mark dedups brushes shared by adjacent segments); the narrowphase
+    /// then clips exactly as before. Cost: O(cells along the line), not O(width × height).
+    /// Short sweeps (≤ ~3 cells of XY travel — every normal movement step) take the plain rectangle path.
+    /// </summary>
+    public void QuerySwept(Vector3 start, Vector3 end, Vector3 boxMins, Vector3 boxMaxs, List<Brush> result)
+    {
+        if (!_gridBuilt) BuildGrid();
+
+        // DP's world gather pads the sweep box by ±1 (see TraceService.SweptBounds, which the entity
+        // broadphase still uses). Fold the pad in here so every path below keeps that slop; it also
+        // covers the float drift the segment march accumulates (≤ ~0.5 over a max-range trace).
+        boxMins -= Vector3.One;
+        boxMaxs += Vector3.One;
+
+        Vector3 delta = end - start;
+        float cellX = _scaleX > 0f ? 1f / _scaleX : 0f;   // world units per grid cell
+        float cellY = _scaleY > 0f ? 1f / _scaleY : 0f;
+        float step = MathF.Max(cellX, cellY);
+        float xyTravel = MathF.Max(MathF.Abs(delta.X), MathF.Abs(delta.Y));
+
+        if (_cells == null || step <= 0f || xyTravel <= step * 3f)
+        {
+            // Short (or gridless) — the rectangle is already tight; keep the proven path.
+            Vector3 qmins = new(
+                MathF.Min(start.X, end.X) + boxMins.X,
+                MathF.Min(start.Y, end.Y) + boxMins.Y,
+                MathF.Min(start.Z, end.Z) + boxMins.Z);
+            Vector3 qmaxs = new(
+                MathF.Max(start.X, end.X) + boxMaxs.X,
+                MathF.Max(start.Y, end.Y) + boxMaxs.Y,
+                MathF.Max(start.Z, end.Z) + boxMaxs.Z);
+            Query(qmins, qmaxs, result);
+            return;
+        }
+
+        _markNumber++;
+        int mark = _markNumber;
+
+        // MARK SEMANTICS (fixed 2026-07-27): the mark means "already IN result", NOT "already looked at".
+        // Query can mark on sight because it has ONE test box — every brush is tested against it exactly once.
+        // QuerySwept has one box PER SEGMENT, so marking on sight pins each brush to the verdict of the first
+        // segment that happens to reach its cell: a brush that fails THAT segment's box but overlaps a LATER
+        // one was never re-tested and silently vanished from the candidate set, so the narrowphase never clipped
+        // it and the trace passed through solid geometry. Cells are XY buckets spanning all Z, and a segment's
+        // box covers up to 4 cells, so an early segment routinely reaches a cell it is still far from in Z —
+        // e.g. sweeping (0,0,0)→(200,0,2000) past a brush at x[100,128] z[1200,1300]: segment 1 reaches its cell
+        // and fails on Z, segment 2 genuinely hits it and skipped it. Long traces with real Z travel (hitscan up
+        // or down a height change, bot LOS, crosshair true-aim) are exactly the case this broadphase exists for.
+        // Re-testing an unadded brush per overlapping segment is a handful of AABB compares — pay it.
+
+        // The always-scan outside list, tested against the FULL sweep AABB (same as Query would). A brush that
+        // fails THIS box cannot overlap any segment box (every segment box is contained in the full one), so
+        // leaving it unmarked costs at most a repeat compare below and keeps one meaning for the mark.
+        Vector3 fullMins = new(
+            MathF.Min(start.X, end.X) + boxMins.X,
+            MathF.Min(start.Y, end.Y) + boxMins.Y,
+            MathF.Min(start.Z, end.Z) + boxMins.Z);
+        Vector3 fullMaxs = new(
+            MathF.Max(start.X, end.X) + boxMaxs.X,
+            MathF.Max(start.Y, end.Y) + boxMaxs.Y,
+            MathF.Max(start.Z, end.Z) + boxMaxs.Z);
+        for (int i = 0; i < _outside.Count; i++)
+        {
+            int idx = _outside[i];
+            if (_mark![idx] == mark) continue;
+            var b = _brushes[idx];
+            if (BoxesOverlap(fullMins, fullMaxs, b.Mins, b.Maxs))
+            {
+                _mark[idx] = mark;
+                result.Add(b);
+            }
+        }
+
+        // March cell-sized segments along the sweep; each segment queries its own small rectangle.
+        int segs = (int)(xyTravel / step) + 1;
+        Vector3 segDelta = delta / segs;
+        Vector3 p = start;
+        for (int s = 0; s < segs; s++)
+        {
+            Vector3 q = s == segs - 1 ? end : p + segDelta;   // land exactly on end — segDelta drift must not shorten the corridor
+            Vector3 smins = new(
+                MathF.Min(p.X, q.X) + boxMins.X,
+                MathF.Min(p.Y, q.Y) + boxMins.Y,
+                MathF.Min(p.Z, q.Z) + boxMins.Z);
+            Vector3 smaxs = new(
+                MathF.Max(p.X, q.X) + boxMaxs.X,
+                MathF.Max(p.Y, q.Y) + boxMaxs.Y,
+                MathF.Max(p.Z, q.Z) + boxMaxs.Z);
+            GridRange(smins, smaxs, out int x0, out int y0, out int x1, out int y1, out _);
+            for (int y = y0; y < y1; y++)
+            {
+                int row = y * GridDim;
+                for (int x = x0; x < x1; x++)
+                {
+                    var bucket = _cells[row + x];
+                    if (bucket == null) continue;
+                    for (int k = 0; k < bucket.Count; k++)
+                    {
+                        int idx = bucket[k];
+                        if (_mark![idx] == mark) continue;   // already in result
+                        var b = _brushes[idx];
+                        if (BoxesOverlap(smins, smaxs, b.Mins, b.Maxs))
+                        {
+                            _mark[idx] = mark;
+                            result.Add(b);
+                        }
+                    }
+                }
+            }
+            p = q;
+        }
+    }
 }

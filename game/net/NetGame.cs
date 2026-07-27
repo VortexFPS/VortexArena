@@ -3537,7 +3537,12 @@ public sealed partial class NetGame : Node3D
             // world) — skip the host auto-join entirely while it is armed.
             // cl_bench_spectate: same story — stand down so BenchSpectateThink can glue it to a bot
             // (without the gate the join would land once, then bench pulls it back: a one-spawn flicker on capture).
+            // The editor gametype is excluded for the same reason as the observer camera: EDIT *is* the
+            // observer state, so auto-joining the host would drop the mapper into a body at a spawn point a
+            // second after the map loads. This command path bypasses the gametype join gate (it calls
+            // ClientManager.Join directly), so the gate alone does not stop it — it has to be refused here.
             if (_isListenServer && !_hostJoinDone && !ObserverCamera.Active && !BenchSpectateActive
+                && !IsEditorGametype
                 && _serverWorld is { } joinWorld)
             {
                 if (LocalServerPlayer is not { IsObserver: true })
@@ -3756,7 +3761,10 @@ public sealed partial class NetGame : Node3D
 
         // "Client counts as spawned" — shared by the CaptureGate mark below and the loading-screen stage pick:
         // a real spawn (Health > 0), or an armed --observe camera (which never spawns — Health stays 0).
-        bool clientSpawned = _cameraReady && (_client.Health > 0 || ObserverCamera.Active);
+        // An editor client never gains health — EDIT is the observer state — so gating "loaded" on a live body
+        // would leave the loading screen up forever. A ready camera is the real readiness signal there, the
+        // same reasoning as the fixed observer camera beside it.
+        bool clientSpawned = _cameraReady && (_client.Health > 0 || ObserverCamera.Active || IsEditorGametype);
 
         // Capture readiness: a windowed --screenshot waits on this so it lands on the spawned world, not the
         // loading screen or a from-origin pre-spawn frame (CaptureGate). One-shot at first spawn, independent of
@@ -5560,26 +5568,6 @@ public sealed partial class NetGame : Node3D
 
         // Editor status panel (E2). It stays blank in every non-editor session, so gate it on the gametype and
         // let it read the local observer state: EDIT *is* the observer state, so free-flying means editing.
-        bool editorSession = string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase);
-        bool editorFreeFly = editorSession && (_client?.IsObserving ?? true);
-
-        if (_editor is not null)
-        {
-            _editor.Active = editorFreeFly;
-            if (editorFreeFly)
-                EnsureEditorSession();
-            else if (_editorOrtho is { IsOpen: true })
-                _editorOrtho.Close();   // dropping into playtest must not leave a flat wireframe camera
-        }
-
-        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
-        {
-            editorPanel.IsEditorSession = editorSession;
-            editorPanel.IsEditing = _client?.IsObserving ?? true;
-            editorPanel.FlySpeed = p?.SpectatorSpeed ?? 1f;
-            editorPanel.Controller = _editor;
-            editorPanel.Ortho = _editorOrtho;
-        }
 
         // QC HUD_PressedKeys spectatee gate: a free-fly observer never shows the cluster, and while merely
         // playing it shows only at enable 2. Feed the live spectatee_status (translated into the QC convention:
@@ -5673,6 +5661,28 @@ public sealed partial class NetGame : Node3D
     {
         if (_fullHud is null || _client is null)
             return;
+        // (E2/E3) Editor state + panel feed. This lives on a per-frame path deliberately: the readouts it
+        // drives (hover coordinates, drag delta, undo label) change continuously, so the change-latched
+        // player-setup path is the wrong home for it.
+        bool editorFreeFly = IsEditorGametype && (_client?.IsObserving ?? true);
+        if (_editor is not null)
+        {
+            _editor.Active = editorFreeFly;
+            if (editorFreeFly)
+                EnsureEditorSession();
+            else if (_editorOrtho is { IsOpen: true })
+                _editorOrtho.Close();   // dropping into playtest must not leave a flat wireframe camera
+        }
+
+        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
+        {
+            editorPanel.IsEditorSession = IsEditorGametype;
+            editorPanel.IsEditing = _client?.IsObserving ?? true;
+            editorPanel.FlySpeed = LocalServerPlayer?.SpectatorSpeed ?? 1f;
+            editorPanel.Controller = _editor;
+            editorPanel.Ortho = _editorOrtho;
+        }
+
         InfoMessagesPanel im = _fullHud.InfoMessages;
         im.RespawnStat = _client.RespawnTimeStat;
         im.NetServerTime = _client.LatestServerTime;
@@ -6677,12 +6687,18 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
+    /// True when this match is running the map-editor gametype. Several host behaviours key off it because
+    /// the editor inverts the usual assumption that observing is a transient state on the way to spawning:
+    /// here it is where the mapper LIVES, so auto-join, loading-screen completion and the weapon binds all
+    /// have to treat "observer" as a finished, playable state rather than a pending one.
+    /// </summary>
+    private bool IsEditorGametype => string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// True while this client is free-flying (EDIT) inside an editor session — the only state in which the
     /// weapon binds are repurposed. Playtesting is real play, so weapons behave normally there.
     /// </summary>
-    private bool IsEditorFreeFly =>
-        string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase)
-        && (_client?.IsObserving ?? false);
+    private bool IsEditorFreeFly => IsEditorGametype && (_client?.IsObserving ?? false);
 
     /// <summary>
     /// Re-dispatch a weapon bind as an editor action while in EDIT (see <see cref="IsEditorFreeFly"/>).

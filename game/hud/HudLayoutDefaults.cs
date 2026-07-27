@@ -92,6 +92,10 @@ public static class HudLayoutDefaults
         ["ping"]         = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
         ["position"]     = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
         ["vehicle"]      = E(0.29f, 0.84f, 0.42f, 0.16f, "0", "", "1", Main, CfgNo),
+        // The map editor's status readout. Full-viewport and self-positioning like the other port extras:
+        // this table is what the generic per-panel cvars (pos/size/bg/enable) are seeded from, and a panel
+        // missing from it gets no size cvar at all and resolves to a zero rect — i.e. draws nothing.
+        ["editor"]       = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
     };
 
     /// <summary>All ids in the table (for cvar registration).</summary>

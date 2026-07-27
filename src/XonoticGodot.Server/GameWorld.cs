@@ -1326,7 +1326,12 @@ public sealed class GameWorld
         // the default here; same with other round-based gametypes that implement join gating. The default here is
         // the LMS gate for backward compatibility.
         Clients.GametypeJoinGate = p =>
-            (GameType is not LastManStanding lms || lms.CanJoin(p, LmsPreStart))
+            // The editor's EDIT state IS the observer state, so the delayed auto-join would yank a mapper out
+            // of free-fly a second after connecting and drop them at a spawn point. Entering PLAYTEST is only
+            // ever the explicit `editor_playtest` toggle. Gated HERE rather than in ActivateGameType because
+            // this assignment runs after it and would otherwise clobber a per-gametype gate.
+            GameType is not EditorMode
+            && (GameType is not LastManStanding lms || lms.CanJoin(p, LmsPreStart))
             && GametypeHasFreeSlot(p);
         Clients.GametypeOnJoin = p => { if (GameType is LastManStanding lms) lms.AddPlayer(p, !LmsPreStart); };
     }
@@ -2959,11 +2964,9 @@ public sealed class GameWorld
                 m.Activate();
                 break;
             case EditorMode:
-                // The editor's EDIT state IS the observer state, so the automatic "you have observed long
-                // enough, joining you now" path would yank a mapper out of free-fly a second after connecting
-                // and drop them at a spawn point. Refuse every implicit join: entering PLAYTEST is only ever
-                // the explicit `editor_playtest` toggle, which places the player where it already is.
-                Clients.GametypeJoinGate = _ => false;
+                // Nothing to wire: no scoring, no rounds, no team source. The join gate that keeps a mapper in
+                // free-fly lives on the DEFAULT gate in WireServerInfrastructure, because that assignment runs
+                // after this switch and would overwrite anything set here.
                 break;
             case TeamMayhem tm:
                 tm.Activate();

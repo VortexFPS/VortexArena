@@ -110,8 +110,7 @@ public sealed partial class EditorGizmos : Node3D
     {
         EditorController c = _controller!;
         VmapDocument doc = c.Document!;
-        _overlayMesh.ClearSurfaces();
-        _overlayMesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
+        _segments.Clear();
 
         bool anything = false;
 
@@ -142,10 +141,26 @@ public sealed partial class EditorGizmos : Node3D
             }
         }
 
+        // Only open a surface when there is something to put in it: ImmediateMesh errors on SurfaceEnd with no
+        // vertices, and an idle editor (nothing hovered, nothing selected) is the common case.
+        _overlayMesh.ClearSurfaces();
+        if (_segments.Count == 0)
+            return;
+
+        _overlayMesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
+        foreach ((Vector3 a, Vector3 b, Color color) in _segments)
+        {
+            _overlayMesh.SurfaceSetColor(color);
+            _overlayMesh.SurfaceAddVertex(a);
+            _overlayMesh.SurfaceSetColor(color);
+            _overlayMesh.SurfaceAddVertex(b);
+        }
         _overlayMesh.SurfaceEnd();
-        if (!anything)
-            _overlayMesh.ClearSurfaces();   // an empty Lines surface still costs a draw call
+        _ = anything;
     }
+
+    /// <summary>Line segments accumulated this frame, emitted in one surface at the end of the rebuild.</summary>
+    private readonly List<(Vector3 A, Vector3 B, Color Color)> _segments = new();
 
     /// <summary>Outline one selection, optionally displaced (for the drag ghost). Returns true if it drew.</summary>
     private bool DrawSelection(VmapDocument doc, VmapSelection sel, Color color, NVec3 offset)
@@ -256,13 +271,7 @@ public sealed partial class EditorGizmos : Node3D
         _overlayMesh.SurfaceAddVertex(Coords.ToGodot(b));
     }
 
-    private void Line(Vector3 a, Vector3 b, Color color)
-    {
-        _overlayMesh.SurfaceSetColor(color);
-        _overlayMesh.SurfaceAddVertex(a);
-        _overlayMesh.SurfaceSetColor(color);
-        _overlayMesh.SurfaceAddVertex(b);
-    }
+    private void Line(Vector3 a, Vector3 b, Color color) => _segments.Add((a, b, color));
 
     private void DrawLoop(Vector3[] points, Color color)
     {

@@ -157,9 +157,37 @@ public sealed partial class EditorController : Node3D
     //  Picking + hover
     // =============================================================================================
 
+    // Last ray the hover was solved for, so a still camera does not re-pick.
+    private NVec3 _lastPickOrigin;
+    private NVec3 _lastPickDir;
+    private int _lastPickVersion = -1;
+    private EditorTool _lastPickTool = (EditorTool)(-1);
+
+    /// <summary>
+    /// Re-solve the crosshair hover, but only when the answer can have changed.
+    ///
+    /// A pick evaluates brush windings across the whole document, and a real map is thousands of brushes — on
+    /// stormkeep (5400) doing that every frame cost tens of milliseconds and showed up as a CPU-LOGIC hitch.
+    /// The hover can only change when the view moves, the geometry changes, or the tool changes, so gate on
+    /// exactly those. Standing still is the common case while a mapper reads the HUD or lines up a shot.
+    /// </summary>
     private void UpdateCrosshairHover()
     {
         (NVec3 origin, NVec3 dir) = CameraRay();
+
+        // ~0.02 units of movement and ~0.1 degrees of rotation are well below what could select a different
+        // feature, so treating them as "unchanged" costs nothing visible.
+        bool sameRay = (origin - _lastPickOrigin).LengthSquared() < 4e-4f
+                       && NVec3.Dot(dir, _lastPickDir) > 0.9999985f;
+
+        if (sameRay && _lastPickVersion == GeometryVersion && _lastPickTool == Tool)
+            return;
+
+        _lastPickOrigin = origin;
+        _lastPickDir = dir;
+        _lastPickVersion = GeometryVersion;
+        _lastPickTool = Tool;
+
         Hover = VmapPicking.Pick(_document!, origin, dir, PickMode(), GrabRadius, PickRange);
     }
 

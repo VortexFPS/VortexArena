@@ -63,11 +63,15 @@ public partial class EditorPanel : HudPanel
             QueueRedraw();
     }
 
-    private static int ShowMode() => Api.Services is null ? 1 : (int)Api.Cvars.GetFloat(CvarShow);
+    /// <summary>
+    /// The panel's on/off mode. Read through the base's <see cref="HudPanel.ShowModeCvar"/> rather than a
+    /// direct cvar lookup: that is the accessor which knows which store the HUD's per-panel cvars live in.
+    /// </summary>
+    private int ShowMode() => ShowModeCvar();
 
     protected override void DrawPanel()
     {
-        if (!IsEditorSession || ShowMode() == 0)
+        if (!IsEditorSession || ShowModeCvar() == 0)
             return;
 
         int size = (int)Mathf.Clamp(Size2.Y * 0.017f, 11f, 24f);
@@ -184,13 +188,12 @@ public partial class EditorPanel : HudPanel
         return string.IsNullOrEmpty(key) ? "[--]" : $"[{key}]";
     }
 
-    private static float CvarFloat(string name, float fallback = 0f)
-    {
-        if (Api.Services is null)
-            return fallback;
-        string s = Api.Cvars.GetString(name);
-        return string.IsNullOrEmpty(s) ? fallback : Api.Cvars.GetFloat(name);
-    }
+    /// <summary>
+    /// Read a client cvar through the base's global accessor. Going direct to <c>Api.Cvars</c> reads a
+    /// different store than the one the client's own cvars live in, which silently reports every editor
+    /// setting as its fallback — the panel then claims "Grid: OFF" while the grid is plainly on screen.
+    /// </summary>
+    private float CvarFloat(string name, float fallback = 0f) => GlobalF(name, fallback);
 
     private static string Fmt(float v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 }

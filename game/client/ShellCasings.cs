@@ -136,13 +136,12 @@ public sealed partial class ShellCasings : Node3D
         string vpath = kind == CasingKind.Shell ? "models/casing_shell.mdl" : "models/casing_bronze.iqm";
         if (ModelLoader is not null)
         {
-            try
-            {
-                Node3D? loaded = ModelLoader(vpath);
-                if (loaded is not null)
-                    return loaded;
-            }
-            catch { /* fall through to generated mesh */ }
+            // [crash fix 2026-07-26] one built tree per casing model EVER; every casing shares its mesh
+            // (SharedMeshCache) — the per-casing IqmBuilder.Build (fresh ArrayMesh + AnimationLibrary,
+            // 10-25 finalizer-thread frees/s under sustained fire) was the top residual churn source.
+            MeshInstance3D? shared = SharedMeshCache.Instantiate(vpath, () => ModelLoader(vpath));
+            if (shared is not null)
+                return shared;
         }
         return GeneratedCasing(kind);
     }

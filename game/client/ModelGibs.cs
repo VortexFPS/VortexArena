@@ -172,15 +172,14 @@ public sealed partial class ModelGibs : Node3D
     {
         // All shipped gib models load through the host loader now, including the Quake1 chunk.mdl (MdlReader
         // added 2026-07); GeneratedChunk stays as the fallback when the loader is unwired or a parse fails.
+        // [crash fix 2026-07-26] one built tree per gib model EVER; every gib shares its mesh
+        // (SharedMeshCache) — the per-gib Md3Builder ArrayMesh (~3-7 finalizer-thread frees/s in combat)
+        // was the #2 residual churn source.
         if (ModelLoader is not null)
         {
-            try
-            {
-                Node3D? loaded = ModelLoader(modelPath);
-                if (loaded is not null)
-                    return loaded;
-            }
-            catch { /* fall through */ }
+            MeshInstance3D? shared = SharedMeshCache.Instantiate(modelPath, () => ModelLoader(modelPath));
+            if (shared is not null)
+                return shared;
         }
         return GeneratedChunk();
     }

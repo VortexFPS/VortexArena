@@ -109,6 +109,11 @@ public static class ClientSettings
         // checkbox and acceleration sliders bind m_filter / m_accelerate / minspeed / maxspeed. Stock values
         // make every branch a no-op (DP parity).
         c.Register("m_filter", "0", save);
+        // (2026-07-26 wobble hunt) m_smoothdt: rescale the frame's mouse deltas onto the conditioned
+        // display-interval timeline (the one cl_smoothdt gives translation), carry-ledgered so swipe
+        // totals stay exactly 1:1. Kills the yaw channel's raw frame-time variance — the felt
+        // "stutter when moving the mouse". 0 = legacy raw application (A/B).
+        c.Register("m_smoothdt", "1", save);
         c.Register("m_accelerate", "1", save);
         c.Register("m_accelerate_minspeed", "5000", save);
         c.Register("m_accelerate_maxspeed", "10000", save);

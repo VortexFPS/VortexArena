@@ -3006,6 +3006,7 @@ public sealed partial class NetGame : Node3D
     private bool _hitchHoldCv = true;      // cl_movement_hitch_hold: Fix B post-hitch stall-aware reconcile (see docs/TROUBLESHOOTING.md)
     private bool _smoothDtCv = true;       // cl_smoothdt: conditioned client-motion dt (the r16 variance fix; see ConditionDt)
     private bool _smoothDtCapCv = true;    // cl_smoothdt_driftcap: bounded drift ledger + wide hitch gate (2026-07-26 fix)
+    private bool _mouseSmoothDtCv = true;  // m_smoothdt: yaw-channel dt conditioning (2026-07-26; see FlushMouseLook)
     private bool _interpCushionCv = true;  // cl_interp_cushion: full measured-interval slew target (DP boundmode-5 parity; see InterpBias)
     private bool _netClockDp5Cv;           // cl_netclock_dp5: DP boundmode-5 stepped correction law instead of the rate slew (A/B)
     private bool _frameGovernorCv = false; // cl_frame_governor: adaptive frame pacing (r16; default OFF — opt-in experiment)
@@ -3106,6 +3107,8 @@ public sealed partial class NetGame : Node3D
         };
         _pitchMinCv = CvOr("in_pitch_min", -90f);
         _pitchMaxCv = CvOr("in_pitch_max", 90f);
+        // m_smoothdt defaults ON (unset → on): yaw-channel dt conditioning; 0 = legacy raw application (A/B).
+        _mouseSmoothDtCv = (_sharedCvars?.GetString("m_smoothdt") ?? "") != "0";
     }
 
     public override void _Process(double delta)
@@ -3145,9 +3148,11 @@ public sealed partial class NetGame : Node3D
             XonoticGodot.Common.Diagnostics.Prof.Mark("sv.gatewait_ms", gateWaitMs);
         }
 
-        // DP CL_Input: apply the frame's accumulated mouse-look FIRST (raw wall-clock dt — cl.realframetime),
-        // so everything below (input sampling, camera, radar) sees this frame's view angles.
-        FlushMouseLook(dt);
+        // DP CL_Input: apply the frame's accumulated mouse-look FIRST, so everything below (input sampling,
+        // camera, radar) sees this frame's view angles. rawDt = cl.realframetime for the accel math (the
+        // audited contract); dt = the conditioned display-interval estimate for m_smoothdt's yaw-channel
+        // conditioning (see FlushMouseLook).
+        FlushMouseLook(rawDt, dt);
 
         // slowmo / host_timescale: the CLIENT-side time accumulators (input cadence + render clock) scale by the
         // SAME factor the server applies to its sim (ServerNet.StepWorld → SimulationLoop.TimeScale), so the player's
@@ -6226,12 +6231,38 @@ public sealed partial class NetGame : Node3D
     /// A hardcoded 0.025 here once replaced m_yaw (DP 0.022) — +13.6% view turn per count vs Base at equal
     /// sensitivity, which in air-strafe turning reads as sharper movement, not just hotter aim.
     /// </summary>
-    private void FlushMouseLook(float realFrameTime)
+    // m_smoothdt (2026-07-26 wobble hunt): the yaw/pitch channel used to be the ONE motion channel riding
+    // the raw frame cadence — counts accumulate over the real previous pump interval but are displayed for
+    // the NEXT frame's duration, so displayed rotation rate carried the full frame-time variance while
+    // translation rode ConditionDt's smoothed timeline (the felt "stutter when moving the mouse in the
+    // air"). Fix: rescale the post-accel deltas by (conditioned display estimate / real interval) so both
+    // optical-flow channels share one timeline, with a per-axis carry ledger so the TOTAL rotation of any
+    // swipe stays exactly Σ(counts) — 1:1 aim is preserved; only the per-frame distribution shifts by
+    // ≤±50% of one frame's counts. The ledger drains fast (50%/frame) when input stops so a swipe's tail
+    // completes within ~25 ms and there is no post-stop drift. m_smoothdt 0 = legacy raw application.
+    private float _mouseCarryX, _mouseCarryY;
+
+    private void FlushMouseLook(float realFrameTime, float displayDt)
     {
         float dx = _mouseDx, dy = _mouseDy;
         _mouseDx = 0f;
         _mouseDy = 0f;
         (float mx, float my) = _mouseAccel.Apply(dx, dy, realFrameTime, in _mouseAccelCv, LookSensitivity());
+        if (_mouseSmoothDtCv && realFrameTime > 0f && displayDt > 0f)
+        {
+            float scale = Math.Clamp(displayDt / realFrameTime, 0.5f, 2f);
+            float outX = mx * scale, outY = my * scale;
+            _mouseCarryX += mx - outX;
+            _mouseCarryY += my - outY;
+            float repay = (dx != 0f || dy != 0f) ? 0.25f : 0.5f;
+            outX += _mouseCarryX * repay; _mouseCarryX *= 1f - repay;
+            outY += _mouseCarryY * repay; _mouseCarryY *= 1f - repay;
+            mx = outX; my = outY;
+        }
+        else
+        {
+            _mouseCarryX = 0f; _mouseCarryY = 0f; // toggled off mid-session: drop sub-count residue
+        }
         if (mx == 0f && my == 0f)
             return;
         float sens = LookSensitivity() * _view.SensitivityScale;

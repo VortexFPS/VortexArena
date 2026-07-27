@@ -105,6 +105,13 @@ public sealed partial class NetGame : Node3D
         new(System.StringComparer.OrdinalIgnoreCase);
     private ClientEntityView _entityView = null!;
     private Camera3D _camera = null!;
+
+    // (E3/E5) Map editor: the interaction controller, its line-overlay renderer and the orthographic view.
+    // Created with the render tree and inert until the editor gametype puts this client into free-fly.
+    private Vmap.EditorController? _editor;
+    private Vmap.EditorGizmos? _editorGizmos;
+    private Vmap.EditorOrthoView? _editorOrtho;
+    private bool _orthoPanning;
     private RadarPanel _radar = null!;
     private NetHud _hud = null!;                 // crosshair + health/armor readout (the always-on lightweight HUD)
     // The full CSQC HUD panel set (weapon bar / ammo / kill-feed / centerprint / timer) on the net play path —
@@ -1465,6 +1472,21 @@ public sealed partial class NetGame : Node3D
         // resident means the `editor_grid` bind works instantly instead of building a shader on first toggle
         // (which would be a pipeline-compile hitch at exactly the wrong moment).
         AddChild(new Vmap.EditorGrid());
+
+        // (E3/E5) Editor nodes. Always present but inert outside the editor gametype, so toggling into it is
+        // instant rather than paying node + shader construction at the moment the mapper asks for it.
+        _editor = new Vmap.EditorController();
+        _editor.Attach(_camera);
+        AddChild(_editor);
+
+        _editorGizmos = new Vmap.EditorGizmos();
+        _editorGizmos.Attach(_editor);
+        AddChild(_editorGizmos);
+
+        _editorOrtho = new Vmap.EditorOrthoView { Name = "EditorOrtho" };
+        _editorOrtho.Attach(_camera, _editor, _editorGizmos);
+        AddChild(_editorOrtho);
+        _editor.Ortho = _editorOrtho;
 
         AddLight();
     }
@@ -5538,11 +5560,25 @@ public sealed partial class NetGame : Node3D
 
         // Editor status panel (E2). It stays blank in every non-editor session, so gate it on the gametype and
         // let it read the local observer state: EDIT *is* the observer state, so free-flying means editing.
+        bool editorSession = string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase);
+        bool editorFreeFly = editorSession && (_client?.IsObserving ?? true);
+
+        if (_editor is not null)
+        {
+            _editor.Active = editorFreeFly;
+            if (editorFreeFly)
+                EnsureEditorSession();
+            else if (_editorOrtho is { IsOpen: true })
+                _editorOrtho.Close();   // dropping into playtest must not leave a flat wireframe camera
+        }
+
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
         {
-            editorPanel.IsEditorSession = string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase);
+            editorPanel.IsEditorSession = editorSession;
             editorPanel.IsEditing = _client?.IsObserving ?? true;
             editorPanel.FlySpeed = p?.SpectatorSpeed ?? 1f;
+            editorPanel.Controller = _editor;
+            editorPanel.Ortho = _editorOrtho;
         }
 
         // QC HUD_PressedKeys spectatee gate: a free-fly observer never shows the cluster, and while merely
@@ -6219,6 +6255,14 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
+        // (E3/E5) Map-editor interaction. Runs only while free-flying in the editor gametype, and consumes the
+        // event when it acts so a grab doesn't also register as a weapon impulse or a spectate-cycle.
+        if (!ConsoleState.IsOpen && HandleEditorInput(@event))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // Minigame menu toggle (QC the +minigamemenu bind — no default key in Base; we bind 'M'). Opens/closes
         // the in-game Create/Join/Current-Game menu. Active even during play (so you can start a game), but not
         // while the console is open. When the menu is open it captures the cursor so the player can click it.
@@ -6491,6 +6535,147 @@ public sealed partial class NetGame : Node3D
         RunCommand?.Invoke(command);
     }
 
+    // =============================================================================================
+    //  Map-editor interaction (E3/E5) — the input half; the logic lives in EditorController.
+    // =============================================================================================
+
+    /// <summary>
+    /// Route input to the editor while free-flying in an editor session. Returns true when the event was
+    /// consumed.
+    ///
+    /// The 3D view is crosshair-driven and keeps the mouse captured (aim, click, grab — the same motion as
+    /// aiming a weapon). The orthographic view is the exception: pan/zoom need a pointer, so opening it takes
+    /// cursor ownership through the same <c>UiOwnsCursor</c> path the maximized radar uses, which also
+    /// suspends movement input so flying doesn't fight panning.
+    /// </summary>
+    private bool HandleEditorInput(InputEvent @event)
+    {
+        if (_editor is null || !_editor.Active)
+            return false;
+
+        bool orthoOpen = _editorOrtho is { IsOpen: true };
+
+        if (@event is InputEventMouseButton mb)
+        {
+            if (orthoOpen)
+                return HandleOrthoMouse(mb);
+
+            switch (mb.ButtonIndex)
+            {
+                case MouseButton.Left when mb.Pressed:
+                    _editor.BeginDrag(addToSelection: Input.IsKeyPressed(Key.Shift));
+                    return true;
+                case MouseButton.Left:
+                    _editor.EndDrag();
+                    return true;
+                case MouseButton.Right when mb.Pressed:
+                    // Right-click cancels an in-flight grab (the universal editor escape); with nothing being
+                    // dragged it cycles the sub-object tool instead of being dead.
+                    if (_editor.IsDragging)
+                        _editor.CancelDrag();
+                    else
+                        _editor.CycleTool();
+                    return true;
+            }
+            return false;
+        }
+
+        if (orthoOpen && @event is InputEventMouseMotion motion && _orthoPanning)
+        {
+            _editorOrtho!.PanByPixels(motion.Relative, GetViewport().GetVisibleRect().Size.Y);
+            return true;
+        }
+
+        if (@event is InputEventKey { Pressed: true, Echo: false } key)
+        {
+            switch (key.Keycode)
+            {
+                case Key.Z when key.CtrlPressed && key.ShiftPressed:
+                    _editor.Redo();
+                    return true;
+                case Key.Z when key.CtrlPressed:
+                    _editor.Undo();
+                    return true;
+                case Key.Y when key.CtrlPressed:
+                    _editor.Redo();
+                    return true;
+                case Key.Delete:
+                    _editor.DeleteSelection();
+                    return true;
+                case Key.Escape when _editor.IsDragging:
+                    _editor.CancelDrag();
+                    return true;
+                case Key.Escape when orthoOpen:
+                    _editorOrtho!.Close();
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Mouse handling specific to the orthographic view: middle-drag pans, the wheel zooms.</summary>
+    private bool HandleOrthoMouse(InputEventMouseButton mb)
+    {
+        switch (mb.ButtonIndex)
+        {
+            case MouseButton.Middle:
+                _orthoPanning = mb.Pressed;
+                return true;
+            case MouseButton.WheelUp when mb.Pressed:
+                // Ctrl moves the floor-filter slab through the map instead of zooming, so stacked floors can
+                // be stepped through without leaving the view.
+                if (mb.CtrlPressed)
+                    _editorOrtho!.MoveSlab(_editor!.GridSize * 4f);
+                else
+                    _editorOrtho!.ZoomBy(1f / 1.2f);
+                return true;
+            case MouseButton.WheelDown when mb.Pressed:
+                if (mb.CtrlPressed)
+                    _editorOrtho!.MoveSlab(-_editor!.GridSize * 4f);
+                else
+                    _editorOrtho!.ZoomBy(1.2f);
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Open (or re-open) an editing session for the current map: an already-imported <c>.vmap</c> if one
+    /// exists, otherwise imported live from the loaded map so a mapper can start editing any level without a
+    /// separate conversion step.
+    /// </summary>
+    private void EnsureEditorSession()
+    {
+        if (_editor is null || _editor.Session is not null || _assets is null)
+            return;
+
+        try
+        {
+            string? existing = Vmap.VmapService.FindPackage(_map);
+            XonoticGodot.Formats.Vmap.VmapDocument doc;
+            if (existing is not null)
+            {
+                doc = XonoticGodot.Formats.Vmap.VmapPackage.Read(existing);
+                XonoticGodot.Common.Diagnostics.Log.Info($"editor: opened {existing}");
+            }
+            else if (_bsp is not null)
+            {
+                doc = XonoticGodot.Formats.Vmap.BspToVmap.Import(_bsp, _map, $"maps/{_map}.bsp");
+                XonoticGodot.Common.Diagnostics.Log.Info($"editor: imported {_map} from BSP ({doc.Brushes.Count} brushes) — vmap_import to keep it");
+            }
+            else
+            {
+                return;
+            }
+            _editor.OpenSession(doc);
+        }
+        catch (Exception ex)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"editor: could not open a session for '{_map}': {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// True while this client is free-flying (EDIT) inside an editor session — the only state in which the
     /// weapon binds are repurposed. Playtesting is real play, so weapons behave normally there.
@@ -6517,6 +6702,24 @@ public sealed partial class NetGame : Node3D
     {
         if (!IsEditorFreeFly)
             return false;
+
+        // Keys 3-6 drive the editor directly rather than going through the console, because they act on this
+        // client's live controller state (tool, ortho view) which has no server side to route to.
+        switch (WeaponCommandToImpulse(command))
+        {
+            case 3:
+                _editor?.CycleTool();
+                return true;
+            case 4:
+                _editorOrtho?.Toggle(Coords.ToQuake(_camera.GlobalTransform.Origin));
+                return true;
+            case 5:
+                _editorOrtho?.CycleAxis();
+                return true;
+            case 6:
+                _editor?.RotateSelection(15f);
+                return true;
+        }
 
         string? action = WeaponCommandToImpulse(command) switch
         {
@@ -6685,7 +6888,8 @@ public sealed partial class NetGame : Node3D
     /// <summary>Any in-world HUD UI that should free the mouse cursor + suspend look/fire (minigame board/menu, the
     /// quick-chat menu, or the maximized radar). The bind channel stays live so the toggling bind can still close the
     /// panel — the maximized radar's `m` toggle + Esc/right-click close all route through it.</summary>
-    private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || (_radar?.Maximized ?? false);
+    private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || (_radar?.Maximized ?? false)
+                                 || (_editorOrtho?.IsOpen ?? false);
 
     /// <summary>Whether gameplay owns keyboard/mouse input this frame — false whenever a UI owner has it (the DP
     /// key_dest states): the pause/auto-pause, the console, the messagemode chat prompt (key_dest = message:

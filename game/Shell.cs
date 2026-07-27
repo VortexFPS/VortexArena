@@ -186,6 +186,8 @@ public partial class Shell : Node
         // commands. Client-side and bindable; the grid node itself lives in the match scene (NetGame).
         Vmap.EditorGrid.RegisterDefaults(MenuState.Cvars);
         Vmap.EditorGrid.RegisterCommands(MenuState.Interp!, MenuState.Cvars);
+        Vmap.EditorController.RegisterDefaults(MenuState.Cvars);
+        Vmap.EditorOrthoView.RegisterDefaults(MenuState.Cvars);
 
         // Dev/CI: `--menu-screen nexposee:<Title>` opens that panel inside the nexposee on boot (vs the plain
         // `--menu-screen settings` which pushes a framed dialog). Consumed by MainMenu; clear it so the

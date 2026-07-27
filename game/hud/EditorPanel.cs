@@ -2,7 +2,9 @@ using Godot;
 using XonoticGodot.Common.Services;
 using XonoticGodot.Engine.Console;
 using XonoticGodot.Engine.Simulation;
+using XonoticGodot.Formats.Vmap;
 using XonoticGodot.Game.Vmap;
+using NVec3 = System.Numerics.Vector3;
 
 namespace XonoticGodot.Game.Hud;
 
@@ -37,6 +39,12 @@ public partial class EditorPanel : HudPanel
 
     /// <summary>Fly-speed multiplier from the spectator speed ladder, shown so the mapper knows why they are fast.</summary>
     public float FlySpeed { get; set; } = 1f;
+
+    /// <summary>The live editor controller, for tool/selection/coordinate readouts. Null outside a session.</summary>
+    public EditorController? Controller { get; set; }
+
+    /// <summary>The orthographic view, for its state line. Null outside a session.</summary>
+    public EditorOrthoView? Ortho { get; set; }
 
     public override bool IsDynamic => true;
 
@@ -79,12 +87,62 @@ public partial class EditorPanel : HudPanel
 
         if (IsEditing)
         {
-            lines.Add((
-                $"Grid: {(gridOn ? "ON" : "OFF")}  {Fmt(gridSize)}u   {Key(BindGrid)} toggle · {Key(BindGridUp)}/{Key(BindGridDown)} size",
-                gridOn ? new Color(0.8f, 0.9f, 0.95f) : new Color(0.55f, 0.6f, 0.65f)));
+            var dim = new Color(0.6f, 0.65f, 0.7f);
+            var bright = new Color(0.8f, 0.9f, 0.95f);
+
+            if (Controller is { } c)
+            {
+                lines.Add(($"Tool: {c.Tool}   {Key(BindTool)} cycle · RMB", bright));
+
+                lines.Add((
+                    $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +
+                    $"Snap: {(c.SnapEnabled ? "ON" : "OFF")} {Fmt(c.SnapRadiusDisplay)}u",
+                    gridOn ? bright : dim));
+
+                // Selection + live coordinates. During a drag the delta is what the mapper is actually steering,
+                // so it takes the line; otherwise the selection centre anchors where they are working.
+                if (c.Session is { } session && session.Selection.Count > 0)
+                {
+                    VmapSelection first = session.Selection[0];
+                    string what = session.Selection.Count > 1
+                        ? $"{session.Selection.Count} {first.Kind}s"
+                        : $"{first.Kind} of brush #{first.BrushId}";
+                    lines.Add(($"Sel: {what}", new Color(0.45f, 0.85f, 1f)));
+
+                    if (c.Document is { } doc
+                        && VmapEdit.TryGetSelectionCenter(doc, session.SelectedBrushIds(), out NVec3 center))
+                        lines.Add(($"ctr  {Coord(center)}", dim));
+                }
+
+                if (c.IsDragging)
+                {
+                    NVec3 d = c.DragDelta;
+                    string snapNote = c.DragSnap.Snapped ? $"  snap→{c.DragSnap.TargetKind}" : "";
+                    lines.Add(($"drag {Coord(d)}  |{d.Length():0.#}|{snapNote}", new Color(0.4f, 1f, 0.55f)));
+                }
+                else if (c.Hover.Hit)
+                {
+                    lines.Add(($"cur  {Coord(c.Hover.Point)}", dim));
+                }
+
+                if (c.Session is { CanUndo: true } undoable)
+                    lines.Add(($"[Ctrl+Z] undo: {undoable.UndoLabel}", dim));
+            }
+            else
+            {
+                lines.Add((
+                    $"Grid: {(gridOn ? "ON" : "OFF")}  {Fmt(gridSize)}u   {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}",
+                    gridOn ? bright : dim));
+            }
+
+            if (Ortho is { IsOpen: true } ortho)
+                lines.Add(($"ORTHO {ortho.AxisLabel}  {Key(BindOrtho)} close · {Key(BindOrthoAxis)} axis · MMB pan · wheel zoom",
+                    new Color(1f, 0.85f, 0.4f)));
+            else
+                lines.Add(($"{Key(BindOrtho)} ortho view", dim));
 
             if (FlySpeed > 0f)
-                lines.Add(($"Fly x{FlySpeed:0.#}", new Color(0.6f, 0.65f, 0.7f)));
+                lines.Add(($"Fly x{FlySpeed:0.#}", dim));
         }
 
         float widest = 0f;
@@ -103,8 +161,17 @@ public partial class EditorPanel : HudPanel
     // reverse-looks-up the weapon command, which is what is actually bound to a key.
     private const string BindPlaytest = "weapon_group_2";
     private const string BindGrid = "weapon_group_1";
+    private const string BindTool = "weapon_group_3";
+    private const string BindOrtho = "weapon_group_4";
+    private const string BindOrthoAxis = "weapon_group_5";
     private const string BindGridUp = "weapnext";
     private const string BindGridDown = "weapprev";
+
+    /// <summary>
+    /// Format a world position the way a mapper reads one: Quake units, integral, in the map's own coordinate
+    /// system (COORDINATE_CONVENTIONS.md — HUD coordinates are Quake, never the renderer's Y-up space).
+    /// </summary>
+    private static string Coord(NVec3 v) => $"({v.X:0.#}, {v.Y:0.#}, {v.Z:0.#})";
 
     /// <summary>
     /// The key currently bound to <paramref name="command"/>, in brackets, or <c>--</c> when nothing is bound.

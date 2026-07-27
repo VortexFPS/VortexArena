@@ -91,7 +91,11 @@ public partial class FrameProfiler : CanvasLayer
           // (E2) the editor's world-space alignment grid: a full-screen depth-reconstruction pass. The _Process
           // side is just cvar->uniform pushes and is inert while the grid is off, but scoped so enabling it
           // shows up as its own line rather than inflating proc:other.
-          "editorgrid" };
+          "editorgrid",
+          // (E3/E5) the map editor's per-frame work: crosshair picking + drag tracking, and the line-overlay
+          // rebuild. Both are inert outside an editor session but scoped so an editing session's cost is
+          // attributed rather than inflating proc:other.
+          "editor.ctrl", "editor.gizmos" };
 
     /// <summary>
     /// Open a named timing scope: <c>using (FrameProfiler.Scope("name")) { ... }</c> (or as a one-statement

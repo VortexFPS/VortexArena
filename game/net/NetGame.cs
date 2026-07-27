@@ -4343,7 +4343,7 @@ public sealed partial class NetGame : Node3D
     // QC view.qc UpdateDamage/HitSound run off the owner's feedback STATS (HIT/TYPEHIT/KILL_TIME + the
     // cumulative damage total). Both paths feed the same HitSound state machine: a listen host reads the
     // live LocalServerPlayer fields (flushed by the server's EndFrame under the sim gate), a pure client the
-    // networked LocalState slice (the EntityField.Feedback block, protocol v16).
+    // networked LocalState slice (the EntityField.Feedback block, protocol v18).
     private int _arcWeaponId = int.MinValue; // lazily-resolved Arc registry id (the QC have_arc check)
 
     /// <summary>
@@ -4381,10 +4381,13 @@ public sealed partial class NetGame : Node3D
             _fullHud.Ammo.NadeBonusTypeId = host.NadeBonusType;
             _fullHud.Ammo.NadeBonusScoreFrac = host.NadeBonusScore;
 
-            // QC UpdateDamage/HitSound off the live stats (the host never follow-spectates → spectatee 0).
+            // QC UpdateDamage/HitSound off the live stats. The host CAN follow-spectate (cl_bench_spectate, the
+            // `spectate` command), and the server-side EndFrame stamp already mirrors the spectatee's feedback
+            // onto this player — so pass the real spectatee id through, or view.qc:907's "drop accumulated
+            // damage on a spectatee switch" never fires here.
             if (_hitSound is not null
-                && _hitSound.Update(haveArc, spectatee: 0, host.HitTime, host.HitsoundDamageDealtTotal,
-                                    host.TypeHitTime, host.KillTime))
+                && _hitSound.Update(haveArc, _client?.SpectatingNetId ?? 0, host.HitTime,
+                                    host.HitsoundDamageDealtTotal, host.TypeHitTime, host.KillTime))
                 x.HitFlash = 1f;
             return;
         }
@@ -4395,6 +4398,21 @@ public sealed partial class NetGame : Node3D
         {
             x.NadeTimer = 0f; x.CaptureProgress = 0f; x.ReviveProgress = 0f;
             _fullHud.Ammo.NadeBonusCount = 0; _fullHud.Ammo.NadeBonusTypeId = 0; _fullHud.Ammo.NadeBonusScoreFrac = 0f;
+
+            // FOLLOW-SPECTATOR: QC stamps the spectator's own feedback stats from their spectatee
+            // (world.qc:2508 `IS_SPEC(it) ? it.enemy : it`), so watching someone frag sounds like playing.
+            // An observer has no own entity in the stream, so read the block off the WATCHED entity — the
+            // server keeps it unstripped for exactly this recipient (ServerNet.RelevantEntitiesFor).
+            int watched = _client?.SpectatingNetId ?? 0;
+            if (_hitSound is not null && watched != 0 && _client is not null
+                && _client.TryGetRemoteState(watched, out XonoticGodot.Net.NetEntityState spec))
+            {
+                if (_hitSound.Update(haveArc, watched, spec.HitTime, spec.HitDamageDealtTotal,
+                                     spec.TypeHitTime, spec.KillTime))
+                    x.HitFlash = 1f;
+                return;
+            }
+
             _hitSound?.Reset();
             return;
         }

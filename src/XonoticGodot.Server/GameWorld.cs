@@ -2752,9 +2752,19 @@ public sealed class GameWorld
         // kill sound) + the ceil'd cumulative damage total, then clear the per-frame accumulators the damage
         // pipeline / Obituary banked this tick. Runs after the gametype/round steps so same-frame gametype
         // kills (round-end executions etc.) flush this frame, not next. Bots' stats are set too but the
-        // owner-only Feedback privacy gate keeps them off the wire.
+        // owner-only Feedback privacy gate keeps them off the wire (ServerNet.RelevantEntitiesFor).
+        //
+        // TWO passes, exactly like QC. Pass 1 stamps each viewer from `IS_SPEC(it) ? it.enemy : it`, so a
+        // follow-spectator inherits the feedback of the player they are watching. Pass 2 clears every client's
+        // accumulators. Fusing them would let whichever player is iterated first consume the banked damage —
+        // a spectator would silently steal their spectatee's own hit sound.
         foreach (Player p in Clients.Players)
-            XonoticGodot.Common.Gameplay.Damage.DamageSystem.EndFrameFlushHitSoundStats(p, Time);
+        {
+            Player source = p.Spectatee ?? p;
+            XonoticGodot.Common.Gameplay.Damage.DamageSystem.StampHitSoundStats(p, source, Time);
+        }
+        foreach (Player p in Clients.Players)
+            XonoticGodot.Common.Gameplay.Damage.DamageSystem.ClearHitSoundAccumulators(p);
 
         // 5) the post-resolution server hook (QC the tail of the server frame).
         ServerHooks.FireEndFrame(Time);

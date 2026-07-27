@@ -19,15 +19,25 @@ namespace XonoticGodot.Game.Client;
 ///   <item><b>misc/kill</b> — the kill confirm (KILL_TIME advance). The server's flush gives the kill
 ///   priority over the hit beep, so the killing blow plays ONLY this.</item>
 /// </list>
-/// All three share one non-positional player on the SFX bus — QC plays them on the same CH_INFO channel of
-/// the world entity, so a new cue REPLACES a still-ringing one (the kill sound cuts a trailing beep).
+/// All three are non-positional cues on the SFX bus, played through a small VOICE POOL so they OVERLAP.
+/// QC uses <c>CH_INFO</c>, which is channel <b>0</b> (common/sounds/sound.qh:6) — in Quake/DP channel 0
+/// auto-allocates a free channel and never stops a playing sound, so Base's cues ring out over each other.
+/// A single shared player that Stop()s first is NOT equivalent: <c>misc/kill.wav</c> is 1.25 s and the next
+/// hit beep lands 0.05 s later (<c>cl_hitsound_antispam_time</c>), so the kill confirm was being cut after
+/// ~4% of its length, and sustained fire chopped every beep to 50 ms instead of layering.
 /// Typehit/kill are NOT gated by <c>cl_hitsound</c>, exactly like QC.
 /// </summary>
 public sealed class HitSound
 {
+    // Enough concurrent voices to cover the realistic worst case: a 1.25 s kill confirm overlapping a train
+    // of 0.26 s beeps arriving every 0.05 s (~6 live) plus headroom. When all are busy the oldest is reused,
+    // which is what DP's SND_PickChannel does once it runs out of channels.
+    private const int VoiceCount = 8;
+
     private readonly CvarService? _cvars;
     private readonly HitSoundLogic _logic = new();
-    private AudioStreamPlayer? _player;
+    private readonly AudioStreamPlayer?[] _voices = new AudioStreamPlayer?[VoiceCount];
+    private int _nextVoice;
     private AudioStream? _hitStream, _typeHitStream, _killStream;
     private bool _hitProbed, _typeHitProbed, _killProbed; // one probe per sample; a miss stays silent
     private Node? _parent;
@@ -67,14 +77,15 @@ public sealed class HitSound
         HitSoundCues cues = _logic.Update(now, mode, antispam, maxPitch, minPitch, nomDamage,
             haveArc, spectatee, hitTime, damageTotal, typeHitTime, killTime);
 
-        // At most one fires per server frame (the flush's typehit > kill > hit priority); play in that order
-        // anyway so a same-client-frame pileup resolves like QC's channel-replace would.
+        // The server flush gives at most one of these per SERVER frame, but two can still land in one client
+        // frame. QC's call order is hit → typehit → kill (view.qc:956/967/974) and channel 0 layers rather
+        // than replacing, so all of them play; matching the order keeps the mix identical to Base.
         if (cues.PlayHit)
             Play(ref _hitStream, ref _hitProbed, "misc/hit", cues.HitPitch);
-        if (cues.PlayKill)
-            Play(ref _killStream, ref _killProbed, "misc/kill", 1f);
         if (cues.PlayTypeHit)
             Play(ref _typeHitStream, ref _typeHitProbed, "misc/typehit", 1f);
+        if (cues.PlayKill)
+            Play(ref _killStream, ref _killProbed, "misc/kill", 1f);
         return cues.NewDamage;
     }
 
@@ -92,43 +103,68 @@ public sealed class HitSound
         if (stream is null)
         {
             if (probed) return; // known-missing sample — stay silent instead of re-probing every beep
-            probed = true;
+            // Only LATCH the probe once a real loader has had its say. The HUD can be built before
+            // AudioLoader is wired (NetGame only assigns it when the asset system exists), and latching on
+            // that null-loader attempt made the sample silent for the whole session even after assets mount.
+            bool hadLoader = AudioLoader is not null;
             stream = AudioLoader?.Invoke(sample);
             if (stream is null)
             {
-                // Fallback: the res:// path convention (the loader probes .ogg then .wav; mirror with .wav).
-                string resPath = $"res://sound/{sample}.wav";
-                if (ResourceLoader.Exists(resPath))
+                // Fallback: the res:// convention. Probe BOTH extensions like AssetLoader.LoadSound does —
+                // the shipped typehit is .ogg, so a .wav-only fallback could never resolve it.
+                foreach (string ext in new[] { ".ogg", ".wav" })
                 {
+                    string resPath = $"res://sound/{sample}{ext}";
+                    if (!ResourceLoader.Exists(resPath)) continue;
                     try { stream = ResourceLoader.Load<AudioStream>(resPath); }
                     catch { /* silent */ }
+                    if (stream is not null) break;
                 }
             }
-            if (stream is null) return;
+            if (stream is null)
+            {
+                probed = hadLoader; // genuinely missing → stop probing; no loader yet → retry next cue
+                return;
+            }
         }
 
-        EnsurePlayer();
-        if (_player is null)
+        AudioStreamPlayer? voice = TakeVoice();
+        if (voice is null)
             return;
 
-        // One shared player = QC's single CH_INFO channel: a new cue replaces a still-playing one.
-        _player.Stop();
-        _player.Stream = stream;
-        _player.PitchScale = pitch;
-        _player.Play();
+        // NO Stop() on a busy voice unless the pool is exhausted: QC's CH_INFO is channel 0, which layers.
+        voice.Stream = stream;
+        voice.PitchScale = pitch;
+        voice.Play();
     }
 
-    private void EnsurePlayer()
+    /// <summary>A free voice, else the round-robin oldest (DP's SND_PickChannel steals when channels run
+    /// out). Null until the pool can be parented into the tree.</summary>
+    private AudioStreamPlayer? TakeVoice()
     {
-        if (_player is not null && GodotObject.IsInstanceValid(_player))
-            return;
         if (_parent is null || !GodotObject.IsInstanceValid(_parent))
-            return;
+            return null;
 
-        _player = new AudioStreamPlayer { Name = "HitSound", Bus = "SFX" };
-        // QC plays VOL_BASE; kept slightly quieter (the port's existing deliberate tweak) so the beep
-        // doesn't mask the announcer.
-        _player.VolumeDb = Mathf.LinearToDb(0.7f);
-        _parent.AddChild(_player);
+        for (int i = 0; i < _voices.Length; i++)
+        {
+            AudioStreamPlayer? v = _voices[i];
+            if (v is null || !GodotObject.IsInstanceValid(v))
+            {
+                v = new AudioStreamPlayer { Name = $"HitSound{i}", Bus = "SFX" };
+                // QC plays VOL_BASE; kept slightly quieter (the port's existing deliberate tweak) so the beep
+                // doesn't mask the announcer.
+                v.VolumeDb = Mathf.LinearToDb(0.7f);
+                _parent.AddChild(v);
+                _voices[i] = v;
+                return v;
+            }
+            if (!v.Playing)
+                return v;
+        }
+
+        // All busy — reuse the next in rotation (the approximate least-recently-started).
+        AudioStreamPlayer? steal = _voices[_nextVoice];
+        _nextVoice = (_nextVoice + 1) % _voices.Length;
+        return steal;
     }
 }

@@ -119,25 +119,37 @@ public sealed class DamageSystem : IDamageSystem
             : DeathTypes.WithHitType(deathType, DeathTypes.Splash);
 
     /// <summary>
-    /// Port of the hit-feedback stat flush in QC <c>EndFrame</c> (server/world.qc:2507-2528): once per server
-    /// frame, per player, exactly ONE of the three feedback stats advances — priority typehit &gt; kill &gt; hit,
-    /// so the killing blow's banked damage is eaten by the kill priority and the client plays ONLY the kill
-    /// sound that frame — then the per-frame accumulators clear. The hit branch also advances the cumulative
-    /// <see cref="Entity.HitsoundDamageDealtTotal"/> by <c>ceil(dealt)</c> (QC's deliberate wire rounding:
-    /// "not accurate as client code doesn't need so much accuracy"). Called by GameWorld's OnEndFrame for
-    /// every player after all damage/obituaries of the tick have run.
+    /// Port of the hit-feedback stat STAMP in QC <c>EndFrame</c> (server/world.qc:2507-2518): exactly ONE of
+    /// the three feedback stats advances on <paramref name="viewer"/> — priority typehit &gt; kill &gt; hit, so
+    /// the killing blow's banked damage is eaten by the kill priority and the client plays ONLY the kill sound
+    /// that frame. The hit branch also advances the cumulative <see cref="Entity.HitsoundDamageDealtTotal"/>
+    /// by <c>ceil(dealt)</c> (QC's deliberate wire rounding: "not accurate as client code doesn't need so much
+    /// accuracy").
+    ///
+    /// <para>The accumulators are read from <paramref name="source"/>, which QC resolves as
+    /// <c>IS_SPEC(it) ? it.enemy : it</c> — a FOLLOW-SPECTATOR inherits the feedback of whoever they are
+    /// watching, which is what makes spectating a fragging player sound like Base. Clearing is deliberately
+    /// NOT done here: QC clears in a SEPARATE FOREACH_CLIENT pass (world.qc:2525-2527), because a spectator
+    /// reading their spectatee's accumulators must not consume them before the spectatee's own stamp runs.
+    /// Call <see cref="ClearHitSoundAccumulators"/> for every client once all stamps are done.</para>
     /// </summary>
-    public static void EndFrameFlushHitSoundStats(Entity e, float time)
+    public static void StampHitSoundStats(Entity viewer, Entity source, float time)
     {
-        if (e.TypeHitSoundCount > 0)
-            e.TypeHitTime = time;
-        else if (e.KillSoundCount > 0)
-            e.KillTime = time;
-        else if (e.HitSoundDamageDealt > 0f)
+        if (source.TypeHitSoundCount > 0)
+            viewer.TypeHitTime = time;
+        else if (source.KillSoundCount > 0)
+            viewer.KillTime = time;
+        else if (source.HitSoundDamageDealt > 0f)
         {
-            e.HitTime = time;
-            e.HitsoundDamageDealtTotal += MathF.Ceiling(e.HitSoundDamageDealt);
+            viewer.HitTime = time;
+            viewer.HitsoundDamageDealtTotal += MathF.Ceiling(source.HitSoundDamageDealt);
         }
+    }
+
+    /// <summary>QC EndFrame's second pass (world.qc:2525-2527): drop this tick's banked feedback. Runs for
+    /// EVERY client, after every <see cref="StampHitSoundStats"/> has read them.</summary>
+    public static void ClearHitSoundAccumulators(Entity e)
+    {
         e.TypeHitSoundCount = 0;
         e.KillSoundCount = 0;
         e.HitSoundDamageDealt = 0f;

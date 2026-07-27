@@ -104,6 +104,9 @@ public sealed class ServerNet : IDisposable
     // --- snapshot delta-compression + movevar replication + teleport detection ---
     private ushort _snapshotSeq;                                     // global snapshot sequence (clients ack it)
     private readonly Dictionary<int, NetEntityState> _entityScratch = new(); // reused per-tick entity set
+    // Set during BuildEntitySet when any player carries owner-private Feedback-block state; forces the
+    // per-recipient pass in RelevantEntitiesFor to run so that state is stripped from other players' copies.
+    private bool _scratchHasOwnerPrivate;
     // (§12.8) DP-faithful per-client PVS entity culling (sv_cullentities_pvs). _entityBounds holds each networked
     // entity's world-space bounds (filled in BuildEntitySet); _relevantScratch is the per-recipient filtered view
     // of _entityScratch fed to EncodeSnapshot — the delta encoder then turns "no longer relevant" into a removal
@@ -2326,6 +2329,7 @@ public sealed class ServerNet : IDisposable
     {
         _entityScratch.Clear();
         _entityBounds.Clear();
+        _scratchHasOwnerPrivate = false;
 
         // QC world.qc:EndFrame records antilag history at `altime` (time + frametime*(1+g_antilag_nudge)), NOT at
         // the bare current time — so the ring aligns with the time the client will see this frame. Compute it once.
@@ -2514,6 +2518,15 @@ public sealed class ServerNet : IDisposable
             if (flushed is not null)
                 _statusBlob[p] = NormalizeStatusBlob(flushed);
             s.StatusEffects = _statusBlob.TryGetValue(p, out byte[]? cachedBlob) ? cachedBlob : null;
+
+            // Does this player carry OWNER-PRIVATE Feedback-block state? If any player does, the per-recipient
+            // pass below MUST run to strip it from everyone else's copy — so the "no filtering needed" fast
+            // paths in RelevantEntitiesFor have to know. (Cheap: one bool per snapshot, not per recipient.)
+            if (s.HitTime != 0f || s.TypeHitTime != 0f || s.KillTime != 0f || s.HitDamageDealtTotal != 0f
+                || s.NadeDarknessTime != 0f || s.NadeBonus != 0f || s.NadeBonusScore != 0f)
+            {
+                _scratchHasOwnerPrivate = true;
+            }
 
             _entityScratch[netId] = s;
             _entityBounds[netId] = RelevanceBounds(p.Origin, p.Mins, p.Maxs);
@@ -2751,7 +2764,7 @@ public sealed class ServerNet : IDisposable
         bool havePvsCull = cullPvs && _world.Pvs is { HasVis: true } && !owner.IsDead && !owner.IsObserver;
 
         // Fast path: neither filter narrows the set → send the shared scratch as-is.
-        if (!havePvsCull && !applyPrivacy)
+        if (!havePvsCull && !applyPrivacy && !_scratchHasOwnerPrivate)
             return _entityScratch;
 
         int viewerCluster = -1;
@@ -2790,10 +2803,15 @@ public sealed class ServerNet : IDisposable
         }
 
         // Privacy still applies even with PVS culling off, so if neither now narrows the set, take the fast path.
-        if (!havePvsCull && !applyPrivacy)
+        if (!havePvsCull && !applyPrivacy && !_scratchHasOwnerPrivate)
             return _entityScratch;
 
         int ownerTeam = (int)owner.Team;
+        // QC EndFrame stamps a follow-spectator's feedback stats from `it.enemy` (the spectatee), so a
+        // spectator legitimately receives the watched player's hit/kill feedback — it becomes their own STAT
+        // in Base. An observer has no networked entity of their own here, so the client reads it off the
+        // spectatee's entity instead; keep the block on that ONE entity for this recipient only.
+        int spectateeNetId = owner.Spectatee is { } sp ? NetIdFor(sp) : 0;
 
         _relevantScratch.Clear();
         foreach (KeyValuePair<int, NetEntityState> kv in _entityScratch)
@@ -2840,6 +2858,24 @@ public sealed class ServerNet : IDisposable
                 && !state.VehicleView.Equals(XonoticGodot.Net.VehicleViewState.None))
             {
                 state.VehicleView = XonoticGodot.Net.VehicleViewState.None;
+            }
+
+            // OWNER-PRIVATE Feedback block. In QC these are per-client STATs (STAT(HIT_TIME) etc.) — they are
+            // not entity data at all, so no recipient but the owner ever sees them. The port carries them on
+            // the player entity delta, which means they must be stripped here or every client learns the exact
+            // frame any visible enemy landed a hit or scored a frag, and pays the delta bytes for it.
+            // Deliberately NOT gated on applyPrivacy: that flag is off for spectators and in
+            // radar-show-enemies modes, neither of which should hand out another player's private stats.
+            if (!isOwn && kv.Key != spectateeNetId && state.Kind == NetEntityKind.Player)
+            {
+                state.HitTime = 0f;
+                state.TypeHitTime = 0f;
+                state.KillTime = 0f;
+                state.HitDamageDealtTotal = 0f;
+                state.NadeDarknessTime = 0f;
+                state.NadeBonus = 0;
+                state.NadeBonusType = 0;
+                state.NadeBonusScore = 0f;
             }
 
             _relevantScratch[kv.Key] = state;

@@ -207,6 +207,15 @@ public class ClientFeedbackTests
             Api.Services = _prevServices;
         }
 
+        /// <summary>The non-spectating EndFrame flush: stamp a player from their OWN accumulators, then clear.
+        /// QC keeps these as two separate FOREACH_CLIENT passes (world.qc:2507-2527) precisely so a spectator
+        /// can read their spectatee's accumulators before anyone clears them — see the spectator test below.</summary>
+        private static void FlushSelf(Player p, float time)
+        {
+            DamageSystem.StampHitSoundStats(p, p, time);
+            DamageSystem.ClearHitSoundAccumulators(p);
+        }
+
         private static Player NewPlayer(float health = 100f, float armor = 0f, int team = 0)
         {
             // QC players are DAMAGE_AIM (SpawnSystem sets DamageMode.Aim) — the hit-feedback count block
@@ -238,7 +247,7 @@ public class ClientFeedbackTests
             Assert.Equal(50f, attacker.HitSoundDamageDealt, 3);
 
             // EndFrame: HIT_TIME stamps, the total advances by ceil(50), the accumulator clears.
-            DamageSystem.EndFrameFlushHitSoundStats(attacker, time: 100f);
+            FlushSelf(attacker, 100f);
             Assert.Equal(100f, attacker.HitTime, 3);
             Assert.Equal(50f, attacker.HitsoundDamageDealtTotal, 3);
             Assert.Equal(0f, attacker.HitSoundDamageDealt, 3);
@@ -339,7 +348,7 @@ public class ClientFeedbackTests
             p.TypeHitSoundCount = 1;
             p.KillSoundCount = 1;
             p.HitSoundDamageDealt = 50f;
-            DamageSystem.EndFrameFlushHitSoundStats(p, time: 10f);
+            FlushSelf(p, 10f);
             Assert.Equal(10f, p.TypeHitTime, 3);
             Assert.Equal(0f, p.KillTime, 3);
             Assert.Equal(0f, p.HitTime, 3);
@@ -352,7 +361,7 @@ public class ClientFeedbackTests
             // kill beats hit (the killing blow plays ONLY misc/kill)
             p.KillSoundCount = 1;
             p.HitSoundDamageDealt = 80f;
-            DamageSystem.EndFrameFlushHitSoundStats(p, time: 11f);
+            FlushSelf(p, 11f);
             Assert.Equal(11f, p.KillTime, 3);
             Assert.Equal(0f, p.HitTime, 3);
             Assert.Equal(0f, p.HitsoundDamageDealtTotal, 3);
@@ -364,14 +373,49 @@ public class ClientFeedbackTests
             // QC EndFrame: STAT(HITSOUND_DAMAGE_DEALT_TOTAL) += ceil(hitsound_damage_dealt).
             var p = NewPlayer();
             p.HitSoundDamageDealt = 0.3f;
-            DamageSystem.EndFrameFlushHitSoundStats(p, time: 5f);
+            FlushSelf(p, 5f);
             Assert.Equal(1f, p.HitsoundDamageDealtTotal, 3);
             Assert.Equal(5f, p.HitTime, 3);
 
             p.HitSoundDamageDealt = 12.2f;
-            DamageSystem.EndFrameFlushHitSoundStats(p, time: 6f);
+            FlushSelf(p, 6f);
             Assert.Equal(14f, p.HitsoundDamageDealtTotal, 3); // 1 + ceil(12.2)
             Assert.Equal(6f, p.HitTime, 3);
+        }
+
+        [Fact]
+        public void Spectator_Inherits_The_Spectatee_Feedback_Without_Stealing_It()
+        {
+            // QC world.qc:2508 resolves the accumulator source as `IS_SPEC(it) ? it.enemy : it`, so a
+            // follow-spectator's own feedback stats mirror whoever they are watching — watching someone frag
+            // sounds exactly like fragging. The stamp/clear split is what makes this safe: if clearing were
+            // fused into the stamp, whichever of the two was iterated first would consume the banked damage
+            // and the other would fall silent.
+            var player = NewPlayer();
+            var spectator = NewPlayer();
+
+            player.HitSoundDamageDealt = 40f;
+            player.KillSoundCount = 1;
+
+            // Pass 1 — every viewer stamps from its source; the spectator reads the player's accumulators.
+            DamageSystem.StampHitSoundStats(player, player, 20f);
+            DamageSystem.StampHitSoundStats(spectator, player, 20f);
+            // Pass 2 — only now does anything clear.
+            DamageSystem.ClearHitSoundAccumulators(player);
+            DamageSystem.ClearHitSoundAccumulators(spectator);
+
+            // Both got the kill stamp: the spectator did NOT eat the player's event.
+            Assert.Equal(20f, player.KillTime, 3);
+            Assert.Equal(20f, spectator.KillTime, 3);
+            Assert.Equal(0f, player.HitSoundDamageDealt, 3);
+
+            // A spectator watching an IDLE player gets nothing (no phantom sounds).
+            var idle = NewPlayer();
+            var watcher = NewPlayer();
+            DamageSystem.StampHitSoundStats(watcher, idle, 30f);
+            Assert.Equal(0f, watcher.KillTime, 3);
+            Assert.Equal(0f, watcher.HitTime, 3);
+            Assert.Equal(0f, watcher.TypeHitTime, 3);
         }
     }
 
@@ -388,7 +432,7 @@ public class ClientFeedbackTests
         current.NadeTimer = 0.5f;
         current.CaptureProgress = 0.25f;
         current.ReviveProgress = 0.75f;
-        // [hitsound] the v16 feedback times ride the same block.
+        // [hitsound] the v18 feedback times ride the same block.
         current.HitTime = 12.5f;
         current.TypeHitTime = 13.25f;
         current.KillTime = 14.125f;

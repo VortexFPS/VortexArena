@@ -477,7 +477,7 @@ public static class EntityStateCodec
             w.WriteUShort(current.NadeBonus);
             w.WriteByte((byte)current.NadeBonusType);
             w.WriteFloat(current.NadeBonusScore);
-            // [hitsound] the hit/typehit/kill feedback times appended after the nade stats (protocol v16).
+            // [hitsound] the hit/typehit/kill feedback times appended after the nade stats (protocol v18).
             w.WriteFloat(current.HitTime);
             w.WriteFloat(current.TypeHitTime);
             w.WriteFloat(current.KillTime);
@@ -571,7 +571,7 @@ public static class EntityStateCodec
             s.NadeBonus = r.ReadUShort();
             s.NadeBonusType = r.ReadByte();
             s.NadeBonusScore = r.ReadFloat();
-            // [hitsound] the hit/typehit/kill feedback times — SAME order as WriteDelta (protocol v16).
+            // [hitsound] the hit/typehit/kill feedback times — SAME order as WriteDelta (protocol v18).
             s.HitTime = r.ReadFloat();
             s.TypeHitTime = r.ReadFloat();
             s.KillTime = r.ReadFloat();

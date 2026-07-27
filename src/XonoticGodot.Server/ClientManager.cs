@@ -84,6 +84,17 @@ public sealed class ClientManager
     /// <summary>The connected players (the <see cref="Player"/> view of <see cref="Clients"/>).</summary>
     public IReadOnlyList<Player> Players => _players;
 
+    // WS1 stage 3 (sv_threaded): a copy-on-write roster snapshot for CROSS-THREAD readers. The live _players
+    // List is mutated only on the sim thread (join/leave/bot add-remove); the render thread's display reads
+    // (NetGame.LocalServerPlayer, HUD mirrors) enumerate THIS immutable array instead — a List being resized
+    // mid-foreach throws, an old array is merely one roster-change stale. Rebuilt at the two mutation sites.
+    private volatile Player[] _playersSnapshot = System.Array.Empty<Player>();
+
+    /// <summary>Immutable roster snapshot, safe to enumerate from any thread (may be one change stale).</summary>
+    public Player[] PlayersSnapshot => _playersSnapshot;
+
+    private void RefreshPlayersSnapshot() => _playersSnapshot = _players.ToArray();
+
     /// <summary>QC <c>player_count</c>: how many clients are connected.</summary>
     public int PlayerCount => _clients.Count;
 
@@ -195,6 +206,7 @@ public sealed class ClientManager
         var info = new ClientInfo(p, isBot);
         _clients.Add(info);
         _players.Add(p);
+        RefreshPlayersSnapshot();
 
         // engine sim: clients are simulated first each tick (SimulationLoop.Clients / ClientMove).
         p.Flags |= EntFlags.Client;
@@ -687,7 +699,23 @@ public sealed class ClientManager
         spectator.ViewOfs = target.ViewOfs;
         spectator.SetResourceExplicit(ResourceType.Health, target.GetResource(ResourceType.Health));
         spectator.SetResourceExplicit(ResourceType.Armor, target.GetResource(ResourceType.Armor));
+        // QC SpectateCopy also mirrors the ammo family + the weapon loadout (server/client.qc:1799 copies
+        // ammo_* / weapons / switchweapon) — the follower's owner block feeds the full HUD's ammo/weapons
+        // panels, so without these the panels would show the observer's EMPTY inventory, not the spectatee's.
+        spectator.SetResourceExplicit(ResourceType.Shells, target.GetResource(ResourceType.Shells));
+        spectator.SetResourceExplicit(ResourceType.Bullets, target.GetResource(ResourceType.Bullets));
+        spectator.SetResourceExplicit(ResourceType.Rockets, target.GetResource(ResourceType.Rockets));
+        spectator.SetResourceExplicit(ResourceType.Cells, target.GetResource(ResourceType.Cells));
+        spectator.SetResourceExplicit(ResourceType.Fuel, target.GetResource(ResourceType.Fuel));
         spectator.ActiveWeaponId = target.ActiveWeaponId;
+        spectator.SwitchWeaponId = target.SwitchWeaponId;
+        spectator.OwnedWeaponSet = target.OwnedWeaponSet;   // WepSet is a bit-struct — plain value copy
+        if (!spectator.OwnedWeapons.SetEquals(target.OwnedWeapons))
+        {
+            spectator.OwnedWeapons.Clear();
+            foreach (string w in target.OwnedWeapons)
+                spectator.OwnedWeapons.Add(w);
+        }
 
         // QC SpectateCopy (server/client.qc:1820): STAT(PRESSED_KEYS, this) = STAT(PRESSED_KEYS, spectatee) — a
         // following observer inherits the watched player's held-key bitset so the pressed-keys / strafe HUD shows
@@ -863,6 +891,7 @@ public sealed class ClientManager
 
         _clients.RemoveAt(idx);
         _players.Remove(p);
+        RefreshPlayersSnapshot();
         _sim.Clients.Remove(p);
         _match.RemovePlayer(p);
         _scores.Unregister(p);

@@ -415,7 +415,10 @@ public partial class ProjectileRenderer : Node3D
     {
         if (string.IsNullOrEmpty(desc.ModelPath) || ModelFactory is null)
             return null;
-        Node3D? model = ModelFactory(desc.ModelPath!);
+        // [crash fix 2026-07-26] one built tree per projectile model EVER; every projectile shares its
+        // mesh (SharedMeshCache) — the per-spawn MD3 ArrayMesh was residual finalizer churn (#3). The
+        // procedural bodies below already share via _bodyResCache; this brings the MD3 family in line.
+        MeshInstance3D? model = SharedMeshCache.Instantiate(desc.ModelPath!, () => ModelFactory(desc.ModelPath!));
         if (model is null)
             return null;
         model.Name = "Body";

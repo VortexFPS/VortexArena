@@ -179,6 +179,21 @@ public static class StartItem
         // physics ghost and hide the real item. The hook is notify-style; the return value is informational only.
         MutatorHooks.FireItemSpawn(item);
 
+        // Dev/CI (port-only): g_debug_items_start_unavailable "<substring>|all" — mark matching PERMANENT
+        // items as already picked up at spawn (the same Item_ScheduleRespawn hide a real pickup runs), so the
+        // awaiting-respawn ghost render can be framed deterministically (--observe + --screenshot) without
+        // scripting a player to touch it. Empty/unset = off. Combine with a large g_pickup_respawntime_* to
+        // keep the ghost up for the whole capture. Runs AFTER the Item_Spawn hook (a real pickup always
+        // post-dates spawn hooks) and only on items that are actually AVAILABLE — a FindTeam-hidden teamed
+        // loser or a delayed-start powerup must not get a respawn timer that would later show extra members.
+        if (!isLoot && item.ItemAvailable && Api.Services is not null)
+        {
+            string dbgGhost = Api.Cvars.GetString("g_debug_items_start_unavailable");
+            if (!string.IsNullOrWhiteSpace(dbgGhost)
+                && (dbgGhost == "all" || item.ClassName.Contains(dbgGhost, System.StringComparison.OrdinalIgnoreCase)))
+                ItemPickupRules.ScheduleRespawn(item);
+        }
+
         LastSpawnFailed = false;
         return item;
     }

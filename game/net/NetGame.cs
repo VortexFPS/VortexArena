@@ -3514,9 +3514,13 @@ public sealed partial class NetGame : Node3D
             // spawns (IsObserver flips false), then latch done. Remote clients are NOT auto-joined — they get the
             // real Base observer flow (+jump joins, +attack spectates). A campaign host that CAN'T passive-autojoin
             // at sv_spectate 1 relies on this same path (its CmdJoin succeeds on stock campaign maps).
-            // cl_bench_spectate: the host is a CAMERA — stand down so BenchSpectateThink can glue it to a bot
+            // Two independent "the host is a CAMERA, not a player" gates, both of which must hold off the join:
+            // --observe stays an OBSERVER by design (no body/viewmodel in the shot; nothing perturbs the
+            // world) — skip the host auto-join entirely while it is armed.
+            // cl_bench_spectate: same story — stand down so BenchSpectateThink can glue it to a bot
             // (without the gate the join would land once, then bench pulls it back: a one-spawn flicker on capture).
-            if (_isListenServer && !_hostJoinDone && !BenchSpectateActive && _serverWorld is { } joinWorld)
+            if (_isListenServer && !_hostJoinDone && !ObserverCamera.Active && !BenchSpectateActive
+                && _serverWorld is { } joinWorld)
             {
                 if (LocalServerPlayer is not { IsObserver: true })
                 {
@@ -3732,10 +3736,14 @@ public sealed partial class NetGame : Node3D
             }
         }
 
+        // "Client counts as spawned" — shared by the CaptureGate mark below and the loading-screen stage pick:
+        // a real spawn (Health > 0), or an armed --observe camera (which never spawns — Health stays 0).
+        bool clientSpawned = _cameraReady && (_client.Health > 0 || ObserverCamera.Active);
+
         // Capture readiness: a windowed --screenshot waits on this so it lands on the spawned world, not the
         // loading screen or a from-origin pre-spawn frame (CaptureGate). One-shot at first spawn, independent of
         // the loading-screen block below (which a bare CLI host may not have).
-        if (!_captureMarked && _cameraReady && _client.Health > 0)
+        if (!_captureMarked && clientSpawned)
         {
             _captureMarked = true;
             CaptureGate.MarkReady();
@@ -3748,9 +3756,9 @@ public sealed partial class NetGame : Node3D
         if (LoadingScreen is not null || _fallbackOverlay is not null)
         {
             HandshakeStage stage =
-                (_cameraReady && _client.Health > 0) ? HandshakeStage.Spawned
-                : !_client.Accepted                  ? HandshakeStage.Connecting
-                : !_cameraReady                       ? HandshakeStage.WaitingForServer
+                clientSpawned          ? HandshakeStage.Spawned
+                : !_client.Accepted    ? HandshakeStage.Connecting
+                : !_cameraReady        ? HandshakeStage.WaitingForServer
                 : HandshakeStage.Joining;
 
             if (stage != _handshakeStage)
@@ -7229,6 +7237,25 @@ public sealed partial class NetGame : Node3D
     {
         if (_client is null || _camera is null)
             return;
+
+        // Dev/CI --observe: pin the camera at the fixed Quake-space point/angles (ObserverCamera), ignoring
+        // the local player/prediction entirely. The eye = OriginQuake + EyeHeight, so subtract it here to land
+        // the eye EXACTLY on the requested point. Velocity 0 → no bob; not dead → no event-chase.
+        if (ObserverCamera.Active)
+        {
+            _view.Spectating = false;
+            _view.CameraMode = Client.FirstPersonView.ChaseMode.None;
+            var ost = new Client.FirstPersonView.ViewState
+            {
+                OriginQuake = ObserverCamera.OriginQuake - new NVec3(0f, 0f, EyeHeight),
+                VelocityQuake = NVec3.Zero,
+                ViewAnglesQuake = ObserverCamera.AnglesQuake,
+                IsDead = false,
+                EyeHeightZ = 0f, // fall back to the static EyeHeight the origin above compensates for
+            };
+            _view.UpdateView(_camera, ost, dt);
+            return;
+        }
 
         // Follow-cam: while spectating a specific player (spectatee_status > 0), render from THAT player's
         // interpolated pose + view angles, not the local predicted origin. The server glues us to the spectatee

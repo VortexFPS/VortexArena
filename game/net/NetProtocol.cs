@@ -122,11 +122,22 @@ public static class NetProtocol
     /// sign-flipped extrapolation everywhere) to full 32-bit floats — DP7's coord path, matching the owner
     /// block. Wire layout change in every entity delta ⇒ version bump.
     ///
-    /// v16 (hit/kill/typehit feedback parity): the <see cref="XonoticGodot.Net.EntityField.Feedback"/> block
+    /// v17 (weapon item colors): a new 16-bit <c>ColormapOverride</c> entity delta field (EntityField bit 26)
+    /// carries the full authoritative <c>Entity.ColorMapOverride</c> for RENDER_COLORMAPPED non-player entities
+    /// (dropped-weapon loot, colormapped props/monsters), and the non-player snapshot's <c>Weapon</c> field now
+    /// carries a weapon PICKUP's registry id (+1 biased). New delta bit in every entity delta ⇒ version bump.
+    ///
+    /// v18 (hit/kill/typehit feedback parity): the <see cref="XonoticGodot.Net.EntityField.Feedback"/> block
     /// gained three trailing floats — QC STAT(HIT_TIME) / STAT(TYPEHIT_TIME) / STAT(KILL_TIME), the
     /// EndFrame-flushed feedback times driving the client's distinct hit/typehit/kill confirmation sounds
     /// (view.qc HitSound). Unconditional reads inside an existing block ⇒ version bump.
-    public const uint ProtocolVersion = 16;
+    ///
+    /// NOTE: v16 is PERMANENTLY UNUSED. This branch originally claimed 16 while feature/weapon-item-colors
+    /// took 17 specifically to force a textual conflict on this line — the alternative being two builds
+    /// advertising the same version with different entity layouts, where the handshake passes and ReadDelta
+    /// corrupt-decodes. That worked as designed: weapon-item-colors merged first, so this change lands as 18.
+    /// Keep using the skip trick for concurrent wire branches; never reuse 16.
+    public const uint ProtocolVersion = 18;
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;

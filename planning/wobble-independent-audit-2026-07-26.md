@@ -314,13 +314,40 @@ Godot physics has no consumers here. Landed in `project.godot` plus a **live** c
 | run time in a >5% episode | 35.0% | 0.0% |
 | cumulative sim-vs-wall drift | 101 ms (both rails) | 3.8 ms |
 
-**Two consequences to carry forward.** (1) With the engine clock honest, `cl_smoothdt`'s conditioning
-becomes the top remaining dt-side contributor: 0.01% → **1.23%** felt-band, plus a −0.49% DC
-slowdown from the driftcap's shed debt. (2) **The r16 premise that justified `ConditionDt` was
-measured against a mangled "raw" leg** — "`cl_smoothdt 0` felt WORSE" compared median-filtered-
-mangled against mangled, never against a true wall-clock delta. Re-A/B `cl_smoothdt {0,1}` on the
-honest clock before keeping the filter; it may now be unnecessary, and it is the only remaining
-in-process mechanism between the wall clock and displayed motion.
+**Release-export playtest (implosion, 10 bots, 311 s / 43.4k frames, 139 fps avg): Bryan confirms the
+felt wobble is GONE.** Trace `motion_trace_20260726_233904.csv`, zero row gaps: engine clock 0.01%
+felt-band RMS, cumulative sim-vs-wall drift 17.7 ms over five minutes (was ±50 ms rails), 2 episodes
+both under 200 ms. Verdict CLEAN.
+
+### `cl_smoothdt` re-voted to DEFAULT 0 (same session)
+
+The engine fix made `ConditionDt` the only remaining dt-side contributor (0.01% → **0.46%** felt-band
+on the release capture, 1.23% on Debug) — and **the r16 premise that justified it was measured against
+a mangled "raw" leg**: "`cl_smoothdt 0` felt WORSE" compared median-filtered-mangled against mangled,
+never against a true wall-clock delta. Re-A/B'd on the honest clock: **no felt difference.** So the
+filter's costs stand unpaid and the default flips to 0:
+
+- it is **authoritative, not cosmetic** — the conditioned dt ships in `InputCommand.DeltaTime`, so the
+  server integrates it: filter error is real movement-speed error (strafe timing, jump distance);
+- the driftcap **sheds real wall time by design** — 244 ms over 311 s on that capture (+0.078% slow);
+- Base has no dt filter at all, and Godot's previous-frame delta *is* DP's `cl.realframetime`
+  semantics (frametime-parity audit), so there is no lag here to correct that DP does not also have;
+- median-of-9 is a poor estimator for the bimodal frame mixes §3a already found (mode flips pass
+  straight through; the median becomes a majority-vote telegraph).
+
+Verified live at the new default: `dt == raw_dt` on 100% of rows (ConditionDt inert), both detector
+legs identical at 0.20% — the whole dt path is now transparent, i.e. what the engine measures is what
+motion integrates. `cl_smoothdt 1` is kept as an A/B, and **what a future "1 feels better" result
+would mean is now a real diagnostic**: it would be the first evidence in this hunt that the display
+interval genuinely is not the wall interval (DWM re-quantizing presents to vblank) — in which case the
+right filter is not a median but a **display-cadence estimator**, snapping to the measured refresh
+period with drift repayment (the seam doc's S2 done with a correct refresh number; Godot misreads
+60 Hz in borderless). `cl_smoothdt_driftcap` stays either way — correct hygiene, and it is what held
+the measured 1.0847 gated-in skew from running away.
+
+Residual, and now the whole of it: the display side (§3e #1/#2/#4 — DWM vblank sampling, VRR/G-Sync
+never checked, driver queue depth) and machine state (#3). "Feels the same at `cl_smoothdt 0`" is mild
+evidence *against* display re-quantization mattering here, but it does not settle it.
 
 Still unmeasured, and now the whole residual: the display side (§3e #1/#2/#4 — DWM vblank sampling,
 VRR/G-Sync, driver queue depth) and machine state (#3). Those need a display clock; the checks in

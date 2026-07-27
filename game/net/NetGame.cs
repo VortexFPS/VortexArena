@@ -3004,7 +3004,7 @@ public sealed partial class NetGame : Node3D
     private bool _netInputTraceCv;         // net_input_trace: dormant net input→movement pipeline diagnostic (see _Process)
     private int _netTraceTick;             // throttle counter for the net_input_trace log
     private bool _hitchHoldCv = true;      // cl_movement_hitch_hold: Fix B post-hitch stall-aware reconcile (see docs/TROUBLESHOOTING.md)
-    private bool _smoothDtCv = true;       // cl_smoothdt: conditioned client-motion dt (the r16 variance fix; see ConditionDt)
+    private bool _smoothDtCv;              // cl_smoothdt: conditioned client-motion dt — default OFF, see ConditionDt
     private bool _smoothDtCapCv = true;    // cl_smoothdt_driftcap: bounded drift ledger + wide hitch gate (2026-07-26 fix)
     private bool _mouseSmoothDtCv = true;  // m_smoothdt: yaw-channel dt conditioning (2026-07-26; see FlushMouseLook)
     private bool _interpCushionCv = true;  // cl_interp_cushion: full measured-interval slew target (DP boundmode-5 parity; see InterpBias)
@@ -3072,8 +3072,10 @@ public sealed partial class NetGame : Node3D
         _netInputTraceCv = (_sharedCvars?.GetString("net_input_trace") ?? "") == "1";
         // cl_movement_hitch_hold defaults ON (unset → on): treat anything but "0" as enabled.
         _hitchHoldCv = (_sharedCvars?.GetString("cl_movement_hitch_hold") ?? "") != "0";
-        // cl_smoothdt defaults ON (unset → on): the r16 conditioned-motion-dt fix; 0 = raw Godot delta (A/B).
-        _smoothDtCv = (_sharedCvars?.GetString("cl_smoothdt") ?? "") != "0";
+        // cl_smoothdt defaults OFF (unset → off, note the "0" fallback): raw measured delta, Base-faithful.
+        // It was default-ON for the r16 variance fix; that justification died with the engine-clamp root cause
+        // (see ConditionDt) and the playtest on the honest clock found no felt difference. 1 = the filter (A/B).
+        _smoothDtCv = (_sharedCvars?.GetString("cl_smoothdt") ?? "0") != "0";
         // cl_smoothdt_driftcap defaults ON (unset → on): bounded drift ledger + wide hitch gate
         // (the 2026-07-26 oscillator fix); 0 = legacy r16 unbounded ledger (A/B).
         _smoothDtCapCv = (_sharedCvars?.GetString("cl_smoothdt_driftcap") ?? "") != "0";
@@ -4065,10 +4067,27 @@ public sealed partial class NetGame : Node3D
         }
     }
 
-    // ---- cl_smoothdt (r16 rubberband FIX): conditioned client-motion dt --------------------------------
-    // Godot's delta is the PREVIOUS frame's duration; with frame-time variance, advancing motion by it puts
-    // a per-frame error into everything the eye sees (see the note at the top of _Process). This filter
-    // replaces it, for the CLIENT MOTION PATH only, with a better estimate of the CURRENT frame's duration:
+    // ---- cl_smoothdt: conditioned client-motion dt — DEFAULT OFF since 2026-07-26 ----------------------
+    // WHY IT IS OFF NOW. This filter was default-ON as the r16 "variance fix", justified by an A/B in which
+    // `cl_smoothdt 0` felt worse than 1. That A/B was invalid: Godot's MainTimerSync was rewriting the delta
+    // onto a physics_step/N grid with a ±50 ms repayment ledger (planning/wobble-independent-audit-2026-07-26.md
+    // §3f — the actual wobble), so the "raw" leg was never raw. It compared median-filtered-mangled against
+    // mangled. With `physics_jitter_fix 0` restoring the measured delta, the release-export playtest found NO
+    // felt difference between the legs — so the filter is carrying cost for no measured benefit:
+    //   • it is the only remaining dt-side contributor to felt-band speed error (measured by the two-clock
+    //     detector on a 311 s release capture: engine clock 0.01% RMS, after ConditionDt 0.46%);
+    //   • it is AUTHORITATIVE, not cosmetic — the conditioned dt ships in InputCommand.DeltaTime, so the
+    //     server integrates it: filter error is real movement-speed error (strafe timing, jump distance);
+    //   • the driftcap sheds real wall time by design (that capture: 244 ms over 311 s, +0.078% slow);
+    //   • Base has no dt filter at all, and Godot's previous-frame delta IS DP's cl.realframetime semantics
+    //     (frametime-parity audit) — there is no lag here to correct that DP does not also have.
+    // KEEP IT AS AN A/B, and note what a future "1 feels better" result would MEAN: that the display interval
+    // genuinely is not the wall interval (DWM re-quantizes presents to vblank), in which case the right filter
+    // is not a median-of-9 but a DISPLAY-CADENCE estimator — snap to the measured refresh period with drift
+    // repayment (the seam doc's S2, done with a correct refresh number; Godot misreads 60 Hz in borderless).
+    //
+    // What it does when enabled (1): replaces the motion path's dt — the CLIENT MOTION PATH only — with an
+    // estimate of the CURRENT frame's duration rather than last frame's measurement:
     //   estimate = median of the last 9 raw deltas   (robust to one-off spikes — the classic frame pacer),
     //   hitches pass through RAW                      (a real stall must advance real time — no slow-mo),
     //   drift correction                              (a bounded ±4% nudge keeps Σ(smooth) == Σ(raw), so

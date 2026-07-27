@@ -189,11 +189,17 @@ public static class ClientSettings
         // two-snapshot interpolation). Both live-toggle in-session; both DP-archived.
         c.Register("cl_movement", "1", save);
         c.Register("cl_nolerp", "0", save);
-        // (r16) cl_smoothdt: condition the client MOTION path's per-frame dt (rolling-median predicted,
-        // hitch-passthrough, drift-corrected to wall time) instead of Godot's previous-frame delta — with
-        // frame-time variance the raw lagged delta puts a per-frame motion error into everything the eye
-        // sees (the r16 "rubberband"). 0 = raw delta (A/B). Server tick timing is unaffected (always raw).
-        c.Register("cl_smoothdt", "1");
+        // cl_smoothdt: condition the client MOTION path's per-frame dt (rolling-median predicted,
+        // hitch-passthrough, drift-corrected to wall time) instead of the measured delta. DEFAULT 0 since
+        // 2026-07-26: it shipped ON as the r16 "variance fix" on the strength of an A/B whose "raw" leg was
+        // itself engine-mangled (MainTimerSync rewrote the delta — the real wobble, now fixed via
+        // physics_jitter_fix 0). Re-A/B'd on the honest clock: no felt difference, so the filter's costs stand
+        // unpaid — it is the last dt-side felt-band contributor (0.01% -> 0.46% RMS on a 311 s release
+        // capture), it is AUTHORITATIVE (the conditioned dt ships in InputCommand.DeltaTime, so filter error
+        // is real movement-speed error), the driftcap sheds real wall time (+0.078% slow), and Base has no dt
+        // filter. 1 = the filter, kept as an A/B — see NetGame.ConditionDt for what a "1 feels better" result
+        // would mean. Server tick timing is unaffected either way (always raw).
+        c.Register("cl_smoothdt", "0");
         // (2026-07-26 wobble audit) cl_smoothdt_driftcap: bound cl_smoothdt's drift-repayment ledger so a
         // large excursion can't ride the ±4% clamp for hundreds of ms (a sustained, FELT speed error — the
         // measured worst case was 1.5s), and widen the hitch gate so a 144↔250fps cadence transition passes

@@ -380,14 +380,32 @@ public static class StatusEffectsCatalog
     //  Fire damage-over-time (QC server/damage.qc Fire_AddDamage / Fire_ApplyDamage)
     // ============================================================================================
 
-    /// <summary>QC <c>StatusEffects_gettime(this, actor)</c> (status_effects.qc:17-28): the effect's end time,
-    /// clamped up to <paramref name="now"/> so an effect whose timer has just lapsed still reads as active
-    /// for the current frame (the burn-stacking math relies on this). Permanent (ExpireTime &lt;= 0) returns now.</summary>
+    /// <summary>QC <c>StatusEffects_gettime(this, actor)</c> (status_effects.qc:17-25): the effect's stored end
+    /// time, or 0 when the effect is not active.
+    /// <para>
+    /// Upstream 916d46a6 (MR !1608 follow-up) changed this contract. It used to clamp the result UP to the
+    /// current time, so an effect whose timer had lapsed but whose tick had not yet removed it still read as
+    /// "ends now". That made a caller doing <c>t = gettime(); apply(t + duration)</c> compute a window starting
+    /// in the past — with <c>g_spawnshieldtime 0</c> a picked-up superweapon was lost the instant it was taken,
+    /// and the same hit stacked powerups. It now returns the RAW stored time (which may be in the past for one
+    /// frame) and callers that need a floor apply their own <c>max(now, …)</c>.
+    /// </para>
+    /// <para>
+    /// Port deviation: <see cref="ActiveStatusEffect.ExpireTime"/> &lt;= 0 is this port's "permanent" convention
+    /// (SuperweaponTimeout persistence, FreezeTag/NadeIce until-thawed) where QC uses <c>m_persistent</c> with a
+    /// stored time that is simply never consulted. A permanent effect is still ACTIVE, so returning its stored
+    /// 0 would read as "inactive" to every caller — it keeps returning <paramref name="now"/> instead, i.e.
+    /// "running, ends no earlier than this frame". Only the expired-but-present case changed.
+    /// </para></summary>
     public static float GetTime(Entity e, StatusEffectDef def, float now)
     {
         foreach (var s in e.StatusEffects)
-            if (s.DefId == def.RegistryId)
-                return (s.ExpireTime > 0f && s.ExpireTime >= now) ? s.ExpireTime : now;
+        {
+            if (s.DefId != def.RegistryId) continue;
+            // QC: if(!StatusEffects_active(this, actor)) return 0;
+            if ((s.Flags & StatusEffectFlags.Active) == 0) return 0f;
+            return s.ExpireTime > 0f ? s.ExpireTime : now;   // (<= 0 == the port's permanent convention)
+        }
         return 0f;
     }
 
@@ -413,7 +431,12 @@ public static class StatusEffectsCatalog
         if (Has(e, Burning))
         {
             float fireEndTime = GetTime(e, Burning, now);
-            float minTime = fireEndTime - now;
+            // Floor the remaining-burn interval at 0. Since upstream 916d46a6 GetTime returns the raw stored
+            // end time, so a burn that lapsed between ticks yields a NEGATIVE minTime here and poisons the
+            // stacking LEMMA below (minDamage goes negative, shrinking the new burn). Upstream leaves this
+            // unclamped and eats a sub-frame shortfall; the clamp costs nothing and keeps the LEMMA's inputs
+            // in their documented domain.
+            float minTime = MathF.Max(0f, fireEndTime - now);
             float maxTime = MathF.Max(minTime, t);
             float minDps = e.FireDamagePerSec;
             float maxDps = MathF.Max(minDps, dps);
@@ -685,17 +708,21 @@ public static class StatusEffectsCatalog
                 continue;
             }
 
+            // QC m_tick timeout: time > statuseffect_time -> m_remove(TIMEOUT) (no removal sound).
+            // ORDER MATTERS (upstream 916d46a6): every per-effect m_tick now runs SUPER first and then bails on
+            // `if(!this.m_active(this, actor)) return;`, so the timeout removal happens BEFORE the per-effect
+            // body. The port previously ran the body first, which gave an expiring effect one extra tick on the
+            // frame it lapsed — a bonus burn tick, and a re-set of the EF_ flags that m_remove had just cleared.
+            if (s.ExpireTime > 0f && now >= s.ExpireTime)
+            {
+                Remove(e, def, StatusEffectRemoval.Timeout);
+                continue;   // QC: !m_active -> the per-effect body is skipped
+            }
+
             // Per-effect m_tick body (burning fire damage + water/frozen extinguish, stunned frozen-extinguish).
             // A true return is the per-effect m_remove(NORMAL) request.
             if (def.OnTick != null && def.OnTick(e, s))
-            {
                 Remove(e, def, StatusEffectRemoval.Normal);
-                continue;
-            }
-
-            // QC m_tick timeout: time > statuseffect_time -> m_remove(TIMEOUT) (no removal sound).
-            if (s.ExpireTime > 0f && now >= s.ExpireTime)
-                Remove(e, def, StatusEffectRemoval.Timeout);
         }
     }
 

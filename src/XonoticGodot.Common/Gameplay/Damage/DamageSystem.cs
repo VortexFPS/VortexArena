@@ -222,7 +222,8 @@ public sealed class DamageSystem : IDamageSystem
                                 {
                                     // virtual: the attacker only "feels" the mirror damage on the HUD; no HP lost.
                                     (float vt, float vs) = HealthArmorApplyDamage(
-                                        atk.GetResource(ResourceType.Armor), ArmorBlockPercent(deathType), mirrorDamage);
+                                        atk.GetResource(ResourceType.Health), atk.GetResource(ResourceType.Armor),
+                                        ArmorBlockPercent(deathType), mirrorDamage);
                                     atk.DmgTake += vt;
                                     atk.DmgSave += vs;
                                     atk.DmgInflictor = inflictor;
@@ -233,7 +234,8 @@ public sealed class DamageSystem : IDamageSystem
                                 if (CvarBool(CvarFriendlyFireVirtual))
                                 {
                                     (float vt, float vs) = HealthArmorApplyDamage(
-                                        targ.GetResource(ResourceType.Armor), ArmorBlockPercent(deathType), damage);
+                                        targ.GetResource(ResourceType.Health), targ.GetResource(ResourceType.Armor),
+                                        ArmorBlockPercent(deathType), damage);
                                     targ.DmgTake += vt;
                                     targ.DmgSave += vs;
                                     targ.DmgInflictor = inflictor;
@@ -392,7 +394,9 @@ public sealed class DamageSystem : IDamageSystem
     /// </summary>
     private void PlayerCorpseDamage(Entity targ, Entity? inflictor, Entity? attacker, string deathType, float damage)
     {
-        (float take, float save) = HealthArmorApplyDamage(
+        // QC passes INFINITY for health here: a corpse has no health ceiling, so `take` stays bounded by the
+        // incoming damage exactly as it was before upstream a7664932 added the bound.
+        (float take, float save) = HealthArmorApplyDamage(float.PositiveInfinity,
             MathF.Max(targ.GetResource(ResourceType.Armor), 0f), ArmorBlockPercent(deathType), damage);
 
         targ.TakeResource(ResourceType.Armor, save);
@@ -437,7 +441,7 @@ public sealed class DamageSystem : IDamageSystem
             if (HasSpawnShield(targ) && shieldBlock < 1f)
                 damage *= 1f - QClamp(shieldBlock, 0f, 1f);
 
-            (take, save) = HealthArmorApplyDamage(initialArmor, ArmorBlockPercent(deathType), damage);
+            (take, save) = HealthArmorApplyDamage(initialHealth, initialArmor, ArmorBlockPercent(deathType), damage);
         }
 
         // --- credited-attacker window (QC player.qc ~293 .pusher/.pushltime) ---
@@ -488,9 +492,11 @@ public sealed class DamageSystem : IDamageSystem
             take = hook.DamageTake;
             save = hook.DamageSave;
         }
+        // NB (upstream a7664932): HealthArmorApplyDamage already bounds take and save to current health and
+        // armor, so these re-clamps only exist to re-bound what a SplitHealthArmor handler wrote back — the
+        // handlers themselves need not duplicate the clamp.
         take = QClamp(take, 0f, targ.GetResource(ResourceType.Health));
         save = QClamp(save, 0f, targ.GetResource(ResourceType.Armor));
-        float excess = MathF.Max(0f, damage - take - save);
 
         // --- armor / body-impact sound (QC player.qc ~327): the hit-feedback "clink"/"thud". Gated on
         //     sound_allowed(MSG_BROADCAST, attacker). The armor sound is suppressed when the hit is fatal
@@ -586,10 +592,13 @@ public sealed class DamageSystem : IDamageSystem
         }
 
         // [T57] accuracy REAL credit + per-frame damage score columns — QC server/player.qc:432-447.
-        // realdmg = damage - excess (the part that actually removed health/armor, no overkill).
+        // realdmg = take + save (upstream a7664932): the part that actually removed health/armor. This was
+        // `damage - excess` with excess = max(0, damage - take - save) — algebraically identical whenever
+        // take + save <= damage, but it silently under-reports when a SplitHealthArmor handler inflates them
+        // past the incoming damage (excess floors at 0). The direct sum drops the intermediate and is exact.
         if ((dhRemoved != 0f || daRemoved != 0f) && !forbidLoggingDamage)
         {
-            float realdmg = damage - excess;
+            float realdmg = take + save;
             bool deathKill = DeathTypes.BaseOf(deathType) == DeathTypes.Kill;
             // QC round gate: !(round active && !round started) && time >= game_starttime. No round handler is
             // reachable from the pipeline; the game-start half uses the StartItem host seam (game_starttime).
@@ -790,14 +799,22 @@ public sealed class DamageSystem : IDamageSystem
     // ===============================================================================================
 
     /// <summary>
-    /// QC <c>healtharmor_applydamage(armor, armorblock, deathtype, damage)</c> (common/util.qc):
-    /// <c>save = bound(0, damage * armorblock, armor)</c>, <c>take = bound(0, damage - save, damage)</c>.
+    /// QC <c>healtharmor_applydamage(health, armor, armorblock, deathtype, damage)</c> (common/util.qc):
+    /// <c>save = bound(0, damage * armorblock, armor)</c>, <c>take = bound(0, damage - save, health)</c>.
     /// Drown and HITTYPE_ARMORPIERCE force armorblock to 0 (handled by <see cref="ArmorBlockPercent"/>).
+    /// <para>
+    /// Upstream a7664932 (MR !1626) added the <paramref name="health"/> bound: <c>take</c> used to clamp to
+    /// the incoming <c>damage</c>, so a 300-damage hit on a 40-health player reported 300 taken instead of
+    /// 40 and every consumer of take/save over-counted the overkill. Clamping to current health makes
+    /// take + save the amount actually absorbed, which is what the damage log and the accuracy/score
+    /// columns want. Callers with no health ceiling (a corpse) pass <see cref="float.PositiveInfinity"/>,
+    /// matching QC's <c>INFINITY</c>.
+    /// </para>
     /// </summary>
-    private static (float take, float save) HealthArmorApplyDamage(float armor, float armorBlock, float damage)
+    private static (float take, float save) HealthArmorApplyDamage(float health, float armor, float armorBlock, float damage)
     {
         float save = QClamp(damage * armorBlock, 0f, armor);
-        float take = QClamp(damage - save, 0f, damage);
+        float take = QClamp(damage - save, 0f, health);
         return (take, save);
     }
 

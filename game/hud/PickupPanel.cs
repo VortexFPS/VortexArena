@@ -50,12 +50,20 @@ public partial class PickupPanel : HudPanel
     public bool Spectating { get; set; }
 
     /// <summary>
-    /// The networked match timer used for the optional leading-timer readout (QC <c>HUD_Pickup_Time</c>
-    /// fed by the timer panel's clock). The integration layer supplies a formatted "M:SS" string for the
-    /// instant a pickup happened; null/empty hides the timer regardless of <c>_showtimer</c>. Self-contained
-    /// fallback: when unset we synthesize an elapsed "M:SS" from the panel's own clock so the slot still reads.
+    /// The frozen match-clock string for the live slot — the game time the pickup HAPPENED (QC
+    /// <c>seconds_tostring(HUD_Pickup_Time(last_pickup_time))</c>: constant while displayed, NOT a running
+    /// age). Stamped by <see cref="Push"/> from <see cref="MatchTimeProvider"/>; assignable directly by an
+    /// integration layer that prefers to feed its own string. Null/empty falls back to the panel-clock freeze.
     /// </summary>
     public string? TimerText { get; set; }
+
+    /// <summary>
+    /// Supplies the CURRENT match-clock string in the timer panel's display convention (count-up elapsed, or
+    /// count-down remaining when a timelimit runs — QC <c>HUD_Pickup_Time</c>). Sampled ONCE inside
+    /// <see cref="Push"/> so the readout freezes at the event. Wired by the host to
+    /// <see cref="TimerPanel.PickupTimeString"/>; null (unwired / timer unfed) → the panel-clock fallback.
+    /// </summary>
+    public System.Func<string?>? MatchTimeProvider { get; set; }
 
     /// <summary>
     /// Record a pickup (QC <c>Pickup_Update</c>). If it is the same item as the live slot AND the display
@@ -87,6 +95,9 @@ public partial class PickupPanel : HudPanel
         // (which would silently self-blank the panel via the _count > 0 checks).
         _count = (int)System.Math.Min((long)_count + count, int.MaxValue);
         _pickupTime = _now;
+        // Freeze the match clock at THIS event (QC last_pickup_time is a fixed STAT; the drawn string never
+        // ticks). Sampled here — not at draw — so the readout is the game time the pickup happened.
+        TimerText = MatchTimeProvider?.Invoke();
         QueueRedraw();
     }
 
@@ -261,14 +272,15 @@ public partial class PickupPanel : HudPanel
     }
 
     /// <summary>
-    /// Resolve the leading-timer string: the integration-supplied <see cref="TimerText"/> when present
-    /// (QC <c>seconds_tostring(HUD_Pickup_Time(last_pickup_time))</c>), else a self-contained "M:SS" of how
-    /// long ago the pickup happened so the readout is never blank when the timer is requested.
+    /// Resolve the leading-timer string: the frozen <see cref="TimerText"/> when present (QC
+    /// <c>seconds_tostring(HUD_Pickup_Time(last_pickup_time))</c>), else the panel's OWN clock reading at the
+    /// pickup instant — also frozen. Never the running age: the readout is the game time the event happened.
+    /// (The panel clock starts at 0 with the HUD, so the fallback approximates the count-up match clock.)
     /// </summary>
     private string ResolveTimerText()
     {
         if (!string.IsNullOrEmpty(TimerText)) return TimerText!;
-        return SecondsToString((float)(_now - _pickupTime));
+        return SecondsToString((float)_pickupTime);
     }
 
     /// <summary>

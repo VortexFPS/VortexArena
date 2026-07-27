@@ -451,9 +451,23 @@ public static class SpawnSystem
         // QC SelectSpawnPoint: with probability (1 - g_spawn_furthest) use a near-uniform pick (1,1,1); otherwise
         // a strongly-far-biased pick (1,5000,5) — `if (random() > g_spawn_furthest)` takes the near branch, so a
         // HIGHER g_spawn_furthest means MORE spawns far from players. Default 0.5 = 50/50 (identical to before).
-        Entity chosen = _rng.NextDouble() > Cvar("g_spawn_furthest", 0.5f)
+        // [R0b] CvarOr (not the 0-fallback Cvar) so an explicit g_spawn_furthest 0 (always-uniform, a legitimate
+        // Base config) reads back as 0 instead of being silently coerced to the 0.5 default.
+        bool farBranch = !(_rng.NextDouble() > CvarOr("g_spawn_furthest", 0.5f));
+        Entity chosen = !farBranch
             ? WeightedPick(scored, lower: 1f, upper: 1f, exponent: 1f)
-            : WeightedPick(scored, lower: 1f, upper: 5000f, exponent: 5f);
+            // [R3] The far pick: dist^5 roulette by default, or (when g_spawn_furthest_topfraction > 0) a uniform
+            // pick among the "far set" — every spot within topfraction of the max weight — so the single furthest
+            // spot is never a near-certainty (the spawn-control lever). topfraction 0 keeps the faithful exponent.
+            : WeightedPickFar(scored, CvarOr("g_spawn_furthest_topfraction", 0f));
+
+        // [R5] Occupied-spot re-pick: if the chosen spot's placement box overlaps a live player hull, re-pick once
+        // from the remaining scored set (UT-style) rather than dropping the spawnee on top of them (Base overlap).
+        chosen = RepickIfOccupied(chosen, scored, livePlayers, farBranch);
+
+        // [sv_spawn_debug] one structured line per resolved spawn so a bot match can be scored for bad spawns
+        // (a visible enemy within LOS distance) before/after the anti-abuse levers. Gated; silent by default.
+        LogSpawnDebug(forPlayer, chosen, livePlayers, farBranch);
 
         return ToSpawnPoint(chosen);
     }
@@ -524,10 +538,20 @@ public static class SpawnSystem
         // select time: trace the player box at the actual placement (spot.origin + the PutPlayerInServer z-nudge)
         // and, on trace_startsolid, attempt the move-out-of-solid relocation, persisting it onto the spot's origin
         // (the spot entity is re-read each selection, so the nudge sticks like Base's permanent link-time move).
+        //
+        // [R0a] The trace is NOMONSTERS (world + brush-model entities, no player hulls). Base runs this once at
+        // map LOAD (relocate_spawnpoint), when the world is empty of players — so it only ever caught spots
+        // embedded in solid geometry (a mapper error). The port runs it per-SELECTION, when players are live; a
+        // plain Normal trace here would clip against player hulls, so an enemy standing on a spot would trip
+        // startsolid and either PERMANENTLY relocate the spot ~70qu upward (the persisted SetOrigin below) or,
+        // under a low ceiling, get it scored -1 and dropped from the pool while they stand there — a body-block
+        // spawn-control lever Base doesn't have. NoMonsters restores Base's intent (players can't displace spots)
+        // while STILL rejecting a spot covered by a closed func_door/plat (Solid.Bsp clips under NoMonsters —
+        // WorldOnly would skip those and spawn the player inside the door). Occupied spots are policy (R5), not here.
         if (Api.Services is not null)
         {
             Vector3 place = spot.Origin + new Vector3(0f, 0f, 1f - PlayerMins.Z - 24f);
-            TraceResult bad = Api.Trace.Trace(place, PlayerMins, PlayerMaxs, place, MoveFilter.Normal, forPlayer);
+            TraceResult bad = Api.Trace.Trace(place, PlayerMins, PlayerMaxs, place, MoveFilter.NoMonsters, forPlayer);
             if (bad.StartSolid)
             {
                 if (!CvarBool("g_spawnpoints_auto_move_out_of_solid", true)
@@ -538,6 +562,10 @@ public static class SpawnSystem
 
         // QC seeds 'shortest' with vlen(world.maxs - world.mins); without world bounds here we use a large
         // constant so a spot with no nearby players still gets a high (good) weight.
+        // [R4] In teamplay, g_spawn_distance_enemies_only measures the nearest-player distance over ENEMIES only
+        // (skipping live teammates), so the scorer stops shoving you away from your own team the way it pushes you
+        // off enemies — the UT/Halo teammate-positive asymmetry. Off (default) keeps Base's all-players distance.
+        bool enemiesOnly = Scoring.GameScores.Teamplay && CvarBool("g_spawn_distance_enemies_only", false);
         float shortest = 1_000_000f;
         for (int i = 0; i < livePlayers.Count; i++)
         {
@@ -546,12 +574,28 @@ public static class SpawnSystem
             // player — QC IS_PLAYER excludes spectators, so they must not bias spawn distance scoring).
             if (ReferenceEquals(other, forPlayer) || other.IsDead || other.IsObserver)
                 continue;
+            if (enemiesOnly && SameTeamLive(forPlayer, other))
+                continue; // [R4] a live teammate no longer repels the spawn
             float d = Vector3.Distance(other.Origin, spot.Origin);
             if (d < shortest)
                 shortest = d;
         }
 
         float prio = shortest > SpawnMinDist ? PrioGoodDistance : 0f;
+
+        // [R1] LOS-aware demotion (g_spawn_avoid_los, default ON): if any live enemy can SEE this spot — map-PVS
+        // prefilter, then a world-only eye-to-eye traceline within g_spawn_avoid_los_distance — drop the
+        // good-distance tier so a hidden spot outscores a visible one. This is the direct answer to "I spawned in
+        // his crosshair". Floored at 0 so it never makes a spot unusable (a visible spot is a last resort, not
+        // rejected). The Duel gametype disables this for the match (Duel.Activate saves + sets g_spawn_avoid_los 0,
+        // Deactivate restores) to preserve the competitive spawn-reading meta.
+        if (CvarBool("g_spawn_avoid_los", true) && SpotSeenByEnemy(forPlayer, spot, livePlayers))
+            prio = MathF.Max(0f, prio - PrioGoodDistance);
+
+        // [R2] Death-point avoidance (g_spawn_avoid_death_radius, default 0/off): demote spots within the radius of
+        // where THIS player just died, decaying over g_spawn_avoid_death_time since the death — breaks the "respawn
+        // into the same fight" loop and the killer's re-aim camp. Off by default (a pure divergence from Base).
+        prio = MathF.Max(0f, prio - DeathAvoidPenalty(forPlayer, spot));
 
         // QC Spawn_Score spawn_evalfunc score-rewriting branch (server/spawnpoints.qc:285): after computing the base
         // (prio, weight), pass the score through any installed spawn_evalfunc that can ADD to the priority (rather than
@@ -613,6 +657,189 @@ public static class SpawnSystem
         }
 
         return chosen ?? scored[0].spot;
+    }
+
+    /// <summary>
+    /// [R3] The far-branch pick. With <c>g_spawn_furthest_topfraction</c> at 0 this is the faithful QC far pick
+    /// (<c>dist^5</c> roulette over the best prio tier). With a positive top-fraction it instead picks UNIFORMLY
+    /// among the "far set" — every spot in the best tier whose <c>dist^5·cnt</c> weight is within
+    /// <paramref name="topFraction"/> of the tier's max — so the single furthest spot is no longer a near-certainty
+    /// (the spawn-control lever the complaints describe), while spawns still land far from players.
+    /// </summary>
+    private static Entity WeightedPickFar(List<(Entity spot, float prio, float weight)> scored, float topFraction)
+    {
+        if (topFraction <= 0f)
+            return WeightedPick(scored, lower: 1f, upper: 5000f, exponent: 5f);
+
+        // Best prio tier (QC priority = (weight>=1)*0.5 + prio; weight is a distance >= 1 here, so the tier is the
+        // max prio), then the max dist^5·cnt weight within it.
+        float bestPrio = float.NegativeInfinity;
+        foreach (var s in scored)
+            if (s.prio > bestPrio) bestPrio = s.prio;
+
+        float maxW = 0f;
+        foreach (var s in scored)
+        {
+            if (s.prio != bestPrio) continue;
+            int cnt = s.spot.Cnt != 0 ? s.spot.Cnt : 1;
+            float w = MathF.Pow(QBound(1f, s.weight, 5000f), 5f) * cnt;
+            if (w > maxW) maxW = w;
+        }
+
+        float threshold = topFraction * maxW;
+        Entity? chosen = null;
+        int count = 0;
+        foreach (var s in scored)
+        {
+            if (s.prio != bestPrio) continue;
+            int cnt = s.spot.Cnt != 0 ? s.spot.Cnt : 1;
+            float w = MathF.Pow(QBound(1f, s.weight, 5000f), 5f) * cnt;
+            if (w < threshold) continue;
+            count++;
+            if (_rng.Next(count) == 0) chosen = s.spot; // uniform reservoir over the far set
+        }
+        return chosen ?? WeightedPick(scored, lower: 1f, upper: 5000f, exponent: 5f);
+    }
+
+    /// <summary>
+    /// [R5] Occupied-spot re-pick (<c>g_spawn_occupied_repick</c>, default on): if <paramref name="chosen"/>'s
+    /// player-placement box overlaps a live player's hull, drop it and re-pick ONCE from the remaining scored
+    /// spots (UT-style avoid-overlap), rather than dropping the spawnee on top of them (Base's overlap). Bounded to
+    /// a single re-pick — the replacement is accepted even if it too is occupied (an all-crowded map), so there is
+    /// no loop and no failure path.
+    /// </summary>
+    private static Entity RepickIfOccupied(Entity chosen, List<(Entity spot, float prio, float weight)> scored,
+        IReadOnlyList<Player> livePlayers, bool farBranch)
+    {
+        if (!CvarBool("g_spawn_occupied_repick", true) || !IsOccupied(chosen, livePlayers))
+            return chosen;
+
+        var remaining = new List<(Entity spot, float prio, float weight)>(scored.Count);
+        foreach (var s in scored)
+            if (!ReferenceEquals(s.spot, chosen)) remaining.Add(s);
+        if (remaining.Count == 0)
+            return chosen; // only the occupied spot exists — nothing better to do
+
+        return farBranch
+            ? WeightedPickFar(remaining, CvarOr("g_spawn_furthest_topfraction", 0f))
+            : WeightedPick(remaining, lower: 1f, upper: 1f, exponent: 1f);
+    }
+
+    /// <summary>[R5] Does a live player's hull overlap the spawn placement box at <paramref name="spot"/>? A pure
+    /// AABB test (no trace) so only an actual body on the spot counts — a wall/floor never does.</summary>
+    private static bool IsOccupied(Entity spot, IReadOnlyList<Player> livePlayers)
+    {
+        Vector3 place = spot.Origin + new Vector3(0f, 0f, 1f - PlayerMins.Z - 24f);
+        Vector3 lo = place + PlayerMins, hi = place + PlayerMaxs;
+        for (int i = 0; i < livePlayers.Count; i++)
+        {
+            Player other = livePlayers[i];
+            if (other.IsDead || other.IsObserver) continue;
+            Vector3 omin = other.Origin + PlayerMins, omax = other.Origin + PlayerMaxs;
+            if (lo.X <= omax.X && hi.X >= omin.X &&
+                lo.Y <= omax.Y && hi.Y >= omin.Y &&
+                lo.Z <= omax.Z && hi.Z >= omin.Z)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>[R1] The standing eye height (QC PL_VIEW_OFS) used as both endpoints of the LOS sightline.</summary>
+    private static readonly Vector3 StandEye = XonoticGodot.Common.Physics.PlayerPhysics.StandViewOfs;
+
+    /// <summary>QC <c>SAME_TEAM</c> for two live players: equal, non-zero team colors.</summary>
+    private static bool SameTeamLive(Player a, Player b) => a.Team != Teams.None && a.Team == b.Team;
+
+    /// <summary>Is <paramref name="other"/> an enemy of <paramref name="self"/>? In FFA everyone is; in teamplay
+    /// only a different (valid) team.</summary>
+    private static bool IsEnemy(Player self, Player other)
+        => !Scoring.GameScores.Teamplay || !SameTeamLive(self, other);
+
+    /// <summary>
+    /// [R1] Can any live enemy currently SEE <paramref name="spot"/>? For each enemy within
+    /// <c>g_spawn_avoid_los_distance</c>, a cheap map-PVS reject (<see cref="ITraceService.CheckPvs"/>, a
+    /// conservative superset) then an exact WORLD-ONLY eye-to-eye traceline — a clear map sightline means the spot
+    /// is exposed. World-only so a teammate momentarily standing in the sightline doesn't mask an exposed spot.
+    /// </summary>
+    private static bool SpotSeenByEnemy(Player forPlayer, Entity spot, IReadOnlyList<Player> livePlayers)
+    {
+        if (Api.Services is null)
+            return false;
+        float losDist = CvarOr("g_spawn_avoid_los_distance", 1250f);
+        if (losDist <= 0f)
+            return false;
+
+        Vector3 spotEye = spot.Origin + StandEye;
+        for (int i = 0; i < livePlayers.Count; i++)
+        {
+            Player other = livePlayers[i];
+            if (ReferenceEquals(other, forPlayer) || other.IsDead || other.IsObserver)
+                continue;
+            if (!IsEnemy(forPlayer, other))
+                continue;
+            if (Vector3.Distance(other.Origin, spot.Origin) > losDist)
+                continue;
+            Vector3 enemyEye = other.Origin + StandEye;
+            if (!Api.Trace.CheckPvs(spotEye, enemyEye))
+                continue; // not even potentially visible per the compiled PVS — skip the trace
+            TraceResult t = Api.Trace.Trace(spotEye, Vector3.Zero, Vector3.Zero, enemyEye, MoveFilter.WorldOnly, forPlayer);
+            if (t.Fraction >= 1f)
+                return true; // clear sightline → the spot is visible to this enemy
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// [R2] The death-point avoidance penalty for <paramref name="spot"/> (0 when <c>g_spawn_avoid_death_radius</c>
+    /// is 0/off). Spots within the radius of where <paramref name="forPlayer"/> last died are demoted, the penalty
+    /// decaying linearly to 0 over <c>g_spawn_avoid_death_time</c> seconds since the death (Halo-style). A player
+    /// who hasn't died yet (zero <see cref="Player.DeathOrigin"/>) is never penalized.
+    /// </summary>
+    private static float DeathAvoidPenalty(Player forPlayer, Entity spot)
+    {
+        float radius = CvarOr("g_spawn_avoid_death_radius", 0f);
+        if (radius <= 0f || forPlayer.DeathOrigin == Vector3.Zero)
+            return 0f;
+        float now = Api.Services is not null ? Api.Clock.Time : 0f;
+        float window = CvarOr("g_spawn_avoid_death_time", 8f);
+        float elapsed = now - forPlayer.DeathTime;
+        if (window > 0f && elapsed >= window)
+            return 0f; // the death is too old to still steer the spawn
+        if (Vector3.Distance(spot.Origin, forPlayer.DeathOrigin) >= radius)
+            return 0f;
+        float decay = window > 0f ? MathF.Max(0f, 1f - elapsed / window) : 1f;
+        return PrioGoodDistance * decay;
+    }
+
+    /// <summary>
+    /// [sv_spawn_debug] Emit one structured line per resolved spawn — the spawning player, the chosen spot, the
+    /// pick branch, the nearest-enemy distance, and whether the spot is visible to an enemy — so a bot match can be
+    /// scored for "bad spawns" (a visible enemy within LOS distance) before/after the anti-abuse levers. Gated on
+    /// <c>sv_spawn_debug</c> (distinct from Base's <c>spawn_debug</c>, which triggers GotoNextMap); silent by default.
+    /// </summary>
+    private static void LogSpawnDebug(Player forPlayer, Entity chosen, IReadOnlyList<Player> livePlayers, bool farBranch)
+    {
+        if (Api.Services is null || !CvarBool("sv_spawn_debug", false))
+            return;
+
+        float nearest = float.PositiveInfinity;
+        for (int i = 0; i < livePlayers.Count; i++)
+        {
+            Player other = livePlayers[i];
+            if (ReferenceEquals(other, forPlayer) || other.IsDead || other.IsObserver)
+                continue;
+            if (!IsEnemy(forPlayer, other))
+                continue;
+            float d = Vector3.Distance(other.Origin, chosen.Origin);
+            if (d < nearest) nearest = d;
+        }
+        bool seen = SpotSeenByEnemy(forPlayer, chosen, livePlayers);
+        string near = float.IsPositiveInfinity(nearest)
+            ? "none"
+            : nearest.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"[spawn] player=#{forPlayer.Index} spot=#{chosen.Index} branch={(farBranch ? "far" : "uniform")} " +
+            $"nearestEnemy={near} enemyLOS={(seen ? "YES" : "no")}");
     }
 
     /// <summary>Collect all spawnpoint entities across the known classnames (deduped, stable order).</summary>
@@ -700,7 +927,10 @@ public static class SpawnSystem
         {
             Vector3 newOrigin = spot.Origin + new Vector3(0f, 0f, dz);
             Vector3 place = newOrigin + new Vector3(0f, 0f, zNudge);
-            TraceResult t = Api.Trace.Trace(place, PlayerMins, PlayerMaxs, place, MoveFilter.Normal, forPlayer);
+            // [R0a] NoMonsters to match the ScoreSpot gate that called us: we relocate out of world/brush-entity
+            // embedding only, never off a live player hull (a player can't permanently displace a spawnpoint by
+            // standing on it — but a closed door still counts as solid, so we don't relocate INTO one either).
+            TraceResult t = Api.Trace.Trace(place, PlayerMins, PlayerMaxs, place, MoveFilter.NoMonsters, forPlayer);
             if (!t.StartSolid)
             {
                 // Commit the relocation onto the spot (QC setorigin in relocate_spawnpoint). Persists across

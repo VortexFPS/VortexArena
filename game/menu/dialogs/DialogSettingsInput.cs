@@ -282,7 +282,9 @@ public partial class InvertMouseCheckBox : CheckBox
         if (_updating) return;
         float cur = MenuState.Cvars.GetFloat(_cvar);
         float mag = Mathf.Abs(cur);
-        if (mag < 0.0001f) mag = DefaultMagnitude; // don't lose the value if it was somehow 0
+        // 0 → don't lose the value; ≥0.5 → legacy sign-only ±1 from the old registration (DP magnitudes
+        // are ~0.022) — normalize to the DP default instead of re-archiving the bogus scale.
+        if (mag < 0.0001f || mag >= 0.5f) mag = DefaultMagnitude;
         float next = pressed ? -mag : mag;
         MenuState.Cvars.Set(_cvar, next.ToString(CultureInfo.InvariantCulture));
         MenuState.Cvars.MarkArchived(_cvar);

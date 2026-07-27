@@ -12,11 +12,11 @@ namespace XonoticGodot.Game.Menu;
 /// to open the in-game HUD editor. Reached from the menu (not in a match) the not-connected branch is taken, so
 /// we issue <c>map _hudsetup</c> + <c>_hud_configure 1</c> and close.
 ///
-/// FAITHFUL UI NOW: XonoticGodot has no in-game HUD editor backend; <c>map _hudsetup</c> routes through
-/// <see cref="MenuCommand"/> (StartMap hook) and the <c>_hud_configure</c> set writes the shared cvar store the
-/// game reads, so the binding is real even though the editor it drives is pending. "No" was QC
-/// <c>Dialog_Close</c> — here the universal Back. Binds no persistent settings cvars of its own.
-/// QC title "Enter HUD editor".
+/// The flow is LIVE end-to-end: <c>map _hudsetup</c> routes through <see cref="MenuCommand"/> (StartMap hook;
+/// the map ships in the maps pk3), <c>_hud_configure 1</c> lands in the shared cvar store via the bare-cvar
+/// fallback, and the in-game editor it enables is <see cref="Game.Hud.HudConfigEditor"/> (the hud_config.qc
+/// port). "No" was QC <c>Dialog_Close</c> — here the universal Back. Binds no persistent settings cvars of
+/// its own. QC title "Enter HUD editor".
 /// </summary>
 public partial class DialogHudConfirm : MenuScreen
 {

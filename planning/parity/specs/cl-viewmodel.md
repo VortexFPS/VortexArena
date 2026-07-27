@@ -107,11 +107,13 @@ shared weapon state (active/switch weapon, shot origin, animation frame) the ser
   (NetGame:1331) from predicted velocity + live view angles + onground. Does NOT handle
   `cl_followmodel_velocity_absolute` or the lean teleport reset (`csqcmodel_teleported`). Toggles/constants are
   `[Export]` defaults that match Base but are NOT read from cvars.
-- **Muzzle flash** → local: `ViewModel.Fire` → `EffectSystem.MuzzleFlashAttached` (a heuristic particle burst at
-  the `tag_shot` socket) + a flash `OmniLight3D` + recoil; driven live from NetGame fire prediction
-  (`PredictFireShot`/`UpdateLocalFireFeedback`). Remote: server `EffectEmitter.Emit("*_MUZZLEFLASH", ...,
-  except: actor)` → world-space burst (the QC `Send_Effect_Except`). The **muzzle flash MODEL** (spinning md3,
-  Devastator/Machinegun) is NOT ported. Secondary fire does not flash (only `_attackHeld` primary calls Fire).
+- **Muzzle flash** → local: `ViewModel.Fire` → `EffectSystem.MuzzleFlash` — the FULL effectinfo `Spawn` path
+  (parsed blocks + block dlight + faithful/modern router, the same path the networked copy takes) at the
+  `tag_shot` socket's live world transform with `dir*1000`, + a flash `OmniLight3D` + recoil; driven live from
+  NetGame fire prediction (`PredictFireShot`/`UpdateLocalFireFeedback`). (The old heuristic attached burst,
+  `MuzzleFlashAttached`, was deleted — it made every weapon's local flash read generic, playtest #49.)
+  Remote: server `EffectEmitter.Emit("*_MUZZLEFLASH", ..., except: actor)` → world-space burst (the QC
+  `Send_Effect_Except`). Secondary shots flash on the press edge (`SecondaryFiresShot` gate).
 - **Casings** → `ShellCasings.cs` is a complete, faithful client casing sim (bounce, tumble, fade, maxcount,
   real `casing_bronze.iqm`/generated shell). BUT it is **DEAD**: `EffectSystem.SpawnCasing` has ZERO live
   callers and there is NO server-side `SpawnCasing`/`casings` emission. No brass is ever ejected in a match.

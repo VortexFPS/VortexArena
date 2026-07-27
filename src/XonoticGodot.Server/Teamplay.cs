@@ -476,7 +476,9 @@ public sealed class Teamplay
         {
             int forcedColor = IndexToTeam(botForced);
             // QC SetPlayerTeam → SetPlayerColors: set .team AND .clientcolors (the auto-join skips the mutator hook).
-            SetPlayerColors(joiner, forcedColor - 1);
+            // NO -1 here: QC's `new_team - 1` maps SVQC .team values (5/14/13/10) to color codes; the port's
+            // Teams constants (4/13/12/9) ARE the color codes already (r16 green-team bug — a double subtract).
+            SetPlayerColors(joiner, forcedColor);
             return forcedColor;
         }
 
@@ -490,7 +492,7 @@ public sealed class Teamplay
             if (idx >= 1 && idx <= TeamCount && allowed[idx - 1])
             {
                 int forcedColor = IndexToTeam(idx);
-                SetPlayerColors(joiner, forcedColor - 1);
+                SetPlayerColors(joiner, forcedColor); // color code, not QC .team — no -1 (see AssignBestTeam note)
                 return forcedColor;
             }
         }
@@ -564,7 +566,7 @@ public sealed class Teamplay
             bestTeam = Teams.Red; // degenerate guard (matches TeamBalance.JoinSmallestTeam)
 
         // QC SetPlayerTeam → SetPlayerColors: set .team AND .clientcolors (the auto-join skips the mutator hook).
-        SetPlayerColors(joiner, bestTeam - 1);
+        SetPlayerColors(joiner, bestTeam); // bestTeam is a color code already — no -1 (see the bot-forced note above)
         return bestTeam;
     }
 
@@ -637,7 +639,10 @@ public sealed class Teamplay
             return false;
 
         // QC Player_SetTeamIndex tail: a spectator sentinel zeroes clientcolors and sets team = -1; otherwise the
-        // team is applied through SetPlayerColors(player, new_team - 1) so .team AND .clientcolors stay consistent.
+        // team is applied through SetPlayerColors so .team AND .clientcolors stay consistent. QC passes
+        // `new_team - 1` because its SVQC .team values (5/14/13/10) sit one above the color codes — the port's
+        // Teams constants ARE the color codes (4/13/12/9), so no -1 (the r16 all-green bug: red 4-1=3 = the
+        // GREEN palette slot, blue 13-1=12 = yellow; the SetColor round-trip's +1 masked it for team identity).
         if (newTeam == Teams.None || newTeam == TeamForceSpectator)
         {
             player.ClientColors = 0;
@@ -645,7 +650,7 @@ public sealed class Teamplay
         }
         else
         {
-            SetPlayerColors(player, newTeam - 1);
+            SetPlayerColors(player, newTeam);
         }
 
         // QC MUTATOR_CALLHOOK(Player_ChangedTeam, ...): react after the change (return value ignored).
@@ -682,9 +687,11 @@ public sealed class Teamplay
     public void SetColor(Player player, int clr)
     {
         player.ClientColors = clr;
-        // QC setcolor: in teamplay team = (clr & 15) + 1 (the packed color's low nibble + 1 IS the team color
-        // code 4/13/12/9 directly — NOT an index); in FFA the team stays at the neutral sentinel (-1).
-        player.Team = IsTeamGame ? (clr & 15) + 1 : TeamForceSpectator;
+        // QC setcolor: in teamplay `self.team = (clr & 15) + 1` re-derives the SVQC .team value from the pants
+        // nibble. The port's Team field holds the COLOR CODE itself (Teams.Red/Blue = 4/13 — QC's team-1), so the
+        // low nibble maps back with NO +1. (The old `+ 1` paired with the SetPlayerColors `- 1` — the two
+        // cancelled for team identity while painting everyone the wrong palette slot: the r16 all-green bug.)
+        player.Team = IsTeamGame ? (clr & 15) : TeamForceSpectator;
     }
 
     /// <summary>

@@ -37,9 +37,10 @@ public partial class DialogSettingsMisc : SettingsTab
         box.AddChild(errorComp);
         Dependent.Bind(errorComp, "cl_movement", 1, 1);
 
-        // QC: makeXonoticCheckBoxEx(2, 1, "crypto_aeslevel", …) — toggles bit 1 of the int-flags cvar.
-        // (QC gates this on the engine providing crypto_aeslevel; we include it faithfully.)
-        box.AddChild(Widgets.FlagCheckBox("crypto_aeslevel", 1, "Use encryption (AES) when available"));
+        // QC: makeXonoticCheckBoxEx(2, 1, "crypto_aeslevel", …) — checked stores 2 (encryption REQUESTED),
+        // unchecked 1 (supported-but-not-requested; 0 = refuse / 3 = require have no menu rows).
+        // (QC gates this row on the engine providing crypto_aeslevel; we include it faithfully.)
+        box.AddChild(Widgets.ValueCheckBox("crypto_aeslevel", 2f, 1f, "Use encryption (AES) when available"));
 
         box.AddChild(Ui.Spacer());
 

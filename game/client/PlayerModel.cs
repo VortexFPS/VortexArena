@@ -307,6 +307,15 @@ public partial class PlayerModel : Node3D
         float legsRetain = _legsFade.RetainAndAdvance(FadeSeconds, dt);
         float torsoRetain = _torsoFade.RetainAndAdvance(FadeSeconds, dt);
 
+        // Aim-bone pitch for the torso/arms. Remote players come through ClientEntityView, which renders the BODY
+        // yaw-only (#50, e.Angles.X forced to 0) and parks the view pitch on the render-only ViewPitch field (#7)
+        // — read that. The local player's own body (third-person crosshair-chase) is bound to a direct entity that
+        // never passed through that choke point, so its pitch still rides Angles.X and ViewPitch is 0; fall back to
+        // Angles.X there. The two are never both non-zero, so this can't double-count.
+        // (Feeds BOTH crossfade passes below — the fix landed on main while this branch was moving the single
+        // FromFrames call into the two-pass retain blend.)
+        float aimPitch = e.ViewPitch != 0f ? e.ViewPitch : e.Angles.X;
+
         SkeletonAnim anim = LocomotionBlend.Split(legs, _legsTime, torsoClip, torsoPhase);
         if (legsRetain > 0f || torsoRetain > 0f)
         {
@@ -317,11 +326,11 @@ public partial class PlayerModel : Node3D
                 legsRetain > 0f ? _legsFade.PrevTime : _legsTime,
                 torsoRetain > 0f ? _torsoFade.PrevClip : torsoClip,
                 torsoRetain > 0f ? _torsoFade.PrevTime : torsoPhase);
-            _player.FromFrames(anim, prevAnim, legsRetain, torsoRetain, e.Angles.X, dead);
+            _player.FromFrames(anim, prevAnim, legsRetain, torsoRetain, aimPitch, dead);
         }
         else
         {
-            _player.FromFrames(anim, e.Angles.X, dead);
+            _player.FromFrames(anim, aimPitch, dead);
         }
 
         PushIfDue(cullEnabled, isLocal, distSqToView, cullDistSq);
@@ -491,6 +500,42 @@ public partial class PlayerModel : Node3D
     {
         StopRagdoll();
         if (Active) { _player.Free(); Active = false; }
+    }
+
+    /// <summary>
+    /// [crash fix 2026-07-26] Deterministic MAIN-THREAD release of this model's exclusively-owned
+    /// native resources — the IqmBuilder-built body <see cref="ArrayMesh"/> and its <see cref="Skin"/>
+    /// (one fresh pair per PlayerModel; the ownership audit verified there is NO pool and NO corpse
+    /// handoff). Without this they ride GodotSharp finalizers on the .NET finalizer thread, whose
+    /// RenderingServer::free races the render loop (the 0xC0000374 family). Everything SHARED is
+    /// excluded: surface materials/textures (AssetSystem caches), the AnimationLibrary
+    /// (AssetLoader parse cache), and the static placeholder mesh/material (by-reference check).
+    /// </summary>
+    public override void _ExitTree()
+    {
+        ReleaseSkeleton(); // idempotent (guarded by Active) — normal teardown already called it
+        DisposeOwnedVisuals(this);
+        _alphaMeshes.Clear();
+        _alphaMeshesChildGen = -1;
+    }
+
+    private static void DisposeOwnedVisuals(Node n)
+    {
+        if (n is MeshInstance3D mi)
+        {
+            if (mi.Skin is Skin skin)
+            {
+                mi.Skin = null;
+                skin.Dispose();
+            }
+            if (mi.Mesh is Mesh m && !ReferenceEquals(m, PlaceholderMesh))
+            {
+                mi.Mesh = null;
+                m.Dispose();
+            }
+        }
+        foreach (Node c in n.GetChildren())
+            DisposeOwnedVisuals(c);
     }
 
     // --- per-entity alpha render (W1 alpha-net seam) -----------------------------------------------------

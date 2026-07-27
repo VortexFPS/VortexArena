@@ -8,9 +8,10 @@ using XonoticGodot.Server;
 namespace XonoticGodot.Game.Net;
 
 /// <summary>
-/// S5 (sv_threaded, default OFF) — the dedicated server-simulation worker thread for the listen/host path.
+/// S5 (sv_threaded — DEFAULT ON since the 2026-07-11 WS1 rework) — the dedicated server-simulation worker
+/// thread for the listen/host path.
 ///
-/// When the listen server is started with <c>sv_threaded 1</c> on a windowed (non-headless) host, the heavy
+/// When the listen server starts with <c>sv_threaded 1</c> (the default) on a windowed (non-headless) host, the heavy
 /// authoritative work — <see cref="ServerNet.Tick"/> → <see cref="GameWorld.Frame"/> → the 72 Hz
 /// <c>SimulationLoop</c> ticks — moves off the Godot main thread onto THIS long-lived background thread, so the
 /// render frame no longer blocks on the sim. The main thread keeps only client prediction + render.
@@ -72,6 +73,10 @@ internal sealed class ServerThread : IDisposable
         // lock fallback this points at the SAME instance the main thread uses, so it is semantically a no-op here —
         // but it documents intent and keeps the worker correct even if some code later swaps the process ambient.
         Api.SetThreadServices(_world.ServerServices);
+
+        // WS1 stage 1: sends from this thread STAGE into ServerNet's outbox (pooled copies) instead of touching
+        // the main-thread-affine Godot ENet peer — the encode now runs here, right after the ticks it describes.
+        ServerNet.OnSimWorker = true;
 
         // Fixed-cadence accumulator loop. We measure real elapsed time with a Stopwatch and feed it to
         // ServerNet.Tick, whose GameWorld.Frame → SimulationLoop.Advance accumulates and runs as many fixed

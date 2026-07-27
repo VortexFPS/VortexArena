@@ -42,8 +42,13 @@ dotnet test tests/XonoticGodot.Tests --filter "CameraDriftTests|ReconcilerTests|
 
 `--camera-trace <scenario.json> <out.json>` boots a 0-bot listen server on the scenario's map, feeds NetGame the
 scripted per-tick input (`game/net/CameraTrace.cs`), and dumps the rendered camera + predicted origin per frame.
-Scenarios live here (`stationary.json`, `lookaround.json`, `port_stationary.json`); a scenario may set `cvars`
-(e.g. `cl_movement_smoothing_faithful 0`) to A/B faithful vs port in-engine.
+Scenarios live here (`stationary.json`, `lookaround.json`, `port_stationary.json`, `jumpland.json`); a scenario
+may set `cvars` (e.g. `cl_movement_smoothing_faithful 0`) to A/B faithful vs port in-engine.
+
+`jumpland.json` (2026-07-05) pins the **cl_bobfall landing dip**: idle 2 s, one jump (buttons=2 for 6 frames),
+idle to land. Expected: after the landing frame the eye offset (viewZ − physZ − viewOfsZ) swings to
+`clamp(vz_land, −400, 0) × cl_bobfall` (≈ −12.6u for a stormkeep jump, exact) at the sin midpoint and recovers
+over `1/cl_bobfallcycle` = 0.33 s; rerun with `"cvars": {"cl_bobfall": "0"}` as the control (offset stays 0).
 
 ```bash
 GODOT="/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe"

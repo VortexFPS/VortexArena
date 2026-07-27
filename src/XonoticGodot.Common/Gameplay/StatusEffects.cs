@@ -513,11 +513,12 @@ public static class StatusEffectsCatalog
         float dTransfer = transferDmgFactor * dps * tTransfer;
         if (dTransfer <= 0f) return;
 
-        // Radius search: the entity's own size + a small pad to catch entities whose bbox just touches.
-        float searchRad = (e.AbsMax - e.AbsMin).Length() * 0.5f + 4f;
-        // Snapshot the nearby list to avoid mutating the collection while iterating (FindInRadius may be live).
+        // QC: boxesoverlap(e.absmin, e.absmax, it.absmin, it.absmax) — query the burning entity's box directly
+        // (FindInBox applies the precise AABB test itself, touching counts); replaces the old half-diagonal+4
+        // bounding-sphere FindInRadius + per-entity BoxesOverlap trim (upstream b6e02fe3 pattern). The buffer is
+        // a SNAPSHOT — FireAddDamage below never re-queries.
         System.Collections.Generic.List<Entity> nearby = _fireTransferBuffer ??= new();
-        Api.Entities.FindInRadius(e.Origin, searchRad, nearby);
+        Api.Entities.FindInBox(e.AbsMin, e.AbsMax, nearby);
 
         foreach (Entity it in nearby)
         {
@@ -525,20 +526,11 @@ public static class StatusEffectsCatalog
             if (it.DeadState != DeadFlag.No) continue;
             if (it.TakeDamage == DamageMode.No) continue;
             if (it.IsIndependentPlayer) continue;
-            // QC: boxesoverlap(e.absmin, e.absmax, it.absmin, it.absmax)
-            if (!BoxesOverlap(e.AbsMin, e.AbsMax, it.AbsMin, it.AbsMax)) continue;
             FireAddDamage(it, owner, dTransfer, tTransfer, DeathTypes.Fire);
         }
     }
 
     [System.ThreadStatic] private static System.Collections.Generic.List<Entity>? _fireTransferBuffer;
-
-    /// <summary>QC <c>boxesoverlap(mina, maxa, minb, maxb)</c>: axis-aligned bounding box overlap test.</summary>
-    private static bool BoxesOverlap(System.Numerics.Vector3 minA, System.Numerics.Vector3 maxA,
-        System.Numerics.Vector3 minB, System.Numerics.Vector3 maxB)
-        => minA.X <= maxB.X && maxA.X >= minB.X
-        && minA.Y <= maxB.Y && maxA.Y >= minB.Y
-        && minA.Z <= maxB.Z && maxA.Z >= minB.Z;
 
     // ============================================================================================
     //  Lifecycle mass-clear (QC StatusEffects_removeall / StatusEffects_clearall)

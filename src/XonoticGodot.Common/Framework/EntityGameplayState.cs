@@ -18,6 +18,11 @@ public partial class Entity
     // status effects (frozen/burning/buffs)
     public readonly List<ActiveStatusEffect> StatusEffects = new();
 
+    /// <summary>The status-effect blob reference last decoded into <see cref="StatusEffects"/> (client render-only).
+    /// The server delta-resends the blob only on change, so its reference is stable while unchanged — the decode
+    /// (which allocates a dictionary) is skipped when the incoming blob is the same reference (ClientEntityView).</summary>
+    public byte[]? LastStatusBlob;
+
     // =====================================================================================
     //  [W14a] csqcmodel render-only mirror fields (decoded onto the CLIENT proxy entity)
     // =====================================================================================
@@ -33,6 +38,13 @@ public partial class Entity
     /// <summary>QC the action's start time (server clock); the client derives the play phase as <c>now − this</c>.
     /// Decoded from <c>NetEntityState.AnimActionTime</c>.</summary>
     public float AnimActionTime;
+
+    /// <summary>QC the player's networked view PITCH (degrees), for the animdecide upper-body AIM-bone layer
+    /// (<c>PlayerSkeleton</c> bends the spine/arm aim bones by <c>bound(-90, viewPitch, 90) * weight</c>). Kept
+    /// SEPARATE from <see cref="Entity.Angles"/> because the player BODY renders yaw-only (Base entcs forces
+    /// angles_x/z to 0 — #50); the aim layer is the sole consumer of the pitch, so it rides its own render-only
+    /// field instead of the entity basis. Decoded in ClientEntityView; 0 for non-player kinds.</summary>
+    public float ViewPitch;
 
     /// <summary>QC <c>.m_switchweapon</c> — the weapon RegistryId the remote player is switching TO (-1 = none).
     /// Decoded from <c>NetEntityState.SwitchWeapon</c> for the remote weapon switch render (QW5).</summary>

@@ -143,6 +143,12 @@ public static class BindTable
         ShowScores = false;
     }
 
+    /// <summary>Release just the attack buttons (DP <c>-fire</c>/<c>-fire2</c> — what Base's
+    /// <c>cl_unpress_attack_on_weapon_switch</c> localcmds do): the buttons stay up until the key is physically
+    /// re-pressed. Used when a forced out-of-ammo weapon switch arrives with the trigger still down, so the
+    /// switched-to weapon doesn't surprise-fire the moment it raises.</summary>
+    public static void ReleaseAttack() => _attack = _attack2 = false;
+
     /// <summary>True when a '+'/'-' bind command is one of the held engine BUTTONS <see cref="SetButton"/> tracks
     /// (movement/fire/zoom/use/hook/showscores). Anything else (e.g. +hud_panel_radar_maximized) is a press-toggle
     /// alias that <see cref="HandleBind"/> dispatches to the command sink instead of latching as a button. Kept in

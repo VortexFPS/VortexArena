@@ -1883,6 +1883,15 @@ public sealed class GameWorld
         using (Prof.Sample("start.bots"))
             Bots.ServerFrame();
 
+#if XG_BOTPLAYER
+        // Bot-player harness (compile-gated): think the brain bound to the local HUMAN player on the sim
+        // thread, right after the bot pass, and publish its command for the client to sample. Inert unless
+        // --bot-player attached one. The player itself is not a bot, so its command still arrives over the
+        // normal net InputProvider path below — this only produces the input a human's hands would.
+        using (Prof.Sample("start.botplayer"))
+            Bots.ThinkBotPlayer(Simulation.FrameTime);
+#endif
+
         // QC anticheat_startframe: advance the global evade phase walk (server/anticheat.qc).
         AntiCheat.StartFrame(Simulation.FrameTime);
 
@@ -3344,29 +3353,47 @@ public sealed class GameWorld
     {
         // Each arm is an explicit Action<Entity>? so the switch-expression has a single common type (lambdas
         // have no natural type, which would otherwise fail to infer alongside the null default arm).
+        //
+        // EVERY arm must gate on e.ClassName: the sink receives ALL objective classnames (flags, dom_*,
+        // onslaught_*, trigger_race_*, nexball_*), and multi-gametype maps (implosion / geoplanetary /
+        // runningmanctf / courtfun) carry several modes' entities in ONE lump. QC's per-spawnfunc
+        // `if (!g_<mode>) delete(this)` is this gate. Without it, implosion's 12 dom_* entities spawned in CTF
+        // as 12 NEUTRAL flags — silently flipping the match to one-flag mode with the carriable flag sitting on
+        // the mapper's "Center" dom point (r16: "the blue flag is at the center of the map"). Foreign
+        // objectives simply fall through to RetirePlaceholder.
         GametypeObjectiveSpawns.Sink = GameType switch
         {
             Ctf ctf => (Action<Entity>?)(e =>
             {
-                if ((int)e.Team == Teams.None) ctf.SpawnNeutralFlag(e.Origin, e.Angles);
-                else ctf.SpawnFlag((int)e.Team, e.Origin, e.Angles);
+                switch (e.ClassName)
+                {
+                    case "item_flag_neutral":
+                        ctf.SpawnNeutralFlag(e.Origin, e.Angles);
+                        break;
+                    case "item_flag_team1" or "item_flag_team2" or "item_flag_team3" or "item_flag_team4":
+                        ctf.SpawnFlag((int)e.Team, e.Origin, e.Angles);
+                        break;
+                }
                 RetirePlaceholder(e);
             }),
             Domination dom => e =>
             {
-                // dom_team is a team-definition data holder, NOT a placement — never spawn a control point for it,
-                // just retire it (it must never linger/render, in dom mode either). #20.
-                if (e.ClassName == "dom_team") { RetirePlaceholder(e); return; }
-                // QC dom_controlpoint_setup: .frags = per-point amount, .wait = per-point rate (defaults 1 / 5).
-                float amt = e.Count > 0 ? e.Count : 1f;
-                dom.SpawnControlPoint(e.Origin, (int)e.Team, amt);
+                // Only dom_controlpoint places a point. dom_team is a team-definition data holder, NOT a
+                // placement (#20), and foreign objectives (flags on a dual CTF+dom map) must not become
+                // control points at the flag bases — everything else just retires.
+                if (e.ClassName == "dom_controlpoint")
+                {
+                    // QC dom_controlpoint_setup: .frags = per-point amount, .wait = per-point rate (defaults 1 / 5).
+                    float amt = e.Count > 0 ? e.Count : 1f;
+                    dom.SpawnControlPoint(e.Origin, (int)e.Team, amt);
+                }
                 RetirePlaceholder(e);
             },
             Race race => e =>
             {
                 if (e.ClassName == "trigger_race_penalty")
                     race.SpawnPenaltyZone(e.Origin, e.Count > 0 ? e.Count : 5f);
-                else
+                else if (e.ClassName == "trigger_race_checkpoint")
                     // QC spawnfunc(trigger_race_checkpoint): .cnt → race_checkpoint index (0 = start line);
                     // spawnflag 4 kills a wrong-order crossing (DEATH_HURTTRIGGER 10000); spawnflag 8 on the
                     // highest CP marks the timed finish line (race_timed_checkpoint) for start!=finish tracks.
@@ -3497,9 +3524,10 @@ public sealed class GameWorld
                         // QC spawnfunc(nexball_football): a kick-only football (NBM_FOOTBALL) — NOT carryable.
                         nb.SpawnBall(e.Origin, basketball: false);
                         break;
-                    default: // "nexball_goal" (every goal/fault/out funnels here)
+                    case "nexball_goal": // every goal/fault/out spawnfunc Emits this normalized classname
                         nb.SpawnGoal((int)e.Team, e.Origin); // team or Nexball.GoalFault/GoalOut sentinel
                         break;
+                    // foreign objectives (flags/dom/race on a multi-mode map) must NOT become goals — retire only.
                 }
                 RetirePlaceholder(e);
             },

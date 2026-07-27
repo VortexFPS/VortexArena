@@ -708,6 +708,32 @@ public sealed class Ctf : GameType
         FlagAnnounceSound(flag.HomeTeam, "TAKEN");
         NotificationSystem.Send(NotifBroadcast.All, null, MsgType.Info, $"CTF_PICKUP_{TeamSuffix(flag.HomeTeam)}", player.NetName);
         NotificationSystem.Center(player, $"CTF_PICKUP_{TeamSuffix(flag.HomeTeam)}");
+
+        // QC ctf_Handle_Pickup per-audience fan-out (sv_ctf.qc:790-801): every OTHER player gets an explicit
+        // on-screen line naming WHICH flag was taken — without it a third party only hears the voice and sees
+        // the kill feed (r16: "just that a flag was taken"). FOREACH_CLIENT(IS_PLAYER(it) && it != player):
+        //   same team as the carrier            → "Your %steammate got the <FLAG> flag! Protect them!"
+        //   the flag's own team                 → "The %senemy got your flag! Retrieve it!"
+        //   a third team (3/4-team CTF)         → "The %senemy got the <FLAG> flag! Retrieve it!"
+        //   anyone else, neutral (one-flag)     → "The %senemy got the flag! Retrieve it!"
+        // Args mirror QC: Team_ColorCode(player.team) + netname (the CHOICE verbose variant consumes both).
+        if (_lastRoster is { } roster2)
+        {
+            bool neutral = flag.HomeTeam == Teams.None;
+            string flagSuffix = neutral ? "NEUTRAL" : TeamSuffix(flag.HomeTeam);
+            string carrierColor = Teams.ColorCode((int)player.Team);
+            foreach (Player it in roster2)
+            {
+                if (ReferenceEquals(it, player) || it.IsObserver) // QC IS_PLAYER(it) && it != player
+                    continue;
+                string notif =
+                    (int)it.Team == (int)player.Team ? $"CTF_PICKUP_TEAM_{flagSuffix}"
+                    : neutral ? "CTF_PICKUP_ENEMY_NEUTRAL"
+                    : (int)it.Team == flag.HomeTeam ? "CTF_PICKUP_ENEMY"
+                    : $"CTF_PICKUP_ENEMY_OTHER_{flagSuffix}";
+                NotificationSystem.Send(NotifBroadcast.One, it, MsgType.Choice, notif, carrierColor, player.NetName);
+            }
+        }
         return true;
     }
 
@@ -1880,8 +1906,18 @@ public sealed class Ctf : GameType
     /// whose return timer has elapsed. Call each tick. Complements the per-entity think; safe with or without
     /// the entity layer (operates on <see cref="FlagState.DropTime"/>).
     /// </summary>
+    // The most recent host roster (Clients.Players), cached by Tick for the touch-driven paths that QC
+    // serves with FOREACH_CLIENT (Pickup's per-audience fan-out). Null until the first ticked frame / in
+    // bare unit tests that drive Pickup directly.
+    private IReadOnlyList<Player>? _lastRoster;
+
     public void Tick(IReadOnlyList<Player>? roster = null)
     {
+        // Cache the roster for the touch-driven paths (Pickup's per-audience notification fan-out — QC
+        // FOREACH_CLIENT — runs from FlagTouch, which has no roster parameter). Refreshed every tick by the
+        // host (GameWorld passes Clients.Players); null in bare unit tests, where the fan-out politely skips.
+        if (roster is not null)
+            _lastRoster = roster;
         if (MatchEnded)
             return;
         float now = Api.Services is not null ? Api.Clock.Time : 0f;

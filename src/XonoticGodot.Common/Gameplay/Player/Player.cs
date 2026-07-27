@@ -237,6 +237,14 @@ public sealed class Player : Entity
     /// </summary>
     public Vector3 DeathOrigin;
 
+    /// <summary>
+    /// The sim time (<c>Api.Clock.Time</c>) at which <see cref="DeathOrigin"/> was last latched — set alongside it
+    /// in the Obituary path (DamageSystem.Killed). Backs the [R2] death-point spawn avoidance decay
+    /// (<see cref="SpawnSystem"/> <c>g_spawn_avoid_death_time</c>): how long ago the player died. Zero until the
+    /// player's first death (which, with a zero <see cref="DeathOrigin"/>, disables the penalty anyway).
+    /// </summary>
+    public float DeathTime;
+
     // ===== chat state (server/chat.qc Say + server/command/cmd.qc ignore-list CRUD — T46) =====
     // The flat per-client chat fields QC keeps on the clientstate (CS(this)): the three per-say-type flood
     // "next allowed time" stamps, the mute flag, and the ignore list. These must persist across ticks (a per-tick

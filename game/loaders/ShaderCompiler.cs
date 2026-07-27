@@ -113,6 +113,68 @@ public static class ShaderCompiler
     }
 
     // -------------------------------------------------------------------------------------------------
+    //  Autosprite deform (opt-in — the MD3 model path; BSP keeps the billboard approximation)
+    // -------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The autosprite deform on <paramref name="def"/>: null when none, else whether it is the axial
+    /// variant (<c>autosprite2</c>). First autosprite-family deform wins (Q3 shaders carry at most one).
+    /// </summary>
+    public static bool? AutospriteAxial(ShaderDef def)
+    {
+        foreach (DeformVertexes d in def.Deforms)
+        {
+            if (d.Type == DeformType.Autosprite) return false;
+            if (d.Type == DeformType.Autosprite2) return true;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Compile the faithful autosprite/autosprite2 deform material for <paramref name="def"/> — a
+    /// <see cref="ShaderMaterial"/> whose vertex stage rebuilds each quad on the view axes from the
+    /// <c>CUSTOM0/1</c> frames the MD3 builder bakes (<c>AutospriteQuads</c>), and whose fragment is DP's
+    /// bolt shading: lit base (<c>rgbGen lightingDiffuse</c>) + fullbright <c>_glow</c> companion on
+    /// EMISSION, additive (NOT unshaded — the corrected playtest-#38 model). Returns null when the def has
+    /// no autosprite deform or no usable image stage; callers fall back to <see cref="Compile"/>.
+    /// </summary>
+    public static ShaderMaterial? CompileAutosprite(ShaderDef def, AssetSystem ctx)
+    {
+        ArgumentNullException.ThrowIfNull(def);
+        ArgumentNullException.ThrowIfNull(ctx);
+
+        bool? axial = AutospriteAxial(def);
+        if (axial == null || def.IsNoDraw || def.IsSky)
+            return null;
+
+        var stages = SelectRenderStages(def);
+        if (stages.Count == 0)
+            return null;
+        ShaderStage stage = stages[0]; // the bolt shaders are single-stage; a chain's base stage drives
+        if (stage.IsLightmap)
+            return null;
+
+        string albedoName = StageImageName(stage);
+        Texture2D? albedo = ResolveStageTexture(stage, albedoName, ctx);
+        if (albedo == null)
+            return null;
+
+        string code = AutospriteShaderGen.Generate(def, stage, axial.Value);
+        var mat = new ShaderMaterial
+        {
+            Shader = new Shader { Code = code },
+            ResourceName = def.Name + "/autosprite",
+        };
+        mat.SetShaderParameter("albedo_tex", albedo);
+
+        // The fullbright companion (laser.tga -> laser_glow.tga, shipped next to every bolt texture).
+        // Missing companion -> 1×1 black: the EMISSION term contributes nothing.
+        Texture2D? glow = ctx.LoadTexture(AssetPaths.StripImageExtension(albedoName) + "_glow");
+        mat.SetShaderParameter("glow_tex", glow ?? ctx.BlackTexture());
+        return mat;
+    }
+
+    // -------------------------------------------------------------------------------------------------
     //  Stage selection
     // -------------------------------------------------------------------------------------------------
 
@@ -390,6 +452,7 @@ public static class ShaderCompiler
                 case TcModType.Rotate:
                 case TcModType.Stretch:
                 case TcModType.Turb:
+                case TcModType.Page: // flipbook atlas cycles with TIME (electro crackle) — was a silent no-op
                     return true;
                 case TcModType.Scale:
                     // A static scale alone doesn't need a custom shader — it is baked onto the
@@ -469,6 +532,12 @@ public static class ShaderCompiler
         sb.Append("render_mode ").Append(string.Join(", ", modes)).Append(";\n\n");
 
         sb.Append("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic;\n");
+        // GPU MD3 vertex-morph hook (cl_gpu_morph — ModelAnimator): frameB streams ride CUSTOM0/1 and
+        // morph_amount blends toward them, so an ANIMATED-STAGE surface on a morphing model (the CTF flag's
+        // scrolling-energy surface — the r16 case that pinned the whole flag to the CPU rebuild path) morphs
+        // GPU-side too. Default 0.0 = exact no-op for every static/world use of this material. Per-material
+        // uniform (vertex-stage instance uniforms are inert); ModelAnimator drives a per-surface Duplicate().
+        sb.Append("uniform float morph_amount = 0.0;\n");
         // animMap frame cycling (playtest r14 D): one sampler per extra frame, selected below by
         // int(TIME*fps) % N (Q3 tr_shade.c R_BindAnimatedImage). Frame 0 stays albedo_tex so a map that
         // fails to resolve degrades to the old static look. Q3 caps animations at 8 frames.
@@ -484,14 +553,20 @@ public static class ShaderCompiler
             sb.Append("const float ALPHA_CUTOFF = ").Append(Flt(AlphaCutoff(stage.AlphaFunc!))).Append(";\n");
         sb.Append('\n');
 
-        // ---- vertex() : deformVertexes ----
+        // ---- vertex() : MD3 morph prelude + deformVertexes ----
+        // The morph mix runs FIRST (DP lerps the frames, THEN applies deforms — R_AliasLerpVerts before
+        // RSurf_PrepareVerticesForBatch); at the default morph_amount 0 the branch is an exact no-op.
+        sb.Append("void vertex() {\n");
+        sb.Append("    if (morph_amount > 0.0) {   // GPU MD3 vertex-morph (see uniform above)\n");
+        sb.Append("        VERTEX = mix(VERTEX, CUSTOM0.xyz, morph_amount);\n");
+        sb.Append("        NORMAL = normalize(mix(NORMAL, CUSTOM1.xyz, morph_amount));\n");
+        sb.Append("    }\n");
         if (def.Deforms.Count > 0 && HasWaveDeform(def))
         {
-            sb.Append("void vertex() {\n");
             foreach (DeformVertexes d in def.Deforms)
                 EmitDeform(sb, d);
-            sb.Append("}\n\n");
         }
+        sb.Append("}\n\n");
 
         // ---- fragment() : tcMod stack on UV, then sample ----
         sb.Append("void fragment() {\n");
@@ -522,101 +597,12 @@ public static class ShaderCompiler
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Emit the <c>rgbGen</c> colour modulation onto the running <c>c</c> (playtest r14 D — the mortar
-    /// sight's <c>rgbGen wave sawtooth 0 1 0 10</c> blink). Only the forms a generated stage can honor:
-    /// <c>wave</c> (Q3 waveform, clamped 0..1 exactly as the fixed-function vertex colour clamped) and
-    /// <c>const</c>. Identity/vertex/entity forms keep the default untouched colour — same as before.
-    /// </summary>
-    private static void EmitRgbGen(StringBuilder sb, ColorGen? cg)
-    {
-        if (cg is { Type: ColorGenType.Wave, Wave: not null })
-        {
-            WaveForm w = cg.Wave;
-            // value = base + amplitude * func(phase + time*freq), func over one period of x in [0,1).
-            sb.Append("    float wx = fract(").Append(Flt(w.Phase)).Append(" + TIME * ").Append(Flt(w.Frequency))
-              .Append(");   // rgbGen wave ").Append(w.RawName).Append('\n');
-            string func = w.Func switch
-            {
-                WaveFunc.Sin => "sin(wx * 6.2831853)",
-                WaveFunc.Square => "(wx < 0.5 ? 1.0 : -1.0)",
-                // Q3 triangle table: 0 -> 1 over the first quarter, back to 0, then mirrored negative.
-                WaveFunc.Triangle => "(1.0 - 4.0 * abs(fract(wx + 0.25) - 0.5))",
-                WaveFunc.Sawtooth => "wx",
-                WaveFunc.InverseSawtooth => "(1.0 - wx)",
-                _ => "sin(wx * 6.2831853)", // noise/unknown: a periodic stand-in beats a frozen constant
-            };
-            sb.Append("    c.rgb *= clamp(").Append(Flt(w.Base)).Append(" + ").Append(Flt(w.Amplitude))
-              .Append(" * ").Append(func).Append(", 0.0, 1.0);\n");
-        }
-        else if (cg is { Type: ColorGenType.Const } cc && cc.Parms.Length >= 3)
-        {
-            sb.Append("    c.rgb *= vec3(").Append(Flt(cc.Parms[0])).Append(", ").Append(Flt(cc.Parms[1]))
-              .Append(", ").Append(Flt(cc.Parms[2])).Append(");   // rgbGen const\n");
-        }
-    }
+    // EmitRgbGen / EmitTcMod / the waveform expressions moved to the Godot-free
+    // XonoticGodot.Formats.Materials.Q3StageGlsl so the autosprite deform shader generator
+    // (AutospriteShaderGen) emits the identical, unit-tested GLSL. Thin local aliases keep call sites terse.
+    private static void EmitRgbGen(StringBuilder sb, ColorGen? cg) => Q3StageGlsl.EmitRgbGen(sb, cg);
 
-    /// <summary>Emit the GLSL for one tcMod operation, transforming the running <c>uv</c>.</summary>
-    private static void EmitTcMod(StringBuilder sb, TcMod m)
-    {
-        switch (m.Type)
-        {
-            case TcModType.Scroll:
-                sb.Append("    uv += vec2(").Append(Flt(m.P(0))).Append(", ").Append(Flt(m.P(1)))
-                  .Append(") * TIME;            // tcMod scroll\n");
-                break;
-            case TcModType.Scale:
-                sb.Append("    uv *= vec2(").Append(Flt(m.P(0))).Append(", ").Append(Flt(m.P(1)))
-                  .Append(");                   // tcMod scale\n");
-                break;
-            case TcModType.Rotate:
-            {
-                // degrees per second about the (0.5,0.5) center.
-                string rad = Flt(m.P(0) * (MathF.PI / 180f));
-                sb.Append("    {\n");
-                sb.Append("        float a = ").Append(rad).Append(" * TIME;       // tcMod rotate\n");
-                sb.Append("        float s = sin(a), co = cos(a);\n");
-                sb.Append("        uv -= vec2(0.5);\n");
-                sb.Append("        uv = vec2(co*uv.x - s*uv.y, s*uv.x + co*uv.y);\n");
-                sb.Append("        uv += vec2(0.5);\n");
-                sb.Append("    }\n");
-                break;
-            }
-            case TcModType.Stretch:
-            {
-                WaveForm w = m.Wave ?? new WaveForm();
-                // stretch scales UV about center by 1/wave(t) (Q3 divides by the wave value).
-                sb.Append("    {\n");
-                sb.Append("        float w = ").Append(WaveExpr(w)).Append(";   // tcMod stretch\n");
-                sb.Append("        float inv = (abs(w) < 0.0001) ? 1.0 : 1.0 / w;\n");
-                sb.Append("        uv = (uv - vec2(0.5)) * inv + vec2(0.5);\n");
-                sb.Append("    }\n");
-                break;
-            }
-            case TcModType.Turb:
-            {
-                // base amp phase freq → sine warp of UV by position+time.
-                string bas = Flt(m.P(0)), amp = Flt(m.P(1)), ph = Flt(m.P(2)), fr = Flt(m.P(3));
-                sb.Append("    {\n");
-                sb.Append("        float ph = ").Append(ph).Append(";              // tcMod turb\n");
-                sb.Append("        float fr = ").Append(fr).Append(";\n");
-                sb.Append("        float amp = ").Append(amp).Append(";\n");
-                sb.Append("        uv.x += amp * sin((uv.y + ").Append(bas).Append(" + TIME*fr + ph) * 6.2831853);\n");
-                sb.Append("        uv.y += amp * sin((uv.x + ").Append(bas).Append(" + TIME*fr + ph) * 6.2831853);\n");
-                sb.Append("    }\n");
-                break;
-            }
-            case TcModType.Transform:
-                // 2x2 + translate. Static, but fold it in for completeness.
-                sb.Append("    uv = vec2(").Append(Flt(m.P(0))).Append("*uv.x + ").Append(Flt(m.P(2)))
-                  .Append("*uv.y + ").Append(Flt(m.P(4))).Append(", ")
-                  .Append(Flt(m.P(1))).Append("*uv.x + ").Append(Flt(m.P(3)))
-                  .Append("*uv.y + ").Append(Flt(m.P(5))).Append("); // tcMod transform\n");
-                break;
-            default:
-                break; // entityTranslate/page: no time animation we can express statically
-        }
-    }
+    private static void EmitTcMod(StringBuilder sb, TcMod m) => Q3StageGlsl.EmitTcMod(sb, m);
 
     /// <summary>Emit vertex displacement GLSL for one deformVertexes directive.</summary>
     private static void EmitDeform(StringBuilder sb, DeformVertexes d)
@@ -670,29 +656,10 @@ public static class ShaderCompiler
     }
 
     /// <summary>A Q3 waveform evaluated at TIME, as a GLSL expression: base + amp * wave(phase + freq*TIME).</summary>
-    private static string WaveExpr(WaveForm w) => WaveExprPhased(w, "0.0");
+    private static string WaveExpr(WaveForm w) => Q3StageGlsl.WaveExpr(w);
 
     /// <summary>Waveform expression with an extra spatial phase term added (for surface-varying deforms).</summary>
-    private static string WaveExprPhased(WaveForm w, string extraPhase)
-    {
-        string bas = Flt(w.Base);
-        string amp = Flt(w.Amplitude);
-        string ph = Flt(w.Phase);
-        string fr = Flt(w.Frequency);
-        // t = phase + extraPhase + freq*TIME ; argument in [0,1) cycles.
-        string t = $"({ph} + {extraPhase} + {fr} * TIME)";
-        string wave = w.Func switch
-        {
-            WaveFunc.Sin => $"sin({t} * 6.2831853)",
-            WaveFunc.Triangle => $"(abs(fract({t}) * 2.0 - 1.0) * 2.0 - 1.0)",
-            WaveFunc.Square => $"(fract({t}) < 0.5 ? 1.0 : -1.0)",
-            WaveFunc.Sawtooth => $"(fract({t}) * 2.0 - 1.0)",
-            WaveFunc.InverseSawtooth => $"(1.0 - fract({t}) * 2.0)",
-            WaveFunc.Noise => $"(sin({t} * 12.9898) * 0.5)", // cheap pseudo-noise
-            _ => "0.0",
-        };
-        return $"({bas} + {amp} * {wave})";
-    }
+    private static string WaveExprPhased(WaveForm w, string extraPhase) => Q3StageGlsl.WaveExprPhased(w, extraPhase);
 
     // -------------------------------------------------------------------------------------------------
     //  Special materials
@@ -808,15 +775,7 @@ public static class ShaderCompiler
     // -------------------------------------------------------------------------------------------------
 
     /// <summary>The Godot alpha-scissor cutoff for a Q3 <c>alphaFunc</c> comparator (GE128/GT0/LT128).</summary>
-    private static float AlphaCutoff(string alphaFunc)
-    {
-        // Q3: GT0 → >0 (cutoff ~0.004), LT128 → <0.5, GE128 → >=0.5. We approximate with a single scissor
-        // threshold (the common case is GE128 ≈ 0.5).
-        string f = alphaFunc.ToUpperInvariant();
-        if (f.Contains("128")) return 0.5f;
-        if (f.Contains("GT0") || f.Contains("GE0")) return 0.004f;
-        return 0.5f;
-    }
+    private static float AlphaCutoff(string alphaFunc) => Q3StageGlsl.AlphaCutoff(alphaFunc);
 
     /// <summary>
     /// The image name a stage paints with (its <c>map</c>, or the first <c>animMap</c> frame), with the
@@ -867,13 +826,7 @@ public static class ShaderCompiler
         => string.IsNullOrEmpty(a) ? marker : a + " " + marker;
 
     /// <summary>Format a float for GLSL source: invariant culture, always with a decimal point.</summary>
-    private static string Flt(float v)
-    {
-        if (float.IsNaN(v) || float.IsInfinity(v))
-            v = 0f;
-        string s = v.ToString("0.0######", CultureInfo.InvariantCulture);
-        return s;
-    }
+    private static string Flt(float v) => Q3StageGlsl.Flt(v);
 
     private static string Sanitize(string s) => s.Replace("*/", "* /").Replace("\n", " ").Replace("\r", " ");
 }

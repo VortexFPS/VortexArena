@@ -98,8 +98,36 @@ public static class ClientSettings
         c.Register("r_world_cell_div", "8");
         c.Register("r_world_cell_min", "256");
         c.Register("r_world_cell_max", "4096");
-        // Mouse pitch (only its SIGN is used here, for invert-look); DP default 1 (non-inverted) = current behaviour.
-        c.Register("m_pitch", "1", save);
+        // Mouse pitch/yaw scale (DP cl_input.c defaults, 0.022 deg/count). m_pitch is SIGNED — negative inverts
+        // the Y axis (the input dialog's "Invert aiming" writes ±|value|). Pre-DP-formula builds registered
+        // m_pitch "1" and used only its sign — archived ±1 values are normalized at read (NetGame.MPitch) and
+        // by the invert checkbox, so old configs don't get 45× pitch.
+        c.Register("m_pitch", "0.022", save);
+        c.Register("m_yaw", "0.022", save);
+        // DP mouse filter + acceleration family (cl_input.c:401-412, all CF_ARCHIVE) — applied per render
+        // frame by NetGame.FlushMouseLook (Common.Input.MouseAccel); the input dialog's "Smooth aiming"
+        // checkbox and acceleration sliders bind m_filter / m_accelerate / minspeed / maxspeed. Stock values
+        // make every branch a no-op (DP parity).
+        c.Register("m_filter", "0", save);
+        // (2026-07-26 wobble hunt) m_smoothdt: rescale the frame's mouse deltas onto the conditioned
+        // display-interval timeline (the one cl_smoothdt gives translation), carry-ledgered so swipe
+        // totals stay exactly 1:1. Kills the yaw channel's raw frame-time variance — the felt
+        // "stutter when moving the mouse". 0 = legacy raw application (A/B).
+        c.Register("m_smoothdt", "1", save);
+        c.Register("m_accelerate", "1", save);
+        c.Register("m_accelerate_minspeed", "5000", save);
+        c.Register("m_accelerate_maxspeed", "10000", save);
+        c.Register("m_accelerate_filter", "0", save);
+        c.Register("m_accelerate_power_offset", "0", save);
+        c.Register("m_accelerate_power", "2", save);
+        c.Register("m_accelerate_power_senscap", "0", save);
+        c.Register("m_accelerate_power_strength", "0", save);
+        c.Register("m_accelerate_natural_strength", "0", save);
+        c.Register("m_accelerate_natural_accelsenscap", "0", save);
+        c.Register("m_accelerate_natural_offset", "0", save);
+        // DP pitch clamp (CF_CLIENT, NOT archived): how far you can aim up/down (quake used -70/80).
+        c.Register("in_pitch_min", "-90");
+        c.Register("in_pitch_max", "90");
         // Server-browser auto-refresh pause toggle (DP default 0).
         c.Register("net_slist_pause", "0");
         // Local-player movement-prediction model (read live by NetGame). DEFAULT 1 = PATH A, the Base-faithful path:
@@ -134,13 +162,68 @@ public static class ClientSettings
         // time (Base cl_nettimesyncboundmode), 0 = hard-rebase to the latest server time every snapshot (the old
         // behaviour, which jolts the camera/decay timeline when snapshots arrive in lumps). For A/B isolation.
         c.Register("cl_netclock_smooth", "1");
+        // (parity audit 2026-07-11) Render-clock cushion: 1 (default) = DP boundmode-5 parity — the slew/step
+        // target sits a full MEASURED snapshot interval behind the newest state (Base targets cl.mtime[1], the
+        // previous snapshot's time), so the cushion grows exactly when a loaded listen server produces snapshots
+        // late and interpolation never rides the f=1 clamp edge (raw tick-lumps). 0 = the r16 half-tick bias.
+        c.Register("cl_interp_cushion", "1");
+        // (parity audit 2026-07-11) Correction-law A/B: 1 = Base's exact cl_nettimesyncboundmode 5 stepped law
+        // (snap >0.5s / halve >0.1s / creep -2ms/+1ms per SNAPSHOT, free-run between snapshots — cl_parse.c:3354),
+        // 0 (default) = the r16 continuous rate slew (±5% playback-rate band). Both respect cl_interp_cushion.
+        c.Register("cl_netclock_dp5", "0");
+        // (WS1, 2026-07-11) sv_threaded — the listen-host threading decision, READ FROM THIS SHARED STORE at
+        // StartListenServer (prefix = authority, not reader: it decides the SERVER's drive). DEFAULT ON: the
+        // sim worker owns tick+encode with per-tick gate holds; the render thread never blocks on the common
+        // path. 0 = single-threaded drive + the unified cvar store. Headless hosts ignore it (always inline).
+        c.Register("sv_threaded", "1");
         // Post-hitch stall-aware reconcile (default ON). After a frame HITCH (GC / heavy streaming stalls the shared
         // listen-server thread), the server is transiently behind; this HOLDS a moderate reconcile correction for a
         // few snapshots instead of snapping the camera back, then resumes. Defensive (NOT the cause of any observed
         // bug — the spawn-stutter was the ENet throttle), so it's toggleable: `set cl_movement_hitch_hold 0` reverts
         // to immediate snapping. Rationale + the masking risk it carries: docs/TROUBLESHOOTING.md.
         c.Register("cl_movement_hitch_hold", "1");
+        // (r16) DP parity switches: cl_movement 0 = NO client-side movement prediction — the view rides the
+        // server-authoritative owner state (velocity-extrapolated over the sub-snapshot remainder); commands
+        // still go to the server. The settings-Misc dialog already Dependent-binds on cl_movement (QC parity)
+        // — this makes the cvar real. cl_nolerp 1 = remote entities render raw newest snapshots (no
+        // two-snapshot interpolation). Both live-toggle in-session; both DP-archived.
+        c.Register("cl_movement", "1", save);
+        c.Register("cl_nolerp", "0", save);
+        // cl_smoothdt: condition the client MOTION path's per-frame dt (rolling-median predicted,
+        // hitch-passthrough, drift-corrected to wall time) instead of the measured delta. DEFAULT 0 since
+        // 2026-07-26: it shipped ON as the r16 "variance fix" on the strength of an A/B whose "raw" leg was
+        // itself engine-mangled (MainTimerSync rewrote the delta — the real wobble, now fixed via
+        // physics_jitter_fix 0). Re-A/B'd on the honest clock: no felt difference, so the filter's costs stand
+        // unpaid — it is the last dt-side felt-band contributor (0.01% -> 0.46% RMS on a 311 s release
+        // capture), it is AUTHORITATIVE (the conditioned dt ships in InputCommand.DeltaTime, so filter error
+        // is real movement-speed error), the driftcap sheds real wall time (+0.078% slow), and Base has no dt
+        // filter. 1 = the filter, kept as an A/B — see NetGame.ConditionDt for what a "1 feels better" result
+        // would mean. Server tick timing is unaffected either way (always raw).
+        c.Register("cl_smoothdt", "0");
+        // (2026-07-26 wobble audit) cl_smoothdt_driftcap: bound cl_smoothdt's drift-repayment ledger so a
+        // large excursion can't ride the ±4% clamp for hundreds of ms (a sustained, FELT speed error — the
+        // measured worst case was 1.5s), and widen the hitch gate so a 144↔250fps cadence transition passes
+        // raw instead of loading the ledger. Sheds wall-time debt past the cap (DP's own trade under
+        // overload). 0 = legacy r16 unbounded ledger (A/B).
+        c.Register("cl_smoothdt_driftcap", "1");
+        // (2026-07-26 wobble ROOT CAUSE) cl_engine_jitterfix: Godot's physics_jitter_fix, exposed live. It is
+        // NOT a physics knob for us — Godot's physics has no consumers here; it is the gate on whether
+        // MainTimerSync rewrites the frame delta before _Process sees it. Default 0 = report the measured
+        // delta (DP cl.realframetime). 0.5 = Godot stock = the rewriting behaviour, for A/B. Full mechanism +
+        // the measured displayed-speed error it produces: ApplyEngineTiming.
+        c.Register("cl_engine_jitterfix", "0");
+        // (r16) cl_frame_governor: adaptive frame pacing — every second, cap the engine at ~0.98/p75 of the
+        // recent frame times so delivery is metronomic while the rate still adapts to load (the property both
+        // smooth-feeling controls — vsync ON and a hard-engaged cap — share). 0 = off. An explicit cl_maxfps
+        // remains the upper bound; floor 60.
+        c.Register("cl_frame_governor", "0");
         c.Register("cl_predictfire", "1");       // intentionally default ON (NetGame: unset → on)
+        // Release +attack/+attack2 (until a physical re-press) when the server FORCE-switches a weapon that ran
+        // DRY while the trigger is still down, so the switched-to weapon doesn't surprise-fire the moment it
+        // raises. Port addition, default ON: Base's cl_unpress_attack_on_weapon_switch covers EVERY switch and
+        // ships 0 (holding fire through an out-of-ammo switch opens fire with the new gun); this narrower gate
+        // keeps manual-switch hold-fire and non-dry forced cycles (NIX) Base-faithful. 0 = raw Base behavior.
+        c.Register("cl_unpress_attack_on_empty_switch", "1");
         // Client-side projectile prediction (CSQC Projectile_Draw): snap+extrapolate vs the old ease. Default
         // ON; `set cl_projectile_prediction 0` reverts for A/B feel-testing (ClientWorld polls it live).
         c.Register("cl_projectile_prediction", "1");
@@ -168,6 +251,21 @@ public static class ClientSettings
         // (planning/PERFORMANCE_REPORT.md A3). `set cl_precache_all_weapons 0` restores the smart expected-only warm
         // for memory-constrained machines (NetGame.PrecacheWeaponModelsAsync reads it).
         c.Register("cl_precache_all_weapons", "1");
+        // Persist the shared asset caches (parsed models, decoded sounds, compiled materials/textures, parsed
+        // shaders) across map changes AND server switches (default ON). When ON, every match reuses MenuState's
+        // process-lifetime AssetLoader, so the second map load finds the stock assets already hot instead of
+        // rebuilding them — the whole per-map model/sound/material warm collapses to cache hits. The cost is
+        // that the warmed set stays resident between matches (plus each visited map's external lightmaps
+        // accumulate). `set cl_persist_asset_cache 0` restores per-match loaders for memory-constrained machines
+        // (NetGame._Ready reads it once when choosing its AssetLoader).
+        c.Register("cl_persist_asset_cache", "1");
+        // Warm the map-independent eager asset set (weapons, stock player models, combat sounds) into the shared
+        // cache at GAME LOAD — in the background while the player sits at the menu — instead of at the first map
+        // load (default ON). With cl_persist_asset_cache, this makes the first match's precache a cache hit so the
+        // map loads fast; the warm is fully budgeted (heavy IQM parse off-thread, small builds on a per-frame main
+        // budget) so the menu never hitches (Shell.StartMenuAssetWarm → MenuAssetWarmer). No effect when
+        // persistence is off (a per-match loader wouldn't see the warmed cache). `set cl_warm_at_boot 0` disables.
+        c.Register("cl_warm_at_boot", "1");
         // Off-screen / distant pose-cull for skeletal player models (3.3): when ON, PlayerModel.PushBones is
         // skipped for a REMOTE player whose model is off-screen, and distant on-screen players refresh the
         // Skeleton3D at half rate. The CPU locomotion clock keeps running every frame, so a model going
@@ -261,6 +359,123 @@ public static class ClientSettings
     }
 
     /// <summary>
+    /// Apply <c>vid_vsync</c> onto the window and describe the resulting behavior in the console. DP applies
+    /// vsync INSTANTLY on set — no vid_restart needed — so this is both the vid_restart slice and the live
+    /// Changed-hook target (see <see cref="InstallLiveVideoCvars"/>; the 2026-07-11 "vid_restart didn't apply
+    /// vsync mid-game" report: the apply worked but Mailbox is uncapped by design, so nothing VISIBLY changed —
+    /// the mode's meaning is now spelled out).
+    /// Vsync modes (vid_vsync, extended beyond DP's 0/1 — planning/PERFORMANCE_REPORT.md B1):
+    ///   0 = off      — no sync; lowest latency, tears.
+    ///   1 = on       — classic double-buffered vsync; fps LOCKS to refresh (a missed vblank halves it).
+    ///   2 = mailbox  — triple-buffered: renders UNCAPPED, presents the newest frame at vblank. No tearing,
+    ///                  no beat-doubling, and deliberately NO fps cap. Recommended for high-refresh displays.
+    ///   3 = adaptive — vsync when fast enough, tears instead of stuttering when late.
+    /// Drivers that don't support a mode fall back gracefully.
+    /// </summary>
+    public static void ApplyVsync(CvarService c)
+    {
+        int mode = (int)c.GetFloat("vid_vsync");
+        DisplayServer.VSyncMode vsync = mode switch
+        {
+            <= 0 => DisplayServer.VSyncMode.Disabled,
+            1 => DisplayServer.VSyncMode.Enabled,
+            2 => DisplayServer.VSyncMode.Mailbox,
+            _ => DisplayServer.VSyncMode.Adaptive,
+        };
+        DisplayServer.WindowSetVsyncMode(vsync);
+        string meaning = vsync switch
+        {
+            DisplayServer.VSyncMode.Enabled => "classic vsync — fps locks to the refresh rate",
+            DisplayServer.VSyncMode.Mailbox => "mailbox — no tearing, fps stays UNCAPPED by design",
+            DisplayServer.VSyncMode.Adaptive => "adaptive — syncs when fast enough, tears when late",
+            _ => "off — uncapped, may tear",
+        };
+        // Log the REQUESTED vs ACTUAL vsync mode — drivers can silently reject a mode (esp. Mailbox in windowed
+        // mode), and the FrameProfiler env banner reads the mode BEFORE this runs, so this is the authoritative line.
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"[video] vid_vsync {mode} → requested {vsync}, actual {DisplayServer.WindowGetVsyncMode()} ({meaning})");
+    }
+
+    /// <summary>Apply <c>cl_maxfps</c> onto <see cref="Godot.Engine.MaxFps"/> (DP applies this live too).</summary>
+    public static void ApplyMaxFps(CvarService c)
+    {
+        // Framerate cap (DP cl_maxfps): 0 = unlimited. Guidance (B1): with vsync off, a cap slightly UNDER the
+        // worst-case sustainable rate is smoother than uncapped, and it bounds the per-frame Godot-interop alloc
+        // rate (godot#105750). With vid_vsync 2 (mailbox) leave it at 0 (uncapped).
+        int maxFps = (int)c.GetFloat("cl_maxfps");
+        // "Auto" = the DP-shipped default (256) ONLY: not an fps target anyone chose, and it lets the CPU
+        // outrun the swapchain on a fast GPU -> present-jitter hitches, so it gets the engaging ceiling
+        // max(144, refresh). Every EXPLICIT choice is the player's and is honored as-is — including the
+        // menu's "Unlimited" (0 -> Engine.MaxFps 0, truly uncapped). (2026-07-06: 0 was previously folded
+        // into the auto case, silently capping "Unlimited" at 144 — Bryan's uncap request; the perf harness
+        // also captures uncapped now so peak frame time and its dips are measured, not masked by the cap.)
+        int appliedFps = maxFps == 256
+            ? System.Math.Max(144, (int)DisplayServer.ScreenGetRefreshRate())
+            : maxFps;
+        Godot.Engine.MaxFps = appliedFps;
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"[video] cl_maxfps {maxFps} -> Engine.MaxFps {appliedFps} (refresh {DisplayServer.ScreenGetRefreshRate():0}Hz)");
+    }
+
+    /// <summary>
+    /// Apply <c>cl_engine_jitterfix</c> onto <see cref="Godot.Engine.PhysicsJitterFix"/> — the knob that decides
+    /// whether Godot reports the frame delta it MEASURED or a rewritten one.
+    ///
+    /// <para><b>Why this is a cvar at all</b> (2026-07-26 wobble root cause, planning/
+    /// wobble-independent-audit-2026-07-26.md §3f). <c>MainTimerSync::advance_checked</c> runs three clamps over
+    /// the wall-clock delta before it reaches <c>_Process</c>. Clamp 1 forces it into
+    /// <c>[min_avg_physics_steps, max_avg_physics_steps] × physics_step</c>; clamp 2 then bounds it to
+    /// <c>±physics_jitter_fix × physics_step</c> around the measured value and carries the difference in a
+    /// <c>time_deficit</c> ledger repaid on later frames. None of this is gated by <c>run/delta_smooth</c> (that
+    /// setting only disables <c>DeltaSmoother</c>, which additionally requires VSYNC_ENABLED and so was never
+    /// running at our <c>vid_vsync 0</c> default).</para>
+    ///
+    /// <para>With this project's <c>physics_ticks_per_second = 10</c> the clamp band at ~144 fps is
+    /// <c>[0, 100/12 ms] = [0, 8.333 ms]</c>: the ceiling sits ~1.4 ms above the median frame time and the floor
+    /// collapses to zero, so it is a one-sided RECTIFIER — long frames are truncated, short frames are never
+    /// extended. Measured in production traces: 23–40% of all frames report a time on the <c>100/N</c> ms grid,
+    /// the deficit ledger rides its ±50 ms rails, and over 300 ms windows the time the game embodies differs from
+    /// the time that elapsed by −20%/+28% (p1/p99), 23–38% of run time inside a >5% episode, worst episodes
+    /// 460–550 ms. Motion integrates the reported delta while the display runs on wall time, so that IS a
+    /// displayed-speed error — the felt wobble, generated below every port-side dt filter (which is why
+    /// <c>cl_smoothdt</c>/<c>cl_smoothdt_driftcap</c> could not touch it: their input is already rewritten).</para>
+    ///
+    /// <para>0 (our default) makes clamp 2 degenerate to <c>clamp(measured, measured)</c>, which restores the exact
+    /// measured delta and erases clamp 1's effect — DP-faithful <c>cl.realframetime</c> behaviour, and free for us
+    /// because Godot's own physics has zero consumers here (see the project.godot rationale). 0.5 = Godot's stock
+    /// value = the legacy behaviour, for A/B. Live-settable, so the A/B is a console toggle mid-match rather than
+    /// a re-export: <c>cl_engine_jitterfix 0.5</c> / <c>cl_engine_jitterfix 0</c>. Score both legs with
+    /// <c>tools/wobble-detect.py</c>.</para>
+    /// </summary>
+    public static void ApplyEngineTiming(CvarService c)
+    {
+        double jf = c.GetFloat("cl_engine_jitterfix");
+        if (jf < 0d) jf = 0d;
+        Godot.Engine.PhysicsJitterFix = jf;
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"[video] cl_engine_jitterfix {jf:0.###} -> Engine.PhysicsJitterFix {Godot.Engine.PhysicsJitterFix:0.###} "
+            + $"(physics {Godot.Engine.PhysicsTicksPerSecond} Hz, max steps/frame "
+            + $"{Godot.Engine.MaxPhysicsStepsPerFrame}; 0 = report the measured delta)");
+    }
+
+    /// <summary>
+    /// DP parity: <c>vid_vsync</c> and <c>cl_maxfps</c> take effect IMMEDIATELY when set (console `vid_vsync 1`,
+    /// a cfg exec, a menu widget) — no <c>vid_restart</c> required. Resolution/fullscreen/borderless still go
+    /// through vid_restart (they resize/recreate the window). Wire ONCE after boot-config load (Shell), so the
+    /// bulk cfg exec doesn't re-apply per line.
+    /// </summary>
+    public static void InstallLiveVideoCvars(CvarService c)
+    {
+        c.Changed += name =>
+        {
+            if (string.Equals(name, "vid_vsync", StringComparison.Ordinal)) ApplyVsync(c);
+            else if (string.Equals(name, "cl_maxfps", StringComparison.Ordinal)) ApplyMaxFps(c);
+            // The wobble A/B has to be togglable mid-match to be feel-testable at all (see ApplyEngineTiming).
+            else if (string.Equals(name, "cl_engine_jitterfix", StringComparison.Ordinal)) ApplyEngineTiming(c);
+        };
+    }
+
+    /// <summary>
     /// Resolution + fullscreen + borderless + vsync from the <c>vid_*</c> cvars onto the window (QC vid_restart).
     /// </summary>
     public static void ApplyVideo()
@@ -295,29 +510,7 @@ public static class ClientSettings
         if (!fullscreen)
             DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, borderless);
 
-        // Vsync mode (vid_vsync, extended beyond DP's 0/1 — planning/PERFORMANCE_REPORT.md B1):
-        //   0 = off            — no sync; lowest latency, tears.
-        //   1 = on             — classic double-buffered vsync; on a high-refresh display the per-frame work sits
-        //                        right at the vblank budget, so any jitter pushes a frame past it → it waits for
-        //                        the NEXT vblank → the frame time DOUBLES (the measured "drops to 60 from 160"
-        //                        beat).
-        //   2 = mailbox        — triple-buffered: on Vulkan (Forward+) the GPU renders UNCAPPED and PRESENTS the
-        //                        latest complete frame at vblank. No tearing AND no beat-doubling — the single
-        //                        best pacing fix for high-refresh displays. Recommended.
-        //   3 = adaptive       — vsync when fast enough, off (tear) when a frame is late, instead of stuttering.
-        // Drivers that don't support a mode fall back gracefully.
-        DisplayServer.VSyncMode vsync = (int)c.GetFloat("vid_vsync") switch
-        {
-            <= 0 => DisplayServer.VSyncMode.Disabled,
-            1 => DisplayServer.VSyncMode.Enabled,
-            2 => DisplayServer.VSyncMode.Mailbox,
-            _ => DisplayServer.VSyncMode.Adaptive,
-        };
-        DisplayServer.WindowSetVsyncMode(vsync);
-        // Log the REQUESTED vs ACTUAL vsync mode — drivers can silently reject a mode (esp. Mailbox in windowed
-        // mode), and the FrameProfiler env banner reads the mode BEFORE this runs, so this is the authoritative line.
-        XonoticGodot.Common.Diagnostics.Log.Info(
-            $"[video] vid_vsync {(int)c.GetFloat("vid_vsync")} → requested {vsync}, actual {DisplayServer.WindowGetVsyncMode()}");
+        ApplyVsync(c);
 
         // Framerate cap (DP cl_maxfps): 0 = unlimited. Previously read by the menu but never enforced, so the
         // game ran uncapped — variable frame times beat against the fixed 72 Hz input/prediction tick and showed
@@ -332,16 +525,11 @@ public static class ClientSettings
         // display refresh is the ideal ceiling, but Godot under-reports it in borderless mode (reads 60 on this
         // box), so for the "auto" case (the DP-shipped 256) we apply max(144, detected-refresh). Every OTHER
         // explicit choice -- the menu's 128 / 512 / 1024 / 2048 or "Unlimited" (0) -- is the player's, honored as-is.
-        int maxFps = (int)c.GetFloat("cl_maxfps");
-        // "Auto" = the DP default (256) or the menu's "Unlimited" (0): neither is an fps target the player chose,
-        // and both let the CPU outrun the swapchain on a fast GPU -> present-jitter hitches. Apply an engaging
-        // ceiling = max(144, refresh). Any EXPLICIT non-default menu value (128 / 512 / 1024 / 2048) is honored.
-        int appliedFps = (maxFps == 0 || maxFps == 256)
-            ? System.Math.Max(144, (int)DisplayServer.ScreenGetRefreshRate())
-            : maxFps;
-        Godot.Engine.MaxFps = appliedFps;
-        XonoticGodot.Common.Diagnostics.Log.Info(
-            $"[video] cl_maxfps {maxFps} -> Engine.MaxFps {appliedFps} (refresh {DisplayServer.ScreenGetRefreshRate():0}Hz)");
+        ApplyMaxFps(c);
+
+        // Engine frame-delta honesty (the 2026-07-26 wobble root cause) — applied here so it is live from the
+        // first rendered frame, and re-applied on every vid_restart alongside vsync/maxfps.
+        ApplyEngineTiming(c);
 
         // (§12.7) OS-stall resistance: lift the process to ABOVE_NORMAL so background work (AV scans, the
         // indexer, browsers) can't preempt the game's main/render threads mid-frame — the CPU-side half of
@@ -389,10 +577,11 @@ public static class ClientSettings
     {
         const CvarFlags save = CvarFlags.Save;
         // vid_vsync is extended to a mode index (see ApplyVideo): 0 off / 1 on / 2 mailbox / 3 adaptive. The port
-        // default is 2 (mailbox — best frame pacing without a FIFO cascade on a missed present); it's already set
-        // to 2 as a locked default in MenuState.Boot, so this idempotent Register keeps that value and just carries
-        // the archive flag. A player can still set 0 (lowest input latency) / 1 / 3 from the console or video menu.
-        c.Register("vid_vsync", "2", save);
+        // default is 0 (OFF — Bryan's 2026-07-06 call: −0.5 ms/frame AND better lows than the previous mailbox
+        // default, uncapped decomposition in the perf-campaign doc); it's already set as a locked default in
+        // MenuState.Boot, so this idempotent Register keeps that value and just carries the archive flag. A
+        // player can still pick 1 / 2 (mailbox: no tearing, the pre-07-06 default) / 3 from console or menu.
+        c.Register("vid_vsync", "0", save);
         c.Register("vid_borderless", "0", save);
         // (§12.7) AboveNormal process priority by default — see ApplyVideo's priority block. 0 = stock priority.
         c.Register("sys_priority_boost", "1", save);

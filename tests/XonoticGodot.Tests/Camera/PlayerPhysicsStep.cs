@@ -12,15 +12,17 @@ namespace XonoticGodot.Tests.Camera;
 /// <see cref="PlayerPhysics"/> tick (the same sim the server runs), and reads the result back — so client
 /// prediction and the "server" simulation in <see cref="CameraPipeline"/> stay in lockstep exactly as in play.
 ///
-/// <para>The wish-move scaling matches <c>WishMoveScaling</c> (cl_forwardspeed/sidespeed/upspeed 400/350/400),
-/// kept in sync by hand since that type is <c>internal</c> to the game assembly. The carrier's hull/flags
-/// persist across ticks (as in <c>EntityMovementStep</c>); the harness sets <c>Api.Clock.Time</c> once per frame
-/// so a reconcile replay re-simulates the stored inputs "at now", never advancing the clock per replayed tick.</para>
+/// <para>The wish-move scaling matches <c>WishMoveScaling</c> — Base's <c>sys_phys_fixspeed</c> stuffcmds
+/// every client's cl_*speed to <c>max(sv_maxspeed, sv_maxairspeed)</c> = 360 stock on ALL axes — kept in sync
+/// by hand since that type is <c>internal</c> to the game assembly. The carrier's hull/flags persist across
+/// ticks (as in <c>EntityMovementStep</c>); the harness sets <c>Api.Clock.Time</c> once per frame so a
+/// reconcile replay re-simulates the stored inputs "at now", never advancing the clock per replayed tick.</para>
 /// </summary>
 public sealed class PlayerPhysicsStep : IMovementStep
 {
-    // cl_forwardspeed / cl_sidespeed / cl_upspeed (Base/darkplaces/cl_input.c) — must match WishMoveScaling.
-    private const float ForwardSpeed = 400f, SideSpeed = 350f, UpSpeed = 400f;
+    // sys_phys_fixspeed: max(sv_maxspeed, sv_maxairspeed) = 360 stock — must match WishMoveScaling.Speed()
+    // (tests run on unset cvars, where WishMoveScaling falls back to the same stock 360).
+    private const float ForwardSpeed = 360f, SideSpeed = 360f, UpSpeed = 360f;
 
     private readonly PlayerPhysics _physics = new();
     private readonly Entity _carrier;

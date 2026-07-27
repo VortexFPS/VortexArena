@@ -226,6 +226,9 @@ public sealed class TranslateBrushesOp : IVmapOp
 
     public IReadOnlyList<int> TouchedBrushIds => _ids;
 
+    /// <summary>Translation applied to every selected brush. Read by the wire codec.</summary>
+    public Vector3 Delta => _delta;
+
     public string Describe() => $"Move {_ids.Length} brush{(_ids.Length == 1 ? "" : "es")}";
 
     public bool Apply(VmapDocument doc)
@@ -268,6 +271,12 @@ public sealed class MoveFaceOp : IVmapOp
     }
 
     public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
+
+    /// <summary>Index of the pushed face within its brush. Read by the wire codec.</summary>
+    public int FaceIndex => _faceIndex;
+
+    /// <summary>Signed push distance along the face normal. Read by the wire codec.</summary>
+    public float Distance => _distance;
 
     public string Describe() => $"Push face {_faceIndex} of brush {_brushId} by {_distance:0.##}u";
 
@@ -312,6 +321,12 @@ public sealed class MoveVerticesOp : IVmapOp
     }
 
     public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
+
+    /// <summary>World positions of the grabbed vertices. Read by the wire codec.</summary>
+    public IReadOnlyList<Vector3> Targets => _targets;
+
+    /// <summary>Translation applied to each grabbed vertex. Read by the wire codec.</summary>
+    public Vector3 Delta => _delta;
 
     public string Describe() => _targets.Length == 2
         ? $"Drag edge of brush {_brushId}"
@@ -376,6 +391,15 @@ public sealed class RotateBrushesOp : IVmapOp
     }
 
     public IReadOnlyList<int> TouchedBrushIds => _ids;
+
+    /// <summary>Point the rotation turns about. Read by the wire codec.</summary>
+    public Vector3 Pivot => _pivot;
+
+    /// <summary>Rotation axis (need not be normalized). Read by the wire codec.</summary>
+    public Vector3 Axis => _axis;
+
+    /// <summary>Rotation angle in degrees. Read by the wire codec.</summary>
+    public float Degrees => _degrees;
 
     public string Describe() => $"Rotate {_ids.Length} brush{(_ids.Length == 1 ? "" : "es")} by {_degrees:0.#}°";
 

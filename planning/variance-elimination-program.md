@@ -31,6 +31,28 @@ green; 25s scripted windowed run with `sv_threaded 1` + 6 bots: zero errors, cle
 snapshots interpolating, bots navigating. Encode-per-peer now scales off-main for hosted servers
 (the multi-peer concern from the WS2 review — structurally closed).
 
+> **Correction 2026-07-27 — "all 17 sites" was `_transport.Send` only.** The stage-1 migration was
+> scoped by grepping `_transport.Send`, so four worker-reachable transport touches with *other* names
+> survived and kept calling the main-thread-affine Godot ENet peer directly from `XG-ServerSim`:
+> `FlushSounds` + `FlushEffects` (`_transport.Broadcast`), `Reject` (`_transport.Disconnect`, reached
+> via the stage-2 `_inboundNet` drain), and `BuildScoreboard`'s ping/packet-loss reads
+> (`GetPeer`/`GetStatistic`). That is the long-standing mid-combat listen-server crash: a temporary
+> two-thread entry detector on `NetTransport` measured **10–20 real overlaps per 55 s session**
+> (`XG-ServerSim` inside `Send` while main was inside `Poll`, and the reverse), and a pre-fix run
+> faulted with `0xC0000005` in `PacketPeer.PutPacket`. Fixed by widening the outbox from a packet
+> queue to an ordered op queue (`Packet | Broadcast | Disconnect`) and sampling peer stats on the
+> transport thread; post-fix the detector reads **0** overlaps. Note for future stages: the funnel is
+> `SendPacket`/`BroadcastPacket`/`DisconnectPeer`, and the audit grep is `_transport\.`, not
+> `_transport.Send`.
+>
+> **The detector is now permanent**, as a `[Conditional("DEBUG")]` guard on `NetTransport` (call sites
+> compiled out of Release entirely; it wraps `Poll`/`Send`/`Flush`/`Disconnect` and the
+> `RoundTripMs`/`PacketLoss` stat readers). On the first violation it prints the offending managed stack
+> — reintroducing the old `FlushSounds` bug makes it name `ServerNet.FlushSounds` → `StepSimThreaded` →
+> `ServerThread.Run` with file:line inside one 55 s run — and it stays completely silent on a healthy
+> session. If it ever fires, someone has put a Godot transport call back on the sim worker; route that
+> call through the outbox rather than silencing the guard.
+
 **Stage 2 LANDED 2026-07-11: inbound marshaling.** Transport events (packet/connect/disconnect)
 fire on main but their handlers mutate peers/world — now (threaded) they enqueue into `_inboundNet`
 (payloads are already owned byte[]s from GetPacket; one queue keeps connect→handshake→input order)

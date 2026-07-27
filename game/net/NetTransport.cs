@@ -42,6 +42,71 @@ public abstract class NetTransport : IDisposable
     /// <summary>True once the underlying ENet host is up.</summary>
     public bool IsActive => Peer is not null && Peer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Disconnected;
 
+    // =====================================================================================
+    //  DEBUG-only cross-thread guard  (regression cover for the 2026-07-27 listen-server crash)
+    //
+    //  ENetMultiplayerPeer is a Godot object and is NOT thread-safe, but the sv_threaded host has two
+    //  threads with a legitimate interest in it: MAIN owns the transport (Poll / outbox drain / Flush)
+    //  and the XG-ServerSim WORKER owns the sim+encode. The contract is that the worker NEVER touches
+    //  this object — it stages into ServerNet's outbox and main hands the bytes over. That contract is
+    //  invisible at the call site, and it has been broken twice: the WS1 stage-1 migration moved the 17
+    //  `_transport.Send` sites into the outbox but missed `Broadcast` (FlushSounds / FlushEffects),
+    //  `Disconnect` (Reject, reached via the stage-2 inbound drain) and the GetPeer/GetStatistic reads in
+    //  BuildScoreboard. The result was an intermittent 0xC0000005 inside PacketPeer.PutPacket, ~1 run in 3
+    //  in bot combat — a stochastic crash that cost several sessions to pin down.
+    //
+    //  This turns that into a deterministic, per-run signal: it flags any moment two DIFFERENT threads are
+    //  inside this peer's Godot calls at once. When it was written the pre-fix build measured 10-20 real
+    //  overlaps per 55 s session and the fixed build measured 0, so a non-zero count here means someone has
+    //  reintroduced an off-thread transport touch. Re-entrancy on the SAME thread (Poll → PacketReceived
+    //  handler → Send, the unthreaded path) is tracked by depth and is NOT an overlap.
+    //
+    //  Cost: [Conditional("DEBUG")] — the compiler removes the call sites outright in Release, leaving only
+    //  the (free, non-throwing) try/finally shells. No Prof scope: the check is an Interlocked CAS, far
+    //  cheaper than the scope that would measure it.
+    // =====================================================================================
+#if DEBUG
+    private int _ownerTid;                                                        // managed thread id inside, 0 = free
+    private readonly System.Threading.ThreadLocal<int> _depth = new(() => 0);     // per-instance, per-thread re-entrancy
+    private long _overlaps;
+    private int _reported;
+
+    /// <summary>DEBUG: how many times a second thread was caught inside this peer. Must stay 0.</summary>
+    internal long CrossThreadOverlaps => System.Threading.Interlocked.Read(ref _overlaps);
+#endif
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void EnterTransport(string what)
+    {
+#if DEBUG
+        if (_depth.Value++ > 0)
+            return;                                   // already inside on this thread — nested, not concurrent
+        int me = System.Environment.CurrentManagedThreadId;
+        int prev = System.Threading.Interlocked.CompareExchange(ref _ownerTid, me, 0);
+        if (prev == 0 || prev == me)
+            return;
+
+        System.Threading.Interlocked.Increment(ref _overlaps);
+        if (System.Threading.Interlocked.Exchange(ref _reported, 1) == 0)
+            GD.PrintErr(
+                $"[NetTransport] CROSS-THREAD ACCESS: '{System.Threading.Thread.CurrentThread.Name ?? "main"}' " +
+                $"(tid{me}) entered {what} while tid{prev} was already inside the ENet peer. Godot objects are " +
+                $"not thread-safe — this is the intermittent-crash bug class. Route the sim-worker call through " +
+                $"ServerNet's outbox (SendPacket / BroadcastPacket / DisconnectPeer) instead.\n" +
+                $"{System.Environment.StackTrace}");
+#endif
+    }
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void ExitTransport()
+    {
+#if DEBUG
+        if (--_depth.Value > 0)
+            return;
+        System.Threading.Interlocked.CompareExchange(ref _ownerTid, 0, System.Environment.CurrentManagedThreadId);
+#endif
+    }
+
     /// <summary>
     /// Pump ENet: poll the host, fire connect/disconnect for any peers whose status changed, then drain all
     /// queued packets, raising <see cref="PacketReceived"/> for each. Call once per frame before the game
@@ -52,6 +117,9 @@ public abstract class NetTransport : IDisposable
         if (Peer is null)
             return;
 
+        EnterTransport(nameof(Poll));
+        try
+        {
         // A DEAD peer (a connect attempt that timed out/was refused, or a torn-down link) isn't pollable —
         // Godot's ENet layer prints a native "The multiplayer instance isn't currently active" ERROR on every
         // Poll (the 2026-07-11 join-test storm: a client whose connect expired spammed stderr for its whole
@@ -77,6 +145,8 @@ public abstract class NetTransport : IDisposable
             if (data is { Length: > 0 })
                 PacketReceived?.Invoke(from, channel, data);
         }
+        }
+        finally { ExitTransport(); }
     }
 
     /// <summary>
@@ -90,7 +160,14 @@ public abstract class NetTransport : IDisposable
     /// inactive. (Godot's <c>ENetMultiplayerPeer.Host</c> is the underlying <c>ENetConnection</c>; its
     /// <c>Flush()</c> is enet_host_flush — send-only, it never receives.)
     /// </summary>
-    public void Flush() => Peer?.Host?.Flush();
+    public void Flush()
+    {
+        if (Peer is null)
+            return;
+        EnterTransport(nameof(Flush));
+        try { Peer.Host?.Flush(); }
+        finally { ExitTransport(); }
+    }
 
     /// <summary>
     /// Send <paramref name="payload"/> to <paramref name="targetPeerId"/> (use <see cref="ServerPeerId"/> from
@@ -104,14 +181,19 @@ public abstract class NetTransport : IDisposable
         if (Peer is null || payload.IsEmpty)
             return;
 
-        Peer.SetTargetPeer(targetPeerId);
-        Peer.TransferMode = reliable
-            ? MultiplayerPeer.TransferModeEnum.Reliable
-            : MultiplayerPeer.TransferModeEnum.Unreliable;
-        Peer.TransferChannel = reliable ? NetProtocol.ReliableChannel : NetProtocol.UnreliableChannel;
-        // ENetMultiplayerPeer.PutPacket has a ReadOnlySpan overload that copies into ENet's packet buffer
-        // without an intermediate managed array — keep the hot send path allocation-free.
-        Peer.PutPacket(payload);
+        EnterTransport(nameof(Send));
+        try
+        {
+            Peer.SetTargetPeer(targetPeerId);
+            Peer.TransferMode = reliable
+                ? MultiplayerPeer.TransferModeEnum.Reliable
+                : MultiplayerPeer.TransferModeEnum.Unreliable;
+            Peer.TransferChannel = reliable ? NetProtocol.ReliableChannel : NetProtocol.UnreliableChannel;
+            // ENetMultiplayerPeer.PutPacket has a ReadOnlySpan overload that copies into ENet's packet buffer
+            // without an intermediate managed array — keep the hot send path allocation-free.
+            Peer.PutPacket(payload);
+        }
+        finally { ExitTransport(); }
     }
 
     /// <summary>Broadcast to every connected peer (server-side convenience).</summary>
@@ -164,6 +246,14 @@ public abstract class NetTransport : IDisposable
 
     public virtual void Dispose()
     {
+#if DEBUG
+        // Stay silent on a healthy session; a non-zero count means the off-thread-transport contract was
+        // broken somewhere this run (see the cross-thread guard above).
+        if (CrossThreadOverlaps > 0)
+            GD.PrintErr($"[NetTransport] {CrossThreadOverlaps} cross-thread accesses this session — see the " +
+                        "first CROSS-THREAD ACCESS report above for the offending call site.");
+        _depth.Dispose();
+#endif
         if (Peer is not null)
         {
             Peer.Close();
@@ -216,7 +306,9 @@ public abstract class NetTransport : IDisposable
         public void Disconnect(int peerId, bool now = false)
         {
             if (Peer is null) return;
-            Peer.DisconnectPeer(peerId, now);
+            EnterTransport(nameof(Disconnect));
+            try { Peer.DisconnectPeer(peerId, now); }
+            finally { ExitTransport(); }
         }
 
         /// <summary>QC <c>CS(e).ping</c> (server/sv_main.qc bot_think / scoreboard.qc SP_PING): a connected
@@ -227,10 +319,15 @@ public abstract class NetTransport : IDisposable
         public int RoundTripMs(int peerId)
         {
             if (Peer is null) return -1;
-            ENetPacketPeer p = Peer.GetPeer(peerId);
-            if (p is null) return -1;
-            double rtt = p.GetStatistic(ENetPacketPeer.PeerStatistic.RoundTripTime);
-            return (int)System.Math.Round(rtt);
+            EnterTransport(nameof(RoundTripMs));
+            try
+            {
+                ENetPacketPeer p = Peer.GetPeer(peerId);
+                if (p is null) return -1;
+                double rtt = p.GetStatistic(ENetPacketPeer.PeerStatistic.RoundTripTime);
+                return (int)System.Math.Round(rtt);
+            }
+            finally { ExitTransport(); }
         }
 
         /// <summary>QC <c>CS(e).ping_packetloss</c> (server/world.qc:74): a connected peer's measured packet loss
@@ -239,9 +336,14 @@ public abstract class NetTransport : IDisposable
         public float PacketLoss(int peerId)
         {
             if (Peer is null) return 0f;
-            ENetPacketPeer p = Peer.GetPeer(peerId);
-            if (p is null) return 0f;
-            return Mathf.Clamp((float)(p.GetStatistic(ENetPacketPeer.PeerStatistic.PacketLoss) / 65536.0), 0f, 1f);
+            EnterTransport(nameof(PacketLoss));
+            try
+            {
+                ENetPacketPeer p = Peer.GetPeer(peerId);
+                if (p is null) return 0f;
+                return Mathf.Clamp((float)(p.GetStatistic(ENetPacketPeer.PeerStatistic.PacketLoss) / 65536.0), 0f, 1f);
+            }
+            finally { ExitTransport(); }
         }
     }
 

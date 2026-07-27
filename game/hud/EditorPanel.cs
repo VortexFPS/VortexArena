@@ -139,7 +139,11 @@ public partial class EditorPanel : HudPanel
                     lines.Add(($"brush #{infoBrush.Id}  {infoBrush.Faces.Count} faces  {kind}", dim));
                 }
 
-                if (c.IsDragging)
+                if (c.IsDragging && c.Manipulator == ManipulatorMode.Rotate)
+                {
+                    lines.Add(($"rotate {c.DragAngle:0.#}°  axis {AxisName(c.DragAxis)}", new Color(0.4f, 1f, 0.55f)));
+                }
+                else if (c.IsDragging)
                 {
                     NVec3 d = c.DragDelta;
                     string axis = c.DragAxis != NVec3.Zero ? $"  axis {AxisName(c.DragAxis)}" : "";

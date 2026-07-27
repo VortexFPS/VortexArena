@@ -327,7 +327,10 @@ public sealed partial class EditorController : Node3D
         _dragDistance = Hover.Distance;
         _dragDelta = NVec3.Zero;
         _dragRaw = NVec3.Zero;
-        _dragAxis = Hover.Selection.Kind == VmapSelectionKind.Face ? Hover.Normal : NVec3.Zero;
+        _dragAngle = 0f;
+        _dragAxis = Manipulator == ManipulatorMode.Rotate
+            ? RotationAxis()
+            : Hover.Selection.Kind == VmapSelectionKind.Face ? Hover.Normal : NVec3.Zero;
         _dragSnap = default;
         _dragging = true;
     }
@@ -356,6 +359,15 @@ public sealed partial class EditorController : Node3D
         NVec3 screenUp = Coords.ToQuake(t.Basis.Y);
 
         // Screen Y grows downward, so an upward drag is -Y.
+        // In ROTATE mode the pointer drives an ANGLE, not a displacement: horizontal travel turns the
+        // selection about the chosen axis. Degrees-per-pixel is fixed rather than depth-scaled, because a
+        // rotation has no depth for the drag to track against.
+        if (Manipulator == ManipulatorMode.Rotate)
+        {
+            _dragAngle += mouseDelta.X * 0.5f;
+            return;
+        }
+
         _dragRaw += screenRight * (mouseDelta.X * unitsPerPixel) - screenUp * (mouseDelta.Y * unitsPerPixel);
         UpdateDragFromRaw();
     }
@@ -363,11 +375,37 @@ public sealed partial class EditorController : Node3D
     /// <summary>Accumulated, unsnapped drag offset in world space.</summary>
     private NVec3 _dragRaw;
 
+    /// <summary>Accumulated rotation in degrees while dragging in <see cref="ManipulatorMode.Rotate"/>.</summary>
+    private float _dragAngle;
+
+    /// <summary>Snapped rotation the current drag would apply, in degrees (0 outside a rotate drag).</summary>
+    public float DragAngle => Manipulator == ManipulatorMode.Rotate && _dragging
+        ? VmapEdit.SnapToGrid(_dragAngle, AngleSnapDegrees)
+        : 0f;
+
+    /// <summary>Rotation snap step. 15 degrees matches Radiant's default and keeps geometry on nice angles.</summary>
+    public const float AngleSnapDegrees = 15f;
+
     /// <summary>The axis a face push is constrained to (its normal); zero for a free 3D drag.</summary>
     private NVec3 _dragAxis;
 
     /// <summary>The constrained drag axis, for the HUD/gizmo axis readout. Zero when the drag is free.</summary>
     public NVec3 DragAxis => _dragAxis;
+
+    /// <summary>
+    /// The axis a rotate drag turns about: whichever world axis the camera is most nearly looking ALONG, so
+    /// the ring you can see face-on is the one that turns. Falls back to Z (yaw), the common case.
+    /// </summary>
+    private NVec3 RotationAxis()
+    {
+        if (_camera is null)
+            return new NVec3(0f, 0f, 1f);
+
+        NVec3 fwd = Coords.ToQuake(-_camera.GlobalTransform.Basis.Z);
+        float ax = MathF.Abs(fwd.X), ay = MathF.Abs(fwd.Y), az = MathF.Abs(fwd.Z);
+        if (az >= ax && az >= ay) return new NVec3(0f, 0f, 1f);
+        return ax >= ay ? new NVec3(1f, 0f, 0f) : new NVec3(0f, 1f, 0f);
+    }
 
     /// <summary>Resolve the raw drag into the committed delta: constrain to the axis, then snap.</summary>
     private void UpdateDragFromRaw()
@@ -397,7 +435,27 @@ public sealed partial class EditorController : Node3D
 
         VmapSelection sel = _dragSelection;
         NVec3 delta = _dragDelta;
+        float angle = DragAngle;
+        ManipulatorMode mode = Manipulator;
         CancelDrag();
+
+        if (mode == ManipulatorMode.Rotate)
+        {
+            // Rotate the whole selection about its own centre, on the axis nearest the view direction — the
+            // axis whose handle ring is facing you is the one you are turning.
+            List<int> rotIds = _session.SelectedBrushIds();
+            if (angle == 0f || rotIds.Count == 0
+                || !VmapEdit.TryGetSelectionCenter(_document!, rotIds, out NVec3 pivot))
+                return false;
+
+            if (!_session.Apply(new RotateBrushesOp(rotIds, pivot, RotationAxis(), angle)))
+            {
+                Log.Info("editor: rotation refused — that would break the brush");
+                return false;
+            }
+            GeometryVersion++;
+            return true;
+        }
 
         if (delta == NVec3.Zero)
             return false;   // a click, not a drag
@@ -431,6 +489,7 @@ public sealed partial class EditorController : Node3D
         _dragSelection = VmapSelection.None;
         _dragDelta = NVec3.Zero;
         _dragRaw = NVec3.Zero;
+        _dragAngle = 0f;
         _dragAxis = NVec3.Zero;
         _dragSnap = default;
     }

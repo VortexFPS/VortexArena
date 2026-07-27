@@ -71,6 +71,13 @@ public sealed class ClientManager
     /// </summary>
     public static System.Func<Player, bool>? ClippedSpectatingProvider { get; set; }
 
+    /// <summary>
+    /// Set by the host while the map-editor gametype is active: forces free-fly observers to MOVETYPE_NOCLIP
+    /// regardless of <see cref="ClippedSpectatingProvider"/>. Editing while colliding with the level is
+    /// needlessly fiddly, and a brush dragged around you would otherwise trap the camera.
+    /// </summary>
+    public static bool? EditorFreeFlyNoclip { get; set; }
+
     private readonly List<ClientInfo> _clients = new();
     private readonly List<Player> _players = new();          // dense Player view (matches SimulationLoop.Clients)
     private readonly SimulationLoop _sim;
@@ -511,7 +518,12 @@ public sealed class ClientManager
         // (client.qc:261) precisely so a spectator can move before/without joining.
         if (p.Spectatee is null && p.MoveType is MoveType.Noclip or MoveType.FlyWorldOnly or MoveType.None)
         {
-            bool wouldClip = ClippedSpectatingProvider?.Invoke(p) ?? false;
+            // The EDITOR always flies free. cl_clippedspectating is a spectator-watching preference; a mapper
+            // needs to pass through the geometry they are editing (and to get back out of a brush they just
+            // moved around themselves), so the editor gametype ignores it.
+            bool wouldClip = EditorFreeFlyNoclip is null or false
+                ? ClippedSpectatingProvider?.Invoke(p) ?? false
+                : false;
             p.MoveType = wouldClip ? MoveType.FlyWorldOnly : MoveType.Noclip;
         }
 

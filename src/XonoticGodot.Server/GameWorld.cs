@@ -2931,6 +2931,9 @@ public sealed class GameWorld
         XonoticGodot.Common.Gameplay.RoundHandler.RoundNotStartedProvider = null;
         // Clear any prior gametype's bot attack-veto (only the incoming gametype's arm below re-installs it).
         Bot.BotBrain.ForbidAttackHook = null;
+        // Cleared here and re-set by the editor arm below, so switching away from the editor restores the
+        // normal cl_clippedspectating behaviour for ordinary spectators.
+        ClientManager.EditorFreeFlyNoclip = null;
         // Reset the join gate + onJoin hooks: gametypes that override these (Survival, LMS) re-install them in their
         // arm below (in Boot's WireCommandsGameType → ActivateGameType). For non-round gametypes, these stay as the
         // Boot defaults (LMS-based gate + noop, which gracefully no-op for DM/TDM/etc). Survival installs its own
@@ -2974,6 +2977,7 @@ public sealed class GameWorld
                 // seed the arena to the full set. Seeded only when unset, so a session can still override it.
                 if (string.IsNullOrEmpty(Api.Cvars.GetString("g_weaponarena")))
                     Api.Cvars.Set("g_weaponarena", EditorMode.DefaultWeaponArena);
+                ClientManager.EditorFreeFlyNoclip = true;   // fly through geometry while editing
                 break;
             case TeamMayhem tm:
                 tm.Activate();

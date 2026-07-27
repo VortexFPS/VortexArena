@@ -33,3 +33,16 @@ scons platform=windows target=template_release arch=x86_64 module_mono_enabled=y
 **Drop the patch when upgrading to Godot ≥4.8** — it ships upstream from there. Re-check
 `custom_template/release` on any engine upgrade: a stale custom template from an older engine
 version will crash the export at runtime.
+
+## Exporting on another machine
+
+`custom_template/release` in `export_presets.cfg` is an **absolute path to the dev box** — anyone
+exporting elsewhere must re-point it at their own build. That is deliberate, and the failure mode is
+safe: Godot hard-aborts an export whose custom template is missing, naming the path
+(`editor_export_platform_pc.cpp`: a non-empty `template_path` that fails `FileAccess::exists` returns
+`ERR_FILE_NOT_FOUND`). You get a clear error, never a silently wrong binary.
+
+**Do not "fix" this by blanking the field.** An EMPTY `custom_template/release` is the one dangerous
+value: Godot then falls back to the stock export template *silently*, and the result is a release
+build without the mouse-input backport — the frame-cadence stutter quietly returns and nothing in the
+export output says so. A wrong path fails loudly; an empty one fails invisibly. Keep it populated.

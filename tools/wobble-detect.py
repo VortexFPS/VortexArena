@@ -205,7 +205,26 @@ def clamp_grid_forensics(dt_ms, known_step_s=None):
 
     if hits < 0.15 * len(tail):
         return None
+
+    # DECOY-GRID CONTROL — the null hypothesis, measured rather than assumed.
+    #
+    # "86% of the tail is on-grid" only means something against the rate a grid would catch by CHANCE,
+    # and that rate is not a constant: GRID_TOL is a RELATIVE tolerance and physics_step/N points crowd
+    # together as N rises, so the accidental hit rate moves with physics_ticks_per_second and with the
+    # tail's own shape. Rather than reason about it, score the same tail against a deliberately WRONG
+    # quantum. The decoy is an irrational multiple of the real step (1/phi), so its grid shares no points
+    # with the real one, while the frame-time distribution being scored is identical.
+    #
+    # DIVIDING, not multiplying: a coarser decoy's finest point would land above the tail's dense region
+    # entirely (at a 100 ms step, step*phi bottoms out at 13.5 ms while the tail's mass is 7-13 ms), so it
+    # could not score there even in principle and the control would flatter the result. A FINER decoy puts
+    # candidate points right where the data actually is, which is the harder test.
+    decoy_hits, _ = _grid_fit(tail, step_s / 1.6180339887)
+    decoy_frac = decoy_hits / len(tail)
+
     return {
+        "decoy_frac_of_tail": decoy_frac,
+        "decoy_enrichment": (hits / len(tail)) / decoy_frac if decoy_frac > 0 else float("inf"),
         "physics_step_s": step_s,
         "physics_ticks_per_second": round(1.0 / step_s),
         "quantum_source": source,
@@ -424,6 +443,13 @@ def report(path, cols, args, proj):
         print(f"       ON-GRID                : {grid['grid_hits']} frames"
               f" = {100 * grid['grid_frac_of_tail']:.1f}% of the tail,"
               f" {100 * grid['grid_frac_of_all']:.1f}% of all frames")
+        enr = grid["decoy_enrichment"]
+        enr_s = "inf" if enr == float("inf") else f"{enr:.0f}x"
+        print(f"       decoy grid (control)   : {100 * grid['decoy_frac_of_tail']:.1f}% of the SAME tail"
+              f"  -> {enr_s} enrichment")
+        if enr < 3:
+            print("         ^^ the real grid barely beats a wrong one: this is NOT evidence of a clamp")
+            print("            (tolerance too loose for this quantum, or the tail is simply dense here).")
         for val, cnt in grid["buckets"]:
             nn = round(grid["physics_step_s"] * 1000.0 / val)
             print(f"         {val:8.3f} ms  x{cnt:6d}   = physics_step/{nn}")

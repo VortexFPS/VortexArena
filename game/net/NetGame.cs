@@ -6764,7 +6764,8 @@ public sealed partial class NetGame : Node3D
             }
             else if (_bsp is not null)
             {
-                doc = XonoticGodot.Formats.Vmap.BspToVmap.Import(_bsp, _map, $"maps/{_map}.bsp");
+                doc = XonoticGodot.Formats.Vmap.BspToVmap.Import(
+                    _bsp, _map, $"maps/{_map}.bsp", sourceHash: "", droppedSubmodels: _droppedSubmodels);
                 XonoticGodot.Common.Diagnostics.Log.Info(
                     $"editor: imported {_map} from BSP ({doc.Brushes.Count} brushes) — vmap_import to keep it");
                 LogEditorFaceHistogram(doc);
@@ -6823,6 +6824,7 @@ public sealed partial class NetGame : Node3D
         XonoticGodot.Common.Diagnostics.Log.Info(
             $"editor: {toolBrushes} tool brushes; visible faces {pass}/{total}; {hist.Count} distinct materials");
         XonoticGodot.Common.Diagnostics.Log.Info($"editor: top materials: {string.Join(" | ", top)}");
+
     }
 
     /// <summary>
@@ -6882,6 +6884,9 @@ public sealed partial class NetGame : Node3D
                 return true;
             case 7:
                 _editor?.CycleManipulator();
+                return true;
+            case 8:
+                Vmap.EditorOrthoView.CycleWireAlpha();
                 return true;
         }
 

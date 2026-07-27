@@ -161,8 +161,13 @@ public partial class EditorPanel : HudPanel
             }
 
             if (Ortho is { IsOpen: true } ortho)
-                lines.Add(($"ORTHO {ortho.AxisLabel}  {Key(BindOrtho)} close · {Key(BindOrthoAxis)} axis · MMB pan · wheel zoom",
+            {
+                lines.Add(($"ORTHO {ortho.AxisLabel}   {Key(BindOrtho)} close · {Key(BindOrthoAxis)} axis",
                     new Color(1f, 0.85f, 0.4f)));
+                // Panning is not discoverable: the view owns the cursor, so the usual fly keys pan instead.
+                lines.Add(($"  WASD pan · wheel zoom · Ctrl+wheel floor · edges {ortho.WireAlpha * 100f:0}% {Key(BindWire)}",
+                    new Color(1f, 0.85f, 0.4f)));
+            }
             else
                 lines.Add(($"{Key(BindOrtho)} ortho view", dim));
 
@@ -190,6 +195,7 @@ public partial class EditorPanel : HudPanel
     private const string BindGrid = "weapon_group_1";
     private const string BindTool = "weapon_group_3";
     private const string BindManip = "weapon_group_7";
+    private const string BindWire = "weapon_group_8";
     private const string BindOrtho = "weapon_group_4";
     private const string BindOrthoAxis = "weapon_group_5";
     private const string BindGridUp = "weapnext";

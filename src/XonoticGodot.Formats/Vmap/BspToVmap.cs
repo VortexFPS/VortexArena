@@ -30,9 +30,30 @@ public static class BspToVmap
     /// <param name="mapName">Short map name recorded in the manifest (e.g. "catharsis").</param>
     /// <param name="sourcePath">Virtual path of the source BSP, recorded for provenance.</param>
     /// <param name="sourceHash">Content hash of the source bytes (see <see cref="VmapPackage.HashBytes"/>).</param>
-    public static VmapDocument Import(BspData bsp, string mapName = "", string sourcePath = "", string sourceHash = "")
+    /// <param name="droppedSubmodels">
+    /// Inline model indices the active gametype filtered out (the same set the collision and render builders
+    /// receive). Their brushes are SKIPPED: a gametype-conditional <c>func_wall</c> is not part of this
+    /// session's map, so importing it drops textured, solid-looking brushes into the editor that float in
+    /// mid-air with nothing to line up against — geometry belonging to a mode that is not running.
+    /// </param>
+    public static VmapDocument Import(BspData bsp, string mapName = "", string sourcePath = "",
+        string sourceHash = "", IReadOnlySet<int>? droppedSubmodels = null)
     {
         ArgumentNullException.ThrowIfNull(bsp);
+
+        // Brush index -> owning inline model, so dropped models' brushes can be skipped.
+        var droppedBrushes = new HashSet<int>();
+        if (droppedSubmodels is { Count: > 0 })
+        {
+            for (int mi = 1; mi < bsp.Models.Length; mi++)
+            {
+                if (!droppedSubmodels.Contains(mi))
+                    continue;
+                BspModel dm = bsp.Models[mi];
+                for (int i = 0; i < dm.BrushCount; i++)
+                    droppedBrushes.Add(dm.FirstBrush + i);
+            }
+        }
 
         var doc = new VmapDocument
         {
@@ -53,6 +74,9 @@ public static class BspToVmap
         // ----- brushes: one VmapBrush per BSP brush, faces from its brush sides -----
         for (int bi = 0; bi < bsp.Brushes.Length; bi++)
         {
+            if (droppedBrushes.Contains(bi))
+                continue;
+
             VmapBrush? brush = ImportBrush(bsp, bi, faceIndex);
             if (brush is not null)
                 doc.Brushes.Add(brush);

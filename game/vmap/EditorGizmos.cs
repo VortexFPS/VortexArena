@@ -33,6 +33,7 @@ public sealed partial class EditorGizmos : Node3D
     private MeshInstance3D _wireframe = null!;
     private ImmediateMesh _overlayMesh = null!;
     private int _builtGeometryVersion = -1;
+    private float _builtWireAlpha = -1f;
     private bool _wireframeVisible;
 
     /// <summary>Show the full world wireframe (the orthographic view's geometry, and a 3D debug overlay).</summary>
@@ -95,10 +96,14 @@ public sealed partial class EditorGizmos : Node3D
 
         RebuildOverlay();
 
-        if (_wireframeVisible && _builtGeometryVersion != _controller.GeometryVersion)
+        float wireAlphaNow = _controller.Ortho?.WireAlpha ?? 1f;
+        if (_wireframeVisible
+            && (_builtGeometryVersion != _controller.GeometryVersion
+                || MathF.Abs(_builtWireAlpha - wireAlphaNow) > 0.001f))
         {
             RebuildWorldWireframe();
             _builtGeometryVersion = _controller.GeometryVersion;
+            _builtWireAlpha = wireAlphaNow;
         }
     }
 
@@ -420,9 +425,12 @@ public sealed partial class EditorGizmos : Node3D
             return;
         }
 
+        // Edge lines can obscure the art underneath, so their opacity is a user-cycled setting.
+        float wireAlpha = _controller?.Ortho?.WireAlpha ?? 1f;
+        var tinted = new Color(WireColor.R, WireColor.G, WireColor.B, WireColor.A * wireAlpha);
         var colors = new Color[verts.Count];
         for (int i = 0; i < colors.Length; i++)
-            colors[i] = WireColor;
+            colors[i] = tinted;
 
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);

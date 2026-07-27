@@ -49,6 +49,35 @@ public sealed partial class EditorOrthoView : Node
     /// <summary>Cvar: half-thickness of the floor-filter slab in world units.</summary>
     public const string CvarSlab = "cl_editor_ortho_slab";
 
+    /// <summary>Cvar: opacity of the ortho wireframe edge lines (1 = solid, 0 = hidden).</summary>
+    public const string CvarWireAlpha = "cl_editor_ortho_wire_alpha";
+
+    /// <summary>The opacity steps the toggle cycles through.</summary>
+    private static readonly float[] WireAlphaSteps = { 1.0f, 0.5f, 0.2f, 0.0f };
+
+    /// <summary>Current wireframe opacity.</summary>
+    public float WireAlpha => Mathf.Clamp(Cvar(CvarWireAlpha, 0.5f), 0f, 1f);
+
+    /// <summary>Step to the next opacity in the ladder — the wireframe can obscure the level art underneath.</summary>
+    public static void CycleWireAlpha()
+    {
+        if (Menu.MenuState.Cvars is not { } cvars)
+            return;
+        float current = Mathf.Clamp(Cvar(CvarWireAlpha, 0.5f), 0f, 1f);
+
+        int next = 0;
+        for (int i = 0; i < WireAlphaSteps.Length; i++)
+        {
+            if (MathF.Abs(WireAlphaSteps[i] - current) < 0.01f)
+            {
+                next = (i + 1) % WireAlphaSteps.Length;
+                break;
+            }
+        }
+        cvars.Set(CvarWireAlpha, WireAlphaSteps[next].ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+        Log.Info($"ortho wireframe opacity: {WireAlphaSteps[next] * 100f:0}%");
+    }
+
     private const float MinZoom = 64f;
     private const float MaxZoom = 16384f;
 
@@ -86,6 +115,7 @@ public sealed partial class EditorOrthoView : Node
         ArgumentNullException.ThrowIfNull(c);
         c.Register(CvarZoom, "2048", CvarFlags.Save);
         c.Register(CvarSlab, "4096", CvarFlags.Save);
+        c.Register(CvarWireAlpha, "0.5", CvarFlags.Save);
     }
 
     public void Attach(Camera3D camera, EditorController controller, EditorGizmos gizmos)
@@ -183,7 +213,7 @@ public sealed partial class EditorOrthoView : Node
         if (!IsOpen || viewportHeight <= 0f)
             return;
         float unitsPerPixel = Zoom / viewportHeight;
-        (NVec3 right, NVec3 up) = ScreenAxes();
+        (NVec3 right, NVec3 up) = CameraScreenAxes();
         Center -= right * (pixels.X * unitsPerPixel);
         Center += up * (pixels.Y * unitsPerPixel);
         Apply();
@@ -203,7 +233,7 @@ public sealed partial class EditorOrthoView : Node
             return;
         // Pan speed scales with zoom so a keypress crosses the same FRACTION of the view at any zoom level.
         float speed = Zoom * 0.9f * dt;
-        (NVec3 right, NVec3 up) = ScreenAxes();
+        (NVec3 right, NVec3 up) = CameraScreenAxes();
         Center += right * (side * speed) + up * (forward * speed);
         Apply();
     }
@@ -318,6 +348,22 @@ public sealed partial class EditorOrthoView : Node
         OrthoAxis.Front => new NVec3(0f, 1f, 0f),
         _ => new NVec3(1f, 0f, 0f),
     };
+
+    /// <summary>
+    /// Screen right/up taken from the LIVE camera basis, so panning always matches what is on screen.
+    ///
+    /// The hand-written <see cref="ScreenAxes"/> table disagreed with the camera for one view: the basis comes
+    /// out of <c>LookingAt</c> with a chosen up vector, and the table's guess at the resulting right vector was
+    /// inverted for the front elevation — so WASD panned backwards there. Reading the basis cannot disagree
+    /// with itself.
+    /// </summary>
+    private (NVec3 Right, NVec3 Up) CameraScreenAxes()
+    {
+        if (_camera is null)
+            return ScreenAxes();
+        Transform3D t = _camera.GlobalTransform;
+        return (Coords.ToQuake(t.Basis.X), Coords.ToQuake(t.Basis.Y));
+    }
 
     /// <summary>The world axes mapped to screen right and screen up for the current view.</summary>
     public (NVec3 Right, NVec3 Up) ScreenAxes() => Axis switch

@@ -22,34 +22,71 @@ namespace XonoticGodot.Game.Client;
 /// </summary>
 public static class SharedMeshCache
 {
-    private static readonly Dictionary<string, (Mesh? Mesh, Transform3D Xform)> _cache = new();
+    /// <summary>
+    /// One cached prop visual. The MATERIALS matter as much as the mesh: builders are split on where they
+    /// put them — <c>IqmBuilder</c>/MD3 call <c>ArrayMesh.SurfaceSetMaterial</c> (mesh-level, so extracting
+    /// the mesh carries them along), but <c>MdlBuilder</c> deliberately applies the palette-decoded skin as a
+    /// <see cref="MeshInstance3D.MaterialOverride"/> on the INSTANCE so a per-instance fade can never mutate
+    /// the shared resource. Keeping only the mesh therefore rendered every MDL-sourced prop untextured —
+    /// <c>models/casing_shell.mdl</c> (the shotgun casing) and the Quake1 <c>chunk.mdl</c> gibs. Capture both
+    /// levels here and re-apply per instance.
+    /// </summary>
+    private readonly record struct Prop(
+        Mesh? Mesh, Transform3D Xform, Material? Override, Material?[]? SurfaceOverrides);
 
-    /// <summary>A fresh MeshInstance3D sharing the cached mesh for <paramref name="key"/>, or null
+    private static readonly Dictionary<string, Prop> _cache = new();
+
+    /// <summary>A fresh MeshInstance3D sharing the cached mesh + materials for <paramref name="key"/>, or null
     /// when the builder produced no usable mesh (caller falls back to its generated prop).</summary>
     public static MeshInstance3D? Instantiate(string key, Func<Node3D?> build)
     {
-        if (!_cache.TryGetValue(key, out (Mesh? Mesh, Transform3D Xform) v))
+        if (!_cache.TryGetValue(key, out Prop v))
         {
             v = Extract(build);
             _cache[key] = v;
         }
-        return v.Mesh is null ? null : new MeshInstance3D { Mesh = v.Mesh, Transform = v.Xform };
+        if (v.Mesh is null)
+            return null;
+
+        var inst = new MeshInstance3D { Mesh = v.Mesh, Transform = v.Xform, MaterialOverride = v.Override };
+        if (v.SurfaceOverrides is not null)
+        {
+            int n = System.Math.Min(v.SurfaceOverrides.Length, inst.GetSurfaceOverrideMaterialCount());
+            for (int s = 0; s < n; s++)
+                if (v.SurfaceOverrides[s] is not null)
+                    inst.SetSurfaceOverrideMaterial(s, v.SurfaceOverrides[s]);
+        }
+        return inst;
     }
 
-    private static (Mesh?, Transform3D) Extract(Func<Node3D?> build)
+    private static Prop Extract(Func<Node3D?> build)
     {
         Node3D? root;
         try { root = build(); }
-        catch { return (null, Transform3D.Identity); }
+        catch { return default; }
         if (root is null)
-            return (null, Transform3D.Identity);
+            return default;
 
         (MeshInstance3D? mi, Transform3D xform) = FindFirstMesh(root, Transform3D.Identity);
         Mesh? mesh = mi?.Mesh;
+        Material? matOverride = null;
+        Material?[]? surfaceOverrides = null;
         if (mi is not null)
+        {
+            // Read the materials BEFORE the tree is freed.
+            matOverride = mi.MaterialOverride;
+            int count = mi.GetSurfaceOverrideMaterialCount();
+            for (int s = 0; s < count; s++)
+            {
+                Material? m = mi.GetSurfaceOverrideMaterial(s);
+                if (m is null) continue;
+                surfaceOverrides ??= new Material?[count];
+                surfaceOverrides[s] = m;
+            }
             mi.Mesh = null; // keep the extracted mesh alive past the tree free
+        }
         root.Free();        // never entered the tree: immediate main-thread free is safe
-        return (mesh, xform);
+        return new Prop(mesh, xform, matOverride, surfaceOverrides);
     }
 
     private static (MeshInstance3D?, Transform3D) FindFirstMesh(Node node, Transform3D acc)

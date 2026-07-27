@@ -151,6 +151,14 @@ instance uniform vec3 grid_dir = vec3(0.0, 1.0, 0.0); // Godot WORLD axes, point
 // the duplicates share this same Shader object, so no new pipelines are introduced).
 uniform float viewmodel_depth_range = 1.0;
 uniform float reflect_strength = 1.0;
+// GPU MD3 vertex-morph (cl_gpu_morph — ModelAnimator.ApplyFrameGpu): frameB position/normal streams ride
+// CUSTOM0/CUSTOM1 and morph_amount blends toward them, so a skin-shaded morph model (the CTF flag's team-
+// tintable _shirt skin — the r16 4.4ms/frame CPU-rebuild case) animates GPU-side like the Md3MorphShader
+// path. Default 0.0 keeps the branch off — every existing shared-skin use renders bit-identically, incl.
+// meshes with no CUSTOM arrays. Like viewmodel_depth_range this is a PLAIN per-material uniform (vertex-
+// stage instance uniforms are unreliable); ModelAnimator gives each morphing surface its own Duplicate()
+// of the resolved skin material (same Shader object — no new pipeline family) and drives the value there.
+uniform float morph_amount = 0.0;
 // Dynamic scene tint (XonoticGodot.Game.WorldTint) — a GLOBAL shader parameter applied to every model/skin
 // (players, weapon viewmodels, pickups) so the ""everything else"" grade can differ from the whole-map tint.
 // Strength is folded in on the C# side; default (1,1,1) is identity. Distinct from the per-entity colormod.
@@ -164,13 +172,22 @@ global uniform vec3 entity_tint;
 global uniform float model_light_gamma;
 
 void vertex() {
+    // GPU MD3 vertex-morph (see morph_amount above): frameA is the mesh's own streams, frameB rides
+    // CUSTOM0/1 — identical math to Md3MorphShader.vertex(). Branch-gated on the uniform (dynamically
+    // uniform, no divergence cost) so the default-0 case is EXACTLY the pre-morph shader: VERTEX/NORMAL
+    // untouched.
+    if (morph_amount > 0.0) {
+        VERTEX = mix(VERTEX, CUSTOM0.xyz, morph_amount);
+        NORMAL = normalize(mix(NORMAL, CUSTOM1.xyz, morph_amount));
+    }
     // Custom projection ONLY to remap depth (the DP SHORTDEPTHRANGE viewmodel hack — see
     // viewmodel_depth_range above). Godot 4.3+ uses REVERSED-Z (NDC near = 1, far = 0), so GL's
     // glDepthRange(0, frac) window slice [0, frac] mirrors to [1-frac, 1]: z' = (1-frac)*w + frac*z.
     // At the default frac = 1.0 this is mix(z, w, 0.0) == z — bit-identical to the fixed-function
-    // transform, so world/player instances render exactly as before. VERTEX itself is untouched, so
-    // view-space lighting in fragment() is unaffected. Viewmodel meshes cast no shadows (the C# side
-    // sets CastShadow=Off), so the light-projection shadow pass never sees a compressed depth.
+    // transform, so world/player instances render exactly as before. VERTEX is untouched by the depth
+    // remap (morph aside), so view-space lighting in fragment() is unaffected. Viewmodel meshes cast no
+    // shadows (the C# side sets CastShadow=Off), so the light-projection shadow pass never sees a
+    // compressed depth. Computed from the (possibly morphed) VERTEX.
     POSITION = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
     POSITION.z = mix(POSITION.z, POSITION.w, 1.0 - viewmodel_depth_range);
 }

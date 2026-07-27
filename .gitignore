@@ -63,3 +63,7 @@ _*.log
 
 # Local agent/design memory notes — kept on disk, never versioned
 /memory/
+
+# Python bytecode from the tools/ scripts (perf-report, wobble-detect, find-cvars, …)
+__pycache__/
+*.pyc

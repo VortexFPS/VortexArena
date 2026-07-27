@@ -136,13 +136,12 @@ public sealed partial class ShellCasings : Node3D
         string vpath = kind == CasingKind.Shell ? "models/casing_shell.mdl" : "models/casing_bronze.iqm";
         if (ModelLoader is not null)
         {
-            try
-            {
-                Node3D? loaded = ModelLoader(vpath);
-                if (loaded is not null)
-                    return loaded;
-            }
-            catch { /* fall through to generated mesh */ }
+            // [crash fix 2026-07-26] one built tree per casing model EVER; every casing shares its mesh
+            // (SharedMeshCache) — the per-casing IqmBuilder.Build (fresh ArrayMesh + AnimationLibrary,
+            // 10-25 finalizer-thread frees/s under sustained fire) was the top residual churn source.
+            MeshInstance3D? shared = SharedMeshCache.Instantiate(vpath, () => ModelLoader(vpath));
+            if (shared is not null)
+                return shared;
         }
         return GeneratedCasing(kind);
     }
@@ -399,17 +398,12 @@ public sealed partial class ShellCasings : Node3D
 
         private static void ApplyAlpha(Node node, float a)
         {
-            if (node is MeshInstance3D mi && mi.GetSurfaceOverrideMaterialCount() >= 0)
-            {
-                // Only our generated cylinder carries a StandardMaterial3D we can fade; loaded models keep
-                // their own materials (fading those would need per-instance overrides — skipped, they just pop).
-                if (mi.Mesh is { } mesh && mesh.SurfaceGetMaterial(0) is StandardMaterial3D mat)
-                {
-                    mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                    Color c = mat.AlbedoColor;
-                    mat.AlbedoColor = new Color(c.R, c.G, c.B, a);
-                }
-            }
+            // Per-INSTANCE fade (GeometryInstance3D.Transparency, Forward+): never write into the mesh-level
+            // material — it's shared (the generated cylinder mesh across casings; SharedMeshCache/AssetSystem
+            // for loaded models), so a material write faded every casing in lockstep. This also makes loaded
+            // models actually fade (the old StandardMaterial3D-only path silently popped them).
+            if (node is GeometryInstance3D gi)
+                gi.Transparency = 1f - a;
             foreach (Node child in node.GetChildren())
                 ApplyAlpha(child, a);
         }

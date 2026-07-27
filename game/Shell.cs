@@ -862,14 +862,13 @@ public partial class Shell : Node
     /// </summary>
     private string? LocalRouteCommand(string line)
     {
-        GameWorld? world = _netGame?.ServerWorld;
-        if (world is null)
-            return null;
         // T47 integration wire-up: the listen-server operator's in-game console is the HOST, so it runs as the
         // server console (isServerConsole: true) — without this flag the new client-command privilege gate would
         // reject the host's own kick/map/set/endmatch/etc. (a regression vs pre-T47). caller stays LocalServerPlayer
         // so kill/say/team still act on the host's player; the remote-client path (ServerNet.cs) stays gated.
-        return world.Commands.Execute(line, isServerConsole: true, caller: _netGame?.LocalServerPlayer).Output;
+        // WS1: routed through NetGame so the execute takes the sim gate when sv_threaded is on — a bare
+        // Commands.Execute here mutated the worker-owned world from the main thread (`kill` mid-bot-combat).
+        return _netGame?.ExecuteHostConsoleCommand(line);
     }
 
     /// <summary>

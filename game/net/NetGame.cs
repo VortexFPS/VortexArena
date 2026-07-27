@@ -254,6 +254,27 @@ public sealed partial class NetGame : Node3D
     /// console on a pure client where there is no in-process world. No-op if not connected.</summary>
     public void SendStringCommand(string line) => _client?.SendStringCommand(line);
 
+    /// <summary>
+    /// Execute a host-console gameplay command against the in-process server world, returning its output —
+    /// or null when there is no local world (pure client). WS1: this runs on the MAIN thread (console input)
+    /// while the sim worker owns the world when sv_threaded is on, so it takes the sim gate for the duration —
+    /// the same serialisation the pre-stage-3 whole-frame gate provided for console commands, restored for
+    /// just this path (RunOnSimThread can't be used here: the console needs the command's synchronous output).
+    /// Every world-mutating verb the console can type (kill/kick/give/endmatch/vote/…) must come through here,
+    /// not through a bare Commands.Execute — that was the mid-combat crash class d991956 closed for transport.
+    /// </summary>
+    public string? ExecuteHostConsoleCommand(string line)
+    {
+        GameWorld? world = _serverWorld;
+        if (world is null)
+            return null;
+        object? gate = _server?.SimGate;
+        if (gate is null)
+            return world.Commands.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
+        lock (gate)
+            return world.Commands.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
+    }
+
     /// <summary>The loading screen (DP <c>SCR_DrawLoadingScreen</c>) shown during map load + handshake,
     /// set by <see cref="Shell"/> before the node enters the tree. Null when no loading screen is active
     /// (e.g. a bare CLI host).</summary>
@@ -1059,8 +1080,15 @@ public sealed partial class NetGame : Node3D
         // the engine console UN-escapes it back to real quotes before storing the cvar. We set the cvar value
         // directly (no console reparse), so undo that escaping here to store the same value paste/ObjectPortLoad
         // (which tokenizes "-quoted tokens) expects.
-        _sharedCvars.Set(cvar, value.Replace("\\\"", "\""));
-        _sharedCvars.MarkArchived(cvar); // cl_sandbox_clipboard is an archived client cvar
+        // WS1: this is dispatched on the SIM worker (HandleClientCommand), but the SHARED store is main-owned
+        // (plain Dictionary, read/written by console/menu every frame — only the server's PRIVATE store is
+        // concurrent-enabled). Cross to the main thread for the write; a one-frame clipboard delay is harmless.
+        string unescaped = value.Replace("\\\"", "\"");
+        Callable.From(() =>
+        {
+            _sharedCvars?.Set(cvar, unescaped);
+            _sharedCvars?.MarkArchived(cvar); // cl_sandbox_clipboard is an archived client cvar
+        }).CallDeferred();
     }
 
     /// <summary>
@@ -1308,8 +1336,8 @@ public sealed partial class NetGame : Node3D
         if (now < _benchSpectateNextThink)
             return;
         _benchSpectateNextThink = now + 0.5f;
-        if ((_sharedCvars?.GetFloat("cl_bench_spectate") ?? 0f) == 0f)
-            return;
+        // NOTE: no cl_bench_spectate read here — on the threaded path this runs on the SIM worker and the
+        // shared cvar store is main-owned. The dispatch site (_Process) gates on BenchSpectateActive on main.
         if (LocalServerPlayer is not { } host)
             return;
         var clients = _serverWorld.Clients;
@@ -3227,11 +3255,16 @@ public sealed partial class NetGame : Node3D
         // Demo/benchmark camera: keep the host observing a living bot (no-op unless cl_bench_spectate is set;
         // throttled to 2 Hz). WS1 stage 3: it MUTATES server-side spectator state — run it on the sim thread
         // when threaded (RunOnSimThread is inline when not). Its 2 Hz throttle field is then written only by
-        // whichever thread owns the mode — never both.
-        if (_serverThread is null)
-            BenchSpectateThink();
-        else if (BenchSpectateActive)
-            _server?.RunOnSimThread(BenchSpectateThink);
+        // whichever thread owns the mode — never both. The cl_bench_spectate read happens HERE on main for
+        // both paths: the shared store is a plain main-owned Dictionary, so the worker must never touch it
+        // (BenchSpectateThink itself no longer re-reads the cvar).
+        if (BenchSpectateActive)
+        {
+            if (_serverThread is null)
+                BenchSpectateThink();
+            else
+                _server?.RunOnSimThread(BenchSpectateThink);
+        }
 
         // (perf 2.0) ng.feeds: the music/announcer/host-mutator HUD-feed run — sub-scoped so the ng.process
         // residual shrinks to genuinely-unattributed work (frame-budget decomposition, perf-campaign doc).

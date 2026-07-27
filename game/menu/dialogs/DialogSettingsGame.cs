@@ -201,18 +201,19 @@ public partial class DialogSettingsGameCrosshair : SettingsTab
         box.AddChild(blurMate);
         Dependent.BindNot(blurMate, "crosshair_hittest", 0);
 
-        // QC: checkBoxEx(1.25, bit 1, "crosshair_hittest",...) — toggles bit 1 of crosshair_hittest.
-        var shrinkMate = Widgets.FlagCheckBox("crosshair_hittest", 1, "Shrink if obstructed by a teammate");
+        // QC: makeXonoticCheckBoxEx(1.25, 1, "crosshair_hittest",...) — checked stores 1.25 (hit-test WITH the
+        // teammate shrink), unchecked stores 1 (hit-test only, NOT 0 — the "Perform hit tests" box above owns off).
+        var shrinkMate = Widgets.ValueCheckBox("crosshair_hittest", 1.25f, 1f, "Shrink if obstructed by a teammate");
         box.AddChild(shrinkMate);
         Dependent.BindNot(shrinkMate, "crosshair_hittest", 0);
 
-        // QC: checkBoxEx(0.5, bit 0, "crosshair_hitindication",...); dep crosshair_enabled∈[1,2].
-        var hitIndication = Widgets.FlagCheckBox("crosshair_hitindication", 0, "Animate crosshair when hitting an enemy");
+        // QC: makeXonoticCheckBoxEx(0.5, 0, "crosshair_hitindication",...); dep crosshair_enabled∈[1,2].
+        var hitIndication = Widgets.ValueCheckBox("crosshair_hitindication", 0.5f, 0f, "Animate crosshair when hitting an enemy");
         box.AddChild(hitIndication);
         Dependent.Bind(hitIndication, "crosshair_enabled", 1, 2);
 
-        // QC: checkBoxEx(0.25, bit 0, "crosshair_pickup",...); dep crosshair_enabled∈[1,2].
-        var pickup = Widgets.FlagCheckBox("crosshair_pickup", 0, "Animate crosshair when picking up an item");
+        // QC: makeXonoticCheckBoxEx(0.25, 0, "crosshair_pickup",...); dep crosshair_enabled∈[1,2].
+        var pickup = Widgets.ValueCheckBox("crosshair_pickup", 0.25f, 0f, "Animate crosshair when picking up an item");
         box.AddChild(pickup);
         Dependent.Bind(pickup, "crosshair_enabled", 1, 2);
     }
@@ -281,8 +282,10 @@ public partial class DialogSettingsGameHud : SettingsTab
         box.AddChild(wpEdgeRow);
         Dependent.BindNot(wpEdgeRow, "g_waypointsprite_alpha", 0);
 
-        // QC: checkBoxEx(0.25, bit 1, "g_waypointsprite_crosshairfadealpha",...); deps NOT alpha==0 AND hidewp==0.
-        var wpFade = Widgets.FlagCheckBox("g_waypointsprite_crosshairfadealpha", 1, "Fade when near the crosshair");
+        // QC: makeXonoticCheckBoxEx(0.25, 1, "g_waypointsprite_crosshairfadealpha",...) — an INVERTED value
+        // pair (yes 0.25 < no 1): checked fades the sprite to 25% near the crosshair, unchecked = full alpha.
+        // Deps: NOT alpha==0 AND hidewp==0.
+        var wpFade = Widgets.ValueCheckBox("g_waypointsprite_crosshairfadealpha", 0.25f, 1f, "Fade when near the crosshair");
         box.AddChild(wpFade);
         Dependent.BindNot(wpFade, "g_waypointsprite_alpha", 0);
 
@@ -323,8 +326,9 @@ public partial class DialogSettingsGameHud : SettingsTab
         box.AddChild(snDecolorRow);
         Dependent.BindNot(snDecolorRow, "hud_shownames_alpha", 0);
 
-        // QC: checkBoxEx(25, bit 0, "hud_shownames_crosshairdistance",...); deps NOT alpha==0 AND shownames==1.
-        var snCross = Widgets.FlagCheckBox("hud_shownames_crosshairdistance", 0, "Only when near crosshair");
+        // QC: makeXonoticCheckBoxEx(25, 0, "hud_shownames_crosshairdistance",...) — checked stores 25 (the
+        // crosshair-proximity DISTANCE in qu, not a flag), unchecked 0. Deps: NOT alpha==0 AND shownames==1.
+        var snCross = Widgets.ValueCheckBox("hud_shownames_crosshairdistance", 25f, 0f, "Only when near crosshair");
         box.AddChild(snCross);
         Dependent.BindNot(snCross, "hud_shownames_alpha", 0);
 
@@ -355,9 +359,24 @@ public partial class DialogSettingsGameHud : SettingsTab
 
         box.AddChild(Ui.Spacer());
 
-        // QC: makeXonoticButton("Enter HUD editor") onClick=HUDSetup_Check_Gamestatus. No HUD editor backend here;
-        // wire the engine command "menu_showhudoptions" through MenuCommand (logged inert if no backend yet).
-        box.AddChild(Widgets.CommandButton("Enter HUD editor", "menu_showhudoptions"));
+        // QC: makeXonoticButton("Enter HUD editor") onClick=HUDSetup_Check_Gamestatus
+        // (dialog_settings_game_hud.qc): already in a match → HUDSetup_Start runs `togglemenu 0` +
+        // `_hud_configure 1` (drop straight into the live editor, game/hud/HudConfigEditor.cs); not in a match
+        // → the confirm dialog offering to start a local game first (dialog_settings_game_hudconfirm.qc).
+        var enterHud = new Button
+        {
+            Text = Localization.Tr("Enter HUD editor"),
+            CustomMinimumSize = new Vector2(0, 36),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        enterHud.Pressed += () =>
+        {
+            if (MenuCommand.InMatch?.Invoke() == true)
+                MenuCommand.Run("togglemenu 0; _hud_configure 1"); // QC HUDSetup_Start (in-match branch)
+            else
+                MenuCommand.OpenDialogOverlay?.Invoke("hudconfirm"); // QC DialogOpenButton → hudconfirmDialog
+        };
+        box.AddChild(enterHud);
     }
 
     private static string Percent(float v) => $"{Mathf.RoundToInt(v * 100f)}%";
@@ -457,28 +476,34 @@ public partial class DialogSettingsGameView : SettingsTab
         var perspGroup = new ButtonGroup();
         box.AddChild(Widgets.RadioButton("chase_active", "0", "1st person perspective", perspGroup));
 
-        // QC: checkBoxEx(2, bit 0, "cl_eventchase_death",...); dep chase_active∈[-1,0].
-        var eventChase = Widgets.FlagCheckBox("cl_eventchase_death", 0, "Slide to third person upon death");
+        // These five are QC VALUE-PAIR checkboxes — makeXonoticCheckBoxEx(yesValue, noValue, cvar, label)
+        // stores yesValue when checked / noValue when unchecked (NOT a bit toggle; the old FlagCheckBox
+        // wiring with bit 0 masked nothing and made every one of them inert).
+
+        // QC: makeXonoticCheckBoxEx(2, 0, "cl_eventchase_death",...); dep chase_active∈[-1,0].
+        var eventChase = Widgets.ValueCheckBox("cl_eventchase_death", 2f, 0f, "Slide to third person upon death");
         box.AddChild(eventChase);
         Dependent.Bind(eventChase, "chase_active", -1, 0);
 
-        // QC: checkBoxEx(0.05, bit 0, "cl_bobfall",...); dep chase_active∈[-1,0].
-        var bobFall = Widgets.FlagCheckBox("cl_bobfall", 0, "Smooth the view when landing from a jump");
+        // QC: makeXonoticCheckBoxEx(0.05, 0, "cl_bobfall",...); dep chase_active∈[-1,0]. ON in stock Xonotic
+        // (xonotic-client.cfg:151 cl_bobfall 0.05) — the landing dip.
+        var bobFall = Widgets.ValueCheckBox("cl_bobfall", 0.05f, 0f, "Smooth the view when landing from a jump");
         box.AddChild(bobFall);
         Dependent.Bind(bobFall, "chase_active", -1, 0);
 
-        // QC: checkBoxEx(0.05, bit 0, "cl_smoothviewheight",...); dep chase_active∈[-1,0].
-        var smoothCrouch = Widgets.FlagCheckBox("cl_smoothviewheight", 0, "Smooth the view while crouching");
+        // QC: makeXonoticCheckBoxEx(0.05, 0, "cl_smoothviewheight",...); dep chase_active∈[-1,0].
+        var smoothCrouch = Widgets.ValueCheckBox("cl_smoothviewheight", 0.05f, 0f, "Smooth the view while crouching");
         box.AddChild(smoothCrouch);
         Dependent.Bind(smoothCrouch, "chase_active", -1, 0);
 
-        // QC: checkBoxEx_T(0.01, bit 0, "cl_bob",...) makeMulti("cl_bob2"); dep chase_active∈[-1,0].
-        var bob = Widgets.FlagCheckBox("cl_bob", 0, "View bobbing while walking around");
+        // QC: makeXonoticCheckBoxEx_T(0.01, 0, "cl_bob",...) + makeMulti("cl_bob2"); dep chase_active∈[-1,0].
+        var bob = Widgets.ValueCheckBox("cl_bob", 0.01f, 0f, "View bobbing while walking around",
+            multiCvars: "cl_bob2");
         box.AddChild(bob);
         Dependent.Bind(bob, "chase_active", -1, 0);
 
-        // QC: checkBoxEx(1, bit 0, "v_idlescale",...); dep chase_active∈[-1,0].
-        var idle = Widgets.FlagCheckBox("v_idlescale", 0, "View waving while idle");
+        // QC: makeXonoticCheckBoxEx(1, 0, "v_idlescale",...); dep chase_active∈[-1,0] — the idle view sway.
+        var idle = Widgets.ValueCheckBox("v_idlescale", 1f, 0f, "View waving while idle");
         box.AddChild(idle);
         Dependent.Bind(idle, "chase_active", -1, 0);
 
@@ -560,8 +585,9 @@ public partial class DialogSettingsGameView : SettingsTab
         box.AddChild(vzFactorRow);
         Dependent.Bind(vzFactorRow, "cl_velocityzoom_enabled", 1, 1);
 
-        // QC: checkBoxEx(3, bit 1, "cl_velocityzoom_type",...); deps NOT cl_velocityzoom_factor==0 AND enabled==1.
-        var vzForward = Widgets.FlagCheckBox("cl_velocityzoom_type", 1, "Forward movement only");
+        // QC: makeXonoticCheckBoxEx(3, 1, "cl_velocityzoom_type",...) — checked stores type 3 (forward speed
+        // only), unchecked type 1 (all velocity). Deps NOT cl_velocityzoom_factor==0 AND enabled==1.
+        var vzForward = Widgets.ValueCheckBox("cl_velocityzoom_type", 3f, 1f, "Forward movement only");
         box.AddChild(vzForward);
         Dependent.Bind(vzForward, "cl_velocityzoom_enabled", 1, 1);
 
@@ -715,8 +741,10 @@ public partial class DialogSettingsGameMessages : SettingsTab
         box.AddChild(spreesCenter);
         Dependent.Bind(spreesCenter, "notification_show_sprees", 1, 1);
 
-        // QC: checkBoxEx_T(3, bit 0, "notification_show_sprees_info",...); dep show_sprees==1.
-        var spreesInfo = Widgets.FlagCheckBox("notification_show_sprees_info", 3, "Show spree information in death messages");
+        // QC: makeXonoticCheckBoxEx_T(3, 0, "notification_show_sprees_info",...) — checked stores 3 (spree info
+        // in BOTH kill-message target/attacker lines; 1/2 are the single-line variants picked by the QC
+        // mixedslider); unchecked 0. Dep show_sprees==1.
+        var spreesInfo = Widgets.ValueCheckBox("notification_show_sprees_info", 3f, 0f, "Show spree information in death messages");
         box.AddChild(spreesInfo);
         Dependent.Bind(spreesInfo, "notification_show_sprees", 1, 1);
 
@@ -725,8 +753,16 @@ public partial class DialogSettingsGameMessages : SettingsTab
         box.AddChild(spreesNewline);
         Dependent.Bind(spreesNewline, "notification_show_sprees", 1, 1);
 
-        // QC: checkBoxEx_T(2, bit 1, "notification_CHOICE_FRAG",...) + makeMulti(many CHOICE_* siblings).
-        box.AddChild(Widgets.FlagCheckBox("notification_CHOICE_FRAG", 1, "Add extra frag information to centerprint when available"));
+        // QC: makeXonoticCheckBoxEx_T(2, 1, "notification_CHOICE_FRAG",...) — checked stores CHOICE 2 (the
+        // verbose variant), unchecked 1 (simple, NOT off) — mirrored onto the frag-family siblings (makeMulti).
+        box.AddChild(Widgets.ValueCheckBox("notification_CHOICE_FRAG", 2f, 1f,
+            "Add extra frag information to centerprint when available",
+            multiCvars: new[]
+            {
+                "notification_CHOICE_FRAGGED", "notification_CHOICE_TYPEFRAG", "notification_CHOICE_TYPEFRAGGED",
+                "notification_CHOICE_FRAG_FIRE", "notification_CHOICE_FRAGGED_FIRE",
+                "notification_CHOICE_FRAG_FREEZE", "notification_CHOICE_FRAGGED_FREEZE",
+            }));
 
         // QC: checkBox_T(0,"notification_show_location",...).
         box.AddChild(Widgets.CheckBox("notification_show_location", "Add frag location to death messages when available"));
@@ -736,25 +772,31 @@ public partial class DialogSettingsGameMessages : SettingsTab
         // --- Gametype Settings ---
         box.AddChild(Ui.Header("Gametype Settings"));
 
-        // QC: checkBoxEx_T(2, bit 1, "notification_CHOICE_CTF_CAPTURE_TIME", sprintf("Display capture times in %s", CTF)) + makeMulti.
-        box.AddChild(Widgets.FlagCheckBox("notification_CHOICE_CTF_CAPTURE_TIME", 1, "Display capture times in Capture the Flag"));
+        // QC: makeXonoticCheckBoxEx_T(2, 1, "notification_CHOICE_CTF_CAPTURE_TIME", ...) + makeMulti(BROKEN/UNBROKEN).
+        box.AddChild(Widgets.ValueCheckBox("notification_CHOICE_CTF_CAPTURE_TIME", 2f, 1f,
+            "Display capture times in Capture the Flag",
+            multiCvars: new[] { "notification_CHOICE_CTF_CAPTURE_BROKEN", "notification_CHOICE_CTF_CAPTURE_UNBROKEN" }));
 
-        // QC: checkBoxEx_T(2, bit 1, "notification_CHOICE_CTF_PICKUP_ENEMY", sprintf("Display name of flag stealer in %s", CTF)) + makeMulti.
-        box.AddChild(Widgets.FlagCheckBox("notification_CHOICE_CTF_PICKUP_ENEMY", 1, "Display name of flag stealer in Capture the Flag"));
+        // QC: makeXonoticCheckBoxEx_T(2, 1, "notification_CHOICE_CTF_PICKUP_ENEMY", ...) + makeMulti(TEAM/NEUTRAL).
+        box.AddChild(Widgets.ValueCheckBox("notification_CHOICE_CTF_PICKUP_ENEMY", 2f, 1f,
+            "Display name of flag stealer in Capture the Flag",
+            multiCvars: new[] { "notification_CHOICE_CTF_PICKUP_ENEMY_TEAM", "notification_CHOICE_CTF_PICKUP_ENEMY_NEUTRAL" }));
 
         box.AddChild(Ui.Spacer());
 
         // --- Other ---
         box.AddChild(Ui.Header("Other"));
 
-        // QC: checkBoxEx_T(4, bit 0, "con_notify",...).
-        box.AddChild(Widgets.FlagCheckBox("con_notify", 0, "Display console messages in the top left corner"));
+        // QC: makeXonoticCheckBoxEx_T(4, 0, "con_notify",...) — checked stores 4 (notify lines in the top-left).
+        box.AddChild(Widgets.ValueCheckBox("con_notify", 4f, 0f, "Display console messages in the top left corner"));
 
-        // QC: checkBoxEx_T(2, bit 1, "notification_allow_chatboxprint",...).
-        box.AddChild(Widgets.FlagCheckBox("notification_allow_chatboxprint", 1, "Display all info messages in the chatbox"));
+        // QC: makeXonoticCheckBoxEx_T(2, 1, "notification_allow_chatboxprint",...) — checked 2 (ALL info to chatbox).
+        box.AddChild(Widgets.ValueCheckBox("notification_allow_chatboxprint", 2f, 1f, "Display all info messages in the chatbox"));
 
-        // QC: checkBoxEx_T(2, bit 1, "notification_INFO_QUIT_DISCONNECT",...) + makeMulti(QUIT_KICK_IDLING, JOIN_CONNECT).
-        box.AddChild(Widgets.FlagCheckBox("notification_INFO_QUIT_DISCONNECT", 1, "Display player statuses in the chatbox"));
+        // QC: makeXonoticCheckBoxEx_T(2, 1, "notification_INFO_QUIT_DISCONNECT",...) + makeMulti(KICK_IDLING, JOIN_CONNECT).
+        box.AddChild(Widgets.ValueCheckBox("notification_INFO_QUIT_DISCONNECT", 2f, 1f,
+            "Display player statuses in the chatbox",
+            multiCvars: new[] { "notification_INFO_QUIT_KICK_IDLING", "notification_INFO_JOIN_CONNECT" }));
 
         box.AddChild(Ui.Spacer());
 
@@ -772,14 +814,35 @@ public partial class DialogSettingsGameMessages : SettingsTab
         // --- Announcers ---
         box.AddChild(Ui.Header("Announcers"));
 
-        // QC: checkBoxEx_T(2, bit 0, "notification_ANNCE_NUM_RESPAWN_1",...) + makeMulti(RESPAWN_2..10).
-        box.AddChild(Widgets.FlagCheckBox("notification_ANNCE_NUM_RESPAWN_1", 0, "Respawn countdown sounds"));
+        // QC: makeXonoticCheckBoxEx_T(2, 0, "notification_ANNCE_NUM_RESPAWN_1",...) + makeMulti(RESPAWN_2..10).
+        // Checked stores ANNCE mode 2 (play always); unchecked 0 (off).
+        box.AddChild(Widgets.ValueCheckBox("notification_ANNCE_NUM_RESPAWN_1", 2f, 0f, "Respawn countdown sounds",
+            multiCvars: new[]
+            {
+                "notification_ANNCE_NUM_RESPAWN_2", "notification_ANNCE_NUM_RESPAWN_3",
+                "notification_ANNCE_NUM_RESPAWN_4", "notification_ANNCE_NUM_RESPAWN_5",
+                "notification_ANNCE_NUM_RESPAWN_6", "notification_ANNCE_NUM_RESPAWN_7",
+                "notification_ANNCE_NUM_RESPAWN_8", "notification_ANNCE_NUM_RESPAWN_9",
+                "notification_ANNCE_NUM_RESPAWN_10",
+            }));
 
-        // QC: checkBoxEx_T(1, bit 0, "notification_ANNCE_KILLSTREAK_03",...) + makeMulti(KILLSTREAK_05..30).
-        box.AddChild(Widgets.FlagCheckBox("notification_ANNCE_KILLSTREAK_03", 0, "Killstreak sounds"));
+        // QC: makeXonoticCheckBoxEx_T(1, 0, "notification_ANNCE_KILLSTREAK_03",...) + makeMulti(KILLSTREAK_05..30).
+        box.AddChild(Widgets.ValueCheckBox("notification_ANNCE_KILLSTREAK_03", 1f, 0f, "Killstreak sounds",
+            multiCvars: new[]
+            {
+                "notification_ANNCE_KILLSTREAK_05", "notification_ANNCE_KILLSTREAK_10",
+                "notification_ANNCE_KILLSTREAK_15", "notification_ANNCE_KILLSTREAK_20",
+                "notification_ANNCE_KILLSTREAK_25", "notification_ANNCE_KILLSTREAK_30",
+            }));
 
-        // QC: checkBoxEx_T(1, bit 0, "notification_ANNCE_ACHIEVEMENT_AIRSHOT",...) + makeMulti(achievement siblings).
-        box.AddChild(Widgets.FlagCheckBox("notification_ANNCE_ACHIEVEMENT_AIRSHOT", 0, "Achievement sounds"));
+        // QC: makeXonoticCheckBoxEx_T(1, 0, "notification_ANNCE_ACHIEVEMENT_AIRSHOT",...) + makeMulti(achievement siblings).
+        box.AddChild(Widgets.ValueCheckBox("notification_ANNCE_ACHIEVEMENT_AIRSHOT", 1f, 0f, "Achievement sounds",
+            multiCvars: new[]
+            {
+                "notification_ANNCE_ACHIEVEMENT_AMAZING", "notification_ANNCE_ACHIEVEMENT_AWESOME",
+                "notification_ANNCE_ACHIEVEMENT_BOTLIKE", "notification_ANNCE_ACHIEVEMENT_ELECTROBITCH",
+                "notification_ANNCE_ACHIEVEMENT_IMPRESSIVE", "notification_ANNCE_ACHIEVEMENT_YODA",
+            }));
     }
 }
 

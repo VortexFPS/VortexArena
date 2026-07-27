@@ -134,6 +134,34 @@ public partial class ModelAnimator : Node3D
     // =================================================================================================
 
     /// <summary>
+    /// [crash fix 2026-07-26] Deterministic MAIN-THREAD release of every exclusively-owned native
+    /// resource. Without this, the ArrayMesh + per-surface duplicated ShaderMaterials + marshalled
+    /// Variant arrays are freed by GodotSharp finalizers on the .NET FINALIZER thread — whose
+    /// RenderingServer::free calls race the main thread's ClearSurfaces/AddSurfaceFromArrays on the
+    /// same RenderingDevice allocator (0xC0000374 mid-session heap corruption), and whose end-of-run
+    /// backlog is what the at-exit "Attempted to free invalid ID" spam drains. sb.Material is the
+    /// SHARED AssetSystem-cache material and is deliberately not touched.
+    /// </summary>
+    public override void _ExitTree()
+    {
+        if (GodotObject.IsInstanceValid(_mesh))
+            _mesh.Mesh = null;
+        _morphMesh?.Dispose();
+        _morphMesh = null;
+        foreach (SurfaceBuffers sb in _surfaceBuffers)
+        {
+            sb.MorphMaterial?.Dispose();
+            sb.MorphMaterial = null;
+            sb.Arrays.Dispose();
+        }
+        _surfaceBuffers.Clear();
+        _surfaces.Clear();
+        _tagMarkers.Clear();
+        _morphInit = false;
+        _gpuSurfacesUploaded = false;
+    }
+
+    /// <summary>
     /// Build an animator for a parsed MD3. Creates the initial mesh (frame 0) and tag markers, and
     /// auto-registers a sensible default clip set named from the MD3's frame names when recognisable
     /// (idle/run/walk/jump/death/attack), so a model is animatable out of the box.
@@ -354,14 +382,15 @@ public partial class ModelAnimator : Node3D
         _lastBracketA = int.MinValue; _lastBracketB = int.MinValue;
         _morphMesh = new ArrayMesh { ResourceName = "Md3Morph" };
 
-        // GPU vertex-morph gate (cl_gpu_morph), read ONCE here — default 0 keeps the CPU path byte-identical.
-        // All-or-nothing per model: only enable GPU morph when EVERY visible drawable surface resolved to a
-        // StandardMaterial3D (or null). A surface backed by a custom ShaderMaterial (PlayerSkinShader / a
-        // generated animated stage) can't carry a vertex() morph and must stay on the CPU upload — and mixing a
-        // persistent GPU surface with the CPU ClearSurfaces path on one mesh is incompatible, so any such
-        // surface drops the WHOLE model back to CPU. (Live-toggling the cvar needs a rebuild; see Advance.)
-        // Default ON since the §13 flip (registered "1" in ClientSettings; the fallback here matches for
-        // store-less contexts). `cl_gpu_morph 0` restores the CPU upload path.
+        // GPU vertex-morph gate (cl_gpu_morph), read ONCE here. All-or-nothing per model: GPU when EVERY
+        // visible drawable surface resolved to a StandardMaterial3D/null (wrapped in Md3MorphShader) or a
+        // PlayerSkinShader material (r16: the skin shader carries the same morph vertex stage, driven on a
+        // per-surface Duplicate() — the CTF flag's team skin was the one hot morph model stuck on the CPU
+        // path). Any OTHER ShaderMaterial (generated animated stage / hero) still can't carry a vertex()
+        // morph and drops the WHOLE model back to CPU — mixing a persistent GPU surface with the CPU
+        // ClearSurfaces path on one mesh is incompatible. (Live-toggling the cvar needs a rebuild; see
+        // Advance.) Default ON since the §13 flip (registered "1" in ClientSettings; the fallback here
+        // matches for store-less contexts). `cl_gpu_morph 0` restores the CPU upload path.
         _gpuMorph = CvarF("cl_gpu_morph", 1f) != 0f && AllSurfacesGpuEligible();
 
         foreach ((Md3Surface surface, Material? material, bool visible) in _surfaces)
@@ -402,11 +431,17 @@ public partial class ModelAnimator : Node3D
 
             if (_gpuMorph)
             {
-                // Wrap the resolved StandardMaterial3D (or null) into the Md3Morph shader material and pre-size
-                // the two custom-channel float buffers (4 floats/vertex, RgbaFloat). Frame data is filled in
-                // ApplyFrame on the first apply / bracket change.
+                // Wrap the resolved material into a morph-capable one and pre-size the two custom-channel
+                // float buffers (4 floats/vertex, RgbaFloat). Frame data is filled in ApplyFrame on the first
+                // apply / bracket change. A StandardMaterial3D (or null) wraps into the Md3Morph shader; a
+                // PlayerSkinShader material (the CTF flag's team skin — r16) is Duplicate()d instead: the
+                // duplicate shares the same Shader object (no new pipeline family) and copies the texture
+                // params, the per-entity tints stay INSTANCE uniforms on the MeshInstance (unaffected), and
+                // the per-surface copy gives this animator a private morph_amount to drive.
                 sb.Gpu = true;
-                sb.MorphMaterial = BuildMorphMaterial(material as StandardMaterial3D);
+                sb.MorphMaterial = material is ShaderMaterial morphable
+                    ? (ShaderMaterial)morphable.Duplicate() // skin/animated-stage shader with its own morph_amount
+                    : BuildMorphMaterial(material as StandardMaterial3D);
                 sb.CustomB0 = new float[vcount * 4];
                 sb.CustomB1 = new float[vcount * 4];
             }
@@ -417,13 +452,45 @@ public partial class ModelAnimator : Node3D
         // Assign the persistent mesh to the instance once; from here on we mutate its surfaces in place so
         // the MeshInstance is never re-pointed at a new resource (which would re-trigger render setup).
         // MaterialOverride lives on the MeshInstance, not the mesh, so it survives in-place surface rebuilds.
+        // [crash fix 2026-07-26] The frame-0 mesh ModelLoader.BuildModel uploaded in Initialize is orphaned
+        // by this assignment — dispose it NOW on the main thread instead of leaving a fully-uploaded
+        // mesh + its RD buffers for the finalizer thread (one per animator build).
+        // (bisect-verified 2026-07-26: this dispose is NOT the residual-crash cause — both crash
+        // signatures reproduce with it disabled. RenderingServer defers actual buffer frees internally,
+        // so a same-frame Dispose of the replaced mesh is safe.)
+        Mesh? initialMesh = _mesh.Mesh;
         _mesh.Mesh = _morphMesh;
+        if (initialMesh is not null && initialMesh != _morphMesh)
+            initialMesh.Dispose();
+
+        // One-shot build breadcrumb: which morph path this model took and why (per-model, boot/spawn-time
+        // volume). The r16 flag investigation needed exactly this to see WHY a model stayed on the CPU path.
+        if (_md3.FrameCount > 1)
+        {
+            var mats = new System.Text.StringBuilder();
+            foreach ((Md3Surface s, Material? m, bool vis) in _surfaces)
+                if (vis) mats.Append(m switch
+                {
+                    null => "null ",
+                    StandardMaterial3D => "std ",
+                    ShaderMaterial sm2 when sm2.Shader?.Code?.Contains("morph_amount") == true => "morphable ",
+                    ShaderMaterial => "shader! ", // no morph vertex stage — pins the model to the CPU path
+                    _ => "other! ",
+                });
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"[md3morph] '{_md3.Name}' frames={_md3.FrameCount} gpu={_gpuMorph} mats: {mats.ToString().TrimEnd()}");
+        }
     }
 
     /// <summary>
-    /// True when EVERY visible, drawable surface resolved to a <see cref="StandardMaterial3D"/> (or null). A
-    /// custom <see cref="ShaderMaterial"/> surface (PlayerSkinShader / generated animated stage) cannot carry a
-    /// vertex() morph, so its presence disqualifies the whole model from the GPU path (all-or-nothing rule).
+    /// True when EVERY visible, drawable surface resolved to a GPU-morphable material: a
+    /// <see cref="StandardMaterial3D"/>/null (wrapped in <see cref="Md3MorphShader"/>), or a
+    /// <see cref="PlayerSkinShader"/> material (r16: the shader now carries the same CUSTOM0/1 +
+    /// <c>morph_amount</c> vertex stage, so a team-tintable skin model — the CTF flag, whose per-frame CPU
+    /// rebuild cost 4.4ms with 14 flags — morphs GPU-side via a per-surface material Duplicate()). Any OTHER
+    /// ShaderMaterial (a generated animated stage / hero material) still lacks a vertex() morph and drops the
+    /// whole model to the CPU path (all-or-nothing — mixing persistent GPU surfaces with the CPU
+    /// ClearSurfaces churn on one mesh is incompatible).
     /// </summary>
     private bool AllSurfacesGpuEligible()
     {
@@ -433,8 +500,15 @@ public partial class ModelAnimator : Node3D
                 continue;
             if (surface.VertexCount <= 0 || surface.Triangles.Length == 0 || surface.FrameVertices.Length == 0)
                 continue;
-            if (material is not null and not StandardMaterial3D)
-                return false;
+            if (material is null or StandardMaterial3D)
+                continue;
+            // Any ShaderMaterial whose shader carries the morph_amount vertex stage is morph-capable —
+            // PlayerSkinShader (the flag's team skin) and the generated animated-stage shaders (the flag's
+            // scrolling-energy surface) both do; a hero/other material without it drops the model to CPU.
+            if (material is ShaderMaterial sm && sm.Shader is Shader sh
+                && sh.Code is string code && code.Contains("morph_amount"))
+                continue;
+            return false;
         }
         return true;
     }

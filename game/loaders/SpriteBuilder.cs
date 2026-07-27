@@ -51,8 +51,11 @@ public static class SpriteBuilder
     /// Build a billboarded sprite node from <paramref name="spr"/>. Frame 0 is shown initially; if the
     /// sprite has more than one frame a <see cref="SpriteFramePlayer"/> is attached to animate/swap frames.
     /// Never returns null — a sprite with no usable frames yields an empty placeholder quad.
+    /// <paramref name="vpath"/> (the sprite's normalized path) enables the DP external-frame override: a plain
+    /// <c>&lt;vpath&gt;_&lt;n&gt;</c> image shipped next to the .spr (e.g. <c>chatbubble.spr_0</c>) is used in
+    /// preference to the embedded pixels, exactly like DP's <c>Mod_Sprite_SharedSetup</c>.
     /// </summary>
-    public static Node3D Build(SpriteData spr, AssetSystem assets)
+    public static Node3D Build(SpriteData spr, AssetSystem assets, string? vpath = null)
     {
         ArgumentNullException.ThrowIfNull(spr);
 
@@ -62,7 +65,7 @@ public static class SpriteBuilder
         // become a placeholder so the animation timing still lines up.
         var textures = new ImageTexture?[spr.FrameCount];
         for (int i = 0; i < spr.FrameCount; i++)
-            textures[i] = FrameTexture(spr.Frames[i], assets);
+            textures[i] = FrameTexture(spr.Frames[i], assets, vpath, i);
 
         // Size the quad from frame 0's pixel dimensions (fall back to 1x1 for a null/zero frame).
         SpriteFrame? frame0 = spr.FrameCount > 0 ? spr.Frames[0] : null;
@@ -172,24 +175,22 @@ public static class SpriteBuilder
     //  Per-frame texture decode
     // ---------------------------------------------------------------------------------------------
 
-    private static ImageTexture? FrameTexture(SpriteFrame frame, AssetSystem assets)
+    private static ImageTexture? FrameTexture(SpriteFrame frame, AssetSystem assets, string? vpath, int frameIndex)
     {
+        // DP external-frame override (Mod_Sprite_SharedSetup): a plain `<vpath>_<n>` image shipped next to the
+        // .spr replaces the embedded pixels — a higher-res / properly-alpha'd version (e.g. chatbubble.spr_0.tga,
+        // a 256² alpha billboard vs. the embedded 16² opaque HL frame). Probe it first for container sprites
+        // (sp2 names its own external image below, so skip when ExternalImage is already set).
+        if (!string.IsNullOrEmpty(vpath) && string.IsNullOrEmpty(frame.ExternalImage))
+        {
+            ImageTexture? ext = AsImageTexture(SafeLoadTexture(assets, $"{vpath}_{frameIndex}"));
+            if (ext is not null)
+                return ext;
+        }
+
         // sp2: external image resolved through the VFS/material system.
         if (!string.IsNullOrEmpty(frame.ExternalImage))
-        {
-            Texture2D? tex = SafeLoadTexture(assets, frame.ExternalImage!);
-            // assets.LoadTexture returns a Texture2D; if it already is an ImageTexture keep it, else wrap
-            // its image so the frame-swap path has a uniform ImageTexture type.
-            if (tex is ImageTexture it)
-                return it;
-            if (tex is not null)
-            {
-                Image? img = tex.GetImage();
-                if (img is not null)
-                    return ImageTexture.CreateFromImage(img);
-            }
-            return Placeholder(frame.Width, frame.Height);
-        }
+            return AsImageTexture(SafeLoadTexture(assets, frame.ExternalImage!)) ?? Placeholder(frame.Width, frame.Height);
 
         // spr32 / sprhl: decoded RGBA8 ready to upload.
         if (frame.Rgba is not null && frame.Width > 0 && frame.Height > 0)
@@ -200,6 +201,16 @@ public static class SpriteBuilder
 
         // plain Quake spr (palette indices only, no embedded palette) or a zero-size frame.
         return Placeholder(frame.Width, frame.Height);
+    }
+
+    /// <summary>Normalize a loaded <see cref="Texture2D"/> to an <see cref="ImageTexture"/> (the type the
+    /// frame-swap path expects): pass an ImageTexture through, wrap any other texture's image, null on miss.</summary>
+    private static ImageTexture? AsImageTexture(Texture2D? tex)
+    {
+        if (tex is ImageTexture it)
+            return it;
+        Image? img = tex?.GetImage();
+        return img is not null ? ImageTexture.CreateFromImage(img) : null;
     }
 
     private static Texture2D? SafeLoadTexture(AssetSystem assets, string name)

@@ -75,8 +75,9 @@ public partial class DialogSettingsVideo : SettingsTab
         // -- Anaglyph 3D -----------------------------------------------------------------------------------
         box.AddChild(Widgets.CheckBox("r_stereo_redcyan", "Anaglyph 3D (red-cyan)"));
 
-        // -- High-quality frame buffer (QC checkboxEx bit 2 on r_viewfbo) ----------------------------------
-        var viewfbo = Widgets.FlagCheckBox("r_viewfbo", 2, "High-quality frame buffer");
+        // -- High-quality frame buffer (QC makeXonoticCheckBoxEx(2, 0, "r_viewfbo") — checked stores 2
+        //    = RGBA16F fbo, unchecked 0; the 1 = RGBA8 middle mode has no menu row) -------------------------
+        var viewfbo = Widgets.ValueCheckBox("r_viewfbo", 2f, 0f, "High-quality frame buffer");
         box.AddChild(viewfbo);
         Dependent.Bind(viewfbo, "vid_samples", 0, 1); // QC setDependent(e,"vid_samples",0,1) (GL20 branch)
 

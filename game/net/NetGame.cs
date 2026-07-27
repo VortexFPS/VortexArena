@@ -116,6 +116,8 @@ public sealed partial class NetGame : Node3D
     private XonoticGodot.Game.Client.DamageTextLayer? _damageText; // [T51] floating damage numbers (cl_damagetext)
     private XonoticGodot.Game.Client.WaypointSpriteLayer? _waypointLayer; // 3D in-world waypoint/objective markers
     private Node3D? _mapRoot;                                              // the built map scene (holds the "Portals" child)
+    private Godot.Environment? _worldEnv;                                  // the WorldEnvironment's env — kept so a pure client can swap in the real map sky/fog/tint once its BSP loads
+    private bool _clientMapLoaded;                                         // a pure --connect client has loaded the server's map (render + prediction collision) — one-shot
     private XonoticGodot.Game.Client.PortalRenderer? _portalRenderer;      // see-through warpzone portal render (listen host)
     private XonoticGodot.Game.Client.PortalDiscRenderer? _portalDiscRenderer; // warpzone portal DISC (skinned model) — listen host, reads the same AmbientManager zones
     private XonoticGodot.Game.Client.NadeOrbRenderer? _orbRenderer;        // 3D nade orb effect models (heal/ammo/entrap/veil/darkness) — fed by the entity stream, read for the in-orb color flash
@@ -126,6 +128,7 @@ public sealed partial class NetGame : Node3D
     private MinigameClient? _minigame;          // client-side minigame coordinator (board overlay + menu + cmd forwarding)
     private ViewEffects _viewEffects = null!;   // SEAM: T4's reusable screen-effects layer, on the net play path
     private AssetLoader? _assets;
+    private AssetLoader? _injectedAssets;        // shared process-lifetime loader from MenuState — persists model/sound/material/texture/shader caches across maps & servers; null (or cl_persist_asset_cache 0) → build a fresh per-match loader
     private ViewModel _viewModel = null!;       // first-person weapon view-model (CSQC viewmodel / wepent)
     private int _equippedWeaponId = int.MinValue; // weapon id currently in the viewmodel; rebuild only on a change
     private string _equippedVmOverride = "";       // per-weapon wr_viewmodel override (Tuba note model); rebuild on change
@@ -190,6 +193,8 @@ public sealed partial class NetGame : Node3D
     private float _fireClock;
     private readonly Dictionary<int, float> _weaponReadyTime = new();
     private bool _loggedAccept;
+    private bool _hostJoinDone;                  // [#44] the listen host's early_join_requested `join` actually spawned it
+    private float _hostJoinNextRetryMsec;        // [#44] next allowed `join` attempt (bounded retry — a blocked spawn no-ops)
     private bool _cameraReady;                   // C5: false until the first snapshot seeds the predicted eye
     private int _prevHealth = -1;               // previous networked local health, for the damage red-flash edge
     private bool _inputActive;                   // tracks the active→inactive edge to release held buttons (pause/console)
@@ -236,7 +241,9 @@ public sealed partial class NetGame : Node3D
                 if (byId is not null)
                     return byId;
             }
-            foreach (Player p in _serverWorld.Clients.Players)
+            // WS1 stage 3: enumerate the COW roster snapshot — this property is read from the render thread
+            // (HUD mirrors, feeds) while the sim worker may be mutating the live List on a join/leave.
+            foreach (Player p in _serverWorld.Clients.PlayersSnapshot)
                 if (!p.IsBot)
                     return p;
             return null;
@@ -246,6 +253,27 @@ public sealed partial class NetGame : Node3D
     /// <summary>Send a console command line to the connected server (DP <c>clc_stringcmd</c>) — used by the
     /// console on a pure client where there is no in-process world. No-op if not connected.</summary>
     public void SendStringCommand(string line) => _client?.SendStringCommand(line);
+
+    /// <summary>
+    /// Execute a host-console gameplay command against the in-process server world, returning its output —
+    /// or null when there is no local world (pure client). WS1: this runs on the MAIN thread (console input)
+    /// while the sim worker owns the world when sv_threaded is on, so it takes the sim gate for the duration —
+    /// the same serialisation the pre-stage-3 whole-frame gate provided for console commands, restored for
+    /// just this path (RunOnSimThread can't be used here: the console needs the command's synchronous output).
+    /// Every world-mutating verb the console can type (kill/kick/give/endmatch/vote/…) must come through here,
+    /// not through a bare Commands.Execute — that was the mid-combat crash class d991956 closed for transport.
+    /// </summary>
+    public string? ExecuteHostConsoleCommand(string line)
+    {
+        GameWorld? world = _serverWorld;
+        if (world is null)
+            return null;
+        object? gate = _server?.SimGate;
+        if (gate is null)
+            return world.Commands.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
+        lock (gate)
+            return world.Commands.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
+    }
 
     /// <summary>The loading screen (DP <c>SCR_DrawLoadingScreen</c>) shown during map load + handshake,
     /// set by <see cref="Shell"/> before the node enters the tree. Null when no loading screen is active
@@ -322,11 +350,33 @@ public sealed partial class NetGame : Node3D
     private const float MaxInputFrameDt = 0.1f;
     private const float MaxSubStepDt = 0.05f;
 
-    // PATH A render-clock damping (#2): fraction of the render-clock→server-time error closed per fresh snapshot
-    // (DP cl_nettimesyncfactor-style gradual catch-up), and the discontinuity threshold above which we hard-snap
-    // instead (respawn / teleport / level change / a big hitch).
-    private const float ClockSyncFactor = 0.2f;
+    // PATH A render-clock RATE SLEW (r16 rubberband fix — supersedes the per-snapshot ClockSyncFactor STEP):
+    // the render clock converges on server time by modulating its playback RATE within a bounded,
+    // imperceptible band instead of stepping a fraction of the error on each snapshot arrival. Every step
+    // visibly sped/slowed ALL interpolated entities for a frame; under combat load the listen server's tick
+    // catch-up makes LatestServerTime elastic vs wall time, so the steps oscillated in ~300-600ms waves
+    // (session-20260710-182544: frame-time lag-1 autocorr +0.61) — the felt "movement rubberbanding".
+    //   ClockSlewGain — rate deviation per second of clock error (err 33ms → the 5% cap);
+    //   ClockSlewMax  — playback-rate deviation cap (±5%: never perceptibly fast/slow);
+    //   MaxClockResync — discontinuity threshold beyond which we hard-snap (respawn / level change / a
+    //                    huge hitch). DP's cl_nettimesyncboundmode family, done as a rate, not a step.
+    private const float ClockSlewGain = 1.5f;
+    private const float ClockSlewMax = 0.05f;
     private const float MaxClockResync = 0.25f;
+    // Slew-target offset behind the newest snapshot (pairs with the hard upper bound at LatestServerTime in
+    // _Process). Frametime parity audit 2026-07-11: Base (cl_nettimesyncboundmode 5, cl_parse.c:3354) targets
+    // cl.mtime[1] — the PREVIOUS snapshot's time, a full MEASURED interval behind newest, so the cushion grows
+    // adaptively exactly when snapshot production runs late (the loaded listen server) and interpolation never
+    // rides the f=1 clamp edge. cl_interp_cushion 1 (default) = that DP parity via _snapInterval; 0 = the r16
+    // half-tick constant bias below (legacy, ~7ms from the edge).
+    private const float InterpBias = 0.5f / 72f;
+    // Measured spacing between the last two snapshots (DP cl.mtime[0] - cl.mtime[1]), clamped to [1 tick, 0.1s];
+    // the cl_interp_cushion slew/step target offset. Seeded at one tick until two snapshots have arrived.
+    private float _snapInterval = 1f / 72f;
+
+    /// <summary>How far behind the newest snapshot the render clock aims (see <see cref="InterpBias"/>):
+    /// the measured snapshot interval (DP boundmode-5 parity, default) or the legacy half-tick bias.</summary>
+    private float InterpCushion() => _interpCushionCv ? _snapInterval : InterpBias;
 
     // Fix B: a render frame longer than this (a stall on the shared listen-server thread — GC / heavy map streaming,
     // ~3.6+ ticks) arms the reconciler's post-hitch hold so a transient server-behind correction glides/holds rather
@@ -348,8 +398,8 @@ public sealed partial class NetGame : Node3D
     // not in the movement dt.
     private float _inputDeltaTime = XonoticGodot.Engine.Simulation.SimulationLoop.TicRate;
 
-    // FPS eye height (Xonotic PL_VIEW_OFS '0 0 35'). Mouse-look sensitivity now reads the live `sensitivity`
-    // cvar (LookSensitivity), not a hardcoded constant, so the input-settings dialog drives it.
+    // FPS eye height (Xonotic PL_VIEW_OFS '0 0 35'). Mouse-look reads the live `sensitivity` × m_yaw/m_pitch
+    // cvars (DP cl_input.c formula), so the input-settings dialog drives it and tuned m_yaw/m_pitch work.
     private const float EyeHeight = 35f;
 
     // Standing player hull (Xonotic sv_player_mins/maxs), Quake units — same as PlayerController.HullMins/Maxs.
@@ -367,13 +417,15 @@ public sealed partial class NetGame : Node3D
     /// predictor reads the user's physics cvars); pass null for a standalone/CLI client.
     /// </summary>
     public void ConfigureClient(string address, string playerName = "player",
-        VirtualFileSystem? vfs = null, XonoticGodot.Engine.Simulation.CvarService? cvars = null)
+        VirtualFileSystem? vfs = null, XonoticGodot.Engine.Simulation.CvarService? cvars = null,
+        AssetLoader? sharedAssets = null)
     {
         _isListenServer = false;
         (_host, _port) = ParseAddress(address, DefaultPort);
         _playerName = string.IsNullOrWhiteSpace(playerName) ? "player" : playerName;
         _vfs = vfs;
         _sharedCvars = cvars;
+        _injectedAssets = sharedAssets;
     }
 
     /// <summary>
@@ -385,7 +437,7 @@ public sealed partial class NetGame : Node3D
     public void ConfigureListenServer(string map, string gametype = "dm", int botCount = 0, int botSkill = -1,
         int port = DefaultPort, string playerName = "player", string serverName = "XonoticGodot Listen Server",
         VirtualFileSystem? vfs = null, XonoticGodot.Engine.Simulation.CvarService? cvars = null,
-        string campaignName = "", int campaignIndex = 0)
+        string campaignName = "", int campaignIndex = 0, AssetLoader? sharedAssets = null)
     {
         _isListenServer = true;
         _host = "127.0.0.1";
@@ -400,6 +452,7 @@ public sealed partial class NetGame : Node3D
         _playerName = string.IsNullOrWhiteSpace(playerName) ? "player" : playerName;
         _vfs = vfs;
         _sharedCvars = cvars;
+        _injectedAssets = sharedAssets;
     }
 
     // =====================================================================================
@@ -411,7 +464,14 @@ public sealed partial class NetGame : Node3D
         // The asset loader (models/sounds/maps) over the shared VFS, when the menu mounted one.
         if (_vfs is not null)
         {
-            _assets = new AssetLoader(_vfs);
+            // Reuse MenuState's PROCESS-LIFETIME loader when one was injected (cl_persist_asset_cache 1, default):
+            // its model/sound/material/texture/shader caches then persist across map changes AND server switches,
+            // so the second map load finds the stock assets already parsed + GPU-uploaded instead of rebuilding
+            // them. Map-coupled resources (the lightmap atlas + its surface materials) are NOT in these caches —
+            // they live in the map render tree and are freed with the match — so sharing is safe. A fresh loader
+            // is built only when persistence is off or nothing was injected (bare CLI / tests / model viewer).
+            bool persist = (_sharedCvars?.GetFloat("cl_persist_asset_cache") ?? 1f) != 0f;
+            _assets = (persist && _injectedAssets is not null) ? _injectedAssets : new AssetLoader(_vfs);
             // Wire the per-model player-sound resolver (QC LoadPlayerSounds): parses .sounds manifests so the
             // jump grunt + pain/death voices resolve to real samples instead of the bogus default.sounds/<id>.
             PlayerSoundResolver.Install(_vfs);
@@ -578,12 +638,14 @@ public sealed partial class NetGame : Node3D
         //     (DP's one engine cvar table). A host's console `set g_balance_…`/physics tweak is then live in the
         //     match with no bridge, and client prediction (also on the shared store) and server authority read
         //     identical values. The menu already loaded the cfg tree into it, so GameWorld.Boot skips the reload.
-        //   • sv_threaded 1 (experimental, non-headless only): keep a PRIVATE per-world store, isolated from the
-        //     main-thread menu/console writes and fed one-way by the bridge below — the sim runs on a worker
-        //     thread, so a shared mutable store would race. sv_threaded is read from the shared store (where the
-        //     menu/console writes it); with no shared store we stay single-threaded + private.
+        //   • sv_threaded 1 (the DEFAULT since 2026-07-11, non-headless only): keep a PRIVATE per-world store,
+        //     isolated from the main-thread menu/console writes and fed one-way by the bridge below — the sim
+        //     runs on a worker thread, so a shared mutable store would race. sv_threaded is read from the shared
+        //     store (where the menu/console writes it; unset → ON); with no shared store (the degenerate bare
+        //     host) we stay single-threaded + private.
         bool wantThreaded =
-            (_sharedCvars is not null && _sharedCvars.Has("sv_threaded") ? _sharedCvars.GetFloat("sv_threaded") : 0f) != 0f
+            _sharedCvars is not null
+            && (!_sharedCvars.Has("sv_threaded") || _sharedCvars.GetFloat("sv_threaded") != 0f)
             && DisplayServer.GetName() != "headless";
         bool unifyStore = _sharedCvars is not null && !wantThreaded;
 
@@ -637,25 +699,33 @@ public sealed partial class NetGame : Node3D
         // console/menu override in the SHARED store wins over the world default (the menu writes there). Threading
         // is GATED to non-headless hosts: a headless dedicated server already keeps the full catch-up cap and has
         // no render frame to unblock, so it stays on the stock single-threaded drive even with sv_threaded 1.
-        // (§13.5) Default OFF (user choice, 2026-06-12). The transport-split fix made a PLAYED threaded
-        // session clean — 0 PREDICTION DESYNC events over ~3 min, 0 errors — so `sv_threaded 1` is now SAFE to
-        // experiment with (it moves the 4-12 ms server tick off the render thread). Kept default-off for now;
-        // flip to 1 to enable. See §13.5.
-        _serverWorld.Services.Cvars.Register("sv_threaded", "0");
+        // (§13.5 → WS1) DEFAULT ON since 2026-07-11 (user decision, after the WS1 rework): the worker owns
+        // tick+ENCODE, the render thread never blocks on the gate on the common path (per-tick holds; the
+        // sv.gatewait_ms counter measures the residue), and the full validation battery is clean (soaks,
+        // mid-match remote joins, 2989 tests). `sv_threaded 0` restores the single-threaded drive (and the
+        // UNIFIED cvar store — see the store-model comment above).
+        _serverWorld.Services.Cvars.Register("sv_threaded", "1");
         // wantThreaded + unifyStore were resolved above (before the world was built) since they pick the
         // cvar-store model; the worker/gate setup below reuses that one decision so the two never disagree.
 
-        // Create-a-match / `--host` is "host AND play": the local host should spawn straight into the match, not
-        // sit as an observer. xonotic-server.cfg ships `sv_spectate 1` (spectating allowed) which — faithful to QC
-        // PlayerPreThink (server/client.qc:2715: autojoin only when `!(sv_spectate||g_campaign||forced_spectator)`)
-        // — means a passive real client NEVER delayed-autojoins; it waits for a +fire/+jump join. On a self-hosted
-        // listen server that left the player a permanent observer at world origin under the black connect overlay.
-        // `sv_spectate 0` = "clients spawn as players immediately" (the cvar's own definition) restores the intended
-        // ~1s autojoin so Create→Start drops you into the game, like real Xonotic. (Join-on-fire still works.)
-        _serverWorld.Services.Cvars.Set("sv_spectate", "0");
+        // [#44] sv_spectate stays at Base's shipped `1` (spectating allowed). The old port set it to 0 here to
+        // make the host auto-spawn — which as a side effect made spectating impossible for EVERYONE (and armed
+        // the sv_spectate=0 spectator-kick). The host's "Create Game and play" UX is now the Base-faithful
+        // `early_join_requested` equivalent instead: the [#44] block in the accept handler (search _hostJoinDone)
+        // runs `join` for the LOCAL player once its observer attaches, retrying until it spawns — remote clients
+        // get the real observer flow (+jump joins, +attack spectates, exactly QC ObserverOrSpectatorThink).
+        // cl_bench_spectate (demo/benchmark captures) rides this cleanly: the host must stay an OBSERVER camera,
+        // so BenchSpectateActive gates the [#44] host-join off and BenchSpectateThink glues the observer to a bot.
+        //
+        // [#47] Port-default divergence: no idle auto-spectate by default. This now lives in the shipped cfg tree
+        // (xonotic-server.cfg sets sv_maxidle_playertospectator 0, was 60) instead of a post-load code Set — so an
+        // operator's config.cfg/console value actually wins and survives map changes, rather than being clobbered
+        // on every StartListenServer. The Base-faithful machinery in PlayerFrameIdleAll is intact either way.
 
-        // A single-player campaign is "host AND play" too, but g_campaign re-arms the spectator-hold sv_spectate
-        // just cleared; opt the local host out so it spawns straight into the loaded level (Create-Game UX).
+        // A single-player campaign is "host AND play" too: g_campaign arms its own spectator-hold, so opt the
+        // local host out (CampaignHostAutojoin) AND let the [#44] host-join block above spawn it — at the shipped
+        // sv_spectate 1 the passive delayed-autojoin can't fire, so the campaign host rides the same `join` path
+        // (CmdJoin succeeds on stock campaign maps).
         if (!string.IsNullOrEmpty(_campaignName))
         {
             _serverWorld.Clients.CampaignHostAutojoin = true;
@@ -912,6 +982,14 @@ public sealed partial class NetGame : Node3D
             // threaded soak's NRE storm). Gate every trace entry point on the SAME object; the worker holds it
             // around its whole tick (Monitor is reentrant), the single-threaded default path stays lock-free.
             _serverWorld!.Services.TraceImpl.ConcurrencyGate = _simGate;
+            // WS1 stage 3: the main thread's display/feed reads of the PRIVATE server store (music cdtrack,
+            // endscreen cvars, slowmo autopause…) run ungated against the worker's writes — swap the store to
+            // its thread-safe backing BEFORE the worker exists. The unthreaded default path never pays this
+            // (the plain-Dictionary backing measured 32% faster per tick at 4 players).
+            _serverWorld!.Services.CvarsImpl.EnableConcurrentReads();
+            // WS1 per-tick gating: the worker holds the gate around EACH tick (not the whole step), so a
+            // render-thread per-trace wait is bounded by one tick.
+            _serverWorld!.Simulation.TickGate = _simGate;
             _serverThread = new ServerThread(
                 _serverWorld!, _server!,
                 static () => XonoticGodot.Engine.Simulation.SimulationLoop.TicRate);
@@ -1002,8 +1080,15 @@ public sealed partial class NetGame : Node3D
         // the engine console UN-escapes it back to real quotes before storing the cvar. We set the cvar value
         // directly (no console reparse), so undo that escaping here to store the same value paste/ObjectPortLoad
         // (which tokenizes "-quoted tokens) expects.
-        _sharedCvars.Set(cvar, value.Replace("\\\"", "\""));
-        _sharedCvars.MarkArchived(cvar); // cl_sandbox_clipboard is an archived client cvar
+        // WS1: this is dispatched on the SIM worker (HandleClientCommand), but the SHARED store is main-owned
+        // (plain Dictionary, read/written by console/menu every frame — only the server's PRIVATE store is
+        // concurrent-enabled). Cross to the main thread for the write; a one-frame clipboard delay is harmless.
+        string unescaped = value.Replace("\\\"", "\"");
+        Callable.From(() =>
+        {
+            _sharedCvars?.Set(cvar, unescaped);
+            _sharedCvars?.MarkArchived(cvar); // cl_sandbox_clipboard is an archived client cvar
+        }).CallDeferred();
     }
 
     /// <summary>
@@ -1225,6 +1310,60 @@ public sealed partial class NetGame : Node3D
         }
     }
 
+    // cl_bench_spectate: next server-time the bench camera re-evaluates (0.5 s cadence — cheap, and the
+    // re-glue after a spectatee death only needs sub-second latency, not per-frame work).
+    private float _benchSpectateNextThink;
+
+    /// <summary>True while <c>cl_bench_spectate</c> holds the host as an observer camera — read where the
+    /// normal host-join flow must stand down (the [#44] early-join block; BenchSpectateThink owns the camera).</summary>
+    private bool BenchSpectateActive => (_sharedCvars?.GetFloat("cl_bench_spectate") ?? 0f) != 0f;
+
+    /// <summary>
+    /// <c>cl_bench_spectate</c> (demo/benchmark captures): keep the local listen-server host OBSERVING a
+    /// living bot, so the capture camera experiences real gameplay — map traversal, combat, and first-person
+    /// gunplay via the follow-cam (<see cref="UpdateCamera"/>) + the spectated viewmodel — instead of idling
+    /// at a spawn point. Host-side twin of the manual <c>spectate</c> client command (same ClientManager
+    /// calls). Re-glues after the spectatee dies (the per-tick glue drops a follower whose target died or
+    /// re-observed — ClientManager's SpectateCopy gate) or leaves; if the host somehow joined the match (a
+    /// stray +jump), it is pulled back to observer — bench mode owns the camera by design. Runs inside the
+    /// _Process sim-gate span, so the server-state mutations are safe under sv_threaded too.
+    /// </summary>
+    private void BenchSpectateThink()
+    {
+        if (_serverWorld is null || !_isListenServer)
+            return;
+        float now = _serverWorld.Time;
+        if (now < _benchSpectateNextThink)
+            return;
+        _benchSpectateNextThink = now + 0.5f;
+        // NOTE: no cl_bench_spectate read here — on the threaded path this runs on the SIM worker and the
+        // shared cvar store is main-owned. The dispatch site (_Process) gates on BenchSpectateActive on main.
+        if (LocalServerPlayer is not { } host)
+            return;
+        var clients = _serverWorld.Clients;
+        if (!host.IsObserver)
+        {
+            // The real observer transition (model hidden, weapons stripped, non-solid, autojoin disarmed) —
+            // exactly what the spectate command runs. Follow on the next think, once the state settled a tick.
+            clients.PutObserverInServer(host);
+            return;
+        }
+        if (host.Spectatee is not null)
+            return; // glued — SpectateCopy tracks the bot each tick
+        foreach (var p in clients.Players)
+        {
+            // First living bot in roster order = a deterministic pick for captures. After a spectatee death
+            // (which drops the follower to free-fly) this re-attaches — usually to the same bot once its
+            // forced respawn lands, else to the next living one.
+            if (p.IsBot && !p.IsObserver && !p.IsDead)
+            {
+                clients.Spectate(host, p);
+                XonoticGodot.Common.Diagnostics.Log.Info($"[bench] spectating bot '{p.NetName}' (slot {p.Index})");
+                break;
+            }
+        }
+    }
+
     private void SetupRender()
     {
         _render = new ClientWorld { Name = "Render" };
@@ -1297,47 +1436,10 @@ public sealed partial class NetGame : Node3D
         // stamped on this clock, so the client derives the action play phase as LatestServerTime − start.
         _render.ServerTimeProvider = () => _client?.LatestServerTime ?? 0f;
 
-        // Render the world geometry on the listen server: the client draws the worldmodel it loaded locally
-        // (DP VF_DRAWWORLD=1 + renderscene(); the server ships no geometry). Reuses the SAME BSP + gametype filter
-        // the collision was built from in StartListenServer — identical to GameDemo.cs:181's MapLoader.BuildMap.
-        // A pure --connect client has no BSP yet (see the map-name handshake follow-up), so this is gated on _bsp.
-        if (_bsp is not null && _assets?.Assets is not null)
-        {
-            // Pass the loaded map name so external lm_NNNN lightmaps resolve (stock maps have no internal lump).
-            _mapRoot = MapLoader.BuildMap(_bsp, _assets.Assets, _map, _droppedSubmodels);
-            AddChild(_mapRoot);
-        }
-
-        // (§12.8) Hand the render world the map's PVS so it can DP-faithfully cull remote entities behind walls
-        // (r_pvs_cull_entities). Cheap — BspPvs just wraps the parsed lumps. Null map keeps entity culling inert.
-        if (_bsp is not null)
-            _render.Pvs = new XonoticGodot.Formats.Bsp.BspPvs(_bsp);
-
-        // Client-side collision world for the particle systems: decal splats conform to the real brush faces
-        // (DP R_DecalSystem — without it marks fall back to flat quads), and the chunked-SDF service builds
-        // from the same world. One build per map load (~100 ms, hidden by the load screen; the server world's
-        // collision is a separate instance inside GameWorld with no accessor — rebuilding keeps the seam clean).
-        if (_bsp is not null && _assets?.Assets is not null)
-        {
-            CollisionWorld clientCollision = MapLoader.BuildCollision(_bsp, _assets.Assets);
-            _render.Effects.SetCollisionWorld(clientCollision);
-            // Splats clip against the RENDER triangles (DP's actual target) — marks roll over visible
-            // trim/patch edges the collision brushes don't model.
-            _render.Effects.SetDecalGeometry(_bsp);
-
-            // Chunked-SDF collision field for modern particles (planning/particles-dual-system.md §A). Built
-            // only in a modern-collision mode (cl_particles_modern 1/2) — mode 0 (the faithful default) needs
-            // no SDF, so the default load pays nothing beyond the shared collision build above. Generation is
-            // further gated/async inside the service (cl_particles_sdf_generate).
-            if (_vfs is not null &&
-                XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat(XonoticGodot.Engine.Particles.ParticleCvars.Modern) != 0f)
-            {
-                string bspVpath = $"maps/{_map}.bsp";
-                byte[]? bspBytes = _vfs.Exists(bspVpath) ? _vfs.ReadBytes(bspVpath) : null;
-                if (bspBytes is not null)
-                    _render.Effects.BuildSdfForMap(_map, bspBytes, clientCollision, _vfs);
-            }
-        }
+        // Render the world geometry + PVS entity-cull + client particle/decal collision from the loaded BSP.
+        // On a listen server _bsp is already set (StartListenServer); a pure --connect client has no BSP here and
+        // attaches this later — once the server's map name arrives — via LoadClientMapFromServer. No-op until then.
+        AttachWorldRender();
 
         if (_client is not null)
         {
@@ -1359,6 +1461,58 @@ public sealed partial class NetGame : Node3D
         }
 
         AddLight();
+    }
+
+    /// <summary>
+    /// Build + attach the map's render geometry (worldmodel), the PVS entity-cull, and the client-side
+    /// particle/decal collision from the loaded <see cref="_bsp"/>. Shared by <see cref="SetupRender"/> (listen
+    /// server — <see cref="_bsp"/> is loaded in <see cref="StartListenServer"/>) and
+    /// <see cref="LoadClientMapFromServer"/> (a pure <c>--connect</c> client, once the server's map name arrives).
+    /// No-op without a BSP / render world / assets, so it is safe to call before the map is known.
+    /// </summary>
+    private void AttachWorldRender(CollisionWorld? sharedEffectsWorld = null)
+    {
+        if (_bsp is null || _render is null || _assets?.Assets is null)
+            return;
+
+        // The client draws the worldmodel it loaded locally (DP VF_DRAWWORLD=1 + renderscene(); the server ships
+        // no geometry). Reuses the SAME BSP + gametype submodel filter the collision was built from — render and
+        // collision MUST agree (GameDemo.cs:134/181). The map name resolves external lm_NNNN lightmaps.
+        _mapRoot = MapLoader.BuildMap(_bsp, _assets.Assets, _map, _droppedSubmodels);
+        AddChild(_mapRoot);
+
+        // (§12.8) The render world's PVS so it DP-faithfully culls remote entities behind walls (r_pvs_cull_entities).
+        _render.Pvs = new XonoticGodot.Formats.Bsp.BspPvs(_bsp);
+
+        // Client-side collision for the particle systems: decal splats conform to the real brush faces (DP
+        // R_DecalSystem — else marks fall back to flat quads). A pure client already built the world for its
+        // prediction collision (LoadClientMapFromServer) and passes it in, so we don't build the same brush world a
+        // SECOND time on the connect frame — both the prediction trace and these effect traces are main-thread, so
+        // sharing one instance is safe. The listen path builds a fresh one (GameWorld owns the server collision).
+        CollisionWorld effectsWorld = sharedEffectsWorld ?? MapLoader.BuildCollision(_bsp, _assets.Assets);
+        _render.Effects.SetCollisionWorld(effectsWorld);
+        // Splats clip against the RENDER triangles (DP's actual target) — marks roll over visible trim/patch edges.
+        _render.Effects.SetDecalGeometry(_bsp);
+
+        // Chunked-SDF collision field for modern particles (planning/particles-dual-system.md §A). Built only in a
+        // modern-collision mode (cl_particles_modern 1/2) — mode 0 (the faithful default) needs no SDF, so the
+        // default connect pays nothing here. The SDF generator queries the world on a background Task, and
+        // CollisionWorld.Query mutates a per-instance mark epoch — so it must NOT share the instance the
+        // main-thread prediction traces use. When we shared the prediction world into effects above, hand the SDF
+        // lane its OWN world (a dedicated build), else reuse the fresh effects world (listen path, as before).
+        if (_vfs is not null &&
+            XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat(XonoticGodot.Engine.Particles.ParticleCvars.Modern) != 0f)
+        {
+            string bspVpath = $"maps/{_map}.bsp";
+            byte[]? bspBytes = _vfs.Exists(bspVpath) ? _vfs.ReadBytes(bspVpath) : null;
+            if (bspBytes is not null)
+            {
+                CollisionWorld sdfWorld = sharedEffectsWorld is null
+                    ? effectsWorld
+                    : MapLoader.BuildCollision(_bsp, _assets.Assets);
+                _render.Effects.BuildSdfForMap(_map, bspBytes, sdfWorld, _vfs);
+            }
+        }
     }
 
     /// <summary>
@@ -1804,6 +1958,18 @@ public sealed partial class NetGame : Node3D
         Api.Cvars.Register("cl_eventchase_death", "2");
         Api.Cvars.Register("cl_eventchase_distance", "140");
         Api.Cvars.Register("cl_eventchase_speed", "1.3");
+
+        // Port benchmark/demo knob (NOT a Base cvar; never archived): 1 = on a listen host, stay an observer
+        // and follow a living bot (BenchSpectateThink) so a capture camera experiences real gameplay. The
+        // perf-run demo scenario sets it together with g_weaponarena/g_forced_respawn/bot_ai_weapon_rotate.
+        Api.Cvars.Register("cl_bench_spectate", "0");
+        // cl_motion_trace (r16 rubberband diagnostic): per-frame CSV of the motion-timeline signals — render
+        // clock error/slew, server ticks per frame, camera/predicted/remote-entity rendered speeds, prediction
+        // error magnitude — so a felt motion wobble can be attributed to its actual carrier. Port-only debug.
+        Api.Cvars.Register("cl_motion_trace", "0");
+        // Spectator follow-cam angle smoothing half-life in seconds (port quality knob, NOT a Base cvar —
+        // Base renders the spectatee's raw stepped angles). 0 = raw. See SmoothSpectateAngles.
+        Api.Cvars.Register("cl_spectate_smoothangles", "0.05");
         // QC Scoreboard_WouldDraw death-scoreboard gate (_cl_main.qc / scoreboard.qc:1793): force the scoreboard up
         // a short delay after the local player dies, even without holding +showscores.
         Api.Cvars.Register("cl_deathscoreboard", "1");
@@ -1816,6 +1982,29 @@ public sealed partial class NetGame : Node3D
     /// owner's active weapon arrives in the snapshot owner block (<see cref="ClientNet.ActiveWeaponId"/>).
     /// Holstered / dead (id &lt; 0 or health &le; 0) hides the gun, mirroring view.qc masking it when dead.
     /// </summary>
+    /// <summary>
+    /// Seconds left of the OUTGOING weapon's <c>switchdelay_drop</c> during a staged first-person weapon swap
+    /// (the holster slide window <see cref="EquipNetworkedWeapon"/> holds the old model through). Negative = no
+    /// swap staged. Also read by the fire-feedback gate: the server slot is in the Drop state for this window,
+    /// so predicted muzzle flash/sound must not fire through it.
+    /// </summary>
+    private float _switchDropLeft = -1f;
+
+    /// <summary>
+    /// Seconds left of the INCOMING weapon's <c>switchdelay_raise</c> after a first-person weapon install
+    /// (set beside <c>PlayRaise</c>). The server slot is in the Raise state (can't fire) for this window, so the
+    /// fire-feedback gate holds prediction through it — else a held trigger through a switch predicted the flash
+    /// up to the raise time EARLY. Decays in <see cref="UpdateLocalFireFeedback"/>; negative = idle.
+    /// </summary>
+    private float _switchRaiseLeft = -1f;
+
+    /// <summary>
+    /// Client mirror of QC <c>wepent.rl_release</c> (armed on release/equip, cleared on each predicted shot) —
+    /// the release-gated-weapon (Devastator) fire condition. See <see cref="UpdateLocalFireFeedback"/>.
+    /// </summary>
+    private bool _rlReleaseMirror = true;
+    private int _rlMirrorWeaponId = -1;
+
     private void EquipNetworkedWeapon()
     {
         if (_viewModel is null || !GodotObject.IsInstanceValid(_viewModel) || _client is not { Accepted: true })
@@ -1865,9 +2054,49 @@ public sealed partial class NetGame : Node3D
 
         if (id == _equippedWeaponId && vmOverride == _equippedVmOverride)
         {
+            _switchDropLeft = -1f;        // a staged switch back to the current weapon dissolves
             _viewModel.Visible = !hidden; // no weapon/model change; just track the dead/holstered visibility edge
             return;
         }
+
+        // Weapon CHANGE while a gun is up: hold the OLD model on screen for the outgoing weapon's
+        // switchdelay_drop while the holster slide plays, and only then install the new model + raise — QC
+        // weapon_thinkf(WFRAME_DONTCHANGE, oldwep.switchdelay_drop, w_clear) installs the new weapon at w_clear.
+        // The port's Inventory.SwitchWeapon mirrors ActiveWeaponId IMMEDIATELY (the fire driver alone carries the
+        // drop/raise timing), so without this hold the swap looked instantaneous — worst on the out-of-ammo
+        // auto-switch, which has no keypress holster to mask it. Re-targeting mid-drop (rapid re-switch) keeps
+        // the running drop clock, like QC re-entering w_clear with a new m_switchweapon. First equip
+        // (_equippedWeaponId < 0) and the hidden/dead path stay immediate.
+        // (id check: a same-weapon wr_viewmodel override change — the Tuba instrument swap — rebuilds immediately.)
+        if (!hidden && _equippedWeaponId >= 0 && id >= 0 && id != _equippedWeaponId)
+        {
+            if (_switchDropLeft < 0f)
+            {
+                XonoticGodot.Common.Gameplay.Weapon outgoing = XonoticGodot.Common.Gameplay.Weapons.ById(_equippedWeaponId);
+                _switchDropLeft = outgoing?.SwitchDelayDrop() ?? 0f;
+                _viewModel.PlayHolster(); // no-op refresh if the manual keypress already started the slide
+
+                // Out-of-ammo FORCED switch with the trigger still down: Base (cl_unpress_attack_on_weapon_switch
+                // 0 default) lets the switched-to weapon open fire the moment it raises — surprising, since the
+                // player never chose it. Release the attack buttons (DP -fire/-fire2, exactly what Base's opt-in
+                // cvar localcmds) until a physical re-press — but ONLY when the outgoing weapon is genuinely dry
+                // (the forced-switch signature; ClientHasWeapon(andAmmo) is the server's own W_SwitchToOtherWeapon
+                // dry test, so the Devastator's ammo>=4 floor counts as dry). A held trigger through a MANUAL
+                // switch (old weapon still usable) keeps firing, and a non-dry forced cycle (NIX) is untouched.
+                if ((BindTable.AttackHeld || BindTable.Attack2Held) && outgoing is not null
+                    && MenuState.Cvars.GetString("cl_unpress_attack_on_empty_switch") != "0"
+                    && (LocalServerPlayer ?? _hudMirror) is { } fireActor
+                    && !XonoticGodot.Common.Gameplay.Inventory.ClientHasWeapon(fireActor, outgoing, andAmmo: true, complain: false))
+                {
+                    BindTable.ReleaseAttack();
+                    _attackLatch = _attack2Latch = false; // pending sub-tick taps die with the release
+                }
+            }
+            _switchDropLeft -= (float)GetProcessDeltaTime();
+            if (_switchDropLeft > 0f)
+                return; // old model stays up while it lowers
+        }
+        _switchDropLeft = -1f;
         _equippedWeaponId = id;
         _equippedVmOverride = vmOverride;
 
@@ -1887,10 +2116,19 @@ public sealed partial class NetGame : Node3D
         string vModel = string.IsNullOrEmpty(vmOverride) ? WeaponVModelPath(w) : "models/weapons/" + vmOverride;
         ViewModelEquip eq = ViewModelEquip.Build(_assets, vModel);
         _viewModel.SetWeaponModel(eq.Model, MuzzleEffectFor(w), "tag_shot", eq.Attach, MuzzleModelFor(w));
+        // QC wepent.movedir (CL_WeaponEntity_SetModel): the weapon's registered model-local tag_shot offset —
+        // the SAME value the server's SetupShot fires from — so the first-person flash spawns at the real
+        // muzzle point (Base movedir_aligned), not wherever the compressed-view-space render tag lands.
+        System.Numerics.Vector3 mdv = XonoticGodot.Common.Gameplay.WeaponFiring.TryGetMuzzleOffset(id, out System.Numerics.Vector3 mo)
+            ? mo : XonoticGodot.Common.Gameplay.WeaponFiring.DefaultMuzzleOffset;
+        _viewModel.MuzzleMovedir = new Vector3(mdv.X, mdv.Y, mdv.Z);
         _viewModel.Visible = true;
         // Raise the new gun into view instead of popping the model in (Xonotic viewmodel_draw raise; pairs with
         // the keypress holster in RunBoundCommand). Confirmed switch → cancels any pending holster auto-recovery.
         _viewModel.PlayRaise();
+        // The server slot now runs the incoming weapon's raise think (can't fire until it lands) — hold fire
+        // prediction for the same window so a held trigger doesn't pop the flash while the gun is still rising.
+        _switchRaiseLeft = w?.SwitchDelayRaise() ?? 0f;
     }
 
     /// <summary>
@@ -1949,8 +2187,9 @@ public sealed partial class NetGame : Node3D
                 }
                 else
                 {
+                    // TryGetViewedState: the own entity lives in LocalState, never the remote table (see #51/#58).
                     int watched = specNet != 0 ? specNet : (_client?.LocalNetId ?? 0);
-                    if (watched != 0 && _client != null && _client.TryGetRemoteState(watched, out var rs)
+                    if (watched != 0 && _client != null && _client.TryGetViewedState(watched, out var rs)
                         && rs.WepentView.VortexCharge > 0f)
                         charge = rs.WepentView.VortexCharge;
                 }
@@ -1979,7 +2218,10 @@ public sealed partial class NetGame : Node3D
         if (LocalServerPlayer is { } p && specNet == 0)
             return p.ClientColors & 0xFF;
         int watched = specNet != 0 ? specNet : (_client?.LocalNetId ?? 0);
-        if (watched != 0 && _client != null && _client.TryGetRemoteState(watched, out var rs))
+        // TryGetViewedState (NOT TryGetRemoteState): the own entity is kept in ClientNet.LocalState, never the
+        // remote table — the old lookup MISSED for a pure client's own colors, so the first-person weapon never
+        // took the profile/team tint on a remote client (playtest #58).
+        if (watched != 0 && _client != null && _client.TryGetViewedState(watched, out var rs))
             return rs.Colors & 0xFF;
         return 0;
     }
@@ -2124,7 +2366,11 @@ public sealed partial class NetGame : Node3D
         else
             return;                                        // listen host: the host-derived reload anim owns the frame
 
-        if (watched != 0 && _client.TryGetRemoteState(watched, out var rs))
+        // TryGetViewedState (NOT TryGetRemoteState): the OWN entity is diverted to ClientNet.LocalState and never
+        // enters the remote table, so the pure-client "watched == self" lookup used to MISS every frame — the
+        // viewmodel then never received the server's idle edge and a LOOPING fire clip (h_hagar) pumped forever
+        // (playtest #51, the remote twin of the r12 host fix).
+        if (watched != 0 && _client.TryGetViewedState(watched, out var rs))
             _viewModel.SetNetAnimFrame(rs.WepentView.ViewmodelFrame);
     }
 
@@ -2150,7 +2396,7 @@ public sealed partial class NetGame : Node3D
     /// <see cref="EquipNetworkedWeapon"/>, <see cref="BuildWeaponWorldModel"/>, and
     /// <see cref="PrecacheWeaponModels"/> so they all hit the SAME asset-cache key.
     /// </summary>
-    private static string WeaponVModelPath(XonoticGodot.Common.Gameplay.Weapon w)
+    internal static string WeaponVModelPath(XonoticGodot.Common.Gameplay.Weapon w)
         => string.IsNullOrEmpty(w.WorldModel) ? "" : "models/weapons/" + w.WorldModel;
 
     /// <summary>
@@ -2697,6 +2943,15 @@ public sealed partial class NetGame : Node3D
             return;
         _shutDown = true;
 
+        // Motion-trace close: the toggle-off path in MotionTrace never runs on a quit/map-change, and the
+        // writer buffers 128 lines — without this a short capture (or any session tail) is silently lost.
+        if (_motionTrace is not null)
+        {
+            try { _motionTrace.Flush(); _motionTrace.Dispose(); } catch { /* best-effort on teardown */ }
+            _motionTrace = null;
+            _mtHave = false;
+        }
+
         // #19: if we tore down while the solo-local auto-pause was holding slowmo at 0, restore it so the engine
         // doesn't stay frozen for the next map (mirrors TimeoutController.ResetSlowmoOnShutdown).
         if (_localPauseSlowmo is not null && _serverWorld is not null)
@@ -2746,6 +3001,7 @@ public sealed partial class NetGame : Node3D
             // it attached and every retired world would keep re-deriving weapon balance on every future cvar change.
             _serverWorld.Shutdown();
             _serverWorld.Services.TraceImpl.ConcurrencyGate = null;   // traces revert to lock-free
+            _serverWorld.Simulation.TickGate = null;                  // per-tick gating off with the worker gone
         }
         _simGate = null;
         _server?.Dispose();
@@ -2776,7 +3032,23 @@ public sealed partial class NetGame : Node3D
     private bool _netInputTraceCv;         // net_input_trace: dormant net input→movement pipeline diagnostic (see _Process)
     private int _netTraceTick;             // throttle counter for the net_input_trace log
     private bool _hitchHoldCv = true;      // cl_movement_hitch_hold: Fix B post-hitch stall-aware reconcile (see docs/TROUBLESHOOTING.md)
+    private bool _smoothDtCv;              // cl_smoothdt: conditioned client-motion dt — default OFF, see ConditionDt
+    private bool _smoothDtCapCv = true;    // cl_smoothdt_driftcap: bounded drift ledger + wide hitch gate (2026-07-26 fix)
+    private bool _mouseSmoothDtCv = true;  // m_smoothdt: yaw-channel dt conditioning (2026-07-26; see FlushMouseLook)
+    private bool _interpCushionCv = true;  // cl_interp_cushion: full measured-interval slew target (DP boundmode-5 parity; see InterpBias)
+    private bool _netClockDp5Cv;           // cl_netclock_dp5: DP boundmode-5 stepped correction law instead of the rate slew (A/B)
+    private bool _frameGovernorCv = false; // cl_frame_governor: adaptive frame pacing (r16; default OFF — opt-in experiment)
+    private bool _clMovementCv = true;     // DP cl_movement: 0 = no client prediction (view rides the server owner state)
+    private bool _noLerpCv;                // DP cl_nolerp: 1 = remote entities render raw newest snapshots
     private bool _immediateButtonsCv = true; // cl_netimmediatebuttons: send fire/jump/impulse immediately past the rate gate (DP)
+    // DP mouse pipeline (cl_input.c IN_Move → CL_Input): raw deltas accumulate per frame in _mouseDx/Dy
+    // (_UnhandledInput), then FlushMouseLook applies the m_accelerate/m_filter block ONCE per render frame
+    // (the accel math needs realframetime) and scales into the view angles. Params cached R11-style.
+    private readonly XonoticGodot.Common.Input.MouseAccel _mouseAccel = new();
+    private XonoticGodot.Common.Input.MouseAccelParams _mouseAccelCv = XonoticGodot.Common.Input.MouseAccelParams.DpDefaults;
+    private float _pitchMinCv = -90f;      // in_pitch_min (DP -90; quake used -70)
+    private float _pitchMaxCv = 90f;       // in_pitch_max (DP 90; quake used 80)
+    private float _mouseDx, _mouseDy;
 
     private void EnsureProcessCvarCache()
     {
@@ -2798,8 +3070,21 @@ public sealed partial class NetGame : Node3D
             || name.Equals("cl_netclock_smooth", StringComparison.OrdinalIgnoreCase)
             || name.Equals("net_input_trace", StringComparison.OrdinalIgnoreCase)
             || name.Equals("cl_movement_hitch_hold", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("cl_netimmediatebuttons", StringComparison.OrdinalIgnoreCase))
+            || name.Equals("cl_netimmediatebuttons", StringComparison.OrdinalIgnoreCase)
+            // the DP mouse family: m_filter + the whole m_accelerate_* set, and the pitch clamp pair
+            || name.StartsWith("m_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("in_pitch_", StringComparison.OrdinalIgnoreCase))
             RefreshProcessCvars();
+    }
+
+    /// <summary>Read a float cvar with an unset-aware default (GetFloat can't tell unset from 0 — several
+    /// DP mouse-accel defaults are non-zero: minspeed 5000, power 2, in_pitch ±90).</summary>
+    private float CvOr(string name, float def)
+    {
+        string? s = _sharedCvars?.GetString(name);
+        return !string.IsNullOrEmpty(s)
+            && float.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)
+            ? v : def;
     }
 
     private void RefreshProcessCvars()
@@ -2815,8 +3100,45 @@ public sealed partial class NetGame : Node3D
         _netInputTraceCv = (_sharedCvars?.GetString("net_input_trace") ?? "") == "1";
         // cl_movement_hitch_hold defaults ON (unset → on): treat anything but "0" as enabled.
         _hitchHoldCv = (_sharedCvars?.GetString("cl_movement_hitch_hold") ?? "") != "0";
+        // cl_smoothdt defaults OFF (unset → off, note the "0" fallback): raw measured delta, Base-faithful.
+        // It was default-ON for the r16 variance fix; that justification died with the engine-clamp root cause
+        // (see ConditionDt) and the playtest on the honest clock found no felt difference. 1 = the filter (A/B).
+        _smoothDtCv = (_sharedCvars?.GetString("cl_smoothdt") ?? "0") != "0";
+        // cl_smoothdt_driftcap defaults ON (unset → on): bounded drift ledger + wide hitch gate
+        // (the 2026-07-26 oscillator fix); 0 = legacy r16 unbounded ledger (A/B).
+        _smoothDtCapCv = (_sharedCvars?.GetString("cl_smoothdt_driftcap") ?? "") != "0";
+        // cl_interp_cushion defaults ON (unset → on): DP boundmode-5 full-interval slew target; 0 = half-tick bias.
+        _interpCushionCv = (_sharedCvars?.GetString("cl_interp_cushion") ?? "") != "0";
+        // cl_netclock_dp5 defaults OFF: opt-in A/B of Base's stepped correction law vs the r16 rate slew.
+        _netClockDp5Cv = (_sharedCvars?.GetString("cl_netclock_dp5") ?? "") == "1";
+        // cl_frame_governor defaults ON (unset → on): adaptive frame pacing; 0 = off (A/B).
+        _frameGovernorCv = (_sharedCvars?.GetString("cl_frame_governor") ?? "0") == "1"; // default OFF (r16: a workaround, not the fix — the variance program is)
+        // DP cl_movement (default 1 = client prediction) / cl_nolerp (default 0 = interpolate) — r16 A/B.
+        _clMovementCv = (_sharedCvars?.GetString("cl_movement") ?? "") != "0";
+        _noLerpCv = (_sharedCvars?.GetString("cl_nolerp") ?? "") == "1";
         // cl_netimmediatebuttons defaults ON (unset → on): treat anything but "0" as enabled.
         _immediateButtonsCv = (_sharedCvars?.GetString("cl_netimmediatebuttons") ?? "") != "0";
+        // The DP mouse pipeline params (cl_input.c:401-412 registration defaults for anything unset).
+        var dp = XonoticGodot.Common.Input.MouseAccelParams.DpDefaults;
+        _mouseAccelCv = new XonoticGodot.Common.Input.MouseAccelParams
+        {
+            MFilter             = CvOr("m_filter", 0f) != 0f,
+            Accelerate          = CvOr("m_accelerate", dp.Accelerate),
+            AccelerateMinSpeed  = CvOr("m_accelerate_minspeed", dp.AccelerateMinSpeed),
+            AccelerateMaxSpeed  = CvOr("m_accelerate_maxspeed", dp.AccelerateMaxSpeed),
+            AccelerateFilter    = CvOr("m_accelerate_filter", dp.AccelerateFilter),
+            PowerOffset         = CvOr("m_accelerate_power_offset", dp.PowerOffset),
+            Power               = CvOr("m_accelerate_power", dp.Power),
+            PowerSensCap        = CvOr("m_accelerate_power_senscap", dp.PowerSensCap),
+            PowerStrength       = CvOr("m_accelerate_power_strength", dp.PowerStrength),
+            NaturalStrength     = CvOr("m_accelerate_natural_strength", dp.NaturalStrength),
+            NaturalAccelSensCap = CvOr("m_accelerate_natural_accelsenscap", dp.NaturalAccelSensCap),
+            NaturalOffset       = CvOr("m_accelerate_natural_offset", dp.NaturalOffset),
+        };
+        _pitchMinCv = CvOr("in_pitch_min", -90f);
+        _pitchMaxCv = CvOr("in_pitch_max", 90f);
+        // m_smoothdt defaults ON (unset → on): yaw-channel dt conditioning; 0 = legacy raw application (A/B).
+        _mouseSmoothDtCv = (_sharedCvars?.GetString("m_smoothdt") ?? "") != "0";
     }
 
     public override void _Process(double delta)
@@ -2831,7 +3153,44 @@ public sealed partial class NetGame : Node3D
 
         EnsureProcessCvarCache();   // (§11 R11) hot-path cvar values are cached; refreshed on Changed
 
-        float dt = (float)delta;
+        // (motion trace v3) Wall clock at the TOP of the frame. Godot's `delta` is a start-to-start interval,
+        // so only a start-of-frame stamp differences into the same quantity — the v2 column was sampled inside
+        // MotionTrace (late in the frame), which added a work-time phase term to every per-frame comparison.
+        // This is the reference clock the two-clock wobble detector (tools/wobble-detect.py) measures the
+        // engine's reported delta against; see MotionTrace's header for what that comparison decides.
+        _mtQpcTop = System.Diagnostics.Stopwatch.GetTimestamp()
+            / (double)System.Diagnostics.Stopwatch.Frequency;
+
+        float rawDt = (float)delta;
+        // [r16 rubberband FIX — the conviction after the full elimination matrix] Godot's delta is the
+        // PREVIOUS frame's duration: each frame advances the world by how long the LAST frame took, then is
+        // displayed for however long THIS frame takes. With uniform frame times the error is zero (why
+        // vsync-on and a hard-engaged cap feel smooth); with the port's frame-time variance every frame
+        // carries a motion error proportional to that variance — the felt wobble, at ANY average fps,
+        // surviving present-path/GC/movement-mode changes because none of them touch the variance.
+        // ConditionDt feeds the client's MOTION path a rolling-median PREDICTED dt (a better estimate of
+        // this frame's true display duration than last frame's measurement), passes real hitches through
+        // raw, and drift-corrects so accumulated time stays exactly wall-true. The server tick pump keeps
+        // RAW dt — its accumulator integrates variance harmlessly. cl_smoothdt 0 = raw dt for A/B.
+        float dt = ConditionDt(rawDt);
+        FrameGovernor(rawDt); // adaptive frame pacing (r16) — see the method's rationale block
+
+        // WS1 instrumentation: how long the RENDER thread spent waiting on the sim gate last frame (per-trace
+        // ConcurrencyGate acquisitions — prediction/particle/crosshair traces). Read+reset here so the counter
+        // covers a whole frame; attributed one frame late like the other lagged counters. ~0 when unthreaded.
+        if (_serverThread is not null)
+        {
+            double gateWaitMs = XonoticGodot.Engine.Collision.TraceService.GateWaitTicks
+                * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            XonoticGodot.Engine.Collision.TraceService.GateWaitTicks = 0;
+            XonoticGodot.Common.Diagnostics.Prof.Mark("sv.gatewait_ms", gateWaitMs);
+        }
+
+        // DP CL_Input: apply the frame's accumulated mouse-look FIRST, so everything below (input sampling,
+        // camera, radar) sees this frame's view angles. rawDt = cl.realframetime for the accel math (the
+        // audited contract); dt = the conditioned display-interval estimate for m_smoothdt's yaw-channel
+        // conditioning (see FlushMouseLook).
+        FlushMouseLook(rawDt, dt);
 
         // slowmo / host_timescale: the CLIENT-side time accumulators (input cadence + render clock) scale by the
         // SAME factor the server applies to its sim (ServerNet.StepWorld → SimulationLoop.TimeScale), so the player's
@@ -2864,20 +3223,25 @@ public sealed partial class NetGame : Node3D
 
         if (_serverThread is null)
             using (XonoticGodot.Game.Client.FrameProfiler.Scope("server.tick"))
-                _server?.Tick(dt);
+                _server?.Tick(rawDt); // RAW wall time: the tick accumulator integrates variance harmlessly
 
-        // S5: from here to the end of _Process we read/mutate server-world state (the music/HUD feeds,
-        // LocalServerPlayer, the carrier reconcile) AND run the client prediction replay (inside _client.SendInput
-        // → EntityMovementStep.Step). When threaded, all of that must be serialised against the worker's
-        // ServerNet.Tick, so take the SAME gate the worker locks. A single try/finally spans the whole remainder
-        // (incl. the one early `return` at "_client is null") so the gate is always released. When NOT threaded
-        // (_simGate null) this is a plain pass-through with no lock — byte-for-byte the old path.
-        object? simGate = _simGate;
-        bool simGateTaken = false;
-        try
-        {
-            if (simGate is not null)
-                System.Threading.Monitor.Enter(simGate, ref simGateTaken);
+        // WS1 stage 3 (2026-07-11): the S5 whole-remainder gate span is GONE. It serialised the worker's ticks
+        // against the entire rest of _Process — a long tick stalled the render thread at the Enter, and a long
+        // frame stalled the sim (why sv_threaded never actually flattened frames). What replaced it:
+        //   • transport: stage-2 inbound marshaling (main only Polls; the WORKER processes packets/connects at
+        //     its step top) + the stage-1 worker-encode outbox — PumpTransportThreaded takes no gate on the
+        //     common path;
+        //   • world MUTATIONS from main (bench spectate, host auto-join, map-vote impulse, chat/console sinks)
+        //     ride ServerNet.RunOnSimThread;
+        //   • crash-capable read races closed structurally: CvarService → ConcurrentDictionary,
+        //     ClientManager.PlayersSnapshot (COW roster) for cross-thread enumeration, _playerNetIds →
+        //     ConcurrentDictionary;
+        //   • prediction/particle traces serialise per-trace via TraceService.ConcurrencyGate (waits are
+        //     bounded by the WS-BOT tick budgets, p99 ~2.5ms);
+        //   • the remaining display reads of live Player/world fields (HUD mirrors, feeds, carrier mirroring)
+        //     are tolerated stale/torn-per-field — the SAME class of ungated read the standalone HUD panels
+        //     (scoreboard/radar/NetHud) have always done on the threaded path. Wrong-for-a-frame display data
+        //     self-corrects; the reconcile absorbs a rare odd prediction seed.
 
         // S5 (§13.5): when threaded, the worker runs ONLY the pure-C# sim — the MAIN thread services the Godot
         // ENet transport here (receive the client input the worker's next step consumes; send the snapshot of
@@ -2885,8 +3249,26 @@ public sealed partial class NetGame : Node3D
         // transport (_client.Poll, further down) then receives that snapshot the SAME frame.
         if (_serverThread is not null)
             using (XonoticGodot.Game.Client.FrameProfiler.Scope("server.tick"))
-                _server?.PumpTransportThreaded(dt);
+                _server?.PumpTransportThreaded(rawDt); // RAW wall time (see the server Tick note above)
 
+        // Demo/benchmark camera: keep the host observing a living bot (no-op unless cl_bench_spectate is set;
+        // throttled to 2 Hz). WS1 stage 3: it MUTATES server-side spectator state — run it on the sim thread
+        // when threaded (RunOnSimThread is inline when not). Its 2 Hz throttle field is then written only by
+        // whichever thread owns the mode — never both. The cl_bench_spectate read happens HERE on main for
+        // both paths: the shared store is a plain main-owned Dictionary, so the worker must never touch it
+        // (BenchSpectateThink itself no longer re-reads the cvar).
+        if (BenchSpectateActive)
+        {
+            if (_serverThread is null)
+                BenchSpectateThink();
+            else
+                _server?.RunOnSimThread(BenchSpectateThink);
+        }
+
+        // (perf 2.0) ng.feeds: the music/announcer/host-mutator HUD-feed run — sub-scoped so the ng.process
+        // residual shrinks to genuinely-unattributed work (frame-budget decomposition, perf-campaign doc).
+        using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.feeds"))
+        {
         // QC target_music_kill() at NextLevel: stop the map music at intermission (works on both the listen-server
         // and pure-client paths — the flag is networked via ClientNet.MatchIntermission). QC FixIntermissionClient
         // additionally loops a random sv_intermission_cdtrack word over the scoreboard; feed that value from the
@@ -3015,6 +3397,7 @@ public sealed partial class NetGame : Node3D
 
         // Advance the announcer queue (play the next queued voice if the current one finished).
         _notifications?.ProcessAnnouncerQueue();
+        }   // ng.feeds
 
         // Pump the client transport (handshake + snapshots + event bundles) before reading predicted state.
         if (_client is null)
@@ -3024,29 +3407,67 @@ public sealed partial class NetGame : Node3D
         // camera back (see ClientNet.HandleSnapshot). Gated by a cvar because it's defensive, not the cause of any
         // observed bug (the spawn-stutter was the ENet throttle) — `set cl_movement_hitch_hold 0` disables it.
         // Rationale + risks: docs/TROUBLESHOOTING.md.
-        _client.RecentHitch = _hitchHoldCv && dt > HitchFrameSeconds;
-        _client.Poll();
+        _client.RecentHitch = _hitchHoldCv && rawDt > HitchFrameSeconds; // hitch detection must see the REAL frame
+        using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.poll"))
+            _client.Poll();
 
-        // Advance the render clock: free-run by this frame's elapsed time, then gently CREEP it toward server time
-        // on a fresh snapshot (see _renderClock).
-        _renderClock += dt * slowmo; // slowmo: keep the render clock aligned with the (time-scaled) server clock
+        // Advance the render clock: free-run by this frame's elapsed time with a BOUNDED RATE SLEW toward
+        // server time (r16 rubberband fix). The previous design free-ran then corrected 20% of the error
+        // as a STEP on each fresh snapshot — every step jolted the interpolation sampling clock, visibly
+        // speeding/slowing all remote entities for a frame; with the listen server's tick catch-up making
+        // LatestServerTime elastic under combat load, the steps oscillated in ~300-600ms waves — the felt
+        // rubberbanding. Now the clock's PLAYBACK RATE is modulated continuously (±ClockSlewMax): the same
+        // error converges over a few hundred ms while entity motion never deviates perceptibly from real
+        // time — frame rate and sim tick batching fully decouple from interpolation speed. Snap only on
+        // the FIRST snapshot or a discontinuity beyond MaxClockResync (respawn / level change / a huge
+        // hitch). cl_netclock_smooth 0 = the old hard per-snapshot rebase, for A/B.
+        // cl_netclock_dp5 (parity-audit A/B): 1 = Base's exact boundmode-5 STEPPED law, applied per snapshot
+        // arrival below (snap >0.5s / 50% step >0.1s / ±1..2ms creep), free-running at wall rate between
+        // snapshots like DP's cl.time += clframetime. 0 (default) = the r16 continuous rate slew here.
+        bool dp5 = _netClockDp5Cv && _netClockSmoothCv;
+        float slew = 0f;
+        if (_lastSeenServerTime >= 0f && _netClockSmoothCv && !dp5)
+            slew = Math.Clamp((_client.LatestServerTime - InterpCushion() - _renderClock) * ClockSlewGain,
+                -ClockSlewMax, ClockSlewMax);
+        _renderClock += dt * slowmo * (1f + slew); // slowmo: stay aligned with the (time-scaled) server clock
+        // DP cl_nettimesyncboundmode invariant (r16 trace finding): the clock must NEVER run past the newest
+        // snapshot — sampling beyond the interp window clamps the two-snapshot lerp at f=1, rendering every
+        // remote entity at its raw newest pose (uninterpolated tick-lumps: the felt combat rubberbanding; the
+        // motion trace measured the clock ~9ms PAST latest on average). Hard upper bound here; the slew/step
+        // above targets InterpCushion() behind (default: a full measured snapshot interval, DP mode-5 parity —
+        // the DP-equivalent bound, since Base's target cl.mtime[1] also sits one interval below its window edge
+        // cl.mtime[0]), so this clamp only engages a full cushion past target. Falling far behind still
+        // hard-snaps via MaxClockResync below.
+        if (_lastSeenServerTime >= 0f && _renderClock > _client.LatestServerTime)
+            _renderClock = _client.LatestServerTime;
         if (_client.LatestServerTime != _lastSeenServerTime)
         {
             bool firstSnapshot = _lastSeenServerTime < 0f;
+            // Measured snapshot spacing (DP cl.mtime[0] - cl.mtime[1]): feeds the cl_interp_cushion full-interval
+            // target, which is what lets the cushion GROW when the loaded listen server produces snapshots late.
+            if (!firstSnapshot)
+                _snapInterval = Math.Clamp(_client.LatestServerTime - _lastSeenServerTime, 1f / 72f, 0.1f);
             _lastSeenServerTime = _client.LatestServerTime;
-            // PATH A (#2 divergence vs Base): do NOT hard-rebase the render clock to server time on every snapshot.
-            // The in-process server runs 0-4 ticks/frame and only broadcasts when the world advanced, so snapshots
-            // arrive in lumps; a hard `= LatestServerTime` jolts the clock — and the camera / error+stair decay
-            // timeline it drives — at irregular instants (a contributor to the bhop judder). Instead let the clock
-            // free-run (+= dt above) and gently creep toward server time, matching Base's cl_nettimesyncboundmode
-            // (bound + small per-frame creep, cl_parse.c). Snap only on the FIRST snapshot or a large discontinuity
-            // (respawn / teleport / level change / a hitch beyond MaxClockResync). cl_netclock_smooth 0 = old hard
-            // rebase, for A/B.
             float err = _client.LatestServerTime - _renderClock;
-            if (firstSnapshot || !_netClockSmoothCv || MathF.Abs(err) > MaxClockResync)
+            if (firstSnapshot || !_netClockSmoothCv)
                 _renderClock = _client.LatestServerTime;
-            else
-                _renderClock += err * ClockSyncFactor; // DP-style gradual catch-up (cl_nettimesyncfactor)
+            else if (dp5)
+            {
+                // Base cl_nettimesyncboundmode 5, verbatim (cl_parse.c:3354-3361), against the cushioned target
+                // (DP's cl.mtime[1]): snap on a discontinuity, halve big errors per snapshot, else creep at
+                // -2ms/+1ms per snapshot (asymmetric: falls behind faster than it catches up — never overshoots).
+                float target = _client.LatestServerTime - InterpCushion();
+                float terr = _renderClock - target;
+                if (MathF.Abs(terr) > 0.5f)
+                    _renderClock = target;
+                else if (MathF.Abs(terr) > 0.1f)
+                    _renderClock += 0.5f * (target - _renderClock);
+                else
+                    _renderClock = Math.Clamp(target, _renderClock - 0.002f * slowmo, _renderClock + 0.001f * slowmo);
+            }
+            else if (MathF.Abs(err) > MaxClockResync)
+                _renderClock = _client.LatestServerTime;
+            // (no per-snapshot step otherwise — the rate slew above owns convergence)
             if (firstSnapshot)
             {
                 // Seed the carrier from the server's authoritative owner state so the predictor's first replay
@@ -3065,6 +3486,51 @@ public sealed partial class NetGame : Node3D
             {
                 _loggedAccept = true;
                 GD.Print($"[NetGame] handshake accepted by '{_client.ServerName}': netId {_client.LocalNetId}.");
+                // A pure --connect client now knows the server's map — load its BSP so the remote player renders
+                // and collides with the REAL world instead of the flat prediction floor (no-op on a listen server).
+                if (!_isListenServer)
+                    LoadClientMapFromServer(_client.ServerMapName, _client.ServerGametype);
+            }
+
+            // [#44] The listen host's "Create Game and play" join — Base's `early_join_requested` arm of the
+            // PlayerPreThink autojoin (client.qc:2715): the host explicitly ASKED to start a match, so its own
+            // client requests `join` the moment its observer attaches. With sv_spectate back at Base's 1 the
+            // passive delayed-autojoin no longer exists (faithful — it only armed when sv_spectate was 0), so
+            // without this the host — and every scripted flow that expects the host to spawn (--map smoke,
+            // --camera-trace, perf runs, --screenshot's CaptureGate) — would sit at the observer prompt forever.
+            // The `join` can NO-OP (a gated/blocked spawnpoint on assault/onslaught, a team-balance queue), so we
+            // must NOT burn the request on the first attempt: retry on a bounded cadence until the host actually
+            // spawns (IsObserver flips false), then latch done. Remote clients are NOT auto-joined — they get the
+            // real Base observer flow (+jump joins, +attack spectates). A campaign host that CAN'T passive-autojoin
+            // at sv_spectate 1 relies on this same path (its CmdJoin succeeds on stock campaign maps).
+            // cl_bench_spectate: the host is a CAMERA — stand down so BenchSpectateThink can glue it to a bot
+            // (without the gate the join would land once, then bench pulls it back: a one-spawn flicker on capture).
+            if (_isListenServer && !_hostJoinDone && !BenchSpectateActive && _serverWorld is { } joinWorld)
+            {
+                if (LocalServerPlayer is not { IsObserver: true })
+                {
+                    _hostJoinDone = true; // spawned (or no host player yet) — nothing to auto-join
+                }
+                else
+                {
+                    float nowMsec = Godot.Time.GetTicksMsec();
+                    if (nowMsec >= _hostJoinNextRetryMsec)
+                    {
+                        _hostJoinNextRetryMsec = nowMsec + 1000f; // bounded: a blocked spawn no-ops, so don't spam
+                        // WS1 stage 3: the join MUTATES the world — run it on the sim thread (inline when
+                        // unthreaded). The retry-until-spawned loop already tolerates the deferred execution:
+                        // IsObserver stays true until the worker runs it, so we just retry/latch next frame.
+                        Player? joinCaller = LocalServerPlayer;
+                        if (_server is { } joinSrv)
+                            joinSrv.RunOnSimThread(() =>
+                                joinWorld.Commands.Execute("join", isServerConsole: false, caller: joinCaller));
+                        else
+                            joinWorld.Commands.Execute("join", isServerConsole: false, caller: joinCaller);
+                        // If the join spawned us this frame (unthreaded path), IsObserver is now false → latch.
+                        if (LocalServerPlayer is not { IsObserver: true })
+                            _hostJoinDone = true;
+                    }
+                }
             }
 
             // LISTEN-SERVER prediction parity: the predicted carrier and the authoritative host Player are TWO
@@ -3151,10 +3617,10 @@ public sealed partial class NetGame : Node3D
                     Mathf.DegToRad(fa.Y), Mathf.DegToRad(_lastPredictedFixAngles.Y))));
                 bool predictedSame = Time.GetTicksMsec() * 0.001f - _lastPredictedFixTime < 1f
                     && yawDiff < 2f
-                    && Mathf.Abs(Mathf.Clamp(fa.X, -89f, 89f) - _lastPredictedFixAngles.X) < 2f;
+                    && Mathf.Abs(Mathf.Clamp(fa.X, _pitchMinCv, _pitchMaxCv) - _lastPredictedFixAngles.X) < 2f;
                 if (!predictedSame)
                 {
-                    _viewAngles.X = Mathf.Clamp(fa.X, -89f, 89f);
+                    _viewAngles.X = Mathf.Clamp(fa.X, _pitchMinCv, _pitchMaxCv);
                     _viewAngles.Y = fa.Y;
                     _viewAngles.Z = 0f;
                     _lastFixApplyTime = Time.GetTicksMsec() * 0.001f; // arm the predicted replay-echo discard window
@@ -3187,6 +3653,11 @@ public sealed partial class NetGame : Node3D
             // in-session (the Changed hook refreshes it the frame the cvar is set).
             _perFrameInput = _perFrameInputCv;
             _client.PerFrameInput = _perFrameInput;
+            // DP cl_movement / cl_nolerp (r16 A/B switches) + the interp-domain clock for the no-prediction
+            // extrapolation. Pushed per frame so both live-toggle in-session.
+            _client.UseClientMovement = _clMovementCv;
+            _client.NoLerp = _noLerpCv;
+            _client.RenderNow = _renderClock;
             // Send model (Path A): EXACT = transmit every predicted frame (InputSendInterval 0 → server replays the
             // identical sequence → reconcile ~0); BASE-FAITHFUL (default) = gate transmits to cl_netfps/s, the
             // bounded redundancy then coalescing intermediate frames above ~cl_netfps×redundancy fps exactly as DP
@@ -3195,6 +3666,9 @@ public sealed partial class NetGame : Node3D
             // cl_netimmediatebuttons (DP): fire/jump/weapon-switch bypass the rate gate above so they reach the
             // server immediately at high fps, while steady movement stays gated to cl_netfps.
             _client.ImmediateButtons = _immediateButtonsCv;
+            // (perf 2.0) ng.input: the per-frame prediction + input transmit — the using's embedded
+            // statement is the whole if/else, so both cadence paths are covered by one scope.
+            using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.input"))
             if (_perFrameInput)
             {
                 // PATH A — BASE-FAITHFUL variable-dt local prediction (Xonotic Base's default, Movetype_Physics_
@@ -3336,7 +3810,8 @@ public sealed partial class NetGame : Node3D
         // lerp + camera placement + eventchase + eye-contents), so it must run BEFORE the ViewEffects feed below
         // (which reads SampleEyeContents = _view.EyeContents).
         if (_cameraReady)
-            UpdateCamera(dt);
+            using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.camera"))
+                UpdateCamera(dt);
 
         // Camera-trace capture (apparatus A2): once spawned, record the rendered camera origin + predicted state
         // per frame; finish + quit when the scripted input is exhausted. Inert unless --camera-trace was passed.
@@ -3370,11 +3845,21 @@ public sealed partial class NetGame : Node3D
             _view.ZoomScriptCaught);
 
         // Feed the full HUD's player-bound panels (health/ammo/weapons/crosshair) the local server Player on a
-        // listen server, so they reflect live local state as the spawn lands (QC the view player). A pure client
-        // has no local Player actor — the NetHud crosshair/health covers it. Cheap: SetPlayer no-ops when same.
-        UpdateFullHudPlayer();
-        UpdateCrosshairGate();
-        UpdateInfoMessages();
+        // listen server, or the networked-stats mirror on a pure client (refreshed just before, so the panels
+        // read this frame's snapshot values) — the SAME skinned panel set either way. SetPlayer no-ops when same.
+        using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.hud"))
+        {
+            UpdateHudMirror();
+            UpdateFullHudPlayer();
+            UpdateCrosshairGate();
+            UpdateInfoMessages();
+        }
+
+        // [r16 #5] ng.viewfx: the equip + screen-effects + radar + shownames feed block — previously unscoped,
+        // one of the stretches the profiler's "proc:other dominated / add Prof scopes" debt pointed at.
+        // Explicitly disposed just before the second ng.hud block (a `using var` would swallow it + the tail).
+        XonoticGodot.Common.Diagnostics.Prof.ScopeToken _viewfxScope =
+            XonoticGodot.Game.Client.FrameProfiler.Scope("ng.viewfx");
 
         // Install / swap the first-person weapon model when the networked active weapon changes (CSQC view.qc:305
         // picks the v_ model from the active weapon, rebuilding only on a swap).
@@ -3462,21 +3947,30 @@ public sealed partial class NetGame : Node3D
             _shownamesLayer.LocalIsSpectating = _client.SpectateeStatus != 0;
             _shownamesLayer.ChaseActive = _view.ChaseActive;
             _shownamesLayer.LocalTeam = LocalShownamesTeam();
+            // [#55] The REAL teamplay flag (networked ScoreInfo → GameScores.Teamplay; the in-process server
+            // shares the same static on a listen host). The layer previously derived teamplay from
+            // LocalTeam != None — the #27 pants-team trap: FFA players carry a pants-derived team, so DM
+            // players sharing profile colors classified as teammates (LOS skipped, names always visible).
+            _shownamesLayer.Teamplay = XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay;
         }
+        _viewfxScope.Dispose(); // close ng.viewfx — the scoreboard/panels below are ng.hud's
 
         // Scoreboard (QC +showscores): show while the scoreboard key is held, and feed it the networked rows +
         // team totals whenever a fresh LatestScoreboard arrives (the panel only repaints on data/toggle, so this
         // is cheap). BindTable.ShowScores is the held-button state set from the +showscores bind.
-        UpdateScoreboard();
-        UpdateScore();
-        UpdateMatchClock();
-        UpdatePickupFeed();
-        UpdateModIcons();
-        UpdateAccuracy();
-        UpdateVotePanel();
-        UpdateMapVotePanel();
-        UpdateRacePanels();
-        UpdateHudDynamicFollow();
+        using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.hud"))
+        {
+            UpdateScoreboard();
+            UpdateScore();
+            UpdateMatchClock();
+            UpdatePickupFeed();
+            UpdateModIcons();
+            UpdateAccuracy();
+            UpdateVotePanel();
+            UpdateMapVotePanel();
+            UpdateRacePanels();
+            UpdateHudDynamicFollow();
+        }
 
         // Minigame cursor (QC hud_cursormode): while a minigame board/menu (or quickmenu / maximized radar) owns
         // input, show the cursor so the player can click TTT/C4 tiles + the menu; recapture for play once it's
@@ -3516,14 +4010,306 @@ public sealed partial class NetGame : Node3D
             }
             Callable.From(() => MapChangeRequested?.Invoke(map, gametype, bots, skill, campId, campIdx)).CallDeferred();
         }
-        } // end try (S5 sim-gate span)
-        finally
+        // r16 rubberband diagnostic — last so it records this frame's FINAL camera/prediction state.
+        MotionTrace(dt, rawDt, slew);
+
+    }
+
+    // ---- cl_frame_governor (r16): adaptive frame pacing — "reliable frame time while the rate varies" ---
+    // The two conditions that felt smooth all night (vsync ON, a hard-engaged cap) share one property: the
+    // frame DELIVERY cadence is uniform. The port's frame production is structurally lumpy (tick frames /
+    // snapshot-decode frames / effect bursts alternate with cheap frames: p10 3.7ms vs p90 8.3ms), so with
+    // no pacing the panel receives frames of wildly varying age — the felt wobble, at any average fps.
+    // The governor paces frame starts at a rolling target just under what the scene currently sustains:
+    // every second it sets Engine.MaxFps to ~0.98/p75(recent raw dts) — the limiter is then ENGAGED on
+    // most frames (its sleep pads the cheap ones to match the expensive ones) while the rate still adapts
+    // to load over seconds. AIMD dynamics (fall fast on load, climb <=5%/s) prevent self-oscillation; the
+    // user's explicit cl_maxfps stays an upper bound; floor 60. cl_frame_governor 0 = off (restores the
+    // ClientSettings-applied cap).
+    private readonly float[] _govRing = new float[256];
+    private readonly float[] _govSort = new float[256];
+    private int _govI, _govN;
+    private float _govAccum;
+    private int _govApplied;      // last MaxFps the governor applied (0 = none yet)
+    private int _govSaved = -1;   // Engine.MaxFps before the governor took over (-1 = not saved)
+
+    private void FrameGovernor(float rawDt)
+    {
+        if (!_frameGovernorCv)
         {
-            // S5: release the sim gate taken at the top of _Process (no-op when not threaded). Always runs, incl.
-            // the early `_client is null` return and any throw in the body above.
-            if (simGateTaken)
-                System.Threading.Monitor.Exit(simGate!);
+            if (_govSaved >= 0)
+            {
+                Godot.Engine.MaxFps = _govSaved;
+                _govSaved = -1; _govApplied = 0; _govN = 0; _govI = 0; _govAccum = 0f;
+                XonoticGodot.Common.Diagnostics.Log.Info("[governor] off — restored engine cap");
+            }
+            return;
         }
+        if (rawDt <= 0f) return;
+        _govRing[_govI] = rawDt;
+        _govI = (_govI + 1) % _govRing.Length;
+        if (_govN < _govRing.Length) _govN++;
+        _govAccum += rawDt;
+        if (_govAccum < 1.0f || _govN < 32)
+            return;
+        _govAccum = 0f;
+
+        // The measured dt INCLUDES the limiter's own sleep once a cap is applied, so a percentile target
+        // chases itself downward (the first build spiraled 137->83). React instead to the OVER-CAP TAIL —
+        // frames whose dt exceeded the budget did real work past it; sleep can't fake those:
+        //   busy > 10%  -> the cap sits too close to the workload edge: drop 6%. (r16 field result: pacing
+        //                  only smooths when DEEPLY engaged — at the edge, cheap frames sleep but expensive
+        //                  ones still overrun, leaving residual delivery jitter. Converge near the slow
+        //                  tail with margin, like the hard-100 test that felt smooth.)
+        //   busy <  1%  -> real headroom: probe up 2% (the cap follows the workload back up, slowly).
+        //   else        -> hold (deeply paced and sustainable — the desired steady state).
+        int target;
+        if (_govApplied == 0)
+        {
+            // First engage: seed from the uncapped distribution (no sleep in it yet).
+            System.Array.Copy(_govRing, _govSort, _govN);
+            System.Array.Sort(_govSort, 0, _govN);
+            float p75 = MathF.Max(_govSort[(int)(_govN * 0.75f)], 0.0005f);
+            target = (int)(0.98f / p75);
+        }
+        else
+        {
+            float budget = 1f / _govApplied;
+            int busy = 0;
+            for (int i = 0; i < _govN; i++)
+                if (_govRing[i] > budget * 1.10f) busy++;
+            float busyFrac = (float)busy / _govN;
+            if (busyFrac > 0.10f)      target = Math.Max((int)(_govApplied * 0.94f), 60);
+            else if (busyFrac < 0.01f) target = _govApplied + Math.Max(2, _govApplied * 2 / 100);
+            else                       target = _govApplied;
+        }
+
+        target = Math.Max(target, 60); // floor: never governor below 60
+        int userCap = (int)(_sharedCvars?.GetFloat("cl_maxfps") ?? 0f);
+        if (userCap > 0 && userCap != 256)
+            target = Math.Min(target, userCap); // an explicit player cap stays the upper bound
+
+        if (_govSaved < 0) _govSaved = Godot.Engine.MaxFps;
+        if (target != _govApplied)
+        {
+            Godot.Engine.MaxFps = target;
+            if (_govApplied != 0) // don't log the first engage at boot
+                XonoticGodot.Common.Diagnostics.Log.Info($"[governor] MaxFps -> {target}");
+            _govApplied = target;
+        }
+    }
+
+    // ---- cl_smoothdt: conditioned client-motion dt — DEFAULT OFF since 2026-07-26 ----------------------
+    // WHY IT IS OFF NOW. This filter was default-ON as the r16 "variance fix", justified by an A/B in which
+    // `cl_smoothdt 0` felt worse than 1. That A/B was invalid: Godot's MainTimerSync was rewriting the delta
+    // onto a physics_step/N grid with a ±50 ms repayment ledger (planning/wobble-independent-audit-2026-07-26.md
+    // §3f — the actual wobble), so the "raw" leg was never raw. It compared median-filtered-mangled against
+    // mangled. With `physics_jitter_fix 0` restoring the measured delta, the release-export playtest found NO
+    // felt difference between the legs — so the filter is carrying cost for no measured benefit:
+    //   • it is the only remaining dt-side contributor to felt-band speed error (measured by the two-clock
+    //     detector on a 311 s release capture: engine clock 0.01% RMS, after ConditionDt 0.46%);
+    //   • it is AUTHORITATIVE, not cosmetic — the conditioned dt ships in InputCommand.DeltaTime, so the
+    //     server integrates it: filter error is real movement-speed error (strafe timing, jump distance);
+    //   • the driftcap sheds real wall time by design (that capture: 244 ms over 311 s, +0.078% slow);
+    //   • Base has no dt filter at all, and Godot's previous-frame delta IS DP's cl.realframetime semantics
+    //     (frametime-parity audit) — there is no lag here to correct that DP does not also have.
+    // KEEP IT AS AN A/B, and note what a future "1 feels better" result would MEAN: that the display interval
+    // genuinely is not the wall interval (DWM re-quantizes presents to vblank), in which case the right filter
+    // is not a median-of-9 but a DISPLAY-CADENCE estimator — snap to the measured refresh period with drift
+    // repayment (the seam doc's S2, done with a correct refresh number; Godot misreads 60 Hz in borderless).
+    //
+    // What it does when enabled (1): replaces the motion path's dt — the CLIENT MOTION PATH only — with an
+    // estimate of the CURRENT frame's duration rather than last frame's measurement:
+    //   estimate = median of the last 9 raw deltas   (robust to one-off spikes — the classic frame pacer),
+    //   hitches pass through RAW                      (a real stall must advance real time — no slow-mo),
+    //   drift correction                              (a bounded ±4% nudge keeps Σ(smooth) == Σ(raw), so
+    //                                                  total time is exactly wall-true and nothing desyncs
+    //                                                  from the server's raw-dt accumulator).
+    private readonly float[] _dtRing = new float[9];
+    private int _dtRingN;                // filled entries (grows to ring size)
+    private int _dtRingI;                // next write slot
+    private float _dtDrift;             // Σ(raw) - Σ(smooth): positive = smooth is BEHIND wall time
+    private readonly float[] _dtSort = new float[9];
+
+    private float ConditionDt(float rawDt)
+    {
+        if (!_smoothDtCv || rawDt <= 0f)
+            return rawDt;
+
+        // Ring update.
+        _dtRing[_dtRingI] = rawDt;
+        _dtRingI = (_dtRingI + 1) % _dtRing.Length;
+        if (_dtRingN < _dtRing.Length) _dtRingN++;
+        if (_dtRingN < 3)
+            return rawDt; // not enough history yet
+
+        // Median of the recent window.
+        System.Array.Copy(_dtRing, _dtSort, _dtRingN);
+        System.Array.Sort(_dtSort, 0, _dtRingN);
+        float median = _dtSort[_dtRingN / 2];
+
+        // A real hitch (or a big cadence change) passes through raw — and resets nothing: the ring absorbs
+        // it and the median follows if the new cadence persists.
+        // [driftcap] The legacy 1.8×/0.5× gate MISSES the common cap engage/disengage transitions:
+        // 144↔250 fps is ratio 1.736/0.576, so 4-5 frames of the old cadence each dumped ~3 ms into the
+        // ledger — a deterministic ~300 ms saturated-repayment episode per transition (2026-07-26 audit).
+        // 1.6×/0.6× brackets those ratios; the cost is that 1.6-1.8× jitter outliers now pass raw (rare).
+        float gateHi = _smoothDtCapCv ? 1.6f : 1.8f;
+        float gateLo = _smoothDtCapCv ? 0.6f : 0.5f;
+        if (rawDt > median * gateHi || rawDt < median * gateLo)
+        {
+            // keep the drift ledger honest for the raw frame too (smooth == raw here, so no drift change)
+            return rawDt;
+        }
+
+        // Drift-corrected estimate: fold a bounded fraction of the accumulated (raw - smooth) error into
+        // this frame so total conditioned time tracks wall time exactly; ±4% is imperceptible per frame.
+        float bound = median * 0.04f;
+        float nudge = Math.Clamp(_dtDrift * 0.25f, -bound, bound);
+        float smooth = median + nudge;
+        _dtDrift += rawDt - smooth;
+        // [driftcap] Bound the ledger to 16 frames of full-rail repayment (0.64×median ≈ 4.4 ms @144fps).
+        // Unbounded, a big excursion rides the ±4% clamp until fully repaid — a SUSTAINED speed error the
+        // eye reads as the wobble (measured worst case: 1.5 s). Capped, no saturated episode can outlast
+        // ~110 ms @144fps (below the felt band); the excess wall-time debt is shed, the same
+        // accuracy-for-smoothness trade DP makes when it drops overload time (sv.perf_acc_lost).
+        if (_smoothDtCapCv)
+        {
+            float driftCap = median * 0.64f;
+            _dtDrift = Math.Clamp(_dtDrift, -driftCap, driftCap);
+        }
+        return smooth;
+    }
+
+    // ---- cl_motion_trace (r16 rubberband diagnostic) --------------------------------------------------
+    // Per-frame CSV of the motion-timeline signals, written while the cvar is on (opened lazily, closed on
+    // toggle-off). Columns answer "which signal carries the felt wave": clock_err/slew (the interp clock),
+    // ticks (server catch-up bursts), cam/pred speeds (the OWN view's rendered velocity — waves here =
+    // own-movement rubberband), pred_err (reconcile corrections), remote_speed (one tracked remote entity's
+    // rendered velocity — waves here with a steady cam = entity-interp rubberband).
+    //
+    // v2 (presentation-seam falsification): cam_speed divides displacement by the SAME dt that advanced the
+    // camera, so it is flat by construction and blind to dt-vs-display divergence. The v2 columns carry the
+    // un-normalized signals instead — cam_step/yaw_step (what one displayed frame embodies), raw_dt (before
+    // ConditionDt), and qpc_s (QueryPerformanceCounter seconds, the SAME clock PresentMon --qpc_time stamps
+    // presents with), so tools/wobble-report.py can join this trace against a PresentMon capture and measure
+    // displayed motion on the DISPLAY timeline. Filename is timestamped: an A/B can no longer overwrite the
+    // previous leg (the r16 smoothdt-0 segment was lost exactly that way).
+    //
+    // v3 (engine-delta forensics): the wobble turned out to be measurable WITHOUT a display-side clock at all —
+    // by comparing the delta the ENGINE reports against wall time over the same frames. Godot's
+    // MainTimerSync::advance_checked rewrites process_step (clamp band from physics_step, ±jitter_fix ledger),
+    // so `raw_dt_ms` is not raw: it is what the engine CLAIMED. Motion integrates that claim while the display
+    // runs on wall time, so the divergence is a displayed-speed error. Two columns make that comparison exact:
+    //   qpc_top_s — QPC sampled at the TOP of _Process, so diff() is the same start-to-start interval Godot's
+    //               `delta` measures (the v2 qpc_s stayed, sampled here, late in the frame: a work-time phase
+    //               term that telescopes over a window but not per frame).
+    //   frame     — Engine.GetFramesDrawn(), so a SKIPPED row is detectable. Rows are skipped whenever dt <= 0,
+    //               which the engine really does produce (main.cpp:4857 subtracts physics_step per dropped
+    //               physics step); without this column a gap reads as one enormous frame time.
+    // Analysis: tools/wobble-detect.py.
+    private System.IO.StreamWriter? _motionTrace;
+    private NVec3 _mtPrevCam, _mtPrevPred, _mtPrevRemote;
+    private float _mtPrevYaw;
+    private int _mtRemoteId = -1;
+    private int _mtLines;
+    private bool _mtHave;
+    private double _mtQpcTop;           // QPC seconds at the top of this frame's _Process (v3)
+
+    private void MotionTrace(float dt, float rawDt, float slew)
+    {
+        bool on = (_sharedCvars?.GetFloat("cl_motion_trace") ?? 0f) != 0f;
+        if (!on)
+        {
+            if (_motionTrace is not null)
+            {
+                _motionTrace.Flush();
+                _motionTrace.Dispose();
+                _motionTrace = null;
+                _mtHave = false;
+                XonoticGodot.Common.Diagnostics.Log.Info("[motiontrace] closed");
+            }
+            return;
+        }
+        if (!_cameraReady || _client is null || dt <= 0f)
+            return;
+
+        if (_motionTrace is null)
+        {
+            try
+            {
+                string path = UserPaths.Resolve(
+                    $"motion_trace_{System.DateTime.Now:yyyyMMdd_HHmmss}.csv");
+                _motionTrace = new System.IO.StreamWriter(path, append: false) { AutoFlush = false };
+                _motionTrace.WriteLine(
+                    "t,qpc_s,qpc_top_s,frame,dt_ms,raw_dt_ms,clock_err_ms,slew_pct,ticks," +
+                    "cam_speed,cam_step,cam_step_xy,yaw_step,pred_speed,pred_err,remote_speed,maxfps,drift_ms");
+                XonoticGodot.Common.Diagnostics.Log.Info($"[motiontrace] recording -> {path}");
+            }
+            catch (System.Exception ex)
+            {
+                XonoticGodot.Common.Diagnostics.Log.Info($"[motiontrace] open failed: {ex.Message}");
+                _sharedCvars?.Set("cl_motion_trace", "0");
+                return;
+            }
+        }
+
+        NVec3 cam = Coords.ToQuake(_camera.GlobalPosition);
+        NVec3 pred = _client.PredictedOrigin;
+        float errMs = (_client.LatestServerTime - _renderClock) * 1000f;
+        float predErr = _client.PredictionErrorOffset(_renderClock).Length();
+        int ticks = _server?.LastTicksRan ?? -1;
+
+        // One tracked remote entity's rendered pose (the lowest live id; re-picked when it vanishes).
+        float remoteSpeed = -1f;
+        NVec3 remote = default;
+        bool haveRemote = _mtRemoteId >= 0 && _client.SampleRemote(_mtRemoteId, _renderClock, out remote, out _);
+        bool remotePrevValid = haveRemote; // prev sample was the SAME target -> a remote speed is derivable
+        if (!haveRemote)
+        {
+            // Prefer a PLAYER entity (a bot in motion) — the first trace tracked the lowest id, which was a
+            // static world item and produced a useless all-zero column.
+            _mtRemoteId = -1;
+            foreach (int id in _client.RemoteIds)
+                if (_client.TryGetRemoteState(id, out NetEntityState rs) && rs.Kind == NetEntityKind.Player
+                    && (_mtRemoteId < 0 || id < _mtRemoteId))
+                    _mtRemoteId = id;
+            haveRemote = _mtRemoteId >= 0 && _client.SampleRemote(_mtRemoteId, _renderClock, out remote, out _);
+            // NOTE (v2 fix): this used to reset _mtHave — which, with NO remote player in the session
+            // (0-bot capture), re-ran every frame and suppressed EVERY row: the whole trace came out
+            // empty. Only the remote-speed column is invalid across a target switch, so only it is gated.
+        }
+
+        if (_mtHave)
+        {
+            float camSpeed = (cam - _mtPrevCam).Length() / dt;
+            float predSpeed = (pred - _mtPrevPred).Length() / dt;
+            if (remotePrevValid)
+                remoteSpeed = (remote - _mtPrevRemote).Length() / dt;
+            // v2: raw per-frame steps (NOT divided by dt — see the header note) + the PresentMon join clock.
+            // cam_step_xy: horizontal-only step — during a laser-jump/bhop flight arc the horizontal speed is
+            // near-constant (air, no friction) while the ballistic Z sweep puts REAL energy into the felt
+            // band, so the XY step is the clean wobble signal at exactly the high speeds where it's felt.
+            double qpcS = System.Diagnostics.Stopwatch.GetTimestamp()
+                / (double)System.Diagnostics.Stopwatch.Frequency;
+            NVec3 camDelta = cam - _mtPrevCam;
+            float camStep = camDelta.Length();
+            float camStepXy = new NVec3(camDelta.X, camDelta.Y, 0f).Length(); // quake coords: Z = up
+            float yawStep = Mathf.Wrap(_viewAngles.Y - _mtPrevYaw, -180f, 180f);
+            _motionTrace.WriteLine(
+                $"{_renderClock:F4},{qpcS:F6},{_mtQpcTop:F6},{Godot.Engine.GetFramesDrawn()}," +
+                $"{dt * 1000f:F3},{rawDt * 1000f:F3},{errMs:F2},{slew * 100f:F2},{ticks}," +
+                $"{camSpeed:F1},{camStep:F3},{camStepXy:F3},{yawStep:F4},{predSpeed:F1},{predErr:F2},{remoteSpeed:F1}," +
+                $"{Godot.Engine.MaxFps},{_dtDrift * 1000f:F3}");
+            if (++_mtLines % 128 == 0)
+                _motionTrace.Flush(); // survive a quit without the toggle-off close
+        }
+
+        _mtPrevCam = cam;
+        _mtPrevPred = pred;
+        _mtPrevYaw = _viewAngles.Y;
+        if (haveRemote) _mtPrevRemote = remote;
+        _mtHave = true;
     }
 
     /// <summary>The active gametype short code for a changelevel: the live <c>gametype</c> cvar if a mid-match
@@ -3637,6 +4423,13 @@ public sealed partial class NetGame : Node3D
         if (_pickupInit)
         {
             XonoticGodot.Game.Hud.PickupPanel? feed = _fullHud.GetPanel<XonoticGodot.Game.Hud.PickupPanel>();
+            // Leading-timer feed (QC HUD_Pickup_Time reads the timer panel's clock): Push samples this ONCE per
+            // pickup and freezes the string, so the readout is the match time the pickup HAPPENED — it used to
+            // fall back to the panel's running "time since" counter, which visibly ticked up. Wired lazily
+            // (idempotent) — the timer panel returns null until its net feed arrives, keeping the fallback.
+            if (feed is not null && feed.MatchTimeProvider is null
+                && _fullHud.GetPanel<XonoticGodot.Game.Hud.TimerPanel>() is { } timerPanel)
+                feed.MatchTimeProvider = timerPanel.PickupTimeString;
             // (QC STAT(LAST_PICKUP) advance → pickup_crosshair_size = 1, crosshair.qc:362-379): a pickup this
             // frame also bumps the crosshair. We derive the same trigger from the client-side pickup detection
             // below (any new weapon or resource jump) and pulse the crosshair once.
@@ -4631,11 +5424,75 @@ public sealed partial class NetGame : Node3D
     /// there is no local Player so it stays null (the player-agnostic panels — centerprint/killfeed — still draw,
     /// and the NetHud crosshair/health covers the rest). Only re-applies on a change so the per-frame call is cheap.
     /// </summary>
+    /// <summary>
+    /// The pure-client HUD stats mirror: a bare <see cref="Player"/> (never spawned into any world/entity table)
+    /// whose fields are refreshed each frame from the NETWORKED owner stats, so the full skinned HUD panel set
+    /// (health/armor, ammo, weapons, powerups, crosshair) renders on a pure <c>--connect</c> client exactly like
+    /// the listen host — the CSQC model, where the HUD draws from replicated STATs, not server objects. Null on
+    /// a listen server (the real <see cref="LocalServerPlayer"/> feeds the panels there).
+    /// </summary>
+    private Player? _hudMirror;
+
+    /// <summary>
+    /// Refresh <see cref="_hudMirror"/> from the networked owner stats (pure client only): health/armor + the
+    /// inventory block (ammo pools, owned-weapon bitset, unlimited-ammo, STAT_ITEMS flags) + active weapon from
+    /// the owner block; team + packed colors from the networked own-entity slice; position/velocity/onground from
+    /// prediction (the physics/strafe panels); status effects decoded from the owner's own entity slice
+    /// (<see cref="ClientNet.LocalState"/> — the powerups panel timers). Raw field writes, NEVER the hooked
+    /// SetResource — the mirror is a render-side stats holder, not a sim actor, and must not fire mutator hooks.
+    /// </summary>
+    private void UpdateHudMirror()
+    {
+        if (_isListenServer || _client is not { Accepted: true })
+            return;
+        _hudMirror ??= new Player { NetName = _playerName };
+        Player m = _hudMirror;
+        XonoticGodot.Net.OwnerInventory inv = _client.LocalInventory;
+
+        m.Health = _client.Health;
+        m.ArmorValue = _client.Armor;
+        m.AmmoShells = inv.Shells;
+        m.AmmoBullets = inv.Bullets;
+        m.AmmoRockets = inv.Rockets;
+        m.AmmoCells = inv.Cells;
+        m.AmmoFuel = inv.Fuel;
+        m.OwnedWeaponSet = new WepSet { Bits = inv.WeaponBits };
+        m.UnlimitedAmmo = inv.UnlimitedAmmo;
+        m.Items = inv.ItemFlags; // STAT_ITEMS: the powerups panel's jetpack / fuel-regen / superweapon rows
+        m.ActiveWeaponId = _client.ActiveWeaponId;
+        m.SwitchWeaponId = _client.ActiveWeaponId;
+
+        // Team + packed clientcolors for the team/shirt/pants-colored HUD elements (dock tint, panel bg_color_team):
+        // the team from the networked scoreboard row, the colors from our own entity slice (now that the server
+        // sends it). Without these the dock/shirt/pants resolve palette-0 white instead of the profile/team color.
+        m.Team = LocalShownamesTeam();
+        m.ClientColors = _client.LocalState?.Colors ?? m.ClientColors;
+
+        // Predicted pose for the physics/strafe panels + the crosshair's Player.Origin/Angles reads.
+        m.Origin = _client.PredictedOrigin;
+        m.Velocity = _client.PredictedVelocity;
+        m.Angles = _viewAngles;
+        m.DeadState = _client.Health <= 0 && _everAlive ? DeadFlag.Dead : DeadFlag.No;
+
+        // Predicted ground state for the physics/strafehud panels' slick / accel-max branches (else they read a
+        // permanently-airborne mirror). The reconciler seeds OnGround from the owner block's onground bool.
+        if (_client.PredictedOnGround)
+            m.Flags |= XonoticGodot.Common.Framework.EntFlags.OnGround;
+        else
+            m.Flags &= ~XonoticGodot.Common.Framework.EntFlags.OnGround;
+
+        // Powerup timers (strength/shield/…): the server networks every player's status-effect bitmap in the
+        // entity stream — including our own entity now (v14), whose decoded slice ClientNet keeps as LocalState.
+        ClientEntityView.ApplyStatusEffects(m, _client.LocalState?.StatusEffects);
+    }
+
     private void UpdateFullHudPlayer()
     {
         if (_fullHud is null)
             return;
-        Player? p = LocalServerPlayer; // null on a pure client (no in-process world)
+        // The local server Player on a listen host; the networked-stats mirror on a pure client (fed each frame
+        // by UpdateHudMirror — null until the handshake accepts). Either way the full skinned HUD renders.
+        Player? p = LocalServerPlayer ?? _hudMirror;
         if (ReferenceEquals(p, _lastHudPlayer))
             return;
         _lastHudPlayer = p;
@@ -5412,27 +6269,80 @@ public sealed partial class NetGame : Node3D
         // WEAPON-SWITCH / RELOAD binds into a C2S impulse (the QC usercmd.impulse channel — the real way a human
         // switches weapons on the net path) and forwards everything else (kill/say/team/…) to the shared
         // interpreter. Frozen while the console is open or the match is paused (a key the console didn't consume
-        // still reaches here, so the explicit ConsoleState gate is what stops binds firing under the open console).
+        // still reaches here, so the explicit ConsoleState gate is what stops binds firing under the open console),
+        // and while the chat prompt is open (DP key_dest = message swallows ALL input, mouse buttons included —
+        // the prompt only consumes KEY events, so without this gate a MOUSE bind still flips latches / fires the
+        // held +attack the moment the prompt closes).
         if (!ConsoleState.IsOpen && !GetTree().Paused && !MinigameMenuOpen
+            && !XonoticGodot.Game.Hud.ChatPrompt.IsOpen
             && @event is InputEventKey or InputEventMouseButton)
             BindInput.HandleEvent(@event, RunBoundCommand);
 
         // Accumulate mouse-look while the cursor is captured (the Shell owns Escape + the mouse around the
-        // in-game menu). Mouse right → yaw decreases (Quake CCW yaw); mouse down → pitch increases (down-positive).
-        // Sensitivity is the live `sensitivity` cvar (the value the input-settings dialog binds), not a hardcoded
-        // constant; the `m_pitch` SIGN gives invert-Y (the dialog's "Invert aiming" flips m_pitch < 0). The shared
-        // view's SensitivityScale folds in (QC setsensitivityscale) so zoomed aim is finer on the net path too.
+        // in-game menu) — DP's IN_Move: raw deltas sum into in_mouse_x/y over the frame; the application (the
+        // m_accelerate/m_filter block + the m_yaw/m_pitch × sensitivity scale) happens ONCE per render frame in
+        // FlushMouseLook, because the accel math needs realframetime. Events are dispatched before _Process, so
+        // this adds no latency.
         // QC FixIntermissionClient / SVC_INTERMISSION: at intermission the engine freezes the player view at the
         // intermission camera and mouse-look is locked. Mirror it by ignoring look input while the match is over
         // (the angles latched at intermission entry are held), so the scoreboard view doesn't swing with the mouse.
         if (@event is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured
             && !(_client?.MatchIntermission ?? false))
         {
-            float sens = LookSensitivity() * _view.SensitivityScale;
-            _viewAngles.Y -= motion.Relative.X * sens;
-            _viewAngles.X += motion.Relative.Y * sens * PitchSign();
-            _viewAngles.X = Mathf.Clamp(_viewAngles.X, -89f, 89f);
+            _mouseDx += motion.Relative.X;
+            _mouseDy += motion.Relative.Y;
         }
+    }
+
+    /// <summary>
+    /// The per-frame half of the DP mouse pipeline (cl_input.c CL_Input:550-694): run the accumulated deltas
+    /// through the m_accelerate/m_filter block (<see cref="XonoticGodot.Common.Input.MouseAccel"/>), then apply
+    /// — yaw -= m_yaw · dx · sensitivity · sensitivityscale; pitch += m_pitch · dy · sensitivity ·
+    /// sensitivityscale (m_pitch SIGNED, negative = invert-Y; SensitivityScale = QC setsensitivityscale; Xonotic
+    /// never sets cl.viewzoom, so that DP factor stays 1). Pitch clamps to in_pitch_min/max (DP ±90 — CL_AdjustAngles).
+    /// Runs on ZERO-input frames too: averagespeed still decays through the accel lowpass and the m_filter tail
+    /// drains, exactly like DP running the block unconditionally each frame.
+    /// A hardcoded 0.025 here once replaced m_yaw (DP 0.022) — +13.6% view turn per count vs Base at equal
+    /// sensitivity, which in air-strafe turning reads as sharper movement, not just hotter aim.
+    /// </summary>
+    // m_smoothdt (2026-07-26 wobble hunt): the yaw/pitch channel used to be the ONE motion channel riding
+    // the raw frame cadence — counts accumulate over the real previous pump interval but are displayed for
+    // the NEXT frame's duration, so displayed rotation rate carried the full frame-time variance while
+    // translation rode ConditionDt's smoothed timeline (the felt "stutter when moving the mouse in the
+    // air"). Fix: rescale the post-accel deltas by (conditioned display estimate / real interval) so both
+    // optical-flow channels share one timeline, with a per-axis carry ledger so the TOTAL rotation of any
+    // swipe stays exactly Σ(counts) — 1:1 aim is preserved; only the per-frame distribution shifts by
+    // ≤±50% of one frame's counts. The ledger drains fast (50%/frame) when input stops so a swipe's tail
+    // completes within ~25 ms and there is no post-stop drift. m_smoothdt 0 = legacy raw application.
+    private float _mouseCarryX, _mouseCarryY;
+
+    private void FlushMouseLook(float realFrameTime, float displayDt)
+    {
+        float dx = _mouseDx, dy = _mouseDy;
+        _mouseDx = 0f;
+        _mouseDy = 0f;
+        (float mx, float my) = _mouseAccel.Apply(dx, dy, realFrameTime, in _mouseAccelCv, LookSensitivity());
+        if (_mouseSmoothDtCv && realFrameTime > 0f && displayDt > 0f)
+        {
+            float scale = Math.Clamp(displayDt / realFrameTime, 0.5f, 2f);
+            float outX = mx * scale, outY = my * scale;
+            _mouseCarryX += mx - outX;
+            _mouseCarryY += my - outY;
+            float repay = (dx != 0f || dy != 0f) ? 0.25f : 0.5f;
+            outX += _mouseCarryX * repay; _mouseCarryX *= 1f - repay;
+            outY += _mouseCarryY * repay; _mouseCarryY *= 1f - repay;
+            mx = outX; my = outY;
+        }
+        else
+        {
+            _mouseCarryX = 0f; _mouseCarryY = 0f; // toggled off mid-session: drop sub-count residue
+        }
+        if (mx == 0f && my == 0f)
+            return;
+        float sens = LookSensitivity() * _view.SensitivityScale;
+        _viewAngles.Y -= mx * sens * MYaw();
+        _viewAngles.X += my * sens * MPitch();
+        _viewAngles.X = Mathf.Clamp(_viewAngles.X, _pitchMinCv, _pitchMaxCv);
     }
 
     /// <summary>
@@ -5483,7 +6393,12 @@ public sealed partial class NetGame : Node3D
         Player? me = LocalServerPlayer;
         if (me is null)
             return;
-        _serverWorld.Commands.Execute($"impulse {index + 1}", isServerConsole: false, caller: me);
+        // WS1 stage 3: world mutation from a main-thread input event — sim thread when threaded (inline when not).
+        GameWorld w = _serverWorld;
+        if (_server is { } srv)
+            srv.RunOnSimThread(() => w.Commands.Execute($"impulse {index + 1}", isServerConsole: false, caller: me));
+        else
+            w.Commands.Execute($"impulse {index + 1}", isServerConsole: false, caller: me);
     }
 
     /// <summary>
@@ -5649,16 +6564,26 @@ public sealed partial class NetGame : Node3D
     private float LookSensitivity()
     {
         float s = Api.Services is not null ? Api.Cvars.GetFloat("sensitivity") : 0f;
-        // The `sensitivity` cvar is ~1..9 (xonotic default 6); scale it into the deg/pixel feel the prior
-        // constant (0.15 ≈ sensitivity 6 × 0.025) gave, so existing aim is unchanged at the default.
-        return s > 0f ? s * 0.025f : 0.15f;
+        return s > 0f ? s : 3f;
     }
 
-    /// <summary>Invert-Y sign from `m_pitch` (DP: negative pitch inverts the Y axis). +1 normal, −1 inverted.</summary>
-    private static float PitchSign()
+    /// <summary>DP `m_yaw` (default 0.022 deg/count): the yaw half of the mouse scale. Unset/0 → 0.022.</summary>
+    private static float MYaw()
     {
-        if (Api.Services is null) return 1f;
-        return Api.Cvars.GetFloat("m_pitch") < 0f ? -1f : 1f;
+        float v = Api.Services is not null ? Api.Cvars.GetFloat("m_yaw") : 0f;
+        return v != 0f ? v : 0.022f;
+    }
+
+    /// <summary>DP `m_pitch` (default 0.022 deg/count, SIGNED — negative inverts the Y axis; the input
+    /// dialog's "Invert aiming" writes ±|value|). Unset/0 → +0.022. Legacy configs hold ±1 from the old
+    /// sign-only invert convention (ClientSettings used to register "1") — any DP-implausible magnitude
+    /// (≥0.5) is read as sign × 0.022 so an archived ±1 doesn't give 45× pitch.</summary>
+    private static float MPitch()
+    {
+        float v = Api.Services is not null ? Api.Cvars.GetFloat("m_pitch") : 0f;
+        if (v == 0f) return 0.022f;
+        if (MathF.Abs(v) >= 0.5f) return v < 0f ? -0.022f : 0.022f; // legacy sign-only ±1
+        return v;
     }
 
     /// <summary>
@@ -5686,6 +6611,13 @@ public sealed partial class NetGame : Node3D
     /// quick-chat menu, or the maximized radar). The bind channel stays live so the toggling bind can still close the
     /// panel — the maximized radar's `m` toggle + Esc/right-click close all route through it.</summary>
     private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || (_radar?.Maximized ?? false);
+
+    /// <summary>Whether gameplay owns keyboard/mouse input this frame — false whenever a UI owner has it (the DP
+    /// key_dest states): the pause/auto-pause, the console, the messagemode chat prompt (key_dest = message:
+    /// movement/fire suspended while typing), or a cursor-owning HUD UI (minigame/quickmenu/maximized radar). The
+    /// single source of truth for the input-active gate (SampleInput + the fire-feedback edge).</summary>
+    private bool GameplayInputActive =>
+        !GetTree().Paused && !ConsoleState.IsOpen && !XonoticGodot.Game.Hud.ChatPrompt.IsOpen && !UiOwnsCursor;
 
     /// <summary>
     /// Teleporter view-snap (QC player.fixangle): after a prediction tick re-derives the carrier's .fixangle —
@@ -5715,7 +6647,7 @@ public sealed partial class NetGame : Node3D
             _consumedWarpSeq = XonoticGodot.Engine.Simulation.TriggerTouch.LastPredictedWarpSeq;
             Common.Gameplay.WarpzoneTransform wt = XonoticGodot.Engine.Simulation.TriggerTouch.LastPredictedWarpTransform;
             _viewAngles = wt.TransformAngles(_viewAngles);
-            _viewAngles.X = Mathf.Clamp(_viewAngles.X, -89f, 89f);
+            _viewAngles.X = Mathf.Clamp(_viewAngles.X, _pitchMinCv, _pitchMaxCv);
             _client.RotatePendingMoves(a => wt.TransformAngles(a));
             float nowW = Time.GetTicksMsec() * 0.001f;
             // Arm the same guards the (now mostly redundant) fixangle paths use: the server's authoritative
@@ -5748,7 +6680,7 @@ public sealed partial class NetGame : Node3D
                 return;
             }
             _viewAngles = _carrier.FixAngleAngles;
-            _viewAngles.X = Mathf.Clamp(_viewAngles.X, -89f, 89f);
+            _viewAngles.X = Mathf.Clamp(_viewAngles.X, _pitchMinCv, _pitchMaxCv);
             _carrier.FixAngle = false;
             // Remember what the PREDICTED snap applied: the server's AUTHORITATIVE stamp for the SAME crossing
             // arrives 1-3 frames later (its tick runs behind the replay), and re-applying it would discard every
@@ -5799,7 +6731,7 @@ public sealed partial class NetGame : Node3D
     {
         _fireClock += dt;
 
-        bool active = !GetTree().Paused && !ConsoleState.IsOpen && !UiOwnsCursor;
+        bool active = GameplayInputActive;
         if (!active)
         {
             // Input is owned elsewhere (in-game menu / console / minigame / quickmenu): drop the edge state and the
@@ -5813,19 +6745,53 @@ public sealed partial class NetGame : Node3D
         bool a1 = BindTable.AttackHeld;
         if (a1 && !_attackHeld)
             _attackLatch = true; // sub-tick latch for the server (independent of FX prediction)
+        if (!a1)
+            _rlReleaseMirror = true; // QC wr_think else-branch: rl_release = 1 any frame fire is up (must run
+                                     // even inside the switch drop/raise gate below, or a release fully inside
+                                     // the window would be missed and the next held shot never predicts)
+
+        if (_switchRaiseLeft >= 0f)
+            _switchRaiseLeft -= dt; // the incoming weapon's raise window decays here (set at install)
+
+        // A staged weapon swap is holstering or raising (EquipNetworkedWeapon holds the old model for
+        // switchdelay_drop, then the new gun raises for switchdelay_raise): the server slot is in the Drop/Raise
+        // state and cannot fire, so don't predict flash/sound through it. Both press edges still latch for the
+        // server, so the input stream is unaffected — only the local FX skip.
+        if (_switchDropLeft >= 0f || _switchRaiseLeft >= 0f)
+        {
+            bool a2Drop = BindTable.Attack2Held;
+            if (a2Drop && !_attack2Held)
+                _attack2Latch = true;
+            _attackHeld = a1;
+            _attack2Held = a2Drop;
+            return;
+        }
 
         if (_predictFire)
         {
+            // Client mirror of QC wepent.rl_release (devastator.qc wr_think: cleared on each rocket, re-armed any
+            // frame fire is NOT held; wr_setup arms it on equip). A release-gated weapon fires whenever the button
+            // is HELD with the latch armed and ATTACK_FINISHED has expired — NOT only on a fresh press. The old
+            // press-edge-only gate (#24) missed the "re-press during the cooldown tail and keep holding" shot:
+            // the server fires at cooldown expiry with no press edge in sight, nothing was predicted, and the
+            // real fire sound/flash are suppressed as "already predicted" → a fully silent rocket.
+            if (_client is { } clw && clw.ActiveWeaponId != _rlMirrorWeaponId)
+            {
+                _rlMirrorWeaponId = clw.ActiveWeaponId;
+                _rlReleaseMirror = true; // QC wr_setup: rl_release = 1 on equip
+            }
+
             // cl_predictfire on: predict the view-model flash + local fire sound on every shot (first on the press
             // edge, then one per `refire` s while held) — but ONLY once the weapon's persistent ready clock has
             // elapsed, so a burst of taps / wheel-fire can't out-run the refire rate. FirePredictReady + the
             // MarkFirePredicted cadence are the client mirror of the server's ATTACK_FINISHED gate.
             if (a1 && !LocalDeadNow() && HasAmmoNow()
                 && TryActivePrimaryFire(out int wid, out string fireSound, out float refire) && FirePredictReady(wid)
-                && (!_attackHeld || !PrimaryRefireRequiresRelease(wid))) // #24: release-gated weapons only fire on a fresh press
+                && (!PrimaryRefireRequiresRelease(wid) || _rlReleaseMirror)) // #24: release-gated weapons need the armed latch, not a press edge
             {
                 PredictFireShot(fireSound);
                 MarkFirePredicted(wid, refire, dt);
+                _rlReleaseMirror = false; // QC: rl_release = 0 on the shot (inert for non-gated weapons)
             }
         }
         else if (a1 && !_attackHeld && !LocalDeadNow()
@@ -5899,6 +6865,11 @@ public sealed partial class NetGame : Node3D
             "vortex" or "vaporizer" or "rifle" => false, // secondary = zoom
             "shotgun" => false,                           // secondary = melee (no muzzle)
             "blaster" or "hook" => false,                 // secondary isn't a barrel shot
+            // Remote DETONATE, not a shot: Base wr_think fire&2 just flags the live rockets/mines (no
+            // W_MuzzleFlash, no weapon_prepareattack — ATTACK_FINISHED is NOT bumped). Treating it as a shot
+            // popped a phantom flash AND advanced the shared client ready clock, which then swallowed the
+            // prediction of the NEXT primary rocket (the fire→detonate→fire combo went silent).
+            "devastator" or "minelayer" => false,
             "" => false,
             _ => true,
         };
@@ -6002,8 +6973,65 @@ public sealed partial class NetGame : Node3D
         return XonoticGodot.Common.Gameplay.Resources.GetResource(p, w.AmmoType) > 0f;
     }
 
+#if XG_BOTPLAYER
+    private bool _botPlayerAttached;
+
+    /// <summary>
+    /// Bind a bot brain to the local player once it exists (idempotent, compile-gated). The bind MUTATES
+    /// server-side state that the sim worker owns, so it rides <c>RunOnSimThread</c> like every other
+    /// main→sim mutation (inline when unthreaded).
+    /// </summary>
+    private void MaybeAttachBotPlayer()
+    {
+        if (_botPlayerAttached || _serverWorld is null || _server is null)
+            return;
+        if (LocalServerPlayer is not { } me)
+            return;
+        _botPlayerAttached = true;
+        float skill = BotPlayerMode.Skill;
+        XonoticGodot.Server.GameWorld world = _serverWorld;
+        _server.RunOnSimThread(() => world.Bots.AttachBotPlayer(me, skill));
+        GD.Print($"[bot-player] brain attached to the LOCAL player (skill {skill}) — "
+                 + "input now synthesised through the real client pipeline.");
+    }
+#endif
+
     private InputCommand SampleInput()
     {
+#if XG_BOTPLAYER
+        // Bot-player harness: synthesise this tick's command from the brain bound to the local player. Sits
+        // exactly where the camera-trace scripted input sits — the command below is indistinguishable from a
+        // human's, so prediction/encode/reconcile all run for real. Inert unless --bot-player was passed.
+        if (BotPlayerMode.Requested)
+        {
+            MaybeAttachBotPlayer();
+            if (_botPlayerAttached && _carrier is not null && _serverWorld is not null)
+            {
+                XonoticGodot.Server.Bot.BotPopulation.BotPlayerCommand bp =
+                    _serverWorld.Bots.BotPlayerCommandLatest;
+                InputButtons bpButtons = InputButtons.None;
+                if (bp.Attack1) bpButtons |= InputButtons.Attack;
+                if (bp.Attack2) bpButtons |= InputButtons.Attack2;
+                if (bp.Jump) bpButtons |= InputButtons.Jump;
+                if (bp.Crouch) bpButtons |= InputButtons.Crouch;
+                if (bp.Hook) bpButtons |= InputButtons.Hook;
+                _viewAngles = bp.ViewAngles;   // slave the camera to the brain's aim, like the scripted path
+                // Still carry a console/bind-issued impulse (edge-triggered, same as the live path) so an
+                // agent can drive weapon switches etc. at a running bot-player session.
+                int bpImpulse = _pendingImpulse;
+                _pendingImpulse = 0;
+                return new InputCommand
+                {
+                    ViewAngles = bp.ViewAngles,
+                    Forward = bp.Forward, Side = bp.Side, Up = bp.Up,
+                    Buttons = (int)bpButtons,
+                    Impulse = bpImpulse,
+                    DeltaTime = _inputDeltaTime,
+                };
+            }
+        }
+#endif
+
         // Camera-trace (apparatus A2): once spawned, feed the deterministic scripted input instead of the live
         // keyboard/mouse, and slave the view angles to it so the captured camera is reproducible. Inert unless
         // --camera-trace was passed; falls through to real input once the script is exhausted.
@@ -6031,7 +7059,7 @@ public sealed partial class NetGame : Node3D
         // HUD UI (minigame menu/board or the quick-chat menu) is open. On the edge into inactive, drop all held
         // buttons (DP in_releaseall) so a key held at that moment doesn't stay down once input resumes. The view
         // angles hold their last value, so the camera stays put.
-        bool active = !GetTree().Paused && !ConsoleState.IsOpen && !UiOwnsCursor;
+        bool active = GameplayInputActive;
         if (active != _inputActive)
         {
             _inputActive = active;
@@ -6093,8 +7121,8 @@ public sealed partial class NetGame : Node3D
         // the console makes input inactive (movement keys are released + zeroed), but the typing FLAG itself must
         // still ride the command so the server can exempt the typist (camp-check g_campcheck_typecheck gate,
         // type-frag classification, etc.). Mirrors QC PHYS_INPUT_BUTTON_CHAT being live while the chat box is up.
-        if (ConsoleState.IsOpen)
-            buttons |= InputButtons.Chat;
+        if (ConsoleState.IsOpen || XonoticGodot.Game.Hud.ChatPrompt.IsOpen)
+            buttons |= InputButtons.Chat; // messagemode prompt ALSO raises BUTTON_CHAT (the DP key_dest != game rule) -> server chat bubble
 
         // C2S impulse (QC usercmd.impulse): consume the one-shot weapon-switch/reload number a bind set this
         // frame (RunBoundCommand stamped it into _pendingImpulse, edge-triggered). Stamp it onto THIS command and
@@ -6121,6 +7149,55 @@ public sealed partial class NetGame : Node3D
     // =====================================================================================
     //  Camera (driven by the SHARED FirstPersonView — same component PlayerController uses)
     // =====================================================================================
+
+    // Spectate-angle smoother state: the currently-smoothed quake angles + the netId they belong to
+    // (0 = unseeded; a target change re-seeds so a spectatee switch snaps instead of slewing).
+    private NVec3 _specAngSmoothed;
+    private int _specAngForId;
+
+    /// <summary>
+    /// Exponential shortest-arc smoothing over the followed player's view angles
+    /// (<c>cl_spectate_smoothangles</c> = half-life in seconds, 0 = raw). The spectatee's angles arrive in
+    /// steps — a bot re-aims only every AI think, a human's angles land at the snapshot rate — and the raw
+    /// follow-cam pans in those steps. Smoothing is a spectator-view-only quality deviation from Base (which
+    /// renders the raw angles); it never touches gameplay or the local first-person path. Snaps outright on a
+    /// spectatee change and on any component jump &gt; 90° (respawn / teleport / warp crossing), so it cannot
+    /// slow-slew across a legitimate discontinuity.
+    /// </summary>
+    private NVec3 SmoothSpectateAngles(NVec3 target, float dt)
+    {
+        int id = _client?.SpectatingNetId ?? 0;
+        float halflife = CvarOr(Api.Cvars, "cl_spectate_smoothangles", 0.05f);
+        if (halflife <= 0f || id == 0 || _specAngForId != id)
+        {
+            _specAngForId = id;
+            _specAngSmoothed = target;
+            return target;
+        }
+        float dp = AngleDelta180(target.X - _specAngSmoothed.X);
+        float dy = AngleDelta180(target.Y - _specAngSmoothed.Y);
+        float dr = AngleDelta180(target.Z - _specAngSmoothed.Z);
+        if (System.MathF.Abs(dp) > 90f || System.MathF.Abs(dy) > 90f)
+        {
+            _specAngSmoothed = target;   // discontinuity — snap, don't slew
+            return target;
+        }
+        float k = 1f - System.MathF.Pow(0.5f, dt / halflife);
+        _specAngSmoothed = new NVec3(
+            AngleDelta180(_specAngSmoothed.X + dp * k),
+            AngleDelta180(_specAngSmoothed.Y + dy * k),
+            AngleDelta180(_specAngSmoothed.Z + dr * k));
+        return _specAngSmoothed;
+    }
+
+    /// <summary>Wrap an angle/delta to the shortest-arc (-180, 180] range.</summary>
+    private static float AngleDelta180(float a)
+    {
+        a %= 360f;
+        if (a > 180f) a -= 360f;
+        else if (a < -180f) a += 360f;
+        return a;
+    }
 
     /// <summary>
     /// Drive the shared <see cref="Client.FirstPersonView"/> from the PREDICTED local state: the predicted origin
@@ -6155,11 +7232,17 @@ public sealed partial class NetGame : Node3D
             _view.CameraMode = CvarOr(Api.Cvars, "chase_active", 0f) != 0f
                 ? Client.FirstPersonView.ChaseMode.Chase
                 : Client.FirstPersonView.ChaseMode.None;
+            // The camera sits inside the followed player in first person — hide that body exactly like one's
+            // own (which never even reaches the client's entity stream; the spectatee does). Chase shows it.
+            _render?.SetViewedFirstPerson(
+                _view.CameraMode == Client.FirstPersonView.ChaseMode.None ? _client.SpectatingNetId : 0);
             var sst = new Client.FirstPersonView.ViewState
             {
                 OriginQuake = specOrg,
                 VelocityQuake = NVec3.Zero,
-                ViewAnglesQuake = specAng,   // see what the spectated player sees
+                // See what the spectated player sees — through a smoother: a bot only re-aims every AI think
+                // and a human's angles arrive at the tick rate, so the raw follow angles pan in visible steps.
+                ViewAnglesQuake = SmoothSpectateAngles(specAng, dt),
                 IsDead = false,              // following a live player — no death-cam pullback
                 EyeHeightZ = EyeHeight,
             };
@@ -6167,6 +7250,8 @@ public sealed partial class NetGame : Node3D
             return;
         }
         _view.Spectating = false;
+        _render?.SetViewedFirstPerson(0);   // not following → every body draws again
+        _specAngForId = 0;                  // and the spectate-angle smoother re-seeds on the next follow
 
         float now = _renderClock; // the clock the reconciler armed the prediction-error decay with (see _Process)
 
@@ -6306,8 +7391,8 @@ public sealed partial class NetGame : Node3D
             // sets ViewOfs to the crouch/standing value each predicted tick, QC STAT(PL_CROUCH_VIEW_OFS)/PL_VIEW_OFS).
             // In faithful mode this is the viewheightavg-blended height (smooth crouch); else the raw live offset.
             EyeHeightZ = eyeOfsZ,
-            // QC IS_ONGROUND / (input_buttons & BIT(1)): drive the horizontal view-bob smooth ramp (cl_bob2) and
-            // the fall-bob swing trigger (cl_bobfall). Both off by default, so no observable effect in a stock match.
+            // QC IS_ONGROUND / (input_buttons & BIT(1)): drive the horizontal view-bob smooth ramp (cl_bob2, off
+            // by default) and the fall-bob swing trigger (cl_bobfall 0.05 — ON in stock Xonotic: the landing dip).
             OnGround = _carrier?.OnGround ?? false,
             JumpHeld = BindTable.JumpHeld,
         };
@@ -6830,12 +7915,14 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>Cvars the listen-server boot sequence (or the map's worldspawn) authors itself — a console override
-    /// of these must NOT be backfilled across a map change, or it would clobber the new map's gravity, the host's
-    /// spectate/bot setup, the chosen match limits, or the map name. The limits ride the campaign-guarded
-    /// <see cref="CopyCvarIfSet"/> path above; sv_gravity is owned by each map's worldspawn.</summary>
+    /// of these must NOT be backfilled across a map change, or it would clobber the new map's gravity, the chosen
+    /// match limits, or the map name. The limits ride the campaign-guarded <see cref="CopyCvarIfSet"/> path above;
+    /// sv_gravity is owned by each map's worldspawn. NOTE: sv_spectate is deliberately NOT here anymore — the boot
+    /// no longer authors it (#44 kept Base's shipped 1), so excluding it would have silently reverted an operator's
+    /// runtime override on every map change.</summary>
     private static readonly System.Collections.Generic.HashSet<string> BootAuthoredCvars = new(System.StringComparer.Ordinal)
     {
-        "mapname", "sv_gravity", "sv_spectate", "timelimit", "fraglimit", "bot_number", "skill",
+        "mapname", "sv_gravity", "timelimit", "fraglimit", "bot_number", "skill",
     };
 
     private static CollisionWorld BuildTestFloor()
@@ -6889,7 +7976,149 @@ public sealed partial class NetGame : Node3D
         // and the C# API can override it at runtime (XonoticGodot.Game.WorldTint).
         XonoticGodot.Game.WorldTint.ApplyWorldspawn(_bsp);
 
+        _worldEnv = env; // kept so a pure client can swap in the real map's sky/fog/tint once its BSP loads (ApplyMapSky)
         AddChild(new WorldEnvironment { Name = "WorldEnvironment", Environment = env });
+    }
+
+    /// <summary>
+    /// Re-apply the real map's skybox, fog and colour-tint baseline to the live <see cref="WorldEnvironment"/>,
+    /// replacing the procedural sky <see cref="AddLight"/> put up before the map was known. Called by
+    /// <see cref="LoadClientMapFromServer"/> once a pure <c>--connect</c> client has loaded the server's BSP.
+    /// No-op when the environment or BSP isn't available.
+    /// </summary>
+    private void ApplyMapSky()
+    {
+        if (_worldEnv is null || _bsp is null)
+            return;
+        Sky? sky = XonoticGodot.Game.Loaders.SkyboxLoader.TryBuild(_bsp, _assets?.Assets);
+        if (sky is not null)
+            _worldEnv.Sky = sky;
+        XonoticGodot.Game.MapLoader.ApplyFog(_worldEnv, _bsp);
+        XonoticGodot.Game.WorldTint.ApplyWorldspawn(_bsp);
+    }
+
+    /// <summary>
+    /// A pure <c>--connect</c> client boots on a flat prediction floor (<see cref="BootClientFacade"/>) because it
+    /// doesn't yet know the server's map. Once the handshake accept delivers the map name (+ gametype), load that
+    /// BSP locally and wire it in three ways so the remote player sees and moves through the REAL world, not a void:
+    /// <list type="number">
+    ///   <item>swap the ambient trace world's flat floor for the map's collision, so the predicted local player
+    ///         clips real geometry (fixes the walk-through-walls / <c>PREDICTION DESYNC</c> on a pure client);</item>
+    ///   <item>attach the render worldmodel + PVS cull + particle collision (<see cref="AttachWorldRender"/>);</item>
+    ///   <item>swap the procedural sky for the map's real skybox/fog/tint (<see cref="ApplyMapSky"/>).</item>
+    /// </list>
+    /// One-shot (<see cref="_clientMapLoaded"/>); inert on a listen server (its map is loaded in
+    /// <see cref="StartListenServer"/>) and when the map can't be resolved in the VFS (stays on the flat floor).
+    /// </summary>
+    private void LoadClientMapFromServer(string mapName, string gametype)
+    {
+        if (_clientMapLoaded || _isListenServer || string.IsNullOrWhiteSpace(mapName))
+            return;
+
+        XonoticGodot.Formats.Bsp.BspData? bsp = TryLoadMapBsp(mapName);
+        if (bsp is null)
+        {
+            GD.PrintErr($"[NetGame] client: server map '{mapName}' not found in the VFS — staying on the flat " +
+                        "prediction floor (world will not render).");
+            return;
+        }
+        _clientMapLoaded = true;
+        _map = mapName;
+        if (!string.IsNullOrWhiteSpace(gametype))
+            _gametype = gametype;
+        _bsp = bsp;
+        // Drop the SAME gametype-conditional "*N" submodels the server dropped, so the client's render + collision
+        // agree with authority (render and collision MUST match — GameDemo.cs:134/181).
+        _droppedSubmodels = GameMapView.ComputeDroppedSubmodels(bsp, _gametype);
+
+        // (1) Prediction/gameplay collision: replace the flat floor the carrier has been tracing against with the
+        // real map collision. The ambient EngineServices keeps its entity table (the carrier lives there) + clock +
+        // cvars + models; only the static brush world the trace consults changes. Safe between frames (single-thread).
+        BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp, _droppedSubmodels);
+        if (Api.Services is XonoticGodot.Engine.Simulation.EngineServices es)
+        {
+            es.SetCollisionWorld(built.World);
+            es.Pvs = new XonoticGodot.Formats.Bsp.BspPvs(bsp);
+            // Register the inline "*N" brush models into the client model catalog. NOTE: this is FORWARD-LOOKING —
+            // no client code currently mirrors snapshot entities into the ambient facade table or calls SetModel
+            // on it (the only facade entity is the prediction carrier), so predicted movement still doesn't clip
+            // networked doors/plats today (the server reconcile corrects it). The registration is cheap + idempotent
+            // and is here so that when a snapshot→facade mover mirror lands, a "*N" setmodel resolves its clip brushes.
+            BspCollisionBuilder.RegisterSubmodels(built.Submodels, es.ModelsImpl);
+        }
+
+        // (2) Render the worldmodel + PVS entity-cull + particle/decal collision (the same path the listen server
+        // runs in SetupRender), now that _bsp is set. Hand it the prediction world we just built so it doesn't
+        // build the full brush world a SECOND time on this connect frame (both uses are main-thread — safe to share).
+        AttachWorldRender(built.World);
+
+        // (3) The map's real skybox / fog / colour tint, replacing the procedural sky AddLight put up pre-map.
+        ApplyMapSky();
+
+        // (4) The map-dependent HUD/ambience feeds SetupCameraAndHud/SetupMusic couldn't wire in _Ready (the map
+        // name wasn't known yet on a pure client):
+        // — radar minimap image + world bounds (QC mi_min/mi_max), so the image and the blips align;
+        if (_radar is not null)
+        {
+            _radar.MapName = _map;
+            if (bsp.Models.Length > 0)
+            {
+                _radar.MapMinXY = new Vector2(bsp.Models[0].Mins.X, bsp.Models[0].Mins.Y);
+                _radar.MapMaxXY = new Vector2(bsp.Models[0].Maxs.X, bsp.Models[0].Maxs.Y);
+            }
+        }
+        // — waypoint-sprite distance-fade ramp (QC waypointsprite_fadedistance = vlen(mi_scale));
+        if (_waypointLayer is not null && bsp.Models.Length > 0)
+        {
+            NVec3 mn = bsp.Models[0].Mins, mx = bsp.Models[0].Maxs;
+            _waypointLayer.MapSize = new NVec3(mx.X - mn.X, mx.Y - mn.Y, mx.Z - mn.Z).Length();
+        }
+        // — map music: SetupMusic ran with no map name, so resolve the cdtrack now. The MusicPlayer re-reads
+        //   CdTrack each frame, so a late set starts the track cleanly. (trigger_music/target_music volumes stay
+        //   listen-host-only — they are server entities and aren't networked.) Resolve order mirrors SetupMusic:
+        //   the mapinfo cdtrack first, then — for legacy/Q3/Nexuiz-compat maps with no mapinfo — the worldspawn
+        //   "music"/"noise" key (QC world.qc:970), parsed from the BSP we just loaded. Without the worldspawn
+        //   fallback those maps played on the listen host but were silent on a pure client.
+        if (_musicPlayer is not null && _vfs is not null)
+        {
+            string mapinfoPath = $"maps/{_map}.mapinfo";
+            string cdTrack = "";
+            if (_vfs.Exists(mapinfoPath))
+            {
+                try { cdTrack = ParseMapinfoCdTrack(_vfs.ReadText(mapinfoPath)); }
+                catch { /* unreadable mapinfo — fall through to worldspawn */ }
+            }
+            if (string.IsNullOrEmpty(cdTrack) && bsp.Entities.Count > 0)
+            {
+                IReadOnlyDictionary<string, string> worldspawn = bsp.Entities[0];
+                if (worldspawn.TryGetValue("music", out string? wsMusic) && !string.IsNullOrEmpty(wsMusic))
+                    cdTrack = wsMusic;
+                else if (worldspawn.TryGetValue("noise", out string? wsNoise) && !string.IsNullOrEmpty(wsNoise))
+                    cdTrack = wsNoise;
+            }
+            string resolvedTrack = MusicPlayer.ResolveMusicPath(cdTrack);
+            if (!string.IsNullOrEmpty(resolvedTrack))
+            {
+                _musicPlayer.CdTrack = resolvedTrack;
+                GD.Print($"[NetGame] map music: '{resolvedTrack}' (from mapinfo, client map load)");
+            }
+        }
+        // — warpzone portal window/disc renderers (SetupCameraAndHud skipped them — no _mapRoot yet). The zone
+        //   transforms aren't networked, so on a pure client these degrade to the dark-mirror placeholder rather
+        //   than the live see-through render — but the portal FRAMES render instead of nothing. _camera is live
+        //   (SetupCameraAndHud ran in _Ready; this fires from _Process on the first accept).
+        if (_mapRoot is not null && _camera is not null && _portalRenderer is null)
+        {
+            _portalRenderer = new XonoticGodot.Game.Client.PortalRenderer { Name = "PortalRenderer" };
+            AddChild(_portalRenderer);
+            _portalRenderer.Setup(_mapRoot, _camera);
+
+            _portalDiscRenderer = new XonoticGodot.Game.Client.PortalDiscRenderer { Name = "PortalDiscRenderer" };
+            AddChild(_portalDiscRenderer);
+            _portalDiscRenderer.Setup(_camera, (path, skin) => _assets?.LoadModel(path, skin));
+        }
+
+        GD.Print($"[NetGame] client loaded map '{_map}' ({_gametype}) for render + prediction collision.");
     }
 
     // (the old hardcoded BotName table moved into BotPopulation's bots.txt fallback — T39)

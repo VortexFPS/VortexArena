@@ -85,7 +85,9 @@ public sealed class MatchController : IMatchEvents
     public void Spawn(Player p)
     {
         BuildLivePlayers();
-        SpawnPoint? sp = SpawnSystem.SelectSpawnPoint(p, _livePlayersScratch);
+        // [R0c] targetCheck:true — match Base's Spawn_FilterOutBadSpots(..., targetcheck=true) for every spawn
+        // (spawnpoints.qc:419); the emergency re-filter re-admits spots if a map rejects them all. Inert on DM/CTF.
+        SpawnPoint? sp = SpawnSystem.SelectSpawnPoint(p, _livePlayersScratch, targetCheck: true);
         if (sp is null)
         {
             // QC: spawn failed (no spawnpoints) — retry next tick by leaving the respawn timer armed soon.

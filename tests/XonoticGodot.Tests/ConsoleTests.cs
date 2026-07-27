@@ -62,6 +62,28 @@ public class ConsoleTests
     }
 
     [Fact]
+    public void VidVsync_ConsoleChain_SetsFiresChanged_AndVidRestartDispatches()
+    {
+        // The 2026-07-11 "couldn't put on vid_vsync mid game" report: pins the full console chain —
+        // bare `vid_vsync 1` is a cvar ASSIGNMENT (DP console semantics, not a query), it fires Changed
+        // (ClientSettings.InstallLiveVideoCvars live-applies vsync off that event, DP parity — no
+        // vid_restart needed), and a typed `vid_restart` reaches the registered host command.
+        var (interp, cvars, _) = Make();
+        cvars.Register("vid_vsync", "0");
+        bool restarted = false;
+        interp.RegisterCommand("vid_restart", _ => restarted = true); // mirrors ConsoleOverlay.RegisterHostCommands
+        var changed = new List<string>();
+        cvars.Changed += changed.Add;
+
+        interp.ExecuteLine("vid_vsync 1");
+        interp.ExecuteLine("vid_restart");
+
+        Assert.Equal("1", cvars.GetString("vid_vsync"));
+        Assert.Contains("vid_vsync", changed);
+        Assert.True(restarted);
+    }
+
+    [Fact]
     public void NullHandler_StillCountsUnknown()
     {
         var cvars = new CvarService();

@@ -60,8 +60,12 @@ Both paths converge on `TeleportPlayer` (teleporters.qc:67), which is the author
 ### tdeath / check_tdeath — the telefrag  (`teleporters.qc:tdeath`)
 - **Algorithm:** `TDEATHLOOP(player.origin)` builds a box = `player.origin + player.mins/maxs`, unioned with
   `telefragmin/telefragmax` (portals pass the destination portal's `absmin/absmax`; teleporters pass `'0 0 0'`).
-  `deathradius = max(vlen(deathmin), vlen(deathmax))`. `findradius` + `head.chain`; for each `head != player`
-  with `head.takedamage` and `boxesoverlap(deathmin,deathmax,head.absmin,head.absmax)`:
+  Upstream `b6e02fe3` (2026-07-06) replaced the old `findradius` scan — whose
+  `deathradius = max(vlen(deathmin), vlen(deathmax))` was the box's distance from the WORLD ORIGIN (a perf-only
+  bug; the per-entity `boxesoverlap` kept it correct) — with `findbox(deathmin, deathmax)`, dropping the QC-side
+  box filter (the engine query is exact). The port matches: `Teleporters.CheckTdeath`/`Telefrag` use
+  `IEntityService.FindInBox` (area-grid backed, precise AABB inside). For each `head != player`
+  with `head.takedamage`:
   - If the teleportee is a live player (`GetResource(player,RES_HEALTH) >= 1`):
     skip if `teamplay && g_telefrags_teamplay && head.team == player.team`; else if `head` is a live player,
     `++tdeath_hit`, and `Damage(head, teleporter, telefragger, 10000, DEATH_TELEFRAG, ...)`.

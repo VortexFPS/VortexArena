@@ -626,30 +626,6 @@ public partial class EffectSystem : Node3D
         => Spawn(effectName, origin, direction, 1);
 
     /// <summary>
-    /// A muzzle flash ATTACHED to a weapon node (the first-person view-model's muzzle socket): the burst is
-    /// parented under <paramref name="parent"/> in LOCAL coords, emitting forward out of the barrel (the socket's
-    /// local −Z, the same axis the world-space <see cref="MuzzleFlash"/> uses via −muzzleXf.Basis.Z), so the
-    /// particles ride the gun's sway/recoil/bob and pop the instant the local player clicks — the snappy
-    /// first-person muzzle flash. Remote players still see the networked world-space copy (Send_Effect). Uses the
-    /// heuristic muzzle-flash burst rather than the full effectinfo tree so localisation stays trivial; the local
-    /// flash needn't be byte-identical to the networked one.
-    /// </summary>
-    public Node3D? MuzzleFlashAttached(string effectName, Node3D parent, float speed = 120f)
-    {
-        if (parent is null || !GodotObject.IsInstanceValid(parent))
-            return null;
-        Tint tint = DefaultTint(EffectClass.MuzzleFlash, effectName);
-        Node3D node = BuildBurst(EffectClass.MuzzleFlash, Vector3.Zero, new Vector3(0f, 0f, -1f) * speed, 1, tint);
-        if (node is GpuParticles3D gp)
-            gp.LocalCoords = true; // emitted particles follow the gun (the attached feel)
-        parent.AddChild(node);
-        // Self-free after the brief burst; QueueFree-based so it works regardless of parent (and the node is freed
-        // anyway when the weapon model is swapped). Not Track()'d — the view-model owns it, not the effect pool.
-        ScheduleFree(node, 0.7f);
-        return node;
-    }
-
-    /// <summary>
     /// Returns the particlefont atlas sprite for a named trail effect (e.g. "TR_ROCKET", "TR_NEXUIZPLASMA"),
     /// for use by the <see cref="ProjectileRenderer"/>'s continuous-emitter trail builder. Loads effectinfo
     /// lazily on first call. Returns null when the atlas isn't mounted, the effect isn't in effectinfo, or

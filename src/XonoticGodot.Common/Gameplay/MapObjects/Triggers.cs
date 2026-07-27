@@ -786,6 +786,12 @@ public static class Triggers
     /// </summary>
     private static readonly List<Entity> _swamped = new();
 
+    /// <summary>Scratch buffer reused for the per-frame <see cref="SwampThink"/> volume scan (replaces a
+    /// per-think <c>.ToList()</c>). Swamp thinks run sequentially on the sim thread; the claim loop below runs
+    /// no callbacks (it only stamps <c>SwampSlug</c>), so nothing can re-enter mid-iteration — one shared static
+    /// is safe (the damage pass afterwards iterates <see cref="_swamped"/>, not this).</summary>
+    private static readonly List<Entity> _swampScratch = new();
+
     /// <summary>QC <c>swamp_think</c>: re-mark the players inside the volume each frame and damage on interval.</summary>
     private static void SwampThink(Entity self)
     {
@@ -809,10 +815,11 @@ public static class Triggers
         if (self.Active != MapMover.ActiveActive)
             return;
 
-        Vector3 center = (self.AbsMin + self.AbsMax) * 0.5f;
-        float radius = (self.AbsMax - self.AbsMin).Length() * 0.5f + 1f;
-
-        foreach (Entity it in Api.Entities.FindInRadius(center, radius).ToList())
+        // QC swamp_touch claims by trigger TOUCH (box-exact). FindInBox queries the volume's AABB directly
+        // (precise overlap inside) — the old bounding-SPHERE FindInRadius (half-diagonal radius, no box trim)
+        // over-claimed players standing near the volume's corners, swamp-slowing them while OUTSIDE the swamp.
+        Api.Entities.FindInBox(self.AbsMin, self.AbsMax, _swampScratch);
+        foreach (Entity it in _swampScratch)
         {
             if ((it.Flags & EntFlags.Client) == 0 || MapMover.IsDead(it))
                 continue;

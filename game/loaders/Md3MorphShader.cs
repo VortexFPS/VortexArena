@@ -84,6 +84,12 @@ uniform bool has_gloss = false;
 uniform bool has_glow = false;
 // frameA->frameB blend weight. Set every render frame from C# (the cheap ""one float"" steady-state cost).
 uniform float morph_amount = 0.0;
+// DP first-person viewmodel depth hack (MATERIALFLAG_SHORTDEPTHRANGE = GL_DepthRange(0, 0.0625)) — the same
+// plain uniform as PlayerSkinShader: 1.0 (default) = full depth range, an identity remap for every world
+// morph prop; a first-person muzzle-flash/weapon morph material gets 0.0625 (morph materials are built
+// per-animator, so ViewModelRenderFx can set it directly) and compresses into the nearest 1/16 slice so it
+// never clips into world geometry.
+uniform float viewmodel_depth_range = 1.0;
 // Dynamic scene tint (XonoticGodot.Game.WorldTint) — a GLOBAL shader parameter applied to every model material
 // (players, weapon viewmodels, pickups, and now GPU-morph props) so the look matches the rest of the pipeline.
 // Strength is folded in on the C# side; default (1,1,1) is identity.
@@ -95,6 +101,11 @@ void vertex() {
     // the Quake-space values then converting (the CPU path's R_AliasLerpVerts), so the geometry is identical.
     VERTEX = mix(VERTEX, CUSTOM0.xyz, morph_amount);
     NORMAL = normalize(mix(NORMAL, CUSTOM1.xyz, morph_amount));
+    // DP SHORTDEPTHRANGE viewmodel remap (see viewmodel_depth_range above), from the MORPHED vertex. Godot
+    // 4.3+ reversed-Z: GL's [0, frac] window slice mirrors to [1-frac, 1] => z' = (1-frac)*w + frac*z. At the
+    // default 1.0 this is mix(z, w, 0.0) == z — bit-identical to the fixed-function transform.
+    POSITION = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
+    POSITION.z = mix(POSITION.z, POSITION.w, 1.0 - viewmodel_depth_range);
 }
 
 void fragment() {

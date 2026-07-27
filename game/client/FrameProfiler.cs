@@ -84,7 +84,10 @@ public partial class FrameProfiler : CanvasLayer
           "portal.render",
           // (M2/M3) the newer client render nodes: nade-orb followers + dynamic-light spawns — scoped so their
           // per-frame CPU is attributed instead of leaking into proc:other.
-          "nadeorbs", "dynlights" };
+          "nadeorbs", "dynlights",
+          // the messagemode chat prompt's caret-blink _Process (only ticks while the prompt is open — it disables
+          // its own _Process when closed — but scoped so the open-window cost is attributed, not proc:other).
+          "chat" };
 
     /// <summary>
     /// Open a named timing scope: <c>using (FrameProfiler.Scope("name")) { ... }</c> (or as a one-statement

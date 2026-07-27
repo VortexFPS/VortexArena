@@ -61,6 +61,9 @@ public sealed class Duel : GameType
     private HookHandler<DeathEvent>? _deathHandler;
     private HookHandler<MutatorHooks.FilterItemDefinitionArgs>? _filterItemHandler;
 
+    /// <summary>The pre-duel <c>g_spawn_avoid_los</c> value, restored on <see cref="Deactivate"/> (null = not saved).</summary>
+    private string? _avoidLosPrior;
+
     /// <summary>Optional sink for the host/controller to react to a frag (e.g. schedule the respawn).</summary>
     public IMatchEvents? Events;
 
@@ -168,10 +171,29 @@ public sealed class Duel : GameType
         // g_duel_with_powerups is set. Subscribe the filter into the live hook chain the same way Mayhem does.
         _filterItemHandler = OnFilterItemDefinition;
         MutatorHooks.FilterItemDefinition.Add(_filterItemHandler);
+
+        // [R1 preset] Disable the port's LOS spawn demotion for the duel (g_spawn_avoid_los, default ON
+        // elsewhere): reading and controlling spawns is core 1v1 skill, and demoting enemy-visible spots
+        // would rewrite that meta (planning/spawn-system-analysis-2026-07-06.md). Save/restore so a host's
+        // global setting survives the mode switch — an admin who wants it ON in duel can still set it after
+        // match start. Mirrors the SeedTimeLimit gametype-preset mechanism.
+        if (Api.Services is not null)
+        {
+            _avoidLosPrior = Api.Cvars.GetString("g_spawn_avoid_los");
+            Api.Cvars.Set("g_spawn_avoid_los", "0");
+        }
     }
 
     public override void Deactivate()
     {
+        // [R1 preset] Restore the host's pre-duel g_spawn_avoid_los so switching duel -> DM doesn't leave
+        // the LOS demotion silently disabled.
+        if (_avoidLosPrior is not null)
+        {
+            if (Api.Services is not null)
+                Api.Cvars.Set("g_spawn_avoid_los", _avoidLosPrior);
+            _avoidLosPrior = null;
+        }
         if (_filterItemHandler is not null)
         {
             MutatorHooks.FilterItemDefinition.Remove(_filterItemHandler);

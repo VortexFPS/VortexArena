@@ -52,12 +52,10 @@ public sealed class EntityMovementStep : IMovementStep
         // build the per-tick movement input from the command (the same conversion the server applies).
         InputButtons b = cmd.TypedButtons;
         // The InputCommand carries the wish-move normalized to ±1 (see NetGame.SampleInput); the move code must
-        // rescale it to wish-velocity units. Darkplaces builds the usercmd from cl_forwardspeed/cl_sidespeed/
-        // cl_upspeed (cl_input.c:502-515), NOT from the live sv_maxspeed — so scale by those fixed client speeds
-        // (a remote client may lack the replicated maxspeed; PlayerPhysics then clamps wishspeed to live MaxSpeed,
-        // WishDir2D + MathF.Min(wishspeed, mp.MaxSpeed)). Scaling by live maxspeed instead capped the true top
-        // speed when maxspeed>360. CRITICAL: keep these identical to ServerNet.ToMovementInput so the client
-        // predictor and the server converter stay in lockstep.
+        // rescale it to wish-velocity units. A live Xonotic client's cl_*speed cvars are stuffcmd'd to
+        // max(sv_maxspeed, sv_maxairspeed) = 360 by Base's sys_phys_fixspeed (see WishMoveScaling) — the client
+        // holds the replicated movevars (MoveVarsBlock.Apply), so both legs resolve the same value. CRITICAL:
+        // keep this identical to ServerNet.ToMovementInput so predictor and converter stay in lockstep.
         var input = new MovementInput
         {
             ViewAngles = cmd.ViewAngles,
@@ -134,25 +132,39 @@ public sealed class EntityMovementStep : IMovementStep
 }
 
 /// <summary>
-/// The Darkplaces client wish-move scaling (cl_input.c CL_Input): the normalized ±1 WASD axes are scaled to
-/// wish-velocity units by the FIXED client input-speed cvars — forward/back by <c>cl_forwardspeed</c>/
-/// <c>cl_backspeed</c> (400), strafe by <c>cl_sidespeed</c> (350), up/down by <c>cl_upspeed</c> (400) — NOT by
-/// the live sv_maxspeed (a remote client may not hold the replicated value). The server physics then clamps the
-/// resulting wishspeed to the live MaxSpeed. The client predictor (<see cref="EntityMovementStep"/>) and the
-/// server converter (<see cref="ServerNet"/>) BOTH call this so prediction stays in lockstep with authority.
+/// The wish-move scaling a LIVE Xonotic client actually runs with: Base's <c>sys_phys_fixspeed</c>
+/// (qcsrc/ecs/systems/sv_physics.qc:105-117) stuffcmds <c>cl_forwardspeed</c>/<c>cl_backspeed</c>/
+/// <c>cl_sidespeed</c>/<c>cl_upspeed</c> = <c>max(sv_maxspeed, sv_maxairspeed)</c> to every client on spawn —
+/// stock: <b>360 on all axes</b>. (The raw DP client defaults — 400/350/400, cl_input.c:364-367 — only apply
+/// for the instant before that first stuffcmd lands; baking them here skewed the pure-strafe wishspeed to 350
+/// vs Base's 360 and bent the strafity/movity input ANGLE for mixed W+A/D input, since Base's axes are
+/// symmetric.) The per-player <c>maxspeed_mod</c> half of fixspeed (spectator ladder) is applied downstream in
+/// <c>PlayerPhysics.Move</c>. Reads the live movevars — replicated to clients via <see cref="MoveVarsBlock"/> —
+/// so a server running maxspeed ≠ 360 scales identically on both legs; unset cvars fall back to the stock 360.
+/// The client predictor (<see cref="EntityMovementStep"/>) and the server converter (<see cref="ServerNet"/>)
+/// BOTH call this so prediction stays in lockstep with authority.
 /// </summary>
 internal static class WishMoveScaling
 {
-    /// <summary>cl_forwardspeed / cl_backspeed (Base/darkplaces/cl_input.c:365-366), default 400.</summary>
-    public const float ForwardSpeed = 400f;
+    /// <summary>Stock <c>max(sv_maxspeed, sv_maxairspeed)</c> = 360 (physicsX.cfg sets both to 360).</summary>
+    public const float StockSpeed = 360f;
 
-    /// <summary>cl_sidespeed (Base/darkplaces/cl_input.c:367), default 350.</summary>
-    public const float SideSpeed = 350f;
+    /// <summary>The live fixspeed value: <c>max(sv_maxspeed, sv_maxairspeed)</c>, unset → 360.</summary>
+    public static float Speed()
+    {
+        if (XonoticGodot.Common.Services.Api.Services is null)
+            return StockSpeed;
+        float maxspeed = XonoticGodot.Common.Services.Api.Cvars.GetFloat("sv_maxspeed");
+        float maxairspeed = XonoticGodot.Common.Services.Api.Cvars.GetFloat("sv_maxairspeed");
+        if (maxspeed <= 0f) maxspeed = StockSpeed;       // unset → stock (the FromCvars fallback idiom)
+        if (maxairspeed <= 0f) maxairspeed = StockSpeed;
+        return System.MathF.Max(maxspeed, maxairspeed);
+    }
 
-    /// <summary>cl_upspeed (Base/darkplaces/cl_input.c:364), default 400.</summary>
-    public const float UpSpeed = 400f;
-
-    /// <summary>Scale a normalized (±1) wish-move into wish-velocity units (forward/side/up → DP cmd move).</summary>
+    /// <summary>Scale a normalized (±1) wish-move into wish-velocity units (forward/side/up → cmd move).</summary>
     public static NVec3 Scale(float forward, float side, float up)
-        => new(forward * ForwardSpeed, side * SideSpeed, up * UpSpeed);
+    {
+        float spd = Speed();
+        return new(forward * spd, side * spd, up * spd);
+    }
 }

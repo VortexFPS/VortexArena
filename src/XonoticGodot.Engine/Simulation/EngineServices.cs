@@ -37,6 +37,13 @@ public sealed class EngineServices : IEngineServices
     /// </summary>
     public XonoticGodot.Formats.Bsp.BspPvs? Pvs { get => TraceImpl.Pvs; set => TraceImpl.Pvs = value; }
 
+    /// <summary>
+    /// Swap the static collision world the trace service clips against, in place (keeping the entity table, clock,
+    /// cvars and models). A pure network client boots on a flat prediction floor and calls this once it has loaded
+    /// the server's real map BSP, so the predicted local player collides with real geometry.
+    /// </summary>
+    public void SetCollisionWorld(CollisionWorld world) => TraceImpl.SetCollisionWorld(world);
+
     /// <param name="world">The collision world this facade traces against.</param>
     /// <param name="sharedCvars">
     /// An optional process-wide cvar store to reuse instead of a fresh one. The menu front-end creates the
@@ -251,6 +258,32 @@ public sealed class EntityService : IEntityService, TraceService.IEntityProvider
         results.RemoveRange(w, results.Count - w);
     }
 
+    /// <summary>
+    /// Allocation-free, area-grid-accelerated <c>findbox</c> (DP <c>VM_findbox</c>/<c>World_EntitiesInBox</c>):
+    /// fills <paramref name="results"/> with every entity whose linked bounds (<c>AbsMin</c>/<c>AbsMax</c>)
+    /// overlap [<paramref name="mins"/>, <paramref name="maxs"/>]. The precise AABB test is applied HERE (DP
+    /// does the same engine-side), so callers replacing the QC findradius(origin, huge-radius) + per-entity
+    /// boxesoverlap pattern (upstream xonotic-data b6e02fe3 — the telefrag loop) need no follow-up box filter.
+    /// </summary>
+    public void FindInBox(Vector3 mins, Vector3 maxs, List<Entity> results)
+    {
+        // Broadphase: the grid cells overlapping the box (conservative superset — XY-partitioned, cleared+filled).
+        _grid.EntitiesInBox(mins, maxs, results);
+
+        int w = 0;
+        for (int i = 0; i < results.Count; i++)
+        {
+            Entity e = results[i];
+            if (e.IsFreed) continue;
+            // Precise: linked AbsMin/AbsMax overlap (QC boxesoverlap semantics — touching counts).
+            if (mins.X <= e.AbsMax.X && maxs.X >= e.AbsMin.X
+                && mins.Y <= e.AbsMax.Y && maxs.Y >= e.AbsMin.Y
+                && mins.Z <= e.AbsMax.Z && maxs.Z >= e.AbsMin.Z)
+                results[w++] = e;
+        }
+        results.RemoveRange(w, results.Count - w);
+    }
+
     // --- TraceService.IEntityProvider ---
 
     public IReadOnlyList<Entity> SolidEntities
@@ -341,7 +374,39 @@ public sealed class CvarService : ICvarService
         public bool Allocated;
     }
 
-    private readonly Dictionary<string, Var> _vars = new(StringComparer.Ordinal);
+    // WS1 stage 3 (sv_threaded): DUAL-MODE backing. Default = a plain Dictionary — the tick's hot path does
+    // hundreds of GetFloat reads per player-move, and a ConcurrentDictionary there measured +32% ms/tick
+    // (0.44 → 0.57 at 4 players), unacceptable as a default tax. A THREADED listen server calls
+    // EnableConcurrentReads() before its worker starts: the backing swaps to a ConcurrentDictionary so the
+    // MAIN thread's display/feed reads (music cdtrack, endscreen cvars, slowmo autopause…) can't race the sim
+    // worker's writes (a plain Dictionary read during a resize is undefined) — and the read overhead lands on
+    // the WORKER, off the render thread. One logical writer either way; per-Var field pairs (Value/FloatValue)
+    // are written in place, so a concurrent reader can transiently see a fresh Value with the previous
+    // FloatValue — benign for the display-read class.
+    private Dictionary<string, Var>? _varsFast = new(StringComparer.Ordinal);
+    private System.Collections.Concurrent.ConcurrentDictionary<string, Var>? _varsSafe;
+
+    /// <summary>Swap to the thread-safe backing (idempotent). Call BEFORE any second thread touches the store.</summary>
+    public void EnableConcurrentReads()
+    {
+        if (_varsSafe is not null) return;
+        _varsSafe = new System.Collections.Concurrent.ConcurrentDictionary<string, Var>(_varsFast!, StringComparer.Ordinal);
+        _varsFast = null;
+    }
+
+    private bool TryGetVar(string name, out Var v)
+        => _varsSafe is not null ? _varsSafe.TryGetValue(name, out v!) : _varsFast!.TryGetValue(name, out v!);
+    private void PutVar(string name, Var v)
+    {
+        if (_varsSafe is not null) _varsSafe[name] = v;
+        else _varsFast![name] = v;
+    }
+    private bool HasVar(string name)
+        => _varsSafe is not null ? _varsSafe.ContainsKey(name) : _varsFast!.ContainsKey(name);
+    private IEnumerable<KeyValuePair<string, Var>> AllVars()
+        => _varsSafe is not null ? _varsSafe : _varsFast!;
+    private IReadOnlyCollection<string> VarNames()
+        => _varsSafe is not null ? (IReadOnlyCollection<string>)_varsSafe.Keys : _varsFast!.Keys;
 
     /// <summary>
     /// Names that some code <see cref="GetFloat"/>/<see cref="GetString"/>-read while ABSENT from the store —
@@ -366,14 +431,14 @@ public sealed class CvarService : ICvarService
 
     public float GetFloat(string name)
     {
-        if (_vars.TryGetValue(name, out var v)) return v.FloatValue;
+        if (TryGetVar(name, out var v)) return v.FloatValue;
         NoteMissing(name);
         return 0f;
     }
 
     public string GetString(string name)
     {
-        if (_vars.TryGetValue(name, out var v)) return v.Value;
+        if (TryGetVar(name, out var v)) return v.Value;
         NoteMissing(name);
         return "";
     }
@@ -382,7 +447,10 @@ public sealed class CvarService : ICvarService
     private void NoteMissing(string name)
     {
         if (_noting) return;                    // read triggered by our own logging — ignore
-        if (!_unregisteredReads.Add(name)) return; // already noted this name
+        lock (_unregisteredReads)               // cross-thread read-misses (threaded listen server) — see _vars
+        {
+            if (!_unregisteredReads.Add(name)) return; // already noted this name
+        }
         _noting = true;
         try
         {
@@ -397,13 +465,13 @@ public sealed class CvarService : ICvarService
 
     public void Set(string name, string value)
     {
-        if (!_vars.TryGetValue(name, out var v))
+        if (!TryGetVar(name, out var v))
         {
             // First value seen is the (inferred) baseline default, and the cvar is "allocated" (DP CF_ALLOCATED) —
             // created by a set, not a code Register. A later Register promotes it (clears Allocated + adopts the
             // real default), so an inferred default never masquerades as authoritative once code declares one.
             v = new Var { Default = value, HasDefault = true, Allocated = true };
-            _vars[name] = v;
+            PutVar(name, v);
         }
         if ((v.Flags & CvarFlags.ReadOnly) != 0)
             return;
@@ -416,7 +484,7 @@ public sealed class CvarService : ICvarService
 
     public void Register(string name, string defaultValue, CvarFlags flags = CvarFlags.None)
     {
-        if (_vars.TryGetValue(name, out var existing))
+        if (TryGetVar(name, out var existing))
         {
             // Idempotent for the VALUE (keep whatever a cfg/user already set), but a Register DECLARES the cvar:
             // fold in the flags and clear Allocated (it's no longer a bare set). Adopt the registered default as the
@@ -429,7 +497,7 @@ public sealed class CvarService : ICvarService
             if (!existing.DefaultLocked) { existing.Default = defaultValue; existing.HasDefault = true; }
             return;
         }
-        _vars[name] = new Var
+        PutVar(name, new Var
         {
             Value = defaultValue,
             FloatValue = ParseFloat(defaultValue),
@@ -438,16 +506,17 @@ public sealed class CvarService : ICvarService
             HasDefault = true,
             // Allocated stays false: a Register-declared cvar has an authoritative default (its registered value),
             // so it is persisted only when changed — never force-saved by the allocated escape.
-        };
+        });
     }
 
     // ---- menu-facing extras (the DP cvar-store features the front-end binds to) ---------------------------
 
     /// <summary>Whether a cvar exists in the store (set or registered).</summary>
-    public bool Has(string name) => _vars.ContainsKey(name);
+    public bool Has(string name) => HasVar(name);
 
-    /// <summary>Every known cvar name (for the cvar-list dialog / search).</summary>
-    public IReadOnlyCollection<string> Names => _vars.Keys;
+    /// <summary>Every known cvar name (for the cvar-list dialog / search). The concurrent backing's Keys is a
+    /// point-in-time snapshot (runtime type ReadOnlyCollection) — exactly right for cross-thread listing.</summary>
+    public IReadOnlyCollection<string> Names => VarNames();
 
     /// <summary>
     /// Names read while absent and STILL absent now — the live "orphan" cvars (read but never registered/set).
@@ -459,23 +528,29 @@ public sealed class CvarService : ICvarService
     {
         get
         {
-            foreach (string n in _unregisteredReads)
-                if (!_vars.ContainsKey(n))
+            string[] noted;
+            lock (_unregisteredReads) // snapshot vs cross-thread Adds
+            {
+                noted = new string[_unregisteredReads.Count];
+                _unregisteredReads.CopyTo(noted);
+            }
+            foreach (string n in noted)
+                if (!HasVar(n))
                     yield return n;
         }
     }
 
     /// <summary>The cvar's baseline default (registered default, or the first value a cfg set). "" if unknown.</summary>
-    public string GetDefault(string name) => _vars.TryGetValue(name, out var v) ? v.Default : "";
+    public string GetDefault(string name) => TryGetVar(name, out var v) ? v.Default : "";
 
     /// <summary>True when the cvar's current value differs from its default (the reset dialogs flag these).</summary>
     public bool IsModified(string name)
-        => _vars.TryGetValue(name, out var v) && v.HasDefault && !string.Equals(v.Value, v.Default, StringComparison.Ordinal);
+        => TryGetVar(name, out var v) && v.HasDefault && !string.Equals(v.Value, v.Default, StringComparison.Ordinal);
 
     /// <summary>Restore a cvar to its default value (the reset-to-default affordance).</summary>
     public void ResetToDefault(string name)
     {
-        if (_vars.TryGetValue(name, out var v) && v.HasDefault)
+        if (TryGetVar(name, out var v) && v.HasDefault)
             Set(name, v.Default);
     }
 
@@ -490,10 +565,10 @@ public sealed class CvarService : ICvarService
     public static void BackfillModified(CvarService from, CvarService to,
         IReadOnlySet<string>? exclude = null)
     {
-        foreach (string name in from._vars.Keys)
+        foreach (string name in from.VarNames())
         {
             if (exclude is not null && exclude.Contains(name)) continue;
-            if (to._vars.ContainsKey(name) && from.IsModified(name))
+            if (to.HasVar(name) && from.IsModified(name))
                 to.Set(name, from.GetString(name));
         }
     }
@@ -501,20 +576,20 @@ public sealed class CvarService : ICvarService
     /// <summary>Mark a cvar as archived (DP <c>seta</c>) so the menu persists it to the user config.</summary>
     public void MarkArchived(string name)
     {
-        if (_vars.TryGetValue(name, out var v))
+        if (TryGetVar(name, out var v))
             v.Archived = true;
     }
 
     /// <summary>True if the cvar is archived (declared <c>seta</c>/<see cref="CvarFlags.Save"/>, or menu-touched).</summary>
     public bool IsArchived(string name)
-        => _vars.TryGetValue(name, out var v) && (v.Archived || (v.Flags & CvarFlags.Save) != 0);
+        => TryGetVar(name, out var v) && (v.Archived || (v.Flags & CvarFlags.Save) != 0);
 
     /// <summary>Every archived cvar name (what the menu writes to <c>user://config.cfg</c> as <c>seta</c>).</summary>
     public IEnumerable<string> ArchivedNames
     {
         get
         {
-            foreach (var kv in _vars)
+            foreach (var kv in AllVars())
                 if (kv.Value.Archived || (kv.Value.Flags & CvarFlags.Save) != 0)
                     yield return kv.Key;
         }
@@ -528,8 +603,9 @@ public sealed class CvarService : ICvarService
     /// </summary>
     public void LockDefaults()
     {
-        foreach (var v in _vars.Values)
+        foreach (var kv in AllVars())
         {
+            Var v = kv.Value;
             v.Default = v.Value;
             v.HasDefault = true;
             v.DefaultLocked = true;
@@ -550,7 +626,7 @@ public sealed class CvarService : ICvarService
     {
         get
         {
-            foreach (var kv in _vars)
+            foreach (var kv in AllVars())
             {
                 var v = kv.Value;
                 if (!(v.Archived || (v.Flags & CvarFlags.Save) != 0))
@@ -612,7 +688,10 @@ public sealed class SoundService : ISoundService
         if (!SoundAllowedGate.IsAllowed(e)) return;
         // SV_StartSound emits from the entity's box center (DP uses ent.origin + 0.5*(mins+maxs)).
         Vector3 origin = e.Origin + (e.Mins + e.Maxs) * 0.5f;
-        Broadcast?.Invoke(new SoundEvent(e, channel, sample, volume, attenuation, origin, Loop: loop, Pitch: pitch));
+        // (perf 2.1) snd.play: the listen host's in-process sound mirror runs INSIDE this event — a cold
+        // sample decode here lands in whatever gameplay scope emitted (the mp.weapon melt hunt).
+        using (Prof.Sample("snd.play"))
+            Broadcast?.Invoke(new SoundEvent(e, channel, sample, volume, attenuation, origin, Loop: loop, Pitch: pitch));
     }
 
     public void PlayAt(Vector3 point, SoundChannel channel, string sample, float volume = 1f, float attenuation = 1f)

@@ -148,7 +148,7 @@ exactly.** The two that differ are proven harmless for the corpus:
 | sv_gameplayfix_nogravityonground | 1 | GF_…=1 | ✅ |
 | sv_gameplayfix_stepmultipletimes | 1 | GF_…=1 | ✅ |
 | sv_gameplayfix_downtracesupportsongroundflag | 1 | GF_DOWNTRACEONGROUND=1 | ✅ |
-| **sv_gameplayfix_q2airaccelerate** | **1** | **GF_Q2AIRACCELERATE=0** | ⚠️ benign — see §2.2 |
+| **sv_gameplayfix_q2airaccelerate** | **1** | **GF_Q2AIRACCELERATE=0** | ❌ verdict below was WRONG — fixed 2026-07-05, see the §2.2 CORRECTION |
 
 ### 2.1 `sv_wallfriction`: live 1 — wall friction is a no-op in stock QC (RESOLVED 2026-06-07)
 
@@ -210,6 +210,19 @@ acceleration but does not in stock Xonotic.
   the live `1`. The fix would only diverge if `com_phys_vel_max > sv_maxairspeed` (a non-stock per-frame
   speed-cap), which no corpus scenario uses. Recommend bumping the define to `1` in a future corpus
   regen for documentation accuracy (it will not change any golden JSON).
+
+  > **CORRECTION (2026-07-05): the "benign" verdict above is WRONG.** It proved `wishspeed0 == wishspeed`
+  > at the *call site* — but between that capture and the flag's application inside `PM_Accelerate`
+  > (player.qc:288-289), the driver reduces `wishspeed` further: the STRAFE `GeomLerp` clamp
+  > (ecs/systems/physics.qc:345-348, pure strafe → `sv_maxairstrafespeed` = **100**) and the ducked
+  > halving (:316-317). With the fix ON (live Base), `wishspeed0` becomes that clamped value, so the air
+  > accel step is `accel·dt·100` for pure strafe; with the define at 0 the step ran from the unclamped
+  > 360 — **~3× live Base's mid-air strafe-redirect budget** (measured 637.6 vs 242.7 deg/s sustained at
+  > 400 u/s — StrafeParityProbeTests). Straight-line air movement has `wishspeed == wishspeed0`, so every
+  > forward-only scenario — all this section examined — was genuinely unaffected, which is how the wrong
+  > verdict survived. Fixed: `GF_Q2AIRACCELERATE 1` + the port's `MovementParameters.GameplayFixQ2AirAccelerate`
+  > (default ON, wire-replicated); `strafe_jump_air.json` was the one fixture that changed on regen,
+  > exactly as this analysis predicts.
 
 **Bottom line:** the analytic corpus is faithful to the live engine for every scenario it covers; the
 two mismatches are documented and proven harmless. The corpus remains the primary ULP-tight movement

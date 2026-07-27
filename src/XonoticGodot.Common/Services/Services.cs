@@ -78,6 +78,25 @@ public interface IEntityService
     }
 
     /// <summary>
+    /// Allocation-free <c>findbox(mins, maxs)</c> (DP <c>VM_findbox</c>/<c>World_EntitiesInBox</c>): clears
+    /// <paramref name="results"/> then fills it with every entity whose linked bounds (<c>AbsMin</c>/<c>AbsMax</c>)
+    /// overlap the box. The precise AABB test happens INSIDE the query (DP applies it engine-side), so a caller
+    /// replacing the QC findradius + per-entity boxesoverlap pattern (upstream xonotic-data b6e02fe3) drops its
+    /// own box filter. Default impl broadphases via <see cref="FindInRadius(Vector3, float)"/> over the box's
+    /// bounding sphere (for minimal fakes); real services override to query the entity area grid directly.
+    /// </summary>
+    void FindInBox(Vector3 mins, Vector3 maxs, List<Entity> results)
+    {
+        results.Clear();
+        Vector3 center = (mins + maxs) * 0.5f;
+        foreach (Entity e in FindInRadius(center, (maxs - mins).Length() * 0.5f))
+            if (mins.X <= e.AbsMax.X && maxs.X >= e.AbsMin.X
+                && mins.Y <= e.AbsMax.Y && maxs.Y >= e.AbsMin.Y
+                && mins.Z <= e.AbsMax.Z && maxs.Z >= e.AbsMin.Z)
+                results.Add(e);
+    }
+
+    /// <summary>
     /// The live NON-CLIENT entity table as an indexable list, for per-frame consumers that need ONE alloc-free
     /// pass over every edict instead of repeated <see cref="FindByClass"/> iterator scans (each call allocates
     /// an iterator and walks the whole table). On the server decorator this is the engine table only — player

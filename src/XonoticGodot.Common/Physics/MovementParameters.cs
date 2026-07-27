@@ -65,6 +65,17 @@ public struct MovementParameters
     // --- gravity / integration ---
     public float Gravity;            // sv_gravity             (800)
 
+    /// <summary>QC <c>autocvar_sv_gameplayfix_q2airaccelerate</c> (stats.qh:396, inline default <b>1</b>;
+    /// xonotic-server.cfg:562 also sets 1; replicated to CSQC prediction via <c>MOVEFLAG_Q2AIRACCELERATE</c>,
+    /// stats.qh:401 / movetypes.qh:49). Applied INSIDE <c>PM_Accelerate</c> (player.qc:288-289):
+    /// <c>wishspeed0 = wishspeed</c> — i.e. the air accel step becomes <c>accel·dt·wishspeed</c> with the
+    /// strafe-GeomLerp/duck-clamped wishspeed, NOT the pre-clamp wishspeed0. This is what limits mid-air
+    /// STRAFE acceleration in live Xonotic (pure strafe: step from 100, not 350) — with the flag off the
+    /// port out-turned Base ~3× (637.6 vs 242.7 deg/s at 400 u/s, StrafeParityProbeTests). Straight-line
+    /// air movement is unaffected (wishspeed == wishspeed0 there), which is why the golden corpus never
+    /// caught it. An explicitly-set 0 must be honored (a server may legitimately run the Q1 behavior).</summary>
+    public bool  GameplayFixQ2AirAccelerate; // sv_gameplayfix_q2airaccelerate (1)
+
     // --- stair stepping / hull ---
     public float StepHeight;         // sv_stepheight          (31 in Xonotic; spec/task note 34)
     public int   StepDown;           // sv_gameplayfix_stepdown(2)  0=off 1=on 2=on+set-onground
@@ -188,6 +199,7 @@ public struct MovementParameters
         p.JumpStep                  = CvarBool(N(prefix, "jumpstep"),             p.JumpStep);
 
         p.Gravity                   = Cvar(N(prefix, "gravity"),                 p.Gravity);
+        p.GameplayFixQ2AirAccelerate = CvarBool(N(prefix, "gameplayfix_q2airaccelerate"), p.GameplayFixQ2AirAccelerate);
 
         p.StepHeight                = Cvar(N(prefix, "stepheight"),              p.StepHeight);
         p.StepDown                  = (int)CvarRaw(N(prefix, "gameplayfix_stepdown"), p.StepDown);
@@ -264,6 +276,7 @@ public struct MovementParameters
         JumpStep = true,     // sv_jumpstep 1 — allow the up/forward step while airborne
 
         Gravity = 800f,
+        GameplayFixQ2AirAccelerate = true, // sv_gameplayfix_q2airaccelerate — QC autocvar inline default 1
 
         StepHeight = 31f, // Xonotic physicsX.cfg value; task brief mentions 34 (the Nexuiz/Vecxis value).
         StepDown = 2,
@@ -434,6 +447,10 @@ public struct MovementParameters
         // applies only to the short-vector tail an older peer omits (guarded by i < v.Length).
         p.StepUpSpeedScale = i < v.Length ? v[i] : p.StepUpSpeedScale; i++;
         p.StepUpSpeedMax   = i < v.Length ? v[i] : p.StepUpSpeedMax; i++;
+
+        // v8 tail: sv_gameplayfix_q2airaccelerate (default ON; Capture sends unset→1 via AbsentDefaults, so a
+        // configured 0 — the Q1 behavior — survives the wire; absent tail from an older peer keeps the default).
+        p.GameplayFixQ2AirAccelerate = B(p.GameplayFixQ2AirAccelerate);
 
         return p;
     }

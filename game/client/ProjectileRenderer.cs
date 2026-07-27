@@ -415,7 +415,10 @@ public partial class ProjectileRenderer : Node3D
     {
         if (string.IsNullOrEmpty(desc.ModelPath) || ModelFactory is null)
             return null;
-        Node3D? model = ModelFactory(desc.ModelPath!);
+        // [crash fix 2026-07-26] one built tree per projectile model EVER; every projectile shares its
+        // mesh (SharedMeshCache) — the per-spawn MD3 ArrayMesh was residual finalizer churn (#3). The
+        // procedural bodies below already share via _bodyResCache; this brings the MD3 family in line.
+        MeshInstance3D? model = SharedMeshCache.Instantiate(desc.ModelPath!, () => ModelFactory(desc.ModelPath!));
         if (model is null)
             return null;
         model.Name = "Body";
@@ -662,19 +665,28 @@ public partial class ProjectileRenderer : Node3D
     /// Build one hidden body + trail-layer set per projectile type for the offscreen GPU warm pass (A2,
     /// <see cref="GpuWarmPass"/>). Each references the SAME cached Resources a real projectile uses
     /// (<c>_bodyResCache</c> / the effectinfo trail materials), so rendering them once offscreen compiles the
-    /// trail + body draw pipelines — the first rocket/plasma/grenade in play then hits a warm GPU. The procedural
-    /// body is used (not the real model, which is an asset-load concern handled separately). Nodes are NOT
-    /// parented here; the warm pass owns, renders, and frees them.
+    /// trail + body draw pipelines — the first rocket/plasma/grenade in play then hits a warm GPU. Both the
+    /// procedural body AND the real model body (when <see cref="ModelFactory"/> is wired) are warmed: the
+    /// bolt models (laser.mdl / elaser.mdl / hlac_bullet.md3) compile brand-new autosprite-deform
+    /// ShaderMaterials that only exist on the model path, so warming just the procedural stand-in would
+    /// leave the first blaster/electro shot to eat the pipeline compile. Nodes are NOT parented here; the
+    /// warm pass owns, renders, and frees them.
     /// </summary>
     public List<Node3D> BuildWarmupInstances()
     {
         // A nominal forward velocity so the effectinfo path's velocity-inheriting blocks build their materials.
         Vector3 nominal = new(0f, 0f, -1200f);
         var list = new List<Node3D>();
+        var warmedModels = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
         foreach (PType t in System.Enum.GetValues<PType>())
         {
             ProjectileCatalog.Desc d = ProjectileCatalog.DescOf(t);
             list.Add(BuildBody(d));
+            // The real model body, deduped by path (elaser.mdl serves two types). Null-safe: headless /
+            // asset-less runs have no ModelFactory and skip straight past.
+            if (!string.IsNullOrEmpty(d.ModelPath) && warmedModels.Add(d.ModelPath!)
+                && BuildModelBody(d) is { } model)
+                list.Add(model);
             foreach (GpuParticles3D e in BuildTrails(d, nominal))
                 list.Add(e);
         }

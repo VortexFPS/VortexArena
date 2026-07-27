@@ -2915,6 +2915,15 @@ public sealed partial class NetGame : Node3D
             return;
         _shutDown = true;
 
+        // Motion-trace close: the toggle-off path in MotionTrace never runs on a quit/map-change, and the
+        // writer buffers 128 lines — without this a short capture (or any session tail) is silently lost.
+        if (_motionTrace is not null)
+        {
+            try { _motionTrace.Flush(); _motionTrace.Dispose(); } catch { /* best-effort on teardown */ }
+            _motionTrace = null;
+            _mtHave = false;
+        }
+
         // #19: if we tore down while the solo-local auto-pause was holding slowmo at 0, restore it so the engine
         // doesn't stay frozen for the next map (mirrors TimeoutController.ResetSlowmoOnShutdown).
         if (_localPauseSlowmo is not null && _serverWorld is not null)
@@ -3951,7 +3960,7 @@ public sealed partial class NetGame : Node3D
             Callable.From(() => MapChangeRequested?.Invoke(map, gametype, bots, skill, campId, campIdx)).CallDeferred();
         }
         // r16 rubberband diagnostic — last so it records this frame's FINAL camera/prediction state.
-        MotionTrace(dt, slew);
+        MotionTrace(dt, rawDt, slew);
 
     }
 
@@ -4094,13 +4103,22 @@ public sealed partial class NetGame : Node3D
     // ticks (server catch-up bursts), cam/pred speeds (the OWN view's rendered velocity — waves here =
     // own-movement rubberband), pred_err (reconcile corrections), remote_speed (one tracked remote entity's
     // rendered velocity — waves here with a steady cam = entity-interp rubberband).
+    //
+    // v2 (presentation-seam falsification): cam_speed divides displacement by the SAME dt that advanced the
+    // camera, so it is flat by construction and blind to dt-vs-display divergence. The v2 columns carry the
+    // un-normalized signals instead — cam_step/yaw_step (what one displayed frame embodies), raw_dt (before
+    // ConditionDt), and qpc_s (QueryPerformanceCounter seconds, the SAME clock PresentMon --qpc_time stamps
+    // presents with), so tools/wobble-report.py can join this trace against a PresentMon capture and measure
+    // displayed motion on the DISPLAY timeline. Filename is timestamped: an A/B can no longer overwrite the
+    // previous leg (the r16 smoothdt-0 segment was lost exactly that way).
     private System.IO.StreamWriter? _motionTrace;
     private NVec3 _mtPrevCam, _mtPrevPred, _mtPrevRemote;
+    private float _mtPrevYaw;
     private int _mtRemoteId = -1;
     private int _mtLines;
     private bool _mtHave;
 
-    private void MotionTrace(float dt, float slew)
+    private void MotionTrace(float dt, float rawDt, float slew)
     {
         bool on = (_sharedCvars?.GetFloat("cl_motion_trace") ?? 0f) != 0f;
         if (!on)
@@ -4122,9 +4140,12 @@ public sealed partial class NetGame : Node3D
         {
             try
             {
-                string path = UserPaths.Resolve("motion_trace.csv");
+                string path = UserPaths.Resolve(
+                    $"motion_trace_{System.DateTime.Now:yyyyMMdd_HHmmss}.csv");
                 _motionTrace = new System.IO.StreamWriter(path, append: false) { AutoFlush = false };
-                _motionTrace.WriteLine("t,dt_ms,clock_err_ms,slew_pct,ticks,cam_speed,pred_speed,pred_err,remote_speed");
+                _motionTrace.WriteLine(
+                    "t,qpc_s,dt_ms,raw_dt_ms,clock_err_ms,slew_pct,ticks," +
+                    "cam_speed,cam_step,yaw_step,pred_speed,pred_err,remote_speed,maxfps,drift_ms");
                 XonoticGodot.Common.Diagnostics.Log.Info($"[motiontrace] recording -> {path}");
             }
             catch (System.Exception ex)
@@ -4145,6 +4166,7 @@ public sealed partial class NetGame : Node3D
         float remoteSpeed = -1f;
         NVec3 remote = default;
         bool haveRemote = _mtRemoteId >= 0 && _client.SampleRemote(_mtRemoteId, _renderClock, out remote, out _);
+        bool remotePrevValid = haveRemote; // prev sample was the SAME target -> a remote speed is derivable
         if (!haveRemote)
         {
             // Prefer a PLAYER entity (a bot in motion) — the first trace tracked the lowest id, which was a
@@ -4155,24 +4177,33 @@ public sealed partial class NetGame : Node3D
                     && (_mtRemoteId < 0 || id < _mtRemoteId))
                     _mtRemoteId = id;
             haveRemote = _mtRemoteId >= 0 && _client.SampleRemote(_mtRemoteId, _renderClock, out remote, out _);
-            _mtHave = false; // new target (or none): don't derive a speed across the switch
+            // NOTE (v2 fix): this used to reset _mtHave — which, with NO remote player in the session
+            // (0-bot capture), re-ran every frame and suppressed EVERY row: the whole trace came out
+            // empty. Only the remote-speed column is invalid across a target switch, so only it is gated.
         }
 
         if (_mtHave)
         {
             float camSpeed = (cam - _mtPrevCam).Length() / dt;
             float predSpeed = (pred - _mtPrevPred).Length() / dt;
-            if (haveRemote)
+            if (remotePrevValid)
                 remoteSpeed = (remote - _mtPrevRemote).Length() / dt;
+            // v2: raw per-frame steps (NOT divided by dt — see the header note) + the PresentMon join clock.
+            double qpcS = System.Diagnostics.Stopwatch.GetTimestamp()
+                / (double)System.Diagnostics.Stopwatch.Frequency;
+            float camStep = (cam - _mtPrevCam).Length();
+            float yawStep = Mathf.Wrap(_viewAngles.Y - _mtPrevYaw, -180f, 180f);
             _motionTrace.WriteLine(
-                $"{_renderClock:F4},{dt * 1000f:F2},{errMs:F2},{slew * 100f:F2},{ticks}," +
-                $"{camSpeed:F1},{predSpeed:F1},{predErr:F2},{remoteSpeed:F1}");
+                $"{_renderClock:F4},{qpcS:F6},{dt * 1000f:F3},{rawDt * 1000f:F3},{errMs:F2},{slew * 100f:F2},{ticks}," +
+                $"{camSpeed:F1},{camStep:F3},{yawStep:F4},{predSpeed:F1},{predErr:F2},{remoteSpeed:F1}," +
+                $"{Godot.Engine.MaxFps},{_dtDrift * 1000f:F3}");
             if (++_mtLines % 128 == 0)
                 _motionTrace.Flush(); // survive a quit without the toggle-off close
         }
 
         _mtPrevCam = cam;
         _mtPrevPred = pred;
+        _mtPrevYaw = _viewAngles.Y;
         if (haveRemote) _mtPrevRemote = remote;
         _mtHave = true;
     }

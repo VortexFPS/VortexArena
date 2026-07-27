@@ -157,6 +157,10 @@ a { color: #e0a458; }
     <b>v1.3:</b> real-time / previewable lighting answered (§10.1 ladder — progressive GPU lightmapper elevated),
     spawn-point presence pads (§8.7), and the gameplay layer (§12): deterministic item placement, player-count-aware
     map selection, demo heatmaps.<br>
+    <b>Status 2026-07-27 — E0/E1/E2 IMPLEMENTED</b> on <code>feature/map-editor</code>: the <code>.vmap</code>
+    container + brush CSG kernel, the <code>.bsp</code> and <code>.map</code> importers, the editor gametype with
+    the EDIT/PLAYTEST toggle, and the world-space alignment grid. Marked <span class="pill rec">built</span> below
+    where shipped. Next: E3 (selection &amp; move, convex plane-refit).<br>
     Companion screenshots: the current renderer's output of the courtyard map vs. the decorated concept of the same shot (referenced throughout as <b>CURRENT</b> and <b>CONCEPT</b>).
   </div>
 </div></div>
@@ -813,7 +817,8 @@ strict split between <b>truth</b> (edited, versioned, small) and <b>bake</b> (de
 
 <pre><code>mymap.vmap/
   map.json          <span class="cm">— manifest, format version, zones, environment/sun settings, gameplay metadata (§12.2)</span>
-  geometry.bin      <span class="cm">— brushes, patches, entities (imported or later edited)   [truth]</span>
+  geometry.json     <span class="cm">— brushes (planes + materials + projections) and patches  [truth]</span>
+  entities.json     <span class="cm">— classnames, key/values, brush-entity ownership          [truth]</span>
   materials.json    <span class="cm">— base-material grammar, layer stacks, per-zone palettes  [truth]</span>
   decor.json        <span class="cm">— generator rules + params + seeds, prop rules, amplification decisions [truth]</span>
   paint/            <span class="cm">— sparse delta tiles (§7): mask strokes, freezes         [truth]</span>
@@ -852,7 +857,12 @@ maintain. Each connected player is in one of two states, swapped with a single t
           speed steps) plus optional scroll-wheel speed. Gameplay input is repurposed for tools via an editor
           <i>bind layer</i> pushed over the normal binds (BindTable is already the single chokepoint): attack =
           tool primary (grab/drag), attack2 = context/alt-constraint, use = cycle tool — all rebindable, live binds
-          shown in the HUD (§11.6).</td></tr>
+          shown in the HUD (§11.6).
+          <br><b>The editor reuses the WEAPON binds</b> while free-flying: you cannot shoot and edit at the same
+          time, so keys 1–9 and the mousewheel are dead weight in EDIT and become the editor's controls. This
+          means the editor inherits whatever keys the mapper already has in muscle memory instead of demanding a
+          second bind set — and PLAYTEST is real play, so weapons behave normally there. Shipped in E2: wheel
+          steps the grid size, 1 toggles the grid, 2 toggles EDIT/PLAYTEST; 3–9 are held for the E3 tools.</td></tr>
   <tr><td><b>PLAYTEST</b></td>
       <td>A real player entity spawned at the camera position with full movement physics — run, jump, bhop the space
           you just edited; weapons optional by cvar. Toggling back returns to EDIT at the exit position. The swap is
@@ -893,10 +903,18 @@ they're view-agnostic ops; only the picking and axis constraints differ per view
   <li><b>Rotate mode</b> — three grabbable rotation rings around the selection center; click a ring, drag to rotate
       about that axis; angle snapping (5°/15° steps) obeys the same snap toggle; live angle readout at the cursor.
       Numeric entry (type an angle/distance mid-drag) is a cheap, high-value add.</li>
-  <li><b>Grid &amp; align</b> — global grid in power-of-two steps (1u–64u, Radiant convention); toggleable; an
-      <i>align-to-grid</i> action snaps the current selection. The grid renders in-world as a plane overlay anchored
-      to the working surface, fading with distance (so it doesn't wallpaper the map), and its state (on/off · size ·
-      keybind) always shows in the HUD.</li>
+  <li><b>Grid &amp; align</b> <span class="pill rec">built — E2</span> — a grid fixed in <b>world space that
+      geometry receives</b>: every surface shows the lines where the global grid planes cut through it, so a wall,
+      a slope and a stair display one continuous lattice you can align across the whole map. Power-of-two steps
+      (1u–1024u, Radiant convention), toggleable, fading with distance so it doesn't wallpaper the level; state
+      (on/off · size · keybind) always in the HUD. An <i>align-to-grid</i> action snaps the selection (E3).
+      <br><b>How</b>: deliberately not a projected texture (which would move with the surface and scale with its
+      UVs) and not a screen overlay (which would float in front of the level instead of lying on it). It is one
+      full-screen pass that reads the depth buffer, reconstructs each pixel's world position and lights pixels
+      near a grid plane — so every visible surface is covered automatically, brushes and props and player models
+      alike, with no per-material work and no second copy of the geometry. Line width comes from screen-space
+      derivatives (<code>fwidth</code>) of that reconstructed position, which is what keeps lines ~1px on a
+      distant floor and on a wall seen edge-on rather than aliasing into shimmer.</li>
   <li><b>Geometry-to-geometry snapping</b> — while dragging, candidate targets within a threshold pull the drag:
       vertex→vertex, vertex→edge, edge→edge, and face-plane→face-plane coplanar snap. The active snap is visualized
       (target highlight + tick). Toggleable with its own keybind (shown in the HUD with the on/off state), threshold a
@@ -1108,18 +1126,18 @@ and can proceed in parallel.</p>
 
 <table>
   <tr><th style="width:8%">Phase</th><th style="width:38%">Deliverable</th><th>Proves / unlocks</th><th style="width:12%">Size</th></tr>
-  <tr><td><b>E0</b></td>
+  <tr><td><b>E0</b> <span class="pill rec">built</span></td>
       <td><b><code>.vmap</code> package core + .bsp importer</b> (§11.1–11.2): container read/write (dir + zip), truth
           sections for geometry/entities/materials, bake regeneration through the existing MapLoader machinery,
           <code>vmap_import &lt;map&gt;</code> console command, engine loads a <code>.vmap</code> end-to-end.</td>
       <td>The format exists and round-trips; every later phase writes into it. Any stock BSP becomes editable input.</td>
       <td>~1–2 wk</td></tr>
-  <tr><td><b>E1</b></td>
+  <tr><td><b>E1</b> <span class="pill rec">built</span></td>
       <td><b>.map importer</b> (§11.1): NetRadiant map syntax parser, CSG plane→winding evaluation, detail/func_group
           structure, patch defs (q3map2 source in <code>Base/netradiant</code> as reference).</td>
       <td>Clean authoring-truth input for new maps; better detection signals for amplification later.</td>
       <td>~1–1.5 wk</td></tr>
-  <tr><td><b>E2</b></td>
+  <tr><td><b>E2</b> <span class="pill rec">built</span></td>
       <td><b>Editor game mode shell</b> (§11.3): <code>editor</code> mode, EDIT free-fly (reused spectator fly branch,
           speed ladder) ↔ PLAYTEST transmute toggle preserving position/angles, editor bind layer, HUD frame with
           state banner + live keybinds, and the first render-mode toggles (§11.5: Base / Flat + wireframe &amp; vertex

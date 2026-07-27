@@ -73,8 +73,7 @@ public partial class MenuRoot : Control
 
         // The skinned mouse cursor (cursor.tga + its hotspot), like the engine's draw_setMousePointer. Global,
         // so it persists across the menu; in a match the mouse is captured/hidden so it doesn't show there.
-        if (MenuSkin.Cursor is { } cursor)
-            Input.SetCustomMouseCursor(cursor, Input.CursorShape.Arrow, MenuSkin.CursorHotspot);
+        ApplySkinCursor();
 
         // Size to the window now and on every resize, so the full-rect children (background + screens) fill it.
         FitToViewport();
@@ -118,13 +117,25 @@ public partial class MenuRoot : Control
     /// <c>m_init_delayed</c> re-running on a restart; the QC "Set language"/"Set skin" buttons then re-open the
     /// User settings via the trailing <c>menu_cmd languageselect</c>/<c>skinselect</c>.
     /// </summary>
+    /// <summary>
+    /// Install the skinned pointer, falling back to the OS arrow when the skin has no usable cursor image.
+    /// SetCustomMouseCursor with a zero-sized texture installs an INVISIBLE cursor rather than failing, so a
+    /// missing or broken cursor.tga otherwise leaves the menu with no visible pointer at all.
+    /// </summary>
+    private static void ApplySkinCursor()
+    {
+        if (MenuSkin.Cursor is { } cursor && cursor.GetWidth() > 0 && cursor.GetHeight() > 0)
+            Input.SetCustomMouseCursor(cursor, Input.CursorShape.Arrow, MenuSkin.CursorHotspot);
+        else
+            Input.SetCustomMouseCursor(null, Input.CursorShape.Arrow);
+    }
+
     public void Restart()
     {
         MenuSkin.Reload();
         Theme = MenuSkin.Theme; // re-built lazily from the (possibly new) skin; cascades to all descendants
 
-        if (MenuSkin.Cursor is { } cursor)
-            Input.SetCustomMouseCursor(cursor, Input.CursorShape.Arrow, MenuSkin.CursorHotspot);
+        ApplySkinCursor();
 
         // Rebuild the backdrop (the skin's background.tga may have changed) and re-show the main menu, which
         // reconstructs every screen label through the (possibly new) active language catalog.

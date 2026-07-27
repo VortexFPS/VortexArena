@@ -1649,6 +1649,14 @@ public sealed partial class NetGame : Node3D
         _camera = new Camera3D { Name = "Camera3D", Fov = vFov, Near = 1f, Current = true };
         AddChild(_camera);
 
+        // (E3/E5) The editor nodes are constructed in SetupRender, which runs BEFORE this method — so the
+        // Attach calls there handed them a null camera, and both silently stood down every frame: the
+        // controller early-returns without a camera (no picking, so no hover highlight and no drag) and the
+        // ortho view refuses to open. Bind them to the real camera here, where it exists.
+        _editor?.Attach(_camera);
+        if (_editor is not null && _editorGizmos is not null)
+            _editorOrtho?.Attach(_camera, _editor, _editorGizmos);
+
         // First-person weapon view-model hung off the camera (CSQC viewmodel rendered at the view origin). Built
         // here because SetupRender ran first, so _render.Effects is live (ClientWorld._Ready set it synchronously
         // on AddChild). The weapon model is installed/swapped from the networked active weapon each frame in
@@ -5594,7 +5602,10 @@ public sealed partial class NetGame : Node3D
         // (p == null) NetHud stays the always-on fallback.
         bool havePlayer = p is not null;
         if (_hud is not null && GodotObject.IsInstanceValid(_hud))
-            _hud.SuppressCrosshairAndHealth = havePlayer;
+            // The editor picks along the crosshair, so a free-flying mapper needs one. NetHud's lightweight
+            // vector crosshair is the right one here: the skinned HUD's is player-bound and an observer has no
+            // player, which is why aiming in the editor had nothing to aim WITH.
+            _hud.SuppressCrosshairAndHealth = havePlayer && !IsEditorFreeFly;
 
         // HealthArmorPanel reads the Player's resources, so it self-blanks with no Player (safe to leave visible).
         // CrosshairPanel, however, draws its reticle even without a Player (it doesn't gate on Player) — so on a

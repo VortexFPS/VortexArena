@@ -99,6 +99,13 @@ public static class Cvars
         // Registered (like the step-up knobs) so the console/menu can set it and the listen-server cvar bridge applies it.
         new("slowmo", "1", Notify, "global time scale: <1 slow-motion, >1 fast, 1 = real time, 0 = paused"),
 
+        // DP overload semantics (frametime parity audit 2026-07-11; read live in ServerNet.StepWorld). DP sheds
+        // sim time under overload (sv_main.c:2604 caps the owed backlog at 0.1s and discards the rest) and
+        // wall-clock-budgets the catch-up loop (:2676 aborttime) — the game runs briefly, uniformly slow instead
+        // of paying its time-debt with burst ticks that spike the already-slow frames (the r16 wobble oscillator).
+        new("sv_overload_timedrop", "1", "1 = DP parity: cap owed sim backlog at 0.1s, shedding the excess (overload = brief uniform slow-motion); 0 = legacy preserve-and-burst catch-up"),
+        new("sv_catchup_wallbudget_ms", "0", "wall-clock ms a frame may spend running catch-up ticks before deferring the rest (first owed tick always runs; DP aborttime analogue); 0 = unlimited (default — the 2026-07-11 playtest found no felt benefit; the timedrop + soft cap already bound catch-up)"),
+
         // [T45] warpzone self-targeting (lib/warpzone/server.qc WarpZone_InitStep_FindTarget). Behaviour is already
         // correct without this entry (Warpzone.cs reads it via Api.Cvars.GetFloat, which returns 0 when unset), but
         // registering it makes it visible to cvarlist/the menu and lets the listen-server `set` bridge apply changes.
@@ -335,6 +342,10 @@ public static class Cvars
         new("bot_ai_enemydetectioninterval_stickingtoenemy", "4"),
         new("bot_ai_enemydetectionradius", "10000"),
         new("bot_ai_chooseweaponinterval", "0.5"),
+        // Port benchmark/demo knob (NOT a Base cvar): >0 = seconds per weapon; bots step through their
+        // owned loadout one weapon at a time (entity slot phases them apart) instead of range-picking.
+        // Used by the perf-run demo scenario together with g_weaponarena; keep 0 for normal play.
+        new("bot_ai_weapon_rotate", "0"),
         new("bot_ai_dangerdetectioninterval", "0.25"),
         new("bot_ai_dangerdetectionupdates", "64"),
         new("bot_ai_friends_aware_pickup_radius", "500"),

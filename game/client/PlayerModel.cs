@@ -279,6 +279,42 @@ public partial class PlayerModel : Node3D
         if (Active) { _player.Free(); Active = false; }
     }
 
+    /// <summary>
+    /// [crash fix 2026-07-26] Deterministic MAIN-THREAD release of this model's exclusively-owned
+    /// native resources — the IqmBuilder-built body <see cref="ArrayMesh"/> and its <see cref="Skin"/>
+    /// (one fresh pair per PlayerModel; the ownership audit verified there is NO pool and NO corpse
+    /// handoff). Without this they ride GodotSharp finalizers on the .NET finalizer thread, whose
+    /// RenderingServer::free races the render loop (the 0xC0000374 family). Everything SHARED is
+    /// excluded: surface materials/textures (AssetSystem caches), the AnimationLibrary
+    /// (AssetLoader parse cache), and the static placeholder mesh/material (by-reference check).
+    /// </summary>
+    public override void _ExitTree()
+    {
+        ReleaseSkeleton(); // idempotent (guarded by Active) — normal teardown already called it
+        DisposeOwnedVisuals(this);
+        _alphaMeshes.Clear();
+        _alphaMeshesChildGen = -1;
+    }
+
+    private static void DisposeOwnedVisuals(Node n)
+    {
+        if (n is MeshInstance3D mi)
+        {
+            if (mi.Skin is Skin skin)
+            {
+                mi.Skin = null;
+                skin.Dispose();
+            }
+            if (mi.Mesh is Mesh m && !ReferenceEquals(m, PlaceholderMesh))
+            {
+                mi.Mesh = null;
+                m.Dispose();
+            }
+        }
+        foreach (Node c in n.GetChildren())
+            DisposeOwnedVisuals(c);
+    }
+
     // --- per-entity alpha render (W1 alpha-net seam) -----------------------------------------------------
     // The networked Entity.Alpha (default 1 = opaque; the Cloaked mutator seeds default_player_alpha 0.25, fades
     // set < 1) is rendered as a per-instance transparency on every mesh under this model. We use

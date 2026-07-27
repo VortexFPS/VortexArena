@@ -601,5 +601,8 @@ public sealed class BotNavigation
     /// shallow ford counts as directly reachable (no waypoints needed).
     /// </summary>
     private bool CanWalkStraight(Vector3 a, Vector3 b)
-        => BotTracewalk.CanWalk(a, b, Mins, Maxs);
+        // Strategy-budgeted (variance program 2026-07-11): a straight-to-goal shortcut beyond the budget is
+        // never the right answer anyway (the router owns long routes) — and the unbounded walk toward a far
+        // goal was the melt-class 256-step × 4-trace tracewalk. See WaypointNetwork.StrategyWalkMaxDist.
+        => BotTracewalk.CanWalk(a, b, Mins, Maxs, maxWalkDistance: WaypointNetwork.StrategyWalkMaxDist);
 }

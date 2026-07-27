@@ -39,6 +39,44 @@ public sealed class SimulationLoop
     /// </summary>
     public int MaxTicksPerFrame { get; set; } = MaxTicksPerAdvance;
 
+    /// <summary>
+    /// DP overload semantics #1 (sv_main.c:2604): cap the owed-time backlog at this many seconds each Advance,
+    /// DISCARDING the excess (DP's <c>sv.perf_acc_lost</c>) — under sustained overload the game deliberately runs
+    /// slow-motion instead of paying the debt with burst catch-up ticks (which spike exactly the frames that are
+    /// already slow: the measured r16 cost-wave oscillator). DP hardcodes 0.1; &lt;= 0 restores the legacy
+    /// preserve-and-burst behaviour (backlog kept up to the <see cref="MaxTicksPerAdvance"/> spiral guard).
+    /// Driven by the <c>sv_overload_timedrop</c> cvar (ServerNet.StepWorld).
+    /// </summary>
+    public float BacklogDropSeconds { get; set; }
+
+    /// <summary>
+    /// DP overload semantics #2 (sv_main.c:2636/2676 <c>aborttime</c>): stop STARTING catch-up ticks once this much
+    /// wall-clock time has elapsed inside the current Advance (the first owed tick always runs — progress must be
+    /// made). DP's budget is a 100 ms freeze guard; ours defaults much tighter (via <c>sv_catchup_wallbudget_ms</c>)
+    /// because the goal is a flat per-frame cost, not just avoiding a freeze: deferred ticks stay owed and either
+    /// run on later frames or get shed by <see cref="BacklogDropSeconds"/>. 0 = unlimited (legacy).
+    /// </summary>
+    public float CatchupWallBudgetSeconds { get; set; }
+
+    /// <summary>Accumulated sim seconds shed by <see cref="BacklogDropSeconds"/> (DP <c>sv.perf_acc_lost</c>) +
+    /// spiral-guard drops. Diagnostic only — read by hitch dumps / perf tooling.</summary>
+    public double TimeLostSeconds { get; private set; }
+
+    /// <summary>Wall-clock source (monotonic seconds) for <see cref="CatchupWallBudgetSeconds"/> — HOST-INJECTED
+    /// (ServerNet supplies the real timer; tests drive it deterministically). Kept out of the engine so the
+    /// simulation source stays free of non-deterministic APIs (DeterminismTests); the budget is inert until a
+    /// host provides a clock.</summary>
+    public Func<double>? WallClock;
+
+    /// <summary>
+    /// WS1 per-tick gate (sv_threaded): when set, <see cref="Advance"/> holds this around EACH <see cref="Tick"/>
+    /// instead of the caller holding it around the whole step — so a cross-thread reader (the render thread's
+    /// per-trace <c>ConcurrencyGate</c>, which is the SAME object) waits at most ONE tick, not a multi-tick
+    /// catch-up + encode. Each tick stays atomic; between ticks the world is a consistent post-tick state.
+    /// Null (the default / unthreaded path) = no locking, byte-identical behavior.
+    /// </summary>
+    public object? TickGate;
+
     private readonly EngineServices _services;
     private readonly EntityService _entities;
     private readonly PhysicsContext _physics;
@@ -158,16 +196,36 @@ public sealed class SimulationLoop
         // its input cadence by the same factor so prediction and authority stay in lockstep.
         _accumulator += realDelta * MathF.Max(0f, TimeScale);
 
+        // DP overload semantics #1 (sv_main.c:2604, cvar sv_overload_timedrop): cap the owed backlog and SHED the
+        // excess instead of paying it back with burst ticks. Under sustained overload the sim runs uniformly
+        // slightly slow (DP: "the game will slow down if the server is taking too long") — the smooth failure
+        // mode — where the legacy burst spikes exactly the frames that are already slow (the r16 oscillator).
+        if (BacklogDropSeconds > 0f && _accumulator > BacklogDropSeconds)
+        {
+            TimeLostSeconds += _accumulator - BacklogDropSeconds;
+            _accumulator = BacklogDropSeconds;
+        }
+
         // SOFT cap (B3): run at most MaxTicksPerFrame ticks this render frame, but DON'T drop the remainder —
         // it drains over the next frames (clamped to the hard MaxTicksPerAdvance so a stale-default can't exceed
         // the spiral guard). On the interactive path (cap 4) this turns a post-hitch 16-tick spike into a few
         // calm frames; with the default cap it's the original behaviour.
+        // DP overload semantics #2 (sv_main.c:2676 aborttime, cvar sv_catchup_wallbudget_ms): additionally stop
+        // STARTING catch-up ticks once this Advance has spent its wall-clock budget — the tick-count cap alone
+        // can't keep frame cost flat when a combat tick costs 3x a quiet one. The first owed tick always runs.
         int softLimit = System.Math.Clamp(MaxTicksPerFrame, 1, MaxTicksPerAdvance);
+        bool budgeted = CatchupWallBudgetSeconds > 0f && WallClock is not null;
+        double budgetStart = budgeted ? WallClock!() : 0.0;
         int ticks = 0;
         while (_accumulator >= TicRate && ticks < softLimit)
         {
+            if (ticks > 0 && budgeted && WallClock!() - budgetStart >= CatchupWallBudgetSeconds)
+                break; // owed time stays banked: later frames drain it, or BacklogDropSeconds sheds it
             _accumulator -= TicRate;
-            Tick();
+            if (TickGate is null)
+                Tick();
+            else
+                lock (TickGate) Tick(); // WS1: per-tick hold — cross-thread readers wait ≤ one tick
             ticks++;
         }
 
@@ -180,6 +238,7 @@ public sealed class SimulationLoop
             // turned a client input burst into standing input latency (see InputQueuePolicy). Visible in hitch dumps.
             XonoticGodot.Common.Diagnostics.Prof.Event(
                 $"sim: backlog dropped ({_accumulator * 1000f:0}ms behind)");
+            TimeLostSeconds += _accumulator;
             _accumulator = 0f;
         }
 

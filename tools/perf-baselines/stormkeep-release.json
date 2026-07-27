@@ -1,0 +1,1695 @@
+{
+ "session": "session-20260706-190713",
+ "log": "C:\\Users\\Bryan\\Projects\\Xonotic\\XonoticGodot\\.claude\\worktrees\\sweet-chaum-b1d580\\_scratch\\perf-userdir\\logs\\session-20260706-190713.log",
+ "frames": 17218,
+ "duration_s": 98.962,
+ "avg_fps": 191.61673981110982,
+ "p50_ms": 4.83,
+ "p95_ms": 8.11,
+ "p99_ms": 8.33,
+ "p999_ms": 60.09,
+ "low1_fps": 120.04801920768307,
+ "low01_fps": 16.641704110500914,
+ "max_ms": 189.57,
+ "hitch_time_ms": 3098.19,
+ "slow_frames": 101,
+ "slow_cut_ms": 12.0,
+ "old_schema": false,
+ "top_offenders": [
+  [
+   "iqm.mesh",
+   1482.08
+  ],
+  [
+   "proc:other",
+   635.9700000000004
+  ],
+  [
+   "ng.process",
+   540.6799999999997
+  ],
+  [
+   "stream.predecode",
+   182.31999999999996
+  ],
+  [
+   "cev.process",
+   96.26
+  ],
+  [
+   "iqm.anims",
+   74.33
+  ],
+  [
+   "particles.cpu",
+   33.27
+  ],
+  [
+   "hud.trueaim",
+   22.07
+  ]
+ ],
+ "alloc_total_mb": 1756.0390625,
+ "alloc_storms": [
+  {
+   "t": 3.423,
+   "mb": 229.8994140625,
+   "top1": "iqm.mesh",
+   "gc2": 1
+  },
+  {
+   "t": 1.003,
+   "mb": 104.05078125,
+   "top1": "proc:other",
+   "gc2": 2
+  },
+  {
+   "t": 14.889,
+   "mb": 49.2470703125,
+   "top1": "ng.process",
+   "gc2": 0
+  },
+  {
+   "t": 1.233,
+   "mb": 48.787109375,
+   "top1": "proc:other",
+   "gc2": 0
+  },
+  {
+   "t": 14.874,
+   "mb": 40.2900390625,
+   "top1": "ng.process",
+   "gc2": 0
+  },
+  {
+   "t": 6.407,
+   "mb": 34.0146484375,
+   "top1": "iqm.mesh",
+   "gc2": 1
+  },
+  {
+   "t": 7.813,
+   "mb": 17.6884765625,
+   "top1": "iqm.mesh",
+   "gc2": 0
+  },
+  {
+   "t": 19.388,
+   "mb": 16.3193359375,
+   "top1": "stream.predecode",
+   "gc2": 0
+  },
+  {
+   "t": 15.428,
+   "mb": 16.2080078125,
+   "top1": "stream.predecode",
+   "gc2": 0
+  },
+  {
+   "t": 7.205,
+   "mb": 12.0673828125,
+   "top1": "iqm.mesh",
+   "gc2": 0
+  }
+ ],
+ "gc": {
+  "gc0": 170,
+  "gc1": 42,
+  "gc2": 6
+ },
+ "gc_pause_ms": 411.39,
+ "pipe_total": 133,
+ "pipe_sync": [
+  {
+   "t": 3.423,
+   "n": 39,
+   "ms": 78.38
+  },
+  {
+   "t": 7.205,
+   "n": 5,
+   "ms": 100.0
+  },
+  {
+   "t": 7.415,
+   "n": 2,
+   "ms": 147.67
+  },
+  {
+   "t": 8.727,
+   "n": 1,
+   "ms": 102.23
+  },
+  {
+   "t": 12.25,
+   "n": 4,
+   "ms": 102.45
+  },
+  {
+   "t": 12.447,
+   "n": 5,
+   "ms": 74.34
+  },
+  {
+   "t": 12.456,
+   "n": 1,
+   "ms": 42.16
+  },
+  {
+   "t": 14.853,
+   "n": 1,
+   "ms": 12.87
+  },
+  {
+   "t": 16.561,
+   "n": 1,
+   "ms": 6.3
+  },
+  {
+   "t": 16.758,
+   "n": 1,
+   "ms": 8.33
+  },
+  {
+   "t": 21.81,
+   "n": 1,
+   "ms": 8.33
+  },
+  {
+   "t": 26.593,
+   "n": 3,
+   "ms": 31.58
+  },
+  {
+   "t": 36.664,
+   "n": 1,
+   "ms": 8.33
+  },
+  {
+   "t": 37.88,
+   "n": 1,
+   "ms": 10.5
+  },
+  {
+   "t": 39.846,
+   "n": 1,
+   "ms": 8.33
+  }
+ ],
+ "draws_p50": 396.0,
+ "postload_secs": 20.0,
+ "postload": {
+  "frames": 15642,
+  "duration_s": 79.962,
+  "avg_fps": 195.59609918205268,
+  "p50_ms": 4.87,
+  "p95_ms": 7.88,
+  "p99_ms": 8.33,
+  "p999_ms": 8.59,
+  "low1_fps": 120.04801920768307,
+  "low01_fps": 116.41443538998836,
+  "max_ms": 31.58,
+  "hitch_time_ms": 134.93,
+  "slow_frames": 10,
+  "slow_cut_ms": 12.0,
+  "draws_p50": 408.0,
+  "census": {
+   "CPU-LOGIC": 94,
+   "MIXED": 38,
+   "PIPELINE-COMPILE": 3,
+   "VSYNC/PRESENT": 4
+  },
+  "recovery": 21
+ },
+ "logdata": {
+  "events": [
+   {
+    "t": 12.9,
+    "cls": "GC-PAUSE",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 12.9,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 12.9,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 12.9,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 14.9,
+    "cls": "PIPELINE-COMPILE",
+    "ms": 12.9,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 14.9,
+    "cls": "MIXED",
+    "ms": 18.4,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 14.9,
+    "cls": "CPU-LOGIC",
+    "ms": 16.8,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.0,
+    "cls": "VSYNC/PRESENT",
+    "ms": 34.1,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.0,
+    "cls": "PIPELINE-COMPILE",
+    "ms": 46.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.0,
+    "cls": "CPU-LOGIC",
+    "ms": 14.4,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.0,
+    "cls": "ASSET-BUILD",
+    "ms": 12.4,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.0,
+    "cls": "MIXED",
+    "ms": 11.1,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.0,
+    "cls": "CPU-LOGIC",
+    "ms": 11.1,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.0,
+    "cls": "VSYNC/PRESENT",
+    "ms": 16.7,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 16.7,
+    "n": 5,
+    "rec": true
+   },
+   {
+    "t": 15.1,
+    "cls": "MIXED",
+    "ms": 16.7,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.1,
+    "cls": "ASSET-BUILD",
+    "ms": 14.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.1,
+    "cls": "MIXED",
+    "ms": 14.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.2,
+    "cls": "MIXED",
+    "ms": 14.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 15.2,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.2,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.2,
+    "cls": "CPU-LOGIC",
+    "ms": 9.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.2,
+    "cls": "MIXED",
+    "ms": 9.5,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.3,
+    "cls": "MIXED",
+    "ms": 11.1,
+    "n": 3,
+    "rec": false
+   },
+   {
+    "t": 15.3,
+    "cls": "VSYNC/PRESENT",
+    "ms": 9.5,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 15.3,
+    "cls": "GC-PAUSE",
+    "ms": 8.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.3,
+    "cls": "MIXED",
+    "ms": 8.1,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.3,
+    "cls": "MIXED",
+    "ms": 9.9,
+    "n": 3,
+    "rec": false
+   },
+   {
+    "t": 15.3,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.3,
+    "cls": "MIXED",
+    "ms": 8.1,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.5,
+    "cls": "CPU-LOGIC",
+    "ms": 8.2,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.5,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.5,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 15.5,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 18.2,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 18.2,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 18.3,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 18.3,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 18.4,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 18.4,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 18.4,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 18.5,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.1,
+    "cls": "CPU-LOGIC",
+    "ms": 18.0,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.1,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 2,
+    "rec": true
+   },
+   {
+    "t": 19.1,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.3,
+    "cls": "GC-PAUSE",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.3,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.3,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.3,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.3,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.5,
+    "cls": "CPU-LOGIC",
+    "ms": 11.0,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.5,
+    "cls": "MIXED",
+    "ms": 9.7,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.5,
+    "cls": "MIXED",
+    "ms": 10.0,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.5,
+    "cls": "CPU-LOGIC",
+    "ms": 15.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.6,
+    "cls": "CPU-LOGIC",
+    "ms": 15.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 19.6,
+    "cls": "GC-PAUSE",
+    "ms": 31.0,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.6,
+    "cls": "CPU-LOGIC",
+    "ms": 13.5,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.6,
+    "cls": "CPU-LOGIC",
+    "ms": 21.2,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 19.6,
+    "cls": "MIXED",
+    "ms": 16.7,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.6,
+    "cls": "VSYNC/PRESENT",
+    "ms": 16.7,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.7,
+    "cls": "VSYNC/PRESENT",
+    "ms": 16.7,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.7,
+    "cls": "MIXED",
+    "ms": 16.7,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.7,
+    "cls": "VSYNC/PRESENT",
+    "ms": 16.7,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.7,
+    "cls": "VSYNC/PRESENT",
+    "ms": 16.7,
+    "n": 2,
+    "rec": true
+   },
+   {
+    "t": 19.7,
+    "cls": "MIXED",
+    "ms": 14.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.7,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.7,
+    "cls": "MIXED",
+    "ms": 14.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.7,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.7,
+    "cls": "MIXED",
+    "ms": 14.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.7,
+    "cls": "VSYNC/PRESENT",
+    "ms": 12.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.8,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.8,
+    "cls": "MIXED",
+    "ms": 14.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.8,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.8,
+    "cls": "VSYNC/PRESENT",
+    "ms": 14.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 19.8,
+    "cls": "CPU-LOGIC",
+    "ms": 9.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.8,
+    "cls": "MIXED",
+    "ms": 9.2,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 19.8,
+    "cls": "CPU-LOGIC",
+    "ms": 10.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 20.8,
+    "cls": "CPU-LOGIC",
+    "ms": 10.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 20.9,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 21.2,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 21.2,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 21.4,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 21.4,
+    "cls": "PIPELINE-COMPILE",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 21.4,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 21.5,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 21.5,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 25.4,
+    "cls": "CPU-LOGIC",
+    "ms": 10.1,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 26.6,
+    "cls": "CPU-LOGIC",
+    "ms": 10.1,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 26.6,
+    "cls": "PIPELINE-COMPILE",
+    "ms": 31.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 27.3,
+    "cls": "VSYNC/PRESENT",
+    "ms": 15.7,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 30.2,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 30.4,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 31.3,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 3,
+    "rec": false
+   },
+   {
+    "t": 31.3,
+    "cls": "MIXED",
+    "ms": 8.2,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 31.3,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 32.6,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 7,
+    "rec": false
+   },
+   {
+    "t": 32.6,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 32.6,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 34.0,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 34.0,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 34.0,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 34.0,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 34.2,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 34.6,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 34.8,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 34.8,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 35.0,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 36.7,
+    "cls": "VSYNC/PRESENT",
+    "ms": 22.9,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 37.9,
+    "cls": "PIPELINE-COMPILE",
+    "ms": 10.5,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 39.9,
+    "cls": "VSYNC/PRESENT",
+    "ms": 15.1,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 40.8,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 40.9,
+    "cls": "CPU-LOGIC",
+    "ms": 24.7,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 40.9,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 42.9,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 6,
+    "rec": false
+   },
+   {
+    "t": 43.7,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 44.7,
+    "cls": "CPU-LOGIC",
+    "ms": 9.2,
+    "n": 8,
+    "rec": false
+   },
+   {
+    "t": 44.7,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 45.9,
+    "cls": "VSYNC/PRESENT",
+    "ms": 16.0,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 53.3,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 54.2,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 54.2,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 54.2,
+    "cls": "MIXED",
+    "ms": 8.0,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 54.5,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 54.5,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 55.2,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 55.2,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.2,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 55.4,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 55.4,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 55.5,
+    "cls": "CPU-LOGIC",
+    "ms": 8.1,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 55.8,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 55.8,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 55.8,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 56.8,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 68.5,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 69.8,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 3,
+    "rec": false
+   },
+   {
+    "t": 69.8,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 69.8,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 69.8,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 69.9,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 69.9,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 70.9,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 71.0,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 71.0,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 71.0,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 71.3,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 72.1,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 73.1,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 73.3,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 74.6,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 3,
+    "rec": false
+   },
+   {
+    "t": 76.5,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 76.8,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 2,
+    "rec": false
+   },
+   {
+    "t": 76.8,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 76.8,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 76.8,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 76.8,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 76.8,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 76.9,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 77.0,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 15,
+    "rec": false
+   },
+   {
+    "t": 77.0,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 77.0,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 77.0,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 77.0,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 77.0,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 77.0,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 77.0,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 77.0,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 77.1,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 77.1,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 81.9,
+    "cls": "CPU-LOGIC",
+    "ms": 12.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 82.3,
+    "cls": "CPU-LOGIC",
+    "ms": 12.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 82.3,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 85.4,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 86.7,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 88.2,
+    "cls": "VSYNC/PRESENT",
+    "ms": 13.5,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 88.9,
+    "cls": "VSYNC/PRESENT",
+    "ms": 16.0,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 92.0,
+    "cls": "CPU-LOGIC",
+    "ms": 15.6,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 94.4,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 95.2,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 95.2,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 95.2,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 95.2,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 95.2,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 95.6,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 99.2,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 99.2,
+    "cls": "VSYNC/PRESENT",
+    "ms": 8.3,
+    "n": 1,
+    "rec": true
+   },
+   {
+    "t": 99.4,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 99.7,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 99.8,
+    "cls": "CPU-LOGIC",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 99.8,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   },
+   {
+    "t": 100.0,
+    "cls": "MIXED",
+    "ms": 8.3,
+    "n": 1,
+    "rec": false
+   }
+  ],
+  "census": {
+   "GC-PAUSE": 4,
+   "MIXED": 73,
+   "PIPELINE-COMPILE": 5,
+   "CPU-LOGIC": 117,
+   "ASSET-BUILD": 2,
+   "VSYNC/PRESENT": 4
+  },
+  "recovery": 53,
+  "env": "managed-debugger=False godot-context=release csharp=Release(optimized) vsync=Enabled maxfps=0 refresh=60Hz cpu=24c gpu=NVIDIA GeForce RTX 3080",
+  "debug_build": false,
+  "summary": [
+   "=== frame profiler session summary (100s, 17218 frames) ===",
+   "  fps: avg 191.6  1%low 119  0.1%low 18  (median 4.9ms, worst 189.6ms)",
+   "  hitches: 258 total \u2014 205 primaries: 2 ASSET-BUILD, 5 PIPELINE-COMPILE, 4 GC-PAUSE, 4 VSYNC/PRESENT, 117 CPU-LOGIC, 73 MIXED; +53 VSYNC/PRESENT recovery tails",
+   "    worst[1]: 46.3ms PIPELINE-COMPILE (ng.process) @ t=15.0s",
+   "    worst[2]: 34.1ms VSYNC/PRESENT (ng.process) @ t=15.0s",
+   "    worst[3]: 31.6ms PIPELINE-COMPILE (ng.process) @ t=26.6s",
+   "    worst[4]: 31.0ms GC-PAUSE (stream.build) @ t=19.6s",
+   "    worst[5]: 24.7ms CPU-LOGIC (ng.process) @ t=40.9s",
+   "  gc: g0+171 g1+42 g2+6, total pause 413ms",
+   "  alloc: 1.7GB total, 12MB/s recent, peak 229.9MB in one frame @ t=3.4s, heap 382.0MB",
+   "  scope coverage debt: proc:other dominated 8 hitch(es), watchdog '(unscoped)' won 2 \u2014 add Prof scopes there"
+  ]
+ },
+ "clusters": [
+  {
+   "start": 18.2,
+   "end": 21.5,
+   "count": 43,
+   "ms": 494.70000000000016,
+   "classes": {
+    "CPU-LOGIC": 20,
+    "MIXED": 20,
+    "GC-PAUSE": 2,
+    "PIPELINE-COMPILE": 1
+   }
+  },
+  {
+   "start": 68.5,
+   "end": 77.1,
+   "count": 48,
+   "ms": 398.40000000000015,
+   "classes": {
+    "CPU-LOGIC": 38,
+    "MIXED": 10
+   }
+  },
+  {
+   "start": 12.9,
+   "end": 15.5,
+   "count": 32,
+   "ms": 390.50000000000006,
+   "classes": {
+    "GC-PAUSE": 2,
+    "MIXED": 19,
+    "PIPELINE-COMPILE": 2,
+    "CPU-LOGIC": 7,
+    "ASSET-BUILD": 2
+   }
+  },
+  {
+   "start": 30.2,
+   "end": 35.0,
+   "count": 23,
+   "ms": 190.80000000000007,
+   "classes": {
+    "MIXED": 6,
+    "CPU-LOGIC": 17
+   }
+  },
+  {
+   "start": 40.8,
+   "end": 44.7,
+   "count": 18,
+   "ms": 173.0,
+   "classes": {
+    "CPU-LOGIC": 11,
+    "MIXED": 7
+   }
+  }
+ ]
+}

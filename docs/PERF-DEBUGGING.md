@@ -12,10 +12,21 @@ tracer: see **NET-DEBUGGING.md** (`net_input_trace`) and **TROUBLESHOOTING.md**.
 1. **Capture on the release export** (debug builds hitch differently and are watermarked as such):
    ```powershell
    tools\perf-run.ps1 -Label repro            # 35s catharsis + 6 bots, profiler forced on, auto-report
-   tools\perf-run.ps1 -Label repro -Map stormkeep -Secs 60
+   tools\perf-run.ps1 -Label repro -Map stormkeep -Secs 90
+   tools\perf-run.ps1 -Label floor -Scenario idle   # the old stand-at-spawn camera (floor readings)
    ```
+   The default **demo scenario** spectates a living bot first-person (`cl_bench_spectate`), gives every
+   bot the 8 core weapons (`g_weaponarena`) rotating one-by-one (`bot_ai_weapon_rotate 8`), and forces
+   respawns — the capture camera traverses the map and sees real gunplay, so first-use shader compiles,
+   streaming, and combat effects actually show up in the census (an idle spawn camera exercises almost
+   none of that; the 2026-07-06 idle runs read 2 PIPELINE-COMPILE primaries where the demo run read 6,
+   worst 114 ms).
    Or in any running game: console → `set cl_frameprofiler 1` (2 = also echo the 5 s snapshots), play,
-   quit. Session files land in `~/XonData/logs/session-<stamp>.{log,csv}` (newest ~50 pairs are kept).
+   quit. Session files land in `<userdir>/logs/session-<stamp>.{log,csv}` (newest ~50 pairs are kept) —
+   `~/XonData` for real play; perf-run captures use an **isolated scratch profile**
+   (`_scratch/perf-userdir`, via `XONOTIC_USERDIR`) with a pinned cvar set (`cl_autopause 0`,
+   `cl_portal_render 0`, `vid_vsync 2`, `cl_maxfps 0` — your `-Cvar` flags override the pins), so runs
+   never mutate the daily config and are config-identical by construction (`-UserDir real` opts out).
 2. **Read the report**:
    ```powershell
    python tools\perf-report.py                # newest session: percentiles, census, clusters, offenders
@@ -68,11 +79,12 @@ session hitch counter; **F11** expands the live scope tree; `set cl_frameprofile
 | Tool | What it does |
 |---|---|
 | `tools/perf-run.ps1` / `.sh` | One-command capture: launches the **release export** (`-DebugBuild` for the project) on a map + bots with the profiler forced, self-quits, runs the report, writes `_scratch/perf_<label>.json`. |
-| `tools/perf-report.py` | Turns a session pair into percentiles/1%-lows, a primaries-vs-recovery census, hitch **clusters**, top offending scopes, alloc storms, GC/pipeline totals. `--diff <session|json>` compares runs; `--json` writes a baseline. Old (pre-2026-07-03) CSVs had a one-frame ms↔scopes skew — the tool detects and corrects it. |
+| `tools/perf-report.py` | Turns a session pair into percentiles/1%-lows, a primaries-vs-recovery census, hitch **clusters**, top offending scopes, alloc storms, GC/pipeline totals — plus a **post-load block** (`t ≥ 20 s`, `--postload SECS`) so steady-state smoothness is readable without load/join noise (trust the `pl` rows for smoothness A/Bs; the full-session 0.1%-low is pinned by load frames). `--diff <session|json>` compares runs; `--json` writes a baseline. Old (pre-2026-07-03) CSVs had a one-frame ms↔scopes skew — the tool detects and corrects it. |
 | `tools/perf-smoke.ps1` | Pre-merge gate: budget-asserting headless benches (`ServerTickPerfBench` fails on a >4-5× tick regression; opt out with `XG_PERF_ASSERT=0`), `-Live` adds a 30 s capture diffed vs `tools/perf-baselines/`. |
 | `cl_frameprofiler_dump 1` | Console: dumps the last ~240 frames (forensic ring) to `frameprofile_ring.csv`. |
 | RenderDoc auto-capture | Run under RenderDoc → sync SURFACE compiles self-capture (≤6/session, after t=28 s) to `<temp>/xonotic_rdoc/`. |
 | `net_input_trace 1` | The input→server→reconcile pipeline tracer — see NET-DEBUGGING.md. |
+| `cl_motion_trace 1` + `tools/wobble-detect.py` | **Smoothness/wobble, not hitches.** Per-frame CSV to `~/XonData/motion_trace_<stamp>.csv`; the detector compares the delta the engine *reported* against QPC wall time over the same frames — any divergence is a displayed-speed error (motion integrates the reported delta; the display runs on wall time). Reports felt-band (0.3–5 Hz) speed-error RMS + episode durations, `physics_step/N` engine-clamp forensics, and per-clock attribution (engine vs `cl_smoothdt`). Exit 1 on WOBBLE. Calibrate the zero with a `vid_vsync 1` leg. `tools/wobble-report.py` is the companion for the display-side (PresentMon join). |
 
 Cvars: `cl_frameprofiler` (0/1/2; debug builds default 1), `cl_frameprofiler_hitchms` (floor, default 12;
 a hitch must also exceed 1.8× the rolling median), `cl_frameprofiler_watchdog` (default 1),
@@ -82,20 +94,30 @@ a hitch must also exceed 1.8× the rolling median), `cl_frameprofiler_watchdog` 
 
 - **Measure before theorizing.** The ENet-throttle spawn-stutter burned days of wrong guesses until live
   instrumentation named it (NET-DEBUGGING.md). The profiler now auto-names most things — read it first.
-- **Release build, engaged `cl_maxfps`, same map + bot count**, compare 1%-low and the *primaries*
-  census, not raw totals. Uncapped fps = pathological present pacing; VSYNC counts are machine-load
-  sensitive (interleave A/B runs when they matter).
+- **Release build, same map + bot count + same `cl_maxfps`**, compare the post-load `pl` rows, not raw
+  totals. Since 2026-07-06 captures run UNCAPPED (`cl_maxfps 0` = truly unlimited — peak frame time and
+  its dips are the campaign target); hitch/primaries COUNTS are only comparable between runs at the same
+  cap (the hitch threshold rides the median) — across cap modes diff milliseconds and lows instead.
+  VSYNC counts are machine-load sensitive (interleave A/B runs when they matter).
 - **Two A/B confounds found the hard way (2026-07-03):** (a) a parallel `dotnet build`/agent session
   contaminates a capture — check `Get-Process dotnet` is idle first; (b) the idle capture camera sits at a
   RANDOM spawn, and a warpzone-portal-facing spawn re-renders the scene into the portal viewport (~2× draws,
-  +1ms+ p50 on debug) — the report's `draws p50` line + the diff's render-load gate flag it; pin the variable
-  with `-Cvar "cl_portal_render 0"` (or `"wz_portal_lookat 1"` to always face one).
+  +1ms+ p50 on debug) — the report's `draws p50` line + the diff's render-load gate flag it. Since 2026-07-06
+  perf-run **pins `cl_portal_render 0` by default**; portal-cost cells opt back in with
+  `-Cvar "cl_portal_render 1"` + `-Cvar "wz_portal_lookat 1"` (always face one → deterministic load).
 - **New per-frame system ⇒ ships with a `Prof.Sample` scope** (and its name added to
   `FrameProfiler.TopLevelNodeScopes`), or it will surface as `(unscoped)`/`proc:other` in the next hunt.
   The session summary prints a "scope coverage debt" line when that happens.
 - Frame-pairing note for tool maintainers: Godot's `delta` measures the *previous* main-loop iteration.
   The profiler finalizes each record one collector pass later so ms/scopes/watchdog agree
   (`FrameProfiler._pending`); don't "simplify" that away.
+- **A single-clock instrument cannot detect a clock bug.** The wobble hunt spent months on metrics
+  derived from `delta` alone — including one (`cam_speed`) that was flat by construction — while the
+  engine was rewriting `delta` itself (`MainTimerSync::advance_checked`; see §3f of
+  `planning/wobble-independent-audit-2026-07-26.md`). Any smoothness claim needs a second, independent
+  clock: `qpc_top_s` in the motion trace, or a display-side capture. Corollary: `physics/common/*` are
+  **frame-timing** settings here, not physics settings — Godot's physics has no consumers in this
+  project, but `physics_step` sets the clamp grid the reported delta is snapped onto.
 
 ## Deep dives (the postmortems)
 

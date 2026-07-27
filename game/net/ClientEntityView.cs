@@ -361,9 +361,33 @@ public sealed partial class ClientEntityView : Node
         return e;
     }
 
+    // [crash fix 2026-07-26] PVS-flicker grace: sv_cullentities_pvs removes an entity from the snapshot
+    // the moment it leaves the client's PVS and re-adds it on return. Tearing the render node down on
+    // FIRST absence rebuilt the same ModelAnimators over and over (measured: 107 full mesh+material
+    // builds in 100 s of implosion fly-around), flooding the finalizer thread with RenderingServer
+    // frees that race the main thread's surface updates — the 0xC0000374 heap corruption. Instead:
+    // hide the node on first absence and only tear down after a sustained absence. Projectiles are
+    // exempt (their removal carries impact semantics and must stay immediate).
+    private const ulong CullGraceMs = 750;
+    private readonly Dictionary<int, ulong> _unseenSince = new();
+    private readonly List<int> _returned = new();
+
     /// <summary>Remove proxies (and their render nodes) for ids the server stopped sending this frame.</summary>
     private void CullDeparted()
     {
+        ulong now = Time.GetTicksMsec();
+
+        // Ids that came BACK inside the grace window: unhide, forget the absence.
+        _returned.Clear();
+        foreach (KeyValuePair<int, ulong> kv in _unseenSince)
+            if (_seen.Contains(kv.Key))
+                _returned.Add(kv.Key);
+        for (int i = 0; i < _returned.Count; i++)
+        {
+            _unseenSince.Remove(_returned[i]);
+            _render.SetEntityHidden(_returned[i], false);
+        }
+
         _stale.Clear();
         foreach (KeyValuePair<int, Entity> kv in _proxies)
             if (!_seen.Contains(kv.Key))
@@ -373,6 +397,19 @@ public sealed partial class ClientEntityView : Node
         {
             int id = _stale[i];
             Entity e = _proxies[id];
+            // Grace path (non-projectiles): first absence hides; teardown only after CullGraceMs.
+            if (!_render.Projectiles.IsTracking(id))
+            {
+                if (!_unseenSince.TryGetValue(id, out ulong since))
+                {
+                    _unseenSince[id] = now;
+                    _render.SetEntityHidden(id, true);
+                    continue;
+                }
+                if (now - since < CullGraceMs)
+                    continue;
+            }
+            _unseenSince.Remove(id);
             _viewEntities.Remove(id);
             // [W-nadeclient] tear down the orb render state for a departed id. The NadeOrbRenderer only tracks
             // nade_orb ids, so this is a harmless no-op for any non-orb entity — same idempotent contract as

@@ -161,4 +161,71 @@ public class BotItemValueTests
         Assert.True(brain.TryPushShoreWaypoint(bot), "swimming goal-less bot should push a shore waypoint");
         Assert.Equal(new Vector3(200, 0, 40), brain.Nav.Current!.Value);
     }
+
+    /// <summary>
+    /// The whole per-weapon table, netname → QC <c>bot_pickupbasevalue</c> (the "rating" ATTRIB in
+    /// common/weapons/weapon/*.qh and the overkill mutator's). This is transcribed data, so a typo in ONE
+    /// entry is the likely defect class and no amount of "does a weapon rate something" testing catches it.
+    /// An unowned weapon rates exactly its base value on an empty arsenal (the discount c is 1.0 at 0 owned).
+    /// </summary>
+    [Theory]
+    [InlineData("arc", 8000f)]
+    [InlineData("devastator", 8000f)]
+    [InlineData("oknex", 8000f)]
+    [InlineData("vortex", 8000f)]
+    [InlineData("crylink", 6000f)]
+    [InlineData("hagar", 6000f)]
+    [InlineData("okshotgun", 6000f)]
+    [InlineData("shotgun", 6000f)]
+    [InlineData("electro", 5000f)]
+    [InlineData("fireball", 5000f)]
+    [InlineData("seeker", 5000f)]
+    [InlineData("hlac", 4000f)]
+    [InlineData("machinegun", 7000f)]
+    [InlineData("minelayer", 7000f)]
+    [InlineData("mortar", 7000f)]
+    [InlineData("okmachinegun", 7000f)]
+    [InlineData("rifle", 7000f)]
+    [InlineData("okhmg", 10000f)]
+    [InlineData("okrpc", 10000f)]
+    [InlineData("vaporizer", 10000f)]
+    [InlineData("tuba", 2000f)]
+    [InlineData("blaster", 0f)]
+    [InlineData("hook", 0f)]
+    [InlineData("porto", 0f)]
+    public void EveryWeapon_CarriesItsQcBotPickupBaseValue(string netName, float expected)
+    {
+        Facade();
+        Weapon? w = Weapons.ByName(netName);
+        Assert.NotNull(w);
+        Assert.Equal(expected, w!.BotPickupBaseValue);
+    }
+
+    [Fact]
+    public void LiveProjectiles_AreNotRatedAsWeaponPickups()
+    {
+        // EntFlags.Item doubles as the port's FL_PROJECTILE marker and projectiles carry their weapon's
+        // NetName, so an in-flight rocket matched the weapon branch and rated ~8000 — bots pathed INTO
+        // incoming rockets and treated a laid mine as a permanent attractor. Real pickups are explicitly
+        // ownerless; a projectile always carries its firer.
+        var es = Facade();
+        var bot = NewPlayer(Teams.None, Vector3.Zero);
+        var shooter = NewPlayer(Teams.None, new Vector3(500, 0, 0));
+
+        Entity rocket = es.EntityTable.Spawn();
+        rocket.ClassName = "rocket";
+        rocket.NetName = "devastator";     // as Devastator.cs stamps it
+        rocket.Flags = EntFlags.Item;      // "QC FL_PROJECTILE"
+        rocket.Solid = Solid.Corpse;
+        rocket.Origin = new Vector3(300, 0, 0);
+        rocket.Owner = shooter;
+
+        var brain = new BotBrain(bot) { PlayerProvider = () => new List<Player> { bot, shooter } };
+        Assert.Equal(0f, RateItems(brain));
+
+        // Sanity: the SAME entity as a real ownerless pickup does rate — proving the test isn't vacuous.
+        rocket.Owner = null;
+        rocket.Solid = Solid.Trigger;
+        Assert.True(RateItems(brain) > 1000f);
+    }
 }

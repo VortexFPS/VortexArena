@@ -596,6 +596,9 @@ public sealed class BotPopulation
                 int idx = (_tokenIndex + 1 + step) % n;
                 BotBrain b = _brains[idx];
                 if (b.Bot.IsObserver) continue;               // not in bot_list
+                // QC bot.qc:800 skips a FROZEN bot when handing out the token — it runs no role, so giving it
+                // the token wastes the hold and starves the live bots' re-rating cadence.
+                if (BotBrain.IsFrozen(b.Bot)) continue;
                 if (next < 0) next = idx;                      // pass 2 fallback: first non-observer
                 if (!b.Bot.IsDead && !b.Nav.HasGoal)          // pass 1: first goal-less (skip dead)
                 {

@@ -208,6 +208,16 @@ public static class BotRoles
             Entity it = rater.Scratch[si];
             if (it.IsFreed || ReferenceEquals(it, bot)) continue;
             if ((it.Flags & EntFlags.Item) == 0) continue;
+            // EntFlags.Item is ALSO the port's FL_PROJECTILE marker (every weapon sets `Flags = EntFlags.Item`
+            // with a weapon NetName), so a live rocket/mine passes the flag test and then matches the weapon
+            // branch of ItemValue — an in-flight devastator rocket rated ~8000 and won the goal outright, i.e.
+            // bots pathed INTO incoming rockets and treated a laid mine as a permanent attractor. Harmless
+            // before this branch only because item values were ≤ 1 and always lost.
+            // QC iterates IL_EACH(g_items, it.bot_pickup, …) — a list projectiles are not on. The port's
+            // equivalent discriminator is Owner: a real pickup is explicitly ownerless ("anyone can pick it
+            // up", StartItem.cs:228), while a projectile always carries its firer. Dropped loot is owned only
+            // for its 0.5 s anti-instant-pick shield, during which it genuinely isn't available to others.
+            if (it.Owner is not null) continue;
 
             if (it.Solid == Solid.Not)
             {
@@ -398,7 +408,12 @@ public static class BotRoles
             // items; only mega-overheal differs, and its huge c at low health dominates anyway).
             if (itemArmor > 0f && armor < Resources.GetResourceLimit(bot, ResourceType.Armor))
                 c = itemArmor / System.MathF.Max(1f, armor * (2f / 3f) + health * (1f / 3f));
-            if (itemHealth > 0f && health < System.MathF.Max(1f, bot.MaxHealth))
+            // Gate on the RESOURCE LIMIT (200), not Player.MaxHealth. QC compares against the ITEM's own
+            // max_health, which is 200 for every stock health item (balance-xonotic.cfg), while MaxHealth is
+            // the 100 spawn value — so this read `health < 100` and a topped-up bot rated EVERY health item 0
+            // (GoalRater.Rate early-returns on <= 0, so mega health was not even a candidate). The armor arm
+            // above already used the limit; this is the asymmetry, not a deliberate choice.
+            if (itemHealth > 0f && health < Resources.GetResourceLimit(bot, ResourceType.Health))
                 c = itemHealth / System.MathF.Max(1f, health);
             if (c <= 0f && itemHealth <= 0f && itemArmor <= 0f)
                 c = 0.5f; // name-matched but resource-less item entity: modest fallback pull
@@ -462,11 +477,18 @@ public static class BotRoles
             return botValue;
 
         // Legacy name-match fallback for items not yet carrying a Pickup ref: the glowing powerups rate at
-        // the QC powerup value; everything else LOW (QC BOT_PICKUP_RATING_LOW).
+        // the QC powerup value. BUFFS are NOT powerups — QC sv_buffs.qc:459-461 gives a buff relic
+        // generic_pickupevalfunc with bot_pickupbasevalue 1000, so rating it 11000 made bots abandon a needed
+        // mega health to chase every relic.
         if (Mentions(name, "powerup") || Mentions(name, "strength") || Mentions(name, "shield")
-            || Mentions(name, "invincible") || Mentions(name, "buff"))
+            || Mentions(name, "invincible"))
             return 11000f;
-        return 2500f;
+        if (Mentions(name, "buff"))
+            return 1000f;
+        // QC generic_pickupevalfunc returns bot_pickupbasevalue, which is 0 for anything without an explicit
+        // m_botvalue — NOT a LOW floor. A blanket 2500 gave every unrecognized entity that happens to carry
+        // EntFlags.Item (objective flags/keys, the keepaway ball) a phantom item-goal pull.
+        return 0f;
     }
 
     private static readonly ResourceType[] AmmoResources =
@@ -497,9 +519,11 @@ public static class BotRoles
     /// </summary>
     private static bool IsPowerup(Entity item)
     {
+        // NOT buffs: QC gates the respawn-camp lead and the jitter exemption on itemdef.instanceOfPowerup,
+        // which is false for a buff relic (its own itemdef family). See ItemValue's buff arm.
         string name = string.IsNullOrEmpty(item.NetName) ? item.ClassName : item.NetName;
         return Mentions(name, "powerup") || Mentions(name, "strength") || Mentions(name, "shield")
-            || Mentions(name, "invincible") || Mentions(name, "buff");
+            || Mentions(name, "invincible");
     }
 }
 

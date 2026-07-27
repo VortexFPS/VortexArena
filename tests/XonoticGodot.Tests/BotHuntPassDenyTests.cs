@@ -149,10 +149,38 @@ public class BotHuntPassDenyTests
     }
 
     [Fact]
+    public void HealthItem_IsRated_UpToTheOverhealLimit_NotTheSpawnHealth()
+    {
+        // QC healtharmor_pickupevalfunc compares against the ITEM's max_health, which is 200 for every stock
+        // health item — NOT the player's 100 spawn health. A bot sitting at 100/100 still wants the mega
+        // because it overheals to 200. Gating on Player.MaxHealth (100) made every health item rate 0 for a
+        // healthy bot, and GoalRater.Rate drops a <= 0 rating entirely, so mega health was never a candidate.
+        var es = Facade();
+        var bot = NewPlayer(Teams.None, Vector3.Zero); // spawn health 100, resource limit 200
+        Entity mega = es.EntityTable.Spawn();
+        mega.ClassName = "item_health_mega";
+        mega.Flags = EntFlags.Item;
+        mega.Solid = Solid.Trigger;
+        mega.Origin = new Vector3(100, 0, 0);
+        mega.SetResourceExplicit(ResourceType.Health, 100f);
+
+        var brain = new BotBrain(bot, skill: 5f) { PlayerProvider = () => new List<Player> { bot } };
+        var rater = new GoalRater();
+        rater.Start();
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f);
+
+        Assert.True(rater.HasGoal, "a 100 HP bot must still rate the mega (it overheals to 200)");
+        Assert.True(rater.Best.Rating > 1000f, $"expected the QC-scale health rating, got {rater.Best.Rating}");
+    }
+
+    [Fact]
     public void DuelBot_DeniesBigItems_WhenToppedUp()
     {
         var es = Facade();
-        var bot = NewPlayer(Teams.None, Vector3.Zero); // full 100/100 health — no NEED for the mega
+        var bot = NewPlayer(Teams.None, Vector3.Zero);
+        // Topped up at the OVERHEAL LIMIT (200), the only state with genuinely no use for a mega — that is
+        // what makes the Duel denial floor observable rather than masked by the natural rating.
+        bot.Health = 200f;
         Entity mega = es.EntityTable.Spawn();
         mega.ClassName = "item_health_mega";
         mega.Flags = EntFlags.Item;

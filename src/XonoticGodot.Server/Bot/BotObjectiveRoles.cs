@@ -137,7 +137,7 @@ public static class BotObjectiveRoles
     {
         int c = 0;
         float r2 = radius * radius;
-        foreach (Entity e in brain.Players())
+        foreach (Entity e in brain.LivePlayers())
         {
             if (ReferenceEquals(e, brain.Bot) || e is not Player p || p.IsDead) continue;
             if ((int)p.Team != (int)brain.Bot.Team) continue;
@@ -202,7 +202,7 @@ public static class BotObjectiveRoles
 
         // Count teammates (QC counts all players on the team, dead or not).
         int count = 0;
-        foreach (Entity e in brain.Players())
+        foreach (Entity e in brain.LivePlayers())
             if (!ReferenceEquals(e, bot) && (int)e.Team == (int)bot.Team) ++count;
 
         if (count == 0) { CtfSetRole(brain, CtfBotRole.Offense); return; }
@@ -240,7 +240,7 @@ public static class BotObjectiveRoles
         Player? best = null;
         float bestD = radius;
         Vector3 eye = self.Origin + self.ViewOfs;
-        foreach (Entity e in brain.Players())
+        foreach (Entity e in brain.LivePlayers())
         {
             if (e is not Player p || ReferenceEquals(p, self) || p.IsDead) continue;
             if ((int)p.Team != (int)self.Team) continue;
@@ -343,7 +343,7 @@ public static class BotObjectiveRoles
 
         // QC havocbot_cantfindflag watchdog: a carrier that can't rate ANY goal for 10s suicides in Base
         // (Damage DEATH_KILL) so the flag returns to play. The port has no bot-layer suicide path — clear the
-        // route and force a fresh rating instead, and re-arm so this doesn't spin every token frame.
+        // route instead, and re-arm so this doesn't spin every token frame.
         if (rater.HasGoal)
             brain.CtfCantFindFlagTime = Api.Clock.Time + 10f;
         else if (Api.Clock.Time > brain.CtfCantFindFlagTime)
@@ -352,7 +352,10 @@ public static class BotObjectiveRoles
             // reachable teammate — a stuck carrier handing off beats QC's suicide and beats circling forever.
             TryCarrierPass(brain, ctf);
             brain.Nav.ClearRoute();
-            brain.ForceGoalRating();
+            // NOTE: deliberately NO ForceGoalRating() here. We are inside the rating pass, and the post-pass
+            // stamp in BotBrain unconditionally clears the force flag — the call was a silent no-op. The fast
+            // retry it was reaching for already exists: this pass rated nothing and the route was just cleared,
+            // so BotBrain's "no goal captured and no route" arm re-arms the rating in 2s.
             brain.CtfCantFindFlagTime = Api.Clock.Time + 10f;
         }
         // (QC also LOCKS the chosen goal for 2-3s when parked on the base waypoint waiting for our flag —
@@ -519,7 +522,7 @@ public static class BotObjectiveRoles
         // can see them (or a coin flip), fall back to the base.
         Player? closest = null;
         float best = 10000f;
-        foreach (Entity e in brain.Players())
+        foreach (Entity e in brain.LivePlayers())
         {
             if (e is not Player p || p.IsDead) continue;
             float d = (org - p.Origin).Length();
@@ -827,7 +830,7 @@ public static class BotObjectiveRoles
     private static int CountTeamInterest(BotBrain brain, Onslaught.OnsNode node, int myTeam)
     {
         int c = 0;
-        foreach (Entity e in brain.Players())
+        foreach (Entity e in brain.LivePlayers())
         {
             if (ReferenceEquals(e, brain.Bot)) continue;            // QC: it != this
             if ((int)e.Team != myTeam) continue;                   // QC SAME_TEAM(it, this)
@@ -1102,7 +1105,7 @@ public static class BotObjectiveRoles
         {
             // QC: count unfrozen players on the team (self included).
             int unfrozen = 0;
-            foreach (Entity e in brain.Players())
+            foreach (Entity e in brain.LivePlayers())
                 if (e is Player p && Teams.SameTeam(self, p) && !ft.IsFrozen(p))
                     ++unfrozen;
 
@@ -1154,7 +1157,7 @@ public static class BotObjectiveRoles
         Player? bestPl = null;
         float bestDist2 = float.MaxValue;
         float sradius2 = sradius * sradius;
-        foreach (var e in brain.Players())
+        foreach (var e in brain.LivePlayers())
         {
             if (e is not Player mate || ReferenceEquals(mate, self) || mate.IsDead) continue;
             if (!Teams.SameTeam(self, mate)) continue;

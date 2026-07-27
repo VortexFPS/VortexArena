@@ -251,6 +251,28 @@ public sealed class BotBrain
                 yield return e;
     }
 
+    /// <summary>
+    /// The LIVE players — QC's <c>FOREACH_CLIENT(IS_PLAYER(it), …)</c>, which is what almost every roster scan
+    /// in the roles actually wants. <see cref="Players()"/> is the bare FOREACH_CLIENT and therefore includes
+    /// OBSERVERS/spectators, who keep their <c>Team</c> and read <c>IsDead == false</c>
+    /// (ClientManager.PutObserverInServer) — so a plain team+alive filter silently accepts them. A follow
+    /// spectator is additionally glued to its spectatee's origin, so it wins any "nearest teammate" scan at
+    /// distance ~0: that made a bot carrier pass the flag to a non-solid free-fly camera, skewed the CTF
+    /// defense/offense census, and routed Freeze-Tag bots to a spectator.
+    /// </summary>
+    internal IEnumerable<Entity> LivePlayers()
+    {
+        foreach (Entity e in Players())
+            if (e is not Player { IsObserver: true })
+                yield return e;
+    }
+
+    /// <summary>QC <c>STAT(FROZEN, e) || StatusEffects_active(STATUSEFFECT_Frozen, e)</c> — a frozen player
+    /// runs no role and holds no strategy token.</summary>
+    internal static bool IsFrozen(Entity e)
+        => XonoticGodot.Common.Gameplay.StatusEffectsCatalog.Frozen is { } f
+           && XonoticGodot.Common.Gameplay.StatusEffectsCatalog.Has(e, f);
+
     // ---- goal-rating clock API for the roles (QC navigation_goalrating_timeout family) ----
 
     /// <summary>QC navigation_goalrating_timeout (navigation.qc:44-47): should the role re-rate goals now?
@@ -258,7 +280,12 @@ public sealed class BotBrain
     public bool GoalRatingTimedOut => _strategyForced || Now >= _strategyTime;
 
     /// <summary>QC navigation_goalrating_timeout_force: discard the current goal decision — re-rate on the
-    /// next token hold.</summary>
+    /// next token hold.
+    /// <para>ONLY effective from OUTSIDE a rating pass (an event handler, a think block). Called from inside a
+    /// role while that role is rating, it is a silent NO-OP: the post-pass stamp below clears
+    /// <c>_strategyForced</c> and re-stamps the interval unconditionally whenever the pass ran. A role that
+    /// wants a fast retry should simply rate nothing and clear its route — that hits the "no goal captured and
+    /// no route" arm, which re-arms in 2s.</para></summary>
     public void ForceGoalRating() => _strategyForced = true;
 
     /// <summary>QC navigation_goalrating_timeout_expire(seconds): keep the current goal at most
@@ -406,6 +433,19 @@ public sealed class BotBrain
         {
             if (StrategyTokenHeld) OnStrategyTokenUsed?.Invoke();
             return Emit(bot, default, jump: false, crouch: false, attack: false, attack2: false, dt);
+        }
+        // FROZEN (Freeze Tag / the Frozen status effect): QC gates the whole havocbot role call on
+        // `!STAT(FROZEN, this) && !StatusEffects_active(STATUSEFFECT_Frozen, this)` (havocbot.qc:52-64) and
+        // skips frozen bots when rotating the strategy token (bot.qc:800). A frozen player keeps
+        // DeadState == No and Health 1, so without this it fell through to the full think: every frozen bot
+        // burned a token hold on a complete goal-rating flood it cannot act on (in a 5v5 with 8 frozen, the
+        // two live bots re-planned ~5x less often than Base), and its role timeout kept expiring so it thawed
+        // into a randomly re-rolled role. Consume the token like the dead branch — otherwise rotation stalls
+        // on the frozen bot and the population stops re-rating entirely.
+        if (IsFrozen(bot))
+        {
+            if (StrategyTokenHeld) OnStrategyTokenUsed?.Invoke();
+            return Emit(bot, Vector3.Zero, jump: false, crouch: false, attack: false, attack2: false, dt);
         }
         if (bot.IsDead)
         {

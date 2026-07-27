@@ -381,6 +381,10 @@ def main():
     print("\n-- frame-mapped displayed-motion proxies (steady-presentation assumption) --")
     if v2:
         analyze_signal("cam_step", trace["cam_step"], dt_s, fs, args.speed_floor, results)
+        if "cam_step_xy" in trace:
+            # horizontal-only: the clean signal for laser-jump/bhop repros — flight-arc horizontal
+            # speed is near-constant while ballistic Z injects real felt-band energy into cam_step.
+            analyze_signal("cam_step_xy", trace["cam_step_xy"], dt_s, fs, args.speed_floor, results)
         analyze_signal("yaw_step", np.abs(trace["yaw_step"]), dt_s, fs, args.yaw_floor, results)
         # wall-mapped control: cam_step normalized by raw dt — the OLD blind view; should be ~clean.
         wall = trace["cam_step"] / np.maximum(trace["raw_dt_ms"], 1e-3)

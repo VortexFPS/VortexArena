@@ -4165,7 +4165,7 @@ public sealed partial class NetGame : Node3D
                 _motionTrace = new System.IO.StreamWriter(path, append: false) { AutoFlush = false };
                 _motionTrace.WriteLine(
                     "t,qpc_s,dt_ms,raw_dt_ms,clock_err_ms,slew_pct,ticks," +
-                    "cam_speed,cam_step,yaw_step,pred_speed,pred_err,remote_speed,maxfps,drift_ms");
+                    "cam_speed,cam_step,cam_step_xy,yaw_step,pred_speed,pred_err,remote_speed,maxfps,drift_ms");
                 XonoticGodot.Common.Diagnostics.Log.Info($"[motiontrace] recording -> {path}");
             }
             catch (System.Exception ex)
@@ -4209,13 +4209,18 @@ public sealed partial class NetGame : Node3D
             if (remotePrevValid)
                 remoteSpeed = (remote - _mtPrevRemote).Length() / dt;
             // v2: raw per-frame steps (NOT divided by dt — see the header note) + the PresentMon join clock.
+            // cam_step_xy: horizontal-only step — during a laser-jump/bhop flight arc the horizontal speed is
+            // near-constant (air, no friction) while the ballistic Z sweep puts REAL energy into the felt
+            // band, so the XY step is the clean wobble signal at exactly the high speeds where it's felt.
             double qpcS = System.Diagnostics.Stopwatch.GetTimestamp()
                 / (double)System.Diagnostics.Stopwatch.Frequency;
-            float camStep = (cam - _mtPrevCam).Length();
+            NVec3 camDelta = cam - _mtPrevCam;
+            float camStep = camDelta.Length();
+            float camStepXy = new NVec3(camDelta.X, camDelta.Y, 0f).Length(); // quake coords: Z = up
             float yawStep = Mathf.Wrap(_viewAngles.Y - _mtPrevYaw, -180f, 180f);
             _motionTrace.WriteLine(
                 $"{_renderClock:F4},{qpcS:F6},{dt * 1000f:F3},{rawDt * 1000f:F3},{errMs:F2},{slew * 100f:F2},{ticks}," +
-                $"{camSpeed:F1},{camStep:F3},{yawStep:F4},{predSpeed:F1},{predErr:F2},{remoteSpeed:F1}," +
+                $"{camSpeed:F1},{camStep:F3},{camStepXy:F3},{yawStep:F4},{predSpeed:F1},{predErr:F2},{remoteSpeed:F1}," +
                 $"{Godot.Engine.MaxFps},{_dtDrift * 1000f:F3}");
             if (++_mtLines % 128 == 0)
                 _motionTrace.Flush(); // survive a quit without the toggle-off close

@@ -76,6 +76,13 @@ public struct MovementParameters
     /// caught it. An explicitly-set 0 must be honored (a server may legitimately run the Q1 behavior).</summary>
     public bool  GameplayFixQ2AirAccelerate; // sv_gameplayfix_q2airaccelerate (1)
 
+    /// <summary>PORT EXTENSION <c>sv_player_softcollision</c> (default ON): player movement hulls pass through
+    /// other players (<c>MoveFilter.NoPlayers</c>) and the server's post-move <c>PlayerSeparation</c> pass pushes
+    /// overlapping bodies apart. 0 = stock solid player-vs-player clipping. PlayerPhysics reads the cvar ambiently
+    /// (<c>PlayerClipFilter</c>, stamped on the client by MoveVarsBlock.Apply), so this field is informational —
+    /// carried for wire completeness like <see cref="NudgeOutOfSolid"/>.</summary>
+    public bool  PlayerSoftCollision;        // sv_player_softcollision (1, port extension)
+
     // --- stair stepping / hull ---
     public float StepHeight;         // sv_stepheight          (31 in Xonotic; spec/task note 34)
     public int   StepDown;           // sv_gameplayfix_stepdown(2)  0=off 1=on 2=on+set-onground
@@ -200,6 +207,7 @@ public struct MovementParameters
 
         p.Gravity                   = Cvar(N(prefix, "gravity"),                 p.Gravity);
         p.GameplayFixQ2AirAccelerate = CvarBool(N(prefix, "gameplayfix_q2airaccelerate"), p.GameplayFixQ2AirAccelerate);
+        p.PlayerSoftCollision       = CvarBool(N(prefix, "player_softcollision"), p.PlayerSoftCollision);
 
         p.StepHeight                = Cvar(N(prefix, "stepheight"),              p.StepHeight);
         p.StepDown                  = (int)CvarRaw(N(prefix, "gameplayfix_stepdown"), p.StepDown);
@@ -277,6 +285,7 @@ public struct MovementParameters
 
         Gravity = 800f,
         GameplayFixQ2AirAccelerate = true, // sv_gameplayfix_q2airaccelerate — QC autocvar inline default 1
+        PlayerSoftCollision = true,        // sv_player_softcollision — port extension, default ON (Vortex Arena)
 
         StepHeight = 31f, // Xonotic physicsX.cfg value; task brief mentions 34 (the Nexuiz/Vecxis value).
         StepDown = 2,
@@ -451,6 +460,10 @@ public struct MovementParameters
         // v8 tail: sv_gameplayfix_q2airaccelerate (default ON; Capture sends unset→1 via AbsentDefaults, so a
         // configured 0 — the Q1 behavior — survives the wire; absent tail from an older peer keeps the default).
         p.GameplayFixQ2AirAccelerate = B(p.GameplayFixQ2AirAccelerate);
+
+        // v9 tail (port extension): sv_player_softcollision (default ON; Capture sends unset→1 via AbsentDefaults,
+        // so a configured 0 — stock solid players — survives the wire).
+        p.PlayerSoftCollision = B(p.PlayerSoftCollision);
 
         return p;
     }

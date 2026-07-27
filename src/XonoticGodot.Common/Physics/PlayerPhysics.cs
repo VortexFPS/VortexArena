@@ -141,6 +141,21 @@ public sealed class PlayerPhysics : IPlayerPhysics
     /// </summary>
     public static System.Func<Entity, bool>? RoundMoveForbidden { get; set; }
 
+    /// <summary>
+    /// PORT EXTENSION <c>sv_player_softcollision</c> (unset → ON): the clip filter for the PLAYER MOVEMENT hull
+    /// traces. When on, the moving player's hull passes through other players (<see cref="MoveFilter.NoPlayers"/>)
+    /// — no hard body-block; the server's post-move <see cref="PlayerSeparation"/> pass gently pushes overlapping
+    /// players apart instead. 0 restores stock solid player-vs-player clipping. Read ambiently like
+    /// <c>sv_gameplayfix_nudgeoutofsolid</c> and replicated to clients via <c>MoveVarsBlock</c> (so prediction
+    /// resolves the same filter); the <c>MovementParameters.PlayerSoftCollision</c> field mirrors it for the wire.
+    /// ONLY the movement traces use this — weapon/hitscan/melee traces keep their own filters, so players stay
+    /// fully shootable.
+    /// </summary>
+    private static MoveFilter PlayerClipFilter()
+        => Api.Services is null || Api.Cvars.GetString("sv_player_softcollision") != "0"
+            ? MoveFilter.NoPlayers
+            : MoveFilter.Normal;
+
     public void Move(Entity player, IMovementInput input)
     {
         float dt = input.FrameTime;
@@ -1135,7 +1150,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
             {
                 Vector3 up = player.Origin + new Vector3(0f, 0f, 0.01f);
                 Vector3 down = player.Origin - new Vector3(0f, 0f, 0.01f);
-                TraceResult tr = Api.Trace.Trace(up, player.Mins, player.Maxs, down, MoveFilter.Normal, player);
+                TraceResult tr = Api.Trace.Trace(up, player.Mins, player.Maxs, down, PlayerClipFilter(), player);
                 onRamp = tr.Fraction < 1f && tr.PlaneNormal.Z < 0.98f && mp.JumpSpeedCapMaxDisableOnRamps;
             }
             if (!onRamp)
@@ -1335,8 +1350,8 @@ public sealed class PlayerPhysics : IPlayerPhysics
         }
         else if (player.IsDucked)
         {
-            // only stand up if the standing hull isn't blocked
-            TraceResult tr = Api.Trace.Trace(player.Origin, mp.PlayerMins, mp.PlayerMaxs, player.Origin, MoveFilter.Normal, player);
+            // only stand up if the standing hull isn't blocked (a nearby player never blocks under softcollision)
+            TraceResult tr = Api.Trace.Trace(player.Origin, mp.PlayerMins, mp.PlayerMaxs, player.Origin, PlayerClipFilter(), player);
             if (!tr.StartSolid)
             {
                 player.IsDucked = false;
@@ -1460,7 +1475,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
         {
             Vector3 up = player.Origin + new Vector3(0f, 0f, 1f);
             Vector3 down = player.Origin - new Vector3(0f, 0f, 1f);
-            TraceResult tr = Api.Trace.Trace(up, player.Mins, player.Maxs, down, MoveFilter.Normal, player);
+            TraceResult tr = Api.Trace.Trace(up, player.Mins, player.Maxs, down, PlayerClipFilter(), player);
             if (tr.Fraction < 1f && tr.PlaneNormal.Z > OnGroundNormalZ)
             {
                 clip |= 1;
@@ -1804,7 +1819,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
     {
         Vector3 start = player.Origin;
         Vector3 end = start + push;
-        trace = Api.Trace.Trace(start, player.Mins, player.Maxs, end, MoveFilter.Normal, player);
+        trace = Api.Trace.Trace(start, player.Mins, player.Maxs, end, PlayerClipFilter(), player);
 
         if (trace.StartSolid)
         {
@@ -1867,8 +1882,9 @@ public sealed class PlayerPhysics : IPlayerPhysics
     private static bool IsJumpHeld(Entity player) => (player.Flags & EntFlags.JumpReleased) == 0;
     private static bool WasOnSlick(Entity player) => player.OnSlick; // FL_ONSLICK tracked as a bool
 
-    /// <summary>QC PHYS_FROZEN(this): the gametype freeze stat OR the STATUSEFFECT_Frozen effect.</summary>
-    private static bool IsFrozen(Entity player)
+    /// <summary>QC PHYS_FROZEN(this): the gametype freeze stat OR the STATUSEFFECT_Frozen effect.
+    /// (internal: <see cref="PlayerSeparation"/> keeps frozen statues immobile in the push-apart pass.)</summary>
+    internal static bool IsFrozen(Entity player)
     {
         if (player.FrozenStat != 0)
             return true;
@@ -2043,7 +2059,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
         if (player.WaterLevel >= WaterLevelSwimming)
             return false;
         Vector3 end = player.Origin - new Vector3(0f, 0f, 24f);
-        TraceResult tr = Api.Trace.Trace(player.Origin, player.Mins, player.Maxs, end, MoveFilter.Normal, player);
+        TraceResult tr = Api.Trace.Trace(player.Origin, player.Mins, player.Maxs, end, PlayerClipFilter(), player);
         return tr.Fraction >= 1f;
     }
 

@@ -2706,6 +2706,11 @@ public sealed class GameWorld
     /// </summary>
     private void OnEndFrame()
     {
+        // 0) soft player collision (PORT EXTENSION sv_player_softcollision): every player has moved this tick
+        //    — with player-vs-player movement clipping off (PlayerPhysics.PlayerClipFilter), slide any
+        //    overlapping bodies apart before the gametype frame reads positions. Self-gates on the cvar.
+        XonoticGodot.Common.Physics.PlayerSeparation.Run(Clients.Players, Simulation.FrameTime, Services.EntityTable.LinkEdict);
+
         // [T37] SEAM E: publish the world's frozen state to the vehicle subsystem and scoring layer (QC game_stopped)
         // so vehicles park and score additions drop during intermission/match-end/timeout.
         XonoticGodot.Common.Gameplay.VehicleCommon.GameStopped = GameStopped;

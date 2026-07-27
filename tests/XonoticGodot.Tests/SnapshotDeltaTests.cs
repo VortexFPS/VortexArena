@@ -371,19 +371,22 @@ public class SnapshotDeltaTests
     }
 
     [Fact]
-    public void MoveVars_Has49Entries_WithTheVersionTailsAppended()
+    public void MoveVars_Has50Entries_WithTheVersionTailsAppended()
     {
         // v7 (T54): the block grew 40 → 46 (T54 breadth), then 46 → 48 (the step-up velocity-limiter port
         // extension); v8: 48 → 49 (sv_gameplayfix_q2airaccelerate — the air-strafe accel limiter, replicated
-        // so prediction agrees with the server on the accel step, like Base's MOVEFLAG_Q2AIRACCELERATE).
-        // APPEND-only (prefix-stable Apply/FromValues across versions).
-        Assert.Equal(49, MoveVarsBlock.Count);
+        // so prediction agrees with the server on the accel step, like Base's MOVEFLAG_Q2AIRACCELERATE);
+        // v9: 49 → 50 (sv_player_softcollision — soft player collision, replicated so prediction picks the
+        // same movement clip filter as the authority). APPEND-only (prefix-stable Apply/FromValues across
+        // versions).
+        Assert.Equal(50, MoveVarsBlock.Count);
         string[] tail =
         {
             "g_movement_highspeed", "g_movement_highspeed_q3_compat", "sv_gameplayfix_nudgeoutofsolid",
             "sv_wallclip", "sv_nostep", "sv_slick_applygravity",
             "sv_step_upspeed_scale", "sv_step_upspeed_max",
             "sv_gameplayfix_q2airaccelerate",
+            "sv_player_softcollision",
         };
         for (int i = 0; i < tail.Length; i++)
             Assert.Equal(tail[i], MoveVarsBlock.MovementCvars[40 + i]);

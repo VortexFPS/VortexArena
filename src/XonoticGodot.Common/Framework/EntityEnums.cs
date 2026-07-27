@@ -72,6 +72,13 @@ public enum MoveFilter
     Missile = 2,
     WorldOnly = 3,
     HitModel = 4,
+    /// <summary>PORT EXTENSION (no DP MOVE_* equivalent): clips exactly like <see cref="Normal"/> except
+    /// PLAYER entities (SOLID_SLIDEBOX + FL_CLIENT) never block the move. Used by the player movement hull
+    /// traces under <c>sv_player_softcollision</c> so players slip through each other while the server's
+    /// post-move separation pass (PlayerSeparation) pushes overlapping bodies apart. Monsters (SLIDEBOX +
+    /// FL_MONSTER) and everything else still clip, and weapon/melee traces keep <see cref="Normal"/> so
+    /// players remain shootable.</summary>
+    NoPlayers = 5,
 }
 
 /// <summary>Entity flag bits (QC FL_*).</summary>

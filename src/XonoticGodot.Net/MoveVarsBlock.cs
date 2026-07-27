@@ -53,6 +53,10 @@ public static class MoveVarsBlock
         // ---- v8: the air-strafe accel limiter (QC MOVEFLAG_Q2AIRACCELERATE — Base replicates it inside the
         //      moveflags stat, stats.qh:401, precisely so prediction agrees with the server on the accel step). ----
         "sv_gameplayfix_q2airaccelerate",  // wishspeed0 := clamped wishspeed inside PM_Accelerate — default 1
+        // ---- v9: soft player collision (PORT EXTENSION). Read ambiently by PlayerPhysics.PlayerClipFilter —
+        //      replicated so a remote client's prediction picks the same movement clip filter (players
+        //      pass-through vs stock solid) as the authority. Unset default is ON (see AbsentDefaults). ----
+        "sv_player_softcollision",         // players pass through each other; server pushes overlaps apart — default 1
         // Deliberately NOT replicated: MOVEVARS_TICRATE/TIMESCALE (the port advertises the tick rate at
         // handshake and ships dt per InputCommand), MOVEVARS_ENTGRAVITY (per-entity, not a cvar),
         // MOVEVARS_CL_TRACK_CANJUMP (a client→server cvar loopback — rides the sentcvar channel instead).
@@ -108,6 +112,8 @@ public static class MoveVarsBlock
         ["sv_step_upspeed_max"] = -1f,
         // FromCvars  CvarBool("gameplayfix_q2airaccelerate", Defaults.GameplayFixQ2AirAccelerate = true)
         ["sv_gameplayfix_q2airaccelerate"] = 1f,
+        // FromCvars  CvarBool("player_softcollision", Defaults.PlayerSoftCollision = true) — port extension
+        ["sv_player_softcollision"] = 1f,
     };
 
     /// <summary>Read the live movement-cvar values from the server's store, in <see cref="MovementCvars"/> order.</summary>

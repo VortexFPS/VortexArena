@@ -299,6 +299,13 @@ public sealed class TraceService : ITraceService
             // NOMONSTERS only clips against BSP (brush model) entities.
             if (filter == MoveFilter.NoMonsters && touch.Solid != Solid.Bsp) continue;
 
+            // NOPLAYERS (port extension, sv_player_softcollision): player entities never block this move —
+            // the player movement hull slips through other players (the server's post-move PlayerSeparation
+            // pass resolves overlaps). Matches GenericHitMask's "player" notion: SOLID_SLIDEBOX carrying
+            // FL_CLIENT (monsters are SLIDEBOX + FL_MONSTER and still clip).
+            if (filter == MoveFilter.NoPlayers && touch.Solid == Solid.SlideBox &&
+                (touch.Flags & EntFlags.Client) != 0) continue;
+
             if (ignore != null)
             {
                 if (touch == ignore) continue;                 // don't clip against self

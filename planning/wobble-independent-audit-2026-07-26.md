@@ -194,6 +194,59 @@ Godot build (coalesce WM_INPUT in the pump), (b) track/backport the upstream fix
 "reduce mouse polling" known-issue note. If it does NOT vanish → the rest-side cost has another
 trigger (pump cost per event is still measured fact) — profile the pump directly.
 
+## 3e. Post-stutter-fix state (2026-07-26, late): the ORIGINAL wobble is NOT confirmed fixed
+
+Bryan (correct framing): the engine backport fixed a real co-resident bug — the mouse-motion
+stutter — but the primary wobble/unstable-frametime complaint is not established as fixed. What
+changed materially: the giant mouse-cost confound is out of every future measurement, so residual
+signals are finally clean. First clean capture (motion_trace_20260726_215606, patched engine,
+laser-jump free play): cam_step_xy residual 3.0% RMS with a PROMINENT ~889 ms wave (12.2×) — but
+the laser-jump rhythm itself is ~0.9 s, so free play still self-confounds. Also: dt p99 sits at
+exactly 8.33 ms (a 120 Hz quantum) even patched — see the timer-resolution suspect below.
+
+### Remaining candidate causes, ranked
+
+1. **Display seam** (DWM Composed: Flip samples variable-cadence frames at vblank; dt ≠ display
+   interval) — still never DIRECTLY measured; all evidence circumstantial. Both r16 "vsync smooth"
+   and "DP smoother" remain consistent with it.
+2. **VRR / G-Sync interaction — never checked at all.** The 143.98 Hz panel is VRR-class. If
+   G-Sync is on (esp. "windowed" mode) the monitor tracks frame delivery: small cadence wander →
+   refresh-rate ramping → perceived speed waves; VRR+composed-flip judder is a known pattern. DP
+   presenting differently (tearing/immediate) would engage VRR differently — would also explain
+   the DP contrast.
+3. **Machine-state oscillation (S7, still unrun):** GPU boost-clock ramping at ~1 Hz under
+   PARTIAL load (a 144 cap on this GPU is exactly partial load); Windows 11 core parking
+   (hundreds-of-ms cadence); **dynamic system timer resolution** — other processes
+   requesting/releasing 1 ms timers changes the limiter's Sleep() error regime on multi-hundred-ms
+   scales (fits the exact-8.33 ms p99 plateau).
+4. **NVIDIA driver-level frame queuing** (Low Latency Mode off = 1–3 driver-queued frames whose
+   depth can wander — the Ladavac integrator one level below the swapchain).
+5. **Tick-quantized world motion vs smooth own-camera** (72 Hz sim vs 144 fps: bots/items advance
+   in tick quanta; beat/aliasing perceived as world wobble even when own motion is clean).
+
+### New detection options (in recommended order)
+
+- **F — NVCP/monitor checks (5 min, no build):** read G-Sync state + monitor OSD refresh readout
+  during play; A/B G-Sync off, Low Latency Mode Ultra, prefer-max-performance. Clears/ranks #2/#4
+  and part of #3 immediately.
+- **D — machine-state logger (cheap):** `nvidia-smi dmon` (GPU clock @100 ms) + `typeperf`
+  (% processor performance @100 ms) alongside a trace, + a timer-resolution column
+  (NtQueryTimerResolution via P/Invoke) in motion trace v3. Correlate wave episodes with
+  clock/timer regime shifts. Clears #3 with data.
+- **A — the wobble bench (the key instrument):** extend `DevHarness` (`game/net/DevHarness.cs`,
+  already wired into the camera drive at NetGame.cs:3792) into a scripted CONSTANT-VELOCITY
+  camera flight (`--wobble-bench`): zero human input → any cam_step_xy modulation IS wobble by
+  definition, AND Bryan can *watch* it — a perception test with no input confound, repeatable
+  across every A/B. This replaces the failed free-play phenomenology forever.
+- **B — engine present-timing telemetry (we now own an engine build):** add VK_KHR_present_wait /
+  present_id instrumentation to the custom template — log each frame's ACTUAL display time
+  in-process, joined to the trace by QPC. The definitive seam measurement (#1) without ETW;
+  NVIDIA supports present_wait on Vulkan.
+- **C — 240 fps phone slow-mo** of the monitor during the bench flight; a script extracts
+  per-video-frame edge displacement = ground-truth displayed motion, independent of everything.
+- **E — PresentMon retry** with the modern 2.x service-based capture (the r16 sparse-capture
+  verdict predates it), or NVIDIA FrameView / GPUView as fallbacks.
+
 ## 4. Decision experiment matrix (supersedes the seam doc's ordering)
 
 All runs on the release export, `cl_motion_trace 1`, sustained movement, ≥60 s per leg,

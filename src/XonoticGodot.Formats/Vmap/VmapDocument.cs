@@ -213,6 +213,28 @@ public sealed class VmapBrush
 
     /// <summary>Brush-wide Q3 NATIVE content flags (union of the faces' content flags at import time).</summary>
     public int ContentFlags { get; set; }
+
+    /// <summary>
+    /// Deep copy, used by the editor's undo journal to snapshot a brush before an op mutates it. Undo by
+    /// snapshot rather than by inverse op: a vertex drag re-derives planes through a least-squares fit, so
+    /// "drag back the other way" is not an exact inverse and would let geometry drift with every undo cycle.
+    /// </summary>
+    public VmapBrush Clone()
+    {
+        var copy = new VmapBrush { Id = Id, IsDetail = IsDetail, ContentFlags = ContentFlags };
+        foreach (VmapFace f in Faces)
+        {
+            copy.Faces.Add(new VmapFace
+            {
+                Plane = f.Plane,
+                Material = f.Material,
+                Projection = f.Projection,
+                SurfaceFlags = f.SurfaceFlags,
+                ContentFlags = f.ContentFlags,
+            });
+        }
+        return copy;
+    }
 }
 
 /// <summary>

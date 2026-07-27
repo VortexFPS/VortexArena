@@ -371,9 +371,6 @@ public static class MonsterAI
     // Team / skill colors (monster_setupcolors / monster_changeteam, sv_monsters.qc:172/200)
     // ====================================================================================
 
-    /// <summary>RENDER_COLORMAPPED (BIT(10)) — the render flag the csqcmodel reads to apply a colormap tint.</summary>
-    private const int RenderColormapped = 1 << 10;
-
     /// <summary>
     /// Port of <c>monster_setupcolors</c> (sv_monsters.qc:172): pick the monster's <c>.colormap</c> by team (in
     /// teamplay), by owner (a player-spawned monster), else by skill tier so monsters are tinted by difficulty.
@@ -389,7 +386,7 @@ public static class MonsterAI
         if (IsTeamplay && e.Team != 0f)
             colormap = 1024 + ((int)e.Team - 1) * 17;
         else if (owner is not null && (owner.Flags & EntFlags.Client) != 0)
-            colormap = owner.ColorMapOverride & ~RenderColormapped; // inherit the player's colormap value
+            colormap = owner.ColorMapOverride & ~Entity.RenderColormapped; // inherit the player's colormap value
         else if (st.Skill <= MonsterSkill.Easy)
             colormap = 1126;
         else if (st.Skill <= MonsterSkill.Medium)
@@ -405,7 +402,7 @@ public static class MonsterAI
 
         // QC stores the bare colormap; the port's render seam expects RENDER_COLORMAPPED set when a colormap is
         // present (mirrors g_model_setcolormaptoactivator / MapModels.SetColormapToActivator).
-        e.ColorMapOverride = colormap > 0 ? (colormap | RenderColormapped) : 0;
+        e.ColorMapOverride = colormap > 0 ? (colormap | Entity.RenderColormapped) : 0;
     }
 
     /// <summary>

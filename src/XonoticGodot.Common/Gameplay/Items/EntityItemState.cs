@@ -36,6 +36,15 @@ namespace XonoticGodot.Common.Framework
         }
 
         /// <summary>
+        /// CLIENT-side proxy field: the weapon registry id a weapon-pickup item carries, decoded from the
+        /// snapshot's <c>Weapon</c> field (non-player entities network <c>RegistryId + 1</c>, 0 = not a weapon
+        /// pickup — see ServerNet). −1 = none/unknown. The render layer prefers this explicit identity over
+        /// matching the item model filename (a mapper can override a pickup's model; a filename guess then
+        /// paints the wrong weapon's colors or none at all).
+        /// </summary>
+        public int ItemWeaponId = -1;
+
+        /// <summary>
         /// QC <c>.m_isloot</c> (server/items/spawning.qh ITEM_IS_LOOT): true for a dropped/tossed loot item
         /// (thrown weapon, death-drop, nade-spawned). NOT derived from <see cref="Gravity"/> — the port's
         /// Entity.Gravity defaults to 1f, so a gravity test would wrongly mark every item loot. Loot items

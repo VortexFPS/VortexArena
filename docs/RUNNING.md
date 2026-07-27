@@ -240,6 +240,8 @@ Headless doesn't render. To walk around the scene:
 4. Or from CLI, windowed: `"$GODOT" --path "C:/Users/Bryan/Projects/Xonotic/XonoticGodot"` (omit `--headless`).
 5. For an **automated frame an agent/CI can inspect**, add `--screenshot <path>` (writes a PNG then quits) —
    see Tricks → *Visual capture* below.
+6. To frame a **specific spot on a map** (an item pickup, a lightmap seam, a prop) without walking there, add
+   `--observe "<x y z> [yaw pitch]"` (+ optional `--look-at "<x y z>"`) — see Tricks → *Observer camera* below.
 
 ---
 
@@ -415,6 +417,35 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   `.gdignore` so the Godot editor skips them and never spams the tree with `*.import` sidecars, and both are
   git-ignored. A root-level capture (`_*.png`) is git-ignored too but Godot will still generate a stray
   `_*.png.import` next to it, so prefer the folders.
+- **Observer camera (verified 2026-07):** `--observe "<x y z> [yaw pitch]"` pins the rendered camera at a fixed
+  Quake-space point (map-entity-lump coordinates) and keeps the local client an **observer** — no auto-join, so no
+  body/viewmodel intrudes and nothing perturbs the world. Add `--look-at "<x y z>"` to aim at a target point
+  instead of giving angles (the usual way to frame an entity). Pair with `--map` + `--screenshot` to capture any
+  spot on a map; add `--bots N` to observe live combat. Values may be space- or comma-separated; Quake pitch is
+  positive-down. Find entity coordinates in the BSP entity lump (lump 0 — plain text, e.g.
+  `python -c "..."` over `maps/<map>.bsp`, or the `viewpos` console print).
+  ```bash
+  "$GODOT" --path . --map stormkeep --observe "456 1288 220" --look-at "576 1408 180" \
+           --resolution 1280x720 --screenshot "$PWD/screenshots/devastator-pad.png"
+  ```
+  (Implementation: `game/net/ObserverCamera.cs`, parsed in `Main.cs`; the camera override + auto-join/CaptureGate
+  gates live in `game/net/NetGame.cs` — grep `ObserverCamera.Active`.)
+  To frame an item in a specific SERVER STATE, `--cvar g_debug_items_start_unavailable "<classname substring>|all"`
+  marks matching permanent items as already picked up at spawn (the awaiting-respawn ghost).
+  **Respawn time:** only `weapon_*` items take their respawn delay from a cvar in this port
+  (`g_pickup_respawntime_weapon`, `_superweapon`); every other item hardcodes it in its def ctor
+  (e.g. mega armor = 30 s, `ArmorItem.cs`). So pin a weapon to hold the ghost for a long capture, and
+  shoot non-weapon items inside their fixed window (mega armor: within ~30 s of map start):
+  ```bash
+  # weapon ghost — respawn pinned, holds for the whole capture
+  "$GODOT" --path . --map stormkeep --observe "-1050 -300 160" --look-at "-910 -160 100" \
+           --cvar g_debug_items_start_unavailable weapon_devastator --cvar g_pickup_respawntime_weapon 600 \
+           --resolution 1280x720 --screenshot "$PWD/screenshots/weapon-ghost.png"
+  # non-weapon ghost — no cvar to pin; the default --screenshot-frames settle is well inside mega armor's 30 s
+  "$GODOT" --path . --map stormkeep --observe "-1050 -300 160" --look-at "-910 -160 100" \
+           --cvar g_debug_items_start_unavailable armor_mega \
+           --resolution 1280x720 --screenshot "$PWD/screenshots/armor-ghost.png"
+  ```
   (First proof of this caught stormkeep's **walls rendering as missing-texture magenta** — unsupported DDS
   textures — while the headless smoke test still reported `0 errors`; now fixed by `DdsDecoder` (S3TC/BC1-3 +
   uncompressed). The last couple of `_norm`/`_gloss` maps were pk3 **symlink** stubs from build-time dedup,

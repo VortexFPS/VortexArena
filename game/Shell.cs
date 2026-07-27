@@ -657,6 +657,11 @@ public partial class Shell : Node
             _netGame.Shutdown();
             _netGame.QueueFree();
             _netGame = null;
+
+            // --observe is a one-session boot capture: disarm when that session ENDS (not on the boot-path
+            // TeardownGame that runs before the first session exists), so a later menu-created game
+            // auto-joins normally and doesn't inherit a camera pinned at the previous map's coordinates.
+            Net.ObserverCamera.Disarm();
         }
     }
 

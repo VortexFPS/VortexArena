@@ -155,7 +155,7 @@ public static class MapModels
         {
             this_.ColorMapOverride = (int)System.MathF.Floor(Prandom.Float() * 256f);
         }
-        this_.ColorMapOverride |= 1 << 10; // BIT(10) RENDER_COLORMAPPED
+        this_.ColorMapOverride |= Entity.RenderColormapped; // BIT(10)
     }
 
     /// <summary>Port of <c>g_model_dropbyspawnflags</c> (models.qc:65-82): spawnflags&amp;3 —

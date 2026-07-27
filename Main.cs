@@ -133,6 +133,17 @@ public partial class Main : Node
                 shell.BootBots = CameraTrace.Bots; // 0 by default; a scenario can request bots to capture the bot-join transition
             }
 
+            // `--observe "<x y z> [yaw pitch]"` [+ `--look-at "<x y z>"`]: dev/CI free camera — keep the local
+            // client an OBSERVER (no auto-join, no body/viewmodel) and pin the camera at that Quake-space point,
+            // aimed by yaw/pitch or at the --look-at target. Pair with `--map <name> --screenshot <path>` to
+            // frame any spot on a map (an item pickup, a lightmap seam) without scripting player movement.
+            int ob = Array.IndexOf(args, "--observe");
+            if (ob >= 0 && ob + 1 < args.Length)
+            {
+                int la = Array.IndexOf(args, "--look-at");
+                ObserverCamera.Configure(args[ob + 1], la >= 0 && la + 1 < args.Length ? args[la + 1] : null);
+            }
+
             // Networked boot paths (CI/dev): join a server, or host a listen server + self-connect.
             int c = Array.IndexOf(args, "--connect");
             if (c >= 0 && c + 1 < args.Length)

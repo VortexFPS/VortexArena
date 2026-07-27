@@ -154,6 +154,20 @@ public partial class Main : Node
             int pt = Array.IndexOf(args, "--port");
             if (pt >= 0 && pt + 1 < args.Length && int.TryParse(args[pt + 1], out int port) && port > 0)
                 shell.BootPort = port;
+#if XG_BOTPLAYER
+            // `--bot-player [skill]`: hand the LOCAL player to a bot brain so an unattended run drives the real
+            // player pipeline (see Directory.Build.props / XgBotPlayer). The flag only exists in a build that
+            // opted in at COMPILE time — a normal binary has no way to reach this, by construction.
+            int bp = Array.IndexOf(args, "--bot-player");
+            if (bp >= 0)
+            {
+                shell.BootBotPlayer = true;
+                if (bp + 1 < args.Length && !args[bp + 1].StartsWith("--")
+                    && float.TryParse(args[bp + 1], System.Globalization.NumberStyles.Float,
+                                      System.Globalization.CultureInfo.InvariantCulture, out float bpSkill))
+                    shell.BootBotPlayerSkill = bpSkill;
+            }
+#endif
             AddChild(shell);
         }
 

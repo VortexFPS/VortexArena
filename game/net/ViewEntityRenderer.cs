@@ -164,6 +164,9 @@ public sealed class ViewEntityRenderer
             h.LastAlpha = float.NaN; // fresh meshes start opaque — force a re-apply of the current alpha below
             // The freshly-built (or swapped) model carries no glow override yet; drop the cached material + gate
             // so the charge-glow block below re-builds and re-applies for the new mesh.
+            // [crash fix 2026-07-26] Dispose the per-instance duplicated glow material instead of just
+            // dropping the reference — it leaked to the finalizer thread on every vortex-holder swap.
+            h.GlowMaterial?.Dispose();
             h.GlowMaterial = null;
             h.LastGlow = new Color(float.NaN, float.NaN, float.NaN);
             h.LastColormap = int.MinValue; // [#36] fresh mesh → re-push the owner colormap below
@@ -381,8 +384,16 @@ public sealed class ViewEntityRenderer
     /// <summary>Drop the weapon view-entity for a departed/removed entity id.</summary>
     public void Remove(int id)
     {
-        if (_held.Remove(id, out Held? h) && GodotObject.IsInstanceValid(h.Holder))
-            h.Holder.QueueFree();
+        if (_held.Remove(id, out Held? h))
+        {
+            h.GlowMaterial?.Dispose();
+            h.GlowMaterial = null;
+            if (GodotObject.IsInstanceValid(h.Holder))
+            {
+                DisposeOwnedMeshes(h.Holder);
+                h.Holder.QueueFree();
+            }
+        }
     }
 
     /// <summary>
@@ -422,16 +433,42 @@ public sealed class ViewEntityRenderer
     public void Clear()
     {
         foreach (Held h in _held.Values)
+        {
+            h.GlowMaterial?.Dispose();
+            h.GlowMaterial = null;
             if (GodotObject.IsInstanceValid(h.Holder))
+            {
+                DisposeOwnedMeshes(h.Holder);
                 h.Holder.QueueFree();
+            }
+        }
         _held.Clear();
+    }
+
+    // [crash fix 2026-07-26] The held-weapon world models are fresh per-build Md3Builder trees (the
+    // comment further up claiming CACHED + SHARED is true of the MATERIALS only — the ArrayMesh is
+    // per-build). Dispose those meshes on the MAIN thread before the QueueFree, instead of leaving
+    // them to the .NET finalizer thread whose RenderingServer::free races the render loop (the
+    // 0xC0000374 family). Materials are the shared AssetSystem cache and are never touched.
+    private static void DisposeOwnedMeshes(Node n)
+    {
+        if (n is MeshInstance3D mi && mi.Mesh is Mesh m)
+        {
+            mi.Mesh = null;
+            m.Dispose();
+        }
+        foreach (Node c in n.GetChildren())
+            DisposeOwnedMeshes(c);
     }
 
     private static void FreeChildren(Node n)
     {
         if (!GodotObject.IsInstanceValid(n)) return;
         foreach (Node c in n.GetChildren())
+        {
+            DisposeOwnedMeshes(c);
             c.QueueFree();
+        }
     }
 
     private static Node3D Placeholder()

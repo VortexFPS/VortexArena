@@ -84,6 +84,7 @@ session hitch counter; **F11** expands the live scope tree; `set cl_frameprofile
 | `cl_frameprofiler_dump 1` | Console: dumps the last ~240 frames (forensic ring) to `frameprofile_ring.csv`. |
 | RenderDoc auto-capture | Run under RenderDoc → sync SURFACE compiles self-capture (≤6/session, after t=28 s) to `<temp>/xonotic_rdoc/`. |
 | `net_input_trace 1` | The input→server→reconcile pipeline tracer — see NET-DEBUGGING.md. |
+| `cl_motion_trace 1` + `tools/wobble-detect.py` | **Smoothness/wobble, not hitches.** Per-frame CSV to `~/XonData/motion_trace_<stamp>.csv`; the detector compares the delta the engine *reported* against QPC wall time over the same frames — any divergence is a displayed-speed error (motion integrates the reported delta; the display runs on wall time). Reports felt-band (0.3–5 Hz) speed-error RMS + episode durations, `physics_step/N` engine-clamp forensics, and per-clock attribution (engine vs `cl_smoothdt`). Exit 1 on WOBBLE. Calibrate the zero with a `vid_vsync 1` leg. `tools/wobble-report.py` is the companion for the display-side (PresentMon join). |
 
 Cvars: `cl_frameprofiler` (0/1/2; debug builds default 1), `cl_frameprofiler_hitchms` (floor, default 12;
 a hitch must also exceed 1.8× the rolling median), `cl_frameprofiler_watchdog` (default 1),
@@ -110,6 +111,13 @@ a hitch must also exceed 1.8× the rolling median), `cl_frameprofiler_watchdog` 
 - Frame-pairing note for tool maintainers: Godot's `delta` measures the *previous* main-loop iteration.
   The profiler finalizes each record one collector pass later so ms/scopes/watchdog agree
   (`FrameProfiler._pending`); don't "simplify" that away.
+- **A single-clock instrument cannot detect a clock bug.** The wobble hunt spent months on metrics
+  derived from `delta` alone — including one (`cam_speed`) that was flat by construction — while the
+  engine was rewriting `delta` itself (`MainTimerSync::advance_checked`; see §3f of
+  `planning/wobble-independent-audit-2026-07-26.md`). Any smoothness claim needs a second, independent
+  clock: `qpc_top_s` in the motion trace, or a display-side capture. Corollary: `physics/common/*` are
+  **frame-timing** settings here, not physics settings — Godot's physics has no consumers in this
+  project, but `physics_step` sets the clamp grid the reported delta is snapped onto.
 
 ## Deep dives (the postmortems)
 

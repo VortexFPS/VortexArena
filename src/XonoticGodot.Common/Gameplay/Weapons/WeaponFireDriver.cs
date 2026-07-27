@@ -185,8 +185,12 @@ public static class WeaponFireDriver
             // The recorded buttons are the authority PrepareAttack / the continuous weapons read.
             // (perf 2.1) First-use breadcrumb: the mp.weapon melts cluster like one-per-weapon-per-match —
             // a timestamped first-fire line correlates them with a specific weapon's cold path in the log.
+            // PER PROCESS, not per match, and deliberately so: the latch is static and never cleared, and
+            // the caches whose cold cost this is pointing at (effects, sounds, material pipelines) now
+            // persist across maps too (cl_persist_asset_cache). A second map's first fire is already warm,
+            // so re-arming this per match would just add a line with nothing behind it.
             if (buttonAtck && _firstFireLogged.Add(weapon.RegistryId))
-                XonoticGodot.Common.Diagnostics.Log.Info($"[wf] first attack this match: {weapon.NetName}");
+                XonoticGodot.Common.Diagnostics.Log.Info($"[wf] first attack this session: {weapon.NetName}");
             using (XonoticGodot.Common.Diagnostics.Prof.Sample(WfScopeName(weapon)))
             {
                 weapon.WrThink(player, slot, FireMode.Primary);

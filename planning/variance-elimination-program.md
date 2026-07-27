@@ -31,6 +31,28 @@ green; 25s scripted windowed run with `sv_threaded 1` + 6 bots: zero errors, cle
 snapshots interpolating, bots navigating. Encode-per-peer now scales off-main for hosted servers
 (the multi-peer concern from the WS2 review — structurally closed).
 
+> **Correction 2026-07-27 — "all 17 sites" was `_transport.Send` only.** The stage-1 migration was
+> scoped by grepping `_transport.Send`, so four worker-reachable transport touches with *other* names
+> survived and kept calling the main-thread-affine Godot ENet peer directly from `XG-ServerSim`:
+> `FlushSounds` + `FlushEffects` (`_transport.Broadcast`), `Reject` (`_transport.Disconnect`, reached
+> via the stage-2 `_inboundNet` drain), and `BuildScoreboard`'s ping/packet-loss reads
+> (`GetPeer`/`GetStatistic`). That is the long-standing mid-combat listen-server crash: a temporary
+> two-thread entry detector on `NetTransport` measured **10–20 real overlaps per 55 s session**
+> (`XG-ServerSim` inside `Send` while main was inside `Poll`, and the reverse), and a pre-fix run
+> faulted with `0xC0000005` in `PacketPeer.PutPacket`. Fixed by widening the outbox from a packet
+> queue to an ordered op queue (`Packet | Broadcast | Disconnect`) and sampling peer stats on the
+> transport thread; post-fix the detector reads **0** overlaps. Note for future stages: the funnel is
+> `SendPacket`/`BroadcastPacket`/`DisconnectPeer`, and the audit grep is `_transport\.`, not
+> `_transport.Send`.
+>
+> **The detector is now permanent**, as a `[Conditional("DEBUG")]` guard on `NetTransport` (call sites
+> compiled out of Release entirely; it wraps `Poll`/`Send`/`Flush`/`Disconnect` and the
+> `RoundTripMs`/`PacketLoss` stat readers). On the first violation it prints the offending managed stack
+> — reintroducing the old `FlushSounds` bug makes it name `ServerNet.FlushSounds` → `StepSimThreaded` →
+> `ServerThread.Run` with file:line inside one 55 s run — and it stays completely silent on a healthy
+> session. If it ever fires, someone has put a Godot transport call back on the sim worker; route that
+> call through the outbox rather than silencing the guard.
+
 **Stage 2 LANDED 2026-07-11: inbound marshaling.** Transport events (packet/connect/disconnect)
 fire on main but their handlers mutate peers/world — now (threaded) they enqueue into `_inboundNet`
 (payloads are already owned byte[]s from GetPacket; one queue keeps connect→handshake→input order)
@@ -83,10 +105,38 @@ improvement yet"):**
   two-run join failure during the rounds was isolated as environmental — rapid kill/relaunch churn;
   identical configs pass under clean sequencing: early/late, threaded/unthreaded, warm/cold).
 
-**NEXT: the fair A/B.** `sv_threaded 1` (still opt-in) now has the full architecture — worker owns
-tick+encode with per-tick gate holds, render thread never blocks on the common path. Playtest the
-implosion 6-bot repro threaded-vs-not (feel + session-CSV autocorr + the sv.gatewait_ms counter),
-then decide the default.
+## VERDICT (2026-07-11, release-export A/B — the program's decisive data)
+
+`sv_threaded` flipped DEFAULT ON (committed 44b6843) and Bryan played the release export both ways:
+"works decently" threaded (default stays), **but the felt wobble is UNCHANGED in both legs.**
+
+The session-CSV autocorrelation says why that is a RESULT, not a failure:
+
+| session | frames | ms p10/p50/p90 | lag1 | lag16 | lag32 | lag80 | decay<0.1 |
+|---|---|---|---|---|---|---|---|
+| 2026-07-10 baseline (pre-program) | 38.5k | 6.36/7.30/8.33 | +0.61 | +0.36 | +0.27 | +0.13 | never (long waves) |
+| 2026-07-11 leg 1 (release, threaded, 20 min) | 156k | 6.53/6.95/8.33 | +0.70 | +0.16 | **+0.08** | +0.09 | **lag 32** |
+| 2026-07-11 short legs ×2 | 2.4k | 6.94/6.94/6.94 | +0.87 | −0.01 | 0.00 | 0.00 | lag 16 |
+
+**The 300–600 ms production waves are GONE** — the slow-decay signature that defined the r16
+conviction has collapsed to short-range pacing correlation. Co-movement flipped too: baseline was
+proc +0.47 / rest +0.48 (game CPU carried the wave); now **rest +0.97 / late +0.74 / proc +0.32**
+— residual frame-time variation is almost entirely present/pacing-side, game quiet.
+
+**Conclusion: the program achieved its measurable goal, and that REFUTES production variance as
+the felt cause.** The wobble survives flat production. The felt mechanism therefore lives in what
+the counters can't see from inside: presentation cadence (composed flip on the misread-60Hz
+borderless panel), the pacer (note: all today's legs ran the AUTO cl_maxfps cap = 144 on a ~143 Hz
+panel — a ~1 Hz cap-vs-refresh beat candidate the baseline didn't have; r16's uncapped wobble means
+the beat isn't the original cause, but it's a new confound to clear), the mouse→view chain (still
+never traced), or machine state (GPU/CPU power oscillation).
+
+**NEXT (phenomenology first, as the r16 memory ordered):** the 3-condition empty-map trisect on the
+release export — (A) hold-W only, no mouse, 0 bots; (B) mouse-only turning, 0 bots; (C) +6 bots —
+with `cl_motion_trace 1`, judging wobble presence per condition. Then the one-line positive control
+(`vid_vsync 1`, now live-applies) and a `cl_maxfps 138 / 0` pair to clear the cap-beat confound.
+Code work is DOWNGRADED until those point somewhere: remaining program items (sim.integrate bursts,
+steering probes, particles chip) are perf hygiene, not wobble suspects.
 
 ### Original recon (superseded by the staged plan above)
 

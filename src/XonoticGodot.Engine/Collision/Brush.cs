@@ -569,6 +569,12 @@ public sealed class CollisionWorld
     {
         if (!_gridBuilt) BuildGrid();
 
+        // DP's world gather pads the sweep box by ±1 (see TraceService.SweptBounds, which the entity
+        // broadphase still uses). Fold the pad in here so every path below keeps that slop; it also
+        // covers the float drift the segment march accumulates (≤ ~0.5 over a max-range trace).
+        boxMins -= Vector3.One;
+        boxMaxs += Vector3.One;
+
         Vector3 delta = end - start;
         float cellX = _scaleX > 0f ? 1f / _scaleX : 0f;   // world units per grid cell
         float cellY = _scaleY > 0f ? 1f / _scaleY : 0f;
@@ -593,7 +599,21 @@ public sealed class CollisionWorld
         _markNumber++;
         int mark = _markNumber;
 
-        // The always-scan outside list, tested against the FULL sweep AABB (same as Query would).
+        // MARK SEMANTICS (fixed 2026-07-27): the mark means "already IN result", NOT "already looked at".
+        // Query can mark on sight because it has ONE test box — every brush is tested against it exactly once.
+        // QuerySwept has one box PER SEGMENT, so marking on sight pins each brush to the verdict of the first
+        // segment that happens to reach its cell: a brush that fails THAT segment's box but overlaps a LATER
+        // one was never re-tested and silently vanished from the candidate set, so the narrowphase never clipped
+        // it and the trace passed through solid geometry. Cells are XY buckets spanning all Z, and a segment's
+        // box covers up to 4 cells, so an early segment routinely reaches a cell it is still far from in Z —
+        // e.g. sweeping (0,0,0)→(200,0,2000) past a brush at x[100,128] z[1200,1300]: segment 1 reaches its cell
+        // and fails on Z, segment 2 genuinely hits it and skipped it. Long traces with real Z travel (hitscan up
+        // or down a height change, bot LOS, crosshair true-aim) are exactly the case this broadphase exists for.
+        // Re-testing an unadded brush per overlapping segment is a handful of AABB compares — pay it.
+
+        // The always-scan outside list, tested against the FULL sweep AABB (same as Query would). A brush that
+        // fails THIS box cannot overlap any segment box (every segment box is contained in the full one), so
+        // leaving it unmarked costs at most a repeat compare below and keeps one meaning for the mark.
         Vector3 fullMins = new(
             MathF.Min(start.X, end.X) + boxMins.X,
             MathF.Min(start.Y, end.Y) + boxMins.Y,
@@ -606,10 +626,12 @@ public sealed class CollisionWorld
         {
             int idx = _outside[i];
             if (_mark![idx] == mark) continue;
-            _mark[idx] = mark;
             var b = _brushes[idx];
             if (BoxesOverlap(fullMins, fullMaxs, b.Mins, b.Maxs))
+            {
+                _mark[idx] = mark;
                 result.Add(b);
+            }
         }
 
         // March cell-sized segments along the sweep; each segment queries its own small rectangle.
@@ -618,7 +640,7 @@ public sealed class CollisionWorld
         Vector3 p = start;
         for (int s = 0; s < segs; s++)
         {
-            Vector3 q = p + segDelta;
+            Vector3 q = s == segs - 1 ? end : p + segDelta;   // land exactly on end — segDelta drift must not shorten the corridor
             Vector3 smins = new(
                 MathF.Min(p.X, q.X) + boxMins.X,
                 MathF.Min(p.Y, q.Y) + boxMins.Y,
@@ -638,11 +660,13 @@ public sealed class CollisionWorld
                     for (int k = 0; k < bucket.Count; k++)
                     {
                         int idx = bucket[k];
-                        if (_mark![idx] == mark) continue;
-                        _mark[idx] = mark;
+                        if (_mark![idx] == mark) continue;   // already in result
                         var b = _brushes[idx];
                         if (BoxesOverlap(smins, smaxs, b.Mins, b.Maxs))
+                        {
+                            _mark[idx] = mark;
                             result.Add(b);
+                        }
                     }
                 }
             }

@@ -140,6 +140,15 @@ public sealed class TraceService : ITraceService
         object? gate = ConcurrencyGate;
         if (gate is null)
             return TraceUnlocked(start, mins, maxs, end, filter, ignore);
+        // The wait clock is only ever read back into Prof.Mark("sv.gatewait_ms"), which is inert while the
+        // profiler is off — so don't pay two QueryPerformanceCounter reads per trace during normal play. A
+        // bot-heavy tick runs thousands of traces (the strategy pool alone budgets 96/tick), and sv_threaded
+        // is the DEFAULT, so this path is the common one. Numbers are unchanged whenever profiling is on.
+        if (!XonoticGodot.Common.Diagnostics.Prof.Enabled)
+        {
+            lock (gate)
+                return TraceUnlocked(start, mins, maxs, end, filter, ignore);
+        }
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (gate)
         {
@@ -208,6 +217,11 @@ public sealed class TraceService : ITraceService
         object? gate = ConcurrencyGate;
         if (gate is null)
             return PointContentsUnlocked(point);
+        if (!XonoticGodot.Common.Diagnostics.Prof.Enabled)   // see Trace: no clock unless it is read back
+        {
+            lock (gate)
+                return PointContentsUnlocked(point);
+        }
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (gate)
         {

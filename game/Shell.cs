@@ -57,6 +57,15 @@ public partial class Shell : Node
     /// <summary>Bot count for the <c>--host</c> listen server (CLI <c>--bots N</c>); 0 = no bots.</summary>
     public int BootBots { get; set; }
 
+#if XG_BOTPLAYER
+    /// <summary>Bot-player harness (CLI <c>--bot-player</c>): drive the LOCAL player from a bot brain so an
+    /// unattended run exercises the real player pipeline. Compile-gated — see Directory.Build.props.</summary>
+    public bool BootBotPlayer { get; set; }
+
+    /// <summary>Skill for the bot-player brain (CLI <c>--bot-player &lt;skill&gt;</c>); default mid-range.</summary>
+    public float BootBotPlayerSkill { get; set; } = 5f;
+#endif
+
     /// <summary>UDP port every listen server this process hosts binds (CLI <c>--port N</c>, DP <c>-port</c>).
     /// Defaults to the stock game port; override it so scripted/agent runs don't collide with a live instance
     /// already holding 26000 (a second host on a busy port otherwise self-connects to the WRONG server).</summary>
@@ -206,6 +215,15 @@ public partial class Shell : Node
         MouseCapture.SetWantCapture(false); // at the menu the cursor is free
 
         // Optional: boot straight into a match (smoke test / dev), bypassing the menu.
+#if XG_BOTPLAYER
+        // Bot-player harness: latch the request before any match starts, so NetGame binds the brain as soon
+        // as the local player exists. Compile-gated — see Directory.Build.props.
+        XonoticGodot.Game.Net.BotPlayerMode.Requested = BootBotPlayer;
+        XonoticGodot.Game.Net.BotPlayerMode.Skill = BootBotPlayerSkill;
+        if (BootBotPlayer)
+            GD.Print("[bot-player] --bot-player: the local player will be driven by a bot brain.");
+#endif
+
         if (!string.IsNullOrWhiteSpace(ConnectAddress))
             ConnectToServer(ConnectAddress!);               // --connect <addr>: join a real server
         else if (BootHost)
@@ -866,14 +884,13 @@ public partial class Shell : Node
     /// </summary>
     private string? LocalRouteCommand(string line)
     {
-        GameWorld? world = _netGame?.ServerWorld;
-        if (world is null)
-            return null;
         // T47 integration wire-up: the listen-server operator's in-game console is the HOST, so it runs as the
         // server console (isServerConsole: true) — without this flag the new client-command privilege gate would
         // reject the host's own kick/map/set/endmatch/etc. (a regression vs pre-T47). caller stays LocalServerPlayer
         // so kill/say/team still act on the host's player; the remote-client path (ServerNet.cs) stays gated.
-        return world.Commands.Execute(line, isServerConsole: true, caller: _netGame?.LocalServerPlayer).Output;
+        // WS1: routed through NetGame so the execute takes the sim gate when sv_threaded is on — a bare
+        // Commands.Execute here mutated the worker-owned world from the main thread (`kill` mid-bot-combat).
+        return _netGame?.ExecuteHostConsoleCommand(line);
     }
 
     /// <summary>

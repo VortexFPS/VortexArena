@@ -1004,8 +1004,12 @@ public sealed class WaypointNetwork
         Waypoint? wp = Nearest(pos, walkFromWp: false);
         // Movable goals re-bind on a short timeout (QC uses ~0.5s for players); static items bind for the match
         // (QC sets a far-future timeout — the binding only changes on a waypoint reconnect, which clears below).
+        // BUT: if the tick trace pool ran dry, Nearest's verdict may be the nearest-by-DISTANCE fallback (its
+        // budget degradation, possibly across a wall) — a transient answer that must not bind a static item for
+        // the match. Cache it on the short timeout so it re-binds once the pool re-arms.
         bool movable = (target.Flags & EntFlags.Client) != 0 || target.Velocity != Vector3.Zero;
-        _goalWpCache[target] = (wp, now + (movable ? 0.5f : 1e9f));
+        float ttl = movable || BotTracewalk.TickBudgetSpent ? 0.5f : 1e9f;
+        _goalWpCache[target] = (wp, now + ttl);
         return wp;
     }
 

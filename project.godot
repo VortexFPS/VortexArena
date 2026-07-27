@@ -31,12 +31,31 @@ project/assembly_name="XonoticGodot"
 ; (perf 2.0 / R30, 2026-07-06) The game runs its OWN 72 Hz sim + collision (TraceService/CollisionWorld);
 ; Godot's physics serves NOTHING today: zero body/area/query users (BuildCollisionMesh is caller-less, the
 ; casings/gibs _PhysicsProcess nodes never spawn - see planning/perf-campaign-2026-07-06.md Phase 1c: the
-; 60 Hz phase cost 0.15-0.39 ms/frame for nothing, and catch-up steps amplified hitches). 10 Hz + a 1-step
-; cap keeps the phase alive for future opt-ins (ragdolls) at ~zero cost. If a real Godot-physics consumer
-; ever lands, raise these deliberately. (Godot strips these comments on re-serialise - rationale lives in
-; the campaign doc.)
+; 60 Hz phase cost 0.15-0.39 ms/frame for nothing, and catch-up steps amplified hitches). 10 Hz keeps the
+; phase alive for future opt-ins (ragdolls) at ~zero cost. If a real Godot-physics consumer ever lands,
+; raise these deliberately. (Godot strips these comments on re-serialise - rationale lives in the campaign
+; doc.)
+;
+; (2026-07-26 WOBBLE ROOT CAUSE - planning/wobble-independent-audit-2026-07-26.md 3f) These settings do not
+; only cost nothing, they used to REWRITE THE FRAME DELTA. MainTimerSync::advance_checked clamps process_step
+; into [min_avg_physics_steps, max_avg_physics_steps] * physics_step and then to +-physics_jitter_fix *
+; physics_step, carrying the difference in a time_deficit ledger repaid on later frames. NONE of that is
+; gated by run/delta_smooth below (that only disables DeltaSmoother, which also needs VSYNC_ENABLED and so
+; never ran at our vid_vsync 0 default). At physics_step = 0.1 s the band at ~144 fps is [0, 100/12 ms] =
+; [0, 8.333 ms]: the ceiling sits ~1.4 ms above the median frame time and the floor collapses to 0, making
+; it a one-sided rectifier. Measured: 23-40% of frames reported a time on the 100/N ms grid, the ledger rode
+; its +-50 ms rails, and embodied-vs-elapsed time diverged -20%/+28% (p1/p99) over 300 ms windows.
+;   physics_jitter_fix 0 -> clamp 2 degenerates to clamp(measured, measured), so _Process receives the delta
+;   Godot actually measured (DP cl.realframetime). Nothing to protect: Godot physics has no consumers here.
+;   Live A/B without a re-export: cl_engine_jitterfix (ClientSettings.ApplyEngineTiming) re-applies this at
+;   runtime; 0.5 restores Godot stock. Score legs with tools/wobble-detect.py.
+;   max_physics_steps_per_frame back to 8: main.cpp:4857 subtracts (steps - max) * physics_step from the
+;   REPORTED delta for every dropped step, which at 0.1 s/step drove _Process deltas negative after a
+;   >=200 ms hitch (the 0.875 ms = p_process_step/8 floor crushes and the skipped trace rows). 8 empty 10 Hz
+;   steps cover an 800 ms stall and still cost nothing, since nothing runs in _PhysicsProcess.
 common/physics_ticks_per_second=10
-common/max_physics_steps_per_frame=1
+common/max_physics_steps_per_frame=8
+common/physics_jitter_fix=0.0
 
 [rendering]
 

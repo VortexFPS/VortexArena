@@ -134,6 +134,34 @@ public partial class ModelAnimator : Node3D
     // =================================================================================================
 
     /// <summary>
+    /// [crash fix 2026-07-26] Deterministic MAIN-THREAD release of every exclusively-owned native
+    /// resource. Without this, the ArrayMesh + per-surface duplicated ShaderMaterials + marshalled
+    /// Variant arrays are freed by GodotSharp finalizers on the .NET FINALIZER thread — whose
+    /// RenderingServer::free calls race the main thread's ClearSurfaces/AddSurfaceFromArrays on the
+    /// same RenderingDevice allocator (0xC0000374 mid-session heap corruption), and whose end-of-run
+    /// backlog is what the at-exit "Attempted to free invalid ID" spam drains. sb.Material is the
+    /// SHARED AssetSystem-cache material and is deliberately not touched.
+    /// </summary>
+    public override void _ExitTree()
+    {
+        if (GodotObject.IsInstanceValid(_mesh))
+            _mesh.Mesh = null;
+        _morphMesh?.Dispose();
+        _morphMesh = null;
+        foreach (SurfaceBuffers sb in _surfaceBuffers)
+        {
+            sb.MorphMaterial?.Dispose();
+            sb.MorphMaterial = null;
+            sb.Arrays.Dispose();
+        }
+        _surfaceBuffers.Clear();
+        _surfaces.Clear();
+        _tagMarkers.Clear();
+        _morphInit = false;
+        _gpuSurfacesUploaded = false;
+    }
+
+    /// <summary>
     /// Build an animator for a parsed MD3. Creates the initial mesh (frame 0) and tag markers, and
     /// auto-registers a sensible default clip set named from the MD3's frame names when recognisable
     /// (idle/run/walk/jump/death/attack), so a model is animatable out of the box.
@@ -424,7 +452,16 @@ public partial class ModelAnimator : Node3D
         // Assign the persistent mesh to the instance once; from here on we mutate its surfaces in place so
         // the MeshInstance is never re-pointed at a new resource (which would re-trigger render setup).
         // MaterialOverride lives on the MeshInstance, not the mesh, so it survives in-place surface rebuilds.
+        // [crash fix 2026-07-26] The frame-0 mesh ModelLoader.BuildModel uploaded in Initialize is orphaned
+        // by this assignment — dispose it NOW on the main thread instead of leaving a fully-uploaded
+        // mesh + its RD buffers for the finalizer thread (one per animator build).
+        // (bisect-verified 2026-07-26: this dispose is NOT the residual-crash cause — both crash
+        // signatures reproduce with it disabled. RenderingServer defers actual buffer frees internally,
+        // so a same-frame Dispose of the replaced mesh is safe.)
+        Mesh? initialMesh = _mesh.Mesh;
         _mesh.Mesh = _morphMesh;
+        if (initialMesh is not null && initialMesh != _morphMesh)
+            initialMesh.Dispose();
 
         // One-shot build breadcrumb: which morph path this model took and why (per-model, boot/spawn-time
         // volume). The r16 flag investigation needed exactly this to see WHY a model stayed on the CPU path.

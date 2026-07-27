@@ -91,9 +91,11 @@ public sealed class ServerNet : IDisposable
     private readonly Dictionary<Player, PeerState> _byPlayer = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Number of connected ENet peers (incl. not-yet-handshaked ones). On a listen server the local
-    /// host is one peer, so <c>&gt; 1</c> means at least one REMOTE client is connected. Peer connect/disconnect
-    /// run on the Godot main thread (the transport poll), so this is safe to read from the main-thread UI.</summary>
-    public int ConnectedPeerCount => _peers.Count;
+    /// host is one peer, so <c>&gt; 1</c> means at least one REMOTE client is connected. Backed by
+    /// <see cref="_livePeerIds"/>, which only the transport-polling thread (always MAIN) touches — the
+    /// <c>_peers</c> table this used to count is mutated by the sim WORKER since the WS1 stage-2 inbound
+    /// marshaling, so counting it here was a cross-thread read of a plain Dictionary.</summary>
+    public int ConnectedPeerCount => _livePeerIds.Count;
 
     /// <summary>Fixed sim ticks the last <c>PumpTransport</c> ran (0 when rendering faster than 72 Hz, up to
     /// MaxTicksPerFrame on catch-up). Read by the <c>cl_motion_trace</c> diagnostic (r16 rubberband hunt).</summary>
@@ -407,7 +409,7 @@ public sealed class ServerNet : IDisposable
     {
         // Single-threaded path (sv_threaded 0, the default): everything runs inline on the caller's thread,
         // exactly as before — receive, sim, send. _simGate is null so no lock and the inbound queue is empty.
-        TransportReceive();
+        TransportReceive(realDelta);
         int ticksRan = StepWorld(realDelta);
         TransportSend(realDelta, ticksRan > 0);
     }
@@ -469,7 +471,7 @@ public sealed class ServerNet : IDisposable
     public void PumpTransportThreaded(float realDelta)
     {
         if (_simGate is null) return;
-        TransportReceive(); // handlers marshal to _inboundNet — no world access on this thread
+        TransportReceive(realDelta); // handlers marshal to _inboundNet — no world access on this thread
         bool advanced = System.Threading.Interlocked.Exchange(ref _pendingBroadcastFlag, 0) != 0;
 
         _masterPollAccum += realDelta;
@@ -504,9 +506,24 @@ public sealed class ServerNet : IDisposable
     /// path) pass straight through.</summary>
     [ThreadStatic] internal static bool OnSimWorker;
 
-    private readonly System.Collections.Concurrent.ConcurrentQueue<(int Peer, byte[] Buf, int Len, bool Reliable)> _outbox = new();
+    /// <summary>What a staged outbound op does when the main thread drains it. One ordered queue (not one per
+    /// kind) so a reject packet and the disconnect that follows it keep their encode order on the wire.</summary>
+    private enum OutKind : byte { Packet, Broadcast, Disconnect }
 
-    /// <summary>Every ServerNet send funnels here (the 17 former direct <c>_transport.Send</c> sites).</summary>
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(OutKind Kind, int Peer, byte[]? Buf, int Len, bool Reliable)> _outbox = new();
+
+    // Cap-and-shed for the outbox (review 2026-07-27): the worker stages one snapshot set per peer per tick
+    // at 72 Hz whether or not main ever drains — a Windows modal main-loop stall (title-bar drag, resize)
+    // parks _Process for seconds while the queue grows without bound (memory + rented buffers), then bursts
+    // seconds of STALE snapshots on resume. Shed policy: once the staged-but-undrained UNRELIABLE count hits
+    // the cap, new unreliable ops are dropped at the staging site — exactly the packets a stalled main could
+    // not have sent anyway, and each is superseded by the next tick's fresh encode. RELIABLE ops and
+    // Disconnects are never shed (event-driven, bounded, and must arrive); they bypass the counter entirely.
+    private const int OutboxUnreliableCap = 256;
+    private int _outboxUnreliable;   // Interlocked: ++ on worker stage, -- on main drain
+    private bool _outboxShedding;    // worker-only, logs one line per shed episode
+
+    /// <summary>Every ServerNet unicast send funnels here (the 17 former direct <c>_transport.Send</c> sites).</summary>
     private void SendPacket(int peerId, ReadOnlySpan<byte> payload, bool reliable)
     {
         if (!OnSimWorker)
@@ -514,35 +531,152 @@ public sealed class ServerNet : IDisposable
             _transport.Send(peerId, payload, reliable);
             return;
         }
-        byte[] buf = System.Buffers.ArrayPool<byte>.Shared.Rent(payload.Length);
-        payload.CopyTo(buf);
-        _outbox.Enqueue((peerId, buf, payload.Length, reliable));
+        StageOutbound(OutKind.Packet, peerId, payload, reliable);
     }
 
-    /// <summary>MAIN thread: hand worker-staged packets to the Godot transport. Lock-free vs the worker
-    /// (ConcurrentQueue); per-peer FIFO order is preserved. Returns true when anything was sent.</summary>
+    /// <summary>
+    /// Broadcast counterpart of <see cref="SendPacket"/> — the funnel the shared bundles use (sound + the
+    /// non-excluded effect bundle). These ran <c>_transport.Broadcast</c> INLINE from the worker until
+    /// 2026-07-27: the WS1 stage-1 migration moved the 17 <c>_transport.Send</c> sites into the outbox but
+    /// grepped for <c>Send</c>, so the two <c>Broadcast</c> sites kept calling straight into the Godot ENet
+    /// peer from the sim worker while the main thread was polling/sending on the same object. That is a plain
+    /// cross-thread call into a non-thread-safe Godot object and it crashed the listen server intermittently
+    /// mid-combat (0xC0000005 inside <c>PacketPeer.PutPacket</c>, ~1 run in 3 with bots fighting).
+    /// </summary>
+    private void BroadcastPacket(ReadOnlySpan<byte> payload, bool reliable)
+    {
+        if (!OnSimWorker)
+        {
+            _transport.Broadcast(payload, reliable);
+            return;
+        }
+        StageOutbound(OutKind.Broadcast, 0, payload, reliable);
+    }
+
+    /// <summary>
+    /// Drop a peer (handshake reject). Same story as <see cref="BroadcastPacket"/>: <see cref="Reject"/> runs
+    /// inside <c>OnPacketCore</c>, which on the threaded path is drained by the WORKER at its step top — so
+    /// <c>ENetMultiplayerPeer.DisconnectPeer</c> was being called off-thread too. Staged in the SAME queue as
+    /// the reject packet that precedes it, so the client still receives the reason before the link closes.
+    /// </summary>
+    private void DisconnectPeer(int peerId)
+    {
+        if (!OnSimWorker)
+        {
+            _transport.Disconnect(peerId);
+            return;
+        }
+        _outbox.Enqueue((OutKind.Disconnect, peerId, null, 0, false));
+    }
+
+    /// <summary>Copy <paramref name="payload"/> into a pooled buffer and stage it — the encode writers are
+    /// reused per peer, so staged bytes must own their memory.</summary>
+    private void StageOutbound(OutKind kind, int peerId, ReadOnlySpan<byte> payload, bool reliable)
+    {
+        if (!reliable)
+        {
+            int inFlight = System.Threading.Volatile.Read(ref _outboxUnreliable);
+            if (inFlight >= OutboxUnreliableCap)
+            {
+                if (!_outboxShedding)
+                {
+                    _outboxShedding = true;
+                    GD.Print($"[ServerNet] outbox at cap ({OutboxUnreliableCap} unreliable ops staged, main thread stalled?) — shedding unreliable sends until it drains");
+                }
+                return; // superseded by the next tick's encode — nothing to burst on resume
+            }
+            if (_outboxShedding && inFlight < OutboxUnreliableCap / 2)
+                _outboxShedding = false;
+            System.Threading.Interlocked.Increment(ref _outboxUnreliable);
+        }
+        byte[] buf = System.Buffers.ArrayPool<byte>.Shared.Rent(payload.Length);
+        payload.CopyTo(buf);
+        _outbox.Enqueue((kind, peerId, buf, payload.Length, reliable));
+    }
+
+    /// <summary>MAIN thread: hand worker-staged ops to the Godot transport. Lock-free vs the worker
+    /// (ConcurrentQueue); FIFO, so per-peer order and packet-before-disconnect both hold. Returns true when
+    /// anything was actually put on the wire (the caller then flushes).</summary>
     private bool DrainOutbox()
     {
         bool any = false;
-        while (_outbox.TryDequeue(out (int Peer, byte[] Buf, int Len, bool Reliable) p))
+        while (_outbox.TryDequeue(out (OutKind Kind, int Peer, byte[]? Buf, int Len, bool Reliable) p))
         {
-            // Drop packets staged for a peer that disconnected in the marshaling window (ENet spams a native
-            // "Invalid target peer" error otherwise). _livePeerIds is main-thread-owned, same thread as here.
-            if (_livePeerIds.Contains(p.Peer))
+            switch (p.Kind)
             {
-                _transport.Send(p.Peer, new ReadOnlySpan<byte>(p.Buf, 0, p.Len), p.Reliable);
-                any = true;
+                case OutKind.Packet:
+                    // Drop packets staged for a peer that disconnected in the marshaling window (ENet spams a
+                    // native "Invalid target peer" error otherwise). _livePeerIds is main-thread-owned, same
+                    // thread as here.
+                    if (_livePeerIds.Contains(p.Peer))
+                    {
+                        _transport.Send(p.Peer, new ReadOnlySpan<byte>(p.Buf!, 0, p.Len), p.Reliable);
+                        any = true;
+                    }
+                    break;
+
+                case OutKind.Broadcast:
+                    // No per-peer filter to apply — ENet fans a broadcast out to whoever is live at send time.
+                    // Skip it entirely when nobody is connected so we don't flag a flush for a no-op.
+                    if (_livePeerIds.Count > 0)
+                    {
+                        _transport.Broadcast(new ReadOnlySpan<byte>(p.Buf!, 0, p.Len), p.Reliable);
+                        any = true;
+                    }
+                    break;
+
+                case OutKind.Disconnect:
+                    // Graceful (now: false) — ENet closes after the queued reject packet above has gone out.
+                    if (_livePeerIds.Contains(p.Peer))
+                        _transport.Disconnect(p.Peer);
+                    break;
             }
-            System.Buffers.ArrayPool<byte>.Shared.Return(p.Buf);
+            // Disconnect ops carry Reliable=false but never touched the counter (enqueued directly,
+            // not via StageOutbound) — only counted unreliable Packet/Broadcast entries decrement.
+            if (p.Kind != OutKind.Disconnect && !p.Reliable)
+                System.Threading.Interlocked.Decrement(ref _outboxUnreliable);
+            if (p.Buf is not null)
+                System.Buffers.ArrayPool<byte>.Shared.Return(p.Buf);
         }
         return any;
     }
 
     /// <summary>Receive handshakes + input frames (fills each peer's input queue). GODOT TRANSPORT — main thread
     /// only on the threaded path.</summary>
-    private void TransportReceive()
+    private void TransportReceive(float realDelta)
     {
         using (Prof.Sample("net.poll")) _transport.Poll();
+        SamplePeerStats(realDelta);
+    }
+
+    // Per-peer ENet statistics (ping + packet loss), sampled on the TRANSPORT-owning thread and read by the
+    // scoreboard encode. BuildScoreboard used to call _transport.RoundTripMs/PacketLoss directly, but on the
+    // threaded path it runs inside the WORKER's encode — and those go through ENetMultiplayerPeer.GetPeer() +
+    // ENetPacketPeer.GetStatistic(), i.e. Godot objects the main thread is concurrently polling and sending on.
+    // Same cross-thread class as the FlushSounds crash, just on the read side. Sampled here instead, published
+    // through a ConcurrentDictionary the encode reads. ENet's RTT/loss are its own smoothed, seconds-scale
+    // estimates, so the 4 Hz sample carries the same information the per-tick live read did.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, (int PingMs, float Loss)> _peerNetStats = new();
+    private const float PeerStatsIntervalSeconds = 0.25f;
+    private float _peerStatsAccum = PeerStatsIntervalSeconds; // due immediately on the first poll
+
+    /// <summary>MAIN thread (transport owner): refresh <see cref="_peerNetStats"/> on a 4 Hz cadence.</summary>
+    private void SamplePeerStats(float realDelta)
+    {
+        _peerStatsAccum += realDelta;
+        if (_peerStatsAccum < PeerStatsIntervalSeconds)
+            return;
+        _peerStatsAccum = 0f;
+
+        // _livePeerIds is this thread's own view of the connected set (maintained in the connect/disconnect
+        // handlers, which fire from the Poll above).
+        foreach (int id in _livePeerIds)
+            _peerNetStats[id] = (_transport.RoundTripMs(id), _transport.PacketLoss(id));
+
+        if (_peerNetStats.Count != _livePeerIds.Count)
+            foreach (int id in _peerNetStats.Keys)          // snapshot; only walked after a disconnect
+                if (!_livePeerIds.Contains(id))
+                    _peerNetStats.TryRemove(id, out _);
     }
 
     /// <summary>Step the authoritative world by <paramref name="realDelta"/> + drive observer joins. PURE C# —
@@ -1601,7 +1735,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.WriteByte((byte)NetControl.HandshakeReject);
         _scratchWriter.WriteString(reason);
         SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
-        _transport.Disconnect(peerId);
+        DisconnectPeer(peerId);
     }
 
     private void HandleHandshake(int peerId, ref BitReader r)
@@ -2886,10 +3020,15 @@ public sealed class ServerNet : IDisposable
             // QC SP_PING (scoreboard.qc:1041): a connected human's measured ENet round-trip time (ms); bots and
             // unmapped players send -1 (unknown → the client renders the neutral '-' rather than a fake number).
             int pingMs = -1;
-            if (_byPlayer.TryGetValue(p, out PeerState? plSt))
+            // Read the main-thread sample (SamplePeerStats), NOT the live ENet peer: this encode runs on the sim
+            // worker when threaded and ENetMultiplayerPeer is main-thread-affine. A peer that connected inside the
+            // current 0.25s sample window simply reads as unmapped for one window (ping -1 → the neutral '-'),
+            // which is what it already rendered before its first RTT estimate existed.
+            if (_byPlayer.TryGetValue(p, out PeerState? plSt)
+                && _peerNetStats.TryGetValue(plSt.PeerId, out (int PingMs, float Loss) ns))
             {
-                plByte = System.Math.Min((int)System.MathF.Ceiling(_transport.PacketLoss(plSt.PeerId) * 255f), 255);
-                pingMs = _transport.RoundTripMs(plSt.PeerId);
+                plByte = System.Math.Min((int)System.MathF.Ceiling(ns.Loss * 255f), 255);
+                pingMs = ns.PingMs;
             }
             // carry the entcs name/team slice so the client can label/group the row without an entcs stream
             // (the port has no entcs name source; the scoreboard would otherwise have an opaque net id).
@@ -3376,7 +3515,7 @@ public sealed class ServerNet : IDisposable
         }
         PatchCount(_eventWriter, countPos, n);
         if (n > 0)
-            _transport.Broadcast(_eventWriter.WrittenSpan, reliable: false);
+            BroadcastPacket(_eventWriter.WrittenSpan, reliable: false);
 
         // per-peer pass for excluded effects (each goes to everyone but the excluded player).
         if (anyExcept)
@@ -3460,7 +3599,7 @@ public sealed class ServerNet : IDisposable
             if (WriteSound(_eventWriter, _soundQueue[i].Event)) n++;
         PatchCount(_eventWriter, countPos, n);
         if (n > 0)
-            _transport.Broadcast(_eventWriter.WrittenSpan, reliable: false);
+            BroadcastPacket(_eventWriter.WrittenSpan, reliable: false);
 
         _soundQueue.Clear();
     }

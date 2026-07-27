@@ -608,6 +608,7 @@ public partial class ClientWorld : Node3D
     public void OnEntityRemove(int index, NVec3 lastOrigin = default, string? impactEffect = null)
     {
         _frameDriven.Remove(index);
+        _graceHidden.Remove(index); // a net id is reusable — a stale grace mark would start the next tenant hidden
         _nameplates.Remove(index); // the Label3D is a child of the node — freed with it below
         StopLoopsForEntity(index); // end any looping sounds this entity emitted (Arc beam, vehicle engine)
 
@@ -641,6 +642,32 @@ public partial class ClientWorld : Node3D
         if (_entityNodes.Remove(index, out EntityNode? node) && GodotObject.IsInstanceValid(node))
             node.QueueFree();
     }
+
+    /// <summary>
+    /// [crash fix 2026-07-26] Hide/show an entity's render nodes WITHOUT tearing them down — the
+    /// PVS-flicker grace window (ClientEntityView.CullDeparted) parks a briefly-unseen entity here
+    /// instead of destroying it: a full teardown+rebuild per PVS boundary crossing was churning
+    /// ~5-10 mesh/material RIDs per second into the .NET finalizer thread, whose concurrent
+    /// RenderingServer::free calls race the main thread's surface updates (the 0xC0000374 mid-session
+    /// heap corruption). No-op for ids with no render state.
+    /// </summary>
+    public void SetEntityHidden(int index, bool hidden)
+    {
+        // The grace set is consulted by the per-frame player pass — without it, that pass's
+        // first-person visibility toggle force-shows a PVS-hidden player model every frame,
+        // making the hide half of this mechanism a no-op for players.
+        if (hidden) _graceHidden.Add(index);
+        else _graceHidden.Remove(index);
+        if (_animators.TryGetValue(index, out ModelAnimator? anim) && GodotObject.IsInstanceValid(anim))
+            anim.Visible = !hidden;
+        if (_playerModels.TryGetValue(index, out PlayerModel? pm) && GodotObject.IsInstanceValid(pm))
+            pm.Visible = !hidden;
+        if (_entityNodes.TryGetValue(index, out EntityNode? node) && GodotObject.IsInstanceValid(node))
+            node.Visible = !hidden;
+    }
+
+    // Ids currently parked hidden by the PVS-flicker grace window (see SetEntityHidden).
+    private readonly System.Collections.Generic.HashSet<int> _graceHidden = new();
 
     /// <summary>
     /// The Godot node a child should attach to in order to track entity <paramref name="ownerIndex"/> at the
@@ -1054,16 +1081,6 @@ public partial class ClientWorld : Node3D
     /// (the model eases back to opaque). A non-positive <paramref name="localNetId"/> is ignored. The per-frame
     /// model pass eases the matching <see cref="PlayerModel"/> toward this each frame; with no target set it no-ops.
     /// </summary>
-    /// <summary>
-    /// QC CSQC's view-entity suppression: the net id of the player the camera currently renders from INSIDE
-    /// (a first-person followed spectatee) — that body is hidden in the player pass. 0 = none (chase view or
-    /// not spectating). Set every frame by NetGame.UpdateCamera; instant on/off by design (no fade).
-    /// </summary>
-    private int _viewedFirstPersonNetId;
-
-    /// <inheritdoc cref="_viewedFirstPersonNetId"/>
-    public void SetViewedFirstPerson(int netId) => _viewedFirstPersonNetId = netId;
-
     public void SetLocalBodyAlpha(int localNetId, float alpha)
     {
         if (localNetId <= 0)
@@ -1073,6 +1090,16 @@ public partial class ClientWorld : Node3D
         else
             _bodyAlphaTarget[localNetId] = Mathf.Clamp(alpha, 0f, 1f);
     }
+
+    /// <summary>
+    /// QC CSQC's view-entity suppression: the net id of the player the camera currently renders from INSIDE
+    /// (a first-person followed spectatee) — that body is hidden in the player pass. 0 = none (chase view or
+    /// not spectating). Set every frame by NetGame.UpdateCamera; instant on/off by design (no fade).
+    /// </summary>
+    private int _viewedFirstPersonNetId;
+
+    /// <inheritdoc cref="_viewedFirstPersonNetId"/>
+    public void SetViewedFirstPerson(int netId) => _viewedFirstPersonNetId = netId;
 
     // =================================================================================================
     //  Per-frame drive
@@ -1132,8 +1159,11 @@ public partial class ClientWorld : Node3D
                 // ServerNet skips the recipient, so only the spectatee case exists). Instant both ways: a
                 // fade here would leave body polygons across the eye for several frames on every re-glue.
                 bool viewedFp = e.Index == _viewedFirstPersonNetId;
-                if (pm.Visible == viewedFp)
-                    pm.Visible = !viewedFp;
+                // A grace-hidden model (PVS flicker window, SetEntityHidden) must STAY hidden — this
+                // toggle only reconciles the first-person state for models the grace window isn't holding.
+                bool wantVisible = !viewedFp && !_graceHidden.Contains(e.Index);
+                if (pm.Visible != wantVisible)
+                    pm.Visible = wantVisible;
                 float distSq = poseCull ? (pm.GlobalPosition - viewG).LengthSquared() : 0f;
                 // QC ENT_CLIENT_STATUSEFFECTS frozen: hold the skeletal pose static while encased (the ice block
                 // freezes the animation, not just the tint). Set from the networked StatusEffects bitmap before posing.

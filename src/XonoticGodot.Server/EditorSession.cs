@@ -104,6 +104,16 @@ public static class EditorSession
         // the HUD, the scoreboard and this session's own state machine all still read EDIT.
         p.IsObserver = false;
 
+        // Everything else ClientManager.Spawn would have restored has to be restored here too, or PLAYTEST is a
+        // subtly broken deathmatch. CanPickupItems is the FL_PICKUPITEMS equivalent and Item_Touch's FIRST gate,
+        // so without it every pickup silently refuses — the reported "items don't work". Solid/TakeDamage were
+        // stripped by PutObserverInServer, so without them playtesters cannot block or hurt each other. And the
+        // observer's NOTARGET flag would otherwise leave the playtester invisible to bots and turrets.
+        p.CanPickupItems = true;
+        p.Solid = Solid.SlideBox;
+        p.TakeDamage = DamageMode.Aim;
+        p.Flags = EntFlags.Client;
+
         // PutPlayerInServer applies its own placement nudge on top of the origin it is given; re-assert the
         // view angles afterwards so the client's camera does not snap away from where the mapper was looking.
         p.Angles = angles;

@@ -2964,9 +2964,16 @@ public sealed class GameWorld
                 m.Activate();
                 break;
             case EditorMode:
-                // Nothing to wire: no scoring, no rounds, no team source. The join gate that keeps a mapper in
-                // free-fly lives on the DEFAULT gate in WireServerInfrastructure, because that assignment runs
-                // after this switch and would overwrite anything set here.
+                // No scoring, no rounds, no team source. The join gate that keeps a mapper in free-fly lives on
+                // the DEFAULT gate in WireServerInfrastructure, because that assignment runs after this switch
+                // and would overwrite anything set here.
+                //
+                // PLAYTEST is deliberately a real deathmatch — damage, items and weapons all behave normally,
+                // because a map tested under special rules has not been tested. The one concession is the
+                // starting arsenal: a mapper checking flow should not have to go and find a weapon first, so
+                // seed the arena to the full set. Seeded only when unset, so a session can still override it.
+                if (string.IsNullOrEmpty(Api.Cvars.GetString("g_weaponarena")))
+                    Api.Cvars.Set("g_weaponarena", EditorMode.DefaultWeaponArena);
                 break;
             case TeamMayhem tm:
                 tm.Activate();

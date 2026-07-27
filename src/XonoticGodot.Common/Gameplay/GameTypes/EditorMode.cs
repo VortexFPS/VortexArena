@@ -34,6 +34,14 @@ public sealed class EditorMode : GameType
     }
 
     /// <summary>
+    /// Default weapon set for PLAYTEST. The point of playtesting is to feel the map with the movement and
+    /// weapons you will actually ship, so it behaves like deathmatch rather than a stripped sandbox — but a
+    /// mapper testing flow should not have to hunt for a weapon first, so the arena default hands out the
+    /// full set. Only seeded when the cvar has not already been set, so a session can override it.
+    /// </summary>
+    public const string DefaultWeaponArena = "most";
+
+    /// <summary>
     /// QC MENUQC gametype description — shown under the gametype icon in the vote picker.
     /// </summary>
     public override string? MenuDescription =>

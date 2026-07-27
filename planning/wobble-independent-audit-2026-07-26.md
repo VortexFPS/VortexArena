@@ -160,6 +160,40 @@ an infinite `RenderingDevice::_free_internal "Attempted to free invalid ID"` err
 log before it was killed). Traces survive (flushed in Shutdown); scripted captures should carry a
 post-quit watchdog kill.
 
+## 3d. BREAKTHROUGH (2026-07-26 night): mouse input modulates the frame cadence itself
+
+Bryan isolated the repro — the stutter appears during high-speed (laser-jump) movement **while
+the mouse is moving** and is clean when it isn't. Neither dt-embodiment fix changed it
+(`cl_smoothdt_driftcap` and `m_smoothdt` both felt-neutral — 3a and 3b are refuted as the felt
+cause; both kept as correctness hygiene). The joined profiler+trace analysis
+(session-20260726-212314 × motion_trace_20260726_212329, 16.2k frames, corr 1.000) found why:
+
+| | still p50 | turning p50 |
+|---|---|---|
+| frame ms | 6.95 | **8.33** (p90 11.1) |
+| proc / rcpu / gpu | 1.14 / 1.54 / 1.40 | 1.35 / 1.04 / 1.43 |
+| **rest (pump/present/waits)** | 4.34 | **5.81** |
+| draw calls | 1343 | 416 |
+
+Moving the mouse costs +1.4 ms median and a heavy tail while the game does LESS work — the entire
+increase is in `rest`, i.e. the Windows message pump / present path, not game or render code.
+This is the felt wobble: **frame-rate modulation keyed to hand movement**, which no dt math can
+fix, invisible to every earlier instrument (they never bucketed by input activity), and immune to
+everything the hunt tried (production variance, threading, pacing, dt conditioning). It also
+explains DP's immunity on the same box (different raw-input pump) and the r16 "mouse→view chain
+never traced" blind spot.
+
+**Known upstream defect class** (Windows-only, high-polling mice → WM_INPUT flood in the pump):
+godot#80583 (125 Hz makes it vanish), #57599, #60646; architecture proposals godot-proposals#1288 /
+godot#26828 (input polling on the render thread). Godot docs recommend fully-updated Win11 for
+≥1 kHz mice.
+
+**Decisive diagnostic:** drop the mouse's polling rate to 125 Hz (mouse software) and re-feel the
+laser-jump repro. Vanishes → confirmed; then the fix options are (a) engine patch in our fork's
+Godot build (coalesce WM_INPUT in the pump), (b) track/backport the upstream fix, (c) ship a
+"reduce mouse polling" known-issue note. If it does NOT vanish → the rest-side cost has another
+trigger (pump cost per event is still measured fact) — profile the pump directly.
+
 ## 4. Decision experiment matrix (supersedes the seam doc's ordering)
 
 All runs on the release export, `cl_motion_trace 1`, sustained movement, ≥60 s per leg,

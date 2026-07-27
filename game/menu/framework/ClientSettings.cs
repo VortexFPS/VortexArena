@@ -189,6 +189,12 @@ public static class ClientSettings
         // frame-time variance the raw lagged delta puts a per-frame motion error into everything the eye
         // sees (the r16 "rubberband"). 0 = raw delta (A/B). Server tick timing is unaffected (always raw).
         c.Register("cl_smoothdt", "1");
+        // (2026-07-26 wobble audit) cl_smoothdt_driftcap: bound cl_smoothdt's drift-repayment ledger so a
+        // large excursion can't ride the ±4% clamp for hundreds of ms (a sustained, FELT speed error — the
+        // measured worst case was 1.5s), and widen the hitch gate so a 144↔250fps cadence transition passes
+        // raw instead of loading the ledger. Sheds wall-time debt past the cap (DP's own trade under
+        // overload). 0 = legacy r16 unbounded ledger (A/B).
+        c.Register("cl_smoothdt_driftcap", "1");
         // (r16) cl_frame_governor: adaptive frame pacing — every second, cap the engine at ~0.98/p75 of the
         // recent frame times so delivery is metronomic while the rate still adapts to load (the property both
         // smooth-feeling controls — vsync ON and a hard-engaged cap — share). 0 = off. An explicit cl_maxfps

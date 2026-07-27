@@ -3005,6 +3005,7 @@ public sealed partial class NetGame : Node3D
     private int _netTraceTick;             // throttle counter for the net_input_trace log
     private bool _hitchHoldCv = true;      // cl_movement_hitch_hold: Fix B post-hitch stall-aware reconcile (see docs/TROUBLESHOOTING.md)
     private bool _smoothDtCv = true;       // cl_smoothdt: conditioned client-motion dt (the r16 variance fix; see ConditionDt)
+    private bool _smoothDtCapCv = true;    // cl_smoothdt_driftcap: bounded drift ledger + wide hitch gate (2026-07-26 fix)
     private bool _interpCushionCv = true;  // cl_interp_cushion: full measured-interval slew target (DP boundmode-5 parity; see InterpBias)
     private bool _netClockDp5Cv;           // cl_netclock_dp5: DP boundmode-5 stepped correction law instead of the rate slew (A/B)
     private bool _frameGovernorCv = false; // cl_frame_governor: adaptive frame pacing (r16; default OFF — opt-in experiment)
@@ -3072,6 +3073,9 @@ public sealed partial class NetGame : Node3D
         _hitchHoldCv = (_sharedCvars?.GetString("cl_movement_hitch_hold") ?? "") != "0";
         // cl_smoothdt defaults ON (unset → on): the r16 conditioned-motion-dt fix; 0 = raw Godot delta (A/B).
         _smoothDtCv = (_sharedCvars?.GetString("cl_smoothdt") ?? "") != "0";
+        // cl_smoothdt_driftcap defaults ON (unset → on): bounded drift ledger + wide hitch gate
+        // (the 2026-07-26 oscillator fix); 0 = legacy r16 unbounded ledger (A/B).
+        _smoothDtCapCv = (_sharedCvars?.GetString("cl_smoothdt_driftcap") ?? "") != "0";
         // cl_interp_cushion defaults ON (unset → on): DP boundmode-5 full-interval slew target; 0 = half-tick bias.
         _interpCushionCv = (_sharedCvars?.GetString("cl_interp_cushion") ?? "") != "0";
         // cl_netclock_dp5 defaults OFF: opt-in A/B of Base's stepped correction law vs the r16 rate slew.
@@ -4082,7 +4086,13 @@ public sealed partial class NetGame : Node3D
 
         // A real hitch (or a big cadence change) passes through raw — and resets nothing: the ring absorbs
         // it and the median follows if the new cadence persists.
-        if (rawDt > median * 1.8f || rawDt < median * 0.5f)
+        // [driftcap] The legacy 1.8×/0.5× gate MISSES the common cap engage/disengage transitions:
+        // 144↔250 fps is ratio 1.736/0.576, so 4-5 frames of the old cadence each dumped ~3 ms into the
+        // ledger — a deterministic ~300 ms saturated-repayment episode per transition (2026-07-26 audit).
+        // 1.6×/0.6× brackets those ratios; the cost is that 1.6-1.8× jitter outliers now pass raw (rare).
+        float gateHi = _smoothDtCapCv ? 1.6f : 1.8f;
+        float gateLo = _smoothDtCapCv ? 0.6f : 0.5f;
+        if (rawDt > median * gateHi || rawDt < median * gateLo)
         {
             // keep the drift ledger honest for the raw frame too (smooth == raw here, so no drift change)
             return rawDt;
@@ -4094,6 +4104,16 @@ public sealed partial class NetGame : Node3D
         float nudge = Math.Clamp(_dtDrift * 0.25f, -bound, bound);
         float smooth = median + nudge;
         _dtDrift += rawDt - smooth;
+        // [driftcap] Bound the ledger to 16 frames of full-rail repayment (0.64×median ≈ 4.4 ms @144fps).
+        // Unbounded, a big excursion rides the ±4% clamp until fully repaid — a SUSTAINED speed error the
+        // eye reads as the wobble (measured worst case: 1.5 s). Capped, no saturated episode can outlast
+        // ~110 ms @144fps (below the felt band); the excess wall-time debt is shed, the same
+        // accuracy-for-smoothness trade DP makes when it drops overload time (sv.perf_acc_lost).
+        if (_smoothDtCapCv)
+        {
+            float driftCap = median * 0.64f;
+            _dtDrift = Math.Clamp(_dtDrift, -driftCap, driftCap);
+        }
         return smooth;
     }
 

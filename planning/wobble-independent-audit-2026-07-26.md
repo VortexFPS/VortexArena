@@ -109,6 +109,38 @@ Also: the windowed Debug run **crashes at exit** with 0xC0000374 heap corruption
 `RenderingDevice::_free_dependencies` after the profiler summary — that's what silently ate the
 first capture of this session (needs its own investigation; not wobble-related).
 
+## 3c. The ConditionDt fix (landed same day, `cl_smoothdt_driftcap`, default ON)
+
+Two surgical changes in `ConditionDt` (0 = legacy r16 behavior for A/B):
+- **Ledger bound**: `_dtDrift` clamped to ±0.64×median (16 full-rail repayment frames) — a
+  saturated episode can't outlast ~110 ms @144fps steady-cadence; excess wall-time debt is shed
+  (DP's own accuracy-for-smoothness trade under overload).
+- **Wider hitch gate**: 1.8×/0.5× → 1.6×/0.6×, bracketing the 144↔250 fps transition ratios
+  (1.736/0.576) so cap engage/disengage passes raw instead of loading the ledger.
+
+**Verification (reproduced 3×, fixed 2× live + deterministic replay):**
+- Offline float32 replay of both variants over the real captured dt series + the audit's synthetic
+  worst cases: real capture worst episode 643→199 ms (≥200 ms count 5→0); 144↔250 cadence square
+  317→83 ms (19→0); bimodal 5/9 ms wandering mix — the release-export combat regime per the r16
+  p10 3.7/p90 8.3 measurement — **96.1% saturation → 8.8%, worst episode 7469→113 ms**, embodiment
+  error RMS 30→7%. (Legacy's 96% saturation also cross-validates the stability analysis's ~92%
+  prediction.) Wall-time cost of shedding: ~0.9 ms/s (0.09% rate error).
+- Live in-engine A/B (Debug, 65 s bench-spectate stormkeep 6 bots, ×3 legacy / ×2 fixed):
+  whole-session worst saturated episode legacy 1521/1125/722 ms → fixed 222/292 ms; ledger range
+  ±50 ms → ±[6..24] ms (residual width = hitch-storm-inflated medians, by design). Steady-state
+  (t>15 s) is *unchanged* between modes in this regime (worst ~130-240 ms both) — the Debug
+  spectate at a 144 cap barely excites the oscillator outside hitch storms; the deep regime needs
+  the release-export combat playtest, which is exactly experiment 3 below.
+
+Caveat kept honest: in this low-excitation regime the felt-band forcing lives in warmup/hitch
+storms; whether 3a carries Bryan's *combat* wobble is decided by experiment 3, not by these runs.
+
+Also observed while testing (separate bug, filed in §3b's hazard list): the Debug windowed build's
+engine teardown is unreliable AFTER our Shutdown completes — either 0xC0000374 heap corruption or
+an infinite `RenderingDevice::_free_internal "Attempted to free invalid ID"` error loop (407 MB
+log before it was killed). Traces survive (flushed in Shutdown); scripted captures should carry a
+post-quit watchdog kill.
+
 ## 4. Decision experiment matrix (supersedes the seam doc's ordering)
 
 All runs on the release export, `cl_motion_trace 1`, sustained movement, ≥60 s per leg,

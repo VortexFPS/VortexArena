@@ -45,6 +45,7 @@ public sealed class OkShotgun : Weapon
     public OkShotgun()
     {
         NetName = "okshotgun";
+        BotPickupBaseValue = 6000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Shells;   // QC ammo_type RES_SHELLS
         DisplayName = "Overkill Shotgun";
         Impulse = 2;

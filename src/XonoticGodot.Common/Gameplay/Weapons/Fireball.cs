@@ -70,6 +70,7 @@ public sealed class Fireball : Weapon
     public Fireball()
     {
         NetName = "fireball";
+        BotPickupBaseValue = 5000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         DisplayName = "Fireball";
         Impulse = 9;
         // WEP_FLAG_SUPERWEAPON | WEP_TYPE_SPLASH | WEP_FLAG_NODUAL

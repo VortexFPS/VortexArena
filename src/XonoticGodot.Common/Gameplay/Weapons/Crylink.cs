@@ -57,6 +57,7 @@ public sealed class Crylink : Weapon
     public Crylink()
     {
         NetName = "crylink";
+        BotPickupBaseValue = 6000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Crylink";
         Impulse = 6;

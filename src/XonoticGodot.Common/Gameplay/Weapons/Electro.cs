@@ -89,6 +89,7 @@ public sealed class Electro : Weapon
     public Electro()
     {
         NetName = "electro";
+        BotPickupBaseValue = 5000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Electro";
         Impulse = 5;

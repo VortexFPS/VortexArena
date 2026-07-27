@@ -60,6 +60,7 @@ public sealed class Hook : Weapon
     public Hook()
     {
         NetName = "hook";
+        BotPickupBaseValue = 0;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Fuel;   // QC ammo_type
         DisplayName = "Grappling Hook";
         Impulse = 0;

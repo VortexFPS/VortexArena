@@ -55,6 +55,7 @@ public sealed class OkRpc : Weapon
     public OkRpc()
     {
         NetName = "okrpc";
+        BotPickupBaseValue = 10000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type RES_ROCKETS
         DisplayName = "Overkill Rocket Propelled Chainsaw";
         Impulse = 9;

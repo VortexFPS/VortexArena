@@ -66,6 +66,7 @@ public sealed class Hlac : Weapon
     public Hlac()
     {
         NetName = "hlac";
+        BotPickupBaseValue = 4000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Heavy Laser Assault Cannon";
         Impulse = 6;

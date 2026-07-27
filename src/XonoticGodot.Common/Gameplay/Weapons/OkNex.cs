@@ -56,6 +56,7 @@ public sealed class OkNex : Weapon
     public OkNex()
     {
         NetName = "oknex";
+        BotPickupBaseValue = 8000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type RES_CELLS
         DisplayName = "Overkill Nex";
         Impulse = 7;

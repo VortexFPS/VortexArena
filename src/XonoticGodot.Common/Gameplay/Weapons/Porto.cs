@@ -45,6 +45,7 @@ public sealed class Porto : Weapon
     public Porto()
     {
         NetName = "porto";
+        BotPickupBaseValue = 0;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         DisplayName = "Port-O-Launch";
         Impulse = 0;
         // WEP_TYPE_OTHER | WEP_FLAG_SUPERWEAPON | WEP_FLAG_NODUAL | WEP_FLAG_NOTRUEAIM

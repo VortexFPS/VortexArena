@@ -38,6 +38,7 @@ public sealed class Blaster : Weapon
     public Blaster()
     {
         NetName = "blaster";
+        BotPickupBaseValue = 0;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         DisplayName = "Blaster";
         Impulse = 1;
         // WEP_FLAG_NORMAL | WEP_FLAG_CANCLIMB | WEP_TYPE_SPLASH

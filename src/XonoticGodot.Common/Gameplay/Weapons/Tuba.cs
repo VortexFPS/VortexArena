@@ -70,6 +70,7 @@ public sealed class Tuba : Weapon
     public Tuba()
     {
         NetName = "tuba";
+        BotPickupBaseValue = 2000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         DisplayName = "@!#%'n Tuba";
         Impulse = 1;
         // WEP_FLAG_HIDDEN | WEP_TYPE_SPLASH | WEP_FLAG_NODUAL | WEP_FLAG_NOTRUEAIM

@@ -59,6 +59,7 @@ public sealed class Rifle : Weapon
     public Rifle()
     {
         NetName = "rifle";
+        BotPickupBaseValue = 7000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Bullets;   // QC ammo_type
         DisplayName = "Rifle";
         Impulse = 7;

@@ -60,6 +60,7 @@ public sealed class Machinegun : Weapon
     public Machinegun()
     {
         NetName = "machinegun";
+        BotPickupBaseValue = 7000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Bullets;   // QC ammo_type
         DisplayName = "MachineGun";
         Impulse = 3;

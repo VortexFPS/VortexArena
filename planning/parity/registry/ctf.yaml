@@ -569,25 +569,26 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:havocbot_role_ctf_carrier/offense/defense/middle/escort/retriever"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:havocbot_goalrating_ctf_*"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleCtf"
+      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleCtf (dispatcher) + CtfRoleCarrier/Retriever/Middle/Offense/Defense/Escort + CtfResetRole/CtfSetRole"
     constants:
-      - { name: "flag goal rating", base: "10000 routerating", port: "RatingFlag 30000", match: false }
+      - { name: "flag/base goal ratings", base: "per-role QC literals (carrier 10000/2000/1000; retriever 10000/12000/8000; middle 8000/9000/3000 + 25000 enemies/items; offense 10000/22000; defense 10000/5000/6000 + 25000; escort 10000/6000/21000)", port: "same literals", match: true }
+      - { name: "role timeouts", base: "retriever 10-20s, middle 10s, defense 30s, offense 120s, escort 30-90s", port: "same", match: true }
     status:
-      logic: partial
-      values: partial
-      timing: na
+      logic: faithful
+      values: faithful
+      timing: faithful
       presentation: na
       audio: na
       liveness: live
-    intended_divergence: true
-    divergence_rationale: "The six QC havocbot CTF roles (carrier/offense/defense/middle/escort/retriever) are deliberately collapsed into a single goal-rater (grab enemy flag / capture at home / return own stolen flag + items/roam) — a behavioural approximation, not the per-role state machine."
     gaps:
-      - "No role timeouts, no team-count-based defense/offense balancing, no middlepoint/symmetry analysis, no can't-find-flag suicide."
-      - "Flag goal rating is RatingFlag 30000 vs QC's 10000 routerating (a relative-weight divergence, not a behavioural break)."
+      - "Carrier can't-find-flag watchdog clears route + forces re-rate instead of QC's DEATH_KILL suicide (no bot-layer damage path)."
+      - "Carrier/middle goalentity_lock_timeout (2-3s base-camp goal lock) intentionally omitted — a no-op at the 7s re-rate cadence."
+      - "Oneflag: carrier routes to OWN base (the port's pinned capture rule, sv_ctf.qc:1186); QC's oneflag find_enemy_flag/enemybase bot call contradicts its own capture rule and is not mirrored."
     verification:
-      - { kind: trace, ref: "BotRoles.ChooseRole(\"ctf\") => BotObjectiveRoles.RoleCtf; wired at the live bot spawn (BotPopulation/BotController); Role(this,_rater) invoked per strategy frame (BotBrain)", result: pass }
-    confidence: medium
-    notes: "RoleCtf is the live CTF bot role — selected by gametype NetName at bot spawn and invoked by the strategy-token brain each frame; logic remains a faithful collapse of the six QC roles."
+      - { kind: trace, ref: "BotRoles.ChooseRole(\"ctf\") => RoleCtf; the role runs EVERY token hold (BotBrain strategy block), goal rating gated on GoalRatingTimedOut — the QC havocbot_ai:64 cadence", result: pass }
+      - { kind: test, ref: "tests/XonoticGodot.Tests/BotCtfObjectiveTests.cs — reset balancing (solo→offense, 1 mate→defense), carrier routes home, retriever chases the thief, middle on enemy-flag-taken, offense→escort switch, retriever revert", result: pass }
+    confidence: high
+    notes: "REWRITTEN 2026-07-11 (parity/bot-objectives): the collapsed single-rater replaced with the FULL six-role QC state machine — teamcount position balancing (middlepoint = mean of flag HomeOrigins), per-role rating scales/timeouts, carrier health-adjusted enemyflag rating, defense PVS-or-coinflip base rush, escort/retriever previous-role revert with timeout_force/_expire on switches."
 
   - id: ctf.flag.map_reset
     name: "Flag reset on map/round reset (ctf_Reset)"

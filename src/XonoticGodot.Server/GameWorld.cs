@@ -3275,6 +3275,11 @@ public sealed class GameWorld
                 // broadcast NotificationSystem (the MSG_CENTER/MSG_INFO routing). Without this the decisions
                 // (CheckWinner / SpawnMonsterDef) reached a null sink and the prints never went out.
                 inv.Notifications = new InvasionNotifyHost();
+                // QC MUTATOR_HOOKFUNCTION(inv, Bot_ForbidAttack) (sv_invasion.qc:426-431): Invasion is co-op —
+                // a bot may only attack MONSTERS, never players (Base also strips players from g_bot_targets on
+                // spawn; the veto here covers both).
+                Bot.BotBrain.ForbidAttackHook = (self, targ) =>
+                    (targ.Flags & XonoticGodot.Common.Framework.EntFlags.Monster) == 0;
                 break;
             case Race race:
                 race.Activate();

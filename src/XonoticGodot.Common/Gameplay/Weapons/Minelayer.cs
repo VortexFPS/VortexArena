@@ -60,6 +60,7 @@ public sealed class Minelayer : Weapon
     public Minelayer()
     {
         NetName = "minelayer";
+        BotPickupBaseValue = 7000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type
         DisplayName = "Mine Layer";
         Impulse = 4;

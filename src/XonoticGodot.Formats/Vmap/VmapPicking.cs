@@ -46,7 +46,22 @@ public sealed class VmapPickIndex
         public required Vector3[][] Windings { get; init; }
     }
 
+    /// <summary>A cached patch: its tessellated triangles and bounds, for object-level picking.</summary>
+    public sealed class PatchEntry
+    {
+        public required VmapPatch Patch { get; init; }
+        public required Vector3 Mins { get; init; }
+        public required Vector3 Maxs { get; init; }
+
+        /// <summary>Triangle soup, three vertices per triangle.</summary>
+        public required Vector3[] Triangles { get; init; }
+    }
+
     private readonly List<Entry> _entries = new();
+    private readonly List<PatchEntry> _patches = new();
+
+    /// <summary>Cached patches, for picking and for drawing their outlines.</summary>
+    public IReadOnlyList<PatchEntry> Patches => _patches;
     private VmapDocument? _doc;
     private bool _includedTools;
     private int _hiddenStamp;
@@ -77,6 +92,7 @@ public sealed class VmapPickIndex
         _hiddenStamp = HiddenSubmodels.Count;
 
         _entries.Clear();
+        _patches.Clear();
         _doc = doc;
         Version = version;
 
@@ -107,6 +123,40 @@ public sealed class VmapPickIndex
                 continue;   // bounds-less brush: nothing to hit or snap to
 
             _entries.Add(new Entry { Brush = brush, Mins = mins, Maxs = maxs, Windings = windings });
+        }
+
+        // Patches are tessellated once here for the same reason brush windings are: a curved surface has no
+        // plane set to intersect, so picking it means testing real triangles, and rebuilding them per frame
+        // would cost what the broadphase was added to avoid.
+        foreach (VmapPatch patch in doc.Patches)
+        {
+            if (!patch.IsValid)
+                continue;
+
+            var single = new VmapDocument();
+            single.Patches.Add(patch);
+            IReadOnlyList<VmapSurface> surfaces = VmapGeometryBuilder.BuildSurfaces(single, includeSky: true);
+
+            var tris = new List<Vector3>(256);
+            var pmins = new Vector3(float.MaxValue);
+            var pmaxs = new Vector3(float.MinValue);
+            foreach (VmapSurface surf in surfaces)
+            {
+                foreach (int idx in surf.Indices)
+                {
+                    Vector3 v = surf.Positions[idx];
+                    tris.Add(v);
+                    pmins = Vector3.Min(pmins, v);
+                    pmaxs = Vector3.Max(pmaxs, v);
+                }
+            }
+            if (tris.Count < 3)
+                continue;
+
+            _patches.Add(new PatchEntry
+            {
+                Patch = patch, Mins = pmins, Maxs = pmaxs, Triangles = tris.ToArray(),
+            });
         }
     }
 
@@ -268,7 +318,73 @@ public static class VmapPicking
             }
         }
 
+        // --- patches: no plane set to intersect, so test the cached tessellation. Always picked as WHOLE
+        // objects regardless of the sub-object tool: a curved surface has no faces or corners to grab.
+        foreach (VmapPickIndex.PatchEntry pe in index.Patches)
+        {
+            if (!VmapPickIndex.RayHitsBox(origin, invDir, pe.Mins, pe.Maxs, bestDistance))
+                continue;
+
+            for (int i = 0; i + 2 < pe.Triangles.Length; i += 3)
+            {
+                if (!RayTriangle(origin, dir, pe.Triangles[i], pe.Triangles[i + 1], pe.Triangles[i + 2],
+                        out float t, out Vector3 n) || t < 0f || t >= bestDistance)
+                    continue;
+
+                bestDistance = t;
+                best = new VmapPickResult
+                {
+                    Hit = true,
+                    Point = origin + dir * t,
+                    Distance = t,
+                    Normal = n,
+                    Selection = VmapSelection.OfPatch(pe.Patch.Id),
+                };
+            }
+        }
+
         return best;
+    }
+
+    /// <summary>
+    /// Möller–Trumbore ray/triangle intersection. Two-sided: a patch is a surface, not a solid, and a mapper
+    /// may well be looking at its back.
+    /// </summary>
+    public static bool RayTriangle(Vector3 origin, Vector3 dir, Vector3 a, Vector3 b, Vector3 c,
+        out float t, out Vector3 normal)
+    {
+        t = 0f;
+        normal = Vector3.Zero;
+
+        Vector3 e1 = b - a, e2 = c - a;
+        Vector3 h = Vector3.Cross(dir, e2);
+        float det = Vector3.Dot(e1, h);
+        if (MathF.Abs(det) < 1e-8f)
+            return false;   // parallel
+
+        float inv = 1f / det;
+        Vector3 s = origin - a;
+        float u = Vector3.Dot(s, h) * inv;
+        if (u < 0f || u > 1f)
+            return false;
+
+        Vector3 q = Vector3.Cross(s, e1);
+        float v = Vector3.Dot(dir, q) * inv;
+        if (v < 0f || u + v > 1f)
+            return false;
+
+        t = Vector3.Dot(e2, q) * inv;
+        if (t <= 0f)
+            return false;
+
+        Vector3 nn = Vector3.Cross(e1, e2);
+        float len = nn.Length();
+        if (len < 1e-8f)
+            return false;
+        nn /= len;
+        // Face the normal back toward the ray so a face push on a patch reads sensibly from either side.
+        normal = Vector3.Dot(nn, dir) > 0f ? -nn : nn;
+        return true;
     }
 
     /// <summary>Choose the sub-object the hit point is closest to, honouring the requested mode.</summary>

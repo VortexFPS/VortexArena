@@ -112,6 +112,11 @@ public sealed partial class NetGame : Node3D
     private Vmap.EditorGizmos? _editorGizmos;
     private Vmap.EditorOrthoView? _editorOrtho;
     private bool _orthoPanning;
+
+    // The editor renders the world from the EDITABLE document, not the compiled BSP. Without this the textured
+    // geometry never reflects an edit: the overlay outline moves and the wall stays put.
+    private Node3D? _editorMapRoot;
+    private int _editorMapVersion = -1;
     private RadarPanel _radar = null!;
     private NetHud _hud = null!;                 // crosshair + health/armor readout (the always-on lightweight HUD)
     // The full CSQC HUD panel set (weapon bar / ammo / kill-feed / centerprint / timer) on the net play path —
@@ -5742,6 +5747,8 @@ public sealed partial class NetGame : Node3D
         if (_editorOrtho is { IsOpen: true } panOrtho)
             panOrtho.PanByAxes(BindTable.Forward, BindTable.Side, (float)GetProcessDeltaTime());
 
+        RefreshEditorWorld();
+
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
         {
             editorPanel.IsEditorSession = IsEditorGametype;
@@ -6800,6 +6807,57 @@ public sealed partial class NetGame : Node3D
     /// showed the per-brush tool filter was at the wrong granularity, and it is how we tell whether a shader
     /// family is still slipping through.
     /// </summary>
+    /// <summary>
+    /// Rebuild the visible world from the EDITED document whenever its geometry version moves.
+    ///
+    /// The map you fly through is normally built from the compiled BSP, which the editor never touches — so an
+    /// edit moved the truth planes and the overlay, while the textured wall stayed exactly where q3map2 left
+    /// it. Once a session is open the editor swaps in geometry generated from the document, so what you see is
+    /// what you are editing.
+    ///
+    /// The whole world is rebuilt per edit rather than patched incrementally. That is honest but blunt: it
+    /// costs a visible pause on a large map. Rebuilding only the chunks a change touches is the obvious
+    /// follow-up, and the cell split in VmapMapBuilder is already the right unit for it.
+    /// </summary>
+    private void RefreshEditorWorld()
+    {
+        if (_editor is null || _assets is null)
+            return;
+
+        bool wantEditorWorld = _editor.Active && _editor.Document is not null;
+
+        if (!wantEditorWorld)
+        {
+            // Left the editor: restore the compiled world.
+            if (_editorMapRoot is not null)
+            {
+                if (GodotObject.IsInstanceValid(_editorMapRoot))
+                    _editorMapRoot.QueueFree();
+                _editorMapRoot = null;
+                _editorMapVersion = -1;
+                if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
+                    _mapRoot.Visible = true;
+            }
+            return;
+        }
+
+        if (_editorMapVersion == _editor.GeometryVersion)
+            return;
+
+        using var _scope = XonoticGodot.Game.Client.FrameProfiler.Scope("editor.world");
+
+        if (_editorMapRoot is not null && GodotObject.IsInstanceValid(_editorMapRoot))
+            _editorMapRoot.QueueFree();
+
+        _editorMapRoot = Vmap.VmapMapBuilder.BuildMap(_editor.Document!, _assets.Assets);
+        AddChild(_editorMapRoot);
+        _editorMapVersion = _editor.GeometryVersion;
+
+        // Hide the compiled world rather than freeing it, so leaving the editor restores it instantly.
+        if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
+            _mapRoot.Visible = false;
+    }
+
     /// <summary>
     /// <c>editor_gametype &lt;name|all&gt;</c>: choose which gametype's geometry the editor shows. Resolves the
     /// hidden inline-model set with the SAME rule the renderer and collision builder use, so the editor shows

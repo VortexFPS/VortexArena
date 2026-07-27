@@ -331,6 +331,8 @@ public sealed partial class EditorController : Node3D
         _dragAxis = Manipulator == ManipulatorMode.Rotate
             ? RotationAxis()
             : Hover.Selection.Kind == VmapSelectionKind.Face ? Hover.Normal : NVec3.Zero;
+        if (Hover.Selection.Kind == VmapSelectionKind.Patch)
+            _dragAxis = NVec3.Zero;   // free 3D: a curved surface has no single axis to push along
         _dragSnap = default;
         _dragging = true;
     }
@@ -462,6 +464,8 @@ public sealed partial class EditorController : Node3D
 
         IVmapOp? op = sel.Kind switch
         {
+            // A patch moves as a whole object — it has no plane set to push or corner to refit.
+            VmapSelectionKind.Patch => new TranslatePatchesOp(new[] { sel.PatchId }, delta),
             VmapSelectionKind.Face => BuildFaceOp(sel, delta),
             VmapSelectionKind.Vertex or VmapSelectionKind.Edge => new MoveVerticesOp(sel.BrushId, sel.Vertices, delta),
             VmapSelectionKind.Brush => new TranslateBrushesOp(_session.SelectedBrushIds(), delta),

@@ -77,6 +77,10 @@ public static class VmapGeometryBuilder
 
     private static void AppendBrush(VmapBrush brush, Dictionary<string, Builder> byMaterial, bool includeSky)
     {
+        // Whole scaffolding volumes never render.
+        if (brush.IsToolBrush)
+            return;
+
         Vector3[][] windings = VmapWinding.BuildBrushWindings(brush);
         for (int i = 0; i < windings.Length; i++)
         {
@@ -86,6 +90,11 @@ public static class VmapGeometryBuilder
 
             VmapFace face = brush.Faces[i];
             if (!IsDrawable(face.SurfaceFlags, includeSky))
+                continue;
+            // Also skip the invisible shader families. A compiled map's brushes carry caulk, noshader and
+            // common/* sides that q3map2 never emits as surfaces; drawing them buries the level inside its own
+            // sealing shell and multiplies the draw count for geometry nobody can see.
+            if (VmapBrush.IsToolMaterial(face.Material))
                 continue;
 
             Builder b = Get(byMaterial, face.Material, face.SurfaceFlags);

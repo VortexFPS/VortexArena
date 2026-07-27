@@ -331,6 +331,7 @@ public sealed partial class EditorGizmos : Node3D
     /// <summary>Outline one selection, optionally displaced (for the drag ghost). Returns true if it drew.</summary>
     private bool DrawSelection(VmapDocument doc, VmapSelection sel, Color color, NVec3 offset, float fillAlpha = 0f)
     {
+        EditorController c0 = _controller!;
         if (sel.IsEmpty || doc.FindBrush(sel.BrushId) is not { } brush)
             return false;
 
@@ -357,6 +358,33 @@ public sealed partial class EditorGizmos : Node3D
                 DrawLoop(w, color);
                 FillPolygon(w, new Color(color.R, color.G, color.B, fillAlpha));
                 return w.Length >= 3;
+            }
+
+            case VmapSelectionKind.Patch:
+            {
+                // Outline the tessellation. A patch has no winding to trace, so the visible boundary IS its
+                // triangles — drawn as a light mesh so a curved surface reads as selected without hiding it.
+                foreach (VmapPickIndex.Entry _ in Array.Empty<VmapPickIndex.Entry>()) { }
+                bool drewPatch = false;
+                foreach (VmapPickIndex.PatchEntry pe in c0.PickIndex.Patches)
+                {
+                    if (pe.Patch.Id != sel.PatchId)
+                        continue;
+                    for (int i = 0; i + 2 < pe.Triangles.Length; i += 3)
+                    {
+                        Vector3 a0 = Coords.ToGodot(pe.Triangles[i] + offset);
+                        Vector3 b0 = Coords.ToGodot(pe.Triangles[i + 1] + offset);
+                        Vector3 c1 = Coords.ToGodot(pe.Triangles[i + 2] + offset);
+                        Line(a0, b0, color);
+                        Line(b0, c1, color);
+                        Line(c1, a0, color);
+                        if (fillAlpha > 0f)
+                            _fills.Add((a0, b0, c1, new Color(color.R, color.G, color.B, fillAlpha * 0.5f)));
+                    }
+                    drewPatch = true;
+                    break;
+                }
+                return drewPatch;
             }
 
             case VmapSelectionKind.Brush:

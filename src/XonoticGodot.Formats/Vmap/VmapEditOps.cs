@@ -336,6 +336,52 @@ public sealed class MoveVerticesOp : IVmapOp
         => doc.FindBrush(_brushId) is { } brush && VmapEdit.TryMoveVertices(brush, _targets, _delta);
 }
 
+/// <summary>
+/// Move whole bezier patches by translating every control point. Patches have no plane set, so this is a
+/// direct point translation rather than a plane-distance shift — and it is always valid: a translated bezier
+/// is still a bezier, so unlike a brush drag there is no convexity to break.
+/// </summary>
+public sealed class TranslatePatchesOp : IVmapOp
+{
+    private readonly int[] _patchIds;
+    private readonly Vector3 _delta;
+
+    public TranslatePatchesOp(IReadOnlyList<int> patchIds, Vector3 delta)
+    {
+        _patchIds = patchIds?.ToArray() ?? throw new ArgumentNullException(nameof(patchIds));
+        _delta = delta;
+    }
+
+    /// <summary>Patches are not brushes; the snapshot journal has nothing brush-shaped to capture here.</summary>
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    /// <summary>Patch ids this op moves.</summary>
+    public IReadOnlyList<int> PatchIds => _patchIds;
+
+    /// <summary>Translation applied to every control point.</summary>
+    public Vector3 Delta => _delta;
+
+    public string Describe() => $"Move {_patchIds.Length} patch{(_patchIds.Length == 1 ? "" : "es")}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        if (_delta == Vector3.Zero || _patchIds.Length == 0)
+            return false;
+
+        bool moved = false;
+        foreach (int id in _patchIds)
+        {
+            VmapPatch? patch = doc.Patches.FirstOrDefault(p => p.Id == id);
+            if (patch is null)
+                continue;
+            for (int i = 0; i < patch.Controls.Count; i++)
+                patch.Controls[i] += _delta;
+            moved = true;
+        }
+        return moved;
+    }
+}
+
 /// <summary>Retexture one face. Trivial, but it goes through the op journal so it undoes and replicates.</summary>
 public sealed class SetFaceMaterialOp : IVmapOp
 {

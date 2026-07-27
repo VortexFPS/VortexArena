@@ -10,6 +10,13 @@ public enum VmapSelectionKind
     Face,
     Edge,
     Vertex,
+
+    /// <summary>
+    /// A whole bezier patch (curved surface / terrain mesh). Patches are NOT plane sets, so face, edge and
+    /// vertex modes are meaningless for them — Radiant treats them the same way: you select the OBJECT and
+    /// edit its control grid, rather than picking faces off a hull it does not have.
+    /// </summary>
+    Patch,
 }
 
 /// <summary>
@@ -28,6 +35,10 @@ public readonly struct VmapSelection
     /// <summary>Face index within the brush, for <see cref="VmapSelectionKind.Face"/>; -1 otherwise.</summary>
     public int FaceIndex { get; init; }
 
+    /// <summary>Patch id for <see cref="VmapSelectionKind.Patch"/>; 0 otherwise. Kept separate from
+    /// <see cref="BrushId"/> because brush and patch ids are independent sequences.</summary>
+    public int PatchId { get; init; }
+
     /// <summary>World positions of the referenced vertices (one for a vertex, two for an edge).</summary>
     public IReadOnlyList<Vector3> Vertices { get; init; }
 
@@ -41,6 +52,10 @@ public readonly struct VmapSelection
 
     public static VmapSelection OfVertex(int brushId, Vector3 vertex) => new()
     { Kind = VmapSelectionKind.Vertex, BrushId = brushId, FaceIndex = -1, Vertices = new[] { vertex } };
+
+    /// <summary>Select a whole bezier patch.</summary>
+    public static VmapSelection OfPatch(int patchId) => new()
+    { Kind = VmapSelectionKind.Patch, PatchId = patchId, FaceIndex = -1, Vertices = Array.Empty<Vector3>() };
 
     public static VmapSelection OfEdge(int brushId, Vector3 a, Vector3 b) => new()
     { Kind = VmapSelectionKind.Edge, BrushId = brushId, FaceIndex = -1, Vertices = new[] { a, b } };

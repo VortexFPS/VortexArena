@@ -434,8 +434,10 @@ def report(path, cols, args, proj):
               f"   (physics_ticks_per_second = {grid['physics_ticks_per_second']})")
         print(f"       tail (> {grid['tail_threshold_ms']:.2f} ms) : {grid['tail_n']} frames"
               f" = {100 * grid['tail_frac']:.1f}% of all")
+        # mn can round to 0 when the modal tail value exceeds ~2x the physics step (e.g. a 60 Hz-physics
+        # trace with a 33 ms vsync mode) — that's off-grid by definition, not a division to attempt.
         mn = round(grid["physics_step_s"] * 1000.0 / grid["mode_ms"])
-        onmode = " = physics_step/%d" % mn if abs(
+        onmode = " = physics_step/%d" % mn if mn >= 1 and abs(
             grid["mode_ms"] - grid["physics_step_s"] * 1000.0 / mn) <= GRID_TOL * grid["mode_ms"] \
             else " (off-grid)"
         print(f"       most common exact value: {grid['mode_ms']:.3f} ms x{grid['mode_n']}"

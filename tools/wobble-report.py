@@ -46,7 +46,14 @@ def load_trace(path):
         rows = list(csv.DictReader(f))
     if not rows:
         sys.exit(f"empty trace: {path}")
-    cols = {k: np.array([float(r[k]) for r in rows]) for k in rows[0] if rows[0][k] not in (None, "")}
+    # A force-killed capture leaves a truncated final row (blank/missing cells) — NaN it like
+    # wobble-detect's loader does instead of crashing on float("")/float(None).
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return float("nan")
+    cols = {k: np.array([_f(r[k]) for r in rows]) for k in rows[0] if rows[0][k] not in (None, "")}
     v2 = "cam_step" in cols
     if not v2:
         print("NOTE: v1 trace (no cam_step/qpc_s) — only dt-side analysis possible; "

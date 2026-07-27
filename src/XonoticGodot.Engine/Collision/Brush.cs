@@ -569,6 +569,12 @@ public sealed class CollisionWorld
     {
         if (!_gridBuilt) BuildGrid();
 
+        // DP's world gather pads the sweep box by ±1 (see TraceService.SweptBounds, which the entity
+        // broadphase still uses). Fold the pad in here so every path below keeps that slop; it also
+        // covers the float drift the segment march accumulates (≤ ~0.5 over a max-range trace).
+        boxMins -= Vector3.One;
+        boxMaxs += Vector3.One;
+
         Vector3 delta = end - start;
         float cellX = _scaleX > 0f ? 1f / _scaleX : 0f;   // world units per grid cell
         float cellY = _scaleY > 0f ? 1f / _scaleY : 0f;
@@ -634,7 +640,7 @@ public sealed class CollisionWorld
         Vector3 p = start;
         for (int s = 0; s < segs; s++)
         {
-            Vector3 q = p + segDelta;
+            Vector3 q = s == segs - 1 ? end : p + segDelta;   // land exactly on end — segDelta drift must not shorten the corridor
             Vector3 smins = new(
                 MathF.Min(p.X, q.X) + boxMins.X,
                 MathF.Min(p.Y, q.Y) + boxMins.Y,

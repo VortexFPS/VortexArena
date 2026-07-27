@@ -111,6 +111,7 @@ public sealed partial class EditorGizmos : Node3D
         EditorController c = _controller!;
         VmapDocument doc = c.Document!;
         _segments.Clear();
+        _fills.Clear();
 
         bool anything = false;
 
@@ -118,17 +119,17 @@ public sealed partial class EditorGizmos : Node3D
         if (c.Session is { } session)
         {
             foreach (VmapSelection sel in session.Selection)
-                anything |= DrawSelection(doc, sel, SelectionColor, NVec3.Zero);
+                anything |= DrawSelection(doc, sel, SelectionColor, NVec3.Zero, fillAlpha: 0.16f);
         }
 
         // --- hover (skipped mid-drag: the ghost already says what is moving) ---
         if (!c.IsDragging && c.Hover.Hit)
-            anything |= DrawSelection(doc, c.Hover.Selection, HoverColor, NVec3.Zero);
+            anything |= DrawSelection(doc, c.Hover.Selection, HoverColor, NVec3.Zero, fillAlpha: 0.10f);
 
         // --- drag ghost: the same outline, offset by the pending delta ---
         if (c.IsDragging && c.DragDelta != NVec3.Zero)
         {
-            anything |= DrawSelection(doc, c.DragSelection, GhostColor, c.DragDelta);
+            anything |= DrawSelection(doc, c.DragSelection, GhostColor, c.DragDelta, fillAlpha: 0.24f);
 
             // --- snap hint: mark the feature the drag latched onto ---
             VmapPicking.SnapResult snap = c.DragSnap;
@@ -144,6 +145,25 @@ public sealed partial class EditorGizmos : Node3D
         // Only open a surface when there is something to put in it: ImmediateMesh errors on SurfaceEnd with no
         // vertices, and an idle editor (nothing hovered, nothing selected) is the common case.
         _overlayMesh.ClearSurfaces();
+        _ = anything;
+
+        // Fills first, outlines second: the translucent face wash reads as "this is the thing", and drawing the
+        // crisp outline over it keeps the exact boundary legible against busy level art.
+        if (_fills.Count > 0)
+        {
+            _overlayMesh.SurfaceBegin(Mesh.PrimitiveType.Triangles);
+            foreach ((Vector3 fa, Vector3 fb, Vector3 fc, Color color) in _fills)
+            {
+                _overlayMesh.SurfaceSetColor(color);
+                _overlayMesh.SurfaceAddVertex(fa);
+                _overlayMesh.SurfaceSetColor(color);
+                _overlayMesh.SurfaceAddVertex(fb);
+                _overlayMesh.SurfaceSetColor(color);
+                _overlayMesh.SurfaceAddVertex(fc);
+            }
+            _overlayMesh.SurfaceEnd();
+        }
+
         if (_segments.Count == 0)
             return;
 
@@ -156,14 +176,23 @@ public sealed partial class EditorGizmos : Node3D
             _overlayMesh.SurfaceAddVertex(b);
         }
         _overlayMesh.SurfaceEnd();
-        _ = anything;
     }
 
     /// <summary>Line segments accumulated this frame, emitted in one surface at the end of the rebuild.</summary>
     private readonly List<(Vector3 A, Vector3 B, Color Color)> _segments = new();
 
+    /// <summary>Translucent fill triangles accumulated this frame.</summary>
+    private readonly List<(Vector3 A, Vector3 B, Vector3 C, Color Color)> _fills = new();
+
+    /// <summary>Fan-fill a convex polygon with a translucent wash.</summary>
+    private void FillPolygon(Vector3[] points, Color color)
+    {
+        for (int i = 1; i + 1 < points.Length; i++)
+            _fills.Add((points[0], points[i], points[i + 1], color));
+    }
+
     /// <summary>Outline one selection, optionally displaced (for the drag ghost). Returns true if it drew.</summary>
-    private bool DrawSelection(VmapDocument doc, VmapSelection sel, Color color, NVec3 offset)
+    private bool DrawSelection(VmapDocument doc, VmapSelection sel, Color color, NVec3 offset, float fillAlpha = 0f)
     {
         if (sel.IsEmpty || doc.FindBrush(sel.BrushId) is not { } brush)
             return false;
@@ -189,6 +218,7 @@ public sealed partial class EditorGizmos : Node3D
                     return false;
                 Vector3[] w = ToGodot(VmapWinding.BuildFaceWinding(brush, sel.FaceIndex), offset);
                 DrawLoop(w, color);
+                FillPolygon(w, new Color(color.R, color.G, color.B, fillAlpha));
                 return w.Length >= 3;
             }
 
@@ -202,6 +232,7 @@ public sealed partial class EditorGizmos : Node3D
                     if (w.Length < 3)
                         continue;
                     DrawLoop(w, color);
+                    FillPolygon(w, new Color(color.R, color.G, color.B, fillAlpha * 0.6f));
                     drew = true;
                 }
                 return drew;

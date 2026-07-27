@@ -6941,8 +6941,65 @@ public sealed partial class NetGame : Node3D
         return XonoticGodot.Common.Gameplay.Resources.GetResource(p, w.AmmoType) > 0f;
     }
 
+#if XG_BOTPLAYER
+    private bool _botPlayerAttached;
+
+    /// <summary>
+    /// Bind a bot brain to the local player once it exists (idempotent, compile-gated). The bind MUTATES
+    /// server-side state that the sim worker owns, so it rides <c>RunOnSimThread</c> like every other
+    /// main→sim mutation (inline when unthreaded).
+    /// </summary>
+    private void MaybeAttachBotPlayer()
+    {
+        if (_botPlayerAttached || _serverWorld is null || _server is null)
+            return;
+        if (LocalServerPlayer is not { } me)
+            return;
+        _botPlayerAttached = true;
+        float skill = BotPlayerMode.Skill;
+        XonoticGodot.Server.GameWorld world = _serverWorld;
+        _server.RunOnSimThread(() => world.Bots.AttachBotPlayer(me, skill));
+        GD.Print($"[bot-player] brain attached to the LOCAL player (skill {skill}) — "
+                 + "input now synthesised through the real client pipeline.");
+    }
+#endif
+
     private InputCommand SampleInput()
     {
+#if XG_BOTPLAYER
+        // Bot-player harness: synthesise this tick's command from the brain bound to the local player. Sits
+        // exactly where the camera-trace scripted input sits — the command below is indistinguishable from a
+        // human's, so prediction/encode/reconcile all run for real. Inert unless --bot-player was passed.
+        if (BotPlayerMode.Requested)
+        {
+            MaybeAttachBotPlayer();
+            if (_botPlayerAttached && _carrier is not null && _serverWorld is not null)
+            {
+                XonoticGodot.Server.Bot.BotPopulation.BotPlayerCommand bp =
+                    _serverWorld.Bots.BotPlayerCommandLatest;
+                InputButtons bpButtons = InputButtons.None;
+                if (bp.Attack1) bpButtons |= InputButtons.Attack;
+                if (bp.Attack2) bpButtons |= InputButtons.Attack2;
+                if (bp.Jump) bpButtons |= InputButtons.Jump;
+                if (bp.Crouch) bpButtons |= InputButtons.Crouch;
+                if (bp.Hook) bpButtons |= InputButtons.Hook;
+                _viewAngles = bp.ViewAngles;   // slave the camera to the brain's aim, like the scripted path
+                // Still carry a console/bind-issued impulse (edge-triggered, same as the live path) so an
+                // agent can drive weapon switches etc. at a running bot-player session.
+                int bpImpulse = _pendingImpulse;
+                _pendingImpulse = 0;
+                return new InputCommand
+                {
+                    ViewAngles = bp.ViewAngles,
+                    Forward = bp.Forward, Side = bp.Side, Up = bp.Up,
+                    Buttons = (int)bpButtons,
+                    Impulse = bpImpulse,
+                    DeltaTime = _inputDeltaTime,
+                };
+            }
+        }
+#endif
+
         // Camera-trace (apparatus A2): once spawned, feed the deterministic scripted input instead of the live
         // keyboard/mouse, and slave the view angles to it so the captured camera is reproducible. Inert unless
         // --camera-trace was passed; falls through to real input once the script is exhausted.

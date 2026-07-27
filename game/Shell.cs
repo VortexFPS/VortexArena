@@ -57,6 +57,15 @@ public partial class Shell : Node
     /// <summary>Bot count for the <c>--host</c> listen server (CLI <c>--bots N</c>); 0 = no bots.</summary>
     public int BootBots { get; set; }
 
+#if XG_BOTPLAYER
+    /// <summary>Bot-player harness (CLI <c>--bot-player</c>): drive the LOCAL player from a bot brain so an
+    /// unattended run exercises the real player pipeline. Compile-gated — see Directory.Build.props.</summary>
+    public bool BootBotPlayer { get; set; }
+
+    /// <summary>Skill for the bot-player brain (CLI <c>--bot-player &lt;skill&gt;</c>); default mid-range.</summary>
+    public float BootBotPlayerSkill { get; set; } = 5f;
+#endif
+
     /// <summary>UDP port every listen server this process hosts binds (CLI <c>--port N</c>, DP <c>-port</c>).
     /// Defaults to the stock game port; override it so scripted/agent runs don't collide with a live instance
     /// already holding 26000 (a second host on a busy port otherwise self-connects to the WRONG server).</summary>
@@ -184,6 +193,15 @@ public partial class Shell : Node
         MouseCapture.SetWantCapture(false); // at the menu the cursor is free
 
         // Optional: boot straight into a match (smoke test / dev), bypassing the menu.
+#if XG_BOTPLAYER
+        // Bot-player harness: latch the request before any match starts, so NetGame binds the brain as soon
+        // as the local player exists. Compile-gated — see Directory.Build.props.
+        XonoticGodot.Game.Net.BotPlayerMode.Requested = BootBotPlayer;
+        XonoticGodot.Game.Net.BotPlayerMode.Skill = BootBotPlayerSkill;
+        if (BootBotPlayer)
+            GD.Print("[bot-player] --bot-player: the local player will be driven by a bot brain.");
+#endif
+
         if (!string.IsNullOrWhiteSpace(ConnectAddress))
             ConnectToServer(ConnectAddress!);               // --connect <addr>: join a real server
         else if (BootHost)

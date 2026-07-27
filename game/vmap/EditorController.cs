@@ -170,6 +170,39 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarShowToolBrushes, "0", CvarFlags.Save);
     }
 
+    /// <summary>
+    /// The gametype whose geometry is currently shown ("" = show everything). Xonotic maps carry
+    /// gametype-conditional brush entities — a CTF-only wall, a Race-only barrier — and the compiled map
+    /// contains all of them at once. NetRadiant has no notion of this: it edits the .map source, where those
+    /// are ordinary entities with filter keys, and it hides categories through its View > Filter toggles
+    /// rather than by gametype. Since we edit the COMPILED result, we can do better and show exactly the map a
+    /// given mode would produce — while never discarding the rest.
+    /// </summary>
+    public string GametypeFilter { get; private set; } = "";
+
+    /// <summary>Human-readable filter state for the HUD.</summary>
+    public string GametypeFilterLabel => string.IsNullOrEmpty(GametypeFilter) ? "all" : GametypeFilter;
+
+    /// <summary>
+    /// Show only geometry present in <paramref name="gametype"/>, or everything when it is empty/"all".
+    /// <paramref name="hiddenSubmodels"/> is the inline-model set that gametype filters out, resolved by the
+    /// host (which owns the BSP and the entity-filter rules).
+    /// </summary>
+    public void SetGametypeFilter(string gametype, IReadOnlySet<int>? hiddenSubmodels)
+    {
+        GametypeFilter = string.Equals(gametype, "all", StringComparison.OrdinalIgnoreCase) ? "" : gametype ?? "";
+
+        PickIndex.HiddenSubmodels.Clear();
+        if (hiddenSubmodels is not null)
+            foreach (int i in hiddenSubmodels)
+                PickIndex.HiddenSubmodels.Add(i);
+        PickIndex.Invalidate();
+
+        // The wireframe and any cached derived geometry must rebuild against the new visible set.
+        GeometryVersion++;
+        Log.Info($"editor: showing geometry for '{GametypeFilterLabel}' ({PickIndex.HiddenSubmodels.Count} models hidden)");
+    }
+
     /// <summary>Point the controller at the scene camera it should pick along.</summary>
     public void Attach(Camera3D camera) => _camera = camera;
 

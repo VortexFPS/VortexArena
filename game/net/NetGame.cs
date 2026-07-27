@@ -6776,6 +6776,9 @@ public sealed partial class NetGame : Node3D
                 return;
             }
             _editor.OpenSession(doc);
+            // Default to the mode actually running, so the editor opens showing the map the player sees.
+            _editor.SetGametypeFilter(_gametype, _droppedSubmodels);
+            Menu.MenuState.Interp?.RegisterCommand("editor_gametype", CmdEditorGametype);
         }
         catch (Exception ex)
         {
@@ -6797,6 +6800,32 @@ public sealed partial class NetGame : Node3D
     /// showed the per-brush tool filter was at the wrong granularity, and it is how we tell whether a shader
     /// family is still slipping through.
     /// </summary>
+    /// <summary>
+    /// <c>editor_gametype &lt;name|all&gt;</c>: choose which gametype's geometry the editor shows. Resolves the
+    /// hidden inline-model set with the SAME rule the renderer and collision builder use, so the editor shows
+    /// exactly the map that mode would produce — and nothing is discarded, only hidden.
+    /// </summary>
+    private void CmdEditorGametype(System.Collections.Generic.IReadOnlyList<string> argv)
+    {
+        if (_editor is null || _bsp is null)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor_gametype: no editing session");
+            return;
+        }
+        if (argv.Count < 2)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Help(
+                $"usage: editor_gametype <name|all>   (currently showing: {_editor.GametypeFilterLabel})");
+            return;
+        }
+
+        string want = argv[1];
+        bool showAll = string.Equals(want, "all", StringComparison.OrdinalIgnoreCase);
+        System.Collections.Generic.IReadOnlySet<int>? hidden =
+            showAll ? null : GameMapView.ComputeDroppedSubmodels(_bsp, want);
+        _editor.SetGametypeFilter(want, hidden);
+    }
+
     private static void LogEditorFaceHistogram(XonoticGodot.Formats.Vmap.VmapDocument doc)
     {
         var hist = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);

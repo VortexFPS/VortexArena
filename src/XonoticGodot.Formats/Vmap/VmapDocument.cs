@@ -215,6 +215,15 @@ public sealed class VmapBrush
     public int ContentFlags { get; set; }
 
     /// <summary>
+    /// Which inline brush model owns this brush: 0 = worldspawn, N = the entity whose <c>model</c> is "*N".
+    ///
+    /// Kept so the editor can FILTER by gametype instead of discarding: a func_wall that only exists in CTF is
+    /// still real map data and must survive a load/save round-trip, it just should not be shown while editing
+    /// for a mode that does not have it.
+    /// </summary>
+    public int SubmodelIndex { get; set; }
+
+    /// <summary>
     /// True for a q3map2 TOOL brush — hint/skip/caulk/nodraw/clip/trigger/areaportal/origin. These are
     /// compiler and gameplay scaffolding (vis hints, collision volumes, trigger bounds), not level
     /// architecture: they render nothing, they outnumber the visible geometry on a real map, and they sit in

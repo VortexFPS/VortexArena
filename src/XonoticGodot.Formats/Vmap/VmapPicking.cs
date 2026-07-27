@@ -49,6 +49,12 @@ public sealed class VmapPickIndex
     private readonly List<Entry> _entries = new();
     private VmapDocument? _doc;
     private bool _includedTools;
+    private int _hiddenStamp;
+
+    /// <summary>
+    /// Inline model indices hidden by the gametype filter. Assign, then call <see cref="Invalidate"/>.
+    /// </summary>
+    public HashSet<int> HiddenSubmodels { get; } = new();
 
     /// <summary>Geometry version this cache was built for; -1 when never built.</summary>
     public int Version { get; private set; } = -1;
@@ -64,9 +70,11 @@ public sealed class VmapPickIndex
     public void EnsureBuilt(VmapDocument doc, int version, bool includeToolBrushes = false)
     {
         ArgumentNullException.ThrowIfNull(doc);
-        if (Version == version && ReferenceEquals(_doc, doc) && _includedTools == includeToolBrushes)
+        if (Version == version && ReferenceEquals(_doc, doc) && _includedTools == includeToolBrushes
+            && _hiddenStamp == HiddenSubmodels.Count)
             return;
         _includedTools = includeToolBrushes;
+        _hiddenStamp = HiddenSubmodels.Count;
 
         _entries.Clear();
         _doc = doc;
@@ -75,6 +83,10 @@ public sealed class VmapPickIndex
         foreach (VmapBrush brush in doc.Brushes)
         {
             if (brush.IsToolBrush && !includeToolBrushes)
+                continue;
+            // Geometry belonging to an inline model the current gametype filter hides (e.g. a CTF-only
+            // func_wall while editing for deathmatch). Hidden, never discarded.
+            if (brush.SubmodelIndex != 0 && HiddenSubmodels.Contains(brush.SubmodelIndex))
                 continue;
 
             Vector3[][] windings = VmapWinding.BuildBrushWindings(brush);

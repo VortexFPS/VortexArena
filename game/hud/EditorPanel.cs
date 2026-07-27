@@ -97,6 +97,7 @@ public partial class EditorPanel : HudPanel
             if (Controller is { } c)
             {
                 lines.Add(($"Tool: {c.Tool}  {Key(BindTool)}   Manip: {c.Manipulator}  {Key(BindManip)}", bright));
+                lines.Add(($"Showing: {c.GametypeFilterLabel}   (editor_gametype <name|all>)", dim));
 
                 lines.Add((
                     $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +

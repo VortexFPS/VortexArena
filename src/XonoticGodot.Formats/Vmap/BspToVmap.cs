@@ -41,19 +41,17 @@ public static class BspToVmap
     {
         ArgumentNullException.ThrowIfNull(bsp);
 
-        // Brush index -> owning inline model, so dropped models' brushes can be skipped.
-        var droppedBrushes = new HashSet<int>();
-        if (droppedSubmodels is { Count: > 0 })
+        // Brush index -> owning inline model. Recorded rather than used to DROP anything: geometry that belongs
+        // to another gametype is still real map data, and discarding it at import would silently destroy it on
+        // the next save. The editor filters on this instead (see VmapBrush.SubmodelIndex).
+        var brushSubmodel = new Dictionary<int, int>();
+        for (int mi = 1; mi < bsp.Models.Length; mi++)
         {
-            for (int mi = 1; mi < bsp.Models.Length; mi++)
-            {
-                if (!droppedSubmodels.Contains(mi))
-                    continue;
-                BspModel dm = bsp.Models[mi];
-                for (int i = 0; i < dm.BrushCount; i++)
-                    droppedBrushes.Add(dm.FirstBrush + i);
-            }
+            BspModel dm = bsp.Models[mi];
+            for (int i = 0; i < dm.BrushCount; i++)
+                brushSubmodel[dm.FirstBrush + i] = mi;
         }
+        _ = droppedSubmodels;
 
         var doc = new VmapDocument
         {
@@ -74,12 +72,12 @@ public static class BspToVmap
         // ----- brushes: one VmapBrush per BSP brush, faces from its brush sides -----
         for (int bi = 0; bi < bsp.Brushes.Length; bi++)
         {
-            if (droppedBrushes.Contains(bi))
-                continue;
-
             VmapBrush? brush = ImportBrush(bsp, bi, faceIndex);
             if (brush is not null)
+            {
+                brush.SubmodelIndex = brushSubmodel.TryGetValue(bi, out int mi2) ? mi2 : 0;
                 doc.Brushes.Add(brush);
+            }
         }
 
         // ----- patches: one VmapPatch per BSP patch face (control points live in the vertex lump) -----

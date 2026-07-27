@@ -509,6 +509,17 @@ public sealed class ServerNet : IDisposable
 
     private readonly System.Collections.Concurrent.ConcurrentQueue<(OutKind Kind, int Peer, byte[]? Buf, int Len, bool Reliable)> _outbox = new();
 
+    // Cap-and-shed for the outbox (review 2026-07-27): the worker stages one snapshot set per peer per tick
+    // at 72 Hz whether or not main ever drains — a Windows modal main-loop stall (title-bar drag, resize)
+    // parks _Process for seconds while the queue grows without bound (memory + rented buffers), then bursts
+    // seconds of STALE snapshots on resume. Shed policy: once the staged-but-undrained UNRELIABLE count hits
+    // the cap, new unreliable ops are dropped at the staging site — exactly the packets a stalled main could
+    // not have sent anyway, and each is superseded by the next tick's fresh encode. RELIABLE ops and
+    // Disconnects are never shed (event-driven, bounded, and must arrive); they bypass the counter entirely.
+    private const int OutboxUnreliableCap = 256;
+    private int _outboxUnreliable;   // Interlocked: ++ on worker stage, -- on main drain
+    private bool _outboxShedding;    // worker-only, logs one line per shed episode
+
     /// <summary>Every ServerNet unicast send funnels here (the 17 former direct <c>_transport.Send</c> sites).</summary>
     private void SendPacket(int peerId, ReadOnlySpan<byte> payload, bool reliable)
     {
@@ -559,6 +570,22 @@ public sealed class ServerNet : IDisposable
     /// reused per peer, so staged bytes must own their memory.</summary>
     private void StageOutbound(OutKind kind, int peerId, ReadOnlySpan<byte> payload, bool reliable)
     {
+        if (!reliable)
+        {
+            int inFlight = System.Threading.Volatile.Read(ref _outboxUnreliable);
+            if (inFlight >= OutboxUnreliableCap)
+            {
+                if (!_outboxShedding)
+                {
+                    _outboxShedding = true;
+                    GD.Print($"[ServerNet] outbox at cap ({OutboxUnreliableCap} unreliable ops staged, main thread stalled?) — shedding unreliable sends until it drains");
+                }
+                return; // superseded by the next tick's encode — nothing to burst on resume
+            }
+            if (_outboxShedding && inFlight < OutboxUnreliableCap / 2)
+                _outboxShedding = false;
+            System.Threading.Interlocked.Increment(ref _outboxUnreliable);
+        }
         byte[] buf = System.Buffers.ArrayPool<byte>.Shared.Rent(payload.Length);
         payload.CopyTo(buf);
         _outbox.Enqueue((kind, peerId, buf, payload.Length, reliable));
@@ -601,6 +628,10 @@ public sealed class ServerNet : IDisposable
                         _transport.Disconnect(p.Peer);
                     break;
             }
+            // Disconnect ops carry Reliable=false but never touched the counter (enqueued directly,
+            // not via StageOutbound) — only counted unreliable Packet/Broadcast entries decrement.
+            if (p.Kind != OutKind.Disconnect && !p.Reliable)
+                System.Threading.Interlocked.Decrement(ref _outboxUnreliable);
             if (p.Buf is not null)
                 System.Buffers.ArrayPool<byte>.Shared.Return(p.Buf);
         }

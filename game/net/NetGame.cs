@@ -1705,7 +1705,10 @@ public sealed partial class NetGame : Node3D
         _damageText.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _fullHud.AddChild(_damageText);
 
-        // Hit-confirmation sound (QC HitSound): non-positional beep on the SFX bus, pitch varies by cl_hitsound mode.
+        // Hit/typehit/kill feedback sounds (QC HitSound): non-positional, SFX bus. misc/hit is the pitched
+        // damage-confirm beep (cl_hitsound modes 0-3); misc/typehit the team/chat-hit dink; misc/kill the
+        // kill confirm (which the server flush prioritizes over the beep). Fed per frame from the owner's
+        // feedback stats in UpdateCrosshairFeedback.
         _hitSound = new XonoticGodot.Game.Client.HitSound(_sharedCvars);
         if (_assets is not null)
             _hitSound.AudioLoader = _assets.LoadSound;
@@ -3308,26 +3311,32 @@ public sealed partial class NetGame : Node3D
             if (_damageText is not null && Mutators.ByName("damagetext") is DamagetextMutator dtm)
             {
                 _damageText.Camera = _camera;
-                Player? localPlayer = LocalServerPlayer;
                 // QC spectatee_status != -1 (playing or following a player → a meaningful view origin, so the
                 // close-range / out-of-view 2D heuristics may apply); a free-fly observer (IsObserving) always
                 // gets a world number.
                 bool canUse2d = _client is not null && !_client.IsObserving;
+                // QC write_damagetext per-viewer visibility (sv_damagetext.qc:32-37): the queue carries EVERY
+                // hit on the server; the local viewer only sees the ones the sv_damagetext tier grants them —
+                // at the shipped default 2 that's THEIR OWN hits only (an observer sees all at tier >= 1).
+                // Without this gate every bot-vs-bot hit on the map drew a number, and the off-screen ones got
+                // pinned near the crosshair by the 2D out-of-view fallback.
+                float dtTier = _serverWorld?.Services.Cvars.GetFloat("sv_damagetext") ?? 2f;
+                Player? dtViewer = LocalServerPlayer;
+                bool dtObserver = _client?.IsObserving ?? false;
                 foreach (DamageTextEvent ev in dtm.DrainPending())
                 {
+                    if (!DamagetextMutator.ShouldShowTo(dtTier,
+                            viewerIsAttacker: dtViewer is not null && ReferenceEquals(ev.Attacker, dtViewer),
+                            viewerIsObserver: dtObserver))
+                        continue;
                     string wn = XonoticGodot.Common.Gameplay.Damage.DeathTypes.WeaponNetNameOf(ev.DeathType);
                     int colorKey = Weapons.ByName(wn) is { } w ? w.RegistryId : -1;
                     _damageText.Add(ev, Coords.ToGodot(ev.Target.Origin), colorKey, canUse2d);
-
-                    // Hit confirmation when the LOCAL player dealt the damage (not self-damage): the hitsound
-                    // beep AND the crosshair hitmarker flash (QC HitSound + the crosshair hit indication). The
-                    // crosshair pulse is otherwise unfed — CrosshairPanel.HitFlash decays itself each frame.
-                    if (localPlayer is not null && ev.Attacker == localPlayer && ev.Target != localPlayer)
-                    {
-                        _hitSound?.OnHit(ev.Health + ev.Armor);
-                        _fullHud.Crosshair.HitFlash = 1f;
-                    }
                 }
+                // (The hitsound + crosshair hit flash no longer ride these damagetext events — QC drives them
+                // from the feedback STATS, which UpdateCrosshairFeedback now does on both paths. That decouples
+                // them from sv_damagetext, skips damagetext's own gates, stops burn-tick DoT beep trails, and
+                // lets the kill sound take its EndFrame priority over the hit beep.)
             }
             if (Mutators.ByName("itemstime") is ItemstimeMutator itm && itm.IsEnabled)
             {
@@ -3348,8 +3357,9 @@ public sealed partial class NetGame : Node3D
 
             // [T41] objective-ring + hit-indication feed moved to UpdateCrosshairFeedback() (called
             // unconditionally below, like UpdateCrosshairWeaponRings) so it also runs on a pure remote client
-            // off the networked LocalState slice. The host damagetext hit path below still owns the host
-            // crosshair flash + hitsound; UpdateCrosshairFeedback only fires the hit cue on the remote path.
+            // off the networked LocalState slice. That same call now owns the hit/typehit/kill feedback
+            // sounds + the crosshair hit flash on BOTH paths (host reads the live Player stats, remote the
+            // networked Feedback block) — QC's stat-driven HitSound, no damagetext coupling.
 
             // (weapon-ring + vehicle-HUD feeders hoisted out of the host-only block — see the unconditional calls
             // before ProcessAnnouncerQueue below — so they also run for a pure remote client; each now picks its
@@ -4329,21 +4339,20 @@ public sealed partial class NetGame : Node3D
         return string.IsNullOrWhiteSpace(gt) ? _gametype : gt;
     }
 
-    // ---- crosshair objective rings + remote-client hit indication ----
-    // Remote-client hit-indication diff (QC view.qc UpdateDamage: STAT(HITSOUND_DAMAGE_DEALT_TOTAL) advances
-    // → unaccounted_damage → the crosshair hit flash + hitsound). On a pure remote client there is no local
-    // damagetext mutator, so we diff the networked cumulative-damage stat off ClientNet.LocalState instead.
-    private float _remoteHitDealtTotal;
-    private bool _remoteHitInit;
+    // ---- crosshair objective rings + hit/typehit/kill feedback ----
+    // QC view.qc UpdateDamage/HitSound run off the owner's feedback STATS (HIT/TYPEHIT/KILL_TIME + the
+    // cumulative damage total). Both paths feed the same HitSound state machine: a listen host reads the
+    // live LocalServerPlayer fields (flushed by the server's EndFrame under the sim gate), a pure client the
+    // networked LocalState slice (the EntityField.Feedback block, protocol v18).
+    private int _arcWeaponId = int.MinValue; // lazily-resolved Arc registry id (the QC have_arc check)
 
     /// <summary>
     /// Feed the crosshair panel the local player's objective-ring stats (QC view.qc HUD_Draw 1006-1022:
-    /// NADE_TIMER &gt; CAPTURE_PROGRESS &gt; REVIVE_PROGRESS) and, on the remote-client path, the hit-indication
-    /// flash (QC view.qc UpdateDamage). Runs on every path: a listen host reads the live
-    /// <see cref="LocalServerPlayer"/> (which carries STAT(NADE_TIMER)/STAT(REVIVE_PROGRESS) live); a pure
-    /// remote client reads the networked <see cref="ClientNet.LocalState"/> slice the server ships (the
-    /// EntityField.Feedback block — NadeTimer/CaptureProgress/ReviveProgress/HitDamageDealtTotal). CAPTURE has
-    /// no server producer yet, so it stays 0 and the panel hides that ring either way.
+    /// NADE_TIMER &gt; CAPTURE_PROGRESS &gt; REVIVE_PROGRESS) and drive the hit/typehit/kill feedback sounds +
+    /// the crosshair hit-indication flash (QC view.qc UpdateDamage/HitSound + crosshair.qc:387). Runs on
+    /// every path: a listen host reads the live <see cref="LocalServerPlayer"/>; a pure remote client reads
+    /// the networked <see cref="ClientNet.LocalState"/> slice the server ships. CAPTURE has no server
+    /// producer yet, so it stays 0 and the panel hides that ring either way.
     /// </summary>
     private void UpdateCrosshairFeedback()
     {
@@ -4351,10 +4360,16 @@ public sealed partial class NetGame : Node3D
             return;
         CrosshairPanel x = _fullHud.Crosshair;
 
+        // QC have_arc (view.qc:918-925): a viewmodel slot holding the Arc bypasses the beep antispam window
+        // at cl_hitsound >= 2 (the beam's pitch shift must sound continuous). _equippedWeaponId mirrors
+        // viewmodels[slot].activeweapon.
+        if (_arcWeaponId == int.MinValue)
+            _arcWeaponId = Weapons.ByName("arc") is { } arc ? arc.RegistryId : -1;
+        bool haveArc = _arcWeaponId >= 0 && _equippedWeaponId == _arcWeaponId;
+
         if (LocalServerPlayer is { } host)
         {
-            // Host / listen-server: the live local Player carries the stats. The host hit flash is driven by the
-            // damagetext drain above (so we don't diff HitDamageDealtTotal here — that would double-fire).
+            // Host / listen-server: the live local Player carries the stats.
             x.NadeTimer = host.NadeTimer;
             x.ReviveProgress = host.ReviveProgress;
             x.CaptureProgress = 0f; // no host producer yet (QC STAT(CAPTURE_PROGRESS) is gametype-set)
@@ -4366,16 +4381,39 @@ public sealed partial class NetGame : Node3D
             _fullHud.Ammo.NadeBonusTypeId = host.NadeBonusType;
             _fullHud.Ammo.NadeBonusScoreFrac = host.NadeBonusScore;
 
-            _remoteHitInit = false; // re-baseline the remote diff if we ever fall back to the client path
+            // QC UpdateDamage/HitSound off the live stats. The host CAN follow-spectate (cl_bench_spectate, the
+            // `spectate` command), and the server-side EndFrame stamp already mirrors the spectatee's feedback
+            // onto this player — so pass the real spectatee id through, or view.qc:907's "drop accumulated
+            // damage on a spectatee switch" never fires here.
+            if (_hitSound is not null
+                && _hitSound.Update(haveArc, _client?.SpectatingNetId ?? 0, host.HitTime,
+                                    host.HitsoundDamageDealtTotal, host.TypeHitTime, host.KillTime))
+                x.HitFlash = 1f;
             return;
         }
 
-        // Pure remote client: read the networked own-entity slice. No slice yet (pre-spawn) → hide the rings.
+        // Pure remote client: read the networked own-entity slice. No slice yet (pre-spawn) → hide the rings
+        // and drop the feedback baselines so the next slice re-seeds silently.
         if (_client is null || _client.LocalState is not { } ls)
         {
             x.NadeTimer = 0f; x.CaptureProgress = 0f; x.ReviveProgress = 0f;
             _fullHud.Ammo.NadeBonusCount = 0; _fullHud.Ammo.NadeBonusTypeId = 0; _fullHud.Ammo.NadeBonusScoreFrac = 0f;
-            _remoteHitInit = false;
+
+            // FOLLOW-SPECTATOR: QC stamps the spectator's own feedback stats from their spectatee
+            // (world.qc:2508 `IS_SPEC(it) ? it.enemy : it`), so watching someone frag sounds like playing.
+            // An observer has no own entity in the stream, so read the block off the WATCHED entity — the
+            // server keeps it unstripped for exactly this recipient (ServerNet.RelevantEntitiesFor).
+            int watched = _client?.SpectatingNetId ?? 0;
+            if (_hitSound is not null && watched != 0 && _client is not null
+                && _client.TryGetRemoteState(watched, out XonoticGodot.Net.NetEntityState spec))
+            {
+                if (_hitSound.Update(haveArc, watched, spec.HitTime, spec.HitDamageDealtTotal,
+                                     spec.TypeHitTime, spec.KillTime))
+                    x.HitFlash = 1f;
+                return;
+            }
+
+            _hitSound?.Reset();
             return;
         }
 
@@ -4388,16 +4426,12 @@ public sealed partial class NetGame : Node3D
         _fullHud.Ammo.NadeBonusTypeId = ls.NadeBonusType;
         _fullHud.Ammo.NadeBonusScoreFrac = ls.NadeBonusScore;
 
-        // QC UpdateDamage: when the cumulative dealt-damage stat advances, the crosshair flashes (and the
-        // hitsound beeps). Diff it against the last frame; skip the first sample so a non-zero baseline (joining
-        // mid-match) doesn't flash on the first snapshot.
-        if (_remoteHitInit && ls.HitDamageDealtTotal > _remoteHitDealtTotal)
-        {
+        // QC UpdateDamage/HitSound off the networked stats; the spectatee id drops accumulated damage on a
+        // spectatee switch (view.qc:907). The first slice seeds baselines silently (mid-match join).
+        if (_hitSound is not null
+            && _hitSound.Update(haveArc, _client.SpectateeStatus, ls.HitTime, ls.HitDamageDealtTotal,
+                                ls.TypeHitTime, ls.KillTime))
             x.HitFlash = 1f;
-            _hitSound?.OnHit(ls.HitDamageDealtTotal - _remoteHitDealtTotal);
-        }
-        _remoteHitDealtTotal = ls.HitDamageDealtTotal;
-        _remoteHitInit = true;
     }
 
     // ---- pickup feed (QC HUD_Pickup / STAT(LAST_PICKUP)) ----

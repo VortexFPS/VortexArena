@@ -652,11 +652,9 @@ public static class MutatorHooks
     /// returns true for a <c>func_assault_destructible</c> victim to ensure audible feedback when shelling walls.
     /// Slot0 the damage victim, slot1 the attacker.
     ///
-    /// NOTE: the port has no live firing site — its hitsound stat (<c>HitsoundDamageDealtTotal</c>,
-    /// DamageSystem.Apply) already accumulates for any non-self target a player attacker hits, so a
-    /// func_assault_destructible already plays the hitsound without this hook. The hook is modeled for
-    /// registry-coverage parity (it would only become load-bearing if the port ever gated the stat on the
-    /// victim type, as Base does).
+    /// Live firing site: DamageSystem.Apply's "count the damage" block — the port now gates hit feedback on
+    /// the victim type exactly like Base (players / monsters / active turrets give feedback; other geometry
+    /// only when a handler on this chain votes yes), so Assault's destructible-wall handler is load-bearing.
     /// </summary>
     public struct PlayHitsoundArgs
     {

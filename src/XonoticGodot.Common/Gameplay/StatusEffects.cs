@@ -481,16 +481,21 @@ public static class StatusEffectsCatalog
         float dmg = dps * t;
         if (dmg <= 0f) return;
 
-        // QC: preserve hitsound counters (damage.qc:1084-1091) so repeated fire ticks don't multiply the
-        // hitsound beep. The port approximates this: suppress HitsoundDamageDealtTotal accumulation for burn
-        // ticks after the first (fire_hitsound tracks the "already-ticked" state).
-        // (QC saves hi/ty from fire_owner and restores them after Damage if fire_hitsound; in the port the
-        // HitsoundDamageDealtTotal on owner is advanced inside DamageSystem.Apply, so we can't retroactively
-        // undo it. The cue is already rare enough that the missing suppress is low-impact.)
+        // QC Fire_ApplyDamage:1078-1086: only the FIRST burn tick after (re)ignition gives the attacker hit
+        // feedback — save the owner's per-frame hitsound accumulators, let Damage() bank the tick, then
+        // restore them when fire_hitsound says this burn already ticked. Without this, a single napalm hit
+        // keeps beeping every frame for the whole burn (feedback trailing seconds behind the actual hit).
+        float hi = owner?.HitSoundDamageDealt ?? 0f;
+        int ty = owner?.TypeHitSoundCount ?? 0;
 
         string deathType = !string.IsNullOrEmpty(e.FireDeathType) ? e.FireDeathType : DeathTypes.Fire;
         // QC Damage(e, e, fire_owner, d, fire_deathtype, ...): inflictor is the burning entity itself.
         Combat.Damage(e, e, owner, dmg, deathType, e.Origin, System.Numerics.Vector3.Zero);
+        if (e.FireHitSound && owner is not null)
+        {
+            owner.HitSoundDamageDealt = hi;
+            owner.TypeHitSoundCount = ty;
+        }
         e.FireHitSound = true; // QC: fire_hitsound = true after the first tick
 
         // --- QC fire TRANSFER (Fire_ApplyDamage:1094-1104) ---

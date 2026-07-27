@@ -96,6 +96,26 @@ public partial class Entity
     /// <summary>QC <c>.fire_hitsound</c>: whether the burn should play a hit sound this tick.</summary>
     public bool FireHitSound;
 
+    // --- hit-confirmation feedback (QC .hitsound_damage_dealt / .typehitsound / .killsound) ---
+    // Per-frame accumulators the damage/obituary code banks on the ATTACKER; GameWorld's end-of-frame flush
+    // (QC world.qc EndFrame:2507) turns them into the HIT_TIME/TYPEHIT_TIME/KILL_TIME stats below with the
+    // typehit > kill > hit priority chain, then clears them. The client (view.qc HitSound) plays one of the
+    // three feedback sounds per advance.
+    /// <summary>QC <c>.hitsound_damage_dealt</c>: damage dealt to enemies this frame (pre-armor-split amount).</summary>
+    public float HitSoundDamageDealt;
+    /// <summary>QC <c>.typehitsound</c>: team hits / hits on a chat-protected victim this frame.</summary>
+    public int TypeHitSoundCount;
+    /// <summary>QC <c>.killsound</c>: enemy frags scored this frame (Obituary's MURDER branch).</summary>
+    public int KillSoundCount;
+
+    // --- the flushed hit-feedback stats (QC STAT(HIT_TIME) / STAT(TYPEHIT_TIME) / STAT(KILL_TIME)) ---
+    /// <summary>QC <c>STAT(HIT_TIME)</c>: sim time of the last frame this player damaged an enemy.</summary>
+    public float HitTime;
+    /// <summary>QC <c>STAT(TYPEHIT_TIME)</c>: sim time of the last frame this player team-hit / typehit someone.</summary>
+    public float TypeHitTime;
+    /// <summary>QC <c>STAT(KILL_TIME)</c>: sim time of the last frame this player fragged an enemy.</summary>
+    public float KillTime;
+
     // --- drowning / freeze stats ---
     /// <summary>QC <c>STAT(AIR_FINISHED)</c>: sim time the player runs out of air (drowning). 0 = not set.</summary>
     public float AirFinished;

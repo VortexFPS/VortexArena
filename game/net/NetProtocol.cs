@@ -127,12 +127,17 @@ public static class NetProtocol
     /// (dropped-weapon loot, colormapped props/monsters), and the non-player snapshot's <c>Weapon</c> field now
     /// carries a weapon PICKUP's registry id (+1 biased). New delta bit in every entity delta ⇒ version bump.
     ///
-    /// NOTE: v16 is deliberately SKIPPED — the unmerged parity/hitsound-feedback branch already claims 16 for a
-    /// different, incompatible wire change (trailing Feedback floats). Taking 17 here guarantees a TEXTUAL merge
-    /// conflict on this line instead of two builds silently advertising the same version with different entity
-    /// layouts (the handshake would pass and ReadDelta would corrupt-decode). Whichever branch merges second
-    /// takes the next number.
-    public const uint ProtocolVersion = 17;
+    /// v18 (hit/kill/typehit feedback parity): the <see cref="XonoticGodot.Net.EntityField.Feedback"/> block
+    /// gained three trailing floats — QC STAT(HIT_TIME) / STAT(TYPEHIT_TIME) / STAT(KILL_TIME), the
+    /// EndFrame-flushed feedback times driving the client's distinct hit/typehit/kill confirmation sounds
+    /// (view.qc HitSound). Unconditional reads inside an existing block ⇒ version bump.
+    ///
+    /// NOTE: v16 is PERMANENTLY UNUSED. This branch originally claimed 16 while feature/weapon-item-colors
+    /// took 17 specifically to force a textual conflict on this line — the alternative being two builds
+    /// advertising the same version with different entity layouts, where the handshake passes and ReadDelta
+    /// corrupt-decodes. That worked as designed: weapon-item-colors merged first, so this change lands as 18.
+    /// Keep using the skip trick for concurrent wire branches; never reuse 16.
+    public const uint ProtocolVersion = 18;
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;

@@ -21,10 +21,10 @@ namespace XonoticGodot.Common.Gameplay;
 /// and the team-heal self-drain. The hooked-player <see cref="Entity.Aiment"/> is set on any direct player latch
 /// by GrapplingHookTouch (Hook.cs, fixed in Wave-2), so the drain is reachable on the live path.
 ///
-/// Known omission: <c>hitsound_damage_dealt</c> is a HUD/stats accumulator the port doesn't carry, so the
-/// owner's per-tick hit-confirm "ding" is omitted (cosmetic). The QC <c>DMG_NOWEP</c> weaponentity-slot flag on
-/// the Damage call has no analogue in the port's deathtype-string model (no weaponentity is threaded through
-/// <c>Combat.Damage</c>), so the drain kill is attributed as a normal hook-weapon kill.
+/// Known omission: the QC <c>DMG_NOWEP</c> weaponentity-slot flag on the Damage call has no analogue in the
+/// port's deathtype-string model (no weaponentity is threaded through <c>Combat.Damage</c>), so the drain kill
+/// is attributed as a normal hook-weapon kill. (The <c>hitsound_damage_dealt</c> per-tick hit-confirm ding IS
+/// carried now — <see cref="Entity.HitSoundDamageDealt"/>, banked like sv_vampirehook.qc:28.)
 /// </summary>
 [Mutator]
 public sealed class VampireHookMutator : MutatorBase
@@ -107,6 +107,12 @@ public sealed class VampireHookMutator : MutatorBase
         // QC: dmgent = (SAME_TEAM(owner, aiment) && teamheal) ? hook_owner : hook_aiment;
         bool sameTeam = Teams.SameTeam(owner, aiment);
         Entity dmgent = (sameTeam && TeamHeal) ? owner : aiment;
+
+        // QC sv_vampirehook.qc:28: hook_owner.hitsound_damage_dealt += g_vampirehook_damage — the owner's
+        // per-tick hit-confirm ding, banked EXPLICITLY so the team-heal drain (a self-Damage below, which the
+        // count-the-damage block excludes) still dings. On the enemy drain the Damage() call can bank it a
+        // second time — a faithful Base quirk (only audible as extra pitch shift at cl_hitsound 2/3).
+        owner.HitSoundDamageDealt += Damage;
 
         // QC: Damage(dmgent, thehook, hook_owner, damage, WEP_HOOK.m_id, DMG_NOWEP, thehook.origin, '0 0 0');
         Combat.Damage(dmgent, thehook, owner, Damage, DeathTypes.FromWeapon("hook"), thehook.Origin, Vector3.Zero);

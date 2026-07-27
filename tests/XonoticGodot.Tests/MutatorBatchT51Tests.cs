@@ -380,6 +380,35 @@ public class MutatorBatchT51Tests : IDisposable
     }
 
     // ----------------------------------------------------------------------------------------------
+    //  per-viewer visibility (QC write_damagetext, sv_damagetext.qc:32-37)
+    // ----------------------------------------------------------------------------------------------
+
+    [Theory]
+    // tier 0/negative: producer already off, but the gate must agree (nothing shows).
+    [InlineData(0f, true, false, false)]
+    // tier 1 (spectators/observers only): the ATTACKER themselves sees nothing…
+    [InlineData(1f, true, false, false)]
+    // …but a free-fly observer sees everything.
+    [InlineData(1f, false, true, true)]
+    // tier 2 (shipped default): the attacker sees their own hits…
+    [InlineData(2f, true, false, true)]
+    // …and NOT anyone else's (the bot-vs-bot center-screen number pileup this gate exists to stop).
+    [InlineData(2f, false, false, false)]
+    // tier 2 keeps the tier-1 observer grant.
+    [InlineData(2f, false, true, true)]
+    // tier 3: everyone sees every hit.
+    [InlineData(3f, false, false, true)]
+    public void Damagetext_Visibility_Follows_The_SvDamagetext_Tiers(
+        float tier, bool isAttacker, bool isObserver, bool expected)
+        => Assert.Equal(expected,
+            DamagetextMutator.ShouldShowTo(tier, isAttacker, isObserver));
+
+    [Fact]
+    public void Damagetext_Visibility_Spectator_Of_The_Attacker_Sees_Their_Hits_At_Tier_1()
+        => Assert.True(DamagetextMutator.ShouldShowTo(1f,
+            viewerIsAttacker: false, viewerIsObserver: false, viewerSpectatesAttacker: true));
+
+    // ----------------------------------------------------------------------------------------------
     //  itemstime
     // ----------------------------------------------------------------------------------------------
 

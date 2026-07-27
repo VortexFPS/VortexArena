@@ -508,6 +508,11 @@ public partial class ClientWorld : Node3D
         _itemTintVariants.Clear();
         _itemDuotoneVariants.Clear();
         _weaponsByItemModel.Clear();
+
+        // Same deterministic-disposal rule for any live per-entity ghost flat (see ReleaseItemFlat): on teardown
+        // the entities are not individually removed, so sweep whatever CsqcState is still held.
+        foreach (CsqcState cs in _csqc.Values)
+            ReleaseItemFlat(cs);
     }
 
     // =================================================================================================
@@ -643,6 +648,7 @@ public partial class ClientWorld : Node3D
         {
             // Build a throwaway entity carrying the id so the sound service can key the (e, channel) stop.
             CsqcModelEffects.Release(new Entity { Index = index }, cs.Effects, Api.Services?.Sound);
+            ReleaseItemFlat(cs);
         }
 
         if (Projectiles.IsTracking(index))
@@ -725,6 +731,21 @@ public partial class ClientWorld : Node3D
     }
 
     /// <summary>
+    /// Dispose an entity's per-entity dark-ghost flat material DETERMINISTICALLY. Dropping the CsqcState
+    /// without this leaves the material to the .NET finalizer thread, whose RenderingServer::free races the
+    /// main thread's renderer work — the 0xC0000374 heap-corruption class documented in SharedMeshCache.
+    /// It is a per-ENTITY material (see CsqcState.ItemFlatMat), so every picked-up item that later leaves the
+    /// PVS would orphan one: a steady drip on any populated map, not a one-off.
+    /// </summary>
+    private static void ReleaseItemFlat(CsqcState cs)
+    {
+        if (cs.ItemFlatMat is null)
+            return;
+        cs.ItemFlatMat.Dispose();
+        cs.ItemFlatMat = null;
+    }
+
+    /// <summary>
     /// Tear down the entity's model visual(s) and re-run the attach. Used when an ASYNC player-model resolve
     /// settles on a different outcome than first assumed (the streamed parse found a non-skeletal model → fall
     /// back to the MD3/static path) or the entity's model changed while a resolve was in flight. The nameplate
@@ -739,7 +760,10 @@ public partial class ClientWorld : Node3D
 
         // Release the per-entity render state exactly like OnEntityRemove, but keep the node + nameplate.
         if (_csqc.Remove(entity.Index, out CsqcState? cs))
+        {
             CsqcModelEffects.Release(entity, cs.Effects, Api.Services?.Sound);
+            ReleaseItemFlat(cs);
+        }
         _animators.Remove(entity.Index);
         if (_playerModels.Remove(entity.Index, out PlayerModel? pm) && GodotObject.IsInstanceValid(pm))
             pm.ReleaseSkeleton(); // the node itself is swept below
@@ -1392,6 +1416,11 @@ public partial class ClientWorld : Node3D
         float lodDist2 = CvarF("cl_loddistance2", 3072f);
         // Weapon-item duotone toggle — frame-invariant, read ONCE (the resting-tint pass runs per item).
         bool weaponItemColors = CvarF("cl_weapon_item_colors", 1f) != 0f;
+        // Ghost / weapon-stay colormods, same story: CvarColormod does a GetString + a token split + a float[]
+        // per call, and DriveItemGhostFx/DriveItemStayFx run per ITEM per FRAME — ~100-150 gen0 allocations a
+        // frame with 20-30 items awaiting respawn, almost all of it discarded by ApplyItemTint's change gate.
+        _ghostColorThisFrame = CvarColormod("cl_ghost_items_color", new Godot.Vector3(-1f, -1f, -1f));
+        _stayColorThisFrame = CvarColormod("cl_weapon_stay_color", new Godot.Vector3(2f, 0.5f, 0.5f));
 
         foreach (var kv in _entityNodes)
         {
@@ -1564,8 +1593,7 @@ public partial class ClientWorld : Node3D
         float stay = Mathf.Clamp(CvarF("cl_weapon_stay_alpha", 0.75f), 0f, 1f); // xonotic-client.cfg default 0.75
         float alpha = stay * Mathf.Clamp(distAlpha, 0f, 1f); // QC: alpha = distFade; then alpha *= cl_weapon_stay_alpha
         SetTreeTransparency(node, st, 1f - alpha);
-        ApplyItemTint(node, st, ItemTintSpec.ForColormod(
-            CvarColormod("cl_weapon_stay_color", new Godot.Vector3(2f, 0.5f, 0.5f))));
+        ApplyItemTint(node, st, ItemTintSpec.ForColormod(_stayColorThisFrame));
         node.SetGameplayVisible(alpha > 0.001f);
     }
 
@@ -1584,8 +1612,7 @@ public partial class ClientWorld : Node3D
         float ghost = Mathf.Clamp(CvarF("cl_ghost_items", 0.45f), 0f, 1f); // QC autocvar_cl_ghost_items default 0.45
         float alpha = ghost * Mathf.Clamp(distAlpha, 0f, 1f); // QC: alpha = distFade; then alpha *= cl_ghost_items
         SetTreeTransparency(node, st, 1f - alpha);
-        ApplyItemTint(node, st, ItemTintSpec.ForColormod(
-            CvarColormod("cl_ghost_items_color", new Godot.Vector3(-1f, -1f, -1f))));
+        ApplyItemTint(node, st, ItemTintSpec.ForColormod(_ghostColorThisFrame));
         node.SetGameplayVisible(alpha > 0.001f);
     }
 
@@ -1719,6 +1746,20 @@ public partial class ClientWorld : Node3D
     private static void ApplyItemTint(EntityNode node, CsqcState st, in ItemTintSpec spec)
     {
         List<MeshInstance3D> meshes = CsqcModelEffects.GetCachedMeshes(st.Effects, node);
+
+        // The flat's SHADING must be re-asserted on EVERY push, before the change gate — not just when the spec
+        // changes. CsqcModelEffects.ResetRenderFlags runs each frame while e.Effects != 0 and mutates any
+        // BaseMaterial3D MaterialOverride in place, including this one; with g_nodepthtestitems 1 a ghosted item
+        // carries EF_NODEPTHTEST forever, so once the gate closed the silhouette was permanently re-lit
+        // (SetFullbright(false) → PerPixel) with no path back. Two property writes on one material; the gate
+        // below still guards all the per-surface work. NoDepthTest is deliberately NOT re-asserted: that channel
+        // reflects the server's g_nodepthtestitems and belongs to CsqcModelEffects, not to the tint.
+        if (st.ItemFlatMat is { } liveFlat)
+        {
+            liveFlat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+            liveFlat.BlendMode = BaseMaterial3D.BlendModeEnum.Mix;
+        }
+
         if (st.ItemTintSpecValid && st.ItemTintSpecApplied == spec
             && st.ItemTintSpecMeshCount == meshes.Count && st.ItemTintSpecFirstMeshId == FirstMeshId(meshes))
             return;
@@ -1743,7 +1784,6 @@ public partial class ClientWorld : Node3D
             flat = st.ItemFlatMat ??= new StandardMaterial3D();
             flat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
             flat.BlendMode = BaseMaterial3D.BlendModeEnum.Mix;
-            flat.NoDepthTest = false;
             flat.AlbedoColor = new Color(cr, cg, cb, 1f);
         }
 
@@ -1886,10 +1926,21 @@ public partial class ClientWorld : Node3D
         // Map-spawned weapon pickup → HUD-icon-derived duotone: the whole diffuse is multiplied toward the
         // dark desaturated BASE (colormod), while the glow texture + the team-colorable shirt/pants mask
         // accents carry the HIGHLIGHT (the icon color itself).
+        // Weapon.Color is a plain field defaulting to Vector3.Zero and not every def sets one (BallStealer
+        // ships without it), so guard HERE rather than at the top: a colorless weapon would paint colormod
+        // (0,0,0) = pure black, strictly worse than the stock look. The dropped-loot path above is deliberately
+        // outside this guard — its colors come from the DROPPER, so it works for a colorless weapon too.
+        if (w.Color == System.Numerics.Vector3.Zero)
+            return false;
         Color baseCol = DarkenForBase(icon);
         paint = new ItemPaint(baseCol, icon, icon, icon, baseCol, icon);
         return true;
     }
+
+    // Ghost / weapon-stay colormods, hoisted once per frame in the entity-drive pass (see the read site).
+    // Only consumed by DriveItemGhostFx/DriveItemStayFx, which run inside that same pass.
+    private Godot.Vector3 _ghostColorThisFrame = new(-1f, -1f, -1f);
+    private Godot.Vector3 _stayColorThisFrame = new(2f, 0.5f, 0.5f);
 
     /// <summary>Derive the duotone BASE from a highlight: darker and slightly desaturated, so the highlight
     /// pops against it (the user-spec contrast pair). Applied as a MULTIPLY over already-mid-gray weapon

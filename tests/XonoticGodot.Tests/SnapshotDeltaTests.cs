@@ -57,7 +57,7 @@ public class SnapshotDeltaTests
     {
         // A dropped weapon carries the thrower's full packed colormap (1024 + (shirt<<4) + pants with
         // RENDER_COLORMAPPED = the same 1024 bit — WeaponThrowing.ThrowerColormap) in its own delta field
-        // (protocol v16), so the client paints the dropper's colors on the loot. The value must round-trip
+        // (protocol v17), so the client paints the dropper's colors on the loot. The value must round-trip
         // VERBATIM — the earlier byte+flag squeeze collapsed sub-1024 slot-reference colormaps.
         var baseline = NetEntityState.Empty(20);
         var cur = baseline;
@@ -81,6 +81,46 @@ public class SnapshotDeltaTests
         var w2 = new BitWriter();
         EntityField mask = EntityStateCodec.WriteDelta(w2, plainBase, plain);
         Assert.Equal(EntityField.Frame, mask & (EntityField.Frame | EntityField.ColormapOverride));
+    }
+
+    [Fact]
+    public void ItemWeaponId_SurvivesDeltaRoundTrip_WithTheBias()
+    {
+        // Protocol v17 re-semanticized the EXISTING Weapon field by kind: on a non-player it carries a weapon
+        // PICKUP's registry id + 1, because RegistryId is 0-based and 0 has to stay "not a weapon pickup".
+        // The +1 (ServerNet encode) and the −1 (ClientEntityView decode) are in different files, so deleting
+        // either one leaves the rest of the suite green while every pickup paints with the ADJACENT weapon's
+        // color. Pin both the wire round-trip and the bias arithmetic, including registry id 0 — the case the
+        // bias exists for.
+        foreach (int registryId in new[] { 0, 1, 7 })
+        {
+            var baseline = NetEntityState.Empty(30);
+            var cur = baseline;
+            cur.Kind = NetEntityKind.Item;
+            cur.Weapon = registryId + 1;          // what ServerNet encodes for a pickup
+
+            var w = new BitWriter();
+            EntityStateCodec.WriteDelta(w, baseline, cur);
+            var r = new BitReader(w.WrittenSpan);
+            NetEntityState got = EntityStateCodec.ReadDelta(ref r, baseline);
+
+            Assert.False(r.BadRead);
+            Assert.Equal(registryId + 1, got.Weapon);
+            Assert.Equal(registryId, got.Weapon - 1); // what ClientEntityView decodes to Entity.ItemWeaponId
+        }
+
+        // A NON-weapon item (health/armor/ammo) must decode to "no weapon" (−1), not to registry id 0.
+        var plainBase = NetEntityState.Empty(31);
+        var plain = plainBase;
+        plain.Kind = NetEntityKind.Item;
+        plain.Frame = 2;                          // change something real so the delta isn't vacuous
+        var pw = new BitWriter();
+        EntityStateCodec.WriteDelta(pw, plainBase, plain);
+        var pr = new BitReader(pw.WrittenSpan);
+        NetEntityState plainGot = EntityStateCodec.ReadDelta(ref pr, plainBase);
+        Assert.False(pr.BadRead);
+        Assert.Equal(0, plainGot.Weapon);
+        Assert.Equal(-1, plainGot.Weapon - 1);
     }
 
     [Fact]

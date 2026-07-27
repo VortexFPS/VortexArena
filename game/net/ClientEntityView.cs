@@ -155,8 +155,9 @@ public sealed partial class ClientEntityView : Node
         e.Colors = s.Colors; // [r15 #43] packed clientcolors → shirt/pants/glow on the body + held weapon
         // RENDER_COLORMAPPED entities (dropped weapons; colormapped props/monsters): the server networks its
         // authoritative Entity.ColorMapOverride verbatim (own delta field), so ClientWorld's item tint pass
-        // paints the DROPPER's shirt/pants on the loot model. On the listen-server path the shared edict
-        // already carries it; this fills the remote-client proxy.
+        // paints the DROPPER's shirt/pants on the loot model. This is the ONLY path that fills it for
+        // rendering — the listen host renders from these same decoded proxies (ClientWorld.OnEntityUpdate has
+        // no caller outside this file), so there is no shared-edict shortcut to fall back on.
         e.ColorMapOverride = s.ColorMapOverride;
         // A weapon PICKUP's explicit identity (non-player Weapon field = RegistryId + 1, 0 = not a weapon
         // pickup): the render layer prefers this over matching the item model filename.

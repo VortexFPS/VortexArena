@@ -398,11 +398,19 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   (Implementation: `game/net/ObserverCamera.cs`, parsed in `Main.cs`; the camera override + auto-join/CaptureGate
   gates live in `game/net/NetGame.cs` — grep `ObserverCamera.Active`.)
   To frame an item in a specific SERVER STATE, `--cvar g_debug_items_start_unavailable "<classname substring>|all"`
-  marks matching permanent items as already picked up at spawn (the awaiting-respawn ghost) — combine with a large
-  `--cvar g_pickup_respawntime_*` so the ghost persists for the capture:
+  marks matching permanent items as already picked up at spawn (the awaiting-respawn ghost).
+  **Respawn time:** only `weapon_*` items take their respawn delay from a cvar in this port
+  (`g_pickup_respawntime_weapon`, `_superweapon`); every other item hardcodes it in its def ctor
+  (e.g. mega armor = 30 s, `ArmorItem.cs`). So pin a weapon to hold the ghost for a long capture, and
+  shoot non-weapon items inside their fixed window (mega armor: within ~30 s of map start):
   ```bash
+  # weapon ghost — respawn pinned, holds for the whole capture
   "$GODOT" --path . --map stormkeep --observe "-1050 -300 160" --look-at "-910 -160 100" \
-           --cvar g_debug_items_start_unavailable armor_mega --cvar g_pickup_respawntime_long 600 \
+           --cvar g_debug_items_start_unavailable weapon_devastator --cvar g_pickup_respawntime_weapon 600 \
+           --resolution 1280x720 --screenshot "$PWD/screenshots/weapon-ghost.png"
+  # non-weapon ghost — no cvar to pin; the default --screenshot-frames settle is well inside mega armor's 30 s
+  "$GODOT" --path . --map stormkeep --observe "-1050 -300 160" --look-at "-910 -160 100" \
+           --cvar g_debug_items_start_unavailable armor_mega \
            --resolution 1280x720 --screenshot "$PWD/screenshots/armor-ghost.png"
   ```
   (First proof of this caught stormkeep's **walls rendering as missing-texture magenta** — unsupported DDS

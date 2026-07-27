@@ -198,10 +198,16 @@ public struct NetEntityState
     public int Alpha;
     public NetEntityFlags Flags;
     public int Owner;            // owning player's entnum (view-models / nameplates / projectiles); 0 = none
-    // KIND-SELECTED semantics (mirror any change at ServerNet encode + ClientEntityView decode):
+    // KIND-SELECTED semantics — mirror any change at ALL THREE sites: ServerNet encode, ClientEntityView
+    // decode, AND game/net/ViewEntityRenderer.cs (which reads s.Weapon RAW for every non-ViewModel kind and
+    // is NOT kind-gated). That third reader is only safe today because ClientEntityView calls its Update for
+    // Player/ViewModel kinds only; wiring it up for Item kinds (third-person dropped-weapon models) would
+    // feed it the +1-biased value and render the NEIGHBOURING weapon. Kind-gate it there first.
     //   Player      → the raw active/held weapon registry id (−1 = none) — renders the remote held weapon.
     //   non-player  → a weapon PICKUP's registry id + 1 (0 = not a weapon pickup; the +1 bias exists because
     //                 RegistryId is 0-based, so id 0 is a real weapon) — decoded to Entity.ItemWeaponId.
+    // SnapshotDeltaTests.ItemWeaponId_SurvivesDeltaRoundTrip pins the bias; deleting either the +1 or the −1
+    // otherwise leaves the whole suite green while every pickup paints with the adjacent weapon's color.
     public int Weapon;
     public string Model;         // model name / precache path (QC .model) — the client loads the mesh by name
 
@@ -406,6 +412,12 @@ public struct NetEntityState
 /// appended AFTER the existing blocks in both WriteDelta and ReadDelta or every later field desyncs. (The
 /// NadeDarknessTime/NadeBonus/NadeBonusType/NadeBonusScore nade owner-stats are appended INSIDE the Feedback(14)
 /// block after ReviveProgress, in lockstep on both sides.)
+///
+/// <para>EXCEPTION — <see cref="EntityField.ColormapOverride"/> (bit 26, protocol v17) is NOT on that tail: its
+/// two bytes are written and read MID-STREAM, between Colors(25) and Health, matching the pre-existing
+/// out-of-bit-order insertions (Colors 25, Armor 15, Alpha 17). Both sides agree, so nothing desyncs — but do
+/// not "restore" it to the tail on one side while reconciling masks with another branch. Read the actual
+/// Write/ReadDelta bodies, not this list, when merging a branch that also adds fields.</para>
 /// </summary>
 public static class EntityStateCodec
 {

@@ -140,6 +140,12 @@ public sealed class Commands
     public Action<string>? ChangeLevelHandler { get; set; }
 
     /// <summary>
+    /// E6: the authoritative editing session, when the editor gametype has one open. Set by the host; null in
+    /// every other mode, which is what makes <c>editor_op</c> inert outside an editing session.
+    /// </summary>
+    public XonoticGodot.Formats.Vmap.VmapEditServer? EditorOps { get; set; }
+
+    /// <summary>
     /// Optional sink the host wires to shut the server down (QC <c>localcmd("quit\n")</c>). Invoked at match end
     /// by the <c>quit_when_empty</c> override in <see cref="GameWorld.DriveEndOfMatchMapFlow"/>. When unwired the
     /// decision is still taken (no map change happens) but the process keeps running.
@@ -830,6 +836,7 @@ public sealed class Commands
         Register("vabstain", "vabstain — abstain from the current vote", ctx => CmdVoteAlias(ctx, "abstain"));
         Register("spec", "spec — become a spectator (alias of spectate, F3)", CmdSpectate);
         Register("team_auto", "team_auto — join the team the balancer picks (F6)", CmdTeamAuto);
+        Register("editor_op", "editor_op <wire> — apply a map-editor geometry op (server-authoritative)", CmdEditorOp);
         Register("selectteam", "selectteam <red|blue|yellow|pink|auto> — choose a team", CmdSelectTeam);
         // QC the engine `color` command → SV_ChangeTeam (server/teamplay.qc:1340): in DP `color`/`topcolor`/
         // `bottomcolor` are engine-handled (host_cmd.c) and call SV_ChangeTeam, which only re-colors in a NON-team
@@ -1630,6 +1637,41 @@ public sealed class Commands
         if (ctx.Caller is null) { ctx.Print("team_auto is a client command"); return true; }
         ctx.Caller.WantsJoin = 0;   // QC wants_join 0 = autoselect
         return CmdJoin(ctx);
+    }
+
+    /// <summary>
+    /// E6: apply a wire-encoded editor op on the server, which owns the authoritative geometry.
+    ///
+    /// Ops ride the existing <c>clc_stringcmd</c> channel rather than a new packet type — they are rare (one
+    /// per drag release, not per frame), so a dedicated channel and a protocol bump would buy nothing, and the
+    /// line is readable in a packet log when co-editing misbehaves. Per-brush locks stop two mappers from
+    /// interleaving edits on the same brush.
+    /// </summary>
+    private bool CmdEditorOp(CommandContext ctx)
+    {
+        if (_world.GameType is not XonoticGodot.Common.Gameplay.EditorMode)
+        {
+            ctx.Print("editor_op: not in the editor gametype");
+            return true;
+        }
+        if (EditorOps is null)
+        {
+            ctx.Print("editor_op: no editing session is open on the server");
+            return true;
+        }
+
+        // Client id: the caller's entity identity is enough to keep two editors' locks apart.
+        int clientId = ctx.Caller?.GetHashCode() ?? 0;
+        XonoticGodot.Formats.Vmap.VmapEditServer.Result result = EditorOps.Submit(clientId, ctx.ArgTail(1));
+
+        ctx.Print(result switch
+        {
+            XonoticGodot.Formats.Vmap.VmapEditServer.Result.Applied => "editor_op: applied",
+            XonoticGodot.Formats.Vmap.VmapEditServer.Result.Locked => "editor_op: brush is being edited by someone else",
+            XonoticGodot.Formats.Vmap.VmapEditServer.Result.Rejected => "editor_op: refused — that would break the brush",
+            _ => "editor_op: malformed op",
+        });
+        return true;
     }
 
     private bool CmdSpectate(CommandContext ctx)

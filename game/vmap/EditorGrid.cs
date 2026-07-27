@@ -2,6 +2,7 @@ using Godot;
 using XonoticGodot.Common.Diagnostics;
 using XonoticGodot.Common.Services;
 using XonoticGodot.Engine.Simulation;
+using XonoticGodot.Formats.Vmap;
 
 namespace XonoticGodot.Game.Vmap;
 
@@ -48,6 +49,10 @@ public sealed partial class EditorGrid : MeshInstance3D
     public const float MaxSize = 1024f;
 
     private ShaderMaterial? _material;
+    private EditorController? _controller;
+
+    /// <summary>Point the grid at the editor controller so it can tint the plane under the crosshair.</summary>
+    public void Attach(EditorController controller) => _controller = controller;
 
     /// <summary>Register the grid's client-side cvar defaults. All are user preferences, so all are saved.</summary>
     public static void RegisterDefaults(CvarService c)
@@ -95,6 +100,35 @@ public sealed partial class EditorGrid : MeshInstance3D
         _material.SetShaderParameter("major_every", MathF.Max(1f, Cvar(CvarMajorEvery, 8f)));
         _material.SetShaderParameter("fade_start", MathF.Max(0f, Cvar(CvarFadeStart, 1024f)));
         _material.SetShaderParameter("fade_end", MathF.Max(1f, Cvar(CvarFadeEnd, 6144f)));
+
+        // Tint the grid ON the face being worked with, so the plane you are about to move reads distinctly from
+        // the rest of the world grid. Uses the DRAG selection while dragging (that is the plane actually moving)
+        // and the hover otherwise.
+        bool active = false;
+        var plane = new Vector4(0f, 0f, 1f, 0f);
+        var tint = new Vector3(1f, 0.85f, 0.3f);   // amber, matching the hover outline
+
+        if (_controller is { Active: true, Document: not null } c)
+        {
+            VmapSelection sel = c.IsDragging ? c.DragSelection : c.Hover.Selection;
+            if (sel.Kind == VmapSelectionKind.Face && c.Document.FindBrush(sel.BrushId) is { } brush
+                && sel.FaceIndex >= 0 && sel.FaceIndex < brush.Faces.Count)
+            {
+                VmapPlane p = brush.Faces[sel.FaceIndex].Plane;
+                // The shader works in Godot space; convert the plane's normal and re-anchor its distance
+                // through a point on it, because ToGodot permutes axes and a raw distance would not survive.
+                Vector3 n = Coords.ToGodot(p.Normal);
+                Vector3 onPlane = Coords.ToGodot(p.Normal * p.Dist);
+                plane = new Vector4(n.X, n.Y, n.Z, n.Dot(onPlane));
+                active = true;
+                if (c.IsDragging)
+                    tint = new Vector3(0.4f, 1f, 0.55f);   // green while actually moving it
+            }
+        }
+
+        _material.SetShaderParameter("hl_active", active ? 1f : 0f);
+        _material.SetShaderParameter("hl_plane", plane);
+        _material.SetShaderParameter("hl_color", tint);
     }
 
     private static float Cvar(string name, float fallback)
@@ -173,6 +207,11 @@ public sealed partial class EditorGrid : MeshInstance3D
             uniform float fade_start   = 1024.0; // distance where the grid begins to fade
             uniform float fade_end     = 6144.0; // distance where it is gone
 
+            uniform float hl_active = 0.0;         // 1 while a face is hovered/dragged
+            uniform vec4  hl_plane = vec4(0.0, 0.0, 1.0, 0.0);  // xyz = normal, w = distance (Godot space)
+            uniform vec3  hl_color : source_color = vec3(1.0, 0.85, 0.3);
+            uniform float hl_band = 1.5;           // how close to the plane counts as "on" it, in world units
+
             uniform vec3 minor_color : source_color = vec3(0.38, 0.78, 1.0);
             uniform vec3 major_color : source_color = vec3(0.75, 0.95, 1.0);
             uniform float minor_alpha = 0.20;
@@ -244,6 +283,14 @@ public sealed partial class EditorGrid : MeshInstance3D
                 // A major line wins where the two coincide.
                 vec3  color = mix(minor_color, major_color, major);
                 float alpha = max(minor * minor_alpha, major * major_alpha) * fade;
+
+                // On the highlighted face, swap the grid to the highlight colour and brighten it, so the plane
+                // being manipulated carries its own grid rather than blending into the global one.
+                if (hl_active > 0.5) {
+                    float onPlane = 1.0 - smoothstep(0.0, hl_band, abs(dot(world, hl_plane.xyz) - hl_plane.w));
+                    color = mix(color, hl_color, onPlane);
+                    alpha = mix(alpha, min(1.0, alpha * 2.5 + 0.10), onPlane);
+                }
                 if (alpha <= 0.001) {
                     discard;
                 }

@@ -215,6 +215,16 @@ public sealed partial class EditorOrthoView : Node
         return (origin, ViewForward());
     }
 
+    /// <summary>
+    /// Re-assert the ortho camera. Called every frame by the host while the view is open, because the normal
+    /// first-person camera update would otherwise reclaim the camera between frames.
+    /// </summary>
+    public void Reapply()
+    {
+        if (IsOpen)
+            Apply();
+    }
+
     /// <summary>Push the current axis/zoom/centre onto the camera.</summary>
     private void Apply()
     {

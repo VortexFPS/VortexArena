@@ -413,6 +413,11 @@ public sealed partial class NetGame : Node3D
     private static readonly NVec3 HullMins = new(-16f, -16f, -24f);
     private static readonly NVec3 HullMaxs = new(16f, 16f, 45f);
 
+    // Observer hull — QC PL_CROUCH_MIN/MAX, the size PutObserverInServer gives a free-flying spectator. Must
+    // match the server's ApplyObserverHull or prediction and authority integrate different collisions.
+    private static readonly NVec3 ObserverHullMins = new(-16f, -16f, -24f);
+    private static readonly NVec3 ObserverHullMaxs = new(16f, 16f, 25f);
+
     // =====================================================================================
     //  Factory configuration (call before AddChild)
     // =====================================================================================
@@ -1471,7 +1476,8 @@ public sealed partial class NetGame : Node3D
         // cl_editor_grid is set: it is a full-screen pass that costs nothing while invisible, and having it
         // resident means the `editor_grid` bind works instantly instead of building a shader on first toggle
         // (which would be a pipeline-compile hitch at exactly the wrong moment).
-        AddChild(new Vmap.EditorGrid());
+        var editorGrid = new Vmap.EditorGrid();
+        AddChild(editorGrid);
 
         // (E3/E5) Editor nodes. Always present but inert outside the editor gametype, so toggling into it is
         // instant rather than paying node + shader construction at the moment the mapper asks for it.
@@ -1487,6 +1493,7 @@ public sealed partial class NetGame : Node3D
         _editorOrtho.Attach(_camera, _editor, _editorGizmos);
         AddChild(_editorOrtho);
         _editor.Ortho = _editorOrtho;
+        editorGrid.Attach(_editor);
 
         AddLight();
     }
@@ -3591,8 +3598,29 @@ public sealed partial class NetGame : Node3D
             // first spawn, matching the IsDead gate used for the death-cam below). PlayerPhysics.Move then bails.
             if (_carrier is not null)
             {
-                bool localDead = LocalServerPlayer is { } self ? self.IsDead : (_everAlive && _client.Health <= 0);
+                // An OBSERVER has zero health, which both of these tests read as dead — and a dead carrier makes
+                // PlayerPhysics.Move bail, so the client predicted NO movement at all while the server flew the
+                // observer around. That mismatch reconciled every single tick, which is what the free-fly camera
+                // jitter actually was. Observing is not dying.
+                bool localDead = !IsLocalObserving
+                    && (LocalServerPlayer is { } self ? self.IsDead : (_everAlive && _client.Health <= 0));
                 _carrier.DeadState = localDead ? DeadFlag.Dead : DeadFlag.No;
+
+                // Match the server's observer state so the predicted leg runs the SAME branch as authority:
+                // the fly branch is selected by movetype, and the hull/eye must agree or the two integrate
+                // different collisions. QC PutObserverInServer: crouch hull, MOVETYPE_NOCLIP for free-fly.
+                if (IsLocalObserving)
+                {
+                    _carrier.MoveType = MoveType.Noclip;
+                    _carrier.Mins = ObserverHullMins;
+                    _carrier.Maxs = ObserverHullMaxs;
+                }
+                else if (_carrier.MoveType == MoveType.Noclip)
+                {
+                    _carrier.MoveType = MoveType.Walk;
+                    _carrier.Mins = HullMins;
+                    _carrier.Maxs = HullMaxs;
+                }
 
                 // Mirror the server-resolved per-player speed multiplier (Speed powerup / speed·disability buffs /
                 // entrap nade) onto the prediction carrier so PlayerPhysics' predicted leg scales the top speed like
@@ -3844,9 +3872,18 @@ public sealed partial class NetGame : Node3D
         // user third-person camera (the menu Perspective radio binds chase_active 0/1, DialogSettingsGame:457,487).
         // Engage the shared view's classic chase mode when chase_active != 0; the death/frozen event-chase still
         // takes precedence inside FirstPersonView. (Negative chase_active is a DP debug split-screen; treat !=0 as on.)
-        _view.CameraMode = CvarOr(Api.Cvars, "chase_active", 0f) != 0f
+        // An observer is never in third person: chase_active is a PLAYER preference, and while free-flying the
+        // camera IS the viewpoint. Without this, returning from PLAYTEST to EDIT left the mapper looking at
+        // their own back.
+        _view.CameraMode = !IsLocalObserving && CvarOr(Api.Cvars, "chase_active", 0f) != 0f
             ? Client.FirstPersonView.ChaseMode.Chase
             : Client.FirstPersonView.ChaseMode.None;
+
+        // Eye height follows the observer/player state rather than the constant, so the free-fly camera sits at
+        // the entity origin and the client's prediction agrees with the server's observer hull.
+        _view.EyeHeight = LocalEyeHeight;
+        if (_carrier is not null)
+            _carrier.ViewOfs = new NVec3(0f, 0f, LocalEyeHeight);
 
         // Place the first-person camera at the predicted eye each frame (smooth even between snapshots, since
         // SendInput re-predicts every tick). C5: held until the first snapshot seeds the carrier — before that
@@ -3854,9 +3891,18 @@ public sealed partial class NetGame : Node3D
         // handshake. The camera is first-placed in the firstSnapshot branch above. Drives the shared view (zoom
         // lerp + camera placement + eventchase + eye-contents), so it must run BEFORE the ViewEffects feed below
         // (which reads SampleEyeContents = _view.EyeContents).
-        if (_cameraReady)
+        // The orthographic editor view OWNS the camera while it is open (it parks it on an axis and switches the
+        // projection). UpdateCamera would re-place it at the first-person eye every frame, which is why toggling
+        // the ortho view looked like it did nothing at all: it opened, and was overwritten before the frame drew.
+        if (_editorOrtho is { IsOpen: true })
+        {
+            _editorOrtho.Reapply();
+        }
+        else if (_cameraReady)
+        {
             using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.camera"))
                 UpdateCamera(dt);
+        }
 
         // Camera-trace capture (apparatus A2): once spawned, record the rendered camera origin + predicted state
         // per frame; finish + quit when the scripted input is exhausted. Inert unless --camera-trace was passed.
@@ -6709,6 +6755,20 @@ public sealed partial class NetGame : Node3D
     private bool IsEditorGametype => string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// True when the local client is free-flying as an observer. Several VIEW decisions key off this because an
+    /// observer is not a player: it has no body, no eye height above its origin, and — critically — zero health,
+    /// which every "are you dead?" test in the client would otherwise answer yes to.
+    /// </summary>
+    private bool IsLocalObserving => _client?.IsObserving ?? false;
+
+    /// <summary>
+    /// Eye offset above the entity origin for the local view. An observer's camera sits AT its origin (QC
+    /// PutObserverInServer sets <c>view_ofs = '0 0 0'</c>, so a free-flying camera cannot poke through a ceiling
+    /// it is otherwise clear of); a live player uses the standing eye height.
+    /// </summary>
+    private float LocalEyeHeight => IsLocalObserving ? 0f : EyeHeight;
+
+    /// <summary>
     /// True while this client is free-flying (EDIT) inside an editor session — the only state in which the
     /// weapon binds are repurposed. Playtesting is real play, so weapons behave normally there.
     /// </summary>
@@ -7690,7 +7750,9 @@ public sealed partial class NetGame : Node3D
             // QC `vieworg += view_punchvector` (cl_player.qc:570): the origin recoil kick added to the rendered eye
             // (first-person only — FirstPersonView suppresses it while chase/death-cam is active).
             PunchOriginQuake = _client.PunchVector,
-            IsDead = localDead,
+            // An observer has zero health, which LocalDeadNow reads as dead — that engaged the death-chase
+            // camera every time the mapper dropped out of PLAYTEST. Observing is not dying.
+            IsDead = localDead && !IsLocalObserving,
             // QC STAT(FROZEN) → cl_ft WantEventchase: engage the third-person cam while Freeze-Tag frozen (host
             // path; the local Player carries the Frozen status effect). A pure remote client reads false here.
             IsFrozen = LocalServerPlayer is { } frozenSelf && StatusEffectsCatalog.Frozen is { } frozenDef2

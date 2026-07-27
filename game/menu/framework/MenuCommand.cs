@@ -228,6 +228,12 @@ public static class MenuCommand
                 OpenDialog?.Invoke("SandboxTools");
                 break;
 
+            // QC commands.cfg `alias team_selection_show "menu_cmd directmenu TeamSelect"` (bound to F5 in
+            // binds-xonotic.cfg). The dialog existed but nothing invoked it, leaving F5 a dead key.
+            case "team_selection_show":
+                OpenDialog?.Invoke("TeamSelect");
+                break;
+
             // QC commands.cfg `alias menu_showhudoptions "menu_cmd directpanelhudmenu ${* ?}"`: with a panel
             // argument (the HUD editor's double-click / Enter on a panel) open that panel's own dialog
             // ("HUD<panel>", e.g. HUDweapons); bare, open the port's panel-dialog directory.

@@ -819,6 +819,8 @@ public sealed class Commands
         Register("ready", "ready — toggle your ready state during warmup", CmdReady);
         Register("join", "join — join the game as a player", CmdJoin);
         Register("spectate", "spectate — become a spectator", CmdSpectate);
+        Register("editor_playtest", "editor_playtest — toggle between EDIT free-fly and PLAYTEST (editor gametype)",
+            CmdEditorPlaytest);
         Register("selectteam", "selectteam <red|blue|yellow|pink|auto> — choose a team", CmdSelectTeam);
         // QC the engine `color` command → SV_ChangeTeam (server/teamplay.qc:1340): in DP `color`/`topcolor`/
         // `bottomcolor` are engine-handled (host_cmd.c) and call SV_ChangeTeam, which only re-colors in a NON-team
@@ -1568,6 +1570,25 @@ public sealed class Commands
         else
             _world.Clients.Spawn(p);
         ctx.Print("joined the game");
+        return true;
+    }
+
+    /// <summary>
+    /// Toggle the caller between the editor's EDIT (free-fly) and PLAYTEST (live player) states, preserving
+    /// position and view angles (design doc §11.3). Only meaningful in the editor gametype: everywhere else
+    /// this would be a free noclip/respawn, so it is refused.
+    /// </summary>
+    private bool CmdEditorPlaytest(CommandContext ctx)
+    {
+        if (ctx.Caller is null) { ctx.Print("editor_playtest is a client command"); return true; }
+        if (_world.GameType is not XonoticGodot.Common.Gameplay.EditorMode)
+        {
+            ctx.Print("editor_playtest: not in the editor gametype");
+            return true;
+        }
+
+        EditorSession.Toggle(_world, ctx.Caller, out string message);
+        ctx.Print(message);
         return true;
     }
 

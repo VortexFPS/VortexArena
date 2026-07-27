@@ -173,6 +173,20 @@ public partial class Shell : Node
         AddChild(screenshots);
         screenshots.RegisterCommand(MenuState.Interp!, MenuState.Cvars);
 
+        // Editable-map-format commands (vmap_import/_info/_list): local authoring actions, so they register
+        // client-side on the shared interpreter and never route to the server. The asset system is passed so a
+        // .map import can resolve real texture sizes for its texel-based texdefs.
+        if (MenuState.Vfs is { } vfs)
+        {
+            var vmaps = new Vmap.VmapService(vfs, MenuState.SharedAssets?.Assets);
+            vmaps.RegisterCommands(MenuState.Interp!);
+        }
+
+        // Editor view aids: the world-space alignment grid's cvars + its `editor_grid` / `editor_grid_size`
+        // commands. Client-side and bindable; the grid node itself lives in the match scene (NetGame).
+        Vmap.EditorGrid.RegisterDefaults(MenuState.Cvars);
+        Vmap.EditorGrid.RegisterCommands(MenuState.Interp!, MenuState.Cvars);
+
         // Dev/CI: `--menu-screen nexposee:<Title>` opens that panel inside the nexposee on boot (vs the plain
         // `--menu-screen settings` which pushes a framed dialog). Consumed by MainMenu; clear it so the
         // OpenDebugScreen path below doesn't also try to push an unknown screen.

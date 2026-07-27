@@ -2958,6 +2958,13 @@ public sealed class GameWorld
                 // respawn + leader recompute run via DriveGametypeFrame.
                 m.Activate();
                 break;
+            case EditorMode:
+                // The editor's EDIT state IS the observer state, so the automatic "you have observed long
+                // enough, joining you now" path would yank a mapper out of free-fly a second after connecting
+                // and drop them at a spawn point. Refuse every implicit join: entering PLAYTEST is only ever
+                // the explicit `editor_playtest` toggle, which places the player where it already is.
+                Clients.GametypeJoinGate = _ => false;
+                break;
             case TeamMayhem tm:
                 tm.Activate();
                 Scores.TeamScoreSource = tm.GetTeamScore;    // read team totals through the gametype (ST_SCORE)

@@ -1460,6 +1460,12 @@ public sealed partial class NetGame : Node3D
             _render.EntityOriginResolver = ResolveEntityOrigin;
         }
 
+        // The editor's world-space alignment grid (E2). Added unconditionally but hidden until
+        // cl_editor_grid is set: it is a full-screen pass that costs nothing while invisible, and having it
+        // resident means the `editor_grid` bind works instantly instead of building a shader on first toggle
+        // (which would be a pipeline-compile hitch at exactly the wrong moment).
+        AddChild(new Vmap.EditorGrid());
+
         AddLight();
     }
 
@@ -5530,6 +5536,15 @@ public sealed partial class NetGame : Node3D
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.StrafeHudPanel>() is { } strafe)
             strafe.Player = p;
 
+        // Editor status panel (E2). It stays blank in every non-editor session, so gate it on the gametype and
+        // let it read the local observer state: EDIT *is* the observer state, so free-flying means editing.
+        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
+        {
+            editorPanel.IsEditorSession = string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase);
+            editorPanel.IsEditing = _client?.IsObserving ?? true;
+            editorPanel.FlySpeed = p?.SpectatorSpeed ?? 1f;
+        }
+
         // QC HUD_PressedKeys spectatee gate: a free-fly observer never shows the cluster, and while merely
         // playing it shows only at enable 2. Feed the live spectatee_status (translated into the QC convention:
         // ClientNet encodes free-fly as SpectateeStatus==LocalNetId, QC uses -1; following a player is >0).
@@ -6448,6 +6463,13 @@ public sealed partial class NetGame : Node3D
         if (command.Equals("-hud_panel_radar_maximized", StringComparison.OrdinalIgnoreCase))
             return; // release of a press-toggle bind — ignored (matches the quickmenu toggle semantics)
 
+        // (E2) Editor tool binds. While free-flying in the editor gametype the weapon keys are dead weight —
+        // you cannot shoot and edit at the same time — so they double as the editor's controls, reusing the
+        // 1..9 + mousewheel muscle memory every player already has instead of demanding a second bind set.
+        // Consumed here, before the weapon dispatch below, so the impulse never reaches the weapon system.
+        if (TryRunEditorBind(command))
+            return;
+
         int imp = WeaponCommandToImpulse(command);
         if (imp != 0)
         {
@@ -6467,6 +6489,50 @@ public sealed partial class NetGame : Node3D
         // Not a weapon command — forward to the shared interpreter (kill/say/team/…). Unknown commands there are
         // just counted (DP Cmd_ForwardToServer is not wired for the net path), so this is a no-op for them.
         RunCommand?.Invoke(command);
+    }
+
+    /// <summary>
+    /// True while this client is free-flying (EDIT) inside an editor session — the only state in which the
+    /// weapon binds are repurposed. Playtesting is real play, so weapons behave normally there.
+    /// </summary>
+    private bool IsEditorFreeFly =>
+        string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase)
+        && (_client?.IsObserving ?? false);
+
+    /// <summary>
+    /// Re-dispatch a weapon bind as an editor action while in EDIT (see <see cref="IsEditorFreeFly"/>).
+    /// Returns true when the command was consumed as an editor action.
+    ///
+    /// Current mapping — mousewheel steps the grid, and the low number keys are the toggles:
+    /// <code>
+    ///   weapnext / weapprev (wheel)   grid size up / down
+    ///   1                             toggle the world grid
+    ///   2                             toggle EDIT / PLAYTEST
+    /// </code>
+    /// Keys 3..9 are deliberately left alone for now: they are the natural home for the selection/move/rotate
+    /// tools that arrive with E3, and binding them to nothing today is better than binding them to something
+    /// that will move.
+    /// </summary>
+    private bool TryRunEditorBind(string command)
+    {
+        if (!IsEditorFreeFly)
+            return false;
+
+        string? action = WeaponCommandToImpulse(command) switch
+        {
+            10 => "editor_grid_size +",   // weapnext  — wheel up
+            12 => "editor_grid_size -",   // weapprev  — wheel down
+            1 => "editor_grid",           // weapon_group_1
+            2 => "editor_playtest",       // weapon_group_2
+            _ => null,
+        };
+        if (action is null)
+            return false;
+
+        // Through the shared interpreter: the grid commands are registered client-side, and editor_playtest is
+        // unregistered here so it falls through the unknown-command router to the server, which owns the state.
+        Menu.MenuState.Interp?.ExecuteLine(action);
+        return true;
     }
 
     /// <summary>

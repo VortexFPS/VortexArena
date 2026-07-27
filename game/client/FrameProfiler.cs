@@ -87,7 +87,11 @@ public partial class FrameProfiler : CanvasLayer
           "nadeorbs", "dynlights",
           // the messagemode chat prompt's caret-blink _Process (only ticks while the prompt is open — it disables
           // its own _Process when closed — but scoped so the open-window cost is attributed, not proc:other).
-          "chat" };
+          "chat",
+          // (E2) the editor's world-space alignment grid: a full-screen depth-reconstruction pass. The _Process
+          // side is just cvar->uniform pushes and is inert while the grid is off, but scoped so enabling it
+          // shows up as its own line rather than inflating proc:other.
+          "editorgrid" };
 
     /// <summary>
     /// Open a named timing scope: <c>using (FrameProfiler.Scope("name")) { ... }</c> (or as a one-statement

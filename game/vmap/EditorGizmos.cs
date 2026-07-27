@@ -222,12 +222,15 @@ public sealed partial class EditorGizmos : Node3D
     /// </summary>
     private void RebuildWorldWireframe()
     {
-        VmapDocument doc = _controller!.Document!;
         var verts = new List<Vector3>(4096);
 
-        foreach (VmapBrush brush in doc.Brushes)
+        // Reuse the picking cache's windings: they are already built for this geometry version, and deriving
+        // them a second time here is what used to make opening the ortho view stall on a large map.
+        _controller!.PickIndex.EnsureBuilt(_controller.Document!, _controller.GeometryVersion);
+
+        foreach (VmapPickIndex.Entry entry in _controller.PickIndex.Entries)
         {
-            foreach (NVec3[] winding in VmapWinding.BuildBrushWindings(brush))
+            foreach (NVec3[] winding in entry.Windings)
             {
                 if (winding.Length < 3)
                     continue;

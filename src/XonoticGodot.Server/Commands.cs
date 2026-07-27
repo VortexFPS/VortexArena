@@ -1533,6 +1533,14 @@ public sealed class Commands
     {
         if (ctx.Caller is null) { ctx.Print("join is a client command"); return true; }
         Player p = ctx.Caller;
+
+        // QC ClientCommand_join (server/command/cmd.qc:665): the join command is gated on joinAllowed(), the
+        // SAME predicate the delayed auto-join uses. The port was calling ClientManager.Join directly, so a
+        // `join` bypassed every gametype join rule — Duel's 2-player cap, LMS's round lockout, the team lock,
+        // and the editor's "EDIT is where you live" gate — while the auto-join path honored all of them.
+        // An already-live (dead) player is a respawn, not a join, and QC lets that through unchecked.
+        if (p.IsObserver && !_world.Clients.JoinAllowed(p, _world.Time))
+            return true;
         // QC Join_Try (client.qc:2274): a non-INGAME client in g_playban_list cannot (re)join — the play-ban's
         // load-bearing enforcement. A player who isn't currently in play is one sitting as observer/spectator;
         // a live (dead) player is already INGAME and falls through to respawn.

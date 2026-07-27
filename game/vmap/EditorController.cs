@@ -91,6 +91,13 @@ public sealed partial class EditorController : Node3D
     /// <summary>Bumped whenever geometry changes, so cached wireframe/render meshes know to rebuild.</summary>
     public int GeometryVersion { get; private set; }
 
+    /// <summary>
+    /// The shared broadphase cache backing picking, snapping and the ortho wireframe. Rebuilt only when
+    /// <see cref="GeometryVersion"/> moves, which is what makes a per-frame crosshair query affordable on a
+    /// real map instead of re-deriving every brush's geometry each frame.
+    /// </summary>
+    public VmapPickIndex PickIndex { get; } = new();
+
     /// <summary>True when this client is in the editor gametype and free-flying (set by the host each frame).</summary>
     public bool Active { get; set; }
 
@@ -188,7 +195,8 @@ public sealed partial class EditorController : Node3D
         _lastPickVersion = GeometryVersion;
         _lastPickTool = Tool;
 
-        Hover = VmapPicking.Pick(_document!, origin, dir, PickMode(), GrabRadius, PickRange);
+        PickIndex.EnsureBuilt(_document!, GeometryVersion);
+        Hover = VmapPicking.Pick(PickIndex, origin, dir, PickMode(), GrabRadius, PickRange);
     }
 
     /// <summary>The camera ray in Quake space — the crosshair is the view centre, so this is simply forward.</summary>
@@ -253,8 +261,9 @@ public sealed partial class EditorController : Node3D
             return;
         }
 
+        PickIndex.EnsureBuilt(_document!, GeometryVersion);
         NVec3 resolved = VmapPicking.ResolveDragPosition(
-            _document!, target, GridSize, SnapRadius, _session!.SelectedBrushIds(), out _dragSnap);
+            PickIndex, target, GridSize, SnapRadius, _session!.SelectedBrushIds(), out _dragSnap);
         _dragDelta = resolved - _dragStartPoint;
     }
 

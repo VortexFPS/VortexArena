@@ -244,6 +244,12 @@ public sealed class ClientManager
         // OBSERVER, not yet a live player — it only enters the match via Join() (on +jump/+attack, a delayed
         // autojoin, or a bot's auto-join). Mark the observer phase here; the loadout/spawn happen in Join().
         p.IsObserver = true;
+        // QC ClientConnect -> PutObserverInServer(this, false, use_spawnpoint=true) (server/client.qc:1900):
+        // a connecting observer is placed AT A SPAWN POINT, not left at the world origin. The port skipped this
+        // because a fresh edict already sits at '0 0 0', which is usually inside solid or out in the void — so
+        // anyone who observes before joining (and, in the editor gametype, anyone who never joins at all) starts
+        // buried in geometry looking at nothing.
+        PlaceObserverAtSpawnPoint(p);
         p.WantsJoin = 0;            // QC this.wants_join = 0 (no team chosen yet; 0 = autoselect on Join)
         p.AutoJoinChecked = 0;      // QC .autojoin_checked: not yet attempted
         p.JoinJumpReleased = true;  // re-armed so the first +jump/+attack press fires Join once
@@ -553,6 +559,32 @@ public sealed class ClientManager
     /// scoreboard. Used by the <c>spectate</c> command (the live-player→observer direction QC has but the port
     /// lacked) and any forced-spectate path. The observer keeps its current origin (free-flies from there).
     /// </summary>
+    /// <summary>
+    /// QC <c>PutObserverInServer</c>'s <c>use_spawnpoint</c> branch (server/client.qc): put a free-fly observer
+    /// at a spawn point, facing the way that spawn faces.
+    ///
+    /// Deliberately NOT applied by <see cref="PutObserverInServer"/> itself: the live-player→observer direction
+    /// must keep the player's current position (that is what makes `spectate` drop you where you were standing,
+    /// and what the editor's PLAYTEST→EDIT toggle relies on). Only the connect-time path wants relocation.
+    /// </summary>
+    public void PlaceObserverAtSpawnPoint(Player p)
+    {
+        ArgumentNullException.ThrowIfNull(p);
+        if (Api.Services is null)
+            return;
+
+        SpawnPoint? sp = SpawnSystem.SelectSpawnPoint(p, LivePlayers(), targetCheck: false);
+        if (sp is not { } spot)
+            return;
+
+        Api.Entities.SetOrigin(p, spot.Origin);
+        // Level the view: a spawn point's roll is never meaningful, and a tilted observer camera reads as a bug.
+        var angles = new Vector3(0f, spot.Angles.Y, 0f);
+        p.Angles = angles;
+        p.FixAngle = true;
+        p.FixAngleAngles = angles;
+    }
+
     public void PutObserverInServer(Player p)
     {
         // QC PutObserverInServer (server/client.qc:268-273): if it WAS a live player with health, puff a despawn

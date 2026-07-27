@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using XonoticGodot.Formats.Materials;
 using XonoticGodot.Formats.Md3;
 using XonoticGodot.Formats.Sidecars;
 
@@ -73,7 +74,10 @@ public partial class Md3Morph : Node3D
     private Node3D _tagsRoot = null!;
 
     // Resolved per-surface materials (null = hidden via skin nodraw, surface skipped).
-    private readonly List<(Md3Surface surface, Material? material, bool visible)> _surfaces = new();
+    // autospriteAxial: null = ordinary surface; false/true = the shader carries deformVertexes
+    // autosprite/autosprite2 and the material is the baked-CUSTOM0/1 deform ShaderMaterial — ApplyFrame
+    // must emit the per-quad frames (AutospriteQuads) alongside the geometry.
+    private readonly List<(Md3Surface surface, Material? material, bool visible, bool? autospriteAxial)> _surfaces = new();
 
     // Tag sockets: model tag + its display name (alias-applied) + the live marker node.
     private readonly List<(Md3Tag tag, string displayName, Marker3D marker)> _tags = new();
@@ -136,6 +140,13 @@ public partial class Md3Morph : Node3D
     /// Resolve each surface's material once. The shader path is <c>skin.MeshToTexture[surfaceName]</c> when
     /// present (per-mesh override / team skin), else the surface's own first shader name. A <c>nodraw</c>
     /// override marks the surface hidden (skipped from the mesh).
+    ///
+    /// <para>A quad-shaped surface whose shader carries <c>deformVertexes autosprite</c>/<c>autosprite2</c>
+    /// (Base's bolt models — laser/elaser/hlac) takes the dedicated deform material
+    /// (<see cref="AssetSystem.ResolveAutospriteMaterial"/>) and is flagged so <see cref="ApplyFrame"/>
+    /// bakes the per-quad CUSTOM0/1 frames; anything else keeps the ordinary
+    /// <see cref="AssetSystem.ResolveMaterial"/> path (which approximates autosprite with a billboard —
+    /// still the behavior for non-quad geometry and BSP surfaces).</para>
     /// </summary>
     private void ResolveSurfaces(SkinFile? skin)
     {
@@ -153,8 +164,24 @@ public partial class Md3Morph : Node3D
                     shader = remap;     // empty remap means "leave default", so keep the fallback
             }
 
-            Material? material = visible ? _assets?.ResolveMaterial(shader) : null;
-            _surfaces.Add((surface, material, visible));
+            Material? material = null;
+            bool? autospriteAxial = null;
+            if (visible && _assets is not null)
+            {
+                ShaderDef? def = _assets.GetShader(shader);
+                if (def != null && ShaderCompiler.AutospriteAxial(def) is bool axial
+                    && surface.VertexCount > 0 && (surface.VertexCount & 3) == 0)
+                {
+                    ShaderMaterial? deform = _assets.ResolveAutospriteMaterial(shader);
+                    if (deform != null)
+                    {
+                        material = deform;
+                        autospriteAxial = axial;
+                    }
+                }
+                material ??= _assets.ResolveMaterial(shader);
+            }
+            _surfaces.Add((surface, material, visible, autospriteAxial));
         }
     }
 
@@ -371,7 +398,7 @@ public partial class Md3Morph : Node3D
         var mesh = new ArrayMesh();
         int surfaceIndex = 0;
 
-        foreach ((Md3Surface surface, Material? material, bool visible) in _surfaces)
+        foreach ((Md3Surface surface, Material? material, bool visible, bool? autospriteAxial) in _surfaces)
         {
             if (!visible)
                 continue;
@@ -389,6 +416,10 @@ public partial class Md3Morph : Node3D
             var positions = new Vector3[vcount];
             var normals = new Vector3[vcount];
             var uvs = new Vector2[vcount];
+            // Autosprite surfaces bake their quad frames from the QUAKE-space morphed vertices
+            // (AutospriteQuads is Godot-free; the s/t scalars are rotation-invariant, so only the
+            // per-quad center/axis convert at the boundary below).
+            System.Numerics.Vector3[]? qpos = autospriteAxial != null ? new System.Numerics.Vector3[vcount] : null;
             bool morph = fa != fb && t > 0f;
             for (int v = 0; v < vcount; v++)
             {
@@ -403,6 +434,8 @@ public partial class Md3Morph : Node3D
                     p = va[v].Position;
                     nrm = va[v].Normal;
                 }
+                if (qpos != null)
+                    qpos[v] = p;
                 positions[v] = Coords.ToGodot(p);
                 Vector3 gn = Coords.ToGodot(nrm);
                 normals[v] = gn.LengthSquared() > 1e-8f ? gn.Normalized() : Vector3.Up;
@@ -424,7 +457,20 @@ public partial class Md3Morph : Node3D
             arrays[(int)Mesh.ArrayType.Normal] = normals;
             arrays[(int)Mesh.ArrayType.TexUV] = uvs;
             arrays[(int)Mesh.ArrayType.Index] = indices;
-            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+
+            Mesh.ArrayFormat flags = 0;
+            if (qpos != null && BakeAutospriteCustoms(surface, qpos, autospriteAxial!.Value)
+                    is (float[] c0, float[] c1))
+            {
+                // CUSTOM0 = (quad center, s), CUSTOM1 = (axis, t) — RGBA float, read by the deform
+                // vertex shader (AutospriteShaderGen). The flags word declares the custom formats.
+                arrays[(int)Mesh.ArrayType.Custom0] = c0;
+                arrays[(int)Mesh.ArrayType.Custom1] = c1;
+                flags = (Mesh.ArrayFormat)(
+                    ((ulong)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift) |
+                    ((ulong)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom1Shift));
+            }
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, null, null, flags);
 
             if (material is not null)
                 mesh.SurfaceSetMaterial(surfaceIndex, material);
@@ -433,6 +479,37 @@ public partial class Md3Morph : Node3D
 
         _mesh.Mesh = mesh;
         PoseTags(frameA, frameB, t);
+    }
+
+    /// <summary>
+    /// Bake the CUSTOM0/1 vertex-attribute arrays for an autosprite surface: per vertex,
+    /// <c>(center.xyz, s)</c> and <c>(axis.xyz, t)</c> with center/axis converted to Godot space. Returns
+    /// null when the surface isn't quad-shaped after all (the caller then emits plain geometry and the
+    /// deform material's CUSTOM reads are zero — the quad simply collapses to its center rather than
+    /// rendering garbage; in practice ResolveSurfaces already guarded vcount % 4).
+    /// </summary>
+    private static (float[], float[])? BakeAutospriteCustoms(
+        Md3Surface surface, System.Numerics.Vector3[] qpos, bool axial)
+    {
+        int vcount = qpos.Length;
+        var s = new float[vcount];
+        var t = new float[vcount];
+        var quads = new AutospriteQuads.Quad[vcount / 4];
+        if (!AutospriteQuads.Bake(qpos, surface.TexCoords, axial, s, t, quads))
+            return null;
+
+        var c0 = new float[vcount * 4];
+        var c1 = new float[vcount * 4];
+        for (int v = 0; v < vcount; v++)
+        {
+            AutospriteQuads.Quad quad = quads[v / 4];
+            Vector3 center = Coords.ToGodot(quad.Center);
+            Vector3 axis = Coords.ToGodot(quad.Axis);
+            int d = v * 4;
+            c0[d + 0] = center.X; c0[d + 1] = center.Y; c0[d + 2] = center.Z; c0[d + 3] = s[v];
+            c1[d + 0] = axis.X;   c1[d + 1] = axis.Y;   c1[d + 2] = axis.Z;   c1[d + 3] = t[v];
+        }
+        return (c0, c1);
     }
 
     /// <summary>Re-pose each tag marker by interpolating its transform between the two frames.</summary>

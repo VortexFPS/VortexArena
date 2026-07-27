@@ -361,24 +361,24 @@ public static class Teleporters
         if ((player.Flags & EntFlags.Client) == 0 || MapMover.IsDead(player))
             return false;
 
+        // QC TDEATHLOOP → findbox(deathmin, deathmax) (upstream b6e02fe3): the old findradius radius —
+        // max(vlen(deathmin), vlen(deathmax)) — was the box's distance from the WORLD ORIGIN, scanning a sphere
+        // that grew with the exit's map position and relying on a per-entity boxesoverlap to trim it. The exact
+        // box query replaces both (the precise AABB test lives inside FindInBox). Fresh list per call: this is
+        // the teleport-event path (not per-frame), and no shared scratch can be re-entered from here.
         Vector3 deathMin = at + player.Mins, deathMax = at + player.Maxs;
-        float radius = MathF.Max(deathMin.Length(), deathMax.Length());
-        foreach (Entity head in Api.Entities.FindInRadius(at, radius).ToList())
+        var candidates = new List<Entity>();
+        Api.Entities.FindInBox(deathMin, deathMax, candidates);
+        foreach (Entity head in candidates)
         {
             if (ReferenceEquals(head, player) || head.TakeDamage == DamageMode.No)
                 continue;
             if ((head.Flags & EntFlags.Client) == 0 || MapMover.IsDead(head))
                 continue;
-            if (BoxesOverlap(deathMin, deathMax, head.AbsMin, head.AbsMax))
-                return true;
+            return true;
         }
         return false;
     }
-
-    private static bool BoxesOverlap(Vector3 amin, Vector3 amax, Vector3 bmin, Vector3 bmax)
-        => amin.X <= bmax.X && amax.X >= bmin.X
-        && amin.Y <= bmax.Y && amax.Y >= bmin.Y
-        && amin.Z <= bmax.Z && amax.Z >= bmin.Z;
 
     /// <summary>
     /// QC <c>TeleportPlayer</c>: debounce + play the teleport sound, relocate the player (origin/angles/
@@ -514,10 +514,15 @@ public static class Teleporters
             return false;
         bool hit = false;
 
-        // QC TDEATHLOOP(player.origin): the box is the player's bbox at the destination (telefragmin/max are
-        // zero here, so no union). deathradius covers the box; chain over findradius.
+        // QC TDEATHLOOP(player.origin) → findbox(deathmin, deathmax) (upstream b6e02fe3): the box is the
+        // player's bbox at the destination (telefragmin/max are zero here, so no union). The old findradius
+        // radius — max(vlen(deathmin), vlen(deathmax)) — was the box's distance from the WORLD ORIGIN (a Base
+        // bug the boxesoverlap filter kept correct but slow); the exact box query replaces both. Fresh list per
+        // call: event-driven, and Combat.Damage below can run arbitrary death hooks — a shared scratch could be
+        // re-entered mid-iteration.
         Vector3 deathMin = at + player.Mins, deathMax = at + player.Maxs;
-        float radius = MathF.Max(deathMin.Length(), deathMax.Length());
+        var candidates = new List<Entity>();
+        Api.Entities.FindInBox(deathMin, deathMax, candidates);
 
         // QC autocvar_g_telefrags_teamplay (default 1, xonotic-server.cfg:60) — note the Base NAME/sense: a value
         // of 1 means SPARE teammates. (cl_/g_ unregistered at runtime → Cvar() returns this faithful default.)
@@ -525,11 +530,9 @@ public static class Teleporters
         bool teleporteeAlive = (player.Flags & EntFlags.Client) != 0
             && !MapMover.IsDead(player) && player.GetResource(ResourceType.Health) >= 1f;
 
-        foreach (Entity head in Api.Entities.FindInRadius(at, radius).ToList())
+        foreach (Entity head in candidates)
         {
             if (ReferenceEquals(head, player) || head.TakeDamage == DamageMode.No)
-                continue;
-            if (!BoxesOverlap(deathMin, deathMax, head.AbsMin, head.AbsMax))
                 continue;
 
             if (teleporteeAlive)

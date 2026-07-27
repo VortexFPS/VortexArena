@@ -27,6 +27,20 @@ public static class Teams
         _ => "Neutral",
     };
 
+    /// <summary>
+    /// QC <c>Team_ColorCode(teamid)</c> (common/teams.qh:63): the chat color escape for a team — fed as the
+    /// <c>%s</c> tint prefix of team-aware notifications ("Your %steammate…" — Send_Notification's
+    /// Team_ColorCode(player.team) arg). Non-team values fall through to white (^7), matching Base.
+    /// </summary>
+    public static string ColorCode(int team) => team switch
+    {
+        Red => "^1",
+        Blue => "^4",
+        Yellow => "^3",
+        Pink => "^6",
+        _ => "^7",
+    };
+
     /// <summary>The first <paramref name="count"/> teams (2..4) used by a gametype.</summary>
     public static IEnumerable<int> Active(int count)
     {

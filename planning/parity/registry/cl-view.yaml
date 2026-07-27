@@ -340,7 +340,7 @@ features:
     verification:
       - { kind: code, ref: "ApplyBobbing ports CSQCPlayer_ApplyBobbing: vertical bob (bobup sin, xyspeed-proportional), horizontal bob2 (cos cycle + bob2_smooth ground-decay blocked while jumping), fall-bob (bobfall_speed/swing). All cvars read live with Base defaults. OnGround/JumpHeld/Velocity fed via ViewState (NetGame:5135-5136); UpdateView live (NetGame:5138).", result: pass }
     confidence: high
-    notes: "FIXED since the 2026-06-22 baseline (was missing — and the baseline note that even Base only TODO-stubbed this was WRONG: CSQCPlayer_ApplyBobbing IS a full implementation in cl_player.qc:321, the view.qc:273-285 stubs were a separate dead branch). The port now faithfully transcribes the cl_player.qc bobbing. cl_bob 0 / cl_bob2 0 are the shipped defaults so a stock match still shows no view-bob — opt-in only. Only the heightcheck trace (default off) is omitted."
+    notes: "FIXED since the 2026-06-22 baseline (was missing — and the baseline note that even Base only TODO-stubbed this was WRONG: CSQCPlayer_ApplyBobbing IS a full implementation in cl_player.qc:321, the view.qc:273-285 stubs were a separate dead branch). The port now faithfully transcribes the cl_player.qc bobbing. cl_bob 0 / cl_bob2 0 are the shipped defaults so a stock match still shows no view-bob — opt-in only. Only the heightcheck trace (default off) is omitted. 2026-07-05: the cl_bobfall READ FALLBACK was 0 (Base ships 0.05 — the landing dip is ON by default); fixed to 0.05 so store-less reads match, and the fall-bob was runtime-verified via a --camera-trace jump-land capture (tools/camera-ref/jumpland.json: land vz -251 -> -12.56u dip = clamp(vz,-400,0)*0.05 exactly, 0.33s swing; cl_bobfall 0 control kills it). The View-tab menu checkbox that toggles it (and cl_bob/cl_bob2) was inert until the same change (see menu-dialogs view tab)."
 
   - id: cl-view.roll.view_roll
     name: "View roll when strafing (cl_rollangle / CalcRoll)"
@@ -396,7 +396,7 @@ features:
     verification:
       - { kind: code, ref: "ApplyDeathTilt ports CSQCPlayer_ApplyDeathTilt (min((time-death_time)*8,1)*v_deathtiltangle, bails under cl_eventchase_death 2 default); ApplyIdleScaling ports CSQCPlayer_ApplyIdleScaling (sin-wave pitch/yaw/roll). Death edge tracked via _deathTime/_wasDead; idle runs after the chase split (FirstPersonView:398). Live on the net path.", result: pass }
     confidence: high
-    notes: "FIXED since the 2026-06-22 baseline (was missing): both death-tilt and idle-wave are now ported. Both off by default in stock Xonotic (v_deathtilt 0 / v_idlescale 0) and v_deathtilt is QC-skipped under the default cl_eventchase_death 2, so a stock match shows neither — opt-in only. The death-cam incompatibility guard is faithfully reproduced."
+    notes: "FIXED since the 2026-06-22 baseline (was missing): both death-tilt and idle-wave are now ported. Both off by default in stock Xonotic (v_deathtilt 0 / v_idlescale 0) and v_deathtilt is QC-skipped under the default cl_eventchase_death 2, so a stock match shows neither — opt-in only. The death-cam incompatibility guard is faithfully reproduced. 2026-07-05: the menu path to ENABLE the idle-wave ('View waving while idle' -> v_idlescale 1) was inert (bit-flag checkbox with bit 0); now a faithful QC value-pair checkbox, so the opt-in actually works."
 
   - id: cl-view.smooth.stair_viewheight
     name: "Stair + viewheight smoothing (stairsmoothz glide + viewheightavg blend)"

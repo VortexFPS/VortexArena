@@ -542,7 +542,7 @@ a:focus-visible { outline: 2px solid #df7b3c; outline-offset: 2px; }
 
 <header class="page-head">
   <div class="head-inner">
-    <div class="head-eyebrow">physicsX.cfg &nbsp;·&nbsp; git-verified &nbsp;·&nbsp; xonotic-data.pk3dir &nbsp;·&nbsp; 2013–2025</div>
+    <div class="head-eyebrow">physicsX.cfg &nbsp;·&nbsp; git-verified &nbsp;·&nbsp; xonotic-data.pk3dir &nbsp;·&nbsp; 2010–2025</div>
 
     <h1 class="head-title">
       Xonotic Default Physics<br>
@@ -586,7 +586,7 @@ a:focus-visible { outline: 2px solid #df7b3c; outline-offset: 2px; }
 
     <div class="head-pills">
       <span class="meta-pill">Source: <strong>local git log -p</strong></span>
-      <span class="meta-pill">Tags verified: <strong>0.8.0 · 0.8.1 · 0.8.2 · 0.8.5 · 0.8.6</strong></span>
+      <span class="meta-pill">Tags verified: <strong>0.1.0preview · 0.5.0 · 0.8.0 · 0.8.1 · 0.8.2 · 0.8.5 · 0.8.6</strong></span>
       <span class="meta-pill">Scope: <strong>physicsX.cfg — default preset only</strong></span>
       <span class="meta-pill">Updated: <strong>2026-07-04</strong></span>
     </div>
@@ -863,13 +863,138 @@ a:focus-visible { outline: 2px solid #df7b3c; outline-offset: 2px; }
 
   <div class="timeline">
 
+    <!-- Nexuiz SVN import -->
+    <div class="era">
+      <div class="era-stamp">2010-03-18 <span class="era-hash">0e7ed909b</span></div>
+      <div class="era-title">Initial Nexuiz SVN import — physicsXPM.cfg seeds the Xonotic physics tree</div>
+      <p class="era-prose">
+        The repository is seeded from Nexuiz SVN r8756. Among the many physics variants included
+        (<code>physics10.cfg</code>, <code>physicsWarsow.cfg</code>, <code>physicsCPMA.cfg</code>, etc.),
+        <code>physicsXPM.cfg</code> — divVerent's "NoQWBunny" modification of XPM-style physics — is the
+        file that will become the Xonotic standard. It already contains most of the movement values
+        that survive to v0.8.0 unchanged.
+      </p>
+    </div>
+
+    <!-- Nov 2010 rename -->
+    <div class="era">
+      <div class="era-stamp">2010-11-20 <span class="era-hash">23bdad34e</span></div>
+      <div class="era-title">physicsXPM.cfg → physicsX0.cfg; Nexuiz variants renamed physicsNexuiz*</div>
+      <p class="era-prose">
+        Formal Xonotic/Nexuiz physics separation. The Xonotic standard file becomes
+        <code>physicsX0.cfg</code>; Nexuiz variants become <code>physicsNexuiz10.cfg</code> etc.
+        The following day (commit <code>5167dc21a</code>, 2010-11-21), <code>sv_maxspeed</code>
+        is set to <code>360</code> — the commit comment reads "= (320 + 400) / 2", a deliberate
+        midpoint between Q3 CPM's 320 and the XPM-era 400.
+      </p>
+    </div>
+
+    <!-- v0.1.0preview -->
+    <div class="era">
+      <div class="era-stamp">2010-12-22 → xonotic-v0.1.0preview</div>
+      <div class="era-title">physicsX0.cfg at first public release — three values differ from the later baseline</div>
+      <p class="era-prose">
+        physicsX0.cfg at the v0.1.0preview tag. The bulk of the movement system is already final —
+        the same <code>sv_gravity 800</code>, <code>sv_friction 8</code>, <code>sv_stepheight 26</code>,
+        <code>sv_jumpvelocity 260</code>, <code>sv_airaccelerate 2</code>, <code>sv_airaccel_qw −0.8</code>,
+        <code>sv_airstopaccelerate 3</code>, <code>sv_airstrafeaccelerate 24</code>,
+        <code>sv_aircontrol 125</code>, and all Warsow bunny values that appear at v0.8.0.
+        Three values differ from the stable v0.5.0 onwards state:
+      </p>
+      <div class="baseline-block">
+        <div class="baseline-heading">physicsX0.cfg values that differ from the v0.5.0+ baseline</div>
+        <div class="baseline-inner">
+          <div class="br"><span class="br-name">sv_maxairspeed</span><span class="br-val">400</span><span class="br-ann">// reduced to 360 in Mar 2011 to match sv_maxspeed</span></div>
+          <div class="br"><span class="br-name">sv_aircontrol_penalty</span><span class="br-val">150</span><span class="br-ann">// raised to 180 in Mar 2011 (via 200 briefly)</span></div>
+          <div class="br"><span class="br-name">sv_airaccel_qw_stretchfactor</span><span class="br-val">— absent</span><span class="br-ann">// not yet present; added May 2011 at value 2</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2011 pre-v0.5.0 -->
+    <div class="era major">
+      <div class="era-stamp">2011-03 – 2011-05 <span class="era-hash">// before xonotic-v0.5.0</span></div>
+      <div class="era-title">Air physics tuned; physicsX0.cfg renamed to physicsX.cfg (2011-05-18)</div>
+      <p class="era-prose">
+        Three rounds of changes before the v0.5.0 release. <code>sv_airspeedlimit_nonqw</code>
+        briefly touched 700 before being reverted. The rename to <code>physicsX.cfg</code> archived the
+        original physics as <code>physicsX010.cfg</code> for reference. All five changes had settled to
+        their final values by the v0.5.0 tag (2011-09-05).
+      </p>
+      <div class="commits">
+        <div class="commit">
+          <div class="commit-left">
+            <span class="commit-hash">e0ec3bbce</span>
+            <span class="commit-date">2011-03-15</span>
+          </div>
+          <div class="commit-right">
+            <div class="commit-msg"><strong>divVerent</strong> — "minor physics adjustment as suggested by FruitieX"</div>
+            <div class="diff-block">
+              <div class="diff-line"><span class="diff-pfx m">−</span><span class="diff-before">sv_maxairspeed 400</span><span class="diff-arr">→</span><span class="diff-after">360</span><span class="diff-note">permanent; air and ground speed caps now equal</span></div>
+              <div class="diff-line"><span class="diff-pfx m">−</span><span class="diff-before">sv_airspeedlimit_nonqw 800</span><span class="diff-arr">→</span><span class="diff-after">700</span><span class="diff-note">temporary; reverted 2011-05-18</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="commit">
+          <div class="commit-left">
+            <span class="commit-hash">26641d5e5</span>
+            <span class="commit-date">2011-03-19</span>
+          </div>
+          <div class="commit-right">
+            <div class="commit-msg"><strong>divVerent</strong> — "aircontrol penalty of 200 WAS too high. 180 feels good now."</div>
+            <div class="diff-block">
+              <div class="diff-line"><span class="diff-pfx m">−</span><span class="diff-before">sv_aircontrol_penalty 150</span><span class="diff-arr">→</span><span class="diff-after">180</span><span class="diff-note">via 200 briefly (commit e0d2cfe41, 2011-03-15); 180 is the stable landing point</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="commit">
+          <div class="commit-left">
+            <span class="commit-hash">db60bcbf4</span>
+            <span class="commit-date">2011-05-17</span>
+          </div>
+          <div class="commit-right">
+            <div class="commit-msg"><strong>divVerent</strong> — "let's add some amount of strafe acceleration (max acceleration boost: +100% vs forward acceleration)"</div>
+            <div class="diff-block">
+              <div class="diff-line"><span class="diff-pfx p">+</span><span class="diff-after">sv_airaccel_qw_stretchfactor 2</span><span class="diff-note">new cvar; stretches the QW acceleration envelope for strafing</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="commit">
+          <div class="commit-left">
+            <span class="commit-hash">05ab71c03</span>
+            <span class="commit-date">2011-05-18</span>
+          </div>
+          <div class="commit-right">
+            <div class="commit-msg"><strong>divVerent</strong> — "set speed limit back to 800 - 700 was a bit too low"</div>
+            <div class="diff-block">
+              <div class="diff-line"><span class="diff-pfx m">−</span><span class="diff-before">sv_airspeedlimit_nonqw 700</span><span class="diff-arr">→</span><span class="diff-after">800</span><span class="diff-note">reverts the 2011-03-15 temporary reduction</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="commit">
+          <div class="commit-left">
+            <span class="commit-hash">c96303a4c</span>
+            <span class="commit-date">2011-05-18</span>
+          </div>
+          <div class="commit-right">
+            <div class="commit-msg"><strong>divVerent</strong> — "rename physicsX0.cfg to physicsX.cfg, and bring back 0.1.0preview's physics as physicsX010.cfg"</div>
+            <div class="diff-block">
+              <div class="diff-line"><span class="diff-pfx m">−</span><span class="diff-before">physicsX0.cfg</span><span class="diff-arr">→</span><span class="diff-after">physicsX.cfg</span><span class="diff-note">physicsX010.cfg added as archive of the v0.1.0preview values</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Baseline -->
     <div class="era">
-      <div class="era-stamp">2011 – early 2013 <span class="era-hash">// baseline before Samual</span></div>
-      <div class="era-title">physicsX0.cfg → physicsX.cfg; XPM-derived defaults established</div>
+      <div class="era-stamp">xonotic-v0.5.0 (2011-09-05) – early 2013 <span class="era-hash">// stable baseline before Samual</span></div>
+      <div class="era-title">physicsX.cfg stable state — values unchanged from v0.5.0 through Aug 2013</div>
       <p class="era-prose">
-        Originally named <code>physicsX0.cfg</code>, the file was renamed to <code>physicsX.cfg</code>
-        on 2011-05-18, making it the default Xonotic preset. Values through early 2013, unchanged since the initial checkin from the Nexuiz SVN:
+        physicsX.cfg as of v0.5.0, reflecting all the 2011 changes above. These values held
+        unchanged through the v0.6.0 (2012-03-08) and v0.7.0 (2013-06-04) releases until
+        Samual's Aug 2013 overhaul. Note: <code>sv_maxairspeed 360</code> now equals
+        <code>sv_maxspeed 360</code> (was 400 at v0.1.0preview).
       </p>
       <div class="baseline-block">
         <div class="baseline-heading">physicsX.cfg state, 2011 – Aug 2013</div>
@@ -1267,10 +1392,11 @@ xonotic-common.cfg  }  also split out from defaultXonotic.cfg</span></pre>
         difference between Q2-style and standard air acceleration was not traced through DarkPlaces C code.</span>
     </div>
     <div class="gap-row">
-      <span class="gap-icon">?</span>
-      <span class="gap-body"><strong>Pre-2011 history.</strong> The full diff history begins at
-        "initial checkin from nexuiz svn r8756" but the Nexuiz-era values and any changes in
-        2009–2011 were not traced further here.</span>
+      <span class="gap-icon">✓</span>
+      <span class="gap-body"><strong>Pre-2011 history — now resolved.</strong> The initial import
+        (2010-03-18, commit <code>0e7ed909b</code>) brought <code>physicsXPM.cfg</code> from Nexuiz
+        SVN r8756. The rename to <code>physicsX0.cfg</code> happened 2010-11-20 (commit
+        <code>23bdad34e</code>). The 2011 changes before v0.5.0 are documented in the timeline above.</span>
     </div>
   </div>
 </section>

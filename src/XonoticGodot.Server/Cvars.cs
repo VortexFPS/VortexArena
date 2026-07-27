@@ -99,6 +99,13 @@ public static class Cvars
         // Registered (like the step-up knobs) so the console/menu can set it and the listen-server cvar bridge applies it.
         new("slowmo", "1", Notify, "global time scale: <1 slow-motion, >1 fast, 1 = real time, 0 = paused"),
 
+        // DP overload semantics (frametime parity audit 2026-07-11; read live in ServerNet.StepWorld). DP sheds
+        // sim time under overload (sv_main.c:2604 caps the owed backlog at 0.1s and discards the rest) and
+        // wall-clock-budgets the catch-up loop (:2676 aborttime) — the game runs briefly, uniformly slow instead
+        // of paying its time-debt with burst ticks that spike the already-slow frames (the r16 wobble oscillator).
+        new("sv_overload_timedrop", "1", "1 = DP parity: cap owed sim backlog at 0.1s, shedding the excess (overload = brief uniform slow-motion); 0 = legacy preserve-and-burst catch-up"),
+        new("sv_catchup_wallbudget_ms", "0", "wall-clock ms a frame may spend running catch-up ticks before deferring the rest (first owed tick always runs; DP aborttime analogue); 0 = unlimited (default — the 2026-07-11 playtest found no felt benefit; the timedrop + soft cap already bound catch-up)"),
+
         // [T45] warpzone self-targeting (lib/warpzone/server.qc WarpZone_InitStep_FindTarget). Behaviour is already
         // correct without this entry (Warpzone.cs reads it via Api.Cvars.GetFloat, which returns 0 when unset), but
         // registering it makes it visible to cvarlist/the menu and lets the listen-server `set` bridge apply changes.
@@ -259,6 +266,17 @@ public static class Cvars
         new("g_spawn_alloweffects", "3", "spawn FX: 1=particles, 2=sound, 3=both"),
         new("g_spawn_furthest", "0.5", "fraction of spawns biased far from players"),
         new("g_spawn_useallspawns", "0"),
+        // ---- anti-abuse spawn scoring (spawn-system-analysis 2026-07-06). R1 ships ON (a deliberate divergence
+        //      from Base; the Duel gametype disables it for the match — Duel.Activate saves + sets
+        //      g_spawn_avoid_los 0, Deactivate restores); the rest default off/faithful. ----
+        new("g_spawn_avoid_los", "1", "[R1] avoid spawning where a live enemy has line of sight to the spot (0 = Base)"),
+        new("g_spawn_avoid_los_distance", "1250", "[R1] only enemies within this range (qu) count for the LOS check"),
+        new("g_spawn_avoid_death_radius", "0", "[R2] demote spawns within this radius (qu) of where you just died (0 = off)"),
+        new("g_spawn_avoid_death_time", "8", "[R2] seconds over which the death-point avoidance decays to nothing"),
+        new("g_spawn_furthest_topfraction", "0", "[R3] far pick: 0 = Base dist^5 roulette; >0 = uniform among spots within this fraction of the max weight"),
+        new("g_spawn_distance_enemies_only", "0", "[R4] teamplay: measure spawn distance to the nearest ENEMY only, not teammates (0 = Base)"),
+        new("g_spawn_occupied_repick", "1", "[R5] if the chosen spot is occupied by a live player, re-pick once instead of overlapping"),
+        new("sv_spawn_debug", "0", "log one line per spawn (nearest-enemy distance + enemy LOS) for tuning; NOT Base's spawn_debug"),
         new("sv_gibhealth", "100", Notify, "health below -N gibs the corpse"),
         new("sv_gentle", "0", Notify, "1 = suppress gore + pain/death voices"),
         new("g_forced_respawn", "0", "1 = auto-respawn at g_respawn_delay_max even without pressing fire"),
@@ -335,6 +353,10 @@ public static class Cvars
         new("bot_ai_enemydetectioninterval_stickingtoenemy", "4"),
         new("bot_ai_enemydetectionradius", "10000"),
         new("bot_ai_chooseweaponinterval", "0.5"),
+        // Port benchmark/demo knob (NOT a Base cvar): >0 = seconds per weapon; bots step through their
+        // owned loadout one weapon at a time (entity slot phases them apart) instead of range-picking.
+        // Used by the perf-run demo scenario together with g_weaponarena; keep 0 for normal play.
+        new("bot_ai_weapon_rotate", "0"),
         new("bot_ai_dangerdetectioninterval", "0.25"),
         new("bot_ai_dangerdetectionupdates", "64"),
         new("bot_ai_friends_aware_pickup_radius", "500"),

@@ -1,6 +1,6 @@
 # Cvar default diff — Base vs port
 
-_Generated 2026-07-02 by `tools/parity-cvar-diff.py`. Entries simulated on both trees: `xonotic-client.cfg`, `xonotic-server.cfg`, `notifications.cfg` (the port's real boot chain — ConfigLoader/MenuState)._
+_Generated 2026-07-05 by `tools/parity-cvar-diff.py`. Entries simulated on both trees: `xonotic-client.cfg`, `xonotic-server.cfg`, `notifications.cfg` (the port's real boot chain — ConfigLoader/MenuState)._
 
 Base tree: `C:\Users\Bryan\Projects\Xonotic\Base\data\xonotic-data.pk3dir` — 6011 effective cvars from 25 files.
 Port tree: `C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir` — 6050 effective cvars from 25 files.
@@ -28,7 +28,7 @@ port-only = port additions. Grouped by prefix; full lists in `_cvar-diff.json`.
 - **Base-only**: none
 - **port-only**: none
 
-## 4. Code-default mismatches vs Base effective (56)
+## 4. Code-default mismatches vs Base effective (55)
 
 A C# literal default (Register table / Cvars.Defaults / numeric fallback read) that disagrees
 with the Base effective value. Bites on any path that reads before/without the cfg chain
@@ -39,23 +39,22 @@ with the Base effective value. Bites on any path that reads before/without the c
 | `cl_zoomfactor` | `5` | `2.5` | game/client/FirstPersonView.cs:277 | fallback |
 | `cl_zoomfactor` | `5` | `2.5` | game/client/FirstPersonView.cs:302 | fallback |
 | `cl_zoomspeed` | `8` | `3.5` | game/client/FirstPersonView.cs:304 | fallback |
-| `v_idlescale` | `` | `0` | game/client/FirstPersonView.cs:603 | fallback |
-| `cl_bobfall` | `0.05` | `0` | game/client/FirstPersonView.cs:706 | fallback |
+| `v_idlescale` | `` | `0` | game/client/FirstPersonView.cs:604 | fallback |
 | `cl_deathglow` | `2` | `0` | game/client/ModelTint.cs:193 | fallback |
 | `r_hdr_glowintensity` | `1` | `0` | game/client/ModelTint.cs:209 | fallback |
 | `hud_panel_centerprint_fade_in` | `0` | `0.15` | game/hud/CenterPrintPanel.cs:283 | Register |
 | `con_chatsize` | `10` | `8` | game/hud/ChatPanel.cs:285 | Register |
 | `hud_width` | `560` | `0` | game/hud/HudConfig.cs:35 | Register |
 | `cl_race_cptimes_showself` | `1` | `0` | game/hud/RaceTimerPanel.cs:143 | Register |
-| `hud_panel_weapons_ammo_full_nails` | `320` | `200` | game/hud/WeaponsPanel.cs:644 | Register |
-| `hud_panel_weapons_orderbyimpulse` | `1` | `0` | game/hud/WeaponsPanel.cs:660 | Register |
-| `cl_netfps` | `64` | `72` | game/menu/framework/ClientSettings.cs:124 | Register |
-| `cl_movement_errorcompensation` | `1` | `0` | game/menu/framework/ClientSettings.cs:155 | Register |
-| `volume` | `1` | `0.7` | game/menu/framework/ClientSettings.cs:414 | Register |
-| `bgmvolume` | `0.75` | `1` | game/menu/framework/ClientSettings.cs:415 | Register |
+| `hud_panel_weapons_ammo_full_nails` | `320` | `200` | game/hud/WeaponsPanel.cs:642 | Register |
+| `hud_panel_weapons_orderbyimpulse` | `1` | `0` | game/hud/WeaponsPanel.cs:658 | Register |
+| `cl_netfps` | `64` | `72` | game/menu/framework/ClientSettings.cs:126 | Register |
+| `cl_movement_errorcompensation` | `1` | `0` | game/menu/framework/ClientSettings.cs:157 | Register |
+| `volume` | `1` | `0.7` | game/menu/framework/ClientSettings.cs:420 | Register |
+| `bgmvolume` | `0.75` | `1` | game/menu/framework/ClientSettings.cs:421 | Register |
 | `g_powerups` | `-1` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:513 | fallback |
 | `g_pickup_items` | `-1` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:515 | fallback |
-| `g_ctf_allow_vehicle_carry` | `1` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:2087 | fallback |
+| `g_ctf_allow_vehicle_carry` | `1` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:2119 | fallback |
 | `g_respawn_delay_large_count` | `8` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/EntityGametypeState.cs:230 | fallback |
 | `g_nades_bonus_score_high` | `60` | `15` | src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:1212 | fallback |
 | `g_lms_forfeit_min_match_time` | `30` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:671 | fallback |
@@ -72,8 +71,8 @@ with the Base effective value. Bites on any path that reads before/without the c
 | `g_vehicles_enter` | `0` | `1` | src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:184 | fallback |
 | `g_instagib_extralives` | `1` | `0` | src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:806 | fallback |
 | `g_vehicles_enter` | `0` | `1` | src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:852 | fallback |
-| `g_rm_laser_damage` | `80` | `150` | src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:435 | fallback |
-| `g_sandbox` | `0` | `g_sandbox <subcommand> [args] — sandbox build mode (object_spawn/edit/attach/…)` | src/XonoticGodot.Server/Commands.cs:861 | Register |
+| `g_rm_laser_damage` | `80` | `150` | src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:446 | fallback |
+| `g_sandbox` | `0` | `g_sandbox <subcommand> [args] — sandbox build mode (object_spawn/edit/attach/…)` | src/XonoticGodot.Server/Commands.cs:874 | Register |
 | `g_warmup_start_ammo_cells` | `90` | `30` | src/XonoticGodot.Server/Cvars.cs:265 | table |
 | `g_balance_contents_playerdamage_drowning` | `20` | `30` | src/XonoticGodot.Server/Cvars.cs:270 | table |
 | `g_balance_contents_playerdamage_lava_burn_time` | `2.5` | `5` | src/XonoticGodot.Server/Cvars.cs:274 | table |
@@ -93,7 +92,7 @@ with the Base effective value. Bites on any path that reads before/without the c
 | `g_pickup_weapons_anyway` | `1` | `0` | src/XonoticGodot.Server/Cvars.cs:523 | table |
 | `g_powerups` | `-1` | `1` | src/XonoticGodot.Server/Cvars.cs:526 | table |
 
-## 5. Base-effective cvars never referenced in port source (1556)
+## 5. Base-effective cvars never referenced in port source (1555)
 
 No string-literal occurrence anywhere under src/ or game/ — dead-setting candidates (the
 graphics-stub class) or subsystems the port genuinely lacks. Interpolated reads
@@ -115,7 +114,7 @@ may be read via string concat — check before filing). `g_physics_<set>_*` and
 - `(bare)` ×16: `debugdraw`, `debugtrace`, `edgefriction`, `freelook`, `joyadvanced`, `joyadvaxisr`, `joyadvaxisx`, `joyadvaxisy` …
 - `camera_` ×12: `camera_chase_smoothly`, `camera_enable`, `camera_forward_follows`, `camera_free`, `camera_look_attenuation`, `camera_look_player`, `camera_mouse_threshold`, `camera_reset` …
 - `gl_` ×12: `gl_flashblend`, `gl_picmip_other`, `gl_picmip_sprites`, `gl_picmip_world`, `gl_polyblend`, `gl_texturecompression_2d`, `gl_texturecompression_color`, `gl_texturecompression_gloss` …
-- `vid_` ×9: `vid_conheight`, `vid_conwidth`, `vid_desktopfullscreen`, `vid_gl13`, `vid_netwmfullscreen`, `vid_pixelheight`, `vid_sRGB`, `vid_sRGB_fallback` …
+- `vid_` ×8: `vid_conwidth`, `vid_desktopfullscreen`, `vid_gl13`, `vid_netwmfullscreen`, `vid_pixelheight`, `vid_sRGB`, `vid_sRGB_fallback`, `vid_x11_display`
 - `joy_` ×7: `joy_deadzoneforward`, `joy_deadzonepitch`, `joy_deadzoneside`, `joy_deadzoneup`, `joy_deadzoneyaw`, `joy_sensitivitypitch`, `joy_sensitivityyaw`
 - `bot_` ×5: `bot_ai_dodgeupdateinterval`, `bot_ai_navigation_jetpack`, `bot_ai_navigation_jetpack_mindistance`, `bot_debug_goalstack`, `bot_debug_tracewalk`
 - `accuracy_` ×4: `accuracy_color0`, `accuracy_color1`, `accuracy_color2`, `accuracy_color_levels`

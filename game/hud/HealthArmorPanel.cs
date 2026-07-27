@@ -23,8 +23,9 @@ namespace XonoticGodot.Game.Hud;
 ///         second when you take a big hit.</item>
 ///   <item>smooth value lerp (<c>_progressbar_gfx_smooth</c>): the bar eases between large value jumps.</item>
 ///   <item>fuel bar + underwater oxygen bar (blinks once out of air).</item>
-///   <item>skin health/armor icons (<c>health</c>/<c>armor</c>, with the port enhancement of swapping to the
-///         <c>_big</c>/<c>_mega</c> art variants at over-max values), numbers tinted by value.</item>
+///   <item>skin health/armor icons (always the plain <c>health</c>/<c>armor</c> pic, exactly like Base — the old
+///         <c>_big</c>/<c>_mega</c> over-max swap was the wrong item-variant art and was removed, playtest #52),
+///         numbers tinted by value.</item>
 /// </list>
 ///
 /// Real data: pulled live from the local <see cref="Player"/> via the resource accessors
@@ -309,7 +310,7 @@ public partial class HealthArmorPanel : HudPanel
                 // small armor sub-icon at the right edge (QC drawpic_aspect_skin at fg*armor/health).
                 float ich = mySize.Y * 0.5f;
                 var icoRect = new Rect2(pos.X + mySize.X - ich, pos.Y + (mySize.Y - ich) * 0.5f, ich, ich);
-                DrawIcon("armor", armor, maxArmor, icoRect, LiveFgAlpha * Mathf.Clamp(armor / Mathf.Max(health, 1f), 0f, 1f));
+                DrawIcon("armor", icoRect, LiveFgAlpha * Mathf.Clamp(armor / Mathf.Max(health, 1f), 0f, 1f));
             }
         }
         else
@@ -320,7 +321,7 @@ public partial class HealthArmorPanel : HudPanel
             {
                 float ich = mySize.Y * 0.5f;
                 var icoRect = new Rect2(pos.X + mySize.X - ich, pos.Y + (mySize.Y - ich) * 0.5f, ich, ich);
-                DrawIcon("health", health, maxHealth, icoRect, LiveFgAlpha);
+                DrawIcon("health", icoRect, LiveFgAlpha);
             }
         }
 
@@ -509,7 +510,7 @@ public partial class HealthArmorPanel : HudPanel
             else { picPos = newPos; numPos = newPos + new Vector2(0f, newSize.X); }
 
             float half = newSize.Y * 0.5f;
-            DrawIcon(icon, value, max, new Rect2(picPos, new Vector2(newSize.X, half)), LiveFgAlpha);
+            DrawIcon(icon, new Rect2(picPos, new Vector2(newSize.X, half)), LiveFgAlpha);
             // number cell, slightly smaller in y (QC reduces it to 0.7 and recenters by 0.15*half). The Y base
             // already carries the icon-width offset (numPos = newPos + eY*newSize.x), so add only the recenter.
             float numH = half * 0.7f;
@@ -534,7 +535,7 @@ public partial class HealthArmorPanel : HudPanel
             else { picPos = newPos; numPos = newPos + new Vector2(newSize.Y, 0f); }
 
             // icon = a square of side newSize.y; number cell = 2×newSize.y wide.
-            DrawIcon(icon, value, max, new Rect2(picPos, new Vector2(newSize.Y, newSize.Y)), LiveFgAlpha);
+            DrawIcon(icon, new Rect2(picPos, new Vector2(newSize.Y, newSize.Y)), LiveFgAlpha);
             float numW = 2f * newSize.Y;
             int size = NumberSize(newSize.Y);
             float topY = numPos.Y + (newSize.Y - size) * 0.5f;
@@ -542,20 +543,16 @@ public partial class HealthArmorPanel : HudPanel
         }
     }
 
-    /// <summary>Draw a health/armor skin icon, swapping to the over-max art variants (a port enhancement:
-    /// <c>_big</c> past max, <c>_mega</c> well past it) for the classic "you're overcharged" cue. Falls back
-    /// to a tinted box matching the bar color when the art is missing so the cell is never blank.</summary>
-    private void DrawIcon(string baseName, float value, float max, Rect2 rect, float alpha)
+    /// <summary>Draw the health/armor skin icon — ALWAYS the plain <c>health</c>/<c>armor</c> pic, exactly like
+    /// Base (<c>healtharmor.qc</c> passes the bare name to <c>DrawNumIcon</c>/<c>drawpic_aspect_skin</c>; the
+    /// <c>_small/_medium/_big/_mega</c> files in the skin are the ITEM pickup icons, not panel art). The old
+    /// port "enhancement" swapped to <c>_big</c>/<c>_mega</c> past 50%/100% of max — which meant the panel showed
+    /// the wrong (item-variant) icon at any normal over-100 value (playtest #52). Falls back to a tinted box
+    /// matching the bar color when the art is missing so the cell is never blank.</summary>
+    private void DrawIcon(string baseName, Rect2 rect, float alpha)
     {
-        string name = baseName;
-        if (max > 0f)
-        {
-            if (value > max) name = baseName + "_mega";
-            else if (value > max * 0.5f) name = baseName + "_big";
-        }
         var modulate = new Color(1f, 1f, 1f, Mathf.Clamp(alpha, 0f, 1f));
-        if (DrawSkinPic(name, rect, modulate)) return;
-        if (name != baseName && DrawSkinPic(baseName, rect, modulate)) return;
+        if (DrawSkinPic(baseName, rect, modulate)) return;
 
         // Fallback glyph: a small filled square tinted like the resource.
         Color box = baseName == "armor" ? DefaultArmorColor : DefaultHealthColor;

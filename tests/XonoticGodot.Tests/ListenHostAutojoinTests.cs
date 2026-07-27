@@ -12,13 +12,22 @@ using Xunit;
 namespace XonoticGodot.Tests;
 
 /// <summary>
-/// Regression guard for the "stuck on the loading screen, sounds playing" bug: a listen-server host (Create
-/// Game / <c>--host</c>) sets <c>sv_spectate 0</c> so it auto-spawns into the match instead of sitting as an
-/// observer. The per-frame <c>sv_spectate=0</c> spectator-kick block (GameWorld.PlayerFrameIdleAll) shared the
-/// <c>info.JoinTime</c> field with the autojoin's MIN_SPEC_TIME grace and reset it EVERY tick while
-/// <c>AutoJoinChecked == 0</c> — pinning that grace open forever, so the host never joined (Health stayed 0) and
-/// the loading screen (which dismisses on the first spawn) never came down even though the world was live.
-/// Introduced in Waves 9-11 (ff8a699); fixed by not touching JoinTime while the autojoin is still pending.
+/// Two related guards for the listen host spawning into its own match.
+///
+/// <para><b>The sv_spectate=0 delayed-autojoin (still a valid operator configuration).</b> Regression guard for
+/// the "stuck on the loading screen, sounds playing" bug: with <c>sv_spectate 0</c> a would-be observer
+/// auto-spawns via the per-tick <c>ObserverOrSpectatorThink</c> grace. The <c>sv_spectate=0</c> spectator-kick
+/// block (GameWorld.PlayerFrameIdleAll) shared the <c>info.JoinTime</c> field with the autojoin's MIN_SPEC_TIME
+/// grace and reset it EVERY tick while <c>AutoJoinChecked == 0</c> — pinning that grace open forever, so the host
+/// never joined (Health stayed 0). Introduced in Waves 9-11 (ff8a699); fixed by not touching JoinTime while the
+/// autojoin is still pending.</para>
+///
+/// <para><b>The shipping listen host uses the `join` command, NOT sv_spectate 0.</b> Since #44, the port ships
+/// Base's <c>sv_spectate 1</c> and the host's "Create Game and play" spawn is driven by <c>NetGame</c> running the
+/// <c>join</c> command for the local observer (retried until it spawns). The <c>Join*</c> tests below cover the
+/// server-layer behavior that block depends on: a <c>join</c> on a normal DM map spawns the observer, and a
+/// <c>join</c> with no reachable spawnpoint leaves it an observer WITHOUT throwing — which is exactly why NetGame
+/// must retry rather than burn a one-shot latch on the first (failed) attempt.</para>
 /// </summary>
 [Collection("GlobalState")]
 public class ListenHostAutojoinTests
@@ -86,6 +95,46 @@ public class ListenHostAutojoinTests
         world.Frame(SimulationLoop.TicRate);
 
         Assert.Equal(joinTimeAtConnect, info.JoinTime, 3);
+    }
+
+    /// <summary>The shipping host-join path (NetGame's [#44] block): a <c>join</c> command for the local observer
+    /// on a normal DM map spawns it as a live player. This is what NetGame's retry loop converges on.</summary>
+    [Fact]
+    public void JoinCommand_SpawnsTheObserver_OnANormalDmMap()
+    {
+        var ents = SpawnDicts(new Vector3(0f, 0f, 16f), new Vector3(128f, 0f, 16f));
+        var world = new GameWorld(FlatFloor(), ents);
+        world.Boot("dm");
+        // Base default sv_spectate 1 — the passive delayed-autojoin does NOT fire; the explicit join is the path.
+        Api.Cvars.Set("sv_spectate", "1");
+
+        ClientManager.ClientInfo info = world.Clients.ClientConnect(isBot: false, netName: "host");
+        Player p = info.Player;
+        Assert.True(p.IsObserver, "a connecting client starts as an observer");
+
+        world.Commands.Execute("join", isServerConsole: false, caller: p);
+
+        Assert.False(p.IsObserver, "join must spawn the host as a live player");
+        Assert.True(p.Health > 0f, "a joined host has health (so the loading screen dismisses)");
+    }
+
+    /// <summary>The failure case that justifies NetGame retrying instead of burning a one-shot latch: a
+    /// <c>join</c> with no reachable spawnpoint leaves the caller an observer and does not throw — so a
+    /// burn-before-success latch would park the host forever, while the bounded retry recovers when a spawn frees.</summary>
+    [Fact]
+    public void JoinCommand_WithNoSpawnpoint_LeavesObserver_WithoutThrowing()
+    {
+        var ents = SpawnDicts(); // worldspawn only — no info_player_deathmatch
+        var world = new GameWorld(FlatFloor(), ents);
+        world.Boot("dm");
+        Api.Cvars.Set("sv_spectate", "1");
+
+        ClientManager.ClientInfo info = world.Clients.ClientConnect(isBot: false, netName: "host");
+        Player p = info.Player;
+
+        world.Commands.Execute("join", isServerConsole: false, caller: p); // must not throw
+
+        Assert.True(p.IsObserver, "no spawnpoint → the join no-ops and the caller stays an observer (retry territory)");
     }
 
     private static void RunTo(GameWorld world, float until, Action? perFrame)

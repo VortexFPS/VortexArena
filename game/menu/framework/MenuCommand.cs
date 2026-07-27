@@ -183,10 +183,21 @@ public static class MenuCommand
                 break;
 
             // directmenu <name> [args] → m_goto(name, true): open + HIDE-menu-on-close (drops back into match).
-            // directpanelhudmenu <name> → the HUD-prefixed variant; we route the bare name (no HUD filter here).
             case "directmenu":
-            case "directpanelhudmenu":
                 if (t.Count > 1) OpenDialog?.Invoke(t[1]);
+                break;
+
+            // directpanelhudmenu <panel> → the HUD-prefixed variant: QC menu_cmd.qc sets filter = "HUD" and
+            // resolves the dialog named "HUD<panel>" (each dialog_hudpanel_<p>.qh registers e.g. "HUDweapons").
+            // The registry carries the same names, so the HUD editor's double-click/Enter opens the RIGHT dialog.
+            case "directpanelhudmenu":
+                if (t.Count > 1) OpenDialog?.Invoke("HUD" + t[1]);
+                break;
+
+            // QC the DP `togglemenu [0]` command (bound to Escape; also issued by QC HUDSetup_Start to drop the
+            // menu before enabling the HUD editor). Arg 0 = force close; no arg / non-zero = toggle.
+            case "togglemenu":
+                ToggleMenu?.Invoke(t.Count > 1 && int.TryParse(t[1], out int tmArg) ? tmArg : -1);
                 break;
 
             // closemenu <name> → close that dialog if open/focused (QC close_mode).
@@ -217,11 +228,21 @@ public static class MenuCommand
                 OpenDialog?.Invoke("SandboxTools");
                 break;
 
-            // The HUD-panel configuration host (the port's stand-in for QC's in-game HUD editor entry):
-            // menu_showhudoptions is what the Game→HUD "Enter HUD editor" button issues.
+            // QC commands.cfg `alias menu_showhudoptions "menu_cmd directpanelhudmenu ${* ?}"`: with a panel
+            // argument (the HUD editor's double-click / Enter on a panel) open that panel's own dialog
+            // ("HUD<panel>", e.g. HUDweapons); bare, open the port's panel-dialog directory.
             case "menu_showhudpanels":
             case "menu_showhudoptions":
-                OpenDialogOverlay?.Invoke("hudpanels");
+                if (t.Count > 1 && MenuDialogRegistry.Has("HUD" + t[1]))
+                    OpenDialog?.Invoke("HUD" + t[1]);
+                else
+                    OpenDialogOverlay?.Invoke("hudpanels");
+                break;
+
+            // QC commands.cfg `alias menu_showhudexit "menu_cmd directmenu HUDExit"`: ESC in the live HUD
+            // editor opens the hudsetup-exit dialog (grid/dock/panel-bg defaults + the Exit-setup button).
+            case "menu_showhudexit":
+                OpenDialog?.Invoke("HUDExit");
                 break;
 
             // ---- live-match gameplay commands (dialog_gamemenu / teamselect COMMANDBUTTON strings) ----------
@@ -278,6 +299,17 @@ public static class MenuCommand
                 break;
 
             default:
+                // DP console semantics: a line starting with a registered cvar name is a bare cvar set/print —
+                // exactly what ConfigInterpreter.ExecuteLine does. The QC HUD-setup command strings depend on it
+                // (`_hud_configure 1` from HUDSetup_Start / DialogHudConfirm, `_hud_configure 0` from the
+                // hudsetup-exit "Exit setup" button). Plain `set` semantics — deliberately NO MarkArchived, so a
+                // transient like _hud_configure never lands in config.cfg (its Save flag decides persistence).
+                if (cvars.Has(cmd))
+                {
+                    if (t.Count >= 2) cvars.Set(cmd, t[1]);
+                    else GD.Print($"\"{cmd}\" is \"{cvars.GetString(cmd)}\"");
+                    break;
+                }
                 GD.Print($"[MenuCommand] '{string.Join(' ', t)}' has no client backend yet (inert).");
                 break;
         }

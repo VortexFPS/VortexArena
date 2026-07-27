@@ -42,6 +42,12 @@ public sealed class AssetSystem
     private Texture2D? _fallbackTexture;       // magenta/black checkerboard
     private Material? _fallbackMaterial;        // unlit material wrapping the checkerboard
     private Texture2D? _whiteTexture;           // 1×1 white ($whiteimage)
+    private Texture2D? _blackTexture;           // 1×1 black (missing _glow companion)
+
+    // Autosprite deform materials, cached separately from _materialCache: the same shader NAME compiles
+    // to a ShaderMaterial with baked CUSTOM0/1 semantics on the model path but keeps the plain
+    // billboard fallback on the ordinary (BSP) path. A null entry caches "not an autosprite shader".
+    private readonly Dictionary<string, ShaderMaterial?> _autospriteCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Build the facade over <paramref name="vfs"/>: load and parse every <c>scripts/*.shader</c> into
@@ -163,6 +169,38 @@ public sealed class AssetSystem
         }
 
         _materialCache[key] = result;
+        return result;
+    }
+
+    /// <summary>
+    /// Resolve the dedicated autosprite-deform <see cref="ShaderMaterial"/> for a shader name whose def
+    /// carries <c>deformVertexes autosprite</c>/<c>autosprite2</c> — the faithful GPU deform the MD3
+    /// builder pairs with baked <c>CUSTOM0/1</c> quad frames (<c>AutospriteQuads</c>). Opt-in and cached
+    /// separately from <see cref="ResolveMaterial"/>: only the model path calls this, so BSP surfaces keep
+    /// the old billboard approximation untouched. Returns null (cached) when the name has no shader, no
+    /// autosprite deform, or no usable image — callers fall back to <see cref="ResolveMaterial"/>.
+    /// </summary>
+    public ShaderMaterial? ResolveAutospriteMaterial(string nameOrTexture)
+    {
+        if (string.IsNullOrEmpty(nameOrTexture))
+            return null;
+
+        string key = StripShaderExtension(nameOrTexture);
+        if (_autospriteCache.TryGetValue(key, out ShaderMaterial? cached))
+            return cached;
+
+        ShaderMaterial? result = null;
+        try
+        {
+            if (_shaders.TryGetValue(key, out ShaderDef? def))
+                result = ShaderCompiler.CompileAutosprite(def, this);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[AssetSystem] autosprite material '{key}' failed to compile: {ex.Message}");
+        }
+
+        _autospriteCache[key] = result;
         return result;
     }
 
@@ -799,6 +837,17 @@ public sealed class AssetSystem
         var img = Image.CreateFromData(1, 1, false, Image.Format.Rgba8, new byte[] { 255, 255, 255, 255 });
         _whiteTexture = ImageTexture.CreateFromImage(img);
         return _whiteTexture;
+    }
+
+    /// <summary>A shared 1×1 black texture — the identity for additive/EMISSION samplers (a bolt shader
+    /// whose <c>_glow</c> companion is missing binds this so the emission term contributes nothing).</summary>
+    internal Texture2D BlackTexture()
+    {
+        if (_blackTexture != null)
+            return _blackTexture;
+        var img = Image.CreateFromData(1, 1, false, Image.Format.Rgba8, new byte[] { 0, 0, 0, 255 });
+        _blackTexture = ImageTexture.CreateFromImage(img);
+        return _blackTexture;
     }
 
     /// <summary>The magenta/black checkerboard used when a texture cannot be resolved.</summary>

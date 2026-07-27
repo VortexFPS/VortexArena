@@ -94,6 +94,12 @@ public static class GameRegistries
         // (ordinal RegistryName — same final order the old AppDomain reflection scan produced).
         GeneratedRegistrations.RegisterAll();
 
+        // The sound catalog (SoundsList → Sounds registry). NOT one of the [attribute] marker catalogs, so the
+        // generator doesn't emit it — register it here so Sounds.All is populated at process boot like the others
+        // (GameInit also calls this; it's idempotent). Without this it was empty until a world booted, so anything
+        // reading Sounds.All at the MENU — e.g. the game-load asset warm — saw zero sounds.
+        Sounds.RegisterAll();
+
         // Extension hook: mod/expansion assemblies passed explicitly still register via reflection
         // (the generator only sees Common's compilation). No caller in the port passes any today.
         if (extraAssemblies.Length > 0)

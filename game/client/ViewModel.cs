@@ -67,6 +67,16 @@ public partial class ViewModel : Node3D
     [Export] public string MuzzleTagName { get; set; } = "tag_shot";
 
     /// <summary>
+    /// QC <c>wepent.movedir</c> — the equipped weapon's model-local <c>tag_shot</c> offset in Quake coords
+    /// (X = forward, Y = +left, Z = up), the SAME registered value the server's <c>SetupShot</c> spawns shots
+    /// from (<c>WeaponFiring.RegisterMuzzleOffset</c>). Set per equip by the host; <see cref="Fire"/> rotates it
+    /// into the live view basis (with the <c>cl_gunalign</c> mirror — Base <c>movedir_aligned</c>) to place the
+    /// first-person muzzle-flash burst at the REAL muzzle point, independent of how the viewmodel renders.
+    /// Default = <c>WeaponFiring.DefaultMuzzleOffset</c> (the tag-less/dedicated fallback).
+    /// </summary>
+    public Vector3 MuzzleMovedir { get; set; } = new Vector3(12f, 0f, -8f);
+
+    /// <summary>
     /// <c>cl_viewmodel_scale</c> — uniform scale DarkPlaces applies to the viewmodel matrix. Xonotic's default
     /// is 1: the <c>v_*</c> models are authored at the right size in view space, so we do NOT shrink them.
     /// </summary>
@@ -166,7 +176,7 @@ public partial class ViewModel : Node3D
     private AnimationPlayer? _iqmAnimPlayer;    // optional IQM/DPM skeletal AnimationPlayer (h_* rigs); mutually exclusive with _animator — only one is set at a time
     private Node3D _modelRoot = null!;     // holds the weapon mesh (+ its tags), under the Quake->camera basis
     private Marker3D? _muzzleMarker;       // muzzle socket on the model (from tags)
-    private bool _noDepthTestApplied;      // EF_NODEPTHTEST has been pushed onto the current model's materials
+    private bool _surfaceFxApplied;        // viewmodel surface state (short-depth-range / legacy fallback) applied to the current model
     private float _modelAlpha = 1f;        // last alpha applied to the model materials (so we only re-touch on change)
     private OmniLight3D _flashLight = null!;
     private OmniLight3D _fillLight = null!; // soft constant light so the view-model is never a black silhouette
@@ -180,7 +190,7 @@ public partial class ViewModel : Node3D
     // pants palette color); _shirtColor/_pantsColor tint the gun's _shirt/_pants masks so the held weapon reads
     // as "yours". _hasTeam ("has color") is false only when no colors resolved (untinted, native glow).
     // _glowDirty tracks whether the current model's materials already carry the tint so we only re-walk on a
-    // change (mirrors _noDepthTestApplied).
+    // change (mirrors _surfaceFxApplied).
     private Color _teamGlow = new(1f, 1f, 1f);
     private bool _hasTeam;
     private bool _glowDirty = true;        // force a material re-walk after a model swap or a color change
@@ -237,6 +247,9 @@ public partial class ViewModel : Node3D
             OmniAttenuation = 0.5f,
             ShadowEnabled = false,
             Position = new Vector3(8f, 14f, 6f), // camera-local: right, up, behind (+Z) — Quake units
+            // The gun meshes live on the dedicated viewmodel render layer; restricting the fill to that layer
+            // stops it spilling onto nearby world geometry through the camera (it exists only for the gun).
+            LightCullMask = ViewModelRenderFx.RenderLayerBit,
         };
         AddChild(_fillLight);
 
@@ -301,6 +314,7 @@ public partial class ViewModel : Node3D
                 return null;
             });
         }
+        ViewModelRenderFx.Apply(_modelRoot); // viewmodel layer + no shadows + no occlusion cull + short-depth-range materials
         ReseedInstanceTint(); // AFTER attach — the new meshes start untinted (playtest #36)
         CaptureAuthoredShotSide();
     }
@@ -336,6 +350,7 @@ public partial class ViewModel : Node3D
         var muzzle = new Marker3D { Name = "tag_shot", Position = new Vector3(24f, 0f, 0f) };
         _modelRoot.AddChild(muzzle);
         _muzzleMarker = muzzle;
+        ViewModelRenderFx.Apply(_modelRoot); // layer + no shadows (+ NoDepthTest on the override bar)
         // The placeholder is centered (no authored side); keep the representative-fallback so cl_gunalign
         // left/right still read distinctly on the placeholder bar.
         _authoredShotSideY = null;
@@ -379,6 +394,7 @@ public partial class ViewModel : Node3D
         // local transform — _modelRoot's ViewBasis then re-aims the whole assembly into the camera frame.
         model.Transform = attach ?? Transform3D.Identity;
         _modelRoot.AddChild(model);
+        ViewModelRenderFx.Apply(_modelRoot); // viewmodel layer + no shadows + no occlusion cull + short-depth-range materials
         ReseedInstanceTint(); // AFTER attach — the new meshes start untinted (playtest #36)
 
         _muzzleMarker = ResolveMuzzleMarker(name => FindMarkerByName(model, name))
@@ -404,10 +420,11 @@ public partial class ViewModel : Node3D
     }
 
     /// <summary>
-    /// Resolve a named muzzle socket (e.g. <c>tag_shot</c>) from a built skeletal model's <see cref="Skeleton3D"/>
-    /// bone rest, creating a child <see cref="Marker3D"/> at that local transform so it inherits the ViewBasis +
-    /// sway like the mesh. Returns null when the model has no skeleton or no such bone. Static rest pose (the
-    /// v_-attach path is also static-rest); a live-animated muzzle would need a BoneAttachment3D follow.
+    /// Resolve a named muzzle socket (e.g. <c>tag_shot</c>) from a built skeletal model's <see cref="Skeleton3D"/>,
+    /// creating a child <see cref="Marker3D"/> under a live <see cref="BoneAttachment3D"/> so the marker FOLLOWS
+    /// the bone's animated pose (the flash/light ride the rig's idle sway and fire recoil, matching Base where
+    /// the shot tag is part of the animated model). Returns null when the model has no skeleton or no such bone.
+    /// With no animation playing the attachment sits at the bone rest — the old static-rest placement.
     /// </summary>
     private static Marker3D? MarkerFromSkeletonBone(Node3D model, string boneName)
     {
@@ -416,15 +433,18 @@ public partial class ViewModel : Node3D
             return null;
         // Bones may be stored under a sanitized name (IqmBuilder replaces ':','/','@','%','.' with '_'); the
         // muzzle tag names (tag_shot/shot/…) contain none of those, so a direct find suffices, but fall back to
-        // a sanitized find for safety. GetBoneGlobalRest composes the parent chain into built model space.
+        // a sanitized find for safety.
         int idx = skel.FindBone(boneName);
         if (idx < 0)
             idx = skel.FindBone(boneName.Replace(':', '_').Replace('/', '_').Replace('@', '_').Replace('%', '_').Replace('.', '_'));
         if (idx < 0)
             return null;
-        var marker = new Marker3D { Name = boneName, Transform = skel.GetBoneGlobalRest(idx) };
-        // Parent under the skeleton so the marker shares the gun's exact built model space.
-        skel.AddChild(marker);
+        var follow = new BoneAttachment3D { Name = boneName + "_follow" };
+        // Parent under the skeleton FIRST so the attachment resolves it, then bind the bone by name.
+        skel.AddChild(follow);
+        follow.BoneName = skel.GetBoneName(idx);
+        var marker = new Marker3D { Name = boneName };
+        follow.AddChild(marker);
         return marker;
     }
 
@@ -591,19 +611,28 @@ public partial class ViewModel : Node3D
     {
         string effect = string.IsNullOrEmpty(effectOverride) ? MuzzleEffect : effectOverride!;
 
-        // Muzzle flash: attach the burst to the muzzle socket so it emits from the barrel and rides the gun's
-        // sway/recoil/bob (the snappy local first-person flash). Remote players still see the networked world-space
-        // copy. Fall back to a one-shot world-space burst at the model front when no socket resolved.
-        if (_muzzleMarker is not null && GodotObject.IsInstanceValid(_muzzleMarker))
+        // Muzzle flash: the REAL per-weapon effectinfo burst, via the same Spawn path a networked W_MuzzleFlash
+        // from another player takes (parsed effectinfo blocks, the block dlight, the faithful/modern router).
+        // Origin/direction are the port of Base NET_HANDLE(w_muzzleflash)'s first-person branch (all.qc:742-775):
+        //   org = eye + the weapon's movedir_aligned rotated into the VIEW basis (forward*md.x + right*-md.y + up*md.z)
+        //   dir = view forward * 1000
+        // NOT the rendered tag_shot's world transform: the viewmodel draws in compressed view space hung off the
+        // camera, so the tag's world position sits short of the real muzzle and its basis is authored/bone-rest
+        // arbitrary — both read visibly wrong on screen (playtest follow-up to #49). This node is a direct child
+        // of the camera at identity, so its GlobalPosition IS the render eye.
+        if (ViewStateProvider is not null)
         {
-            Effects?.MuzzleFlashAttached(effect, _muzzleMarker);
+            AngleVectorsQuake(ViewStateProvider().ViewAnglesQuake, out NVec3 fwd, out NVec3 right, out NVec3 up);
+            Vector3 md = MovedirAligned();
+            NVec3 eye = Coords.ToQuake(GlobalPosition);
+            NVec3 org = eye + fwd * md.X + right * -md.Y + up * md.Z; // QC right*-vecs.y: model Y is +left
+            Effects?.MuzzleFlash(effect, org, fwd * 1000f);
         }
         else
         {
+            // No view state wired (tests/tools): fall back to the muzzle socket's world transform.
             Transform3D muzzleXf = MuzzleGlobalTransform();
-            var originQuake = Coords.ToQuake(muzzleXf.Origin);
-            var dirQuake = Coords.ToQuake(-muzzleXf.Basis.Z) * 120f; // forward
-            Effects?.MuzzleFlash(effect, originQuake, dirQuake);
+            Effects?.MuzzleFlash(effect, Coords.ToQuake(muzzleXf.Origin), Coords.ToQuake(-muzzleXf.Basis.Z) * 1000f);
         }
 
         // Flash light + recoil (+ the grid-lit ambient pop standing in for the flash light — see PushGridLight).
@@ -656,6 +685,10 @@ public partial class ViewModel : Node3D
 
         // EF_ADDITIVE | EF_FULLBRIGHT: make every surface on the model unshaded + additive blend.
         ApplyFlashMaterialFx(flashNode);
+        // Viewmodel render state for the flash too (inherited RENDER_VIEWMODEL in DP): the dedicated render
+        // layer (hidden from portal cameras), no shadow casting, no occlusion cull, and the short-depth-range
+        // uniform on GPU-morph flash materials (the additive BaseMaterial3D surfaces got NoDepthTest above).
+        ViewModelRenderFx.Apply(flashNode);
 
         _muzzleMarker.AddChild(flashNode);
         _muzzleFlashNode = flashNode;
@@ -721,6 +754,12 @@ public partial class ViewModel : Node3D
                 ov.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;  // EF_FULLBRIGHT
                 ov.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
                 ov.BlendMode = BaseMaterial3D.BlendModeEnum.Add;            // EF_ADDITIVE
+                // The flash is setattachment'd to the viewmodel, so in DP it inherits RENDER_VIEWMODEL
+                // (cl_main.c:1138) and its depth hack. For this transparent additive material the no-depth-test
+                // flag is the working equivalent (DP itself converts SHORTDEPTHRANGE to NODEPTHTEST for
+                // sprite-class attachments, r_sprites.c:407-408): drawn after the opaque world, it can never
+                // be clipped by the wall you are firing into point-blank.
+                ov.NoDepthTest = true;
             }
         }
         foreach (Node child in node.GetChildren())
@@ -1125,34 +1164,39 @@ public partial class ViewModel : Node3D
     }
 
     /// <summary>
-    /// Apply EF_NODEPTHTEST + a continuous opacity to every mesh in the current weapon model, faithful to Base
-    /// <c>viewmodel_draw</c> (the per-child loop sets <c>csqcmodel_effects |= EF_NODEPTHTEST</c> and
-    /// <c>e.alpha = a</c>). NoDepthTest makes the gun always draw on top of the scene instead of clipping into
-    /// nearby world geometry; the alpha is the cl_viewmodel_alpha opacity. Walks every <see cref="MeshInstance3D"/>
-    /// descendant and edits its surface materials in place; only re-touches when the alpha changes.
+    /// Apply the viewmodel surface state + continuous opacity to every mesh in the current weapon model,
+    /// faithful to Base <c>viewmodel_draw</c> (the per-child loop sets <c>csqcmodel_effects |=
+    /// EF_NODEPTHTEST</c> and <c>e.alpha = a</c>; the engine turns RENDER_VIEWMODEL/EF_NODEPTHTEST into
+    /// <c>MATERIALFLAG_SHORTDEPTHRANGE</c> — see <see cref="ViewModelRenderFx"/>). At the default opaque
+    /// alpha every surface rides the faithful short-depth-range shader (converting plain StandardMaterial3D
+    /// surfaces); with <c>cl_viewmodel_alpha</c> &lt; 1 the plain surfaces fall back to the legacy
+    /// translucent BaseMaterial3D path (NoDepthTest + alpha — the skin shader is deliberately opaque-only).
+    /// Walks every <see cref="MeshInstance3D"/> descendant; only re-touches on a change.
     /// </summary>
     private void ApplyModelAlpha(float a)
     {
         bool alphaChanged = !Mathf.IsEqualApprox(a, _modelAlpha);
-        bool needDepth = !_noDepthTestApplied;
+        bool needDepth = !_surfaceFxApplied;
         if (!alphaChanged && !needDepth && !_glowDirty)
             return;
         _modelAlpha = a;
-        _noDepthTestApplied = true;
+        _surfaceFxApplied = true;
         _glowDirty = false;
         // Player colormod (subtle albedo tint toward the PANTS color — the dominant personal color, and exactly
-        // the team color in teamplay) + glowmod (emission) on plain-material v_ models, the StandardMaterial
-        // analog of Base e.colormap/e.glowmod. Colorless → no tint, native (white) glow.
-        ApplyMaterialFx(_modelRoot, a, _hasTeam ? _pantsColor : (Color?)null, _hasTeam ? _teamGlow : (Color?)null);
+        // the team color in teamplay) + glowmod (emission) — only reachable on the legacy BaseMaterial3D
+        // fallback surfaces; converted/skin surfaces take their tint from the instance uniforms
+        // (ReapplyInstanceTint), which is DP's actual model: no _shirt/_pants/_glow map → no team color.
+        ApplyMaterialFx(_modelRoot, a, _hasTeam ? _pantsColor : (Color?)null, _hasTeam ? _teamGlow : (Color?)null,
+            _muzzleFlashNode);
     }
 
-    /// <summary>Forget the applied material fx so the NEXT frame re-walks the freshly-built model (depth-test +
+    /// <summary>Forget the applied material fx so the NEXT frame re-walks the freshly-built model (depth state +
     /// alpha must be re-applied to the new model's materials). Called by every model swap. Also clears any
     /// still-live muzzle-flash model node (the QC wepent.muzzle_flash slot is implicitly cleared on model change
     /// since the exterior weapon entity is rebuilt; we QueueFree so there is no orphan node).</summary>
     private void ResetModelFx()
     {
-        _noDepthTestApplied = false;
+        _surfaceFxApplied = false;
         _modelAlpha = 1f;
         _glowDirty = true; // the freshly-built model's materials need the team colormod/glow re-applied
         if (_muzzleFlashNode is not null && GodotObject.IsInstanceValid(_muzzleFlashNode))
@@ -1169,16 +1213,29 @@ public partial class ViewModel : Node3D
     /// </summary>
     private void ReseedInstanceTint() => ReapplyInstanceTint();
 
-    private static void ApplyMaterialFx(Node node, float a, Color? colormod = null, Color? glow = null)
+    private static void ApplyMaterialFx(Node node, float a, Color? colormod = null, Color? glow = null, Node? skip = null)
     {
+        if (node == skip)
+            return; // the muzzle-flash model runs its own material FX + fade (ApplyFlashMaterialFx/SetFlashAlpha)
         if (node is MeshInstance3D mi && mi.Mesh is { } mesh)
         {
             int surfaces = mesh.GetSurfaceCount();
             for (int i = 0; i < surfaces; i++)
             {
-                // Edit a per-instance override so we never mutate a shared mesh material (other instances / the
-                // world pickup share it). Reuse our own override if present (idempotent re-touch on alpha change);
-                // otherwise duplicate the surface's base material to one (the GpuWarmPass per-instance pattern).
+                // OPAQUE default (cl_viewmodel_alpha 1): the faithful short-depth-range state — plain
+                // StandardMaterial3D surfaces are swapped to the equivalent skin-shader material and every
+                // shader surface rides the viewmodel_depth_range instance uniform (set at equip). Tint/glow
+                // ride the instance uniforms there (ReapplyInstanceTint); nothing else to touch per surface.
+                if (a >= 1f && ViewModelRenderFx.EnsureOpaqueSurfaceFx(mi, i))
+                    continue;
+
+                // Legacy BaseMaterial3D path: a translucent gun (cl_viewmodel_alpha < 1 — the skin shader is
+                // deliberately opaque-only) or a surface the shader can't reproduce (untextured / tinted /
+                // transparent source). Edit a per-instance override so we never mutate a shared mesh material
+                // (other instances / the world pickup share it). Reuse our own override if present (idempotent
+                // re-touch on alpha change) — but a ShaderMaterial override left by a previous opaque frame is
+                // replaced from the pristine mesh source; otherwise duplicate the surface's base material
+                // (the GpuWarmPass per-instance pattern).
                 BaseMaterial3D? ov = mi.GetSurfaceOverrideMaterial(i) as BaseMaterial3D;
                 if (ov is null)
                 {
@@ -1187,7 +1244,7 @@ public partial class ViewModel : Node3D
                     ov = (BaseMaterial3D)bm.Duplicate();
                     mi.SetSurfaceOverrideMaterial(i, ov);
                 }
-                ov.NoDepthTest = true; // EF_NODEPTHTEST — always draw the gun on top of the world.
+                ov.NoDepthTest = true; // EF_NODEPTHTEST approximation — draw the gun over the world.
 
                 // Team colormod (Base e.colormap = 256 + c): tint the gun's albedo toward the player's team color
                 // so the held weapon reads as yours. Captured base RGB once (in AlbedoColor.A's sibling channels)
@@ -1232,7 +1289,7 @@ public partial class ViewModel : Node3D
             }
         }
         foreach (Node child in node.GetChildren())
-            ApplyMaterialFx(child, a, colormod, glow);
+            ApplyMaterialFx(child, a, colormod, glow, skip);
     }
 
     /// <summary>
@@ -1474,6 +1531,24 @@ public partial class ViewModel : Node3D
 
     /// <summary>Map a Quake view-space point (X fwd, Y left, Z up) into the camera's local Godot frame.</summary>
     private static Vector3 QuakeViewToCamera(Vector3 q) => new(-q.Y, q.Z, -q.X);
+
+    /// <summary>
+    /// Base <c>movedir_aligned</c> (all.qc:483 — <c>shotorg_adjust(v, false, visual:true, algn)</c> =
+    /// <c>shotorg_adjustfromclient</c>): the weapon's <see cref="MuzzleMovedir"/> with the <c>cl_gunalign</c>
+    /// adjustment — right (3) = authored, left (4) mirrors Y, center (1/2) zeroes Y and drops 2u. This is the
+    /// visual shot origin the first-person muzzle flash spawns from (unaffected by shootfromeye).
+    /// </summary>
+    private Vector3 MovedirAligned()
+    {
+        Vector3 md = MuzzleMovedir;
+        switch (GunAlign)
+        {
+            case 4: md.Y = -md.Y; break;                 // left: mirror across the centre line
+            case 1: case 2: md.Y = 0f; md.Z -= 2f; break; // center: middle + 2u drop
+            default: break;                               // 3 right: authored
+        }
+        return md;
+    }
 
     /// <summary>
     /// The <c>cl_gunalign</c> view-space nudge (Quake: X fwd, Y left, Z up). Right alignment (3) is the model's

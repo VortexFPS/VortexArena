@@ -50,6 +50,9 @@ public static class MoveVarsBlock
         //      Unset defaults are NON-ZERO (scale→1, max→-1) → see AbsentDefaults (verbatim Raw-tail decode). ----
         "sv_step_upspeed_scale",           // multiply positive velocity.z surviving a step-up (1 = vanilla)
         "sv_step_upspeed_max",             // hard cap (u/s) on that upward velocity (-1 = disabled)
+        // ---- v8: the air-strafe accel limiter (QC MOVEFLAG_Q2AIRACCELERATE — Base replicates it inside the
+        //      moveflags stat, stats.qh:401, precisely so prediction agrees with the server on the accel step). ----
+        "sv_gameplayfix_q2airaccelerate",  // wishspeed0 := clamped wishspeed inside PM_Accelerate — default 1
         // Deliberately NOT replicated: MOVEVARS_TICRATE/TIMESCALE (the port advertises the tick rate at
         // handshake and ships dt per InputCommand), MOVEVARS_ENTGRAVITY (per-entity, not a cvar),
         // MOVEVARS_CL_TRACK_CANJUMP (a client→server cvar loopback — rides the sentcvar channel instead).
@@ -103,6 +106,8 @@ public static class MoveVarsBlock
         ["sv_step_upspeed_scale"] = 1f,
         // FromCvars  CvarRaw("step_upspeed_max", Defaults.StepUpSpeedMax = -1) — -1 = disabled (uncapped)
         ["sv_step_upspeed_max"] = -1f,
+        // FromCvars  CvarBool("gameplayfix_q2airaccelerate", Defaults.GameplayFixQ2AirAccelerate = true)
+        ["sv_gameplayfix_q2airaccelerate"] = 1f,
     };
 
     /// <summary>Read the live movement-cvar values from the server's store, in <see cref="MovementCvars"/> order.</summary>

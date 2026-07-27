@@ -36,6 +36,27 @@ public static class MouseCapture
         Apply();
     }
 
+    private static bool _hudEditorWantsCursor;
+
+    /// <summary>
+    /// HUD configure-mode override (the <c>hud_config.qc</c> port): while <c>_hud_configure 1</c> the editor
+    /// needs the OS pointer FREE so panels can be hovered/clicked/dragged — Base shows the engine cursor over
+    /// the live game there (<c>cursor_type</c>). The net layer's per-frame reassert
+    /// (<c>SetWantCapture(!UiOwnsCursor)</c>) doesn't know about the editor, so instead of fighting it frame-
+    /// by-frame the editor raises this override and <see cref="Apply"/> resolves Visible while it's up.
+    /// Set/cleared by <c>HudConfigEditor.Update</c> on the configure-mode edges.
+    /// </summary>
+    public static bool HudEditorWantsCursor
+    {
+        get => _hudEditorWantsCursor;
+        set
+        {
+            if (_hudEditorWantsCursor == value) return;
+            _hudEditorWantsCursor = value;
+            Apply();
+        }
+    }
+
     /// <summary>Feed a window-focus edge (from <see cref="Shell._Notification"/>). Re-applies the mode so the
     /// grab is dropped the moment focus leaves and restored when it returns.</summary>
     public static void SetFocused(bool focused)
@@ -70,7 +91,7 @@ public static class MouseCapture
         // "not focused" is enough to free the pointer. The live checks also cover a background launch, where
         // want-capture can be requested before any focus edge has been delivered.
         bool focused = _focused && WindowReallyFocused();
-        Input.MouseModeEnum target = _wantCapture && focused
+        Input.MouseModeEnum target = _wantCapture && !_hudEditorWantsCursor && focused
             ? Input.MouseModeEnum.Captured
             : Input.MouseModeEnum.Visible;
         if (Input.MouseMode != target)

@@ -46,6 +46,37 @@ public static class MenuDialogRegistry
         // (dialog_settings_user.qc — the faithful home of both pickers), so the *select overlay verbs resolve there.
         ["skinselector"]     = () => MakeSettings("User"),
         ["languageselector"] = () => MakeSettings("User"),
+
+        // ---- HUD editor dialogs (QC names). dialog_hudsetup_exit.qh registers "HUDExit" (the editor's ESC →
+        // `menu_showhudexit` → `menu_cmd directmenu HUDExit`); each dialog_hudpanel_<p>.qh registers
+        // "HUD<panelname>" and `menu_cmd directpanelhudmenu <p>` prefixes the "HUD" filter — so the editor's
+        // double-click/Enter (`menu_showhudoptions <p>`) resolves the per-panel dialog by the same name here.
+        // The confirm popup has no QC .name (opened by object ref, main.hudconfirmDialog); "hudconfirm" is the
+        // port's name for the same dialog. ----
+        ["HUDExit"]          = () => new DialogHudSetupExit(),      // QC XonoticHUDExitDialog (menu_showhudexit)
+        ["hudconfirm"]       = () => new DialogHudConfirm(),        // QC XonoticHUDConfirmDialog (no QC name)
+        ["HUDweapons"]       = () => new DialogHudPanelWeapons(),
+        ["HUDammo"]          = () => new DialogHudPanelAmmo(),
+        ["HUDpowerups"]      = () => new DialogHudPanelPowerups(),
+        ["HUDhealtharmor"]   = () => new DialogHudPanelHealthArmor(),
+        ["HUDnotify"]        = () => new DialogHudPanelNotification(),
+        ["HUDtimer"]         = () => new DialogHudPanelTimer(),
+        ["HUDradar"]         = () => new DialogHudPanelRadar(),
+        ["HUDscore"]         = () => new DialogHudPanelScore(),
+        ["HUDracetimer"]     = () => new DialogHudPanelRaceTimer(),
+        ["HUDvote"]          = () => new DialogHudPanelVote(),
+        ["HUDmodicons"]      = () => new DialogHudPanelModIcons(),
+        ["HUDpressedkeys"]   = () => new DialogHudPanelPressedKeys(),
+        ["HUDchat"]          = () => new DialogHudPanelChat(),
+        ["HUDengineinfo"]    = () => new DialogHudPanelEngineInfo(),
+        ["HUDinfomessages"]  = () => new DialogHudPanelInfoMessages(),
+        ["HUDphysics"]       = () => new DialogHudPanelPhysics(),
+        ["HUDcenterprint"]   = () => new DialogHudPanelCenterPrint(),
+        ["HUDitemstime"]     = () => new DialogHudPanelItemsTime(),
+        ["HUDpickup"]        = () => new DialogHudPanelPickup(),
+        ["HUDquickmenu"]     = () => new DialogHudPanelQuickMenu(),
+        ["HUDcheckpoints"]   = () => new DialogHudPanelCheckpoints(),
+        ["HUDstrafehud"]     = () => new DialogHudPanelStrafeHUD(),
     };
 
     /// <summary>

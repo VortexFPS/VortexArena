@@ -1,5 +1,5 @@
 {
- "generated": "2026-07-02",
+ "generated": "2026-07-05",
  "value_diffs": [],
  "base_only": [],
  "port_only": [],
@@ -29,14 +29,7 @@
    "name": "v_idlescale",
    "base": "",
    "code": "0",
-   "where": "game/client/FirstPersonView.cs:603",
-   "kind": "fallback"
-  },
-  {
-   "name": "cl_bobfall",
-   "base": "0.05",
-   "code": "0",
-   "where": "game/client/FirstPersonView.cs:706",
+   "where": "game/client/FirstPersonView.cs:604",
    "kind": "fallback"
   },
   {
@@ -85,42 +78,42 @@
    "name": "hud_panel_weapons_ammo_full_nails",
    "base": "320",
    "code": "200",
-   "where": "game/hud/WeaponsPanel.cs:644",
+   "where": "game/hud/WeaponsPanel.cs:642",
    "kind": "Register"
   },
   {
    "name": "hud_panel_weapons_orderbyimpulse",
    "base": "1",
    "code": "0",
-   "where": "game/hud/WeaponsPanel.cs:660",
+   "where": "game/hud/WeaponsPanel.cs:658",
    "kind": "Register"
   },
   {
    "name": "cl_netfps",
    "base": "64",
    "code": "72",
-   "where": "game/menu/framework/ClientSettings.cs:124",
+   "where": "game/menu/framework/ClientSettings.cs:126",
    "kind": "Register"
   },
   {
    "name": "cl_movement_errorcompensation",
    "base": "1",
    "code": "0",
-   "where": "game/menu/framework/ClientSettings.cs:155",
+   "where": "game/menu/framework/ClientSettings.cs:157",
    "kind": "Register"
   },
   {
    "name": "volume",
    "base": "1",
    "code": "0.7",
-   "where": "game/menu/framework/ClientSettings.cs:414",
+   "where": "game/menu/framework/ClientSettings.cs:420",
    "kind": "Register"
   },
   {
    "name": "bgmvolume",
    "base": "0.75",
    "code": "1",
-   "where": "game/menu/framework/ClientSettings.cs:415",
+   "where": "game/menu/framework/ClientSettings.cs:421",
    "kind": "Register"
   },
   {
@@ -141,7 +134,7 @@
    "name": "g_ctf_allow_vehicle_carry",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:2087",
+   "where": "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:2119",
    "kind": "fallback"
   },
   {
@@ -260,14 +253,14 @@
    "name": "g_rm_laser_damage",
    "base": "80",
    "code": "150",
-   "where": "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:435",
+   "where": "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:446",
    "kind": "fallback"
   },
   {
    "name": "g_sandbox",
    "base": "0",
    "code": "g_sandbox <subcommand> [args] \u2014 sandbox build mode (object_spawn/edit/attach/\u2026)",
-   "where": "src/XonoticGodot.Server/Commands.cs:861",
+   "where": "src/XonoticGodot.Server/Commands.cs:874",
    "kind": "Register"
   },
   {
@@ -1943,7 +1936,6 @@
   "userbind9_press",
   "userbind9_release",
   "v_kicktime",
-  "vid_conheight",
   "vid_conwidth",
   "vid_desktopfullscreen",
   "vid_gl13",

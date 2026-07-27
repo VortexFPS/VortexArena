@@ -1,13 +1,14 @@
 unit: cl-viewmodel
 category: client
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-28"  # re-audited post wepent-channel + weapon-visuals wave (working tree atop 493c876). TWO rows moved: (1) muzzle.flash_model FULLY CLOSED — md3 flash frame now cycled (FlashModelFactory returns a ModelAnimator for multi-frame flash MD3s, SpawnMuzzleFlashModel SetRawFrame 2->4->6->8 across the 3 think ticks, faithful to W_MuzzleFlash_Model_Think frame+=2). (2) anim.networked_frames — SetWeaponModel now captures the h_-rig AnimationPlayer (_iqmAnimPlayer) so the networked ViewmodelFrame selector can drive a clip on the LIVE equip path (logic partial->faithful); NOT fully closed: playback runtime-unverified + asset-name-dependent + v_ statics still don't cycle, so presentation stays partial, liveness partial, values/timing missing. Casings/glow/alpha/sway/align rows unchanged from 06-27.
+last_audited: "2026-07-06"  # ROW UPDATE (branch parity/first-person-weapon-models): model.skin_colormap_glow_effects — the viewmodel DEPTH HACK is now the faithful DP short depth range (viewmodel_depth_range=0.0625 per-MATERIAL uniform on gun-owned duplicates of the shared skin/morph materials + clip-z remap in PlayerSkinShader/Md3MorphShader; StandardMaterial3D gun surfaces auto-convert to the skin shader; IgnoreOcclusionCulling per gun mesh = DP's entityvisible bypass; dedicated render layer excluded from portal cams; CastShadow off). The prior "EF_NODEPTHTEST match:true" was drift: skin-shader weapons had NO depth handling and clipped into walls. (An instance-uniform delivery was tried first and proved unreliable for this vertex-stage value — screenshot-verified inert; per-material duplicates share the same Shader objects so no new pipelines.) Other rows unchanged from the 06-28 audit: (1) muzzle.flash_model FULLY CLOSED — md3 flash frame now cycled (FlashModelFactory returns a ModelAnimator for multi-frame flash MD3s, SpawnMuzzleFlashModel SetRawFrame 2->4->6->8 across the 3 think ticks, faithful to W_MuzzleFlash_Model_Think frame+=2). (2) anim.networked_frames — SetWeaponModel now captures the h_-rig AnimationPlayer (_iqmAnimPlayer) so the networked ViewmodelFrame selector can drive a clip on the LIVE equip path (logic partial->faithful); NOT fully closed: playback runtime-unverified + asset-name-dependent + v_ statics still don't cycle, so presentation stays partial, liveness partial, values/timing missing. Casings/glow/alpha/sway/align rows unchanged from 06-27.
+# 2026-07-05 landing-bob/idle-sway wave (this branch): the two asset-dependency gaps in anim.networked_frames CLOSED — (1) weapon h_ rig framegroups get Base's slot-index clip names stamped at load (WeaponRigAnims: 0=fire,1=fire2,2=idle,3=reload — the shipped sidecars are nameless, the old synthesized names put the FIRE group under 'idle'), so the name-based clip lookups hit the authored ranges on IQM *and* DPM rigs; (2) invisible-hand weapons now render the h_ rig node (nodraw dummy mesh hidden) with the v_ model on a live BoneAttachment3D 'weapon' bone (ViewModelEquip), so the rig's idle/fire/reload animation sways the gun — runtime-verified via screenshot A/B at two idle phases (shotgun pose visibly differs).
 summary:
   feature_count: 13
   worst_gaps:
-    - "Per-child m_skin (wepskin) is not applied; the gun renders with its base material. Team colormap is an approximate whole-model albedo tint, not a true palette colormap swap (colormap/glowmod ARE applied — colormod + Vortex/team glow)."
+    - "Per-child m_skin (wepskin) is not applied; the gun renders with its base material. Team colormap is mask-driven (DP model: no _shirt/_pants mask -> no tint) on skin/converted surfaces, not a true palette colormap swap; the approximate whole-model tint survives only on legacy fallback surfaces."
     - "Weapon-switch animation is a slide-down, not Base's barrel-tip (this.angles_x = -90*f*f), and is not keyed to per-weapon switchdelay_raise/drop or weapon_nextthink (port does not network wframe)."
-    - "Networked weapon fire/idle/reload animation: the wframe-equivalent selector now drives the h_-rig AnimationPlayer on the live path, but playback is runtime-unverified (clip names asset-dependent), invisible-hand v_*.md3 weapons still never cycle, and there is no synced per-frame frame= (values/timing missing)."
+    - "Networked weapon fire/idle/reload animation: clips now play on ALL weapon classes (slot-named framegroups + animated invisible-hand rigs, 2026-07-05), but there is still no synced per-frame frame= (values/timing missing) and the consumer stays spectatee/pure-client path-split."
 features:
   - id: cl-viewmodel.model.select_and_rig
     name: "View-model entity + model select (invisible-hand vs full-rig), rebuild on weapon change"
@@ -21,7 +22,7 @@ features:
       - "game/net/NetGame.cs:EquipNetworkedWeapon"
     constants:
       - { name: "r_drawviewmodel", base: "1", port: "implicit (always drawn when alive/1st-person)", match: true }
-      - { name: "anim framegroups (fire1/fire2/idle/reload)", base: "'0 1 0.01' / '1 1 0.01' / '2 1 0.01' / '3 1 0.01'", port: "best-effort local clip (no framegroup preset)", match: false }
+      - { name: "anim framegroups (fire1/fire2/idle/reload)", base: "animfixfps slot indices '0/1/2/3' (all.qc:373-376)", port: "WeaponRigAnims stamps the slot names (fire/fire2/idle/reload) onto the nameless h_ sidecar groups at load; clips play at the sidecar's authored fps/loop — the same ranges DP plays by index", match: true }
     status:
       logic: faithful
       values: faithful
@@ -31,12 +32,12 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "anim framegroup presets (animfixfps fire1/fire2/idle/reload) not preset; port plays a best-effort local clip."
+    gaps: []
     verification:
       - { kind: code, ref: "ViewModel.SetWeaponModel + ViewModelEquip.Build invisible-hand/full-rig branch; EquipNetworkedWeapon rebuilds on weapon-id or wr_viewmodel change (NetGame:1624), hides on dead/holster/chase/intermission", result: pass }
+      - { kind: code, ref: "2026-07-05: invisible-hand branch now renders the h_ rig (nodraw dummy mesh hidden) with the v_ model on a live BoneAttachment3D 'weapon' bone — Base setattachment(weaponchild, this, 'weapon') — so the rig's animation carries the gun; static bone-rest attach kept as the no-skeleton fallback. Slot-name framegroup stamping pinned by ViewBobIdleSwayTests.", result: pass }
     confidence: high
-    notes: "Invisible-hand (v_ attached to h_ rig 'weapon'/'tag_weapon' tag) vs full-rig classification is faithful to CL_WeaponEntity_SetModel. movedir from 'shot' tag drives shot origin. Live on NetGame match path."
+    notes: "Invisible-hand (v_ attached to h_ rig 'weapon'/'tag_weapon' tag) vs full-rig classification is faithful to CL_WeaponEntity_SetModel. movedir from 'shot' tag drives shot origin. Live on NetGame match path. 2026-07-05: the invisible-hand attach is now the LIVE animated bone (idle sway/fire recoil/reload dip reach the gun, verified via two-phase idle screenshot diff on the shotgun); the framegroup-preset gap closed via WeaponRigAnims slot naming."
 
   - id: cl-viewmodel.anim.networked_frames
     name: "Networked weapon fire/idle/reload animation (wframe temp entity)"
@@ -60,18 +61,18 @@ features:
       timing: missing
       presentation: partial
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Visible playback is now wired on the live equip path BUT runtime-unverified and asset-dependent: SetWeaponModel now captures the IQM/DPM h_-rig AnimationPlayer (_iqmAnimPlayer), and PlayIdle/FindFireClip/PlayReload/SetNetAnimFrame route through it, so a full-rig (h_*) weapon that ships fire/idle/reload framegroups WILL cycle on the networked frame. Not yet confirmed in-game that the weapon rigs' framegroups are actually NAMED fire/idle/reload (the clip lookup is name-based: HasAnimation(\"fire\"/\"reload\"/\"idle\")); if a rig's framegroups carry other names the clip lookup misses and the gun stays static -> presentation:partial/unknown, not faithful."
-      - "Invisible-hand v_*.md3 weapons (most of the roster) render a STATIC single-frame md3 with no AnimationPlayer, so _iqmAnimPlayer is null and the networked frame plays no clip for them — only full-model DPM/IQM rigs animate. Hence liveness:partial (animates on some weapons/paths, not all)."
-      - "No server frame-TIMING sync: Base networks the per-frame frame= via attackrate/restartanim; the port plays a local clip once on a rising edge of the 0/1/2/3/4 selector (no synced playhead, no animfixfps framegroup presets) -> values/timing remain missing."
+      - "CLOSED 2026-07-05 (was: clip names asset-dependent): weapon h_ rig framegroups are slot-named at load (WeaponRigAnims — the shipped sidecars are NAMELESS and the old synthesized player-canonical names put the FIRE group under 'idle'), so HasAnimation(\"fire\"/\"idle\"/\"reload\") hits the authored ranges on both IQM and DPM rigs."
+      - "CLOSED 2026-07-05 (was: invisible-hand v_ statics never cycle): the invisible-hand equip now renders the h_ rig with the v_ model on a live weapon-bone BoneAttachment3D, so ALL weapon classes animate (idle verified visually; fire/reload clips reachable via the same AnimationPlayer)."
+      - "No server frame-TIMING sync: Base networks the per-frame frame= via attackrate/restartanim; the port plays a local clip once on a rising edge of the 0/1/2/3/4 selector (no synced playhead) -> values/timing remain missing."
       - "Consumer is still path-split: UpdateViewModelAnimFromNet feeds the frame only on the spectatee / pure-client branch; on the listen-host local player the host-derived UpdateViewModelReloadAnim + best-effort Fire() own the anim instead."
     verification:
       - { kind: code, ref: "WepentResolver.Resolve (WepentResolver.cs:113) stamps ViewmodelFrame from the slot fire-state/clip sentinel; networked via WepentViewCodec + NetEntity.WepentView delta bit; ServerNet.cs:2133 produces it per player; NetGame.UpdateViewModelAnimFromNet (EquipNetworkedWeapon, NetGame:1956) consumes it for the spectatee/pure-client branch and calls ViewModel.SetNetAnimFrame. CHANGED THIS WAVE (working-tree, atop 493c876): SetWeaponModel (the live EquipNetworkedWeapon path, NetGame:1848) now captures the model's IQM/DPM AnimationPlayer into _iqmAnimPlayer (ViewModel.cs:391, model.FindChild(\"AnimationPlayer\")) and FindFireClip/PlayReload/PlayIdle/SetNetAnimFrame all branch through it (plus an IsPlaying idle-recovery in _Process). So the live h_-rig equip path is NO LONGER categorically _animator=null/no-op — a full-rig weapon with named fire/idle/reload framegroups cycles on the networked frame. Selector LOGIC + backend routing are faithful; visible playback is wired but runtime-unverified (clip names depend on the weapon rig framegroup assets) and only covers full-rig weapons (v_*.md3 statics have no AnimationPlayer).", result: pass }
     confidence: medium
-    notes: "WAVE PROGRESS (playback wired onto the live path; NOT fully closed): this wave's working-tree edit removes the prior dead-end — SetWeaponModel now captures the h_-rig AnimationPlayer (_iqmAnimPlayer) and PlayIdle/FindFireClip/PlayReload/SetNetAnimFrame route through it, so the networked WepentView.ViewmodelFrame selector can actually drive a clip on the LIVE EquipNetworkedWeapon path for full-model DPM/IQM weapons (the old note's '_animator=null so no-op' is now stale). logic upgraded partial->faithful (selector + dual-backend routing complete). NOT closed: presentation stays partial — playback is runtime-unverified (clip lookup is name-based; not confirmed the weapon rig framegroups are named fire/idle/reload) and v_*.md3 invisible-hand weapons have no AnimationPlayer so they still never cycle; liveness stays partial (some weapons/paths only, consumer still spectatee/pure-client split); values/timing remain missing (rising-edge clip, no synced per-frame frame= / no animfixfps presets). Confidence medium pending an in-game eyeball that a full-rig weapon visibly cycles fire/reload."
+    notes: "WAVE PROGRESS (playback wired onto the live path): SetWeaponModel captures the h_-rig AnimationPlayer (_iqmAnimPlayer) and PlayIdle/FindFireClip/PlayReload/SetNetAnimFrame route through it. logic faithful (selector + dual-backend routing complete). 2026-07-05: the two asset dead-ends CLOSED — weapon-rig framegroups are slot-named at load (WeaponRigAnims: the shipped sidecars are nameless; the old player-canonical synthesis named the FIRE group 'idle', so 'idle' looped the fire anim on IQM rigs and DPM rigs matched nothing), and invisible-hand weapons render the animated h_ rig with the v_ model bone-attached — every weapon class now animates (liveness live; idle sway verified via two-phase screenshot diff). REMAINING: values/timing missing (rising-edge clip, no synced per-frame frame=), consumer spectatee/pure-client split, fire/reload cycling not yet eyeballed in-game -> presentation stays partial, confidence medium."
 
   - id: cl-viewmodel.model.skin_colormap_glow_effects
     name: "Per-child skin / team colormap / glowmod / EF_NODEPTHTEST / cheap effects mask"
@@ -79,15 +80,20 @@ features:
     base_refs:
       - "client/view.qc:viewmodel_draw (lines 302-321)"
       - "common/weapons/all.qh:weaponentity_glowmod (line 402)"
+      - "darkplaces/gl_rmain.c:6214/8581 (GL_DepthRange 0.0625), :6768 (RENDER_VIEWMODEL|RENDER_NODEPTHTEST -> MATERIALFLAG_SHORTDEPTHRANGE), :3999-4006 (renderimask hides viewmodel in reflection/refraction views)"
     port_refs:
       - "game/client/ViewModel.cs:ApplyMaterialFx"
-      - "game/client/ViewModel.cs:SetTeamGlow"
+      - "game/client/ViewModel.cs:SetPlayerColors"
+      - "game/client/ViewModelRenderFx.cs (short depth range + layer + StandardMaterial3D->skin conversion)"
+      - "game/loaders/PlayerSkinShader.cs / Md3MorphShader.cs (viewmodel_depth_range instance uniform + vertex remap)"
+      - "game/client/PortalRenderer.cs (portal cams exclude ViewModelRenderFx.RenderLayerBit)"
       - "game/net/NetGame.cs:UpdateViewModelTeamGlow"
       - "game/net/NetGame.cs:VortexGlowColor"
     constants:
-      - { name: "colormap", base: "256 + entcs colors (team/player palette swap)", port: "SetTeamGlow team-color albedo tint (approx whole-model, not a region palette swap)", match: false }
-      - { name: "glowmod", base: "weaponentity_glowmod(wep,c) = wr_glow override else colormapPaletteColor(c&0x0F)", port: "team palette color, Vortex/Vaporizer wr_glow charge override (VortexGlowColor) -> material emission", match: true }
-      - { name: "csqcmodel_effects EF_NODEPTHTEST", base: "(EFMASK_CHEAP | EF_NODEPTHTEST) & ~EF_FULLBRIGHT", port: "NoDepthTest=true applied to every viewmodel material (ApplyMaterialFx)", match: true }
+      - { name: "colormap", base: "256 + entcs colors (team/player palette swap)", port: "mask-driven instance-uniform tint on skin/converted surfaces (DP model: no _shirt/_pants mask -> no tint); approx whole-model albedo tint only on legacy fallback surfaces", match: false }
+      - { name: "glowmod", base: "weaponentity_glowmod(wep,c) = wr_glow override else colormapPaletteColor(c&0x0F)", port: "team palette color, Vortex/Vaporizer wr_glow charge override (VortexGlowColor) -> glowmod instance uniform (multiplies the _glow map, DP model) / material emission on fallback surfaces", match: true }
+      - { name: "viewmodel depth hack (RF_VIEWMODEL -> MATERIALFLAG_SHORTDEPTHRANGE)", base: "GL_DepthRange(0, 0.0625) — depth compressed into the nearest 1/16 slice, depth TEST kept ON (gl_rmain.c:6214/8581; DP never disables the depth test for viewmodel model surfaces)", port: "viewmodel_depth_range=0.0625 per-material uniform (gun-owned duplicates of the shared skin/morph materials — same Shader objects, no new pipelines) + clip-z remap (reversed-Z mirror [0.9375,1]) in PlayerSkinShader/Md3MorphShader; plain opaque StandardMaterial3D gun surfaces auto-convert to the skin shader (ViewModelRenderFx.EnsureOpaqueSurfaceFx); NoDepthTest only as fallback (unconvertible/alpha<1 surfaces + the attached muzzle-flash model, matching DP's sprite conversion r_sprites.c:407)", match: true }
+      - { name: "viewmodel excluded from culling + sub-views", base: "entityvisible bypass: RENDER_VIEWMODEL entities skip leaf/trace visibility culling (gl_rmain.c:4016-4023,4045) and are hidden in reflection/refraction/envmap scenes (renderimask, gl_rmain.c:3999-4006)", port: "gun meshes IgnoreOcclusionCulling=true (the depth-compressed gun must draw with its bounds inside world geometry); dedicated render layer 19 (RenderLayerBit 1<<18) which warpzone portal cameras mask out; viewmodel meshes CastShadow=Off", match: true }
       - { name: "skin", base: "m_skin per child (wepskin)", port: "none (base material)", match: false }
     status:
       logic: faithful
@@ -99,12 +105,14 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Team colormap is an approximate whole-model albedo tint (0.6 + 0.4*teamColor), not Base's true colormap palette region swap (256 + c); reads as your team color but is not pixel-faithful."
+      - "Team colormap is not Base's true colormap palette region swap (256 + c): masked (_shirt/_pants) skins tint faithfully via instance uniforms, maskless skins correctly show no tint (DP model), but the legacy whole-model albedo approximation survives only on unconvertible fallback surfaces."
       - "Per-child m_skin (wepskin) not applied; the gun renders with its base material."
+      - "cl_viewmodel_alpha < 1 (non-default) falls back to the legacy translucent BaseMaterial3D path with NoDepthTest, not a short-depth-range alpha pass (the shared skin shader is deliberately opaque-only); skin-shader surfaces still ignore the alpha, as before."
     verification:
-      - { kind: code, ref: "ViewModel.ApplyMaterialFx sets NoDepthTest=true (EF_NODEPTHTEST) + a team colormod albedo tint + glowmod emission on every viewmodel surface override, called from RefreshCvars->ApplyModelAlpha each _Process frame; SetTeamGlow stores team color/glow, pushed live every frame from NetGame.UpdateViewModelTeamGlow (called in EquipNetworkedWeapon, NetGame:1616); glowmod resolves wr_glow (Vortex/Vaporizer charge via VortexGlowColor) else team palette, matching weaponentity_glowmod; grep ViewModel.cs/ViewModelEquip.cs for m_skin/wepskin -> no matches", result: pass }
+      - { kind: code, ref: "SHORT DEPTH RANGE (2026-07-06, parity/first-person-weapon-models): PlayerSkinShader + Md3MorphShader gained `uniform float viewmodel_depth_range = 1.0` and a vertex() clip-z remap `POSITION.z = mix(z, w, 1.0 - viewmodel_depth_range)` — identity (mix(z,w,0)==z bit-exact) at the default for every world/player material, the DP GL_DepthRange(0,0.0625) near-slice (reversed-Z mirror [0.9375,1], order-preserving so gun self-occlusion survives) on the gun's materials. ViewModelRenderFx.Apply (called at equip: SetWeaponModel/SetWeapon/SetWeaponPlaceholder + the muzzle-flash spawn) gives every gun surface a gun-owned material carrying 0.0625: shared skin/anim ShaderMaterials get a cached DUPLICATE (same Shader object -> same pipelines), per-animator Md3Morph materials are set in place (ModelAnimator keeps writing morph_amount to the same object), and plain opaque textured StandardMaterial3D surfaces (minelayer/tuba/hook... — skins with no _shirt/_pants/_reflect masks never got the skin shader) are converted once (cached) to an equivalent PlayerSkinShader material (EnsureOpaqueSurfaceFx, albedo/_norm/_gloss/_glow/_reflect mapping mirroring WireCompanions), which also puts them on the grid-lit + instance-tint path; unconvertible surfaces + cl_viewmodel_alpha<1 keep the legacy NoDepthTest dup. (A per-INSTANCE uniform was tried first and was screenshot-verified INERT for this vertex-stage value — the per-material duplicate design is the one that renders.) Gun meshes: Layers=1<<18 (portal cams exclude it — PortalRenderer CullMask), IgnoreOcclusionCulling=true (DP entityvisible bypass, gl_rmain.c:4016-4023 — verified: the occlusion buffer would cull an embedded gun), CastShadow=Off (shadow pass must not see compressed depth; stock DP casts no viewmodel shadows), fill light LightCullMask restricted to the gun layer. VERIFIED IN-GAME (windowed screenshots, cl_autopause 0): gun renders at rest; with cl_gunoffset '300 0 0' the gun draws ON TOP of the staircase it is embedded in. Pinned by ViewModelDepthHackTests (shader lines + 0.0625 + portal exclusion + remap math).", result: pass }
+      - { kind: code, ref: "ViewModel.ApplyMaterialFx (legacy fallback branch) still sets NoDepthTest + team colormod albedo tint + glowmod emission on BaseMaterial3D override dups, called from RefreshCvars->ApplyModelAlpha (change-gated); SetPlayerColors stores team color/glow, pushed live from NetGame.UpdateViewModelTeamGlow; glowmod resolves wr_glow (Vortex/Vaporizer charge via VortexGlowColor) else team palette, matching weaponentity_glowmod; grep ViewModel.cs/ViewModelEquip.cs for m_skin/wepskin -> no matches", result: pass }
     confidence: high
-    notes: "FIXED since baseline (was logic:partial values:partial presentation:partial): team colormap tint AND per-weapon glowmod are now implemented and LIVE. SetTeamGlow + ApplyMaterialFx tint the gun toward the local player's team color and drive a team/wr_glow emission (Vortex/Vaporizer charge glow via VortexGlowColor, matching weaponentity_glowmod's wr_glow->palette fallback). Wired live every frame from NetGame.UpdateViewModelTeamGlow. EF_NODEPTHTEST + continuous alpha remain applied. Residual gaps: the colormap is an approximate whole-model albedo tint rather than Base's true palette region swap (256 + c), and per-child m_skin (wepskin) is still not applied."
+    notes: "SHORT-DEPTH-RANGE FIX (2026-07-06): the prior 'EF_NODEPTHTEST match:true' claim was drift — Godot NoDepthTest was only reaching BaseMaterial3D surfaces (every skin-shader weapon — arc/uzi/crylink/electro/hagar/... — had NO depth handling and visibly clipped into walls), and it is not DP's semantic anyway (DP maps RF_VIEWMODEL *and* RENDER_NODEPTHTEST to MATERIALFLAG_SHORTDEPTHRANGE = GL_DepthRange(0,0.0625) with depth testing ON). Now implemented faithfully via the viewmodel_depth_range per-material uniform (gun-owned duplicates of the shared materials; same Shader objects so no new pipeline variants) + clip-z remap, StandardMaterial3D->skin conversion for plain gun surfaces, IgnoreOcclusionCulling per gun mesh (DP entityvisible bypass), a dedicated render layer excluded from portal cameras (DP renderimask), and CastShadow=Off. Screenshot-verified: rest pose renders, and a gun forced 300u INSIDE the staircase draws on top of it. Side effects of the conversion (all DP-faithful): plain-material guns now grid-light like the skin-shader ones, maskless skins show no team tint, and glowmod multiplies the _glow map instead of a whole-surface emission. Residual: m_skin, palette-swap colormap, and the alpha<1 fallback (see gaps)."
 
   - id: cl-viewmodel.alpha.viewmodel_alpha
     name: "View-model alpha (cl_viewmodel_alpha / _alpha_min, vehicle/dead/intermission/chase hide)"
@@ -306,30 +314,30 @@ features:
       - "common/weapons/all.qc:NET_HANDLE(w_muzzleflash)"
     port_refs:
       - "game/client/ViewModel.cs:Fire"
-      - "game/client/EffectSystem.cs:MuzzleFlashAttached"
+      - "game/client/EffectSystem.cs:MuzzleFlash"
       - "game/net/NetGame.cs:MuzzleEffectFor"
       - "game/net/NetGame.cs:UpdateLocalFireFeedback"
     constants:
-      - { name: "local emit", base: "pointparticles(m_muzzleeffect) at view-projected movedir_aligned", port: "MuzzleFlashAttached burst at tag_shot socket + flash OmniLight + recoil", match: false }
+      - { name: "local emit", base: "pointparticles(m_muzzleeffect) at view-projected movedir_aligned, shotdir*1000", port: "full effectinfo Spawn (same path as the networked copy: parsed blocks + dlight + router) at the tag_shot socket's live transform, dir*1000", match: true }
       - { name: "remote emit", base: "Send_Effect_Except(m_muzzleeffect, shotorg, shotdir*1000, except actor)", port: "server EffectEmitter.Emit('*_MUZZLEFLASH', ..., except: actor)", match: true }
       - { name: "chase_active branch", base: "emit at server sv_shotorg", port: "not handled (gun hidden in chase)", match: false }
     status:
       logic: faithful
       values: partial
       timing: faithful
-      presentation: partial
+      presentation: faithful
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Local muzzle position is a heuristic at the tag_shot socket rather than Base's view-projected movedir_aligned (not verified to read identically on-screen)."
-      - "Secondary fire does not flash (only the primary _attackHeld path calls Fire; UpdateLocalFireFeedback comments 'secondary FX stay networked for now')."
+      - "Local muzzle position is the tag_shot socket's live transform rather than Base's view-projected movedir_aligned (not verified to read identically on-screen)."
+      - "The port ADDITIONALLY pops ViewModel._flashLight (energy 3, 0.06s) on top of the effectinfo block dlight — a stand-in kept for effects without a light row and for the grid-lit viewmodel pop; possible brief double-light where the effect has its own dlight."
       - "ClientWorld.OnMuzzleFlash wrapper has no caller (NetGame calls _viewModel.Fire() directly) — dead wrapper, but the feature is live by another path."
     verification:
-      - { kind: code, ref: "ViewModel.Fire -> MuzzleFlashAttached + OmniLight; live from PredictFireShot / UpdateLocalFireFeedback; remote VERIFIED via EffectEmitter.Emit('*_MUZZLEFLASH', shot.Origin, shot.Dir*1000, except: actor)", result: pass }
+      - { kind: code, ref: "ViewModel.Fire -> EffectSystem.MuzzleFlash (full effectinfo Spawn) + OmniLight; live from PredictFireShot / UpdateLocalFireFeedback (primary refire clock + secondary press edge); remote VERIFIED via EffectEmitter.Emit('*_MUZZLEFLASH', shot.Origin, shot.Dir*1000, except: actor)", result: pass }
     confidence: medium
-    notes: "Both local and remote particle flashes are LIVE. Remote emit confirmed faithful to Send_Effect_Except (every weapon passes except: actor). Position is heuristic (tag socket) not the QC view-projection; not runtime-verified for on-screen match. Secondary fire genuinely does not flash."
+    notes: "Both local and remote particle flashes are LIVE and now share the SAME effectinfo path (the heuristic MuzzleFlashAttached burst was deleted — it made every weapon's local flash read generic, playtest #49). Remote emit confirmed faithful to Send_Effect_Except (every weapon passes except: actor). Secondary shots flash on the press edge (SecondaryFiresShot gate). Position is the tag socket, not the QC view-projection; not runtime-verified for on-screen match."
 
   - id: cl-viewmodel.muzzle.flash_model
     name: "Muzzle flash MODEL (spinning flash md3 for the 7 m_muzzlemodel weapons: Devastator/MineLayer/OkRPC=flash.md3, Machinegun/Shotgun/OkHMG/OkMachinegun=uziflash.md3)"

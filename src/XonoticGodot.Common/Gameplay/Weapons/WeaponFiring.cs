@@ -613,9 +613,23 @@ public static class WeaponFiring
     /// + ricochet ON the glass) even while the damage crossed — the "attacks don't work through the warpzone"
     /// report. Impact FX/sound belong at <c>result.Trace.EndPos</c>; a beam draws start→<c>FirstCrossPoint</c>
     /// then <c>FirstExitPoint</c>→EndPos when <c>ZonesCrossed &gt; 0</c> (one straight segment otherwise).
+    ///
+    /// <para><b>Filter (fixed 2026-07-27, "Vortex shots go through walls").</b> This was <c>MOVE_WORLDONLY</c>,
+    /// which clips against the static world and NOTHING else — so every hitscan beam and impact burst passed
+    /// straight through brush ENTITIES: <c>func_door</c>, <c>func_wall</c>, <c>func_plat</c>, breakables, every
+    /// moving platform. On any map whose walls/doors are brush entities the rail visibly speared through solid
+    /// geometry and its impact landed somewhere behind it, while the DAMAGE (which uses the real
+    /// <see cref="FireRailgunBullet"/> sweep) correctly stopped at the door — so the shot read as going through
+    /// the wall and doing nothing.</para>
+    ///
+    /// <para><c>MOVE_NOMONSTERS</c> is the faithful filter: it clips world + <c>SOLID_BSP</c> brush entities and
+    /// skips players, which is exactly where Base's beam ends. Base's <see cref="FireRailgunBullet"/> loop only
+    /// makes <c>SOLID_SLIDEBOX</c> entities non-solid to pierce them, so it terminates on the first world surface
+    /// OR brush entity — the same set NOMONSTERS stops at. Bullet weapons get the same correction (their impact
+    /// puff/ricochet now lands ON a door instead of behind it).</para>
     /// </summary>
     public static WarpzoneTraceResult HitscanImpactTrace(Entity? actor, Vector3 start, Vector3 end)
-        => Api.Trace.TraceLineWarpzone(start, end, MoveFilter.WorldOnly, actor);
+        => Api.Trace.TraceLineWarpzone(start, end, MoveFilter.NoMonsters, actor);
 
     /// <summary>
     /// Shared bullet-impact FX + ricochet audio (W1-weaponfire-fx) — the C# successor to each bullet weapon's

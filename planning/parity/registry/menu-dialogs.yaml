@@ -261,15 +261,15 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Every makeMulti sibling set is dropped: 'Powerup notifications' writes notification_CENTER_POWERUP_INVISIBILITY but not the 13 sibling CENTER/INFO powerup cvars; weapon centerprint/info rows drop 5 siblings each; CHOICE_FRAG drops 7; INFO_QUIT_DISCONNECT drops 2; ANNCE_NUM_RESPAWN_1 drops 9; KILLSTREAK/ACHIEVEMENT drop theirs — so most toggles only affect a fraction of the messages they claim to."
-      - "The announcer toggle cvars (notification_ANNCE_*) are CONFIRMED unread: NotificationSystem.cs has no per-notification 'notification_<NAME>' cvar lookup at dispatch — respawn-countdown/killstreak/achievement announcer checkboxes have zero effect."
+      - "PARTIALLY CLOSED 2026-07-05: the ValueCheckBox rows now carry their QC makeMulti sibling sets (CHOICE_FRAG +7, CTF_CAPTURE_TIME +2, CTF_PICKUP_ENEMY +2, INFO_QUIT_DISCONNECT +2, ANNCE_NUM_RESPAWN_1 +9, KILLSTREAK +6, ACHIEVEMENT +6 — written with the same stored value, replicating via the registry-derived ReplicatedChoiceCvars set). STILL dropped: the plain-CheckBox multi rows — 'Powerup notifications' (notification_CENTER_POWERUP_INVISIBILITY + 13 CENTER/INFO powerup siblings), weapon centerprint/info rows (5 siblings each), show_sprees_info_specialonly (center_specialonly), and the View tab's cl_unpress_zoom_on_death (on_spawn) — Widgets.CheckBox has no multi support yet."
+      - "The announcer toggle cvars (notification_ANNCE_*) are CONFIRMED unread: NotificationSystem.cs has no per-notification 'notification_<NAME>' cvar lookup at dispatch — respawn-countdown/killstreak/achievement announcer checkboxes have zero effect (the 2026-07-05 checkbox fix makes them WRITE the right values, but nothing consumes them)."
       - "con_notify ('console messages in the top left') and notification_allow_chatboxprint are bound but have NO reader — dead toggles."
       - "notification_show_sprees IS consumed (NotifTokens.cs:146) and so are the sub-toggles: show_location (152), show_sprees_center (208) + center_specialonly (215), show_sprees_info bits (232-251) + info_newline (233) — all live via NotificationSystem.cs:430 NotifTokens.Resolve."
     verification:
       - { kind: code, ref: "grep notification_ANNCE over game+src -> menu bindings only, and NotificationSystem.cs has no dynamic per-notification cvar gate", result: fail }
       - { kind: code, ref: "notification_CHOICE_* rows ARE pushed to the server (ClientNet.cs:969-971 PushReplicatedSet(ReplicatedChoiceCvars) — the QC ReplicateVars analogue) and consumed per-client (Commands.cs:258 IsRegisteredChoiceCvar; NotificationSystem MSG_CHOICE picks optiona/optionb by the replicated value)", result: pass }
     confidence: high
-    notes: "Notification-system fidelity (which cvars the dispatcher consults) belongs to the notifs unit; this row records that the dialog exists, binds the right primary cvars, and loses the multi-writes. Verify pass 2026-07-02: CHOICE replication confirmed live (the old 'sendCvars unimplemented for CHOICE' gap was wrong); spree sub-toggles confirmed live; ANNCE gating confirmed absent."
+    notes: "Notification-system fidelity (which cvars the dispatcher consults) belongs to the notifs unit; this row records that the dialog exists and binds the right cvars. Verify pass 2026-07-02: CHOICE replication confirmed live (the old 'sendCvars unimplemented for CHOICE' gap was wrong); spree sub-toggles confirmed live; ANNCE gating confirmed absent. 2026-07-05: all nine checkBoxEx rows on this tab were inert bit-0 FlagCheckBoxes — now faithful QC value-pair checkboxes with their makeMulti sibling sets restored (see gaps); the plain-CheckBox multi rows remain the open multi-write gap."
 
   - id: menu-dialogs.settings.game_model
     name: "Game>Models tab: simple items, ghost items, force models/colors, body fading, gibs"
@@ -315,7 +315,7 @@ features:
     constants:
       - { name: "fov range", base: "60-130 step 5", port: "same; FirstPersonView reads fov", match: true }
       - { name: "cl_zoomfactor domain", base: "2-10/0.5 + 11-30/1", port: "same enumeration", match: true }
-      - { name: "cl_eventchase_death", base: "checkboxEx value 2", port: "FlagCheckBox bit 0 (writes 1, not 2)", match: false }
+      - { name: "cl_eventchase_death", base: "checkboxEx value 2", port: "ValueCheckBox 2/0 (QC value-pair semantics)", match: true }
     status:
       logic: faithful
       values: partial
@@ -326,16 +326,15 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "cl_eventchase_death checkbox writes the wrong value: QC checkBoxEx(2,...) sets 2 (chase even while the body slides); the port FlagCheckBox toggles bit 0 -> writes 1, and FirstPersonView:591 special-cases ==2 — so ticking the box actually DISABLES the default-2 behavior."
       - "cl_unpress_zoom_on_death / _on_spawn / _on_weapon_switch and cl_unpress_attack_on_weapon_switch are DEAD as cvars — the unpress-on-death behavior is hardcoded always-on (NetGame:3097 comment), not toggleable."
       - "cl_smoothviewheight is live (NetGame) but QC's chase_active in [-1,0] gating on the perspective sub-rows is reduced to single-condition binds."
-      - "'View bobbing' drops the cl_bob2 makeMulti (DialogSettingsGame.cs:476 writes cl_bob only) while FirstPersonView.cs:675 reads cl_bob2 LIVE — ticking the box enables only half the QC bob (the horizontal component stays 0)."
       - "cl_clippedspectating IS replicated + consumed server-side (Commands.cs:586 ClippedSpectatingProvider)."
     verification:
       - { kind: code, ref: "FirstPersonView reads fov(293,528)/cl_zoomfactor(277,302)/cl_zoomspeed(304)/cl_zoomsensitivity(375)/cl_zoomscroll(257,325)/cl_velocityzoom_enabled+type(545)/cl_eventchase_death(591,740)/cl_bob(651)/cl_bobfall(706)/v_idlescale(603); ChaseCamera reads chase_back(57)", result: pass }
       - { kind: code, ref: "grep cl_unpress -> menu bindings + comments only", result: fail }
+      - { kind: code, ref: "2026-07-05: the five perspective checkboxes (cl_eventchase_death 2/0, cl_bobfall 0.05/0, cl_smoothviewheight 0.05/0, cl_bob 0.01/0 + makeMulti cl_bob2, v_idlescale 1/0) rewired from the inert bit-0 FlagCheckBox to CvarValueCheckBox (QC XonoticCheckBox midpoint-load + mindecimals-save; CheckBoxValue math pinned by ViewBobIdleSwayTests)", result: pass }
     confidence: high
-    notes: "View bob / chase camera landed after the 06-14 audit (which recorded them 'not implemented'); this tab is now mostly live. chase_up consumption unverified (only chase_back seen). cl_reticle is bound AND live (game/client/ReticleOverlay.cs reads it)."
+    notes: "View bob / chase camera landed after the 06-14 audit (which recorded them 'not implemented'); this tab is now mostly live. chase_up consumption unverified (only chase_back seen). cl_reticle is bound AND live (game/client/ReticleOverlay.cs reads it). 2026-07-05: the earlier gaps 'eventchase checkbox writes 1 not 2' and ''View bobbing' drops the cl_bob2 makeMulti' are FIXED — the old bit-0 FlagCheckBox wiring was in fact fully inert ((v & 0) != 0 never true; a toggle wrote the int-truncated value back), so none of the five perspective checkboxes ever worked; all five now use faithful QC value-pair semantics."
 
   - id: menu-dialogs.settings.game_weapons
     name: "Game>Weapons tab: priority list, cycling opts, autoswitch, viewmodel visuals, tracer teamcolor"

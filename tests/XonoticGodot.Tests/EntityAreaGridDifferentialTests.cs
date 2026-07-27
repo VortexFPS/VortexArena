@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using XonoticGodot.Common.Framework;
+using XonoticGodot.Common.Gameplay;
 using XonoticGodot.Engine.Simulation;
+using XonoticGodot.Server;
 using Xunit;
 
 namespace XonoticGodot.Tests;
@@ -19,6 +21,9 @@ namespace XonoticGodot.Tests;
 ///         it may return extra XY-overlapping-but-Z-disjoint candidates — those the precise per-call test trims.)</item>
 ///   <item><b>FindInRadius matches a brute-force nearest-point scan</b> EXACTLY — the end-to-end result the
 ///         splash-damage path depends on is unchanged.</item>
+///   <item><b>FindInBox matches a brute-force AbsMin/AbsMax overlap scan</b> EXACTLY — the precise AABB test
+///         lives inside the query (DP <c>findbox</c>), which the telefrag/volume/fire-transfer callers that
+///         dropped their own <c>boxesoverlap</c> depend on.</item>
 /// </list>
 /// </summary>
 [Collection("GlobalState")]
@@ -137,6 +142,76 @@ public class EntityAreaGridDifferentialTests
         var radius = new List<Entity>();
         es.FindInRadius(new Vector3(0, 0, 25), 200f, radius);
         Assert.Single(radius, e => ReferenceEquals(e, p));
+    }
+
+    [Fact]
+    public void FindInBox_matchesBruteForce_acrossMovesAndRemovals()
+    {
+        // FindInBox = grid broadphase + precise AbsMin/AbsMax overlap INSIDE the query (DP findbox /
+        // World_EntitiesInBox — upstream b6e02fe3's telefrag findbox). Callers that replaced the old
+        // findradius + boxesoverlap pair depend on this being exactly the linked-AABB overlap set.
+        EntityService es = BuildWorld(300, 555, out List<Entity> spawned);
+        var r = new Random(7);
+        for (int i = 0; i < spawned.Count; i++)
+        {
+            if (i % 3 == 0) es.SetOrigin(spawned[i], Rand(r, 4000f));
+            if (i % 5 == 0) es.Remove(spawned[i]);
+        }
+
+        var got = new List<Entity>();
+        for (int q = 0; q < 400; q++)
+        {
+            Vector3 c = Rand(r, 4200f);
+            Vector3 h = new(
+                (float)(r.NextDouble() * 400 + 1),
+                (float)(r.NextDouble() * 400 + 1),
+                (float)(r.NextDouble() * 400 + 1));
+            Vector3 mins = c - h, maxs = c + h;
+            es.FindInBox(mins, maxs, got);
+
+            Assert.Equal(got.Count, got.Distinct().Count());     // no duplicates
+            Assert.DoesNotContain(got, e => e.IsFreed);          // no freed entities
+
+            var brute = new List<Entity>();
+            foreach (Entity e in es.All)
+                if (!e.IsFreed && Overlap(mins, maxs, e.AbsMin, e.AbsMax))
+                    brute.Add(e);
+            Assert.Equal(new HashSet<Entity>(brute), new HashSet<Entity>(got));
+        }
+    }
+
+    [Fact]
+    public void ServerFindInBox_dedupsLinkedPlayer_andMergesUnlinkedMove()
+    {
+        // ServerEntityService.FindInBox must mirror the FindInRadius player merge: a grid-linked player is
+        // returned ONCE (not grid + merge), and a player whose Origin moved without a relink (the fresh-player
+        // window) is still found via the live Origin+Mins/Maxs merge — telefrag targets are mostly players.
+        var inner = new EntityService();
+        var server = new ServerEntityService(inner);
+
+        Entity inside = inner.Spawn();
+        inner.SetSize(inside, new Vector3(-8, -8, -8), new Vector3(8, 8, 8));
+        inner.SetOrigin(inside, new Vector3(100, 0, 0));
+        Entity outside = inner.Spawn();
+        inner.SetSize(outside, new Vector3(-8, -8, -8), new Vector3(8, 8, 8));
+        inner.SetOrigin(outside, new Vector3(1000, 0, 0));
+
+        var p = new Player { Index = -1 };                       // client edicts use the negative index space
+        p.Mins = new Vector3(-16, -16, -24);
+        p.Maxs = new Vector3(16, 16, 45);
+        p.Origin = new Vector3(120, 0, 0);
+        server.RegisterPlayer(p);                                // links: found via grid AND merge -> dedup
+
+        var got = new List<Entity>();
+        server.FindInBox(new Vector3(64, -64, -64), new Vector3(160, 64, 64), got);
+        Assert.Contains(inside, got);
+        Assert.DoesNotContain(outside, got);
+        Assert.Single(got, e => ReferenceEquals(e, p));          // linked player exactly once
+
+        // Raw origin write (no relink): grid/AbsMin still hold the OLD cells — the live-box merge must find it.
+        p.Origin = new Vector3(-500, 0, 0);
+        server.FindInBox(new Vector3(-560, -64, -64), new Vector3(-440, 64, 64), got);
+        Assert.Single(got, e => ReferenceEquals(e, p));
     }
 
     [Fact]

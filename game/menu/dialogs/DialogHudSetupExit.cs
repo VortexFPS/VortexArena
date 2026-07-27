@@ -13,10 +13,11 @@ namespace XonoticGodot.Game.Menu;
 /// Every cvar control binds the same engine cvar the QC binds, with the same <c>setDependent</c> grey-outs.
 ///
 /// FAITHFUL UI NOW: the cvar bindings are real (they write the shared <see cref="MenuState.Cvars"/> store the
-/// in-game HUD reads). Three pieces drive backends XonoticGodot lacks and are rendered honestly:
+/// in-game HUD reads), and "Save current skin" runs the real exporter (the <c>hud save</c> backend,
+/// <see cref="Game.Hud.HudConfigEditor.ExportCfg"/>). Still honest stubs:
 ///   * the HUD skin <b>list</b> (QC <c>makeXonoticHUDSkinList</c>, which scans data/data/*.cfg) has no file-scan
-///     backend, so the list area is an honest short note; the Filter input + Save-name input are real cvar-less
-///     fields and the Refresh / Set skin / Save buttons route through <see cref="MenuCommand"/> (logged inert);
+///     backend, so the list area is an honest short note; the Filter input is a real cvar-less field and the
+///     Refresh / Set skin buttons are logged inert until the list backend lands;
 ///   * the two QC <c>makeXonoticColorpickerString</c> widgets are built via the shared
 ///     <see cref="Widgets.ColorButton"/> (<see cref="CvarColorButton"/>, a Godot color picker on the same cvar);
 ///   * "Exit setup" runs the QC command <c>_hud_configure 0</c> through <see cref="Widgets.CommandButton"/>.
@@ -108,16 +109,23 @@ public partial class DialogHudSetupExit : MenuScreen
 
         box.AddChild(Ui.Spacer());
 
-        // QC: makeXonoticButton_T(_("Save current skin"), …) + an inputbox for the name (onChange stores it).
-        var save = MakeButton("Save current skin", () => OnInert("save current HUD skin (menu_savehud)"));
-        save.TooltipText =
-            "Note: HUD skins are saved in data/data/ directory and can be manually renamed/deleted from there";
-        box.AddChild(save);
-        box.AddChild(new LineEdit
+        // QC: makeXonoticButton_T(_("Save current skin"), …) + an inputbox for the name. Saving routes the QC
+        // `hud save <name>` effect — the HUD_Panel_ExportCfg port (HudConfigEditor.ExportCfg) — writing
+        // hud_<skin>_<name>.cfg with every hud_* cvar, same as the editor's Ctrl+S.
+        var saveName = new LineEdit
         {
             PlaceholderText = "New skin name…",
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        var save = MakeButton("Save current skin", () =>
+        {
+            string name = saveName.Text.Trim();
+            Game.Hud.HudConfigEditor.ExportCfg(string.IsNullOrEmpty(name) ? "myconfig" : name);
         });
+        save.TooltipText =
+            "Note: HUD skins are saved in data/data/ directory and can be manually renamed/deleted from there";
+        box.AddChild(save);
+        box.AddChild(saveName);
     }
 
     // -----------------------------------------------------------------------------------------------------

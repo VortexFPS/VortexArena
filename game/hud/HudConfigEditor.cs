@@ -47,6 +47,12 @@ public partial class HudConfigEditor : Control
     private const int ActionMove = 1;
     private const int ActionResize = 2;
 
+    // QC engine cursor types (cursor_type; CURSOR_* in the CSQC defs): what the pointer would do where it is.
+    private const int CursorNormal = 0;
+    private const int CursorMove = 1;    // panel interior → drag-move
+    private const int CursorResize = 2;  // topleft/bottomright border → "\" diagonal resize
+    private const int CursorResize2 = 3; // topright/bottomleft border → "/" diagonal resize
+
     // ---- the panels the editor operates on (HudManager owns them; only PANEL_CONFIG_MAIN ones are editable) ----
     private readonly Hud _hud;
     private CvarService Cvars => MenuState.Cvars;
@@ -67,6 +73,11 @@ public partial class HudConfigEditor : Control
     private Vector2 _panelClickResizeOrigin;
     private Vector2 _highlightedInitialPos;
     private Vector2 _highlightedInitialSize;
+
+    // ---- hover state (QC HUD_Panel_Check_Mouse_Pos ran every non-clicked frame → cursor_type + hover fill) ----
+    private HudPanel? _hoverPanel;
+    private int _hoverCursor;
+    private int _cursorShapeApplied = -1;      // last Godot cursor shape pushed (change-latched)
 
     // ---- undo (one level) + copy/paste size ----
     private Vector2 _panelPosBackup;
@@ -104,6 +115,50 @@ public partial class HudConfigEditor : Control
         SetAnchorsPreset(LayoutPreset.FullRect);
         ZIndex = 100; // draw over the panels (QC PostDraw runs after every panel draw)
         Visible = false;
+        RegisterEditorCommands();
+    }
+
+    /// <summary>
+    /// Safety net for teardown mid-configure: the editor's normal exit edge (<see cref="Update"/>'s
+    /// <c>else if (_wasConfiguring)</c> branch) only runs while the node is alive and ticking, so disconnecting /
+    /// quitting to the menu while <c>_hud_configure</c> is 1 would free this node with the process-global side
+    /// effects still latched — leaving the OS pointer freed forever (mouse-look dead in the next match) and the
+    /// next match booting straight into the editor. Clear all of them here when the node leaves the tree.
+    /// </summary>
+    public override void _ExitTree()
+    {
+        MouseCapture.HudEditorWantsCursor = false; // re-applies capture (the setter calls MouseCapture.Apply)
+        SetCursorShape(CursorNormal);              // drop the Move/diagonal OS cursor shape
+        // Don't let the transient configure flag survive the match, or the next one boots into the editor.
+        if (MenuState.Cvars.GetFloat("_hud_configure") != 0f)
+            MenuState.Cvars.Set("_hud_configure", "0");
+    }
+
+    /// <summary>
+    /// Register the HUD-editor console verbs on the shared interpreter (idempotent — RegisterCommand overwrites
+    /// by name, so re-registration on a later match's Hud is harmless). Base ships these as commands.cfg
+    /// aliases (<c>menu_showhudexit "menu_cmd directmenu HUDExit"</c>, <c>menu_showhudoptions "menu_cmd
+    /// directpanelhudmenu ${* ?}"</c>) plus the client <c>hud</c> command (cl_cmd.qc:288); the port's cfg tree
+    /// never execs those aliases, so the editor registers the equivalents itself. The menu_show* verbs route
+    /// into <see cref="Menu.MenuCommand"/> (the dialog opener); <c>hud save &lt;name&gt;</c> runs the
+    /// <see cref="ExportCfg"/> port. Without these, <see cref="RunLocalCmd"/>'s lines fell through the
+    /// interpreter's unknown-command route (a server forward) and ESC / Ctrl+S / double-click did nothing.
+    /// </summary>
+    private void RegisterEditorCommands()
+    {
+        var interp = MenuState.Interp;
+        if (interp is null) return; // headless/tool contexts without the shared interpreter
+        interp.RegisterCommand("menu_showhudexit", _ => Menu.MenuCommand.Run("menu_showhudexit"));
+        interp.RegisterCommand("menu_showhudoptions", a => Menu.MenuCommand.Run(
+            a.Count > 1 ? "menu_showhudoptions " + a[1] : "menu_showhudoptions"));
+        interp.RegisterCommand("hud", a =>
+        {
+            if (a.Count >= 3 && a[1] == "save")
+                ExportCfg(a[2]);
+            else
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    "Usage: hud save <configname> — export the current HUD layout (QC `hud save`)");
+        });
     }
 
     // =================================================================================================
@@ -156,6 +211,9 @@ public partial class HudConfigEditor : Control
 
             Visible = true;
             Size = viewport;
+            // Free the OS pointer for the editor (Base shows the engine cursor over the live game here —
+            // cursor_type; the net layer's capture reassert doesn't know the editor, so this override does).
+            MouseCapture.HudEditorWantsCursor = true;
             MouseFrame(viewport); // QC HUD_Panel_Mouse (mouse drag/resize, run every frame while configuring)
             QueueRedraw();        // schedule the grid + highlight overlay draw (QC HUD_Configure_PostDraw)
         }
@@ -166,6 +224,9 @@ public partial class HudConfigEditor : Control
             ClearHighlight();
             ResetTabPanels();
             _tabPanel = null;
+            _hoverPanel = null;
+            MouseCapture.HudEditorWantsCursor = false; // recapture for play (QC Exit_Force → CURSOR_NORMAL)
+            SetCursorShape(CursorNormal);
         }
 
         _prevMouseClicked = _mouseClicked; // QC: prevMouseClicked = mouseClicked at end of frame (view.qc:1108)
@@ -437,7 +498,76 @@ public partial class HudConfigEditor : Control
         {
             if (_prevMouseClicked != 0)
                 _highlightedAction = ActionNone;
+
+            // Hover hit-test (QC 1048-1055): every non-clicked frame resolve which panel the cursor is over
+            // (interior → move, border → resize) — drives the white hover fill in _Draw + the cursor shape.
+            _hoverCursor = CheckMousePos(viewport, allowMove: true, out _hoverPanel);
         }
+
+        // Engine cursor shape (QC cursor_type): while dragging show the active action's shape, else the hover's.
+        int cursorType = _mouseClicked != 0
+            ? _highlightedAction switch
+            {
+                ActionMove => CursorMove,
+                ActionResize => _resizeCorner is 1 or 4 ? CursorResize : CursorResize2,
+                _ => CursorNormal,
+            }
+            : _hoverCursor;
+        SetCursorShape(cursorType);
+    }
+
+    /// <summary>
+    /// Port of <c>HUD_Panel_Check_Mouse_Pos</c> (807): the pure hover hit-test — which MAIN panel is under the
+    /// cursor and what the pointer would do there (move interior / one of the four resize borders), walking the
+    /// draw order like <see cref="Highlight"/> but without mutating any selection state. Returns the QC cursor
+    /// type; <paramref name="hovered"/> gets the hit panel (QC leaves it in the global <c>panel</c>, which the
+    /// caller's hover drawfill reads).
+    /// </summary>
+    private int CheckMousePos(Vector2 viewport, bool allowMove, out HudPanel? hovered)
+    {
+        foreach (HudPanel p in PanelsInDrawOrder())
+        {
+            if (!p.ConfigFlags.HasFlag(PanelConfig.Main))
+                continue;
+            Vector2 pos = PanelPosPx(p, viewport);
+            Vector2 size = PanelSizePx(p, viewport);
+            float border = Mathf.Max(8f, PanelBorderPx(p)); // FORCED border (QC: a tiny border stays grabbable)
+            Vector2 m = _mousePos;
+
+            hovered = p;
+            if (allowMove && m.X > pos.X && m.Y > pos.Y && m.X < pos.X + size.X && m.Y < pos.Y + size.Y)
+                return CursorMove;
+            if (m.X >= pos.X - border && m.Y >= pos.Y - border
+                && m.X <= pos.X + 0.5f * size.X && m.Y <= pos.Y + 0.5f * size.Y)
+                return CursorResize;  // topleft border
+            if (m.X >= pos.X + 0.5f * size.X && m.Y >= pos.Y - border
+                && m.X <= pos.X + size.X + border && m.Y <= pos.Y + 0.5f * size.Y)
+                return CursorResize2; // topright border
+            if (m.X >= pos.X - border && m.Y >= pos.Y + 0.5f * size.Y
+                && m.X <= pos.X + 0.5f * size.X && m.Y <= pos.Y + size.Y + border)
+                return CursorResize2; // bottomleft border
+            if (m.X >= pos.X + 0.5f * size.X && m.Y >= pos.Y + 0.5f * size.Y
+                && m.X <= pos.X + size.X + border && m.Y <= pos.Y + size.Y + border)
+                return CursorResize;  // bottomright border
+        }
+        hovered = null;
+        return CursorNormal;
+    }
+
+    /// <summary>Push a QC cursor type onto the OS pointer (Base tiled its own cursor art; the OS shapes carry
+    /// the same affordance: move arrows over interiors, "\"/"/" diagonals over resize corners). Change-latched
+    /// so the DisplayServer isn't poked every frame.</summary>
+    private void SetCursorShape(int cursorType)
+    {
+        if (cursorType == _cursorShapeApplied) return;
+        _cursorShapeApplied = cursorType;
+        Input.SetDefaultCursorShape(cursorType switch
+        {
+            CursorMove => Input.CursorShape.Move,
+            CursorResize => Input.CursorShape.Fdiagsize,  // "\" (TL/BR corners)
+            CursorResize2 => Input.CursorShape.Bdiagsize, // "/" (TR/BL corners)
+            _ => Input.CursorShape.Arrow,
+        });
     }
 
     /// <summary>Compute the dragged size from the current mouse position per the active resize corner (QC
@@ -1007,6 +1137,113 @@ public partial class HudConfigEditor : Control
     }
 
     // =================================================================================================
+    //  HUD config export (QC HUD_Panel_ExportCfg, hud_config.qc:10 — the `hud save <name>` backend)
+    // =================================================================================================
+
+    /// <summary>QC <c>HUD_Write_Cvar</c>: one <c>seta name "value"</c> line. Skipped for cvars the port never
+    /// registered (e.g. Base progressbar colors with no port feature yet), so the dump stays honest.</summary>
+    private static void WriteCvarLine(System.Text.StringBuilder sb, string name)
+    {
+        CvarService cvars = MenuState.Cvars;
+        if (cvars.Has(name))
+            sb.Append("seta ").Append(name).Append(" \"").Append(cvars.GetString(name)).Append("\"\n");
+    }
+
+    /// <summary>Reduce a user/cvar-supplied string to a safe filename token: keep only letters, digits, '-' and
+    /// '_' (dropping path separators, '.', and everything else), falling back to <paramref name="fallback"/> when
+    /// nothing safe remains. Prevents a `hud save ../../evil` (or a poisoned hud_skin) from escaping the data dir.</summary>
+    private static string SanitizeToken(string? raw, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return fallback;
+        var sb = new System.Text.StringBuilder(raw.Length);
+        foreach (char c in raw)
+            if (char.IsAsciiLetterOrDigit(c) || c == '-' || c == '_')
+                sb.Append(c);
+        return sb.Length > 0 ? sb.ToString() : fallback;
+    }
+
+    /// <summary>
+    /// Port of <c>HUD_Panel_ExportCfg</c> (hud_config.qc:10): dump the live HUD tuning — skin + global panel-bg
+    /// defaults, dock, progressbar colors, panel order, grid — then every panel's cvar block, as <c>seta</c>
+    /// lines into <c>hud_&lt;skin&gt;_&lt;cfgname&gt;.cfg</c>. DP wrote into the gamedir's <c>data/</c> (hence
+    /// Base's "saved in data/data/" note); the port's writable home is <see cref="UserPaths"/>, so the file
+    /// lands under <c>&lt;userdir&gt;/data/</c>. Per panel: the eight common cvars in QC order, then — the
+    /// stand-in for QC's per-panel <c>panel_export</c> — the master enable cvar plus every other registered
+    /// <c>hud_panel_&lt;id&gt;_*</c> behaviour cvar (sorted for a stable dump). The QC trailer
+    /// <c>menu_sync</c> is omitted: the port menu reads the live store, there is no menu VM to resync.
+    /// Static (the store is the shared <see cref="MenuState.Cvars"/>) so the menu-side "Save current skin"
+    /// button (<see cref="Menu.DialogHudSetupExit"/>) can export without a live editor instance.
+    /// </summary>
+    public static void ExportCfg(string cfgname)
+    {
+        CvarService cvars = MenuState.Cvars;
+        // Sanitize BOTH the user-supplied config name AND the skin cvar into safe filename tokens: the file goes
+        // to `data/hud_<skin>_<name>.cfg` and is written with a raw System.IO path, so an unsanitized `..` / path
+        // separator (from the console `hud save`, the menu save box, or an exec'd cfg) would escape the user data
+        // dir (UserPaths.Resolve canonicalizes '..' and creates the tree). Keep only filename-safe characters.
+        string skin = SanitizeToken(cvars.GetString("hud_skin"), "luma");
+        string cfgToken = SanitizeToken(cfgname, "myconfig");
+        string filename = $"hud_{skin}_{cfgToken}.cfg";
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("//title \n//author \n\n");
+        foreach (string n in new[] { "hud_skin", "hud_panel_bg", "hud_panel_bg_color", "hud_panel_bg_color_team",
+            "hud_panel_bg_alpha", "hud_panel_bg_border", "hud_panel_bg_padding", "hud_panel_fg_alpha" })
+            WriteCvarLine(sb, n);
+        sb.Append('\n');
+        foreach (string n in new[] { "hud_dock", "hud_dock_color", "hud_dock_color_team", "hud_dock_alpha" })
+            WriteCvarLine(sb, n);
+        sb.Append('\n');
+        foreach (string n in new[] { "hud_progressbar_alpha", "hud_progressbar_strength_color",
+            "hud_progressbar_superweapons_color", "hud_progressbar_shield_color", "hud_progressbar_health_color",
+            "hud_progressbar_armor_color", "hud_progressbar_fuel_color", "hud_progressbar_oxygen_color",
+            "hud_progressbar_nexball_color", "hud_progressbar_speed_color", "hud_progressbar_acceleration_color",
+            "hud_progressbar_acceleration_neg_color", "hud_progressbar_vehicles_ammo1_color",
+            "hud_progressbar_vehicles_ammo2_color" })
+            WriteCvarLine(sb, n);
+        sb.Append('\n');
+        WriteCvarLine(sb, "_hud_panelorder");
+        sb.Append('\n');
+        foreach (string n in new[] { "hud_configure_grid", "hud_configure_grid_xsize", "hud_configure_grid_ysize" })
+            WriteCvarLine(sb, n);
+        sb.Append('\n');
+
+        // Per-panel blocks (QC walks the hud_panels registry; the port's registry equivalent is the luma table).
+        string[] commonSuffixes = { "_pos", "_size", "_bg", "_bg_color", "_bg_color_team", "_bg_alpha",
+            "_bg_border", "_bg_padding" };
+        foreach (string id in HudLayoutDefaults.Ids)
+        {
+            string prefix = "hud_panel_" + id;
+            foreach (string suf in commonSuffixes)
+                WriteCvarLine(sb, prefix + suf);
+            // panel_export stand-in: the master toggle + every other registered hud_panel_<id>_* cvar.
+            WriteCvarLine(sb, prefix);
+            var extras = new List<string>();
+            foreach (string name in cvars.Names)
+                if (name.StartsWith(prefix + "_", StringComparison.Ordinal)
+                    && System.Array.IndexOf(commonSuffixes, name.Substring(prefix.Length)) < 0)
+                    extras.Add(name);
+            extras.Sort(StringComparer.Ordinal);
+            foreach (string name in extras)
+                WriteCvarLine(sb, name);
+            sb.Append('\n');
+        }
+
+        try
+        {
+            string path = UserPaths.Resolve("data/" + filename);
+            System.IO.File.WriteAllText(path, sb.ToString());
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"[HudConfigEditor] Successfully exported to {filename}! (Note: it's saved in {path})");
+        }
+        catch (Exception ex)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"[HudConfigEditor] Couldn't write to {filename}: {ex.Message}");
+        }
+    }
+
+    // =================================================================================================
     //  Draw-order management (QC HUD_Panel_FirstInDrawQ 842 + _hud_panelorder)
     // =================================================================================================
 
@@ -1196,6 +1433,22 @@ public partial class HudConfigEditor : Control
         Vector2 viewport = GetViewportRect().Size;
 
         DrawGrid(viewport);
+
+        // White grab/hover wash (QC HUD_Panel_Mouse 999 / 1055): a 0.1-alpha white fill over the grabbed panel
+        // while the mouse is down, else over the hovered panel (suppressed while a tab-cycle preview shows, and
+        // while a menu dialog fully covers the editor — QC's early return skips the drawfill there).
+        if (MenuAlpha != 1f)
+        {
+            HudPanel? wash = _mouseClicked != 0 ? _highlightedPanel : (_tabPanel is null ? _hoverPanel : null);
+            if (wash is not null)
+            {
+                Vector2 wPos = PanelPosPx(wash, viewport);
+                Vector2 wSize = PanelSizePx(wash, viewport);
+                float wb = PanelBorderPx(wash);
+                DrawRect(new Rect2(wPos - new Vector2(wb, wb), wSize + new Vector2(2f * wb, 2f * wb)),
+                    new Color(1f, 1f, 1f, 0.1f));
+            }
+        }
 
         // tab preview fill (QC PostDraw 1164-1169)
         if (_tabPanel is not null)

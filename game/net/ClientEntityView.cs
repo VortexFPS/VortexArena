@@ -95,15 +95,16 @@ public sealed partial class ClientEntityView : Node
             if (!_net.TryGetRemoteState(id, out NetEntityState s))
                 continue;
 
-            // Interpolated pose (origin + blended angles); fall back to the raw state if no interp yet.
-            if (!_net.SampleRemote(id, now, out NVec3 origin, out NVec3 angles))
+            // Interpolated pose (origin + blended angles + lean); fall back to the raw state if no interp yet.
+            if (!_net.SampleRemote(id, now, out NVec3 origin, out NVec3 angles, out NVec3 lean))
             {
                 origin = s.Origin;
                 angles = s.Angles;
+                lean = s.Lean;
             }
 
             _seen.Add(id);
-            DriveEntity(id, s, origin, angles);
+            DriveEntity(id, s, origin, angles, lean);
         }
 
         CullDeparted();
@@ -114,7 +115,7 @@ public sealed partial class ClientEntityView : Node
     //  Per-entity drive
     // =====================================================================================
 
-    private void DriveEntity(int id, in NetEntityState s, NVec3 origin, NVec3 angles)
+    private void DriveEntity(int id, in NetEntityState s, NVec3 origin, NVec3 angles, NVec3 lean)
     {
         Entity e = GetOrCreateProxy(id);
 
@@ -139,6 +140,10 @@ public sealed partial class ClientEntityView : Node
             e.Angles = angles;
             e.ViewPitch = 0f;
         }
+        // [lean] the playermodel lean offset (snapshot-blended like the angles) — EntityNode composes it
+        // onto the body render basis; nothing else reads it client-side. Orthogonal to the yaw-only body
+        // above: lean is its OWN render field and never routes through Angles, so both apply.
+        e.LeanAngles = lean;
         e.Velocity = s.Velocity;
         e.Frame = s.Frame;
         e.Skin = s.Skin;

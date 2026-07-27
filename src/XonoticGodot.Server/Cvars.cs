@@ -317,6 +317,17 @@ public static class Cvars
         new("g_respawn_waves", "0"),
         new("g_respawn_ghosts", "1"),
 
+        // ---- playermodel lean (the never-merged Base branch mirceakitsune/lean_players, 2011; recovered
+        //      from tip c3fe0de24 — see PlayerLean.cs for the port + fixes). Defaults are the original
+        //      branch's defaultXonotic.cfg values, except g_leanplayer_damage: the original shipped 0.015,
+        //      the port ships 0 = damage lean DISABLED by default (accel lean stays on). ----
+        new("g_leanplayer_acceleration", "0.05", "lean players as they accelerate, by this amount (0 = off)"),
+        new("g_leanplayer_acceleration_fade", "5", "velocity averaging rate (1/s) for acceleration lean; higher values cause a shorter leaning"),
+        new("g_leanplayer_acceleration_max", "10", "acceleration leaning is limited to this amount"),
+        new("g_leanplayer_damage", "0", "lean players that are shot by this amount, based on the force they take (0 = off; the original branch shipped 0.015)"),
+        new("g_leanplayer_damage_fade", "6.3", "damage lean decay rate (1/s; ≈ the original 0.9-per-tick at 60 Hz)"),
+        new("g_leanplayer_damage_max", "0.5", "damage leaning force is limited to this amount"),
+
         // ---- bot management (bot cvars; defaults = SHIPPED xonotic-server.cfg:120-195 values — these matter
         //      when the real cfg tree isn't mounted, so they must not drift from stock) ----
         new("bot_number", "0", "how many bots to keep on the server"),

@@ -1039,6 +1039,13 @@ public static class SpawnSystem
         p.OldOrigin = Vector3.Zero;        // recomputed below after placement
         p.AVelocity = Vector3.Zero;
         p.PunchAngle = Vector3.Zero;
+        // Playermodel lean (QC lean_players PutClientInServer: leanangle_damage_force = '0 0 0'): a fresh
+        // spawn stands straight — clear the networked offset and the working state (the velocity tracker
+        // seeds at rest so the first tick reads zero acceleration, not a spawn-teleport spike).
+        p.LeanAngles = Vector3.Zero;
+        p.LeanAvgVel = Vector3.Zero;
+        p.LeanDmgLoc = Vector3.Zero;
+        p.LeanDmgForce = Vector3.Zero;
         p.WaterLevel = 0;                  // QC WATERLEVEL_NONE
         p.WaterType = (int)Contents.Empty; // QC CONTENT_EMPTY
 

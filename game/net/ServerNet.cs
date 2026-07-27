@@ -2389,6 +2389,10 @@ public sealed class ServerNet : IDisposable
                 Skin = (int)p.Skin,
                 Origin = p.Origin,
                 Angles = p.Angles,
+                // [lean] the playermodel lean offset (PlayerLean.Step, GameWorld.OnPlayerPostThink) — a
+                // render-only angle transform the client composes onto the body basis. Zero for a player at
+                // constant velocity / with lean disabled, so the EntityField.Lean bit stays clear then.
+                Lean = p.LeanAngles,
                 // The remote player's velocity drives the client-side locomotion pick (LocomotionBlend.SelectLegs
                 // → run/walk/idle) for the skeletal PlayerModel — exactly as CSQC's animdecide derives walk/run
                 // from the networked velocity. Without it every remote velocity reads 0 and (combined with the

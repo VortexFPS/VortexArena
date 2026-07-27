@@ -303,6 +303,15 @@ public sealed class DamageSystem : IDamageSystem
             }
         }
 
+        // Playermodel lean (the recovered mirceakitsune/lean_players branch, QC Damage() lean block — the
+        // original sat exactly here, just before "apply push"): register the hit's lever arm + scaled force
+        // on the victim's damage lean so PlayerLean.Step tips the model away from the shot. Ships DISABLED
+        // (g_leanplayer_damage defaults 0 → AccumulateDamage no-ops). Reads the cvar raw (not through
+        // Cvar(), whose 0-means-fallback contract would un-disable the default-off gate).
+        if (IsPlayer(targ) && Api.Services is not null)
+            PlayerLean.AccumulateDamage(targ, info.HitLocation, force,
+                Api.Cvars.GetFloat("g_leanplayer_damage"), Api.Cvars.GetFloat("g_leanplayer_damage_max"));
+
         // ----- apply knockback (QC damage.qc "apply push" ~671) -----
         ApplyKnockback(targ, attacker, info.HitLocation, force);
 

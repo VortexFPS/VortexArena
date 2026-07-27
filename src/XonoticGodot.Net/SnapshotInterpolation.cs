@@ -24,6 +24,11 @@ public struct Snapshot
     /// <summary>Entity velocity at <see cref="Time"/>, if sent. When not sent it can be derived from the
     /// origin delta (see <see cref="InterpolationBuffer.AutoVelocity"/>).</summary>
     public Vector3 Velocity;
+
+    /// <summary>[lean] Playermodel lean offset at <see cref="Time"/> (a makevectors-space angle triple;
+    /// Zero = none). Blended between snapshots like <see cref="Angles"/> so the 8-bit-quantized lean
+    /// eases instead of stepping.</summary>
+    public Vector3 Lean;
 }
 
 /// <summary>
@@ -172,6 +177,9 @@ public sealed class InterpolationBuffer
         result.Origin = f1 * _prev.Origin + f * _cur.Origin;
         result.Velocity = f1 * _prev.Velocity + f * _cur.Velocity;
         result.Angles = BlendAngles(_prev.Angles, _cur.Angles, f);
+        // [lean] the lean offset is a small angle transform (≤ ~20°, never near the pitch gimbal), so the
+        // same seam-safe basis blend smooths its 8-bit wire quantization between snapshots.
+        result.Lean = BlendAngles(_prev.Lean, _cur.Lean, f);
         return result;
     }
 

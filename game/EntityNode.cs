@@ -142,9 +142,15 @@ public partial class EntityNode : Node3D, IEntityPresence
         // by ToGodot — columns X=ToGodot(forward), Y=ToGodot(up), Z=ToGodot(right). Gated to entities that
         // actually carry pitch/roll so the long-standing yaw-only path below stays byte-identical for
         // players/items/monsters (changing their convention is a separate, visually-verified pass).
-        if (Entity.Angles.X != 0f || Entity.Angles.Z != 0f)
+        // [lean] A networked playermodel lean offset (PlayerLean — Zero for everyone while at rest/disabled)
+        // composes onto the same full-basis path: composed = base ∘ lean (the original QC's
+        // LA = Multiply(FromAngles(angles), LF) order), all in Quake space BEFORE the one Godot conversion.
+        bool hasLean = Entity.LeanAngles != System.Numerics.Vector3.Zero;
+        if (hasLean || Entity.Angles.X != 0f || Entity.Angles.Z != 0f)
         {
             var angles = new System.Numerics.Vector3(Entity.Angles.X, yawDeg, Entity.Angles.Z);
+            if (hasLean)
+                angles = XonoticGodot.Common.Math.QMath.AnglesTransformMultiply(angles, Entity.LeanAngles);
             XonoticGodot.Common.Math.QMath.AngleVectors(angles,
                 out System.Numerics.Vector3 fwd, out System.Numerics.Vector3 right, out System.Numerics.Vector3 up);
             Basis = new Basis(Coords.ToGodot(fwd), Coords.ToGodot(up), Coords.ToGodot(right));

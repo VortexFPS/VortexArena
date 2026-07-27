@@ -51,7 +51,7 @@ public enum NetEntityFlags : ushort
 /// entity's delta; only the set fields follow on the wire, so an idle entity (mask 0) costs just its id.
 /// (Widened from 16-bit to 32-bit when <see cref="StatusEffects"/> was added — bit 16 overflowed the old
 /// <c>ushort</c>; <see cref="EntityStateCodec.WriteDelta"/>/<see cref="EntityStateCodec.ReadDelta"/> carry the
-/// mask as a 32-bit value accordingly.) Highest bit currently in use: bit 24 <see cref="VehicleView"/> (the 32-bit
+/// mask as a 32-bit value accordingly.) Highest bit currently in use: bit 25 <see cref="Lean"/> (the 32-bit
 /// mask still has ample headroom).
 /// </summary>
 [Flags]
@@ -141,6 +141,12 @@ public enum EntityField : uint
     // not a hardcoded ordinal, so the shift is transparent.)
     VehicleView = 1 << 24,
 
+    // [lean] The playermodel lean offset (the recovered mirceakitsune/lean_players branch — PlayerLean.cs):
+    // a makevectors-space angle triple the client composes onto the body render basis (EntityNode). Kept
+    // SEPARATE from Angles because the port's player Angles drive the weapon fire direction (W_SetupShot) —
+    // contaminating them with lean would tilt aim. Zero (no lean) keeps the bit clear, so a stationary/
+    // disabled player costs nothing on the wire. Bit 26 (Colors=1<<25 from main’s r15 took the prior free bit 25; producers/consumers reference EntityField.Lean by name, so the shift is transparent).
+    Lean = 1 << 26,
     // [r15 #43] the QC entcs clientcolors slice (ent_cs.qc ENTCS_PROP(COLORS) → .clientcolors): a player's packed
     // 16*shirt+pants palette colors — the FFA profile color (_cl_color) or the team-forced 17*teamcode. Drives the
     // _shirt/_pants mask tint + glowmod on the player model AND their weapon models (Base: viewmodel colormap =
@@ -170,6 +176,10 @@ public struct NetEntityState
     public Vector3 Origin;
     public Vector3 Angles;
     public Vector3 Velocity;
+
+    /// <summary>[lean] The playermodel lean offset (PlayerLean.Step output; Zero = no lean) — a render-only
+    /// angle transform the client composes onto the body basis. See <see cref="EntityField.Lean"/>.</summary>
+    public Vector3 Lean;
     public int Effects;          // EF_* render flags bitfield
     public int Colormap;         // player colors (top/bottom) or team tint
     public int Colors;           // [r15 #43] packed 16*shirt+pants clientcolors (0 = colorless, bit stays clear)
@@ -365,6 +375,8 @@ public struct NetEntityState
         // [W-vehicleview] per-player vehicle HUD view-state — re-send when ANY field differs. None (VehKind 0 =
         // on-foot/observing) keeps the bit clear so a non-pilot costs nothing.
         if (!baseline.VehicleView.Equals(current.VehicleView)) m |= EntityField.VehicleView;
+        // [lean] playermodel lean offset — re-send when it changes; Zero-vs-Zero keeps the bit clear.
+        if (baseline.Lean != current.Lean) m |= EntityField.Lean;
         return m;
     }
 
@@ -485,8 +497,10 @@ public static class EntityStateCodec
             w.WriteFloat(current.OrbExpire);
             w.WriteUShort(current.OrbRadius);
         }
-        // [W-vehicleview] per-player vehicle HUD view-state — the FINAL block (fixed 11-byte VehicleViewCodec layout).
+        // [W-vehicleview] per-player vehicle HUD view-state (fixed 11-byte VehicleViewCodec layout).
         if ((mask & EntityField.VehicleView) != 0) VehicleViewCodec.Write(w, current.VehicleView);
+        // [lean] playermodel lean offset — the FINAL block, appended after VehicleView (8i angles, 3 bytes).
+        if ((mask & EntityField.Lean) != 0) w.WriteAngles(current.Lean, NetPrecision.Low);
         return mask;
     }
 
@@ -572,8 +586,10 @@ public static class EntityStateCodec
             s.OrbExpire = r.ReadFloat();
             s.OrbRadius = r.ReadUShort();
         }
-        // [W-vehicleview] per-player vehicle HUD view-state — the FINAL block (SAME fixed VehicleViewCodec layout).
+        // [W-vehicleview] per-player vehicle HUD view-state (SAME fixed VehicleViewCodec layout).
         if ((mask & EntityField.VehicleView) != 0) s.VehicleView = VehicleViewCodec.Read(ref r);
+        // [lean] playermodel lean offset — the FINAL block, SAME order as WriteDelta (8i angles).
+        if ((mask & EntityField.Lean) != 0) s.Lean = r.ReadAngles(NetPrecision.Low);
         return s;
     }
 }

@@ -2487,6 +2487,11 @@ public sealed class GameWorld
         // (or is force-respawned with g_forced_respawn). The input was already dequeued/acked above.
         if (p.IsDead && !p.IsObserver)
         {
+            // Playermodel lean: a corpse carries no lean (QC lean_players: "Don't lean dead players, which
+            // causes them to spin all over the place"). Dead players never reach OnPlayerPostThink's lean
+            // step, so clear the networked offset + working state here.
+            p.LeanAngles = Vector3.Zero;
+            p.LeanDmgForce = Vector3.Zero;
             DeadPlayerThink(p, input);
             return; // dead players don't run movement/PostThink (PostThink is a no-op while dead anyway)
         }
@@ -2567,6 +2572,11 @@ public sealed class GameWorld
             OnPlayerPostThink(p, input);
     }
 
+    /// <summary>The g_leanplayer_* cvar pack, re-read once per tick (guarded by <see cref="_leanCfgTime"/>)
+    /// instead of six facade lookups per player per tick.</summary>
+    private PlayerLean.Config _leanCfg;
+    private float _leanCfgTime = -1f;
+
     /// <summary>
     /// QC <c>PlayerPostThink</c> + <c>player_regen</c> (the Godot-free slice): per-player post-move
     /// bookkeeping run every tick — drowning (air timer + drown damage), health/armor/fuel regen+rot,
@@ -2590,6 +2600,31 @@ public sealed class GameWorld
 
         ServerPlayerState st = PlayerStates.Of(p);
         bool gameStopped = GameStopped || Time < GameStartTime;
+
+        // Playermodel lean (the recovered mirceakitsune/lean_players branch — see PlayerLean.cs): recompute
+        // the render-only lean offset from this tick's velocity + damage state. Runs for humans AND bots
+        // (both funnel through PostThink); the offset is networked via EntityField.Lean and composed onto the
+        // body basis client-side — never fed back into aim/physics (the original's dead-spin feedback bug).
+        using (Prof.Sample("mp.lean"))
+        {
+            if (_leanCfgTime != Time)
+            {
+                _leanCfgTime = Time;
+                _leanCfg = new PlayerLean.Config(
+                    Api.Cvars.GetFloat("g_leanplayer_acceleration"),
+                    Api.Cvars.GetFloat("g_leanplayer_acceleration_fade"),
+                    Api.Cvars.GetFloat("g_leanplayer_acceleration_max"),
+                    Api.Cvars.GetFloat("g_leanplayer_damage"),
+                    Api.Cvars.GetFloat("g_leanplayer_damage_fade"),
+                    Api.Cvars.GetFloat("g_leanplayer_damage_max"));
+            }
+            var lean = PlayerLean.Step(
+                p.Velocity, p.Angles.Y, p.LeanAvgVel, p.LeanDmgLoc, p.LeanDmgForce, p.IsDead, _leanCfg,
+                Simulation.FrameTime);
+            p.LeanAngles = lean.Offset;
+            p.LeanAvgVel = lean.AvgVel;
+            p.LeanDmgForce = lean.DmgForce;
+        }
 
         // QC GetPressedKeys (server/client.qc:1767), called from PlayerPostThink: compute the player's held-button
         // bitset from this tick's move command and store it in the networked PRESSED_KEYS stat (Player.PressedKeys)

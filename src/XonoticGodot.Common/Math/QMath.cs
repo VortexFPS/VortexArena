@@ -193,6 +193,21 @@ public static class QMath
     }
 
     /// <summary>
+    /// QC <c>AnglesTransform_Invert(transform)</c> (lib/warpzone/anglestransform.qc): the inverse angle
+    /// transform. The basis (forward, −right, up) is an orthonormal rotation, so the inverse is the
+    /// TRANSPOSE — read the transposed matrix's forward/up columns back through
+    /// <see cref="FixedVecToAngles2"/>. <c>Multiply(Invert(t), t)</c> is the identity transform.
+    /// </summary>
+    public static Vector3 AnglesTransformInvert(Vector3 transform)
+    {
+        AngleVectors(transform, out Vector3 forward, out Vector3 right, out Vector3 up);
+        // QC: the transform matrix columns are (forward, -right, up); transpose rows become the inverse's columns.
+        Vector3 iForward = new(forward.X, -right.X, up.X);
+        Vector3 iUp = new(forward.Z, -right.Z, up.Z);
+        return FixedVecToAngles2(iForward, iUp);
+    }
+
+    /// <summary>
     /// QC <c>AnglesTransform_ApplyToAngles(transform, v)</c> (default POSITIVE_PITCH_IS_DOWN branch): apply an
     /// angle transform to a set of entity angles, accounting for the pitch-sign flip — negate pitch, multiply,
     /// negate pitch back. Used by the <c>make</c> cheat's surface-align (<c>transform=fixedvectoangles2(normal,

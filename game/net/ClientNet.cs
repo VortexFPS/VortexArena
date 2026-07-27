@@ -1341,7 +1341,7 @@ public sealed class ClientNet : IDisposable
             RemoteEntity re = GetOrCreateRemote(netId);
             re.State = s;
             bool teleported = (s.Flags & NetEntityFlags.Teleported) != 0;
-            var snap = new Snapshot { Time = serverTime, Origin = s.Origin, Angles = s.Angles };
+            var snap = new Snapshot { Time = serverTime, Origin = s.Origin, Angles = s.Angles, Lean = s.Lean };
             re.Interp.Note(snap, teleported, re.LastServerTime);
             re.LastServerTime = serverTime;
         }
@@ -1376,17 +1376,23 @@ public sealed class ClientNet : IDisposable
 
     /// <summary>
     /// The interpolated render pose of remote entity <paramref name="netId"/> at client time
-    /// <paramref name="now"/> (origin + seam-safe blended angles). Returns false if the entity is unknown.
-    /// Interpolate slightly behind the latest server time for smoothness; here <paramref name="now"/> is
-    /// typically <see cref="LatestServerTime"/> (a one-snapshot delay falls out of the two-snapshot lerp).
+    /// <paramref name="now"/> (origin + seam-safe blended angles + the playermodel lean offset). Returns
+    /// false if the entity is unknown. Interpolate slightly behind the latest server time for smoothness;
+    /// here <paramref name="now"/> is typically <see cref="LatestServerTime"/> (a one-snapshot delay falls
+    /// out of the two-snapshot lerp).
     /// </summary>
     public bool SampleRemote(int netId, float now, out NVec3 origin, out NVec3 angles)
+        => SampleRemote(netId, now, out origin, out angles, out _);
+
+    /// <inheritdoc cref="SampleRemote(int, float, out NVec3, out NVec3)"/>
+    public bool SampleRemote(int netId, float now, out NVec3 origin, out NVec3 angles, out NVec3 lean)
     {
         if (NoLerp)
         {
             // DP cl_nolerp 1: no two-snapshot interpolation — callers fall back to the raw newest state.
             origin = default;
             angles = default;
+            lean = default;
             return false;
         }
         if (_remotes.TryGetValue(netId, out RemoteEntity? re) && re.Interp.HasData)
@@ -1394,10 +1400,12 @@ public sealed class ClientNet : IDisposable
             Snapshot s = re.Interp.Sample(now);
             origin = s.Origin;
             angles = s.Angles;
+            lean = s.Lean;
             return true;
         }
         origin = default;
         angles = default;
+        lean = default;
         return false;
     }
 

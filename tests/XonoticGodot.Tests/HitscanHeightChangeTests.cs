@@ -94,6 +94,9 @@ public class HitscanHeightChangeTests
     [InlineData("stormkeep")]
     [InlineData("implosion")]
     [InlineData("catharsis")]
+    [InlineData("darkzone")]
+    [InlineData("space-elevator")]
+    [InlineData("solarium")]
     public void RailShotsAcrossHeightChanges_NeverSkipASurfaceTheyPassThrough(string map)
     {
         CollisionWorld? maybe = LoadShippedMap(map, out string mapName);

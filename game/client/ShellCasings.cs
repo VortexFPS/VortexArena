@@ -398,17 +398,12 @@ public sealed partial class ShellCasings : Node3D
 
         private static void ApplyAlpha(Node node, float a)
         {
-            if (node is MeshInstance3D mi && mi.GetSurfaceOverrideMaterialCount() >= 0)
-            {
-                // Only our generated cylinder carries a StandardMaterial3D we can fade; loaded models keep
-                // their own materials (fading those would need per-instance overrides — skipped, they just pop).
-                if (mi.Mesh is { } mesh && mesh.SurfaceGetMaterial(0) is StandardMaterial3D mat)
-                {
-                    mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                    Color c = mat.AlbedoColor;
-                    mat.AlbedoColor = new Color(c.R, c.G, c.B, a);
-                }
-            }
+            // Per-INSTANCE fade (GeometryInstance3D.Transparency, Forward+): never write into the mesh-level
+            // material — it's shared (the generated cylinder mesh across casings; SharedMeshCache/AssetSystem
+            // for loaded models), so a material write faded every casing in lockstep. This also makes loaded
+            // models actually fade (the old StandardMaterial3D-only path silently popped them).
+            if (node is GeometryInstance3D gi)
+                gi.Transparency = 1f - a;
             foreach (Node child in node.GetChildren())
                 ApplyAlpha(child, a);
         }

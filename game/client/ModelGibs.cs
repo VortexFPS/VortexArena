@@ -310,19 +310,13 @@ public sealed partial class ModelGibs : Node3D
 
         private static void ApplyAlpha(Node node, float a)
         {
-            if (node is MeshInstance3D mi && mi.Mesh is { } mesh)
-            {
-                int surfaces = mesh.GetSurfaceCount();
-                for (int s = 0; s < surfaces; s++)
-                {
-                    if (mesh.SurfaceGetMaterial(s) is StandardMaterial3D mat)
-                    {
-                        mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                        Color c = mat.AlbedoColor;
-                        mat.AlbedoColor = new Color(c.R, c.G, c.B, a);
-                    }
-                }
-            }
+            // Per-INSTANCE fade (GeometryInstance3D.Transparency, Forward+). The old per-surface material
+            // write hit the AssetSystem-cached SHARED material — and since the SharedMeshCache merge the
+            // mesh is shared by every live gib of this model AND outlives the map (cl_persist_asset_cache):
+            // all gibs faded in lockstep, and a gib dying mid-fade left the cached material near-invisible
+            // for the rest of the session. Instance transparency touches no shared resource.
+            if (node is GeometryInstance3D gi)
+                gi.Transparency = 1f - a;
             foreach (Node child in node.GetChildren())
                 ApplyAlpha(child, a);
         }

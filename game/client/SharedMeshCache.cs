@@ -18,7 +18,9 @@ namespace XonoticGodot.Game.Client;
 /// Only suitable for props whose visual is a single static mesh (no tags/skeleton needed on the
 /// spawned instance — a skinned mesh renders its bind pose, fine for flying brass). Held weapons
 /// keep their per-build trees (muzzle-tag attachments) and dispose deterministically instead.
-/// Main-thread only; failed builds are cached as null so a missing model never re-parses per spawn.
+/// Main-thread only. Failed builds retry for a few spawns (a first-resolve failure can be TRANSIENT —
+/// early-join before the resolver/VFS is warm) and only then negative-cache, so a genuinely missing
+/// model still stops re-parsing per spawn.
 /// </summary>
 public static class SharedMeshCache
 {
@@ -36,6 +38,11 @@ public static class SharedMeshCache
 
     private static readonly Dictionary<string, Prop> _cache = new();
 
+    // Consecutive failed builds per key — a permanent negative entry only lands after MaxBuildAttempts,
+    // so one transient early-session failure can't condemn a model to the placeholder for the whole process.
+    private static readonly Dictionary<string, int> _failures = new();
+    private const int MaxBuildAttempts = 8;
+
     /// <summary>A fresh MeshInstance3D sharing the cached mesh + materials for <paramref name="key"/>, or null
     /// when the builder produced no usable mesh (caller falls back to its generated prop).</summary>
     public static MeshInstance3D? Instantiate(string key, Func<Node3D?> build)
@@ -43,7 +50,19 @@ public static class SharedMeshCache
         if (!_cache.TryGetValue(key, out Prop v))
         {
             v = Extract(build);
-            _cache[key] = v;
+            if (v.Mesh is not null)
+            {
+                _cache[key] = v;
+                _failures.Remove(key);
+            }
+            else
+            {
+                int n = _failures.GetValueOrDefault(key) + 1;
+                _failures[key] = n;
+                if (n >= MaxBuildAttempts)
+                    _cache[key] = v; // stubbornly missing — negative-cache so it never re-parses per spawn
+                return null;
+            }
         }
         if (v.Mesh is null)
             return null;

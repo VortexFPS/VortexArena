@@ -400,14 +400,27 @@ public sealed class Bans
     /// QC <c>Ban_LoadBans</c>: rebuild the store from <c>g_banned_list</c> (version-1 token string). The stored
     /// seconds-remaining are turned back into an absolute expiry against the current clock.
     /// </summary>
+    public bool LastLoadWasMalformed { get; private set; }
+
     public void Load()
     {
         _bans.Clear();
         _loaded = true;
+        LastLoadWasMalformed = false;
         string list = Cvars.String("g_banned_list");
-        string[] tok = list.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        // Strip a UTF-8 BOM: .Trim() does NOT remove U+FEFF, and a bans.cfg saved by an editor with a BOM would
+        // make the version token "﻿1" and silently discard every ban.
+        string[] tok = list.TrimStart('﻿').Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (tok.Length == 0) return;
-        if (tok[0] != "1") return; // only version 1 understood
+        if (tok[0] != "1")
+        {
+            // MALFORMED (truncated by a crash mid-write, hand-edited, wrong version). Flagged so the host can
+            // refuse to overwrite the file: silently loading zero bans and then letting the next Save() —
+            // including the unconditional one in GameWorld.Shutdown — write an empty list back destroyed the
+            // operator's entire ban list unrecoverably.
+            LastLoadWasMalformed = true;
+            return;
+        }
         float now = Now;
         for (int i = 1; i + 1 < tok.Length; i += 2)
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 
 namespace XonoticGodot.Net;
@@ -73,7 +74,7 @@ public static class RconProtocol
         if (StartsWithAscii(payload, InsecurePrefix))
         {
             // "rcon <password> <command>": password up to the first space, command is the rest.
-            string rest = Encoding.ASCII.GetString(payload.Slice(InsecurePrefix.Length));
+            string rest = Encoding.UTF8.GetString(payload.Slice(InsecurePrefix.Length));
             int sp = rest.IndexOf(' ');
             if (sp <= 0 || sp + 1 >= rest.Length)
                 return false;
@@ -101,7 +102,7 @@ public static class RconProtocol
             return false;
 
         byte[] hmac = payload.Slice(prefixLen, HmacLen).ToArray();
-        string tail = Encoding.ASCII.GetString(payload.Slice(prefixLen + HmacLen + 1)); // "<value> <command>"
+        string tail = Encoding.UTF8.GetString(payload.Slice(prefixLen + HmacLen + 1)); // "<value> <command>"
         int sp = tail.IndexOf(' ');
         if (sp <= 0 || sp + 1 >= tail.Length)
             return false;
@@ -133,7 +134,7 @@ public static class RconProtocol
             return false;
         if (Math.Abs(serverUnixTime - clientTime) > maxDiffSeconds)
             return false;
-        byte[] expect = Md4.Hmac(Encoding.ASCII.GetBytes(password), Encoding.ASCII.GetBytes(req.HmacMessage));
+        byte[] expect = Md4.Hmac(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(req.HmacMessage));
         return FixedTimeEquals(expect, req.Hmac);
     }
 
@@ -144,7 +145,7 @@ public static class RconProtocol
     {
         if (req.Kind != RconKind.Challenge || req.Hmac is null || string.IsNullOrEmpty(password))
             return false;
-        byte[] expect = Md4.Hmac(Encoding.ASCII.GetBytes(password), Encoding.ASCII.GetBytes(req.HmacMessage));
+        byte[] expect = Md4.Hmac(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(req.HmacMessage));
         return FixedTimeEquals(expect, req.Hmac);
     }
 
@@ -167,36 +168,81 @@ public static class RconProtocol
 
     // ---- encoding: responses + challenge reply (server) and requests (client / tests / Launcher.GameControl) ----
 
-    /// <summary>Build the rcon reply packet: <c>\xFF\xFF\xFF\xFFn</c> + the console output text (DP "QW rcon print").</summary>
+    /// <summary>
+    /// Build the rcon reply packet: <c>\xFF\xFF\xFF\xFFn</c> + the console output text (DP "QW rcon print").
+    /// TRUNCATED to one safe datagram — see <see cref="MaxResponseTextBytes"/>. Use
+    /// <see cref="BuildResponseChunks"/> to send long output as several readable packets.
+    /// </summary>
     public static byte[] BuildResponse(string outputText)
-        => Concat(Oob, new[] { (byte)'n' }, Encoding.UTF8.GetBytes(outputText));
+    {
+        byte[] body = Encoding.UTF8.GetBytes(outputText ?? "");
+        if (body.Length > MaxResponseTextBytes)
+        {
+            const string note = "\n[output truncated]\n";
+            byte[] noteBytes = Encoding.UTF8.GetBytes(note);
+            var clipped = new byte[MaxResponseTextBytes];
+            Array.Copy(body, clipped, MaxResponseTextBytes - noteBytes.Length);
+            Array.Copy(noteBytes, 0, clipped, MaxResponseTextBytes - noteBytes.Length, noteBytes.Length);
+            body = clipped;
+        }
+        return Concat(Oob, new[] { (byte)'n' }, body);
+    }
+
+    /// <summary>
+    /// The largest reply body we put in one datagram. DP chunks rcon output through Con_Rcon_Redirect at about
+    /// this size; anything past the path MTU is silently lost, and a body over the ~65507-byte UDP limit makes
+    /// the send THROW — which, on the master-server pump, propagated out of _Process and took the server's
+    /// frame loop down on any verbose authenticated command (`status` on a full server, `cvarlist`).
+    /// </summary>
+    public const int MaxResponseTextBytes = 1200;
+
+    /// <summary>Split long console output into MTU-sized reply packets, in order (DP's rcon redirect chunking).
+    /// Always returns at least one packet so a caller can send unconditionally.</summary>
+    public static IReadOnlyList<byte[]> BuildResponseChunks(string outputText)
+    {
+        var packets = new List<byte[]>();
+        byte[] body = Encoding.UTF8.GetBytes(outputText ?? "");
+        if (body.Length == 0)
+        {
+            packets.Add(Concat(Oob, new[] { (byte)'n' }));
+            return packets;
+        }
+        for (int off = 0; off < body.Length; off += MaxResponseTextBytes)
+        {
+            int len = Math.Min(MaxResponseTextBytes, body.Length - off);
+            var slice = new byte[len];
+            Array.Copy(body, off, slice, 0, len);
+            packets.Add(Concat(Oob, new[] { (byte)'n' }, slice));
+        }
+        return packets;
+    }
 
     /// <summary>Build the reply to a <c>getchallenge</c>: <c>\xFF\xFF\xFF\xFFchallenge </c> + the token.</summary>
     public static byte[] BuildChallengeReply(string challenge)
-        => Concat(Oob, Encoding.ASCII.GetBytes("challenge " + challenge));
+        => Concat(Oob, Encoding.UTF8.GetBytes("challenge " + challenge));
 
     /// <summary>Client: build an insecure <c>rcon</c> request. Localhost-only on the server side by policy.</summary>
     public static byte[] BuildInsecureRequest(string password, string command)
-        => Concat(Oob, Encoding.ASCII.GetBytes($"rcon {password} {command}"));
+        => Concat(Oob, Encoding.UTF8.GetBytes($"rcon {password} {command}"));
 
     /// <summary>Client: build a TIME <c>srcon</c> request. <paramref name="unixTime"/> is the client's clock.</summary>
     public static byte[] BuildTimeRequest(string password, long unixTime, string command)
     {
         string message = $"{unixTime} {command}";                        // exactly what gets HMAC'd
-        byte[] hmac = Md4.Hmac(Encoding.ASCII.GetBytes(password), Encoding.ASCII.GetBytes(message));
-        return Concat(Oob, Encoding.ASCII.GetBytes(TimePrefix), hmac, new[] { (byte)' ' }, Encoding.ASCII.GetBytes(message));
+        byte[] hmac = Md4.Hmac(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(message));
+        return Concat(Oob, Encoding.UTF8.GetBytes(TimePrefix), hmac, new[] { (byte)' ' }, Encoding.UTF8.GetBytes(message));
     }
 
     /// <summary>Client: build a CHALLENGE <c>srcon</c> request from a challenge the server issued.</summary>
     public static byte[] BuildChallengeRequest(string password, string challenge, string command)
     {
         string message = $"{challenge} {command}";
-        byte[] hmac = Md4.Hmac(Encoding.ASCII.GetBytes(password), Encoding.ASCII.GetBytes(message));
-        return Concat(Oob, Encoding.ASCII.GetBytes(ChallengePrefix), hmac, new[] { (byte)' ' }, Encoding.ASCII.GetBytes(message));
+        byte[] hmac = Md4.Hmac(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(message));
+        return Concat(Oob, Encoding.UTF8.GetBytes(ChallengePrefix), hmac, new[] { (byte)' ' }, Encoding.UTF8.GetBytes(message));
     }
 
     /// <summary>Client: build a <c>getchallenge</c> request.</summary>
-    public static byte[] BuildGetChallenge() => Concat(Oob, Encoding.ASCII.GetBytes("getchallenge"));
+    public static byte[] BuildGetChallenge() => Concat(Oob, Encoding.UTF8.GetBytes("getchallenge"));
 
     // ---- helpers ----
 

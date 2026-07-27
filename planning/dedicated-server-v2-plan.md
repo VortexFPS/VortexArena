@@ -1,7 +1,11 @@
 # Dedicated server v2 — implementation plan (Tier 1 + Tier 2)
 
-**Status:** PLANNED 2026-07-12 · **Owner:** — · **Branch lineage:** builds on `perf/dedicated-server-slim`
+**Status:** IN PROGRESS — Tier 1 (except DS-1) and Tier 2 (except DS-7) LANDED on
+`feature/dedicated-server-v2`; re-verified against the code 2026-07-27 · **Owner:** — ·
+**Branch lineage:** builds on `perf/dedicated-server-slim`
 (27f214d — dedicated-slim asset gating, 4.9 GB → 0.58 GB peak WS, host self-client stays observer).
+`perf/dedicated-server-slim` is now a strict SUBSET of this branch (both its commits are in this history) —
+it exists only as the original landing point and can be retired.
 **Related:** ADR-0014 (packaging + the deferred client-less seam), ADR-0012 (server topology),
 `planning/launcher-host-agent-plan.md` (VortexArena/Launcher), `planning/conductor-master-orchestrator-plan.md`
 (VortexArena/Conductor).
@@ -12,21 +16,33 @@ each step. Task IDs `DS-#`; each lands as its own branch per the repo convention
 
 ---
 
-## Current state (verified 2026-07-12)
+## Current state (re-verified against the code 2026-07-27)
 
 | Piece | State |
 |---|---|
 | Asset load | ✅ slim (27f214d): collision+entities+muzzle tags+`.sounds` manifests only |
-| Self-client | ⚠️ still connects a loopback ClientNet + carrier + camera/HUD/viewmodel nodes; stays observer (no phantom join) but occupies a slot and ticks prediction per frame |
-| Console input | ❌ none — headless host accepts no runtime commands at all |
-| rcon | ❌ none |
-| Main loop | ⚠️ runs at `Engine.MaxFps` (144 from cl_maxfps clamp) while the sim ticks 72 Hz |
-| server.cfg | ❌ config only via `--cvar` flags / the shipped tree |
-| Master heartbeat | ⚠️ dpmaster-protocol `MasterServerLink`/`MasterServerProtocol` + ServerNet 180 s heartbeat + getinfo answers EXIST; no public master to point at (→ Conductor) |
-| kick/ban | ✅ `kick`/`ban`/`kickban`/`unban`/`banlist` in `src/XonoticGodot.Server/Commands.cs:741,843-846`; ban **persistence** unaudited |
-| Eventlog | ❌ no `sv_eventlog` file emitter |
-| SIGTERM / exit codes | ❌ unhandled; `linux-dedicated` export never smoke-tested (ADR-0014 flags it) |
+| Self-client | ⚠️ **partially addressed.** Slim already suppresses the client ASSET loads, `ClientEntityView` + entity render nodes, effect/sound handlers, announcer voices and the host auto-join (it stays an observer). What REMAINS for DS-1: the loopback `ClientNet` still connects — so it occupies a player slot, is counted by `BuildServerInfo["clients"]`, and still ticks prediction each frame |
+| Console input | ✅ DS-2 stdin console + `quit` verb |
+| rcon | ✅ DS-6 DP-compatible `rcon`/`srcon` (`src/XonoticGodot.Net/RconProtocol.cs`, `Md4.cs`) |
+| Main loop | ✅ DS-3 tick-rate-matched cap |
+| server.cfg | ✅ DS-5 exec convention |
+| Master heartbeat | ⚠️ dpmaster lane works (`MasterServerLink`/`MasterServerProtocol` + 180 s heartbeat + getinfo answers); the MODERN announce lane (DS-7) is unbuilt and blocked — see below |
+| kick/ban | ✅ `kick`/`ban`/`kickban`/`unban`/`banlist` + DS-8 ban **persistence** across restart |
+| Eventlog | ✅ DS-8 `src/XonoticGodot.Server/GameLog.cs` — QC `:event:` line format, console + counter-named file sinks, `:logversion:3` header; wired at the join/part/team/kill/name/vote/gamestart/gameover call sites, each gated on `sv_eventlog` like QC |
+| SIGTERM / exit codes | ✅ DS-4 graceful signals + boot-failure exit codes (`NetGame.GracefulShutdownHook`) |
 | Map rotation | ✅ MapRotation/MapVoting/Intermission → `MapChangeRequested` → Shell rehost (works headless) |
+
+### What actually remains
+
+- **DS-1 (client-less host)** — the only Tier 1 item left, and deliberately sequenced last. Note the benefit
+  is now SMALLER than when this plan was written: slim already removed the asset/render/audio cost, so DS-1's
+  remaining wins are (a) freeing the burned player slot + fixing the browser player count, (b) dropping the
+  per-frame prediction tick, (c) the architectural cleanup. `game/net/NetGame.cs` is **8394 lines** of
+  client+listen entanglement; the ServerHost extraction must stay move-only/mechanical with the listen path on
+  the same code path, and it needs a real two-instance playtest — it is not a safe drive-by.
+- **DS-7 (modern announce)** — **BLOCKED, not skipped.** It depends on the Conductor C1 protocol being frozen
+  (`planning/conductor-master-orchestrator-plan.md`), which lives in a different repo and is not done. Do not
+  start it here; the dpmaster lane covers LAN/legacy in the meantime.
 
 ---
 
@@ -152,19 +168,20 @@ behind the flag while `--headless --host` remains the supported v1.
 
 ## Sequencing & effort
 
-| Order | Task | Size | Depends on |
-|---|---|---|---|
-| 1 | DS-2 stdin console | S | — (lands on v1 headless host immediately) |
-| 2 | DS-5 server.cfg | S | — |
-| 3 | DS-3 loop clamp | S | — |
-| 4 | DS-6 srcon | M | DS-2 (shared console path) |
-| 5 | DS-4 signals + export smoke | S/M | DS-2 (scripted smoke) |
-| 6 | DS-8 eventlog + bans | M | — |
-| 7 | DS-1 client-less host | L | benefits from all above landing first (smaller diff surface in NetGame) |
-| 8 | DS-7 modern announce | S/M | Conductor C1 protocol frozen |
+| Order | Task | Size | Depends on | Status |
+|---|---|---|---|---|
+| 1 | DS-2 stdin console | S | — (lands on v1 headless host immediately) | ✅ DONE |
+| 2 | DS-5 server.cfg | S | — | ✅ DONE |
+| 3 | DS-3 loop clamp | S | — | ✅ DONE |
+| 4 | DS-6 srcon | M | DS-2 (shared console path) | ✅ DONE |
+| 5 | DS-4 signals + export smoke | S/M | DS-2 (scripted smoke) | ✅ DONE (export smoke in CI still open) |
+| 6 | DS-8 eventlog + bans | M | — | ✅ DONE |
+| 7 | DS-1 client-less host | L | benefits from all above landing first (smaller diff surface in NetGame) | ⬜ REMAINING |
+| 8 | DS-7 modern announce | S/M | Conductor C1 protocol frozen | ⛔ BLOCKED (external) |
 
 DS-1 last is deliberate: everything else is additive and works on the v1 headless host today; DS-1 is the
 invasive refactor and shrinks once the console/announce/signal seams already exist as components it can reuse.
+That sequencing held — items 1-6 have landed, so DS-1 now has the smallest diff surface it will ever have.
 
 ## Cross-cutting verification
 - Every task: `ci/ci.sh` green (incl. the dedicated-slim gate assertion), windowed listen log-diff clean.

@@ -750,6 +750,14 @@ public sealed partial class NetGame : Node3D
         if (_isHeadless)
             WireBanPersistence();
 
+        // DS-8: resolve the event log's counter-named file into the user data dir (XonData/logs/), which is what
+        // server.cfg.example documents and where every other writable file lives (bans.cfg, config.cfg). Left
+        // unresolved it was a bare relative name against the process CWD — unwritable for a service/container
+        // install — and any failure was swallowed, so the operator got neither a log nor a diagnostic.
+        _serverWorld.GameLog.PathResolver = static bare =>
+            XonoticGodot.Game.UserPaths.Resolve(System.IO.Path.Combine("logs", bare));
+        _serverWorld.GameLog.WriteErrorSink = static msg => GD.PrintErr(msg);
+
         // Expose the map name as a cvar so the server-browser infostring (ServerNet.BuildServerInfo) and the
         // pure-client map-name handshake (follow-up) have the real value; GameWorld.MapName is set, but the cvar
         // is independent (DP keeps mapname as an engine cvar available to serverinfo).
@@ -1121,19 +1129,49 @@ public sealed partial class NetGame : Node3D
                 {
                     _serverWorld.Services.Cvars.Set("g_banned_list", saved);
                     _serverWorld.Bans.Load(); // rebuild the in-memory slots from the seeded cvar now
+                    if (_serverWorld.Bans.LastLoadWasMalformed)
+                    {
+                        // Do NOT let the session overwrite a file we could not parse — the next Save() (or the
+                        // unconditional one at Shutdown) would replace the operator's bans with an empty list.
+                        GD.PrintErr($"[NetGame] {path} is malformed (bad version token); bans NOT loaded and "
+                                    + "persistence is DISABLED this session so the file is not overwritten. "
+                                    + "Fix or delete the file to re-enable.");
+                        return;
+                    }
                     GD.Print($"[NetGame] loaded persisted bans from {path}.");
                 }
             }
+            else if (Godot.FileAccess.GetOpenError() is var err and not Godot.Error.FileNotFound
+                     and not Godot.Error.Ok)
+            {
+                // Present but unreadable is NOT the same as absent: refuse to persist rather than clobber it.
+                GD.PrintErr($"[NetGame] could not read {path} ({err}); ban persistence DISABLED this session.");
+                return;
+            }
         }
-        catch (Exception ex) { GD.PrintErr($"[NetGame] could not read {path}: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[NetGame] could not read {path}: {ex.Message}; ban persistence DISABLED this session.");
+            return;
+        }
 
         // Mirror every future change back to the file (fires from Bans.Save on ban/unban/prolong).
         _serverWorld.Bans.PersistSink = serialized =>
         {
             try
             {
+                // Godot.FileAccess.Open returns NULL on failure — it does not throw — so the old `w?.StoreString`
+                // silently no-oped and the catch below was dead code. A read-only XonData or a locked bans.cfg
+                // left bans in memory only: the operator saw a successful kickban, no error, and the ban was
+                // gone after restart. Check the null and report the engine's own error code.
                 using Godot.FileAccess? w = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write);
-                w?.StoreString(serialized);
+                if (w is null)
+                {
+                    GD.PrintErr($"[NetGame] could not write {path} ({Godot.FileAccess.GetOpenError()}); "
+                                + "bans are in memory only and will NOT survive a restart.");
+                    return;
+                }
+                w.StoreString(serialized);
             }
             catch (Exception ex) { GD.PrintErr($"[NetGame] could not write {path}: {ex.Message}"); }
         };
@@ -1145,7 +1183,8 @@ public sealed partial class NetGame : Node3D
     /// at 72 Hz, so an idle dedicated box was spinning the loop ~2× the sim for no benefit (pure wasted CPU,
     /// since there is no display to present). Set the cap to <c>sv_dedicated_fps</c> when the operator pinned one,
     /// else the tickrate. Skipped when <c>--fixed-fps</c> is present (a deterministic capture owns the pacing).
-    /// No-op off a headless host. Called once at host start (post cvar-register) so server.cfg's value is live.
+    /// No-op off a headless host. Called at host start (post cvar-register) so server.cfg's value is live, and
+    /// re-applied per frame on the headless host — see <see cref="ReassertDedicatedLoopCap"/>.
     /// </summary>
     private void ApplyDedicatedLoopCap()
     {
@@ -1154,12 +1193,46 @@ public sealed partial class NetGame : Node3D
         if (Array.IndexOf(OS.GetCmdlineArgs(), "--fixed-fps") >= 0)
             return; // deterministic capture: Godot's fixed frame delta owns the loop rate
 
+        int target = DedicatedLoopTarget();
+        Godot.Engine.MaxFps = target;
+        _dedicatedCapApplied = target;
         int tickHz = (int)MathF.Round(1f / XonoticGodot.Engine.Simulation.SimulationLoop.TicRate); // 72
         int pinned = (int)(_serverWorld?.Services.Cvars.GetFloat("sv_dedicated_fps") ?? 0f);
-        int target = pinned > 0 ? pinned : tickHz;
-        Godot.Engine.MaxFps = target;
         GD.Print($"[NetGame] dedicated loop cap: Engine.MaxFps {target} " +
             $"({(pinned > 0 ? "sv_dedicated_fps" : $"sim tickrate {tickHz} Hz")}).");
+    }
+
+    private int DedicatedLoopTarget()
+    {
+        int tickHz = (int)MathF.Round(1f / XonoticGodot.Engine.Simulation.SimulationLoop.TicRate); // 72
+        int pinned = (int)(_serverWorld?.Services.Cvars.GetFloat("sv_dedicated_fps") ?? 0f);
+        return pinned > 0 ? pinned : tickHz;
+    }
+
+    private int _dedicatedCapApplied = -1;
+
+    /// <summary>
+    /// Keep the DS-3 cap authoritative on a headless host. Two ways it was being lost: a runtime
+    /// <c>set sv_dedicated_fps N</c> (console or rcon) did nothing because the cap was only applied once at
+    /// boot — despite server.cfg.example and docs/RUNNING.md presenting it as an operator knob — and
+    /// <c>cl_maxfps</c> IS live-hooked on the shared store, which on a headless host is the SAME store, so a
+    /// single `set cl_maxfps 250` permanently overwrote Engine.MaxFps and the cap never came back. Cheap: two
+    /// int compares per frame, and it only writes when something actually diverged.
+    /// </summary>
+    private void ReassertDedicatedLoopCap()
+    {
+        if (!_isHeadless || _dedicatedCapApplied < 0)
+            return;
+        int want = DedicatedLoopTarget();
+        if (want != _dedicatedCapApplied)
+        {
+            _dedicatedCapApplied = want;
+            Godot.Engine.MaxFps = want;
+            GD.Print($"[NetGame] dedicated loop cap updated: Engine.MaxFps {want}.");
+            return;
+        }
+        if (Godot.Engine.MaxFps != want)
+            Godot.Engine.MaxFps = want; // something else (cl_maxfps hook) clobbered it — take it back
     }
 
     /// <summary>
@@ -3471,6 +3544,9 @@ public sealed partial class NetGame : Node3D
         if (_serverThread is not null)
             using (XonoticGodot.Game.Client.FrameProfiler.Scope("server.tick"))
                 _server?.PumpTransportThreaded(rawDt); // RAW wall time (see the server Tick note above)
+
+        // DS-3: keep the dedicated loop cap authoritative (live sv_dedicated_fps + take it back from cl_maxfps).
+        ReassertDedicatedLoopCap();
 
         // Demo/benchmark camera: keep the host observing a living bot (no-op unless cl_bench_spectate is set;
         // throttled to 2 Hz). WS1 stage 3: it MUTATES server-side spectator state — run it on the sim thread

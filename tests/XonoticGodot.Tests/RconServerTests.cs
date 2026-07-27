@@ -150,4 +150,129 @@ public class RconServerTests
         h.Mono += 31.0; // window elapses → a valid packet works again
         Assert.Equal(RconServer.Result.Executed, h.Handle(Remote, RconProtocol.BuildTimeRequest(Pw, h.UnixTime, "status")));
     }
+
+    // =============================================================================================
+    //  Security regressions (2026-07-27 review). rcon is a remote code-execution surface; each of
+    //  these was a live hole.
+    // =============================================================================================
+
+    [Fact]
+    public void Time_Replay_FromADifferentAddress_IsAlsoRejected()
+    {
+        // The replay guard used to be keyed on address+HMAC. The command travels in CLEARTEXT (only the MAC is
+        // opaque), so a sniffed srcon packet replayed from any other source address re-executed for the rest of
+        // the maxdiff window.
+        var h = new Harness();
+        var pkt = RconProtocol.BuildTimeRequest(Pw, h.UnixTime, "status");
+        Assert.Equal(RconServer.Result.Executed, h.Handle(Remote, pkt));
+
+        var elsewhere = new IPEndPoint(IPAddress.Parse("198.51.100.9"), 40000);
+        Assert.Equal(RconServer.Result.Denied, h.Handle(elsewhere, pkt));
+        Assert.Equal(new[] { "status" }, h.Executed); // executed exactly once
+    }
+
+    [Fact]
+    public void Challenge_IsNotConsumedByAWrongHmac()
+    {
+        // DP clears the challenge slot only inside the success branch. Consuming it unconditionally let anyone
+        // who merely NAMED the token burn it, starving rcon_secure 2 for the real operator indefinitely.
+        var h = new Harness();
+        h.Config = h.Config with { SecureLevel = 2 };
+        Assert.Equal(RconServer.Result.ChallengeIssued, h.Handle(Remote, RconProtocol.BuildGetChallenge()));
+        string challenge = Encoding.UTF8.GetString(h.Sent[^1].AsSpan(4))["challenge ".Length..];
+
+        // An attacker echoes the right token with the WRONG password → denied, but the challenge must survive.
+        Assert.Equal(RconServer.Result.Denied,
+            h.Handle(Remote, RconProtocol.BuildChallengeRequest("wrong-password", challenge, "status")));
+        // The legitimate operator's request with the SAME challenge still works.
+        Assert.Equal(RconServer.Result.Executed,
+            h.Handle(Remote, RconProtocol.BuildChallengeRequest(Pw, challenge, "status")));
+        Assert.Equal(new[] { "status" }, h.Executed);
+    }
+
+    [Fact]
+    public void SuccessfulAuth_ClearsTheFailureBudget()
+    {
+        // Otherwise the counter only ever decayed on the 30 s window, so an attacker trickling 5 junk packets
+        // per window with the operator's address spoofed could keep them locked out forever.
+        var h = new Harness();
+        for (int i = 0; i < 4; i++)
+            Assert.Equal(RconServer.Result.Denied, h.Handle(Remote, RconProtocol.BuildTimeRequest("bad", h.UnixTime, "status")));
+
+        h.UnixTime += 1; // fresh HMAC (not a replay)
+        Assert.Equal(RconServer.Result.Executed, h.Handle(Remote, RconProtocol.BuildTimeRequest(Pw, h.UnixTime, "status")));
+
+        // Budget reset: five more bad attempts are needed to trip the limiter again, so the 5th here is still
+        // a plain Denied rather than RateLimited.
+        for (int i = 0; i < 5; i++)
+        {
+            h.UnixTime += 1;
+            Assert.Equal(RconServer.Result.Denied, h.Handle(Remote, RconProtocol.BuildTimeRequest("bad", h.UnixTime, "status")));
+        }
+    }
+
+    [Fact]
+    public void NonAsciiPassword_Authenticates()
+    {
+        // Encoding.ASCII folds every byte >= 0x80 to '?', so "Sécurité!" was HMAC'd as the key "S?curit?!" —
+        // a silent key-space collapse where any password folding to the same string also authenticated.
+        var h = new Harness();
+        const string pw = "Sécurité-Ω-2026";
+        h.Config = h.Config with { Password = pw };
+        Assert.Equal(RconServer.Result.Executed, h.Handle(Remote, RconProtocol.BuildTimeRequest(pw, h.UnixTime, "status")));
+
+        // And a DIFFERENT password that used to fold to the same ASCII key must still be rejected.
+        h.UnixTime += 1;
+        Assert.Equal(RconServer.Result.Denied, h.Handle(Remote, RconProtocol.BuildTimeRequest("S?curit?-?-2026", h.UnixTime, "status")));
+    }
+
+    [Fact]
+    public void UnsafeCommand_IsRejected_ButDoesNotBurnTheAuthBudget()
+    {
+        // An authenticated operator whose command contains ';' used to be scored as a failed AUTH; five of
+        // those locked them out of their own server.
+        var h = new Harness();
+        for (int i = 0; i < 5; i++)
+        {
+            h.UnixTime += 1;
+            Assert.Equal(RconServer.Result.Denied,
+                h.Handle(Remote, RconProtocol.BuildTimeRequest(Pw, h.UnixTime, "status; quit")));
+        }
+        Assert.Empty(h.Executed);
+
+        h.UnixTime += 1; // still not rate-limited: a clean command goes through
+        Assert.Equal(RconServer.Result.Executed, h.Handle(Remote, RconProtocol.BuildTimeRequest(Pw, h.UnixTime, "status")));
+    }
+
+    [Fact]
+    public void ChallengeTable_DoesNotGrowWithoutBound()
+    {
+        // getchallenge is unauthenticated, and the source address on UDP is attacker-chosen — an unswept,
+        // uncapped table is a remote memory-exhaustion lever needing no credentials at all.
+        var h = new Harness();
+        int issued = 0;
+        for (int i = 0; i < 5000; i++)
+        {
+            var spoofed = new IPEndPoint(IPAddress.Parse($"10.{(i >> 16) & 0xFF}.{(i >> 8) & 0xFF}.{i & 0xFF}"), 40000);
+            if (h.Handle(spoofed, RconProtocol.BuildGetChallenge()) == RconServer.Result.ChallengeIssued)
+                issued++;
+        }
+        // Bounded well below the number of distinct addresses that asked.
+        Assert.True(issued < 2000, $"challenge table grew unbounded: {issued} slots handed out");
+    }
+
+    [Fact]
+    public void Response_IsTruncatedToOneSafeDatagram()
+    {
+        // An unbounded single UDP send threw past ~65507 bytes, and that throw escaped the master-server pump
+        // into _Process — one verbose authenticated command took the server's frame loop down.
+        byte[] pkt = RconProtocol.BuildResponse(new string('x', 200_000));
+        Assert.True(pkt.Length < 2000, $"reply datagram not bounded: {pkt.Length} bytes");
+
+        // The chunked form keeps everything, in order, each piece inside the same bound.
+        var chunks = RconProtocol.BuildResponseChunks(new string('y', 5000));
+        Assert.True(chunks.Count > 1);
+        foreach (byte[] c in chunks)
+            Assert.True(c.Length < 2000);
+    }
 }

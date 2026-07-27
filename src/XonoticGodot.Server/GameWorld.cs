@@ -1221,8 +1221,15 @@ public sealed class GameWorld
                 AntiCheat.FixAngle(tp, Time, AntiCheat.PingProvider(tp));
         };
 
-        // Event log: console sink → broadcast; gated by sv_eventlog at the call sites.
-        GameLog.ConsoleSink = line => Commands.ChatBroadcast?.Invoke(line);
+        // Event log: console sink → the LOCAL SERVER CONSOLE only (QC dedicated_print, server/main.qc:233).
+        // This used to be ChatBroadcast, which reliably svc_prints to EVERY connected peer — so with Base's own
+        // shipped sv_eventlog_console 1, every `:join:<id>:<ent>:<IP>:<name>` line published that player's IP
+        // address to everyone on the server, along with the kill/chat stream and the end-of-match score dump.
+        GameLog.ConsoleSink = line => Commands.ChatConsole?.Invoke(line);
+        // QC gamelog.qc:34 writes ":time:<strftime %Y-%m-%d %H:%M:%S>" ahead of each line when
+        // sv_eventlog_files_timestamps is set (it defaults to 1). Without a provider every timestamp was blank.
+        GameLog.TimestampProvider = static () =>
+            System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
         // QC world.qc:949 matchid = sprintf("%d.%s.%06d", autocvar_sv_eventlog_files_counter, strftime_s(),
         // random()*1e6): a per-match correlation id "<counter>.<unixtime>.<rand6>" (≤64 chars, no : ; ' " \ $).
         // Using the map name alone (the old value) collides across rematches on the same map and weakens eventlog
@@ -4176,10 +4183,13 @@ public sealed class GameWorld
         Commands.DumpStats(final: true);
 
         if (Cvars.Bool("sv_eventlog"))
-        {
             GameLog.GameOver();
-            GameLog.Close();
-        }
+        // Close is OUTSIDE the gate, exactly as QC has it (world.qc:1435-1438 gates only the :gameover echo).
+        // Gating the close too meant that turning sv_eventlog off mid-match left the file latched open: when it
+        // was turned back on, the next match skipped EnsureFileOpen and appended its :gamestart: and every
+        // later line into the PREVIOUS match's file — no :logversion: header, no counter bump, two matches
+        // merged into one log.
+        GameLog.Close();
 
         // QC PlayerStats_GameReport(true): build the per-player/per-team report (upload is an engine concern).
         PlayerStats.GameReport(finished: true, Clients.Players, Time, Teamplay.IsTeamGame);

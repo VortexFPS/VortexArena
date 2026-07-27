@@ -2773,7 +2773,10 @@ public sealed class Commands
             float jointime = _world.Clients.InfoOf(p)?.JoinTime ?? 0f;
             int elapsed = (int)MathF.Round(MathF.Max(0f, _world.Time - jointime));
             bool isPlayer = p.FragsStatus != Player.FragsSpectator;
-            string teamOrSpec = isPlayer ? ((int)p.Team).ToString(System.Globalization.CultureInfo.InvariantCulture) : "spectator";
+            // SVQC team codes in the log, like every other :event: line — see GameLog.ServerTeamCode.
+            string teamOrSpec = isPlayer
+                ? GameLog.ServerTeamCode((int)p.Team).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : "spectator";
 
             // QC :player:see-labels:<scores>:<elapsed>:<team|spectator>:<playerid>:<name>
             // console omits playerid (LOG_HELP just gets name appended); eventlog includes playerid.

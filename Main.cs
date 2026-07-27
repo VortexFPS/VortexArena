@@ -218,10 +218,19 @@ public partial class Main : Node
     {
         void Handle(PosixSignalContext ctx)
         {
-            ctx.Cancel = true; // don't let the runtime hard-terminate — we quit gracefully below
+            // ESCALATION PATH: only the FIRST signal is cancelled+handled gracefully. A second one is left
+            // uncancelled so the runtime terminates the process itself. Cancelling unconditionally meant that
+            // once the latch was set — including when the graceful quit could not run, e.g. the main loop
+            // blocked in a synchronous BSP/collision build, or GracefulQuit threw because the node had left
+            // the tree — every later SIGTERM/SIGINT was swallowed. The server then ignored `systemctl stop`
+            // until TimeoutStopSec expired, and Ctrl+C forever, leaving only kill -9.
             if (System.Threading.Interlocked.Exchange(ref _shuttingDown, 1) != 0)
-                return; // already quitting (a second Ctrl+C) — ignore
-            GD.Print($"[Main] received {ctx.Signal}; shutting down gracefully.");
+            {
+                GD.Print($"[Main] received {ctx.Signal} again; letting the runtime terminate.");
+                return; // ctx.Cancel stays false → the OS default action runs
+            }
+            ctx.Cancel = true; // first signal: quit gracefully below
+            GD.Print($"[Main] received {ctx.Signal}; shutting down gracefully (signal again to force).");
             Callable.From(GracefulQuit).CallDeferred();
         }
 
@@ -234,7 +243,10 @@ public partial class Main : Node
     private void GracefulQuit()
     {
         try { NetGame.GracefulShutdownHook?.Invoke(); } catch { /* best-effort client notice */ }
-        GetTree().Quit(0);
+        // Null-guarded like the sibling DS-4 quit sites: this runs deferred, so the node may have left the
+        // tree in between. Throwing here would leave the shutdown latch set with the process still alive and
+        // (before the escalation path above) deaf to every further signal.
+        GetTree()?.Quit(0);
     }
 
     /// <summary>

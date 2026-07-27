@@ -22,9 +22,16 @@ namespace XonoticGodot.Game.Net;
 /// </summary>
 public sealed partial class ServerConsole : Node
 {
-    private readonly ConcurrentQueue<string> _lines = new();
-    private Thread? _reader;
-    private volatile bool _running;
+    // PROCESS-WIDE reader. A blocking System.Console.In.ReadLine() cannot be cancelled, so a per-node thread
+    // could never be retired: every map change tears down NetGame (and this node) and builds a new one, which
+    // left the old thread parked on the SAME synchronized stdin. With N leaked readers each typed line went to
+    // whichever thread happened to wake, and only the newest node was draining — so roughly N/(N+1) of the
+    // operator's commands vanished, plus a leaked thread (~1 MB stack) per map. One reader, one queue, for the
+    // process lifetime; the live node just drains it.
+    private static readonly ConcurrentQueue<string> _lines = new();
+    private static Thread? _reader;
+    private static volatile bool _readerStarted;
+    private static readonly object _readerGate = new();
 
     /// <summary>Where drained console lines go — the host wires this to its server-command executor. Invoked on
     /// the MAIN thread from <see cref="_Process"/>, so the sink itself owns any sim-thread hand-off.</summary>
@@ -32,21 +39,31 @@ public sealed partial class ServerConsole : Node
 
     public override void _Ready()
     {
-        _running = true;
-        _reader = new Thread(ReadLoop)
+        lock (_readerGate)
         {
-            Name = "XG-ServerConsole",
-            IsBackground = true, // never block process exit — a blocked ReadLine can't be interrupted cleanly
-        };
-        _reader.Start();
-        GD.Print("[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; --no-console to disable).");
+            if (!_readerStarted)
+            {
+                _readerStarted = true;
+                _reader = new Thread(ReadLoop)
+                {
+                    Name = "XG-ServerConsole",
+                    IsBackground = true, // never block process exit — a blocked ReadLine can't be interrupted
+                };
+                _reader.Start();
+                GD.Print("[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; "
+                         + "--no-console to disable).");
+            }
+        }
+        // Drop anything typed while no console node was live (mid map change) so a stale line can't fire into
+        // the fresh world.
+        while (_lines.TryDequeue(out _)) { }
     }
 
-    private void ReadLoop()
+    private static void ReadLoop()
     {
         try
         {
-            while (_running)
+            while (true)
             {
                 string? line;
                 try
@@ -91,8 +108,8 @@ public sealed partial class ServerConsole : Node
 
     public override void _ExitTree()
     {
-        _running = false;
-        // The reader may be parked in a blocking ReadLine; it's a background thread, so we don't join — it dies
-        // with the process. Setting _running false makes it exit after its current (or next) read returns.
+        // Nothing to stop: the reader is process-wide and survives this node deliberately (see the field doc).
+        // It is a background thread parked on a blocking ReadLine, so it dies with the process; the next
+        // ServerConsole reuses it instead of stacking another one.
     }
 }

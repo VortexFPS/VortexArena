@@ -87,7 +87,11 @@ public sealed class MasterServerLink : IDisposable
     /// <summary>Drain pending datagrams (non-blocking) and raise the matching event for each recognised message.</summary>
     public void Poll()
     {
-        while (true)
+        // BUDGETED: an unauthenticated UDP flood (rcon getchallenge spam, master noise) would otherwise pin the
+        // main thread inside this drain and stop the sim from ticking at all. Anything left over is read next
+        // frame — the socket buffer is the queue.
+        const int MaxPacketsPerPoll = 64;
+        for (int i = 0; i < MaxPacketsPerPoll; i++)
         {
             byte[] data;
             IPEndPoint from;
@@ -104,7 +108,11 @@ public sealed class MasterServerLink : IDisposable
                 return; // would-block / transient — done for this frame
             }
 
-            Dispatch(data, from);
+            // Dispatch runs handler code (rcon auth + command execution + the reply send). A throw here used
+            // to escape Poll → PumpMasterServer → _Process and take the whole frame loop down; one bad packet
+            // or an oversized reply must never do that.
+            try { Dispatch(data, from); }
+            catch (Exception ex) { XonoticGodot.Common.Diagnostics.Log.Warn($"[master] dropped packet: {ex.Message}"); }
         }
     }
 

@@ -91,8 +91,12 @@ public sealed class ServerNet : IDisposable
 
     /// <summary>[T63] Re-broadcast a recorded server→client wire packet (an effect/sound/notification bundle,
     /// leading control byte included) to every viewer — the replay host emits these as the demo playhead
-    /// crosses their recorded timestamps.</summary>
-    public void BroadcastRaw(ReadOnlySpan<byte> packet, bool reliable) => _transport.Broadcast(packet, reliable);
+    /// crosses their recorded timestamps.
+    /// <para>Routes through <see cref="BroadcastPacket"/>, not the transport directly: today's only caller is
+    /// the replay drive in NetGame._Process (main thread, where this is a straight passthrough), but going
+    /// through the funnel keeps it ordered against worker-staged outbox packets and safe if it is ever called
+    /// from the sim worker.</para></summary>
+    public void BroadcastRaw(ReadOnlySpan<byte> packet, bool reliable) => BroadcastPacket(packet, reliable);
 
     // Reused writers (the networking spec's allocation discipline: one writer per send path, reset+refilled).
     private readonly BitWriter _snapshotWriter = new(2048);

@@ -135,6 +135,25 @@ Two surgical changes in `ConditionDt` (0 = legacy r16 behavior for A/B):
 Caveat kept honest: in this low-excitation regime the felt-band forcing lives in warmup/hitch
 storms; whether 3a carries Bryan's *combat* wobble is decided by experiment 3, not by these runs.
 
+**PLAYTEST VERDICT (same day, release export, implosion CTF 8 bots, ~2.5 min):** Bryan A/B'd
+`cl_smoothdt_driftcap` live and reports **no felt improvement — 3a is REFUTED as the felt cause**
+(kept as correct-anyway hygiene: his combat trace measured gated-in skew **1.0847**, well past the
+1.04 runaway budget — in legacy mode the ledger WOULD run away under this load; the cap held it to
+±12 ms / max 306 ms episodes). Trace findings from the same session
+(motion_trace_20260726_204818.csv, 20.9k frames, release combat):
+- raw dt p10/50/90 = 6.63/6.95/9.09 ms, lag1 +0.57 but lag32 +0.06 — production stays flat at
+  wave timescales (the variance program's result holds in combat).
+- cam_step scores 26% / cam_wall 19% with a ~1 s dominant wave — but free play cannot separate
+  REAL speed dynamics (fights, jumps, braking) from wobble; these numbers are not evidence either
+  way. yaw analysis self-skipped (aim direction reverses constantly — no sustained segments).
+  **Free-play captures are the wrong instrument for the cam/yaw proxies; the scripted trisect
+  (constant input) is the discriminating experiment and is now the top priority.**
+
+Eliminated so far by feel+data: production variance (07-11), the drift oscillator 3a (07-26).
+Remaining live: the display-side seam (DWM vblank sampling — needs trisect + a working
+present-time measurement), the unconditioned yaw channel 3b (needs trisect condition B), machine
+state (S7).
+
 Also observed while testing (separate bug, filed in §3b's hazard list): the Debug windowed build's
 engine teardown is unreliable AFTER our Shutdown completes — either 0xC0000374 heap corruption or
 an infinite `RenderingDevice::_free_internal "Attempted to free invalid ID"` error loop (407 MB

@@ -50,6 +50,11 @@ public static class BotTracewalk
     private static int _tickTracesLeft = int.MaxValue;
     internal static void ResetTickBudget() => _tickTracesLeft = TickTraceBudget;
 
+    // True once this tick's pool is spent: any budgeted CanWalk from here on reports UNREACHABLE without
+    // walking. Callers that CACHE a reachability verdict must check this — a starved answer is transient
+    // (the pool re-arms next tick) and must not be persisted (see Waypoint.NearestForGoal).
+    internal static bool TickBudgetSpent => _tickTracesLeft <= 0;
+
     /// <summary>
     /// QC <c>tracewalk(e, start, m1, m2, end, end_height, movemode)</c>: can a player hull
     /// (<paramref name="mins"/>/<paramref name="maxs"/>) walk/step/swim from <paramref name="start"/> to

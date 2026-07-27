@@ -926,6 +926,7 @@ public sealed class BotPopulation
         if (dead)
         {
             _botPlayerCmd = new CommandBox();
+            _botPlayerOriginValid = false;   // respawn teleports; don't count the corpse→spawn jump as travel
             return;
         }
 
@@ -953,8 +954,10 @@ public sealed class BotPopulation
         // "the brain attached" does not prove it is playing — so report what it actually did. Distance is
         // integrated from the AUTHORITATIVE origin, i.e. it only moves if the synthesised input really made
         // the round trip through predict → encode → net → server physics.
-        _botPlayerDist += (p.Origin - _botPlayerLastOrigin).Length();
+        if (_botPlayerOriginValid)
+            _botPlayerDist += (p.Origin - _botPlayerLastOrigin).Length();
         _botPlayerLastOrigin = p.Origin;
+        _botPlayerOriginValid = true;
         if (mi.ButtonAttack1 || mi.ButtonAttack2) _botPlayerShots++;
         float now2 = _world.Time;
         if (now2 - _botPlayerLastReport >= 5f)
@@ -969,7 +972,10 @@ public sealed class BotPopulation
     }
 
     private Vector3 _botPlayerLastOrigin;
-    private bool _botPlayerWasDead;
+    private bool _botPlayerOriginValid;
+    // Starts true: the player is typically attached pre-spawn (observer), and that initial not-yet-alive
+    // state must not count as a death — the counters exist to prove the respawn cycle turns over.
+    private bool _botPlayerWasDead = true;
     private int _botPlayerDeaths;
     private int _botPlayerRespawns;
     private float _botPlayerDist;

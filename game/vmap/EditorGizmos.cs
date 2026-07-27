@@ -438,13 +438,13 @@ public sealed partial class EditorGizmos : Node3D
     //  Primitives
     // =============================================================================================
 
+    /// <summary>
+    /// Quake-space line. Buffers like its Godot-space twin — writing to the ImmediateMesh directly here is
+    /// what produced thousands of "Not creating any surface" errors a frame once the manipulator handles
+    /// started using this overload: the buffering rework converted only the other one.
+    /// </summary>
     private void Line(NVec3 a, NVec3 b, Color color)
-    {
-        _overlayMesh.SurfaceSetColor(color);
-        _overlayMesh.SurfaceAddVertex(Coords.ToGodot(a));
-        _overlayMesh.SurfaceSetColor(color);
-        _overlayMesh.SurfaceAddVertex(Coords.ToGodot(b));
-    }
+        => _segments.Add((Coords.ToGodot(a), Coords.ToGodot(b), color));
 
     private void Line(Vector3 a, Vector3 b, Color color) => _segments.Add((a, b, color));
 

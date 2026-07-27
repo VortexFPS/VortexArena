@@ -821,6 +821,15 @@ public sealed class Commands
         Register("spectate", "spectate — become a spectator", CmdSpectate);
         Register("editor_playtest", "editor_playtest — toggle between EDIT free-fly and PLAYTEST (editor gametype)",
             CmdEditorPlaytest);
+
+        // ---- Base bind aliases (binds-xonotic.cfg F1-F6). These are the exact verbs the stock binds invoke;
+        // without them F1/F2/F3/F5/F6 are dead keys, which is what made F3-to-spectate look broken. QC defines
+        // them as aliases over the same underlying commands, so they forward rather than duplicate logic.
+        Register("vyes", "vyes — vote yes (F1)", ctx => CmdVoteAlias(ctx, "yes"));
+        Register("vno", "vno — vote no (F2)", ctx => CmdVoteAlias(ctx, "no"));
+        Register("vabstain", "vabstain — abstain from the current vote", ctx => CmdVoteAlias(ctx, "abstain"));
+        Register("spec", "spec — become a spectator (alias of spectate, F3)", CmdSpectate);
+        Register("team_auto", "team_auto — join the team the balancer picks (F6)", CmdTeamAuto);
         Register("selectteam", "selectteam <red|blue|yellow|pink|auto> — choose a team", CmdSelectTeam);
         // QC the engine `color` command → SV_ChangeTeam (server/teamplay.qc:1340): in DP `color`/`topcolor`/
         // `bottomcolor` are engine-handled (host_cmd.c) and call SV_ChangeTeam, which only re-colors in a NON-team
@@ -1598,6 +1607,29 @@ public sealed class Commands
         EditorSession.Toggle(_world, ctx.Caller, out string message);
         ctx.Print(message);
         return true;
+    }
+
+    /// <summary>
+    /// QC's <c>vyes</c>/<c>vno</c>/<c>vabstain</c> aliases (binds-xonotic.cfg F1/F2): forward to the real
+    /// <c>vote</c> command rather than reimplementing the vote state machine, so the two can never diverge.
+    /// </summary>
+    private bool CmdVoteAlias(CommandContext ctx, string verb)
+    {
+        var forwarded = new CommandContext(new[] { "vote", verb }, ctx.IsServerConsole, ctx.Caller);
+        bool handled = CmdVote(forwarded);
+        ctx.Print(forwarded.Output.TrimEnd());
+        return handled;
+    }
+
+    /// <summary>
+    /// QC <c>team_auto</c> (binds-xonotic.cfg F6): join with no team preference, letting the balancer pick.
+    /// In a non-team gametype this is just a plain join, which is what QC does too.
+    /// </summary>
+    private bool CmdTeamAuto(CommandContext ctx)
+    {
+        if (ctx.Caller is null) { ctx.Print("team_auto is a client command"); return true; }
+        ctx.Caller.WantsJoin = 0;   // QC wants_join 0 = autoselect
+        return CmdJoin(ctx);
     }
 
     private bool CmdSpectate(CommandContext ctx)

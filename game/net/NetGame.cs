@@ -6520,6 +6520,17 @@ public sealed partial class NetGame : Node3D
         if (command.Equals("-hud_panel_radar_maximized", StringComparison.OrdinalIgnoreCase))
             return; // release of a press-toggle bind — ignored (matches the quickmenu toggle semantics)
 
+        // (E2) The editor state toggle rides F9, which Base binds to the minigame HUD. Deliberately handled
+        // BEFORE the free-fly gate below and NOT restricted to EDIT: the weapon binds cannot serve this, because
+        // in PLAYTEST they go back to selecting weapons and the mapper would have no way to return to editing.
+        if (IsEditorGametype
+            && (command.Equals("cl_cmd hud minigame", StringComparison.OrdinalIgnoreCase)
+                || command.Equals("editor_toggle", StringComparison.OrdinalIgnoreCase)))
+        {
+            Menu.MenuState.Interp?.ExecuteLine("editor_playtest");
+            return;
+        }
+
         // (E2) Editor tool binds. While free-flying in the editor gametype the weapon keys are dead weight —
         // you cannot shoot and edit at the same time — so they double as the editor's controls, reusing the
         // 1..9 + mousewheel muscle memory every player already has instead of demanding a second bind set.
@@ -6745,7 +6756,6 @@ public sealed partial class NetGame : Node3D
             10 => "editor_grid_size +",   // weapnext  — wheel up
             12 => "editor_grid_size -",   // weapprev  — wheel down
             1 => "editor_grid",           // weapon_group_1
-            2 => "editor_playtest",       // weapon_group_2
             _ => null,
         };
         if (action is null)

@@ -64,8 +64,24 @@ public sealed class ItemstimeMutator : MutatorBase
     /// is the absolute respawn time; a value &lt; -1 is the "another copy available now" encoding; an item not on
     /// the map is absent (the panel hides it). The host/net layer feeds this to <c>ItemsTimePanel.SetItemTimes</c>.
     /// </summary>
-    public IReadOnlyDictionary<string, float> CurrentTimes => _times;
+    /// <remarks>
+    /// Returns a PUBLISHED SNAPSHOT, never the live table. The sim thread rewrites <see cref="_times"/> every
+    /// frame while the render thread enumerates this for the HUD, and handing out the live dictionary made that
+    /// a genuine data race: it threw "Collection was modified; enumeration operation may not execute" out of
+    /// ItemsTimePanel.SetItemTimes and aborted NetGame._Process mid-frame, taking every later per-frame update
+    /// with it. Republishing an immutable copy after each refresh is lock-free and the table is a handful of
+    /// entries, so the copy is far cheaper than the synchronization would be.
+    /// </remarks>
+    public IReadOnlyDictionary<string, float> CurrentTimes => _published;
+
     private readonly Dictionary<string, float> _times = new(System.StringComparer.Ordinal);
+
+    /// <summary>The snapshot readers see. Volatile: the reference swap must be visible across threads.</summary>
+    private volatile Dictionary<string, float> _published = new(System.StringComparer.Ordinal);
+
+    /// <summary>Copy the working table into a fresh instance and publish it. Called after every mutation.</summary>
+    private void PublishTimes()
+        => _published = new Dictionary<string, float>(_times, System.StringComparer.Ordinal);
 
     private HookHandler<MutatorHooks.SvStartFrameArgs>? _onStartFrame;
 
@@ -80,6 +96,7 @@ public sealed class ItemstimeMutator : MutatorBase
     {
         if (_onStartFrame is not null) MutatorHooks.SvStartFrame.Remove(_onStartFrame);
         _times.Clear();
+        PublishTimes();   // readers must see the cleared table, not the last live one
     }
 
     // QC the producer re-syncs on reset_map_global / player spawn / connect; here we recompute each server
@@ -193,7 +210,7 @@ public sealed class ItemstimeMutator : MutatorBase
     public void Recompute()
     {
         if (Api.Services is null) return;
-        if (Api.Cvars.GetFloat("sv_itemstime") == 0f) { _times.Clear(); return; }
+        if (Api.Cvars.GetFloat("sv_itemstime") == 0f) { _times.Clear(); PublishTimes(); return; }
 
         float now = Api.Clock.Time;
         Dictionary<string, string> classKey = ClassKeyMap();
@@ -232,5 +249,7 @@ public sealed class ItemstimeMutator : MutatorBase
             float t = hasMin ? minT : 0f;
             _times[kv.Key] = avail ? -t : t;
         }
+
+        PublishTimes();
     }
 }

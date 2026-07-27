@@ -249,6 +249,7 @@ public sealed class ClientManager
         // because a fresh edict already sits at '0 0 0', which is usually inside solid or out in the void — so
         // anyone who observes before joining (and, in the editor gametype, anyone who never joins at all) starts
         // buried in geometry looking at nothing.
+        ApplyObserverHull(p);
         PlaceObserverAtSpawnPoint(p);
         p.WantsJoin = 0;            // QC this.wants_join = 0 (no team chosen yet; 0 = autoselect on Join)
         p.AutoJoinChecked = 0;      // QC .autojoin_checked: not yet attempted
@@ -573,6 +574,23 @@ public sealed class ClientManager
     /// must keep the player's current position (that is what makes `spectate` drop you where you were standing,
     /// and what the editor's PLAYTEST→EDIT toggle relies on). Only the connect-time path wants relocation.
     /// </summary>
+    /// <summary>
+    /// QC <c>PutObserverInServer</c>'s hull setup (client.qc:318-320): an observer gets the CROUCH hull and a
+    /// ZERO view offset — <c>setsize(this, PL_CROUCH_MIN, PL_CROUCH_MAX); this.view_ofs = '0 0 0'</c>.
+    ///
+    /// Both halves matter and the port had neither, because its connect path never ran the observer transition.
+    /// The zero view offset is why the free-fly camera sat at standing eye height instead of at the entity
+    /// origin (QC's own comment: so your view doesn't end up in the ceiling under MOVETYPE_FLY_WORLDONLY), and
+    /// the full-size hull is why a free-flying observer collided like a standing player.
+    /// </summary>
+    public static void ApplyObserverHull(Player p)
+    {
+        ArgumentNullException.ThrowIfNull(p);
+        p.ViewOfs = Vector3.Zero;
+        if (Api.Services is not null)
+            Api.Entities.SetSize(p, new Vector3(-16f, -16f, -24f), new Vector3(16f, 16f, 25f)); // QC PL_CROUCH_MIN/MAX
+    }
+
     public void PlaceObserverAtSpawnPoint(Player p)
     {
         ArgumentNullException.ThrowIfNull(p);
@@ -606,6 +624,7 @@ public sealed class ClientManager
         StatusEffectsCatalog.ClearAll(p);
 
         p.IsObserver = true;
+        ApplyObserverHull(p);
 
         // QC MUTATOR_HOOKFUNCTION(<mode>, MakePlayerObserver) (e.g. ctf_RemovePlayer): a player demoted to
         // observer relinquishes any objective they hold — a CTF carrier drops the flag where they stand and any

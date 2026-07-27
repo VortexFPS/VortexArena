@@ -163,7 +163,9 @@ public partial class EditorPanel : HudPanel
     // edit at the same time, so the weapon keys are free, and reusing them means the editor inherits whatever
     // keys the player already has in muscle memory instead of needing its own bind set. The HUD therefore
     // reverse-looks-up the weapon command, which is what is actually bound to a key.
-    private const string BindPlaytest = "weapon_group_2";
+    // The EDIT/PLAYTEST toggle rides F9 (Base's minigame-HUD bind), NOT a weapon key: in PLAYTEST the weapon
+    // binds return to selecting weapons, so a weapon-key toggle would strand the mapper in playtest.
+    private const string BindPlaytest = "cl_cmd hud minigame";
     private const string BindGrid = "weapon_group_1";
     private const string BindTool = "weapon_group_3";
     private const string BindOrtho = "weapon_group_4";

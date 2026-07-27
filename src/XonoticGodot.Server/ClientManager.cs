@@ -502,7 +502,13 @@ public sealed class ClientManager
         // NOCLIP (pass through walls); the port previously hardcoded FLY_WORLDONLY (always clipped), the opposite.
         // Honor the replicated cvar here so a spectator who sets it gets the right collision behaviour. (The QC
         // momentary +use toggle is a transient cosmetic override and is not modelled; the persistent preference is.)
-        if (p.Spectatee is null && p.MoveType is MoveType.Noclip or MoveType.FlyWorldOnly)
+        // MoveType.None is included deliberately: a client that has connected but not yet joined sits at
+        // MOVETYPE_NONE (see ClientConnect), and this gate previously only PROMOTED an observer that was
+        // already flying — so a never-joining client stayed frozen in place forever. That was invisible while
+        // every client auto-joined within a second of connecting, and total in the editor gametype, where
+        // nobody ever joins. QC gives a connecting observer the free-fly movetype in PutObserverInServer
+        // (client.qc:261) precisely so a spectator can move before/without joining.
+        if (p.Spectatee is null && p.MoveType is MoveType.Noclip or MoveType.FlyWorldOnly or MoveType.None)
         {
             bool wouldClip = ClippedSpectatingProvider?.Invoke(p) ?? false;
             p.MoveType = wouldClip ? MoveType.FlyWorldOnly : MoveType.Noclip;

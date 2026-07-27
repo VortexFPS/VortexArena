@@ -5684,6 +5684,9 @@ public sealed partial class NetGame : Node3D
         }
 
         InfoMessagesPanel im = _fullHud.InfoMessages;
+        // In the editor, jump flies you upward and PLAYTEST is its own toggle, so the stock join hint would be
+        // pointing at the wrong key. The editor panel carries the real binding.
+        im.SuppressJoinHint = IsEditorGametype;
         im.RespawnStat = _client.RespawnTimeStat;
         im.NetServerTime = _client.LatestServerTime;
 

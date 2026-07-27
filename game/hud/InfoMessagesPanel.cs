@@ -71,6 +71,13 @@ public partial class InfoMessagesPanel : HudPanel
     public string JoinHint { get; set; } = "";
 
     /// <summary>
+    /// Suppresses the "Press jump to join" line. Set in the editor gametype, where jump means FLY UP and
+    /// joining is a deliberate PLAYTEST toggle — so the stock hint tells the mapper to press a key that does
+    /// something else entirely, and they reasonably conclude the editor is broken.
+    /// </summary>
+    public bool SuppressJoinHint { get; set; }
+
+    /// <summary>
     /// The current sim/match time, used to compute the respawn countdown against
     /// <see cref="Player.RespawnTime"/> and to drive the blinking nag color (QC <c>time % 1</c>). If left
     /// &lt; 0 the respawn line shows without a countdown and the blink falls back to wall-clock time.
@@ -302,7 +309,7 @@ public partial class InfoMessagesPanel : HudPanel
             }
 
             // QC: if not already queued, "^1Press ^3jump^1 to join".
-            if (WantsJoinTeam == 0)
+            if (WantsJoinTeam == 0 && !SuppressJoinHint)
                 lines.Add(Line.Of(BuildJoinHint()));
         }
 

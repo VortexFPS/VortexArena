@@ -183,13 +183,35 @@ public sealed partial class EditorGrid : MeshInstance3D
                 POSITION = vec4(VERTEX.xy * 2.0, 1.0, 1.0);
             }
 
-            // Coverage of the nearest grid plane along any axis, anti-aliased to a constant pixel width via
-            // screen-space derivatives of the world position.
+            // Coverage of the nearest grid plane, measured in PIXELS via screen-space derivatives of the world
+            // position so a line is the same width at any distance or angle. Two guards matter here:
+            //
+            //  * An axis that does not VARY across this surface is excluded. A floor's world Z is constant, and
+            //    level geometry sits exactly on grid multiples by construction — so without this the Z term is
+            //    zero-distance-to-a-grid-plane over the floor's entire area and lights the whole surface, which
+            //    then flickers with depth-reconstruction noise and reads exactly like z-fighting.
+            //
+            //  * Cells that project to less than a few pixels fade out rather than aliasing into moire, which
+            //    is what makes a receding floor shimmer.
             float grid_coverage(vec3 w, vec3 dw, float spacing) {
-                vec3 dist  = abs(fract(w / spacing + 0.5) - 0.5) * spacing;
-                vec3 pixels = dist / max(dw, vec3(1e-6));
+                vec3 uv  = w / spacing;
+                vec3 duv = dw / spacing;          // grid cells spanned by one pixel, per axis
+
+                // Relative threshold, so it holds at any grid size: an axis varying far less than the dominant
+                // one is constant across this surface.
+                float dmax = max(max(duv.x, duv.y), duv.z);
+                float thresh = dmax * 0.02 + 1e-8;
+
+                vec3 pixels = vec3(1e9);
+                if (duv.x > thresh) pixels.x = abs(fract(uv.x + 0.5) - 0.5) / duv.x;
+                if (duv.y > thresh) pixels.y = abs(fract(uv.y + 0.5) - 0.5) / duv.y;
+                if (duv.z > thresh) pixels.z = abs(fract(uv.z + 0.5) - 0.5) / duv.z;
+
                 float nearest = min(min(pixels.x, pixels.y), pixels.z);
-                return 1.0 - smoothstep(0.0, line_px, nearest);
+                float cov = 1.0 - smoothstep(0.0, line_px, nearest);
+
+                // Fade as cells approach pixel size (dmax -> 1 means one cell per pixel).
+                return cov * (1.0 - smoothstep(0.15, 0.6, dmax));
             }
 
             void fragment() {

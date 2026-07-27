@@ -233,10 +233,6 @@ public static class WeaponThrowing
     //  helpers
     // =================================================================================================
 
-    /// <summary>RENDER_COLORMAPPED (BIT(10)) — the render flag the csqcmodel reads to apply a colormap tint
-    /// (same constant as MonsterAI/MapModels).</summary>
-    private const int RenderColormapped = 1 << 10;
-
     /// <summary>
     /// QC <c>own.colormap</c> as inherited by the thrown loot (throwing.qc:33). For a player the engine maps
     /// <c>.colormap</c> through <c>.clientcolors</c>, which the csqcmodel resolves to <c>1024 + (shirt&lt;&lt;4) + pants</c>
@@ -250,7 +246,7 @@ public static class WeaponThrowing
         {
             int pants = p.ClientColors & 0x0F;
             int shirt = (p.ClientColors >> 4) & 0x0F;
-            return (1024 + (shirt << 4) + pants) | RenderColormapped;
+            return (1024 + (shirt << 4) + pants) | Entity.RenderColormapped;
         }
         // already-colormapped thrower (monster/turret): re-use its authoritative value, or none.
         return own.ColorMapOverride;

@@ -2576,6 +2576,10 @@ public sealed class ServerNet : IDisposable
                 // stays clear (a non-player entity costs nothing for the wepent group on the wire).
                 SwitchWeapon = -1,
                 SwitchingWeapon = -1,
+                // A weapon PICKUP's explicit identity: the weapon RegistryId + 1 (0 = not a weapon pickup, the
+                // baseline default — costs nothing for other items). The client paints/classifies the pickup
+                // from this id instead of guessing from the model filename (which a mapper can override).
+                Weapon = e.Pickup is XonoticGodot.Common.Gameplay.WeaponPickup wpk ? wpk.Weapon.RegistryId + 1 : 0,
                 Model = netModel,                  // QC .model (or, for a projectile, its catalog key) — resolved by name
                 Frame = (int)e.Frame,
                 Skin = (int)e.Skin,
@@ -2584,6 +2588,13 @@ public sealed class ServerNet : IDisposable
                 Velocity = e.Velocity,             // static entities keep 0 → the delta never sends it
                 Effects = e.Effects,
                 Colormap = (int)e.Team,
+                // RENDER_COLORMAPPED entities (a thrown/death-dropped weapon inheriting the thrower's packed
+                // shirt/pants — WeaponThrowing.ThrowerColormap — plus colormapped props/monsters): ship the
+                // FULL authoritative colormap in its own delta field (protocol v17), so the client repaints
+                // the loot in the DROPPER's colors (frozen at throw time — the server never rewrites a loot
+                // colormap after spawn) and both QC encodings (packed 1024+ vs a sub-1024 slot reference)
+                // survive the wire. 0 on the overwhelming majority of entities → the delta bit stays clear.
+                ColorMapOverride = e.ColorMapOverride & 0xFFFF,
                 Health = (int)e.Health,
                 Alpha = QuantizeAlpha(e.Alpha), // [W1-alpha-net] per-entity render transparency (e.g. Cloaked items)
                 Owner = (e.Owner is Player op && _byPlayer.TryGetValue(op, out PeerState? ops)) ? ops.PeerId : 0,

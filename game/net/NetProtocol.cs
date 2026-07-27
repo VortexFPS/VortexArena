@@ -121,7 +121,18 @@ public static class NetProtocol
     /// ±4096 qu, teleporting everything on implosion's blue half into the void; bolt velocities ≥4096 qu/s
     /// sign-flipped extrapolation everywhere) to full 32-bit floats — DP7's coord path, matching the owner
     /// block. Wire layout change in every entity delta ⇒ version bump.
-    public const uint ProtocolVersion = 15;
+    ///
+    /// v17 (weapon item colors): a new 16-bit <c>ColormapOverride</c> entity delta field (EntityField bit 26)
+    /// carries the full authoritative <c>Entity.ColorMapOverride</c> for RENDER_COLORMAPPED non-player entities
+    /// (dropped-weapon loot, colormapped props/monsters), and the non-player snapshot's <c>Weapon</c> field now
+    /// carries a weapon PICKUP's registry id (+1 biased). New delta bit in every entity delta ⇒ version bump.
+    ///
+    /// NOTE: v16 is deliberately SKIPPED — the unmerged parity/hitsound-feedback branch already claims 16 for a
+    /// different, incompatible wire change (trailing Feedback floats). Taking 17 here guarantees a TEXTUAL merge
+    /// conflict on this line instead of two builds silently advertising the same version with different entity
+    /// layouts (the handshake would pass and ReadDelta would corrupt-decode). Whichever branch merges second
+    /// takes the next number.
+    public const uint ProtocolVersion = 17;
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;

@@ -1392,6 +1392,7 @@ public sealed class ClientNet : IDisposable
             // DP cl_nolerp 1: no two-snapshot interpolation — callers fall back to the raw newest state.
             origin = default;
             angles = default;
+            lean = default;
             return false;
         }
         if (_remotes.TryGetValue(netId, out RemoteEntity? re) && re.Interp.HasData)

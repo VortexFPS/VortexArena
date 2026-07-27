@@ -3123,6 +3123,14 @@ public sealed partial class NetGame : Node3D
 
         EnsureProcessCvarCache();   // (§11 R11) hot-path cvar values are cached; refreshed on Changed
 
+        // (motion trace v3) Wall clock at the TOP of the frame. Godot's `delta` is a start-to-start interval,
+        // so only a start-of-frame stamp differences into the same quantity — the v2 column was sampled inside
+        // MotionTrace (late in the frame), which added a work-time phase term to every per-frame comparison.
+        // This is the reference clock the two-clock wobble detector (tools/wobble-detect.py) measures the
+        // engine's reported delta against; see MotionTrace's header for what that comparison decides.
+        _mtQpcTop = System.Diagnostics.Stopwatch.GetTimestamp()
+            / (double)System.Diagnostics.Stopwatch.Frequency;
+
         float rawDt = (float)delta;
         // [r16 rubberband FIX — the conviction after the full elimination matrix] Godot's delta is the
         // PREVIOUS frame's duration: each frame advances the world by how long the LAST frame took, then is
@@ -4136,12 +4144,26 @@ public sealed partial class NetGame : Node3D
     // presents with), so tools/wobble-report.py can join this trace against a PresentMon capture and measure
     // displayed motion on the DISPLAY timeline. Filename is timestamped: an A/B can no longer overwrite the
     // previous leg (the r16 smoothdt-0 segment was lost exactly that way).
+    //
+    // v3 (engine-delta forensics): the wobble turned out to be measurable WITHOUT a display-side clock at all —
+    // by comparing the delta the ENGINE reports against wall time over the same frames. Godot's
+    // MainTimerSync::advance_checked rewrites process_step (clamp band from physics_step, ±jitter_fix ledger),
+    // so `raw_dt_ms` is not raw: it is what the engine CLAIMED. Motion integrates that claim while the display
+    // runs on wall time, so the divergence is a displayed-speed error. Two columns make that comparison exact:
+    //   qpc_top_s — QPC sampled at the TOP of _Process, so diff() is the same start-to-start interval Godot's
+    //               `delta` measures (the v2 qpc_s stayed, sampled here, late in the frame: a work-time phase
+    //               term that telescopes over a window but not per frame).
+    //   frame     — Engine.GetFramesDrawn(), so a SKIPPED row is detectable. Rows are skipped whenever dt <= 0,
+    //               which the engine really does produce (main.cpp:4857 subtracts physics_step per dropped
+    //               physics step); without this column a gap reads as one enormous frame time.
+    // Analysis: tools/wobble-detect.py.
     private System.IO.StreamWriter? _motionTrace;
     private NVec3 _mtPrevCam, _mtPrevPred, _mtPrevRemote;
     private float _mtPrevYaw;
     private int _mtRemoteId = -1;
     private int _mtLines;
     private bool _mtHave;
+    private double _mtQpcTop;           // QPC seconds at the top of this frame's _Process (v3)
 
     private void MotionTrace(float dt, float rawDt, float slew)
     {
@@ -4169,7 +4191,7 @@ public sealed partial class NetGame : Node3D
                     $"motion_trace_{System.DateTime.Now:yyyyMMdd_HHmmss}.csv");
                 _motionTrace = new System.IO.StreamWriter(path, append: false) { AutoFlush = false };
                 _motionTrace.WriteLine(
-                    "t,qpc_s,dt_ms,raw_dt_ms,clock_err_ms,slew_pct,ticks," +
+                    "t,qpc_s,qpc_top_s,frame,dt_ms,raw_dt_ms,clock_err_ms,slew_pct,ticks," +
                     "cam_speed,cam_step,cam_step_xy,yaw_step,pred_speed,pred_err,remote_speed,maxfps,drift_ms");
                 XonoticGodot.Common.Diagnostics.Log.Info($"[motiontrace] recording -> {path}");
             }
@@ -4224,7 +4246,8 @@ public sealed partial class NetGame : Node3D
             float camStepXy = new NVec3(camDelta.X, camDelta.Y, 0f).Length(); // quake coords: Z = up
             float yawStep = Mathf.Wrap(_viewAngles.Y - _mtPrevYaw, -180f, 180f);
             _motionTrace.WriteLine(
-                $"{_renderClock:F4},{qpcS:F6},{dt * 1000f:F3},{rawDt * 1000f:F3},{errMs:F2},{slew * 100f:F2},{ticks}," +
+                $"{_renderClock:F4},{qpcS:F6},{_mtQpcTop:F6},{Godot.Engine.GetFramesDrawn()}," +
+                $"{dt * 1000f:F3},{rawDt * 1000f:F3},{errMs:F2},{slew * 100f:F2},{ticks}," +
                 $"{camSpeed:F1},{camStep:F3},{camStepXy:F3},{yawStep:F4},{predSpeed:F1},{predErr:F2},{remoteSpeed:F1}," +
                 $"{Godot.Engine.MaxFps},{_dtDrift * 1000f:F3}");
             if (++_mtLines % 128 == 0)

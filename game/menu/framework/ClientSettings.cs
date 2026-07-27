@@ -200,6 +200,12 @@ public static class ClientSettings
         // raw instead of loading the ledger. Sheds wall-time debt past the cap (DP's own trade under
         // overload). 0 = legacy r16 unbounded ledger (A/B).
         c.Register("cl_smoothdt_driftcap", "1");
+        // (2026-07-26 wobble ROOT CAUSE) cl_engine_jitterfix: Godot's physics_jitter_fix, exposed live. It is
+        // NOT a physics knob for us — Godot's physics has no consumers here; it is the gate on whether
+        // MainTimerSync rewrites the frame delta before _Process sees it. Default 0 = report the measured
+        // delta (DP cl.realframetime). 0.5 = Godot stock = the rewriting behaviour, for A/B. Full mechanism +
+        // the measured displayed-speed error it produces: ApplyEngineTiming.
+        c.Register("cl_engine_jitterfix", "0");
         // (r16) cl_frame_governor: adaptive frame pacing — every second, cap the engine at ~0.98/p75 of the
         // recent frame times so delivery is metronomic while the rate still adapts to load (the property both
         // smooth-feeling controls — vsync ON and a hard-engaged cap — share). 0 = off. An explicit cl_maxfps
@@ -393,6 +399,47 @@ public static class ClientSettings
     }
 
     /// <summary>
+    /// Apply <c>cl_engine_jitterfix</c> onto <see cref="Godot.Engine.PhysicsJitterFix"/> — the knob that decides
+    /// whether Godot reports the frame delta it MEASURED or a rewritten one.
+    ///
+    /// <para><b>Why this is a cvar at all</b> (2026-07-26 wobble root cause, planning/
+    /// wobble-independent-audit-2026-07-26.md §3f). <c>MainTimerSync::advance_checked</c> runs three clamps over
+    /// the wall-clock delta before it reaches <c>_Process</c>. Clamp 1 forces it into
+    /// <c>[min_avg_physics_steps, max_avg_physics_steps] × physics_step</c>; clamp 2 then bounds it to
+    /// <c>±physics_jitter_fix × physics_step</c> around the measured value and carries the difference in a
+    /// <c>time_deficit</c> ledger repaid on later frames. None of this is gated by <c>run/delta_smooth</c> (that
+    /// setting only disables <c>DeltaSmoother</c>, which additionally requires VSYNC_ENABLED and so was never
+    /// running at our <c>vid_vsync 0</c> default).</para>
+    ///
+    /// <para>With this project's <c>physics_ticks_per_second = 10</c> the clamp band at ~144 fps is
+    /// <c>[0, 100/12 ms] = [0, 8.333 ms]</c>: the ceiling sits ~1.4 ms above the median frame time and the floor
+    /// collapses to zero, so it is a one-sided RECTIFIER — long frames are truncated, short frames are never
+    /// extended. Measured in production traces: 23–40% of all frames report a time on the <c>100/N</c> ms grid,
+    /// the deficit ledger rides its ±50 ms rails, and over 300 ms windows the time the game embodies differs from
+    /// the time that elapsed by −20%/+28% (p1/p99), 23–38% of run time inside a >5% episode, worst episodes
+    /// 460–550 ms. Motion integrates the reported delta while the display runs on wall time, so that IS a
+    /// displayed-speed error — the felt wobble, generated below every port-side dt filter (which is why
+    /// <c>cl_smoothdt</c>/<c>cl_smoothdt_driftcap</c> could not touch it: their input is already rewritten).</para>
+    ///
+    /// <para>0 (our default) makes clamp 2 degenerate to <c>clamp(measured, measured)</c>, which restores the exact
+    /// measured delta and erases clamp 1's effect — DP-faithful <c>cl.realframetime</c> behaviour, and free for us
+    /// because Godot's own physics has zero consumers here (see the project.godot rationale). 0.5 = Godot's stock
+    /// value = the legacy behaviour, for A/B. Live-settable, so the A/B is a console toggle mid-match rather than
+    /// a re-export: <c>cl_engine_jitterfix 0.5</c> / <c>cl_engine_jitterfix 0</c>. Score both legs with
+    /// <c>tools/wobble-detect.py</c>.</para>
+    /// </summary>
+    public static void ApplyEngineTiming(CvarService c)
+    {
+        double jf = c.GetFloat("cl_engine_jitterfix");
+        if (jf < 0d) jf = 0d;
+        Godot.Engine.PhysicsJitterFix = jf;
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"[video] cl_engine_jitterfix {jf:0.###} -> Engine.PhysicsJitterFix {Godot.Engine.PhysicsJitterFix:0.###} "
+            + $"(physics {Godot.Engine.PhysicsTicksPerSecond} Hz, max steps/frame "
+            + $"{Godot.Engine.MaxPhysicsStepsPerFrame}; 0 = report the measured delta)");
+    }
+
+    /// <summary>
     /// DP parity: <c>vid_vsync</c> and <c>cl_maxfps</c> take effect IMMEDIATELY when set (console `vid_vsync 1`,
     /// a cfg exec, a menu widget) — no <c>vid_restart</c> required. Resolution/fullscreen/borderless still go
     /// through vid_restart (they resize/recreate the window). Wire ONCE after boot-config load (Shell), so the
@@ -404,6 +451,8 @@ public static class ClientSettings
         {
             if (string.Equals(name, "vid_vsync", StringComparison.Ordinal)) ApplyVsync(c);
             else if (string.Equals(name, "cl_maxfps", StringComparison.Ordinal)) ApplyMaxFps(c);
+            // The wobble A/B has to be togglable mid-match to be feel-testable at all (see ApplyEngineTiming).
+            else if (string.Equals(name, "cl_engine_jitterfix", StringComparison.Ordinal)) ApplyEngineTiming(c);
         };
     }
 
@@ -458,6 +507,10 @@ public static class ClientSettings
         // box), so for the "auto" case (the DP-shipped 256) we apply max(144, detected-refresh). Every OTHER
         // explicit choice -- the menu's 128 / 512 / 1024 / 2048 or "Unlimited" (0) -- is the player's, honored as-is.
         ApplyMaxFps(c);
+
+        // Engine frame-delta honesty (the 2026-07-26 wobble root cause) — applied here so it is live from the
+        // first rendered frame, and re-applied on every vid_restart alongside vsync/maxfps.
+        ApplyEngineTiming(c);
 
         // (§12.7) OS-stall resistance: lift the process to ABOVE_NORMAL so background work (AV scans, the
         // indexer, browsers) can't preempt the game's main/render threads mid-frame — the CPU-side half of

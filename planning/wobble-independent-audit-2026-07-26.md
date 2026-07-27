@@ -1,5 +1,12 @@
 # Wobble: independent audit of the presentation-seam conviction (2026-07-26)
 
+> **READ §3f FIRST (2026-07-26, late).** The hunt landed: Godot's `MainTimerSync` was rewriting the
+> `_Process` delta onto a `physics_step/N` grid with a ±50 ms repayment ledger — a coherent
+> ±20-28% displayed-speed error in 460-725 ms episodes, live below every port-side dt filter, and
+> *not* disabled by the r16 `run/delta_smooth=false` fix. Fixed with `physics_jitter_fix = 0`
+> (engine-reported felt-band error 6.40% → 0.01% in a matched A/B). §1-§3e below are the road that
+> got there and remain accurate as history; the residual candidates are re-ranked at the end of §3f.
+
 **Question asked:** is the 2026-07-11 presentation-seam conviction
 (`wobble-presentation-seam-2026-07-11.md`) actually correct? Four parallel code audits (own-camera
 pipeline, mouse→view chain, pacer/cap path, filter stability analysis) + new detection tooling +
@@ -246,6 +253,99 @@ exactly 8.33 ms (a 120 Hz quantum) even patched — see the timer-resolution sus
   per-video-frame edge displacement = ground-truth displayed motion, independent of everything.
 - **E — PresentMon retry** with the modern 2.x service-based capture (the r16 sparse-capture
   verdict predates it), or NVIDIA FrameView / GPUView as fallbacks.
+
+## 3f. ROOT CAUSE FOUND (2026-07-26, late): Godot rewrites the frame delta before the game sees it
+
+**The delta `_Process` receives is not the delta Godot measured.** `MainTimerSync::advance_checked`
+(`main/main_timer_sync.cpp:414-487`) runs three clamps over the wall-clock interval:
+
+| | what it does | value here |
+|---|---|---|
+| clamp 1 (:431-439) | force into `[min_avg_physics_steps, max_avg_physics_steps] × physics_step` | `[0, 100/12 ms] = [0, 8.333 ms]` |
+| clamp 2 (:442-443) | bound to `±physics_jitter_fix × physics_step` of measured; carry the rest in `time_deficit`, repaid on later frames (:423) | ±50 ms ledger |
+| clamp 3 (:446) | keep `time_accum` consistent | inert (100 ms wide) |
+
+**None of it is gated by `run/delta_smooth`.** That setting only disables `DeltaSmoother`, which
+*additionally* requires `VSYNC_ENABLED` (:246-249) — so at our `vid_vsync 0` default the r16 "ROOT
+CAUSE" fix (9669812) was a no-op, and the real distortion has been live the whole time, one level
+below every port-side dt filter.
+
+**Why this project has it far worse than stock Godot.** `physics_ticks_per_second = 10` (perf 2.0
+R30 — Godot physics has no consumers here) makes `physics_step` 0.1 s, so with `CONTROL_STEPS = 12`
+clamp 1's band at ~144 fps is `[0, 8.333 ms]`: the ceiling sits ~1.4 ms above the median frame time
+and the floor collapses to 0, because at any fps far above the physics rate most frames carry no
+physics step. That is not a smoother, it is a **one-sided rectifier** — long frames are truncated,
+short frames are never extended, and the swallowed time comes back later as a burst of fast motion.
+(At Godot's default 60 Hz physics the band is `[6.94, 8.33] ms` — narrow and *centred*, which is the
+smoother the code was written to be.) Separately `max_physics_steps_per_frame = 1` made
+`main.cpp:4857` subtract 0.1 s from the reported delta per dropped physics step, driving `_Process`
+deltas to the `p_process_step/8` floor (measured: 0.876 ms) or negative after a ≥200 ms hitch.
+
+**Measured, in the traces already on disk** (`tools/wobble-detect.py`, see below). The frame-time
+tail lands on the `physics_step / N` millisecond grid — 8.333 (=100/12), 9.091, 10.0, 11.111, 12.5,
+14.286, 16.667, 20, 25, 33.3, 50 — which continuous frame times cannot do. 54-86% of the tail is
+on-grid; 8.333 ms alone is 39-62% of it. The `time_deficit` ledger rides its ±50 ms rails. Over
+300 ms windows the time the game embodies differs from the time that elapsed by **−20%/+28%
+(p1/p99), 23-38% of run time inside a >5% episode, worst episodes 458-725 ms.** Motion integrates
+the reported delta while the display runs on wall time, so that IS a displayed-speed error: right
+amplitude, right timescale, right load-dependence.
+
+It also retro-explains the checklist the seam doc convicted on: **vsync ON smooth** (frames pin to
+the refresh interval, below the 8.33 ms ceiling → clamp never bites); **deep low cap smooth, edge
+caps wobbly** (a deep cap moves frame times above the band, which then relaxes to 16.7/25 ms — while
+a ~144 cap parks the mean 1.4 ms under the ceiling, the worst possible place for a rectifier);
+**worse under load**; **DP immune on the same box**; **survives at any average fps**; and **every
+port-side fix felt neutral**, because `rawDt` was already rewritten before `ConditionDt` saw it.
+
+### The fix + controlled A/B (Debug, stormkeep 4 bots, 70 s, frame-rate matched 116 vs 124 fps)
+
+`physics_jitter_fix = 0` degenerates clamp 2 to `clamp(measured, measured)`, which restores the exact
+measured delta and erases clamp 1's effect — DP-faithful `cl.realframetime`. Nothing to protect:
+Godot physics has no consumers here. Landed in `project.godot` plus a **live** cvar
+`cl_engine_jitterfix` (`ClientSettings.ApplyEngineTiming`) so the A/B is a console toggle mid-match;
+`max_physics_steps_per_frame` back to 8.
+
+| engine-reported clock | legacy (`cl_engine_jitterfix 0.5`) | fixed (`0`) |
+|---|---|---|
+| clamp grid | 86.3% of tail on-grid (16.8% of all frames) | not detected |
+| felt-band speed error | **6.40% RMS** | **0.01% RMS** |
+| 300 ms rate error p1/p99 | −19.8% / +22.3% | −0.12% / +0.12% |
+| worst episode | **725 ms @ +19.3%** | none |
+| run time in a >5% episode | 35.0% | 0.0% |
+| cumulative sim-vs-wall drift | 101 ms (both rails) | 3.8 ms |
+
+**Two consequences to carry forward.** (1) With the engine clock honest, `cl_smoothdt`'s conditioning
+becomes the top remaining dt-side contributor: 0.01% → **1.23%** felt-band, plus a −0.49% DC
+slowdown from the driftcap's shed debt. (2) **The r16 premise that justified `ConditionDt` was
+measured against a mangled "raw" leg** — "`cl_smoothdt 0` felt WORSE" compared median-filtered-
+mangled against mangled, never against a true wall-clock delta. Re-A/B `cl_smoothdt {0,1}` on the
+honest clock before keeping the filter; it may now be unnecessary, and it is the only remaining
+in-process mechanism between the wall clock and displayed motion.
+
+Still unmeasured, and now the whole residual: the display side (§3e #1/#2/#4 — DWM vblank sampling,
+VRR/G-Sync, driver queue depth) and machine state (#3). Those need a display clock; the checks in
+§3e "New detection options" F/D/A/B stand.
+
+### The detector: `tools/wobble-detect.py` (two independent clocks)
+
+The instrument the hunt was missing, and it needs no PresentMon, no engine patch and no constant-
+input bench — it works on every capture already on disk. Earlier instruments all measured on the sim
+timeline (`cam_speed` divides displacement by the same dt that advanced the camera → flat by
+construction; `cam_step`/`yaw_step` are honest but cannot separate real speed dynamics from artifact,
+so free play scores high either way). This compares the delta the **engine reported** against **QPC
+wall time over the same frames**: on-screen speed is motion-embodied ÷ wall-time-on-screen, so any
+divergence between those two clocks is a displayed-speed error, whatever produced it — and because
+they are separate measurements it *cannot* be flat by construction. Reports: the `physics_step/N`
+clamp-grid forensics (reading the real quantum out of `project.godot`), cumulative sim-vs-wall drift
+with jitter-fix rail detection, felt-band (0.3-5 Hz) rate-error RMS with episode segmentation, and
+per-clock attribution (`raw_dt` = what the engine claimed vs `dt` = what motion integrated), so an
+engine-side distortion is distinguishable from a port-side one. Exit code 1 on WOBBLE — usable as a
+gate. Stdlib only. Calibrate the zero with a `vid_vsync 1` leg.
+
+Motion trace v3 adds the two columns that make it exact: `qpc_top_s` (QPC at the top of `_Process`,
+so `diff()` is the same start-to-start interval Godot's `delta` measures) and `frame`
+(`Engine.GetFramesDrawn()`, so a row skipped by the `dt <= 0` guard — which the engine really does
+produce — is detectable instead of reading as one enormous frame time).
 
 ## 4. Decision experiment matrix (supersedes the seam doc's ordering)
 

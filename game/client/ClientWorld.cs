@@ -643,6 +643,24 @@ public partial class ClientWorld : Node3D
     }
 
     /// <summary>
+    /// [crash fix 2026-07-26] Hide/show an entity's render nodes WITHOUT tearing them down — the
+    /// PVS-flicker grace window (ClientEntityView.CullDeparted) parks a briefly-unseen entity here
+    /// instead of destroying it: a full teardown+rebuild per PVS boundary crossing was churning
+    /// ~5-10 mesh/material RIDs per second into the .NET finalizer thread, whose concurrent
+    /// RenderingServer::free calls race the main thread's surface updates (the 0xC0000374 mid-session
+    /// heap corruption). No-op for ids with no render state.
+    /// </summary>
+    public void SetEntityHidden(int index, bool hidden)
+    {
+        if (_animators.TryGetValue(index, out ModelAnimator? anim) && GodotObject.IsInstanceValid(anim))
+            anim.Visible = !hidden;
+        if (_playerModels.TryGetValue(index, out PlayerModel? pm) && GodotObject.IsInstanceValid(pm))
+            pm.Visible = !hidden;
+        if (_entityNodes.TryGetValue(index, out EntityNode? node) && GodotObject.IsInstanceValid(node))
+            node.Visible = !hidden;
+    }
+
+    /// <summary>
     /// The Godot node a child should attach to in order to track entity <paramref name="ownerIndex"/> at the
     /// named model tag (QC <c>setattachment(weapon, player, "tag_weapon")</c>) — the owner's
     /// <see cref="ModelAnimator"/> tag <see cref="Marker3D"/> when present (so the attachment follows the

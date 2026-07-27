@@ -96,7 +96,7 @@ public partial class EditorPanel : HudPanel
 
             if (Controller is { } c)
             {
-                lines.Add(($"Tool: {c.Tool}   {Key(BindTool)} cycle · RMB", bright));
+                lines.Add(($"Tool: {c.Tool}  {Key(BindTool)}   Manip: {c.Manipulator}  {Key(BindManip)}", bright));
 
                 lines.Add((
                     $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +
@@ -189,6 +189,7 @@ public partial class EditorPanel : HudPanel
     private const string BindPlaytest = "cl_cmd hud minigame";
     private const string BindGrid = "weapon_group_1";
     private const string BindTool = "weapon_group_3";
+    private const string BindManip = "weapon_group_7";
     private const string BindOrtho = "weapon_group_4";
     private const string BindOrthoAxis = "weapon_group_5";
     private const string BindGridUp = "weapnext";

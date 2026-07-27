@@ -8,6 +8,22 @@ using NVec3 = System.Numerics.Vector3;
 
 namespace XonoticGodot.Game.Vmap;
 
+/// <summary>
+/// What the manipulator handles do — the Radiant/Blender-style mode cycle. Independent of
+/// <see cref="EditorTool"/>: the tool decides WHAT is selected, the manipulator decides HOW it transforms.
+/// </summary>
+public enum ManipulatorMode
+{
+    /// <summary>Axis arrows: drag to translate along X, Y or Z.</summary>
+    Translate,
+
+    /// <summary>Curved arcs: drag to rotate about X, Y or Z.</summary>
+    Rotate,
+
+    /// <summary>Axis boxes: drag to scale.</summary>
+    Scale,
+}
+
 /// <summary>Which sub-object the pick resolves to, cycled by the tool key.</summary>
 public enum EditorTool
 {
@@ -75,6 +91,43 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>Active sub-object tool.</summary>
     public EditorTool Tool { get; private set; } = EditorTool.Face;
+
+    /// <summary>Active manipulator mode (translate / rotate / scale).</summary>
+    public ManipulatorMode Manipulator { get; private set; } = ManipulatorMode.Translate;
+
+    /// <summary>Cycle the manipulator: translate → rotate → scale.</summary>
+    public void CycleManipulator()
+    {
+        Manipulator = Manipulator switch
+        {
+            ManipulatorMode.Translate => ManipulatorMode.Rotate,
+            ManipulatorMode.Rotate => ManipulatorMode.Scale,
+            _ => ManipulatorMode.Translate,
+        };
+        Log.Info($"editor manipulator: {Manipulator}");
+    }
+
+    /// <summary>
+    /// World position the manipulator handles are drawn at — the centre of the current selection, or the
+    /// hovered feature when nothing is selected yet, so the handles always have somewhere meaningful to sit.
+    /// </summary>
+    public bool TryGetManipulatorOrigin(out NVec3 origin)
+    {
+        origin = NVec3.Zero;
+        if (_session is null || _document is null)
+            return false;
+
+        List<int> ids = _session.SelectedBrushIds();
+        if (ids.Count > 0 && VmapEdit.TryGetSelectionCenter(_document, ids, out origin))
+            return true;
+
+        if (Hover.Hit)
+        {
+            origin = Hover.Point;
+            return true;
+        }
+        return false;
+    }
 
     /// <summary>What the crosshair is currently over (drives the hover highlight).</summary>
     public VmapPickResult Hover { get; private set; } = VmapPickResult.Miss;

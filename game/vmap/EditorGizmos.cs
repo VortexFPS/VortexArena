@@ -142,6 +142,13 @@ public sealed partial class EditorGizmos : Node3D
             }
         }
 
+        // --- manipulator handles: axis arrows / rotation arcs / scale boxes at the selection ---
+        if (c.TryGetManipulatorOrigin(out NVec3 manipOrigin))
+        {
+            DrawManipulator(manipOrigin, c.Manipulator, c.DragAxis);
+            anything = true;
+        }
+
         // Only open a surface when there is something to put in it: ImmediateMesh errors on SurfaceEnd with no
         // vertices, and an idle editor (nothing hovered, nothing selected) is the common case.
         _overlayMesh.ClearSurfaces();
@@ -176,6 +183,131 @@ public sealed partial class EditorGizmos : Node3D
             _overlayMesh.SurfaceAddVertex(b);
         }
         _overlayMesh.SurfaceEnd();
+    }
+
+    // Axis colours follow the universal convention (X red, Y green, Z blue) so the handles are readable
+    // without a legend.
+    private static readonly Color AxisX = new(1f, 0.3f, 0.3f, 1f);
+    private static readonly Color AxisY = new(0.4f, 1f, 0.4f, 1f);
+    private static readonly Color AxisZ = new(0.45f, 0.6f, 1f, 1f);
+    private static readonly Color AxisActive = new(1f, 0.95f, 0.4f, 1f);
+
+    /// <summary>Handle length in world units. Fixed rather than screen-constant for now — see the note below.</summary>
+    private const float HandleLength = 48f;
+
+    /// <summary>
+    /// Draw the manipulator at <paramref name="origin"/>. The three modes are visually distinct at a glance —
+    /// straight arrows translate, curved arcs rotate, boxed stubs scale — because the mode is otherwise
+    /// invisible state and acting in the wrong one is an easy, annoying mistake.
+    ///
+    /// <paramref name="activeAxis"/> (the constrained axis of a live drag) is highlighted, so the handle shows
+    /// which way the current edit is actually moving.
+    ///
+    /// NOTE: the handles are currently an INDICATOR — they are not yet click targets. Ray-vs-handle picking
+    /// (so grabbing an arrow beats grabbing the face behind it) is the remaining piece; dragging still goes
+    /// through face/vertex picking.
+    /// </summary>
+    private void DrawManipulator(NVec3 origin, ManipulatorMode mode, NVec3 activeAxis)
+    {
+        Span<NVec3> axes = stackalloc NVec3[3];
+        axes[0] = new NVec3(1f, 0f, 0f);
+        axes[1] = new NVec3(0f, 1f, 0f);
+        axes[2] = new NVec3(0f, 0f, 1f);
+        ReadOnlySpan<Color> colors = stackalloc Color[3] { AxisX, AxisY, AxisZ };
+
+        for (int i = 0; i < 3; i++)
+        {
+            NVec3 axis = axes[i];
+            // Highlight whichever axis the live drag is constrained to.
+            bool active = activeAxis != NVec3.Zero && MathF.Abs(NVec3.Dot(activeAxis, axis)) > 0.9f;
+            Color color = active ? AxisActive : colors[i];
+
+            switch (mode)
+            {
+                case ManipulatorMode.Translate:
+                    DrawArrow(origin, axis, HandleLength, color);
+                    break;
+                case ManipulatorMode.Rotate:
+                    DrawArc(origin, axis, HandleLength, color);
+                    break;
+                default:
+                    DrawScaleHandle(origin, axis, HandleLength, color);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>A shaft with a four-line arrowhead — the translate handle.</summary>
+    private void DrawArrow(NVec3 origin, NVec3 axis, float length, Color color)
+    {
+        NVec3 tip = origin + axis * length;
+        Line(origin, tip, color);
+
+        // Arrowhead: four barbs angled back from the tip, in the two axes perpendicular to the shaft.
+        (NVec3 u, NVec3 v) = Perpendiculars(axis);
+        float head = length * 0.22f;
+        NVec3 baseP = tip - axis * head;
+        Line(tip, baseP + u * (head * 0.5f), color);
+        Line(tip, baseP - u * (head * 0.5f), color);
+        Line(tip, baseP + v * (head * 0.5f), color);
+        Line(tip, baseP - v * (head * 0.5f), color);
+    }
+
+    /// <summary>A quarter-circle arc about the axis — the rotate handle.</summary>
+    private void DrawArc(NVec3 origin, NVec3 axis, float radius, Color color)
+    {
+        (NVec3 u, NVec3 v) = Perpendiculars(axis);
+        const int segments = 16;
+        NVec3 prev = origin + u * radius;
+        for (int i = 1; i <= segments; i++)
+        {
+            // A quarter turn is enough to read as "rotation about this axis" without three full rings
+            // overlapping into an unreadable ball.
+            float t = i / (float)segments * (MathF.PI * 0.5f);
+            NVec3 p = origin + (u * MathF.Cos(t) + v * MathF.Sin(t)) * radius;
+            Line(prev, p, color);
+            prev = p;
+        }
+
+        // A small barb at the end so the arc reads as an arrow rather than a plain curve.
+        NVec3 endDir = NVec3.Normalize(prev - origin);
+        NVec3 tangent = NVec3.Cross(axis, endDir);
+        Line(prev, prev - tangent * (radius * 0.16f) + endDir * (radius * 0.10f), color);
+        Line(prev, prev - tangent * (radius * 0.16f) - endDir * (radius * 0.10f), color);
+    }
+
+    /// <summary>A stub ending in a small cube — the scale handle.</summary>
+    private void DrawScaleHandle(NVec3 origin, NVec3 axis, float length, Color color)
+    {
+        NVec3 tip = origin + axis * length;
+        Line(origin, tip, color);
+        DrawBox(tip, length * 0.09f, color);
+    }
+
+    /// <summary>Wireframe cube centred on a point.</summary>
+    private void DrawBox(NVec3 center, float half, Color color)
+    {
+        Vector3 c = Coords.ToGodot(center);
+        for (int i = 0; i < 4; i++)
+        {
+            // Two opposite faces plus the four connecting edges.
+            float sx = (i is 0 or 3) ? half : -half;
+            float sy = (i is 0 or 1) ? half : -half;
+            float nx = (i is 1 or 0) ? half : -half;
+            float ny = (i is 2 or 1) ? half : -half;
+
+            Line(c + new Vector3(sx, sy, half), c + new Vector3(nx, ny, half), color);
+            Line(c + new Vector3(sx, sy, -half), c + new Vector3(nx, ny, -half), color);
+            Line(c + new Vector3(sx, sy, half), c + new Vector3(sx, sy, -half), color);
+        }
+    }
+
+    /// <summary>Two unit vectors perpendicular to <paramref name="axis"/> and to each other.</summary>
+    private static (NVec3 U, NVec3 V) Perpendiculars(NVec3 axis)
+    {
+        NVec3 seed = MathF.Abs(axis.Z) < 0.9f ? new NVec3(0f, 0f, 1f) : new NVec3(1f, 0f, 0f);
+        NVec3 u = NVec3.Normalize(NVec3.Cross(seed, axis));
+        return (u, NVec3.Cross(axis, u));
     }
 
     /// <summary>Line segments accumulated this frame, emitted in one surface at the end of the rebuild.</summary>

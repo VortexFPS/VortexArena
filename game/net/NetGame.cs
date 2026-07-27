@@ -6767,6 +6767,8 @@ public sealed partial class NetGame : Node3D
                 doc = XonoticGodot.Formats.Vmap.BspToVmap.Import(_bsp, _map, $"maps/{_map}.bsp");
                 XonoticGodot.Common.Diagnostics.Log.Info(
                     $"editor: imported {_map} from BSP ({doc.Brushes.Count} brushes) — vmap_import to keep it");
+                LogEditorFaceHistogram(doc);
+
             }
             else
             {
@@ -6787,6 +6789,41 @@ public sealed partial class NetGame : Node3D
     /// have to treat "observer" as a finished, playable state rather than a pending one.
     /// </summary>
     private bool IsEditorGametype => string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Diagnostic for the "floating brushes" hunt: report how many brush FACES survive the visible-surface
+    /// filter, and the material histogram of the survivors. Kept deliberately — it is the measurement that
+    /// showed the per-brush tool filter was at the wrong granularity, and it is how we tell whether a shader
+    /// family is still slipping through.
+    /// </summary>
+    private static void LogEditorFaceHistogram(XonoticGodot.Formats.Vmap.VmapDocument doc)
+    {
+        var hist = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int pass = 0, total = 0, toolBrushes = 0;
+        foreach (XonoticGodot.Formats.Vmap.VmapBrush b in doc.Brushes)
+        {
+            if (b.IsToolBrush) { toolBrushes++; continue; }
+            foreach (XonoticGodot.Formats.Vmap.VmapFace f in b.Faces)
+            {
+                total++;
+                if ((f.SurfaceFlags & 0x0080) != 0 || XonoticGodot.Formats.Vmap.VmapBrush.IsToolMaterial(f.Material))
+                    continue;
+                pass++;
+                string key = string.IsNullOrEmpty(f.Material) ? "(empty)" : f.Material;
+                hist[key] = hist.TryGetValue(key, out int n) ? n + 1 : 1;
+            }
+        }
+
+        var ranked = new List<KeyValuePair<string, int>>(hist);
+        ranked.Sort((x, y) => y.Value.CompareTo(x.Value));
+        var top = new List<string>();
+        for (int i = 0; i < ranked.Count && i < 14; i++)
+            top.Add($"{ranked[i].Value}x {ranked[i].Key}");
+
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"editor: {toolBrushes} tool brushes; visible faces {pass}/{total}; {hist.Count} distinct materials");
+        XonoticGodot.Common.Diagnostics.Log.Info($"editor: top materials: {string.Join(" | ", top)}");
+    }
 
     /// <summary>
     /// True when the local client is free-flying as an observer. Several VIEW decisions key off this because an
@@ -6842,6 +6879,9 @@ public sealed partial class NetGame : Node3D
                 return true;
             case 6:
                 _editor?.RotateSelection(15f);
+                return true;
+            case 7:
+                _editor?.CycleManipulator();
                 return true;
         }
 

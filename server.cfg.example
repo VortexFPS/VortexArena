@@ -28,7 +28,12 @@ set sv_public 1                            // 1 = announce to the master (server
 set g_maxplayers 16                        // 0 = engine max
 set minplayers 2                           // bots fill up to this many active players
 set bot_number 4                           // bots to add when hosting
+set bot_join_empty 1                       // REQUIRED for bots on an EMPTY dedicated server (see below)
 set skill 5                                // bot skill (0..10)
+// bot_join_empty: bot fill is gated on `realPlayers > 0 || bot_join_empty` (QC bot.qc:644-660), so with the
+// default 0 a dedicated server sits empty with ZERO bots until the first human connects — bot_number and
+// minplayers alone will not fill it. (The old --host headless server appeared to fill an empty map only
+// because its loopback self-client counted as a real player; a true --dedicated host has no such client.)
 set timelimit_override 20                  // per-map time limit (minutes); -1 = map default
 set fraglimit_override 30                  // -1 = map default
 

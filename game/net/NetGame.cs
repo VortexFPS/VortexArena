@@ -154,6 +154,27 @@ public sealed partial class NetGame : Node3D
     // collision — still run). True on a headless/exported-dedicated listen server; a camera-trace capture run
     // keeps the full pipeline (its determinism baseline predates the slim path); sv_dedicated_slim 0 opts out.
     private bool _dedicatedSlim;
+
+    /// <summary>
+    /// DS-1: a CLIENT-LESS dedicated host. <see cref="_dedicatedSlim"/> already removes the client's asset,
+    /// render, effect and audio work, but the loopback <see cref="ClientNet"/> itself still connected — so the
+    /// server burned one of its own player slots on a phantom observer, reported that slot in the server
+    /// browser's player count (<c>BuildServerInfo["clients"]</c>), and paid a prediction/carrier tick every
+    /// frame for a view nobody looks at. DP's <c>-dedicated</c> has no local client at all.
+    ///
+    /// <para>When set: no carrier, no <c>ClientNet</c>, no camera/HUD/viewmodel, no prediction — every
+    /// <c>_client</c> path in this file is already null-guarded (verified: 263 references, zero bare derefs),
+    /// so the client simply never exists. Set by <c>--dedicated</c>, and by default on the
+    /// <c>dedicated_server</c> export template. <c>--headless --host</c> deliberately keeps the v1 observer
+    /// behavior: CameraTrace, the perf harness and the two-instance join test all depend on it.</para>
+    /// </summary>
+    private bool _dedicatedNoClient;
+
+    /// <summary>DS-1: true when this process was launched as a real dedicated server (<c>--dedicated</c> or the
+    /// dedicated-server export). Read by <see cref="Shell"/> for the boot path.</summary>
+    public static bool DedicatedRequested =>
+        Array.IndexOf(OS.GetCmdlineArgs(), "--dedicated") >= 0 || OS.HasFeature("dedicated_server");
+
     private bool _readyComplete;                // _Ready finished — _Process can run its full body (before this, fields are half-built)
     private bool _captureMarked;                // one-shot guard: CaptureGate.MarkReady() fired at first spawn (--screenshot)
     private HandshakeStage _handshakeStage;     // last sub-stage announced to the LoadingScreen (so we only BeginStage on a transition)
@@ -511,6 +532,14 @@ public sealed partial class NetGame : Node3D
             GD.Print("[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped " +
                 "(server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.");
 
+        // DS-1: client-less. Only on a listen server that was actually launched as a dedicated process — never
+        // inferred from --headless alone, because the v1 headless host (CameraTrace, perf captures, the
+        // two-instance join test) needs its observer self-client.
+        _dedicatedNoClient = _isListenServer && DedicatedRequested && !CameraTrace.Active;
+        if (_dedicatedNoClient)
+            GD.Print("[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or "
+                     + "prediction. All player slots are available to real clients.");
+
         // The load sequence runs as a coroutine: each BeginStage sets the bar's target and per-stage expected
         // time (the LoadingScreen animates asymptotically from where it is now toward that target), then we
         // yield one frame so the bar can repaint with the new status text BEFORE the synchronous work begins.
@@ -545,7 +574,9 @@ public sealed partial class NetGame : Node3D
         }
 
         // The client connects to the chosen endpoint (a listen server is on 127.0.0.1; a pure client on _host).
-        StartClient();
+        // DS-1: a dedicated host has NO local client at all — this is the seam that frees the burned slot.
+        if (!_dedicatedNoClient)
+            StartClient();
 
         LoadingScreen?.BeginStage("Setting up renderer…", 0.55f, 1.0f);
         await YieldForLoadingFrame();
@@ -553,8 +584,13 @@ public sealed partial class NetGame : Node3D
 
         // Render layer + the net→render bridge + a basic HUD/camera. Built regardless of mode so a connect that
         // hasn't completed yet still has somewhere to draw once snapshots flow.
-        SetupRender();
-        SetupCameraAndHud();
+        // DS-1: except on a dedicated host, which has no client to draw for — the whole ClientWorld/camera/HUD
+        // tree (and its per-frame drive) never gets built.
+        if (!_dedicatedNoClient)
+        {
+            SetupRender();
+            SetupCameraAndHud();
+        }
 
         // Dev capture: `--fx-demo [effect]` rides on the live ClientWorld to burst a named effect in front of the
         // player each frame for an effect-parity --screenshot (the survivor of GameDemo's inline dev flags; see
@@ -3561,6 +3597,13 @@ public sealed partial class NetGame : Node3D
             else
                 _server?.RunOnSimThread(BenchSpectateThink);
         }
+
+        // DS-1: everything from here down is the LOCAL CLIENT half of the frame — music, announcer, HUD feeds,
+        // input sampling, prediction, camera, view effects. A dedicated host has no client, no ClientWorld and
+        // no HUD, so it stops here. This is also where the per-frame CPU saving lands: the server half above
+        // (transport pump + sim tick + snapshot encode) is all a dedicated process needs to do.
+        if (_dedicatedNoClient)
+            return;
 
         // (perf 2.0) ng.feeds: the music/announcer/host-mutator HUD-feed run — sub-scoped so the ng.process
         // residual shrinks to genuinely-unattributed work (frame-budget decomposition, perf-campaign doc).

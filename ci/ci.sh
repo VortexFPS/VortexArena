@@ -99,6 +99,31 @@ if $do_smoke; then
             grep -aq "dedicated slim"     "$log" || { tail -40 "$log"; fail "host smoke: dedicated-slim gate did not engage"; }
             [ "${hard_errors:-1}" -eq 0 ] || { echo "--- $log ---"; tail -40 "$log"; fail "host smoke had $hard_errors hard error(s)"; }
             rm -f "$log"
+
+            # ── DS-1/DS-2: the CLIENT-LESS dedicated host, driven through the stdin console ──────────
+            # The point of --dedicated is that NO local client exists: no loopback peer, no burned player
+            # slot, and a truthful browser player count. Assert that by A/B against the host smoke above
+            # (which requires "handshake accepted") and by reading the console's own `status` block.
+            # bot_join_empty is required because bot fill is gated on realPlayers>0 || bot_join_empty
+            # (QC bot.qc:644-660) — the v1 host only filled an empty map via its phantom self-client.
+            step "dedicated smoke (--dedicated stormkeep, stdin console, 20s)"
+            dlog="$(mktemp)"
+            { sleep 12; echo status; echo quit; } | timeout 240 "$GODOT" --headless --path "$ROOT" \
+                --dedicated stormkeep --gametype dm --bots 2 --port 26099 \
+                --cvar bot_join_empty 1 --quit-after-seconds 30 > "$dlog" 2>&1 || true
+            command -v powershell >/dev/null 2>&1 && \
+                powershell -Command "Get-Process Godot* -ErrorAction SilentlyContinue | Stop-Process -Force" >/dev/null 2>&1 || true
+            d_errors=$(grep -cE '^ERROR:|SCRIPT ERROR|Unhandled exception' "$dlog" || true)
+            echo "hard errors: $d_errors | warnings: $(grep -c 'WARNING:' "$dlog" || true)"
+            grep -aE "DEDICATED:|players:|waypoints for" "$dlog" || true
+            grep -aq "DEDICATED: no local client" "$dlog" || { tail -40 "$dlog"; fail "dedicated smoke: client-less mode did not engage"; }
+            # The load-bearing assertion: a dedicated host must NOT connect a loopback client.
+            grep -aq "handshake accepted" "$dlog" && { tail -40 "$dlog"; fail "dedicated smoke: a local client connected (DS-1 regressed — the phantom slot is back)"; }
+            grep -aq "waypoints for" "$dlog" || { tail -40 "$dlog"; fail "dedicated smoke: bots never filled (bot_join_empty gate?)"; }
+            # `status` must report the 2 bots and NO phantom player.
+            grep -aq "players: 2 (2 bots)" "$dlog" || { tail -40 "$dlog"; fail "dedicated smoke: expected 'players: 2 (2 bots)' from the console status"; }
+            [ "${d_errors:-1}" -eq 0 ] || { echo "--- $dlog ---"; tail -40 "$dlog"; fail "dedicated smoke had $d_errors hard error(s)"; }
+            rm -f "$dlog"
         else
             echo "NOTE: assets/data missing — skipping the headless host smoke (needs the stormkeep map)."
         fi

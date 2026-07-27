@@ -156,6 +156,18 @@ public partial class Main : Node
                 if (h + 1 < args.Length && !args[h + 1].StartsWith("--") && string.IsNullOrEmpty(shell.BootMap))
                     shell.BootMap = args[h + 1];
             }
+            // DS-1 `--dedicated [map]` (DP `-dedicated`): boot a CLIENT-LESS server — same host path as --host,
+            // but NetGame builds no local client (see NetGame._dedicatedNoClient), so no player slot is burned
+            // and the browser's player count is real. The dedicated-server export template implies it via
+            // OS.HasFeature("dedicated_server"). `--headless --host` intentionally keeps the v1 observer host.
+            if (XonoticGodot.Game.Net.NetGame.DedicatedRequested)
+            {
+                shell.BootHost = true;
+                int ded = Array.IndexOf(args, "--dedicated");
+                if (ded >= 0 && ded + 1 < args.Length && !args[ded + 1].StartsWith("--")
+                    && string.IsNullOrEmpty(shell.BootMap))
+                    shell.BootMap = args[ded + 1];
+            }
             int b = Array.IndexOf(args, "--bots");
             if (b >= 0 && b + 1 < args.Length && int.TryParse(args[b + 1], out int bots))
                 shell.BootBots = bots;

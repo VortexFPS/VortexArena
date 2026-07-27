@@ -21,7 +21,7 @@ each step. Task IDs `DS-#`; each lands as its own branch per the repo convention
 | Piece | State |
 |---|---|
 | Asset load | ✅ slim (27f214d): collision+entities+muzzle tags+`.sounds` manifests only |
-| Self-client | ⚠️ **partially addressed.** Slim already suppresses the client ASSET loads, `ClientEntityView` + entity render nodes, effect/sound handlers, announcer voices and the host auto-join (it stays an observer). What REMAINS for DS-1: the loopback `ClientNet` still connects — so it occupies a player slot, is counted by `BuildServerInfo["clients"]`, and still ticks prediction each frame |
+| Self-client | ✅ DS-1: `--dedicated` builds NO local client — no loopback `ClientNet`, carrier, camera, HUD or per-frame prediction. Verified by A/B smoke: `--host` logs `peer … connected` + `handshake accepted` and `status` counts the phantom, `--dedicated` logs neither and reports `players: 0`. `--headless --host` keeps the v1 observer host for CameraTrace / perf captures / the two-instance join test |
 | Console input | ✅ DS-2 stdin console + `quit` verb |
 | rcon | ✅ DS-6 DP-compatible `rcon`/`srcon` (`src/XonoticGodot.Net/RconProtocol.cs`, `Md4.cs`) |
 | Main loop | ✅ DS-3 tick-rate-matched cap |
@@ -34,15 +34,31 @@ each step. Task IDs `DS-#`; each lands as its own branch per the repo convention
 
 ### What actually remains
 
-- **DS-1 (client-less host)** — the only Tier 1 item left, and deliberately sequenced last. Note the benefit
-  is now SMALLER than when this plan was written: slim already removed the asset/render/audio cost, so DS-1's
-  remaining wins are (a) freeing the burned player slot + fixing the browser player count, (b) dropping the
-  per-frame prediction tick, (c) the architectural cleanup. `game/net/NetGame.cs` is **8394 lines** of
-  client+listen entanglement; the ServerHost extraction must stay move-only/mechanical with the listen path on
-  the same code path, and it needs a real two-instance playtest — it is not a safe drive-by.
-- **DS-7 (modern announce)** — **BLOCKED, not skipped.** It depends on the Conductor C1 protocol being frozen
-  (`planning/conductor-master-orchestrator-plan.md`), which lives in a different repo and is not done. Do not
-  start it here; the dpmaster lane covers LAN/legacy in the meantime.
+- **DS-7 (modern announce)** — the last open item, and **BLOCKED, not skipped.** It depends on the Conductor
+  C1 protocol being frozen (`planning/conductor-master-orchestrator-plan.md`), which lives in a different repo
+  and is not done. Do not start it here; the dpmaster lane covers LAN/legacy in the meantime.
+
+### DS-1 as landed — deliberately NOT the ServerHost extraction
+
+The plan called for extracting a `ServerHost` component out of NetGame and building a separate
+`DedicatedServer` node. That was the means; the END was "a dedicated process must not build ANY client
+machinery". The end is now met by a **flag on the existing path** instead, which is what the plan's own risk
+note asked for ("land behind the flag while `--headless --host` remains the supported v1"):
+
+- Slim had already removed the client's asset/render/audio/effect work, so the only thing still costing a
+  dedicated host was the loopback client itself.
+- All **263** `_client` references in NetGame were already null-guarded (verified: zero bare `_client.`
+  derefs), so the client simply never being created needs no extraction to be safe.
+- `_Process` returns before the client half of the frame, so the per-frame prediction/HUD/camera cost is gone.
+
+A move-only `ServerHost` extraction is still worth doing as a readability/architecture cleanup, but it is now
+a REFACTOR with no behavioral payload — it should not be sold as a feature, and it should not be attempted
+without the two-instance playtest the original note demanded.
+
+**Operator gotcha found while verifying DS-1:** bot fill is gated on
+`realPlayers > 0 || bot_join_empty` (QC `bot.qc:644-660`). The v1 headless host only appeared to fill an empty
+map because its phantom self-client counted as a real player. A true dedicated server therefore needs
+`bot_join_empty 1` to have bots waiting on an empty server — now set and explained in `server.cfg.example`.
 
 ---
 
@@ -176,7 +192,7 @@ behind the flag while `--headless --host` remains the supported v1.
 | 4 | DS-6 srcon | M | DS-2 (shared console path) | ✅ DONE |
 | 5 | DS-4 signals + export smoke | S/M | DS-2 (scripted smoke) | ✅ DONE (export smoke in CI still open) |
 | 6 | DS-8 eventlog + bans | M | — | ✅ DONE |
-| 7 | DS-1 client-less host | L | benefits from all above landing first (smaller diff surface in NetGame) | ⬜ REMAINING |
+| 7 | DS-1 client-less host | L | benefits from all above landing first (smaller diff surface in NetGame) | ✅ DONE (as a flag, not the extraction — see above) |
 | 8 | DS-7 modern announce | S/M | Conductor C1 protocol frozen | ⛔ BLOCKED (external) |
 
 DS-1 last is deliberate: everything else is additive and works on the v1 headless host today; DS-1 is the

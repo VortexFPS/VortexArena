@@ -240,11 +240,22 @@ public sealed class VmapBrush
         return true;
     }
 
-    /// <summary>True for the Q3 <c>common/</c> tool shader family (however the path is spelled).</summary>
+    /// <summary>
+    /// True for a material that never produces a visible surface: the Q3 <c>common/</c> tool shader family,
+    /// and <c>noshader</c>.
+    ///
+    /// <c>noshader</c> matters more than the named tools on a COMPILED map. q3map2 writes it for every brush
+    /// side that was not a drawn surface, so the vis/structural brushes a mapper never wants to grab are almost
+    /// all "noshader on every face" rather than "common/hint". Classifying only the named tool shaders caught
+    /// 66 brushes out of stormkeep's 5400 and left the rest in the way.
+    /// </summary>
     public static bool IsToolMaterial(string material)
     {
+        // An empty or placeholder shader draws nothing, so a brush made entirely of them is not architecture.
         if (string.IsNullOrEmpty(material))
-            return false;
+            return true;
+        if (material.Equals("noshader", StringComparison.OrdinalIgnoreCase))
+            return true;
         ReadOnlySpan<char> m = material.AsSpan();
         int slash = m.LastIndexOf('/');
         ReadOnlySpan<char> leaf = slash >= 0 ? m[(slash + 1)..] : m;

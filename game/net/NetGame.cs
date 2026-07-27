@@ -6765,7 +6765,8 @@ public sealed partial class NetGame : Node3D
             else if (_bsp is not null)
             {
                 doc = XonoticGodot.Formats.Vmap.BspToVmap.Import(_bsp, _map, $"maps/{_map}.bsp");
-                XonoticGodot.Common.Diagnostics.Log.Info($"editor: imported {_map} from BSP ({doc.Brushes.Count} brushes) — vmap_import to keep it");
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    $"editor: imported {_map} from BSP ({doc.Brushes.Count} brushes) — vmap_import to keep it");
             }
             else
             {

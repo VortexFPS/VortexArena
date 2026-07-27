@@ -261,8 +261,17 @@ public sealed partial class EditorGizmos : Node3D
 
         foreach (VmapPickIndex.Entry entry in _controller.PickIndex.Entries)
         {
-            foreach (NVec3[] winding in entry.Windings)
+            for (int fi = 0; fi < entry.Windings.Length; fi++)
             {
+                // Only outline surfaces that actually render. A wireframe of every brush side — including the
+                // caulk and noshader planes buried inside walls — is an unreadable thicket, and it is exactly
+                // the geometry the mapper said gets in the way.
+                if (fi < entry.Brush.Faces.Count
+                    && ((entry.Brush.Faces[fi].SurfaceFlags & VmapGeometryBuilder.SurfaceNoDraw) != 0
+                        || VmapBrush.IsToolMaterial(entry.Brush.Faces[fi].Material)))
+                    continue;
+
+                NVec3[] winding = entry.Windings[fi];
                 if (winding.Length < 3)
                     continue;
                 for (int i = 0; i < winding.Length; i++)

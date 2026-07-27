@@ -98,6 +98,9 @@ public sealed class VmapPickIndex
         }
     }
 
+    /// <summary>Whether this index was built including tool brushes (drives the per-face pick filter too).</summary>
+    public bool IncludesToolBrushes => _includedTools;
+
     /// <summary>Force a rebuild on the next <see cref="EnsureBuilt"/> call.</summary>
     public void Invalidate() => Version = -1;
 
@@ -216,7 +219,16 @@ public static class VmapPicking
                 if (w.Length < 3)
                     continue;
 
-                VmapPlane plane = brush.Faces[f].Plane;
+                VmapFace pf = brush.Faces[f];
+
+                // Skip faces that draw NOTHING. The brush-level tool filter is not enough on its own: an
+                // ordinary wall brush still carries caulk/noshader/nodraw sides, and those invisible planes sit
+                // in front of the visible surface, so the crosshair grabs a face that is not there. Only offer
+                // what the mapper can actually see (unless tool geometry was explicitly asked for).
+                if (!index.IncludesToolBrushes && !IsPickableFace(pf))
+                    continue;
+
+                VmapPlane plane = pf.Plane;
 
                 // Only front faces: a ray leaving the camera should hit the outside of a solid, and skipping
                 // back faces stops a click from selecting the far wall of the room you are standing in.
@@ -295,6 +307,17 @@ public static class VmapPicking
 
         return VmapSelection.OfFace(brush.Id, faceIndex);
     }
+
+    /// <summary>Q3SURFACEFLAG_NODRAW — the face exists for collision/vis only.</summary>
+    private const int SurfaceNoDraw = 0x0080;
+
+    /// <summary>
+    /// A face is pickable when it actually renders: not NODRAW, and not one of the invisible shader families
+    /// (<c>common/*</c>, <c>noshader</c>, empty). This is what keeps the crosshair on the wall you can see
+    /// instead of the caulk plane in front of it.
+    /// </summary>
+    private static bool IsPickableFace(VmapFace f)
+        => (f.SurfaceFlags & SurfaceNoDraw) == 0 && !VmapBrush.IsToolMaterial(f.Material);
 
     /// <summary>Is a coplanar point inside a convex polygon? (Consistent sign of the edge cross products.)</summary>
     private static bool PointInPolygon(Vector3[] w, Vector3 normal, Vector3 p)

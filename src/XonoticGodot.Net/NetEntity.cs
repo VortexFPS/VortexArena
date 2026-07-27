@@ -154,8 +154,9 @@ public enum EntityField : uint
 /// The networked state of one entity — the unified "property table" the server replicates and the client
 /// renders/interpolates. This single value type backs BOTH the snapshot delta-compression (the
 /// <see cref="EntityStateCodec"/> writes only changed fields against a baseline) and the CSQC networked-entity
-/// model (the field set is csqcmodel <c>ALLPROPERTIES</c> plus the <c>entcs</c> radar slice). Origin uses the
-/// 13i coord path, angles the 8i path (matching the property table's WriteVector/WriteAngle quantization).
+/// model (the field set is csqcmodel <c>ALLPROPERTIES</c> plus the <c>entcs</c> radar slice). Origin/Velocity
+/// ride full 32-bit floats (protocol v15 — DP7's coord path; the old 13i fixed point wrapped at ±4096 qu,
+/// the r16 invisible-blue-side bug on implosion); angles keep the 8i path (mod-360 wrap is safe).
 /// </summary>
 public struct NetEntityState
 {
@@ -404,9 +405,15 @@ public static class EntityStateCodec
         if ((mask & EntityField.ModelIndex) != 0) w.WriteUShort(current.ModelIndex);
         if ((mask & EntityField.Frame) != 0) w.WriteUShort(current.Frame);
         if ((mask & EntityField.Skin) != 0) w.WriteByte(current.Skin & 0xFF);
-        if ((mask & EntityField.Origin) != 0) w.WriteVector(current.Origin, NetPrecision.Low);
+        // Origin/Velocity ride FULL floats (protocol v15) — DP7-faithful, matching the owner block. The old
+        // NetPrecision.Low (13-bit fixed point, EncodeCoord13's unchecked (short) cast) WRAPS at ±4096 qu:
+        // implosion's blue half lives past +4096 on X and −4096 on Y, so every entity there decoded into the
+        // void (invisible projectiles/trails/items on the whole blue side — r16). Velocity wraps at ±4096
+        // qu/s, which blaster-class bolt speeds (6000) exceed on EVERY map, sign-flipping the client's
+        // between-snapshot extrapolation. Angles stay Low — mod-360 wrapping is safe by construction.
+        if ((mask & EntityField.Origin) != 0) w.WriteVector(current.Origin, NetPrecision.Float);
         if ((mask & EntityField.Angles) != 0) w.WriteAngles(current.Angles, NetPrecision.Low);
-        if ((mask & EntityField.Velocity) != 0) w.WriteVector(current.Velocity, NetPrecision.Low);
+        if ((mask & EntityField.Velocity) != 0) w.WriteVector(current.Velocity, NetPrecision.Float);
         if ((mask & EntityField.Effects) != 0) w.WriteLong(current.Effects);
         if ((mask & EntityField.Colormap) != 0) w.WriteByte(current.Colormap & 0xFF);
         if ((mask & EntityField.Colors) != 0) w.WriteByte(current.Colors & 0xFF);
@@ -493,9 +500,9 @@ public static class EntityStateCodec
         if ((mask & EntityField.ModelIndex) != 0) s.ModelIndex = r.ReadUShort();
         if ((mask & EntityField.Frame) != 0) s.Frame = r.ReadUShort();
         if ((mask & EntityField.Skin) != 0) s.Skin = r.ReadByte();
-        if ((mask & EntityField.Origin) != 0) s.Origin = r.ReadVector(NetPrecision.Low);
+        if ((mask & EntityField.Origin) != 0) s.Origin = r.ReadVector(NetPrecision.Float);   // v15: full floats (±4096 wrap fix)
         if ((mask & EntityField.Angles) != 0) s.Angles = r.ReadAngles(NetPrecision.Low);
-        if ((mask & EntityField.Velocity) != 0) s.Velocity = r.ReadVector(NetPrecision.Low);
+        if ((mask & EntityField.Velocity) != 0) s.Velocity = r.ReadVector(NetPrecision.Float); // v15: full floats
         if ((mask & EntityField.Effects) != 0) s.Effects = r.ReadLong();
         if ((mask & EntityField.Colormap) != 0) s.Colormap = r.ReadByte();
         if ((mask & EntityField.Colors) != 0) s.Colors = r.ReadByte();

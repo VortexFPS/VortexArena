@@ -377,6 +377,16 @@ public sealed class WaypointNetwork
     private static readonly Vector3 _playerMaxs = new(16f, 16f, 45f);
 
     /// <summary>
+    /// Walk-distance budget for STRATEGY-TIME tracewalks (variance program 2026-07-11 — the residual bot-tick
+    /// tail: Release p99 6.2ms / max 17.1ms, all in bot.strategy/bot.seed long walks). Covers the full seed-ring
+    /// growth (2250qu) with slack, so in-budget behavior is unchanged; beyond it a DIRECT walk is never the
+    /// right strategy answer (the waypoint router owns long routes). Budgeted mode also bounds the per-step
+    /// find-the-floor sweep (see <see cref="BotTracewalk.CanWalk"/>). Graph building (AutoLink) stays UNBOUNDED
+    /// — cached waypoint links must keep exact QC semantics.
+    /// </summary>
+    internal const float StrategyWalkMaxDist = 2600f;
+
+    /// <summary>
     /// Floor-snap a candidate waypoint origin (QC waypoint_fixorigin / waypoint_fixorigin_down_dir,
     /// waypoints.qc:1957-1971): tracebox the player hull straight down up to 3000qu from just above the position
     /// and drop the origin to where it lands, so an item/teleporter waypoint sits on the ground the bot stands on
@@ -593,8 +603,10 @@ public sealed class WaypointNetwork
                 attempts++;
                 Vector3 cp = wp.ClosestPoint(pos);
                 bool reach = !canTrace || (walkFromWp
-                    ? BotTracewalk.CanWalk(pos, cp, _playerMins, _playerMaxs, wp.IsBox ? (wp.AbsMax.Z - cp.Z) : 0f)
-                    : BotTracewalk.CanWalk(cp, pos, _playerMins, _playerMaxs));
+                    ? BotTracewalk.CanWalk(pos, cp, _playerMins, _playerMaxs, wp.IsBox ? (wp.AbsMax.Z - cp.Z) : 0f,
+                        maxWalkDistance: StrategyWalkMaxDist)
+                    : BotTracewalk.CanWalk(cp, pos, _playerMins, _playerMaxs,
+                        maxWalkDistance: StrategyWalkMaxDist));
                 if (reach)
                     seeds.Add((wp, TravelCost(pos, cp)));
             }
@@ -680,8 +692,10 @@ public sealed class WaypointNetwork
             Waypoint wp = cand[i].Wp;
             Vector3 cp = wp.ClosestPoint(pos);
             bool reach = walkFromWp
-                ? BotTracewalk.CanWalk(pos, cp, _playerMins, _playerMaxs, wp.IsBox ? (wp.AbsMax.Z - cp.Z) : 0f)
-                : BotTracewalk.CanWalk(cp, pos, _playerMins, _playerMaxs);
+                ? BotTracewalk.CanWalk(pos, cp, _playerMins, _playerMaxs, wp.IsBox ? (wp.AbsMax.Z - cp.Z) : 0f,
+                    maxWalkDistance: StrategyWalkMaxDist)
+                : BotTracewalk.CanWalk(cp, pos, _playerMins, _playerMaxs,
+                    maxWalkDistance: StrategyWalkMaxDist);
             if (reach)
             {
                 if (wp.HasFlag(WaypointFlags.Teleport))
@@ -990,8 +1004,12 @@ public sealed class WaypointNetwork
         Waypoint? wp = Nearest(pos, walkFromWp: false);
         // Movable goals re-bind on a short timeout (QC uses ~0.5s for players); static items bind for the match
         // (QC sets a far-future timeout — the binding only changes on a waypoint reconnect, which clears below).
+        // BUT: if the tick trace pool ran dry, Nearest's verdict may be the nearest-by-DISTANCE fallback (its
+        // budget degradation, possibly across a wall) — a transient answer that must not bind a static item for
+        // the match. Cache it on the short timeout so it re-binds once the pool re-arms.
         bool movable = (target.Flags & EntFlags.Client) != 0 || target.Velocity != Vector3.Zero;
-        _goalWpCache[target] = (wp, now + (movable ? 0.5f : 1e9f));
+        float ttl = movable || BotTracewalk.TickBudgetSpent ? 0.5f : 1e9f;
+        _goalWpCache[target] = (wp, now + ttl);
         return wp;
     }
 

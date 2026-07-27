@@ -63,6 +63,7 @@ public partial class Main : Node
         Log.Info($"Items:     {Items.All.Count}");
         Log.Info($"Mutators:  {Mutators.All.Count}");
         Log.Info($"GameTypes: {GameTypes.All.Count}");
+        Log.Info($"Sounds:    {XonoticGodot.Common.Gameplay.Sounds.All.Count}");
         foreach (var w in Weapons.All)
             Log.Trace($"  weapon[{w.RegistryId}] {w.RegistryName} — {w.DisplayName}");
 
@@ -151,6 +152,26 @@ public partial class Main : Node
             int b = Array.IndexOf(args, "--bots");
             if (b >= 0 && b + 1 < args.Length && int.TryParse(args[b + 1], out int bots))
                 shell.BootBots = bots;
+            // `--port <n>` (DP `-port`): bind the hosted listen server off the stock 26000 — scripted/agent
+            // runs must not collide with a live instance (a busy port makes the host's self-client attach to
+            // the WRONG server behind a plausible-looking handshake; see RUNNING.md).
+            int pt = Array.IndexOf(args, "--port");
+            if (pt >= 0 && pt + 1 < args.Length && int.TryParse(args[pt + 1], out int port) && port > 0)
+                shell.BootPort = port;
+#if XG_BOTPLAYER
+            // `--bot-player [skill]`: hand the LOCAL player to a bot brain so an unattended run drives the real
+            // player pipeline (see Directory.Build.props / XgBotPlayer). The flag only exists in a build that
+            // opted in at COMPILE time — a normal binary has no way to reach this, by construction.
+            int bp = Array.IndexOf(args, "--bot-player");
+            if (bp >= 0)
+            {
+                shell.BootBotPlayer = true;
+                if (bp + 1 < args.Length && !args[bp + 1].StartsWith("--")
+                    && float.TryParse(args[bp + 1], System.Globalization.NumberStyles.Float,
+                                      System.Globalization.CultureInfo.InvariantCulture, out float bpSkill))
+                    shell.BootBotPlayerSkill = bpSkill;
+            }
+#endif
             AddChild(shell);
         }
 

@@ -86,7 +86,22 @@ public sealed class ClientNet : IDisposable
     public int PingMs => _transport.RoundTripMs();
 
     /// <summary>The current predicted local origin (Quake space) — what the camera follows.</summary>
-    public NVec3 PredictedOrigin => _reconciler.Predicted.Origin;
+    // ---- DP cl_movement / cl_nolerp (r16 A/B switches) -------------------------------------------------
+    // UseClientMovement=false (DP `cl_movement 0`): the VIEW rides the server-authoritative owner state —
+    // extrapolated by the owner velocity over the sub-snapshot remainder — instead of the local prediction.
+    // Commands still go to the server (movement stays server-authoritative); only the rendered origin
+    // switches. The DP-faithful no-prediction mode, and the clean discriminator for prediction-path bugs.
+    // NoLerp (DP `cl_nolerp 1`): remote entities render their raw newest snapshot state (no two-snapshot
+    // interpolation). NetGame pushes both flags + RenderNow (the interp-domain clock) each frame.
+    public bool UseClientMovement = true;
+    public bool NoLerp;
+    public float RenderNow;
+    private NVec3 _ownerOrigin, _ownerVelocity;
+    private float _ownerTime = -1f;
+
+    public NVec3 PredictedOrigin => UseClientMovement || _ownerTime < 0f
+        ? _reconciler.Predicted.Origin
+        : _ownerOrigin + _ownerVelocity * Math.Clamp(RenderNow - _ownerTime, 0f, 0.1f);
 
     /// <summary>The local player's own latest decoded entity state (kind/model/health/team/flags), captured from
     /// the snapshot before it is skipped for interpolation (we predict our own origin, not interpolate it). Lets
@@ -96,7 +111,9 @@ public sealed class ClientNet : IDisposable
     public NetEntityState? LocalState { get; private set; }
 
     /// <summary>The current predicted local velocity (Quake space).</summary>
-    public NVec3 PredictedVelocity => _reconciler.Predicted.Velocity;
+    public NVec3 PredictedVelocity => UseClientMovement || _ownerTime < 0f
+        ? _reconciler.Predicted.Velocity
+        : _ownerVelocity;
 
     /// <summary>Diagnostic (camera-trace): the magnitude (qu) of the last reconcile's prediction error — ~0 when
     /// client predict and server authority agree (the command-driven, fps-independent target); a steady nonzero
@@ -106,6 +123,17 @@ public sealed class ClientNet : IDisposable
     /// <summary>Owner HUD stats from the last snapshot (health/armor), for the client HUD.</summary>
     public int Health { get; private set; }
     public int Armor { get; private set; }
+
+    /// <summary>Owner inventory stats from the last snapshot (QC the ammo RES_* STATs + STAT_WEAPONS +
+    /// IT_UNLIMITED_AMMO + the STAT_ITEMS flag bits) — feeds the full HUD's ammo/weapons/powerups panels on a
+    /// pure remote client (NetGame's HUD mirror player). One struct, read in lockstep with the server's
+    /// <c>OwnerInventory.Write</c>.</summary>
+    public XonoticGodot.Net.OwnerInventory LocalInventory { get; private set; } = XonoticGodot.Net.OwnerInventory.None;
+
+    /// <summary>Whether the PREDICTED local player is on the ground this frame (the reconciler's live predicted
+    /// state, seeded from the owner block's onground bool) — feeds the HUD mirror's OnGround flag so the
+    /// physics/strafehud panels take the same ground branches on a pure client as on the listen host.</summary>
+    public bool PredictedOnGround => _reconciler.Predicted.OnGround;
 
     /// <summary>QC view punch (<c>punchangle</c>): the weapon-recoil view kick the server applies on firing and
     /// decays (PM_check_punch). Added to the rendered view angles ONLY (not the aim), so the gun kicks the
@@ -924,6 +952,10 @@ public sealed class ClientNet : IDisposable
         ServerTickRate = r.ReadFloat();
         if (ServerTickRate <= 0f) ServerTickRate = 72f;
         ServerName = r.ReadString();
+        // The current map + gametype (appended to the accept): a pure client loads this BSP for the world render
+        // and its prediction collision. Read in the same order ServerNet.HandleAuth writes them.
+        ServerMapName = r.ReadString();
+        ServerGametype = r.ReadString();
         _reconciler.TickRate = ServerTickRate;
         Accepted = true;
         // ReplicateVars_Start (lib/replicate.qh:50-57): push ALL replicated cvars once at session init, then the
@@ -1053,6 +1085,15 @@ public sealed class ClientNet : IDisposable
     /// <summary>The server's display name, learned at handshake (for the client UI / server browser).</summary>
     public string ServerName { get; private set; } = "";
 
+    /// <summary>The map the server is currently running, learned at handshake. A pure <c>--connect</c> client
+    /// loads this BSP to render the world + build its prediction collision (NetGame.LoadClientMapFromServer);
+    /// "" leaves the client on its flat prediction floor.</summary>
+    public string ServerMapName { get; private set; } = "";
+
+    /// <summary>The server's gametype short name, learned at handshake — the client drops the SAME gametype-
+    /// conditional map submodels the server did, so its rendered world + prediction collision match authority.</summary>
+    public string ServerGametype { get; private set; } = "";
+
     private void HandleReject(ref BitReader r)
     {
         string reason = r.ReadString();
@@ -1062,6 +1103,9 @@ public sealed class ClientNet : IDisposable
 
     private void HandleSnapshot(ref BitReader r)
     {
+        // [r16 #5] cn.snapshot: the snapshot decode+apply is the heavy slice of ng.poll (4-5ms spikes at
+        // 150+ entities were landing in ng.process "(other)"); scoped so the census names it.
+        using var _snapScope = XonoticGodot.Common.Diagnostics.Prof.Sample("cn.snapshot");
         float serverTime = r.ReadFloat();
         uint ackedSeq = r.ReadULong();
 
@@ -1069,6 +1113,10 @@ public sealed class ClientNet : IDisposable
         // owner authoritative state (full precision) — the reconcile seed.
         NVec3 origin = r.ReadVector(NetPrecision.Float);
         NVec3 velocity = r.ReadVector(NetPrecision.Float);
+        // DP cl_movement 0 rides these directly (see UseClientMovement above).
+        _ownerOrigin = origin;
+        _ownerVelocity = velocity;
+        _ownerTime = serverTime;
         bool onGround = r.ReadBool();
         Health = r.ReadShort();
         Armor = r.ReadShort();
@@ -1117,6 +1165,12 @@ public sealed class ClientNet : IDisposable
         // the same values straight off LocalServerPlayer). ALWAYS consumes the 9 floats so the owner block stays
         // aligned for the movevars/scores/entity sections that follow — the server writes them unconditionally.
         LocalWeaponRings = XonoticGodot.Net.OwnerWeaponRings.Read(ref r);
+
+        // Owner inventory (appended after the ring floats — the struct's Write/Read pair owns the layout): ammo
+        // pools + owned-weapon bitset + unlimited-ammo + the STAT_ITEMS flag bits. Feeds the full HUD's
+        // ammo/weapons/powerups panels on a pure remote client via NetGame's HUD mirror player. ALWAYS consumes
+        // the fixed layout so the owner block stays aligned for the movevars/scores/entity sections that follow.
+        LocalInventory = XonoticGodot.Net.OwnerInventory.Read(ref r);
 
         // movevars: when the server's physics changed, stamp the replicated values into our cvar store so the
         // predictor's MovementParameters.FromCvars() matches authority (mid-match physics/mutator changes), then
@@ -1299,6 +1353,12 @@ public sealed class ClientNet : IDisposable
                 _staleScratch.Add(id);
         for (int i = 0; i < _staleScratch.Count; i++)
             _remotes.Remove(_staleScratch[i]);
+
+        // The own entity left the set (we became an observer — the server's entity set skips observers): drop
+        // the captured slice so the "watched == self" consumers see NO state rather than the last alive frame
+        // (e.g. a fire viewmodel frame latched at the moment of death).
+        if (LocalNetId != 0 && !entities.ContainsKey(LocalNetId))
+            LocalState = null;
     }
 
     private RemoteEntity GetOrCreateRemote(int netId)
@@ -1322,6 +1382,13 @@ public sealed class ClientNet : IDisposable
     /// </summary>
     public bool SampleRemote(int netId, float now, out NVec3 origin, out NVec3 angles)
     {
+        if (NoLerp)
+        {
+            // DP cl_nolerp 1: no two-snapshot interpolation — callers fall back to the raw newest state.
+            origin = default;
+            angles = default;
+            return false;
+        }
         if (_remotes.TryGetValue(netId, out RemoteEntity? re) && re.Interp.HasData)
         {
             Snapshot s = re.Interp.Sample(now);
@@ -1341,6 +1408,21 @@ public sealed class ClientNet : IDisposable
         if (_remotes.TryGetValue(netId, out RemoteEntity? re)) { state = re.State; return true; }
         state = default;
         return false;
+    }
+
+    /// <summary>
+    /// The decoded entity slice of the player this client is LOOKING THROUGH — works for the OWN entity too.
+    /// The own entity never enters the remote table (<see cref="HandleSnapshot"/> diverts it to
+    /// <see cref="LocalState"/> so it's never interpolated), so a <see cref="TryGetRemoteState"/> on
+    /// <see cref="LocalNetId"/> always MISSES — the silent breaker of every pure-client "watched == self"
+    /// consumer (viewmodel anim frame, viewmodel colors, vortex glow). Use THIS for view-through reads.
+    /// (v14: the server actually SENDS the own entity — before that the divert branch was dead and LocalState
+    /// stayed null for the whole session, which is why the #49/#51/#58 fixes didn't land on the wire.)
+    /// </summary>
+    public bool TryGetViewedState(int netId, out NetEntityState state)
+    {
+        if (netId != 0 && netId == LocalNetId && LocalState is { } ls) { state = ls; return true; }
+        return TryGetRemoteState(netId, out state);
     }
 
     /// <summary>Drop a remote entity (the renderer calls this when the server stops sending it / it's removed).</summary>

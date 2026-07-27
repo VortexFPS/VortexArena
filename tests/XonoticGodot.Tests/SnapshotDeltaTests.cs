@@ -371,16 +371,19 @@ public class SnapshotDeltaTests
     }
 
     [Fact]
-    public void MoveVars_Has48Entries_WithTheV7TailAppended()
+    public void MoveVars_Has49Entries_WithTheVersionTailsAppended()
     {
         // v7 (T54): the block grew 40 → 46 (T54 breadth), then 46 → 48 (the step-up velocity-limiter port
-        // extension). APPEND-only (prefix-stable Apply/FromValues across versions).
-        Assert.Equal(48, MoveVarsBlock.Count);
+        // extension); v8: 48 → 49 (sv_gameplayfix_q2airaccelerate — the air-strafe accel limiter, replicated
+        // so prediction agrees with the server on the accel step, like Base's MOVEFLAG_Q2AIRACCELERATE).
+        // APPEND-only (prefix-stable Apply/FromValues across versions).
+        Assert.Equal(49, MoveVarsBlock.Count);
         string[] tail =
         {
             "g_movement_highspeed", "g_movement_highspeed_q3_compat", "sv_gameplayfix_nudgeoutofsolid",
             "sv_wallclip", "sv_nostep", "sv_slick_applygravity",
             "sv_step_upspeed_scale", "sv_step_upspeed_max",
+            "sv_gameplayfix_q2airaccelerate",
         };
         for (int i = 0; i < tail.Length; i++)
             Assert.Equal(tail[i], MoveVarsBlock.MovementCvars[40 + i]);
@@ -399,6 +402,9 @@ public class SnapshotDeltaTests
         int IndexOf(string name) => System.Array.IndexOf(MoveVarsBlock.MovementCvars, name);
         Assert.Equal(1f, vals[IndexOf("g_movement_highspeed")]);
         Assert.Equal(1f, vals[IndexOf("sv_gameplayfix_nudgeoutofsolid")]);
+        // v8: q2airaccelerate must capture its ON default (QC autocvar inline 1) from an empty store — a bare
+        // 0 on the wire would flip the client's air-strafe accel step to the Q1 behavior and desync prediction.
+        Assert.Equal(1f, vals[IndexOf("sv_gameplayfix_q2airaccelerate")]);
         Assert.True(float.IsNaN(vals[IndexOf("sv_jumpspeedcap_min")]));
         Assert.True(float.IsNaN(vals[IndexOf("sv_jumpspeedcap_max")]));
         Assert.Equal(0f, vals[IndexOf("sv_maxspeed")]); // plain entries still read raw (Apply/FromValues default them)

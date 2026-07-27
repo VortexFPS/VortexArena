@@ -32,13 +32,13 @@ isolates the movement maths.
 
 ## Regenerating the corpus
 
-Requires the WSL toolchain (gcc-12; see the repo's `wsl-*.sh`). From the repo root:
+Requires a WSL C toolchain (any recent gcc — the 2026-07-05 regen used the distro gcc-13). From the repo
+root (adjust the /mnt/c path when regenerating from a worktree):
 
 ```bash
 wsl -e bash -lc 'cd /mnt/c/Users/Bryan/Projects/Xonotic/XonoticGodot/tools/movement-ref \
-  && export PATH=/usr/local/bin:$PATH \
-  && gcc-12 -O2 -std=c11 -o movement_ref movement_ref.c -lm \
-  && ./movement_ref /mnt/c/Users/Bryan/Projects/Xonotic/XonoticGodot/tests/XonoticGodot.Tests/golden'
+  && gcc -O2 -std=c11 -o /tmp/movement_ref movement_ref.c -lm \
+  && /tmp/movement_ref /mnt/c/Users/Bryan/Projects/Xonotic/XonoticGodot/tests/XonoticGodot.Tests/golden'
 ```
 
 Then run `dotnet test --filter MovementParityTests`. The JSON fixtures in `tests/XonoticGodot.Tests/golden/` are
@@ -55,9 +55,15 @@ integration, ramp clipping, stair stepping, and water.
 
 `verify-against-dp.md` records a live-engine validation: boot `Base/darkplaces/darkplaces-sdl.exe`
 dedicated, let it `exec` the real Xonotic config chain, dump every movement cvar, and diff against this
-file's `stock()` table. The 2026-06-07 run matched 38/40 cvars exactly; the 2 that differ
-(`sv_wallfriction`, `sv_gameplayfix_q2airaccelerate`) are documented and **proven harmless** for the
-corpus (no scenario triggers wall friction; `wishspeed0` is already clamped equal to `wishspeed` before
-`PM_Accelerate`, so the q2 fix is a no-op in stock Xonotic). That doc also contains the exact headless
+file's `stock()` table. The 2026-06-07 run matched 38/40 cvars exactly. Of the two that differed,
+`sv_wallfriction` is genuinely harmless (stock QC's wall-friction body is commented out), but the
+`sv_gameplayfix_q2airaccelerate` "benign" verdict was **WRONG** — it checked only the call-site
+`wishspeed0 == wishspeed` equality and missed that the strafe `GeomLerp`/duck clamps shrink `wishspeed`
+*between* that capture and the flag's application inside `PM_Accelerate` (player.qc:288-289). With the
+flag off, mid-air STRAFE acceleration stepped from the unclamped `wishspeed0` (~3× live Base's redirect
+budget; straight-line movement is unaffected, which is why the corpus never caught it). Fixed 2026-07-05:
+`GF_Q2AIRACCELERATE 1` here + `MovementParameters.GameplayFixQ2AirAccelerate` (default ON, replicated) in
+the port, `strafe_jump_air.json` regenerated; `StrafeParityProbeTests` pins the port to an independent
+live-Base-flagged QC transcription at every mouse-lead angle. That doc also contains the exact headless
 launch command and a precise plan for adding a DP-*captured* smoke fixture (the blocker is deterministic
 per-tick input injection, not the engine or the gmqcc toolchain — both of which are confirmed working).

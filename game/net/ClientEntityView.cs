@@ -121,7 +121,24 @@ public sealed partial class ClientEntityView : Node
         // Fill the proxy from the decoded state + interpolated pose (the CSQCModel property copy).
         e.Origin = origin;
         e.OldOrigin = origin;
-        e.Angles = angles;
+        // [#50] Player BODIES are yaw-only in Base: entcs networks angles_y alone (ent_cs.qc:144-146 forces
+        // X/Z to 0) and CSQCPlayer only ever writes e.angles_y (cl_player.qc:659), so looking up/down NEVER
+        // pitches the model — aim pitch belongs to the animdecide upper-body layer, not the entity basis.
+        // The port networks the player's full view angles (the aim), which routed players onto EntityNode's
+        // pitched full-basis path and tilted the whole body. Zero pitch/roll for player kinds here — the one
+        // choke point both the pure client AND the listen host render players through. The pitch isn't lost: it
+        // rides the separate render-only ViewPitch field, which PlayerModel's aim-bone layer reads (#7), so the
+        // torso/arms still aim up/down while the legs stay upright — the body yaw-only, the aim layer pitched.
+        if (s.Kind == NetEntityKind.Player)
+        {
+            e.Angles = new NVec3(0f, angles.Y, 0f);
+            e.ViewPitch = angles.X;
+        }
+        else
+        {
+            e.Angles = angles;
+            e.ViewPitch = 0f;
+        }
         e.Velocity = s.Velocity;
         e.Frame = s.Frame;
         e.Skin = s.Skin;
@@ -309,8 +326,15 @@ public sealed partial class ClientEntityView : Node
     /// <c>Strength</c> isn't networked (the QC wire carries only time + flags), so it's defaulted; the overlays
     /// only need the effect's PRESENCE + timer, which round-trip exactly.
     /// </summary>
-    private static void ApplyStatusEffects(Entity e, byte[]? blob)
+    internal static void ApplyStatusEffects(Entity e, byte[]? blob)
     {
+        // The blob is delta-resent only on change, so its reference is stable while unchanged — skip the re-decode
+        // (StatusEffectsCatalog.Read allocates a dictionary) when it's the same blob we last applied. This runs
+        // every render frame per remote entity AND for the pure-client HUD mirror, so the skip is real gen0 relief.
+        if (ReferenceEquals(blob, e.LastStatusBlob))
+            return;
+        e.LastStatusBlob = blob;
+
         List<ActiveStatusEffect> list = e.StatusEffects;
         if (list.Count == 0 && (blob is null || blob.Length == 0))
             return; // common case: no effects either side — nothing to do
@@ -337,9 +361,33 @@ public sealed partial class ClientEntityView : Node
         return e;
     }
 
+    // [crash fix 2026-07-26] PVS-flicker grace: sv_cullentities_pvs removes an entity from the snapshot
+    // the moment it leaves the client's PVS and re-adds it on return. Tearing the render node down on
+    // FIRST absence rebuilt the same ModelAnimators over and over (measured: 107 full mesh+material
+    // builds in 100 s of implosion fly-around), flooding the finalizer thread with RenderingServer
+    // frees that race the main thread's surface updates — the 0xC0000374 heap corruption. Instead:
+    // hide the node on first absence and only tear down after a sustained absence. Projectiles are
+    // exempt (their removal carries impact semantics and must stay immediate).
+    private const ulong CullGraceMs = 750;
+    private readonly Dictionary<int, ulong> _unseenSince = new();
+    private readonly List<int> _returned = new();
+
     /// <summary>Remove proxies (and their render nodes) for ids the server stopped sending this frame.</summary>
     private void CullDeparted()
     {
+        ulong now = Time.GetTicksMsec();
+
+        // Ids that came BACK inside the grace window: unhide, forget the absence.
+        _returned.Clear();
+        foreach (KeyValuePair<int, ulong> kv in _unseenSince)
+            if (_seen.Contains(kv.Key))
+                _returned.Add(kv.Key);
+        for (int i = 0; i < _returned.Count; i++)
+        {
+            _unseenSince.Remove(_returned[i]);
+            _render.SetEntityHidden(_returned[i], false);
+        }
+
         _stale.Clear();
         foreach (KeyValuePair<int, Entity> kv in _proxies)
             if (!_seen.Contains(kv.Key))
@@ -349,6 +397,19 @@ public sealed partial class ClientEntityView : Node
         {
             int id = _stale[i];
             Entity e = _proxies[id];
+            // Grace path (non-projectiles): first absence hides; teardown only after CullGraceMs.
+            if (!_render.Projectiles.IsTracking(id))
+            {
+                if (!_unseenSince.TryGetValue(id, out ulong since))
+                {
+                    _unseenSince[id] = now;
+                    _render.SetEntityHidden(id, true);
+                    continue;
+                }
+                if (now - since < CullGraceMs)
+                    continue;
+            }
+            _unseenSince.Remove(id);
             _viewEntities.Remove(id);
             // [W-nadeclient] tear down the orb render state for a departed id. The NadeOrbRenderer only tracks
             // nade_orb ids, so this is a harmless no-op for any non-orb entity — same idempotent contract as

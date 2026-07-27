@@ -646,7 +646,11 @@ public sealed class DamageSystem : IDamageSystem
         // QC Obituary (server/damage.qc:238): targ.death_origin = targ.origin; — latch the death position BEFORE
         // the corpse is tossed/moved, so "spawn near where you died" features (spawn_near_teammate closetodeath,
         // the personal/here/danger waypoints) measure from where the player actually fell, not the corpse rest.
-        if (victim is Player prDeath) prDeath.DeathOrigin = victim.Origin;
+        if (victim is Player prDeath)
+        {
+            prDeath.DeathOrigin = victim.Origin;
+            prDeath.DeathTime = Now(); // [R2] stamp WHEN they died so the death-point spawn-avoidance can decay
+        }
 
         // QC respawn_time = 0; then PlayerDies can set it; else calculate_player_respawn_time fills it.
         if (victim is Player pr0) pr0.RespawnTime = 0f;

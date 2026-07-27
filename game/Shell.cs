@@ -61,6 +61,20 @@ public partial class Shell : Node
     /// free-fly observer), bypassing the menu. Path is a <c>.xgd</c> (OS path, or <c>user://[demos/]</c> relative).</summary>
     public string? PlayDemoPath { get; set; }
 
+#if XG_BOTPLAYER
+    /// <summary>Bot-player harness (CLI <c>--bot-player</c>): drive the LOCAL player from a bot brain so an
+    /// unattended run exercises the real player pipeline. Compile-gated — see Directory.Build.props.</summary>
+    public bool BootBotPlayer { get; set; }
+
+    /// <summary>Skill for the bot-player brain (CLI <c>--bot-player &lt;skill&gt;</c>); default mid-range.</summary>
+    public float BootBotPlayerSkill { get; set; } = 5f;
+#endif
+
+    /// <summary>UDP port every listen server this process hosts binds (CLI <c>--port N</c>, DP <c>-port</c>).
+    /// Defaults to the stock game port; override it so scripted/agent runs don't collide with a live instance
+    /// already holding 26000 (a second host on a busy port otherwise self-connects to the WRONG server).</summary>
+    public int BootPort { get; set; } = XonoticGodot.Game.Net.NetGame.DefaultPort;
+
     private CanvasLayer _menuLayer = null!;
     private MenuRoot _menu = null!;
     private ModelViewer? _viewer;
@@ -70,6 +84,20 @@ public partial class Shell : Node
     private bool _windowFocused = true;      // OS window focus, tracked from _Notification (drives auto-pause)
     private CanvasLayer? _loadingLayer;
     private LoadingScreen? _loadingScreen;
+    private Game.Hud.ChatPrompt _chatPrompt = null!;   // [#46] the messagemode chat input line
+
+    /// <summary>[#46] <c>messagemode</c>/<c>messagemode2</c>: open the chat prompt (in a match only — at the
+    /// menu there is nobody to talk to; print the standard hint instead, like other match-only commands).</summary>
+    private void OpenChatPrompt(bool team)
+    {
+        if (!MatchRunning || ConsoleState.IsOpen)
+        {
+            if (!MatchRunning)
+                XonoticGodot.Common.Diagnostics.Log.Help("messagemode: not connected — start a match first.");
+            return;
+        }
+        _chatPrompt.Open(team);
+    }
 
     /// <summary>Apply any <c>--cvar NAME VALUE</c> command-line overrides into the shared store (repeatable; each
     /// <c>--cvar</c> token consumes the next two args). For test/automation/A-B runs that need to pin a cvar at
@@ -123,6 +151,23 @@ public partial class Shell : Node
         // the runtime hook: release all held buttons whenever the console opens (DP in_releaseall).
         BindInput.Install();
 
+        // [#46] The messagemode chat prompt (the DP engine chat input the stock ENTER/T/Y/Z binds target — Base
+        // has NO QC-side chat input). Lives on its own high CanvasLayer (over the HUD, under the console) and
+        // submits through the SAME dual route a console-typed `say` takes: the in-process listen world as a
+        // client command, else the remote string-command channel. The commands exist even at the menu (they
+        // print a hint), so a bind fired outside a match never lands in the void.
+        var chatLayer = new CanvasLayer { Name = "ChatPromptLayer", Layer = 90 };
+        AddChild(chatLayer);
+        _chatPrompt = new Game.Hud.ChatPrompt { Name = "ChatPrompt" };
+        _chatPrompt.Submit = line =>
+        {
+            if (LocalRouteCommand(line) is null)
+                RouteRemoteCommand(line);
+        };
+        chatLayer.AddChild(_chatPrompt);
+        MenuState.Interp!.RegisterCommand("messagemode", _ => OpenChatPrompt(team: false));
+        MenuState.Interp!.RegisterCommand("messagemode2", _ => OpenChatPrompt(team: true));
+
         // The client-side `screenshot` command (DP CF_CLIENT, bound to F12 by binds-xonotic.cfg): a Godot node that
         // grabs the next rendered frame and writes it to user://screenshots/. Registered on the SHARED interpreter
         // so both the F12 bind (NetGame.RunBoundCommand → RunCommand → ExecuteLine) and a console-typed `screenshot`
@@ -152,6 +197,15 @@ public partial class Shell : Node
         MouseCapture.SetWantCapture(false); // at the menu the cursor is free
 
         // Optional: boot straight into a match (smoke test / dev), bypassing the menu.
+#if XG_BOTPLAYER
+        // Bot-player harness: latch the request before any match starts, so NetGame binds the brain as soon
+        // as the local player exists. Compile-gated — see Directory.Build.props.
+        XonoticGodot.Game.Net.BotPlayerMode.Requested = BootBotPlayer;
+        XonoticGodot.Game.Net.BotPlayerMode.Skill = BootBotPlayerSkill;
+        if (BootBotPlayer)
+            GD.Print("[bot-player] --bot-player: the local player will be driven by a bot brain.");
+#endif
+
         if (!string.IsNullOrWhiteSpace(PlayDemoPath))
             StartReplay(PlayDemoPath!);                     // --playdemo <path>: demo replay (ReplayMode + free-fly)
         else if (!string.IsNullOrWhiteSpace(ConnectAddress))
@@ -167,6 +221,34 @@ public partial class Shell : Node
             StartModelViewer(BootModel!);                   // --model: no-net player-model viewer (visual QA)
         else if (!string.IsNullOrWhiteSpace(DebugScreen))
             OpenDebugScreen(DebugScreen!);
+        else
+            // Plain menu boot (the real launch path): warm the map-independent eager asset set into the shared
+            // cache in the background NOW, so the first match's precache is a cache hit and the map loads fast.
+            // Skipped above for a direct --map/--host/--connect boot — that match runs its own precache.
+            StartMenuAssetWarm();
+    }
+
+    /// <summary>
+    /// Phase 2 of the loading-speed work: at a plain menu boot, warm the map-independent eager asset set (weapons,
+    /// stock player models, combat sounds) into MenuState's process-lifetime <see cref="MenuState.SharedAssets"/>
+    /// in the background (<see cref="Client.MenuAssetWarmer"/>), so the first match's precache collapses to cache
+    /// hits and the map loads fast. Gated on <c>cl_persist_asset_cache</c> (the warm is wasted if the match builds
+    /// its own loader) and <c>cl_warm_at_boot</c>, and skipped without a mounted data dir (no shared loader).
+    /// </summary>
+    private void StartMenuAssetWarm()
+    {
+        if (MenuState.SharedAssets is null)
+            return;
+        if (MenuState.Cvars.GetFloat("cl_persist_asset_cache") == 0f
+            || MenuState.Cvars.GetFloat("cl_warm_at_boot") == 0f)
+            return;
+        string localModel = MenuState.Cvars.GetString("_cl_playermodel");
+        var warmer = new Client.MenuAssetWarmer(MenuState.SharedAssets, localModel)
+        {
+            Name = "MenuAssetWarmer",
+            ProcessMode = ProcessModeEnum.Always,   // keep warming even if a match starts + pauses the tree mid-warm
+        };
+        AddChild(warmer);
     }
 
     /// <summary>Dev/CI: push a named sub-screen so a screenshot can capture that one dialog.</summary>
@@ -225,6 +307,10 @@ public partial class Shell : Node
         MenuCommand.ToggleMenu = HandleToggleMenu;
         MenuCommand.VideoRestart = ClientSettings.ApplyVideo;
         MenuCommand.AudioRestart = ClientSettings.ApplyAudio;
+        // DP parity (2026-07-11): `vid_vsync 1` / `cl_maxfps 144` typed in the console take effect INSTANTLY,
+        // like DP — no vid_restart needed for the non-window-mode video cvars. Wired after boot-config load so
+        // the bulk cfg exec doesn't re-apply per line.
+        ClientSettings.InstallLiveVideoCvars(MenuState.Cvars);
         // QC `map`/`devmap`: in a running match this is a changelevel (keep mode + bots); at the menu it starts a
         // fresh listen server on the map then self-connects (the real "start a game" path).
         MenuCommand.StartMap = ChangeLevel;
@@ -352,6 +438,23 @@ public partial class Shell : Node
         GetViewport().SetInputAsHandled();
         if (key.Pressed)
             return;
+
+        // In-match Escape ownership, highest priority first — each acts on the RELEASE edge (the only edge that
+        // reliably arrives while the mouse is captured, per the note above). Without these, cancelling the chat
+        // prompt or pressing Escape in the HUD editor leaked to the generic pause menu instead:
+        //   1. the chat prompt cancels (it deliberately does NOT consume Escape, so both edges reach here);
+        if (Game.Hud.ChatPrompt.IsOpen)
+        {
+            _chatPrompt.Close();
+            return;
+        }
+        //   2. the live HUD editor (no menu dialog up) opens its setup-exit dialog — QC menu_showhudexit —
+        //      instead of the pause menu; with a dialog already up (_paused) fall through so Escape pops it.
+        if (!_paused && MenuState.Cvars.GetFloat("_hud_configure") != 0f)
+        {
+            MenuCommand.Run("menu_showhudexit");
+            return;
+        }
 
         if (_paused)
         {
@@ -521,6 +624,11 @@ public partial class Shell : Node
 
     private void TeardownGame()
     {
+        // Close the messagemode prompt if the match ends while it's open — otherwise the Shell-lifetime overlay
+        // (CanvasLayer 90, above the menu) keeps drawing over the main menu and its _Input eats every keystroke,
+        // and the static IsOpen leaks into the next match (movement/fire suppressed + BUTTON_CHAT forced).
+        _chatPrompt?.Close();
+
         if (_viewer is not null)
         {
             _viewer.QueueFree();
@@ -572,7 +680,7 @@ public partial class Shell : Node
             // would otherwise time out and prediction freeze). NetGame gates movement input on the pause itself.
             ProcessMode = ProcessModeEnum.Always,
         };
-        net.ConfigureClient(address, ResolvePlayerName(), MenuState.Vfs, MenuState.Cvars);
+        net.ConfigureClient(address, ResolvePlayerName(), MenuState.Vfs, MenuState.Cvars, MenuState.SharedAssets);
         net.LoadingScreen = _loadingScreen;
         net.DismissLoadingScreen = DismissLoadingScreen;
         WireConsoleToNet(net);
@@ -655,13 +763,14 @@ public partial class Shell : Node
             gametype: string.IsNullOrWhiteSpace(config.Gametype) ? "dm" : config.Gametype,
             botCount: config.BotCount,
             botSkill: config.BotSkill,
-            port: XonoticGodot.Game.Net.NetGame.DefaultPort,
+            port: BootPort,
             playerName: ResolvePlayerName(),
             serverName: MenuState.Cvars.GetString("hostname") is { Length: > 0 } hn ? hn : "XonoticGodot Listen Server",
             vfs: MenuState.Vfs,
             cvars: MenuState.Cvars,
             campaignName: config.CampaignId ?? "",   // non-empty → the server boots this as a campaign level
-            campaignIndex: config.CampaignIndex);
+            campaignIndex: config.CampaignIndex,
+            sharedAssets: MenuState.SharedAssets);   // persist the model/sound/material caches across maps & servers
         net.LoadingScreen = _loadingScreen;
         net.DismissLoadingScreen = DismissLoadingScreen;
         WireConsoleToNet(net);
@@ -799,14 +908,13 @@ public partial class Shell : Node
     /// </summary>
     private string? LocalRouteCommand(string line)
     {
-        GameWorld? world = _netGame?.ServerWorld;
-        if (world is null)
-            return null;
         // T47 integration wire-up: the listen-server operator's in-game console is the HOST, so it runs as the
         // server console (isServerConsole: true) — without this flag the new client-command privilege gate would
         // reject the host's own kick/map/set/endmatch/etc. (a regression vs pre-T47). caller stays LocalServerPlayer
         // so kill/say/team still act on the host's player; the remote-client path (ServerNet.cs) stays gated.
-        return world.Commands.Execute(line, isServerConsole: true, caller: _netGame?.LocalServerPlayer).Output;
+        // WS1: routed through NetGame so the execute takes the sim gate when sv_threaded is on — a bare
+        // Commands.Execute here mutated the worker-owned world from the main thread (`kill` mid-bot-combat).
+        return _netGame?.ExecuteHostConsoleCommand(line);
     }
 
     /// <summary>

@@ -132,8 +132,20 @@ public sealed partial class MusicPlayer : Node
         float bestVolume, fadeIn, fadeOut;
         if (SimGate is not null)
         {
-            lock (SimGate)
+            // WS1 stage 3: never BLOCK the render thread behind a mid-flight sim tick for a music scan — if
+            // the gate is contended, skip this frame's re-evaluation (music state freezes one frame; inaudible).
+            bool taken = false;
+            try
+            {
+                System.Threading.Monitor.TryEnter(SimGate, 0, ref taken);
+                if (!taken)
+                    return;
                 EvaluateMusicSources(out bestTrack, out bestVolume, out fadeIn, out fadeOut);
+            }
+            finally
+            {
+                if (taken) System.Threading.Monitor.Exit(SimGate);
+            }
         }
         else
         {

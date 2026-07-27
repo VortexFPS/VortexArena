@@ -119,6 +119,10 @@ public partial class Hud : CanvasLayer
 
     private string _skin = "luma";
 
+    /// <summary>Last frame's <c>_hud_configure</c> state — detects the configure-mode entry/exit edge so the
+    /// panels get one full re-resolve + repaint and the event-gated panels restore their hidden state on exit.</summary>
+    private bool _configuringPrev;
+
     /// <summary>The full-screen HUD dock background (QC HUD_Main dock-draw block). Added first so it composites
     /// behind every panel; self-blanks unless <c>hud_dock</c> is enabled. Driven each frame from the HUD fade.</summary>
     public HudDock Dock { get; private set; } = null!;
@@ -270,6 +274,23 @@ public partial class Hud : CanvasLayer
             Observing: Observing,
             Configuring: global::XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat("_hud_configure") != 0f);
 
+        // HUD configure-mode entry/exit edge (QC HUD_Configure_Frame pokes every panel's update_time on entry):
+        // re-resolve + repaint every panel so the editor-mode bg/alpha overrides (HudPanel.Resolve) apply the
+        // frame the mode flips — and on exit, drop the net/event-gated MAIN panels back to hidden (the net
+        // layer re-shows them when their data next demands it). Editor-gated only; no normal-draw behavior.
+        if (showCtx.Configuring != _configuringPrev)
+        {
+            foreach (HudPanel p in _panels)
+            {
+                p.InvalidateConfig();
+                p.QueueRedraw();
+                if (!showCtx.Configuring && StartHiddenIds.Contains(p.PanelId)
+                    && p.ConfigFlags.HasFlag(PanelConfig.Main))
+                    p.Visible = false;
+            }
+            _configuringPrev = showCtx.Configuring;
+        }
+
         foreach (HudPanel p in _panels)
         {
             // Port extras own their visibility/redraw — just keep their cvar layout fresh (full-viewport).
@@ -291,6 +312,12 @@ public partial class Hud : CanvasLayer
                 // net layer's data-driven Visible (it runs this frame in the parent's _Process, before this child's).
                 if (!StartHiddenIds.Contains(p.PanelId) && !p.Visible)
                     p.Visible = true;
+                // HUD configure mode shows EVERY editable panel (Base draws all registered MAIN panels with
+                // forced backgrounds while _hud_configure) — assert per frame because the net layer re-hides
+                // its event panels (no vote/race running) each frame in the parent's _Process.
+                else if (showCtx.Configuring && !p.Visible && StartHiddenIds.Contains(p.PanelId)
+                         && p.ConfigFlags.HasFlag(PanelConfig.Main))
+                    p.Visible = true;
             }
 
             if (!p.Visible) continue;
@@ -307,6 +334,15 @@ public partial class Hud : CanvasLayer
                 continue;
 
             p.LoadConfig(vp, fade, panelFade);
+
+            // HUD configure mode: repaint every frame so the forced-frame pre-pass (HudPanel._Draw) tracks the
+            // live drag/resize/alpha edits regardless of each panel's own NeedsRedraw throttle (editor-only
+            // path; the throttle resumes the frame the editor exits).
+            if (showCtx.Configuring)
+            {
+                p.QueueRedraw();
+                continue;
+            }
 
             // Re-record the canvas item only when the panel's displayed content actually changed (3.2-3) — most
             // dynamic panels return true (animate every frame), but the value readouts (timer/race timer/health/

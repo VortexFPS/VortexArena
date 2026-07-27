@@ -191,6 +191,28 @@ public sealed class ServerEntityService : IEntityService
                 results.Add(p);
         }
     }
+
+    /// <summary>QC/DP <c>findbox(mins, maxs)</c>: every engine-table entity whose linked bounds overlap the box
+    /// (precise AABB, area-grid backed) PLUS registered players in the box the engine results don't already
+    /// contain — the same fresh-player merge + <c>!Contains</c> dedup as
+    /// <see cref="FindInRadius(Vector3, float, List{Entity})"/>, so a just-registered client the grid hasn't
+    /// linked yet is still found (telefrag targets are mostly players). Players are tested on live
+    /// <c>Origin+Mins/Maxs</c> exactly like the radius merge (their <c>AbsMin</c> may not be linked yet).</summary>
+    public void FindInBox(Vector3 mins, Vector3 maxs, List<Entity> results)
+    {
+        _inner.FindInBox(mins, maxs, results); // clears + fills (precise AABB overlap, area-grid backed)
+        for (int i = 0; i < _players.Count; i++)
+        {
+            Player p = _players[i];
+            if (p.IsFreed) continue;
+            Vector3 pMin = p.Origin + p.Mins, pMax = p.Origin + p.Maxs;
+            if (mins.X > pMax.X || maxs.X < pMin.X
+                || mins.Y > pMax.Y || maxs.Y < pMin.Y
+                || mins.Z > pMax.Z || maxs.Z < pMin.Z) continue;
+            if (!results.Contains(p))
+                results.Add(p);
+        }
+    }
 }
 
 /// <summary>

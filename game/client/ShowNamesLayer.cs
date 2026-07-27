@@ -58,9 +58,18 @@ public partial class ShowNamesLayer : Control
 
     /// <summary>The local client's team (QC the local <c>entcs</c> team) — drives the <c>sameteam</c> branch
     /// (teammate tags fade in unconditionally + may show the status bar; enemies obey the enemy gates). A listen
-    /// server feeds the local server Player's team; a pure client derives it from the local scoreboard row. 0 =
-    /// no team (FFA): then no player is "sameteam", matching QC where a teamless local has only enemies.</summary>
+    /// server feeds the local server Player's team; a pure client derives it from the local scoreboard row.
+    /// ⚠ In FFA this is NON-ZERO (the pants-color-derived team the port carries on every player — the #27 trap),
+    /// so it must NEVER be used as a teamplay test on its own: <see cref="Teamplay"/> gates every compare.</summary>
     public int LocalTeam { get; set; }
+
+    /// <summary>Whether the ACTIVE GAMETYPE is team-based (QC <c>teamplay</c>, networked via the ScoreInfo block
+    /// → <c>GameScores.Teamplay</c>). THE gate for every team compare in this layer — playtest #55's root cause
+    /// was deriving this from <c>LocalTeam != None</c>: in FFA every player carries a pants-color-derived team,
+    /// so players sharing profile colors classified as TEAMMATES (LOS trace skipped, tags always visible,
+    /// through-wall + status bar). Exactly the #27 friendly-fire trap — same rule: gate at the call site on the
+    /// real teamplay flag, never inside a team-field compare.</summary>
+    public bool Teamplay { get; set; }
 
     /// <summary>Whether the local player is in third-person (QC <c>autocvar_chase_active</c> / event-chase). The
     /// own-name tag only draws in chase, exactly like <c>Draw_ShowNames</c>'s self branch.</summary>
@@ -154,7 +163,10 @@ public partial class ShowNamesLayer : Control
         NVec3 viewOrigin = Coords.ToQuake(Camera.GlobalPosition);
 
         float offset = CvarF("hud_shownames_offset", 52f);
-        bool teamplay = LocalTeam != Teams.None;
+        // [#55] THE authoritative teamplay flag (GameScores.Teamplay via the feed) — NOT `LocalTeam != None`:
+        // FFA players carry a pants-derived non-zero team, so the old derivation turned DM into "everyone with
+        // my profile colors is a teammate" (no LOS trace, tags always on). The #27 rule: gate on real teamplay.
+        bool teamplay = Teamplay;
 
         // ---- pass 1: compute each visible player's fade alpha + screen box (QC Draw_ShowNames_All loop) ----
         _drawIds.Clear();
@@ -743,10 +755,15 @@ public partial class ShowNamesLayer : Control
             return true;
         ITraceService trace = Api.Trace;
         TraceResult tr = trace.Trace(from, NVec3.Zero, NVec3.Zero, to, MoveFilter.NoMonsters, null);
-        // QC hit = !(trace_fraction < 1 && trace_ent is not the player itself). The client can't match the remote
-        // player to a trace-set entnum (the remote isn't a distinct trace edict here), so treat "essentially
-        // reached the target" as a clear LOS — only real world geometry between the eye and the player blocks it.
-        return tr.Fraction >= 0.99f;
+        // QC shownames.qc:62-63 — `hit = !(trace_fraction < 1 && <the blocker isn't the target player>)`: ANY
+        // shortfall blocks. The target-player escape hatch Base needs does not apply here: MOVE_NOMONSTERS skips
+        // every non-SOLID_BSP entity (TraceService.ClipToEntities), so a player can never stop this trace and an
+        // unobstructed sweep returns Fraction exactly 1 (SweepState seeds 1f and only a real hit lowers it).
+        //
+        // This used to allow a 0.99 slop, which is not a constant epsilon but 1% OF THE TRACE LENGTH: an enemy
+        // standing within 1% of eye-distance behind cover kept their tag lit — ~20 u of see-through wall at 2000 u
+        // range, growing with distance. That is the "names visible through walls" leak; Base has no such tolerance.
+        return tr.Fraction >= 1f;
     }
 
     private static float Vlen(NVec3 v) => v.Length();

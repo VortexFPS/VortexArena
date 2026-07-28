@@ -168,6 +168,12 @@ public sealed partial class EditorLighting : Node3D
     /// <summary>Bounce count for the bake. Default 8, matching stormkeep's own compile (-bounce 8).</summary>
     public const string CvarBakeBounces = "cl_editor_bake_bounces";
 
+    /// <summary>
+    /// Response curve on the baked light (live, no rebake). 1 is the physical linear average — which reads
+    /// flat; a compiled lightmap's punch lives in its response, and >1 restores it. Default 1.3.
+    /// </summary>
+    public const string CvarBakeGamma = "cl_editor_bake_gamma";
+
     /// <summary>Cap on generated surface lights (the largest emitters win). Keeps pathological maps bounded.</summary>
     private const int MaxSurfaceLights = 224;
 

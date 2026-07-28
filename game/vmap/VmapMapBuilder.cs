@@ -90,6 +90,8 @@ public static class VmapMapBuilder
                 if (!byMaterial.TryGetValue(surface.Material, out CellSurface? cell))
                 {
                     cell = new CellSurface(surface.Material);
+                    if (EditorLightBake.Active)
+                        cell.AlbedoAverage = AverageAlbedo(assets, surface.Material);
                     byMaterial[surface.Material] = cell;
                 }
 
@@ -383,17 +385,51 @@ public static class VmapMapBuilder
     /// <summary>Whether the current build wants lit materials; set by <see cref="BuildMap"/>.</summary>
     private static bool Lit;
 
-    /// <summary>
-    /// Live multiplier on the baked light (the shader's <c>baked_scale</c>). Calibrated so the bake lands near
-    /// the compiled map's own brightness: at 1.0 the editor measured 52.3 mean against the baked reference's
-    /// 26.8. Because it is a shader uniform rather than part of the bake, changing it re-lights instantly with
-    /// no rebuild.
-    /// </summary>
-    public static float BakeScale = 0.24f;
 
     /// <summary>Cache so a shared material is built once per map build, not once per cell. Keyed by shader AND
     /// lit-ness, because the two variants of one shader are different materials.</summary>
     private static readonly Dictionary<string, Material> EditorMaterials = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Average colour of a shader's albedo page, for the bounce: light reflecting off a rust floor is rust,
+    /// not grey. q3map2 does exactly this (per-texture reflectivity from the image average). Cached, because
+    /// GetImage round-trips the GPU and one answer per shader is all a bake needs.
+    /// </summary>
+    private static Color AverageAlbedo(AssetSystem assets, string shaderName)
+    {
+        if (_albedoAverages.TryGetValue(shaderName, out Color cached))
+            return cached;
+
+        var fallback = new Color(0.45f, 0.45f, 0.45f);
+        Color result = fallback;
+        try
+        {
+            Texture2D? tex = assets.ResolveLightmapDiffuse(shaderName).Texture ?? assets.LoadTexture(shaderName);
+            if (tex?.GetImage() is { } img)
+            {
+                if (img.IsCompressed())
+                    img.Decompress();
+                img.Resize(4, 4, Image.Interpolation.Bilinear);
+                float r = 0f, g = 0f, b = 0f;
+                for (int y = 0; y < 4; y++)
+                for (int x = 0; x < 4; x++)
+                {
+                    Color px = img.GetPixel(x, y);
+                    r += px.R; g += px.G; b += px.B;
+                }
+                result = new Color(r / 16f, g / 16f, b / 16f);
+            }
+        }
+        catch (Exception)
+        {
+            result = fallback;   // an unreadable image must not kill the bake; grey is the honest default
+        }
+
+        _albedoAverages[shaderName] = result;
+        return result;
+    }
+
+    private static readonly Dictionary<string, Color> _albedoAverages = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// FULLBRIGHT textured material for the editor world.
@@ -424,7 +460,6 @@ public static class VmapMapBuilder
             baked.SetShaderParameter("uv_scale",
                 diffuse.UvScale.X != 0f && diffuse.UvScale.Y != 0f ? diffuse.UvScale : Vector2.One);
             baked.SetShaderParameter("alpha_cutoff", diffuse.AlphaCutoff);
-            baked.SetShaderParameter("baked_scale", BakeScale);
 
             float bakedEmit = SurfaceEmit(assets, shaderName);
             if (diffuse.Glow is not null)
@@ -604,9 +639,12 @@ public static class VmapMapBuilder
             {
                 NVec3 p = Coords.ToQuake(Positions[i]);
                 NVec3 n = Coords.ToQuake(Normals[i]);
-                Colors[i] = EditorLightBake.Sample(p, n);
+                Colors[i] = EditorLightBake.Sample(p, n, AlbedoAverage);
             }
         }
+
+        /// <summary>Average albedo of this cell's shader — the colour its bounce light carries.</summary>
+        public Color AlbedoAverage = new(0.45f, 0.45f, 0.45f);
 
         /// <summary>Add the bounce gather on top of the direct colours (worker-thread safe, own lists only).</summary>
         public void AddBounceColors()
@@ -629,7 +667,23 @@ public static class VmapMapBuilder
             arrays[(int)Mesh.ArrayType.Normal] = Normals.ToArray();
             arrays[(int)Mesh.ArrayType.TexUV] = Uvs.ToArray();
             if (Colors.Count == Positions.Count && Colors.Count > 0)
-                arrays[(int)Mesh.ArrayType.Color] = Colors.ToArray();
+            {
+                // The mesh COLOR channel is stored 8-bit and CLAMPED to [0,1] — and baked light is not: a
+                // fixture-adjacent vertex routinely carries 2-6. Packed raw, everything bright saturates to
+                // flat white and every downstream knob appears dead (measured: three different bounce
+                // calibrations produced identical statistics to the hundredth). Store at 1/RANGE and let the
+                // shader expand: a poor man's HDR vertex lightmap.
+                var packed = new Color[Colors.Count];
+                for (int i = 0; i < Colors.Count; i++)
+                {
+                    Color c = Colors[i];
+                    packed[i] = new Color(
+                        c.R * (1f / EditorWorldShader.BakedColorRange),
+                        c.G * (1f / EditorWorldShader.BakedColorRange),
+                        c.B * (1f / EditorWorldShader.BakedColorRange));
+                }
+                arrays[(int)Mesh.ArrayType.Color] = packed;
+            }
             arrays[(int)Mesh.ArrayType.Index] = Indices.ToArray();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         }

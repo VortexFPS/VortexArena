@@ -134,7 +134,10 @@ public static class EditorLightBake
     {
         _grid = new Grid(lights);
         _shadows = shadows;
-        _bounceWanted = bounce;
+        // bounces <= 0 means NO bounce at all, exactly like q3map2's -bounce 0 — the earlier clamp to a
+        // minimum of 1 silently turned "cl_editor_bake_bounces 0" into one bounce, which is why toggling it
+        // appeared to do nothing.
+        _bounceWanted = bounce && bounces > 0;
         _bounces = Math.Clamp(bounces, 1, 16);
         _sunDir = sunDirToSun is { } d && d.LengthSquared() > 1e-6f ? NVec3.Normalize(d) : null;
         _sunColor = sunColor;
@@ -165,7 +168,17 @@ public static class EditorLightBake
     /// as a colour to multiply the surface albedo by. Also feeds the bounce accumulator, so the second pass
     /// knows what this region received.
     /// </summary>
-    public static Color Sample(NVec3 position, NVec3 normal)
+    public static Color Sample(NVec3 position, NVec3 normal) => Sample(position, normal, _greyAlbedo);
+
+    private static readonly Color _greyAlbedo = new(0.45f, 0.45f, 0.45f);
+
+    /// <param name="position">Sample position, Quake space.</param>
+    /// <param name="normal">Surface normal.</param>
+    /// <param name="albedo">
+    /// Average colour of the surface's texture: what the BOUNCE from this sample carries. Light reflecting
+    /// off a rust floor is rust — feeding grey here is why bounce light used to read cold.
+    /// </param>
+    public static Color Sample(NVec3 position, NVec3 normal, Color albedo)
     {
         if (_grid is not { } grid)
             return Colors.Black;
@@ -195,7 +208,8 @@ public static class EditorLightBake
         }
 
         if (_bounceWanted && (received.R > 0.001f || received.G > 0.001f || received.B > 0.001f))
-            AccumulateBounce(position, normal, received);
+            AccumulateBounce(position, normal, new Color(
+                received.R * albedo.R, received.G * albedo.G, received.B * albedo.B));
 
         return direct;
     }
@@ -344,7 +358,10 @@ public static class EditorLightBake
             NVec3 n2 = acc.NormW.LengthSquared() > 1e-6f ? NVec3.Normalize(acc.NormW) : new NVec3(0f, 0f, 1f);
             pos.Add(p2 + n2 * 24f);
             nrm.Add(n2);
-            col.Add(new NVec3(acc.R, acc.G, acc.B) * (BounceAlbedo * 0.06f));
+            // The per-sample TEXTURE albedo is already folded in at accumulation; the constant here is only
+            // the emitter-strength calibration (raised from the grey-albedo era, since real Q3 textures
+            // average darker than the 0.5 grey they replaced).
+            col.Add(new NVec3(acc.R, acc.G, acc.B) * 0.35f);
         }
 
         // Bounces 2..N as EMITTER-TO-EMITTER radiosity. Iterating at the patch level is what makes "8
@@ -372,7 +389,7 @@ public static class EditorLightBake
                     float take = -NVec3.Dot(nrm[i], dir);       // receiver i faces it
                     if (give <= 0f || take <= 0f)
                         continue;
-                    float falloff = 1f / (1f + dist2 / (192f * 192f));
+                    float falloff = 1f / (1f + dist2 / (288f * 288f));
                     float window = 1f - dist / BounceRange;
                     add[i] += col[j] * (give * take * falloff * window * window * BounceAlbedo);
                 }
@@ -388,7 +405,7 @@ public static class EditorLightBake
             if (sum < 0.02f)
                 continue;
             var tint = new Color(col[i].X / sum, col[i].Y / sum, col[i].Z / sum);
-            float energy = Math.Clamp(sum, 0f, 5f);
+            float energy = Math.Clamp(sum, 0f, 16f);
             emitters.Add(new BakedLight(pos[i], tint, energy, BounceRange));
         }
 
@@ -426,7 +443,7 @@ public static class EditorLightBake
             if (ndotl <= 0f)
                 continue;
 
-            float falloff = 1f / (1f + dist * dist / (192f * 192f));
+            float falloff = 1f / (1f + dist * dist / (320f * 320f));
             float window = 1f - dist / l.Range;
             float k = l.Energy * ndotl * falloff * window * window;
 

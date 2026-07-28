@@ -208,7 +208,23 @@ public static class MenuState
         _cvars.LockDefaults();
 
         // --- the user's saved preferences win over the stock defaults (incl. their saved `bind` lines) ---
-        LoadUserConfig();
+        // --fresh-cvars: run on REGISTERED DEFAULTS, ignoring the player's saved cvar edits (the load-side
+        // counterpart of the save suppression above). For debugging and A/B testing: a stale value tuned
+        // against last week's semantics — e.g. an ambient saved as 10 when the scale meant something else —
+        // silently overrides every recalibrated default and produces results nothing in the current code can
+        // explain. The config FILE is untouched; a normal launch gets it all back.
+        bool freshCvars = false;
+        foreach (string a in OS.GetCmdlineArgs())
+            if (a == "--fresh-cvars")
+            {
+                freshCvars = true;
+                ConfigSaveSuppressedBy ??= a;   // never resave defaults over the player's real config
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    "[MenuState] --fresh-cvars — saved cvar edits IGNORED this run (registered defaults only).");
+                break;
+            }
+        if (!freshCvars)
+            LoadUserConfig();
 
         // --- i18n: load the active language's gettext catalog so the menu builds translated (menu.qc m_init +
         //     the engine's PRVM_PO_Load at progs load). prvm_language defaults to "en" (xonotic-client.cfg:91);

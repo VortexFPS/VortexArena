@@ -133,6 +133,14 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>GeometryVersion the live collision was built from; -1 forces the first playtest rebuild check.</summary>
     private int _editorCollisionVersion = -1;
+
+    private float _bakeUniformScale = float.NaN, _bakeUniformAmbient = float.NaN, _bakeUniformGamma = float.NaN;
+
+    private static float CvarOr(XonoticGodot.Engine.Simulation.CvarService cvars, string name, float fallback)
+    {
+        string v = cvars.GetString(name);
+        return string.IsNullOrEmpty(v) ? fallback : cvars.GetFloat(name);
+    }
     private RadarPanel _radar = null!;
     private NetHud _hud = null!;                 // crosshair + health/armor readout (the always-on lightweight HUD)
     // The full CSQC HUD panel set (weapon bar / ammo / kill-feed / centerprint / timer) on the net play path —
@@ -5807,6 +5815,25 @@ public sealed partial class NetGame : Node3D
             // mapper changes mid-session. ApplyEnvironment itself no-ops when nothing changed.
             if (_worldEnv is not null)
                 Vmap.EditorLighting.ApplyEnvironment(_worldEnv, Menu.MenuState.Cvars);
+
+            // The baked-light controls are GLOBAL shader uniforms fed from cvars every frame, changed-gated.
+            // Their first incarnation was per-material uniforms, frozen into the material cache at build
+            // time — which is why "_scale and _ambient don't appear to do anything" was literally true.
+            if (Menu.MenuState.Cvars is { } lc)
+            {
+                float sc2 = CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.01f);
+                float am2 = CvarOr(lc, Vmap.EditorLighting.CvarAmbient, 0.03f);
+                float gm2 = CvarOr(lc, Vmap.EditorLighting.CvarBakeGamma, 1.3f);
+                if (sc2 != _bakeUniformScale || am2 != _bakeUniformAmbient || gm2 != _bakeUniformGamma)
+                {
+                    _bakeUniformScale = sc2;
+                    _bakeUniformAmbient = am2;
+                    _bakeUniformGamma = gm2;
+                    RenderingServer.GlobalShaderParameterSet("editor_bake_scale", sc2);
+                    RenderingServer.GlobalShaderParameterSet("editor_bake_ambient", am2);
+                    RenderingServer.GlobalShaderParameterSet("editor_bake_gamma", gm2);
+                }
+            }
             Vmap.EditorLighting.SuppressSceneSun(this, true);
         }
 
@@ -6958,9 +6985,6 @@ public sealed partial class NetGame : Node3D
             AddChild(_editorLights);
             if (_editorLights.Baking)
             {
-                Vmap.VmapMapBuilder.BakeScale = Menu.MenuState.Cvars is { } bc
-                    && !string.IsNullOrEmpty(bc.GetString(Vmap.EditorLighting.CvarBakeScale))
-                        ? bc.GetFloat(Vmap.EditorLighting.CvarBakeScale) : 0.24f;
                 bool shadowsWanted = Menu.MenuState.Cvars is not { } sc
                     || string.IsNullOrEmpty(sc.GetString(Vmap.EditorLighting.CvarBakeShadows))
                     || sc.GetFloat(Vmap.EditorLighting.CvarBakeShadows) != 0f;

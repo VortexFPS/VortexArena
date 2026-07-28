@@ -17,6 +17,14 @@ namespace XonoticGodot.Game.Vmap;
 /// </summary>
 public static class EditorWorldShader
 {
+    /// <summary>
+    /// HDR range of the baked vertex colours: they are stored divided by this (the mesh COLOR channel is
+    /// 8-bit and clamps at 1) and the shader multiplies it back. 8 covers the hottest fixture-adjacent
+    /// values the bake produces while keeping ~5 bits of precision in the darks.
+    /// </summary>
+    public const float BakedColorRange = 8f;
+
+
     private static Shader? _shader;
 
     public static Shader Instance => _shader ??= new Shader { Code = Code };
@@ -35,7 +43,12 @@ uniform float alpha_cutoff = 0.0;
 uniform sampler2D glow_tex : source_color, hint_default_black;  // fixture self-illumination page
 uniform float glow_energy = 0.0;
 
-uniform float baked_scale = 1.0;   // live multiplier on the baked light, so taste needs no re-bake
+// LIVE controls, global on purpose: per-material uniforms are frozen into the material cache at build time,
+// which is exactly how the first version of these knobs came to do nothing at all. A global is one
+// RenderingServer set away from every surface, every frame, no rebuild, no rebake.
+global uniform float editor_bake_scale;    // overall strength of the baked light
+global uniform float editor_bake_ambient;  // flat floor added in-shader (ambient_light_disabled blocks the scene's)
+global uniform float editor_bake_gamma;    // response curve on the baked light: >1 = punchier, more contrast
 
 void fragment() {
     vec4 t = texture(albedo_tex, UV * uv_scale);
@@ -51,8 +64,12 @@ void fragment() {
     METALLIC = 0.0;
 
     // EMISSION carries what was computed offline: the baked fixture light modulating this surface's own
-    // colour, plus the fixture's glow page for the emitting faces themselves.
-    EMISSION = base * COLOR.rgb * baked_scale + texture(glow_tex, UV * uv_scale).rgb * glow_energy;
+    // colour, plus the fixture's glow page for the emitting faces themselves. The gamma curve is applied to
+    // the LIGHT, not the albedo — the same place a lightmap's own storage response lives, and the knob that
+    // separates physically-averaged-and-flat from the punchy compiled look.
+    vec3 baked = pow(max(COLOR.rgb * 8.0, vec3(0.0)), vec3(editor_bake_gamma)) * editor_bake_scale;
+    EMISSION = base * (baked + vec3(editor_bake_ambient))
+        + texture(glow_tex, UV * uv_scale).rgb * glow_energy;
 }
 ";
 }

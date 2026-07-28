@@ -61,6 +61,15 @@ public partial class EditorPanel : HudPanel
     /// <summary>True while the session is showing the ORIGINAL compiled BSP for comparison.</summary>
     public bool ShowingBsp { get; set; }
 
+    /// <summary>The running bake's phase: "direct", "bounce", "finalize".</summary>
+    public string BakePhase { get; set; } = "";
+
+    /// <summary>Cell meshes still waiting for the finished bake to be applied.</summary>
+    public int ApplyRemaining { get; set; }
+
+    /// <summary>Cell meshes the current apply started with.</summary>
+    public int ApplyTotal { get; set; }
+
     /// <summary>Fraction of the running bake that is done, 0..1.</summary>
     public float BakeProgress { get; set; }
 
@@ -147,9 +156,19 @@ public partial class EditorPanel : HudPanel
                 {
                     // A bar, not just a number: a bake runs for minutes and the mapper needs to see it move
                     // to tell "working" from "hung" — which is exactly the distinction that was missing.
+                    // The phase label carries the rest of the honesty: 100% of one pass is not done.
                     int filled = (int)(BakeProgress * 24f);
                     lines.Add(($"  BAKING [{new string('#', filled)}{new string('.', 24 - filled)}] "
-                        + $"{BakeProgress * 100f:F0}%", new Color(0.5f, 0.85f, 1f)));
+                        + $"{BakeProgress * 100f:F0}% {BakePhase}", new Color(0.5f, 0.85f, 1f)));
+                }
+                else if (lit && Baked && ApplyRemaining > 0 && ApplyTotal > 0)
+                {
+                    // The finished bake streams onto the world a few milliseconds a frame; SAY so, rather
+                    // than leaving a silent gap between "BAKING 100%" and the lighting visibly changing.
+                    float f = 1f - (float)ApplyRemaining / ApplyTotal;
+                    int filled = (int)(f * 24f);
+                    lines.Add(($"  APPLYING [{new string('#', filled)}{new string('.', 24 - filled)}] "
+                        + $"{f * 100f:F0}%", new Color(0.5f, 0.85f, 1f)));
                 }
                 else if (lit && Baked && ShadowsStale)
                     lines.Add(($"  LIGHTING STALE — {Key(BindRebake)} to rebake", new Color(1f, 0.75f, 0.3f)));

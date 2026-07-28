@@ -461,11 +461,16 @@ public static class EditorLightBake
         }
     }
 
-    /// <summary>Samples lit so far by the running bake (for the progress readout).</summary>
+    /// <summary>Work units done so far (for the progress readout) — spans BOTH passes, not just direct.</summary>
     public static int Progress => Volatile.Read(ref _progress);
 
-    /// <summary>Total samples the running bake will light.</summary>
+    /// <summary>Total work units for the running bake: samples x passes, so 100% means DONE, not half way.</summary>
     public static int ProgressTotal { get; private set; }
+
+    /// <summary>What the bake is doing right now: "direct", "bounce", "finalize".</summary>
+    public static string ProgressPhase => _phase;
+
+    private static volatile string _phase = "";
 
     /// <summary>True while a background bake is running.</summary>
     public static bool BakeRunning => Volatile.Read(ref _running) != 0;
@@ -517,7 +522,11 @@ public static class EditorLightBake
         Volatile.Write(ref _running, 1);
         Volatile.Write(ref _progress, 0);
         Volatile.Write(ref _cancel, 0);
-        ProgressTotal = set.Count;
+        // The bar covers EVERYTHING the worker does. Counting only the direct pass made it hit 100% and
+        // then sit there through the whole bounce gather and finalize — a full bar that is still working is
+        // indistinguishable from a hang, which is the exact confusion a progress bar exists to remove.
+        ProgressTotal = set.Count * (_bounceWanted ? 2 : 1);
+        _phase = "direct";
 
         try
         {
@@ -563,6 +572,7 @@ public static class EditorLightBake
                     Interlocked.Add(ref _progress, end - start);
                 });
 
+                _phase = "bounce";
                 if (Volatile.Read(ref _cancel) == 0 && _bounceWanted && BuildBounceLights() > 0)
                 {
                     System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, options, chunk =>
@@ -581,17 +591,27 @@ public static class EditorLightBake
                                 c.G + bounce.G * dirt[i],
                                 c.B + bounce.B * dirt[i]);
                         }
+                        Interlocked.Add(ref _progress, end - start);
                     });
+                }
+                else if (_bounceWanted)
+                {
+                    Interlocked.Add(ref _progress, pos.Length);   // no emitters: the pass is instantly done
                 }
             }).ConfigureAwait(false);
 
             // Publish only a COMPLETE bake: half of one written over the retained lighting would leave the
             // map lit in patches, which is worse than the lighting it replaced.
+            _phase = "finalize";
             if (Volatile.Read(ref _cancel) == 0)
             {
                 FillBlackSamples(pos, result, buried);
                 MeasureEncodeRange(result);
                 CacheReset();
+                // Millions of dictionary inserts follow; growing the tables incrementally rehashes them
+                // log-n times over, and this tail runs AFTER the bar looks done - exactly where seconds hurt.
+                _exact.EnsureCapacity(pos.Length);
+                _cache.EnsureCapacity(pos.Length / 4 + 1);
                 for (int i = 0; i < pos.Length; i++)
                     CacheStore(pos[i], result[i], dirs[i]);
             }

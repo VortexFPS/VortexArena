@@ -5904,7 +5904,7 @@ public sealed partial class NetGame : Node3D
             // so only its vertex colours change, a few cell meshes per frame. A full rebuild here was ~880 ms
             // of frozen main thread the instant a bake landed — the one moment the editor should feel free.
             if (Vmap.VmapMapBuilder.RecolorRemaining > 0)
-                Vmap.VmapMapBuilder.RecolorStep(4);
+                Vmap.VmapMapBuilder.RecolorStep(3.0);   // ~3 ms a frame: invisible at 144 Hz, done in about a second
 
             if (Vmap.EditorLightBake.BakeFinished)
             {
@@ -5976,6 +5976,9 @@ public sealed partial class NetGame : Node3D
                 && _editorLights.Baking;
             editorPanel.ShadowsStale = _bakedShadowsStale;
             editorPanel.BakeRunning = Vmap.EditorLightBake.BakeRunning;
+            editorPanel.BakePhase = Vmap.EditorLightBake.ProgressPhase;
+            editorPanel.ApplyRemaining = Vmap.VmapMapBuilder.RecolorRemaining;
+            editorPanel.ApplyTotal = Vmap.VmapMapBuilder.RecolorTotal;
             editorPanel.ShowingBsp = _editorShowBsp;
             editorPanel.BakeProgress = Vmap.EditorLightBake.ProgressTotal > 0
                 ? (float)Vmap.EditorLightBake.Progress / Vmap.EditorLightBake.ProgressTotal

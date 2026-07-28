@@ -501,16 +501,22 @@ public static class VmapMapBuilder
     /// <summary>Surfaces still to recolour; 0 when idle.</summary>
     public static int RecolorRemaining { get; private set; }
 
+    /// <summary>Cell meshes the current apply started with (for the APPLYING readout).</summary>
+    public static int RecolorTotal { get; private set; }
+
     /// <summary>Begin applying the retained bake to the world on screen.</summary>
-    public static void BeginRecolor() => RecolorRemaining = LiveCells.Count;
+    public static void BeginRecolor() => RecolorTotal = RecolorRemaining = LiveCells.Count;
 
     /// <summary>
     /// Recolour up to <paramref name="budget"/> surfaces, resampling the retained bake onto their vertices.
     /// Called once a frame with a small budget so the cost is spread instead of landing as one hitch.
     /// </summary>
-    public static void RecolorStep(int budget)
+    public static void RecolorStep(double maxMillis)
     {
-        while (RecolorRemaining > 0 && budget-- > 0)
+        // A TIME budget rather than a count: cells range from dozens of vertices to tens of thousands, so a
+        // fixed per-frame count was either hitchy on the big ones or needlessly slow on the small ones.
+        ulong until = Time.GetTicksUsec() + (ulong)(maxMillis * 1000.0);
+        while (RecolorRemaining > 0 && Time.GetTicksUsec() < until)
         {
             int index = LiveCells.Count - RecolorRemaining;
             RecolorRemaining--;

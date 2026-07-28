@@ -305,7 +305,21 @@ public static class VmapMapBuilder
                             vn = Coords.ToGodot(NVec3.Normalize(ni));
                     }
                     else
+                    {
+                        // Degenerate in the projection (a sliver, or a triangle edge-on to the chosen
+                        // plane) — patch tessellation produces plenty of these. Barycentric weights are
+                        // meaningless here, but the FIRST vertex's normal is still the wrong answer: fall
+                        // back to the nearest source vertex, which is at least a normal that belongs to
+                        // this part of the surface.
                         uv = ua;
+                        float da = (pt - a).LengthSquared();
+                        float db = (pt - b).LengthSquared();
+                        float dc = (pt - c).LengthSquared();
+                        NVec3 nn = da <= db && da <= dc ? na : db <= dc ? nb : nc;
+                        uv = da <= db && da <= dc ? ua : db <= dc ? ub : uc;
+                        if (nn.LengthSquared() > 1e-8f)
+                            vn = Coords.ToGodot(NVec3.Normalize(nn));
+                    }
                     return (Coords.ToGodot(pt), vn, new Vector2(uv.X, uv.Y), Colors.Black);
                 }
 

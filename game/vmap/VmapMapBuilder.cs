@@ -120,6 +120,9 @@ public static class VmapMapBuilder
             {
                 Name = $"VmapCell_{key.X}_{key.Y}_{key.Z}",
                 Mesh = mesh,
+                // SDFGI only sees geometry that opts in. Static is right even though the map is being edited:
+                // it describes how the surface participates in GI, and a rebuild re-registers it anyway.
+                GIMode = GeometryInstance3D.GIModeEnum.Static,
             };
             for (int s = 0; s < materials.Count; s++)
                 instance.SetSurfaceOverrideMaterial(s, materials[s]);

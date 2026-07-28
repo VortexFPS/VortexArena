@@ -5753,7 +5753,14 @@ public sealed partial class NetGame : Node3D
 
         RefreshEditorWorld();
         if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights) && _camera is not null)
+        {
             _editorLights.Update(_camera.GlobalPosition, Menu.MenuState.Cvars, (float)Time.GetTicksMsec() / 1000f);
+            // Per-frame, not once at build: the environment is owned by the WorldEnvironment NODE (_worldEnv),
+            // which may not exist yet when the first world is built, and the GI/ambient cvars are things a
+            // mapper changes mid-session. ApplyEnvironment itself no-ops when nothing changed.
+            if (_worldEnv is not null)
+                Vmap.EditorLighting.ApplyEnvironment(_worldEnv, Menu.MenuState.Cvars);
+        }
 
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
         {
@@ -6848,6 +6855,7 @@ public sealed partial class NetGame : Node3D
                 if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
                     _editorLights.QueueFree();
                 _editorLights = null;
+                Vmap.EditorLighting.RestoreEnvironment();
                 if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
                 {
                     _mapRoot.Visible = true;
@@ -6894,8 +6902,8 @@ public sealed partial class NetGame : Node3D
         {
             _editorLights = Vmap.EditorLighting.Build(_editor.Document!, _assets.Assets, Menu.MenuState.Cvars);
             AddChild(_editorLights);
-            if (_camera?.GetViewport()?.World3D?.Environment is { } env)
-                Vmap.EditorLighting.ApplyAmbient(env, Menu.MenuState.Cvars);
+            // Baked against the world node so the voxelisation sees the geometry AND the lights.
+            Vmap.EditorLighting.BuildVoxelGi(_editor.Document!, _editorMapRoot, Menu.MenuState.Cvars);
         }
 
         // The regenerated world carries its own "Portals" node, so the portal renderer has to be re-pointed at

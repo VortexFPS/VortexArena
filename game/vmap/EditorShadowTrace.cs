@@ -36,7 +36,19 @@ public sealed class EditorShadowTrace
     private const float CellSize = 256f;
 
     /// <summary>How far off the surface a shadow ray starts, in Quake units. Stops a face shadowing itself.</summary>
-    public const float SurfaceBias = 2f;
+    /// <summary>
+    /// How far a shadow ray starts off the surface, Quake units.
+    ///
+    /// It exists to stop a ray hitting the very surface it leaves, so it wants to be as SMALL as precision
+    /// allows — not as large as seems safe. At 2 units it was lifting samples clear of the geometry they
+    /// belong to: out of a narrow panel recess, or off a trim strip only a few units wide. Those samples
+    /// then saw open space and took full light, so grooves that should read as dark lines came out as
+    /// bright bands along the seam.
+    ///
+    /// 0.5 is still a thousand times the float32 epsilon at this map's far corners (~4000 units), so it
+    /// keeps its actual job while no longer teleporting samples out of the features they describe.
+    /// </summary>
+    public const float SurfaceBias = 0.5f;
 
     private readonly struct Occluder
     {

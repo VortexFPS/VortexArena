@@ -539,26 +539,27 @@ public static class EditorLightBake
             var dirs = new NVec3[pos.Length];
             var buried = new bool[pos.Length];
 
-            // Leave cores for the game. Parallel.For's default is "every core", which on a bake this long
-            // means the main and render threads fight the workers for a scheduler slot on every frame — the
-            // work finishes no sooner and the editor stutters throughout. Two cores held back is the
-            // difference between a bake you can fly around during and one you wait out.
+            // How much of the machine this bake may take (cl_editor_bake_cpu). Parallel.For's default is
+            // "every core", which on a bake this long means the main and render threads fight the workers
+            // for a scheduler slot on every frame — the work finishes no sooner and the whole desktop
+            // stutters throughout.
             var options = new System.Threading.Tasks.ParallelOptions
             {
-                MaxDegreeOfParallelism = Math.Max(1, System.Environment.ProcessorCount - 2),
+                MaxDegreeOfParallelism = BudgetThreads,
             };
+            ThreadPriority priority = BudgetPriority;
 
             await System.Threading.Tasks.Task.Run(() =>
             {
                 // Below-normal priority on the pool threads this bake occupies, so even when every core is
                 // busy the OS still schedules the frame ahead of a ray.
-                Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
+                Thread.CurrentThread.Priority = priority;
                 // Direct + dirt, in chunks so the progress counter moves without an interlock per vertex.
                 System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, options, chunk =>
                 {
                     if (Volatile.Read(ref _cancel) != 0)
                         return;
-                    Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
+                    Thread.CurrentThread.Priority = priority;
                     int start = chunk * ChunkSize;
                     int end = Math.Min(start + ChunkSize, pos.Length);
                     for (int i = start; i < end; i++)
@@ -579,7 +580,7 @@ public static class EditorLightBake
                     {
                         if (Volatile.Read(ref _cancel) != 0)
                             return;
-                        Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
+                        Thread.CurrentThread.Priority = priority;
                         int start = chunk * ChunkSize;
                         int end = Math.Min(start + ChunkSize, pos.Length);
                         for (int i = start; i < end; i++)
@@ -626,6 +627,31 @@ public static class EditorLightBake
 
     /// <summary>Vertices per parallel work item — big enough to amortise the progress interlock.</summary>
     private const int ChunkSize = 2048;
+
+    /// <summary>
+    /// Share of the machine the bake may take, 0..1. 1 uses every core; 0 uses a single one. Below 0.5 the
+    /// worker threads also drop to the lowest priority, on the reasoning that anyone asking for half their
+    /// machine back wants the REST of it responsive, not merely less busy.
+    ///
+    /// A bake is the only thing here that can make a desktop unusable, and "how much of my computer does
+    /// this get" is a decision that belongs to whoever is sitting at it.
+    /// </summary>
+    public static float CpuBudget
+    {
+        get => _cpuBudget;
+        set => _cpuBudget = Math.Clamp(value, 0f, 1f);
+    }
+
+    private static float _cpuBudget = 0.75f;
+
+    /// <summary>Worker count for the current budget: at least one, never more than the machine has.</summary>
+    private static int BudgetThreads =>
+        Math.Clamp((int)MathF.Round(System.Environment.ProcessorCount * _cpuBudget), 1,
+            System.Environment.ProcessorCount);
+
+    /// <summary>Priority for the current budget — see <see cref="CpuBudget"/>.</summary>
+    private static ThreadPriority BudgetPriority =>
+        _cpuBudget < 0.5f ? ThreadPriority.Lowest : ThreadPriority.Normal;
 
     /// <summary>Drop the retained bake (a fresh one is about to replace it).</summary>
     public static void CacheReset()

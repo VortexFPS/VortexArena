@@ -232,9 +232,28 @@ public static class VmapMapBuilder
         float minV = MathF.Min(Axis(a, axisV), MathF.Min(Axis(b, axisV), Axis(c, axisV)));
         float maxV = MathF.Max(Axis(a, axisV), MathF.Max(Axis(b, axisV), Axis(c, axisV)));
 
-        // A map-spanning face is clipped at coarser spacing rather than into thousands of pieces.
-        float spacingU = MathF.Max(EditorLightBake.SampleSpacing, (maxU - minU) / 40f);
-        float spacingV = MathF.Max(EditorLightBake.SampleSpacing, (maxV - minV) / 40f);
+        // ONE GLOBAL GRID for every triangle in the map — never a per-triangle spacing.
+        //
+        // Adapting the spacing to each triangle's own size (the previous `(max-min)/40`) meant two adjacent
+        // faces of different sizes were cut along DIFFERENT planes, so a vertex introduced on one face landed
+        // in the middle of its neighbour's edge. That is a T-junction, and a T-junction rasterises as a
+        // hairline gap — which, viewed nearly edge-on, projects into a long wedge of background. It scaled
+        // with luxel density (more cuts, more junctions), which is why a coarse bake looked perfect and a
+        // fine one had holes in the ceiling.
+        //
+        // A shared grid cannot produce them: neighbours are cut on the same planes, so their new vertices
+        // coincide instead of splitting an edge.
+        float spacingU = EditorLightBake.SampleSpacing;
+        float spacingV = EditorLightBake.SampleSpacing;
+
+        // The cost guard that the adaptive spacing used to provide, without breaking the shared grid: a face
+        // big enough to explode into thousands of pieces is emitted WHOLE. It loses lighting detail, not
+        // geometry, and at that size its neighbours are the same few map-spanning faces.
+        if ((maxU - minU) / spacingU * ((maxV - minV) / spacingV) > MaxBakePieces)
+        {
+            cell.AddTriangle(surface, i0, i1, i2);
+            return;
+        }
 
         var strip = new List<NVec3>(8);
         var strip2 = new List<NVec3>(8);
@@ -285,6 +304,9 @@ public static class VmapMapBuilder
     private static float Axis(NVec3 p, int axis) => axis == 0 ? p.X : axis == 1 ? p.Y : p.Z;
 
     /// <summary>Sutherland-Hodgman clip of a convex polygon against one axis-aligned plane.</summary>
+    /// <summary>Most grid cells one triangle may be cut into before it is emitted whole instead.</summary>
+    private const float MaxBakePieces = 4096f;
+
     private static void ClipAxis(List<NVec3> input, List<NVec3> output, int axis, float limit, bool keepAbove)
     {
         output.Clear();

@@ -7257,6 +7257,8 @@ public sealed partial class NetGame : Node3D
                 bool bounce = Menu.MenuState.Cvars is not { } bc2
                     || string.IsNullOrEmpty(bc2.GetString(Vmap.EditorLighting.CvarBakeBounce))
                     || bc2.GetFloat(Vmap.EditorLighting.CvarBakeBounce) != 0f;
+                Vmap.EditorLightBake.CpuBudget =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarBakeCpu, 0.75f);
                 Vmap.EditorLightBake.SampleSpacing = Math.Clamp(
                     CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarLuxel, 24f), 16f, 256f);
                 Vmap.EditorLightBake.DirtStrength =
@@ -7290,6 +7292,8 @@ public sealed partial class NetGame : Node3D
             // Without this the editor draws the mapper's overlapping solids instead of the level's visible
             // skin, and you end up looking at the inside of the masonry rather than at the room.
             CullOccludedFaces = _editor.CullOccludedFaces,
+            PatchSubdivisions = (int)Math.Clamp(
+                CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchSubdiv, 6f), 2f, 24f),
         }, lit);
         if (_editorLights is { Baking: true })
             GD.Print($"[EditorLighting] bake: {Vmap.EditorLightBake.RaysTraced:N0} shadow rays in "

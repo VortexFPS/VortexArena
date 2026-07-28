@@ -191,6 +191,19 @@ public sealed partial class EditorLighting : Node3D
     public const string CvarShowBsp = "cl_editor_show_bsp";
 
     /// <summary>
+    /// Share of the machine the lightmap bake may use, 0..1 (default 0.75). 1 is every core; 0 is one core.
+    /// Below 0.5 the worker threads also run at the lowest priority. See EditorLightBake.CpuBudget.
+    /// </summary>
+    public const string CvarBakeCpu = "cl_editor_bake_cpu";
+
+    /// <summary>
+    /// Bezier tessellation steps per patch block. Q3 curves are quadratic, so a chord between steps lies
+    /// INSIDE the true curve — too few steps and a curved surface visibly falls short of the flat geometry
+    /// it is supposed to meet.
+    /// </summary>
+    public const string CvarPatchSubdiv = "cl_editor_patch_subdiv";
+
+    /// <summary>
     /// Bloom over the editor world. Default OFF: the baked light is HDR and the fixture strips sit at the
     /// top of its range, so glow smears them across the whole frame — a uniform lift that reads as flat and
     /// that no lighting knob can counteract, because bloom is downstream of all of them.

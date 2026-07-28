@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using XonoticGodot.Common.Diagnostics;
 using XonoticGodot.Common.Gameplay;
@@ -95,6 +96,22 @@ public partial class Shell : Node
         _chatPrompt.Open(team);
     }
 
+    /// <summary>
+    /// DP <c>commandmode</c> (the <c>/</c> prompt): open the same input line, but the typed text is submitted as
+    /// a raw COMMAND rather than chat, optionally prefilled. Base's interactive scoreboard uses it for Ctrl+T
+    /// (<c>commandmode tell "&lt;player&gt;^7"</c>) so the player only has to type the message.
+    /// </summary>
+    private void OpenCommandPrompt(string prefill)
+    {
+        if (!MatchRunning || ConsoleState.IsOpen)
+        {
+            if (!MatchRunning)
+                XonoticGodot.Common.Diagnostics.Log.Help("commandmode: not connected — start a match first.");
+            return;
+        }
+        _chatPrompt.Open(team: false, commandMode: true, prefill: prefill ?? "");
+    }
+
     /// <summary>Apply any <c>--cvar NAME VALUE</c> command-line overrides into the shared store (repeatable; each
     /// <c>--cvar</c> token consumes the next two args). For test/automation/A-B runs that need to pin a cvar at
     /// boot — e.g. <c>vid_vsync</c> / <c>cl_frameprofiler</c> — without touching a config file.</summary>
@@ -163,6 +180,11 @@ public partial class Shell : Node
         chatLayer.AddChild(_chatPrompt);
         MenuState.Interp!.RegisterCommand("messagemode", _ => OpenChatPrompt(team: false));
         MenuState.Interp!.RegisterCommand("messagemode2", _ => OpenChatPrompt(team: true));
+        // DP commandmode [prefill…]: the raw-command variant of messagemode (see OpenCommandPrompt).
+        MenuState.Interp!.RegisterCommand("commandmode",
+            a => OpenCommandPrompt(a.Count >= 2 ? string.Join(' ', a.Skip(1)) : ""));
+        // Direct hook for callers that must preserve exact quoting in the prefill (the scoreboard's Ctrl+T tell).
+        Menu.MenuCommand.OpenCommandPrompt = OpenCommandPrompt;
 
         // The client-side `screenshot` command (DP CF_CLIENT, bound to F12 by binds-xonotic.cfg): a Godot node that
         // grabs the next rendered frame and writes it to user://screenshots/. Registered on the SHARED interpreter
@@ -459,6 +481,12 @@ public partial class Shell : Node
             _chatPrompt.Close();
             return;
         }
+        //   1b. the interactive scoreboard: Escape closes it, and Escape WHILE the scoreboard key is held opens
+        //       it (QC main.qc:545-551 checks S_TAB before falling through to the menu). Must be claimed here —
+        //       Godot runs _UnhandledKeyInput before _UnhandledInput, and this method marks both Escape edges
+        //       handled, so the play path's own handler never sees the key.
+        if (Menu.MenuCommand.ScoreboardEscape?.Invoke() == true)
+            return;
         //   2. the live HUD editor (no menu dialog up) opens its setup-exit dialog — QC menu_showhudexit —
         //      instead of the pause menu; with a dialog already up (_paused) fall through so Escape pops it.
         if (!_paused && MenuState.Cvars.GetFloat("_hud_configure") != 0f)
@@ -549,6 +577,7 @@ public partial class Shell : Node
         _menu.ShowScreen(new PauseMenu());
         _menu.Visible = true;
         _paused = true;
+        MouseCapture.MenuWantsCursor = true; // survives NetGame's per-frame reassert on an unpaused tree
         MouseCapture.SetWantCapture(false);
         SyncAutoPause(); // freeze the sim iff this is a solo local listen game
     }
@@ -560,6 +589,7 @@ public partial class Shell : Node
             return;
         _menu.Visible = false;
         _paused = false;
+        MouseCapture.MenuWantsCursor = false; // clear BEFORE SetWantCapture so recapture lands this frame
         MouseCapture.SetWantCapture(true);
         SyncAutoPause();
     }
@@ -604,6 +634,11 @@ public partial class Shell : Node
                 MouseCapture.SetFocused(osFocused);
             }
         }
+
+        // The menu layer (main or pause) always owns the pointer: re-sync the MouseCapture menu override off
+        // menu visibility every frame (not just the Open/Resume edges) so any other path that shows/hides the
+        // menu keeps the cursor state consistent — same reassert-not-edge-latch reasoning as NetGame's cursor block.
+        MouseCapture.MenuWantsCursor = _menu.Visible;
 
         // Per-frame so console open/close and a remote client joining/leaving (which changes eligibility) are
         // picked up even without a discrete edge — e.g. a remote joins while the host sits in the menu → release

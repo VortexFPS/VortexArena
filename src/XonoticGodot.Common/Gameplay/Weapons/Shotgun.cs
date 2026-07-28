@@ -84,6 +84,7 @@ public sealed class Shotgun : Weapon
     public Shotgun()
     {
         NetName = "shotgun";
+        BotPickupBaseValue = 6000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Shells;   // QC ammo_type
         DisplayName = "Shotgun";
         Impulse = 2;

@@ -105,6 +105,27 @@ def git(repo: Path, *args: str, check: bool = True) -> str:
     return res.stdout.strip()
 
 
+def branch_refspec_is_narrow(repo: Path) -> str | None:
+    """Return the configured fetch refspec if it CANNOT see branches other than master.
+
+    A clone made with --single-branch (or a submodule init) carries
+    `+refs/heads/master:refs/remotes/origin/master`. With that refspec the whole
+    branch/MR half of the harvest silently reports "0 branches, 0 hidden" — which
+    reads identically to "upstream has no open contributions". Never silent: detect
+    it and tell the operator how to widen it.
+    """
+    res = subprocess.run(
+        ["git", "-C", str(repo), "config", "--get-all", "remote.origin.fetch"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    specs = [s.strip() for s in res.stdout.splitlines() if s.strip()]
+    if not specs:
+        return None  # no remote configured; harvest_repo reports that separately
+    if any("refs/heads/*" in s for s in specs):
+        return None
+    return "; ".join(specs)
+
+
 def load_ledger_keys() -> set[str]:
     """Every dedup token already present in the ledger (commit shas + branch tips)."""
     if not LEDGER.exists():
@@ -155,6 +176,16 @@ def harvest_repo(key: str, cfg: dict, since: str, branch_since: str, ledger_keys
         print(f"  ! {key}: repo not found at {repo}; skipping.", file=sys.stderr)
         return {"repo": key, "error": f"not found at {repo}",
                 "master_commits": [], "branches": []}
+
+    narrow = branch_refspec_is_narrow(repo)
+    if narrow:
+        print(f"  ! {key}: fetch refspec is branch-blind ({narrow}) — the branch/MR stream can only "
+              f"see '{branch}'. Widen it with:\n"
+              f"      git -C {repo} config --unset-all remote.origin.fetch\n"
+              f"      git -C {repo} config --add remote.origin.fetch "
+              f"'+refs/heads/*:refs/remotes/origin/*'\n"
+              f"      git -C {repo} fetch --prune origin",
+              file=sys.stderr)
 
     if do_fetch:
         print(f"  fetching {key} ({cfg['gl_project']}) …")
@@ -263,7 +294,7 @@ def harvest_repo(key: str, cfg: dict, since: str, branch_since: str, ledger_keys
     return {"repo": key, "gl_project": cfg["gl_project"],
             "master_commits": master, "branches": branches, "mr_api": bool(mrs),
             "stale_skipped": stale_skipped, "branch_since": branch_since,
-            "translations_dropped": translations_dropped}
+            "translations_dropped": translations_dropped, "narrow_refspec": narrow}
 
 
 def write_worklist(results: list[dict], since: str, run_date: str) -> tuple[Path, Path]:
@@ -293,6 +324,13 @@ def write_worklist(results: list[dict], since: str, run_date: str) -> tuple[Path
         if not r.get("mr_api", True):
             lines.append("\n> ⚠ GitLab MR API not reached — open-MR signal missing; "
                          "branch list is ahead-of-master only.\n")
+        if r.get("narrow_refspec"):
+            lines.append(f"\n> ⚠ **Branch stream is blind** — this clone's fetch refspec is "
+                         f"`{r['narrow_refspec']}`, so only `master` is mirrored locally and the "
+                         "branches-ahead-of-master list below is NOT trustworthy (only fork MRs "
+                         "surfaced via the GitLab API appear). Widen with "
+                         "`git config --add remote.origin.fetch "
+                         "'+refs/heads/*:refs/remotes/origin/*'` then re-fetch.\n")
 
         mc = r["master_commits"]
         td = r.get("translations_dropped", 0)
@@ -334,6 +372,14 @@ def write_worklist(results: list[dict], since: str, run_date: str) -> tuple[Path
 
 
 def main() -> int:
+    # Windows consoles default to cp1252, which cannot encode the status glyphs below — and the
+    # one that crashed was on the "nothing new" path, i.e. the quiet-week path we hit most often.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass  # already-wrapped or non-reconfigurable stream: fall through harmlessly
+
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--since", default=DEFAULT_SINCE, help=f"master-commit cutoff (default {DEFAULT_SINCE})")

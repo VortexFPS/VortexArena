@@ -430,4 +430,66 @@ public class BotLiveLoopTests
             bot.Mins, bot.Maxs, onGround: true, jumpHeld: false, moving: true, committed: false);
         Assert.Equal(2, r);
     }
+
+    // =============================================================================================
+    // SUPERBOT combat jitter (QC havocbot_movetogoal:1280-1306)
+    // =============================================================================================
+
+    /// <summary>
+    /// Run two bots at <paramref name="skill"/> on a flat floor and collect the HORIZONTAL magnitude of the
+    /// wish-move on every frame a bot has a live enemy. The generic CombatMovement always emits a NORMALISED
+    /// direction scaled to run speed, so its magnitude is pinned at MaxSpeed; the SUPERBOT jitter overrides
+    /// X/Y with raw crandom()*maxspeed values, so its magnitude varies. That difference is the discriminator.
+    /// </summary>
+    private static List<float> CombatMoveMagnitudes(float skill)
+    {
+        var world = new GameWorld(FlatFloor(), SpawnDicts(
+            new Vector3(-192f, 0f, 32f), new Vector3(192f, 0f, 32f), new Vector3(0f, 256f, 32f)));
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", "1");
+        Cvars.Set("bot_number", "2");
+        Cvars.Set("skill", skill.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        RunTo(world, 4.0f);
+        Assert.Equal(2, world.Bots.Brains.Count);
+
+        var mags = new List<float>();
+        RunTo(world, 16f, () =>
+        {
+            foreach (BotBrain b in world.Bots.Brains)
+            {
+                if (b.Enemy is null || b.Bot.IsDead) continue;
+                Vector3 m = b.LastInput.MoveValues;
+                mags.Add(new Vector2(m.X, m.Y).Length());
+            }
+        });
+        return mags;
+    }
+
+    [Fact]
+    public void SuperbotCombatJitter_VariesTheHorizontalWishMove()
+    {
+        List<float> mags = CombatMoveMagnitudes(101f);
+        Assert.True(mags.Count > 50, $"not enough in-combat frames to judge ({mags.Count})");
+
+        // The jitter rolls each horizontal axis independently in [-maxspeed, maxspeed], so a large share of
+        // the samples land well below the pinned run-speed magnitude the generic combat move would produce.
+        int belowRunSpeed = mags.FindAll(m => m < 320f * 0.8f).Count;
+        Assert.True(belowRunSpeed > 0,
+            $"no sub-run-speed wish-move seen in {mags.Count} in-combat frames — the SUPERBOT jitter never fired");
+    }
+
+    [Fact]
+    public void NonSuperbot_CombatMoveStaysPinnedToRunSpeed()
+    {
+        // The control: below the SUPERBOT threshold the jitter must not engage, so every in-combat wish-move
+        // keeps the normalised run-speed magnitude CombatMovement produces. This is what guards the new code
+        // from leaking into ordinary play.
+        List<float> mags = CombatMoveMagnitudes(10f);
+        Assert.True(mags.Count > 50, $"not enough in-combat frames to judge ({mags.Count})");
+
+        int belowRunSpeed = mags.FindAll(m => m < 320f * 0.8f).Count;
+        Assert.True(belowRunSpeed == 0,
+            $"{belowRunSpeed}/{mags.Count} skill-10 in-combat frames had a sub-run-speed wish-move — the jitter leaked below the SUPERBOT gate");
+    }
 }

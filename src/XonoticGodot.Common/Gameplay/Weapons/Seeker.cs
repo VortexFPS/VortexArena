@@ -91,6 +91,7 @@ public sealed class Seeker : Weapon
     public Seeker()
     {
         NetName = "seeker";
+        BotPickupBaseValue = 5000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type
         DisplayName = "T.A.G. Seeker";
         Impulse = 8;

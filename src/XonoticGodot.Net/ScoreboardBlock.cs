@@ -64,6 +64,11 @@ public sealed class ScoreboardWire
     public int SpeedAwardBest;
     /// <summary>QC <c>race_speedaward_alltimebest_holder</c>: the all-time best-speed holder name ("" if none).</summary>
     public string SpeedAwardBestHolder = "";
+
+    /// <summary>QC <c>Inventory.inv_items[]</c> (common/items/inventory.qh): the VIEWING client's per-item pickup
+    /// tally this match, keyed by the item def's HUD icon name (QC <c>m_icon</c>). Drives the scoreboard's Item
+    /// stats grid (Scoreboard_ItemStats_Draw). Empty when nothing has been picked up.</summary>
+    public readonly List<(string icon, int count)> ItemStats = new();
 }
 
 /// <summary>
@@ -107,7 +112,8 @@ public static class ScoreboardBlock
     /// totals, then (race/CTS) the rankings table.</summary>
     public static void Serialize(BitWriter w, IReadOnlyList<ScoreRowWire> rows, IReadOnlyList<(int team, int score)> teamScores,
         IReadOnlyList<(int timeEncoded, string holder)>? rankings = null,
-        (int speed, string holder, int best, string bestHolder) speedAward = default)
+        (int speed, string holder, int best, string bestHolder) speedAward = default,
+        IReadOnlyList<(string icon, int count)>? itemStats = null)
     {
         int n = GameScores.NetworkedFields.Count;
         w.WriteByte(n);
@@ -161,6 +167,17 @@ public static class ScoreboardBlock
         w.WriteString(speedAward.holder ?? "");
         w.WriteInt24(speedAward.best);
         w.WriteString(speedAward.bestHolder ?? "");
+
+        // QC the per-viewer Inventory entity (Inventory_Send, customized to its owner + spectators): the item
+        // pickup tally the scoreboard's Item stats grid draws. Byte count + (icon name, count) pairs; the count
+        // is a ushort so a long match can't wrap it. Empty (a single 0 byte) when nothing was picked up.
+        int isc = itemStats is null ? 0 : System.Math.Min(itemStats.Count, 255);
+        w.WriteByte(isc);
+        for (int i = 0; i < isc; i++)
+        {
+            w.WriteString(itemStats![i].icon ?? "");
+            w.WriteUShort(System.Math.Clamp(itemStats[i].count, 0, 65535));
+        }
     }
 
     /// <summary>Read a scoreboard block. Returns null if the layout hash disagrees (the client mod set differs).</summary>
@@ -206,6 +223,14 @@ public static class ScoreboardBlock
         sb.SpeedAwardHolder = r.ReadString();
         sb.SpeedAwardBest = r.ReadInt24();
         sb.SpeedAwardBestHolder = r.ReadString();
+        // QC the Inventory trailer — the viewer's own item pickup tally (see Serialize).
+        int itemCount = r.ReadByte();
+        for (int i = 0; i < itemCount; i++)
+        {
+            string icon = r.ReadString();
+            int count = r.ReadUShort();
+            if (!r.BadRead && icon.Length != 0) sb.ItemStats.Add((icon, count));
+        }
         if (r.BadRead || !layoutOk) return null; // unreadable, or the client's column layout disagrees
         return sb;
     }

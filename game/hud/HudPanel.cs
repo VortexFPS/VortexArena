@@ -405,6 +405,11 @@ public abstract partial class HudPanel : Control
     /// is the real, larger rect.</summary>
     public void Configure(Rect2 rect)
     {
+        // Idempotent: the standalone scoreboard re-applies its derived geometry EVERY frame (QC Scoreboard_Draw
+        // recomputes panel_pos/panel_size on each draw), so an unconditional QueueRedraw here would repaint a
+        // non-dynamic panel every frame for nothing.
+        if (PanelRect == rect)
+            return;
         PanelRect = rect;
         Position = rect.Position;
         Size = rect.Size;
@@ -454,11 +459,17 @@ public abstract partial class HudPanel : Control
     /// <paramref name="panelRect"/> at <paramref name="bgAlpha"/>. The full-panel <see cref="DrawBackground()"/>
     /// passes <c>(0,0,Size2)</c>; the weapons panel passes the shrunk owned-weapon grid rect so the frame
     /// auto-sizes to its contents (playtest-bugs #11). Flat translucent fallback only if the border texture is missing.</summary>
-    protected void DrawBackgroundRect(Rect2 panelRect, float bgAlpha)
+    protected void DrawBackgroundRect(Rect2 panelRect, float bgAlpha) => DrawBackgroundRect(panelRect, bgAlpha, null);
+
+    /// <summary>As <see cref="DrawBackgroundRect(Rect2,float)"/>, but with an explicit frame colour — QC's
+    /// <c>panel_bg_color</c> override (the scoreboard reassigns it to the TEAM colour around each team's table,
+    /// scoreboard.qc:2688-2693, and restores it afterwards). Null keeps the resolved <c>Cfg.BgColor</c>.</summary>
+    protected void DrawBackgroundRect(Rect2 panelRect, float bgAlpha, Color? colorOverride)
     {
         string bg = Cfg.Bg;
         if (string.IsNullOrEmpty(bg) || bg == "0") return; // luma: no frame for this panel
-        var col = new Color(Cfg.BgColor.R, Cfg.BgColor.G, Cfg.BgColor.B);
+        Color src = colorOverride ?? Cfg.BgColor;
+        var col = new Color(src.R, src.G, src.B);
         float t = Cfg.BgBorder;
         // QC HUD_Panel_DrawBg (hud.qh): the bg rect expands by panel_bg_border, but the 9-slice corner/edge
         // tiles are sliced at BORDER_MULTIPLIER(=4) × panel_bg_border — the beveled corner art fills a 4×-larger

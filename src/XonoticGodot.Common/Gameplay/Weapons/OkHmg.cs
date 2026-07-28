@@ -46,6 +46,7 @@ public sealed class OkHmg : Weapon
     public OkHmg()
     {
         NetName = "okhmg";
+        BotPickupBaseValue = 10000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Bullets;   // QC ammo_type RES_BULLETS
         DisplayName = "Overkill Heavy MachineGun";
         Impulse = 3;

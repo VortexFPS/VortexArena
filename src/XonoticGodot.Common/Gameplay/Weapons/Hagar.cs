@@ -76,6 +76,7 @@ public sealed class Hagar : Weapon
     public Hagar()
     {
         NetName = "hagar";
+        BotPickupBaseValue = 6000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type
         DisplayName = "Hagar";
         Impulse = 8;

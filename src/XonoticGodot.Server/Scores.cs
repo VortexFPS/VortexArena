@@ -546,6 +546,12 @@ public sealed class Scores
             // ENEMY FRAG (QC "MURDER"): attacker +1 kill, +1 score (the latter only if we own score).
             Row(attacker).AddAux(ScoreField.Kills, 1);
 
+            // QC damage.qc:336 `++attacker.killsound`: bank the kill-confirmation sound. The end-of-frame
+            // flush (DamageSystem.EndFrameFlushHitSoundStats) advances KILL_TIME with priority OVER the hit
+            // beep, so the killing blow plays the distinct misc/kill sound instead of misc/hit. Teamkills and
+            // suicides (the branches above) deliberately don't bank it.
+            attacker.KillSoundCount++;
+
             // QC GiveFrags fires MUTATOR_CALLHOOK(GiveFragsForKill, attacker, targ, f, deathtype, weaponentity)
             // and reads the (possibly-adjusted) delta back via f = M_ARGV(2, float) when the hook handled it
             // (server/damage.qc:72). Mirror that here: the base frag award is +1, but instagib / weaponarena_random

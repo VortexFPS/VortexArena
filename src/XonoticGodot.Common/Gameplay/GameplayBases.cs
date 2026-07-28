@@ -71,6 +71,15 @@ public abstract partial class Weapon : IRegistered
     /// </summary>
     public ResourceType AmmoType = ResourceType.None;
 
+    /// <summary>
+    /// QC <c>bot_pickupbasevalue</c> (the weapon's "rating" ATTRIB, e.g. vortex.qh:17 = 8000): the base bot
+    /// desirability of picking this weapon up, on the BOT_PICKUP_RATING scale (0 for special/starter weapons
+    /// like Blaster/Hook/Porto; 2000-10000 for real pickups). Read by the bot goal-rater's item valuation
+    /// (weapon_pickupevalfunc): unowned → this value discounted by arsenal strength; owned → the ammo value
+    /// plus 10% of this. Concrete weapons set it in their constructor next to the other identity ATTRIBs.
+    /// </summary>
+    public float BotPickupBaseValue;
+
     // model/asset names (resolved by the model/asset services)
     public string? ViewModel;
     public string? WorldModel;

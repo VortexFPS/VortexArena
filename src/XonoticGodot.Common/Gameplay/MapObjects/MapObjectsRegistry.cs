@@ -351,7 +351,7 @@ public static class MapObjectsRegistry
         ViewLocation.RunDeferredInit();
         Follow.RunDeferredInit();
         AdvancedMovers.RunDeferredInit();
-        Teleporters.RunDeferredInit(); // target_teleporter_checktarget disambiguation (dest/self-target/teleporter)
+        Teleporters.RunDeferredInit(); // target_teleporter_checktarget disambiguation + teleport_findtarget (dest cache + touch)
         InfoAutoScreenshot.RunDeferredInit(); // aim each info_autoscreenshot at its .target (QC findtarget pass)
     }
 

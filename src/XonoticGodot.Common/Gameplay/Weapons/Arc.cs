@@ -92,6 +92,7 @@ public sealed class Arc : Weapon
     public Arc()
     {
         NetName = "arc";
+        BotPickupBaseValue = 8000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Arc";
         Impulse = 3;

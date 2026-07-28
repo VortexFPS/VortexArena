@@ -416,6 +416,10 @@ public sealed class WeaponPickup : Pickup
     /// client can paint/classify a weapon pickup without guessing from the model filename).</summary>
     public Weapon Weapon => _weapon;
 
+    /// <summary>QC a weapon pickup's <c>m_icon</c> is the WEAPON's HUD icon (<c>weapon&lt;name&gt;</c>), not the
+    /// bare netname — the scoreboard's Item stats grid draws the gun's silhouette for it.</summary>
+    public override string Icon => "weapon" + _weapon.NetName;
+
     public WeaponPickup(Weapon w)
     {
         _weapon = w;

@@ -67,9 +67,11 @@ public readonly struct DamageTextEvent
 /// PRECISION_MULTIPLIER fixed-point + int24/short selection) lives in the client layer; the server passes the
 /// un-multiplied amounts in <see cref="DamageTextEvent"/>.
 ///
-/// Visibility tiers (parity §11): QC's <c>write_damagetext</c> filters by sv_damagetext 1/2/3
-/// (spectators / +attacker / all); in this host port that reduces to "show to the local attacker"
-/// (the default tier 2). The queued events are the attacker-credited ones; the client gate applies.
+/// Visibility tiers (parity §11): QC's <c>write_damagetext</c> filters PER VIEWER by sv_damagetext
+/// 1/2/3 (spectators+observers / +attacker / all). The queue itself is unfiltered (every hit, like the
+/// linked temp entities); the host drain applies <see cref="ShouldShowTo"/> per event for the local
+/// viewer — without it a listen host sees a number for EVERY bot-vs-bot hit on the map, with off-screen
+/// ones pinned near the crosshair by the 2D out-of-view fallback.
 ///
 /// ClientDisconnect dent_attackers clear (sv_damagetext.qc:138-148): QC's
 /// MUTATOR_HOOKFUNCTION(damagetext, ClientDisconnect) walks every player and clears the leaving
@@ -121,8 +123,21 @@ public sealed class DamagetextMutator : MutatorBase
     private string _prevDeathType = "";
 
     /// <summary>
+    /// Port of the per-viewer visibility gate in QC <c>write_damagetext</c> (sv_damagetext.qc:32-37): may this
+    /// viewer see a number for a hit credited to a given attacker? Tier &gt;= 3 shows every hit; tier &gt;= 2
+    /// (the shipped default) shows the viewer their OWN hits; tier &gt;= 1 shows a spectator their spectatee's
+    /// hits and a free-fly OBSERVER everything. Tier &lt;= 0 never queues (the producer early-outs).
+    /// </summary>
+    public static bool ShouldShowTo(float tier, bool viewerIsAttacker, bool viewerIsObserver,
+        bool viewerSpectatesAttacker = false)
+        => tier >= 3f
+        || (tier >= 2f && viewerIsAttacker)
+        || (tier >= 1f && (viewerIsObserver || viewerSpectatesAttacker));
+
+    /// <summary>
     /// Drain the queued floating-damage-number events for the client to draw this frame (the host/net layer
-    /// calls this each frame and feeds them to <c>DamageTextLayer</c>). Empties the queue.
+    /// calls this each frame, applies <see cref="ShouldShowTo"/> per event for the local viewer, and feeds
+    /// the visible ones to <c>DamageTextLayer</c>). Empties the queue.
     /// </summary>
     public IReadOnlyList<DamageTextEvent> DrainPending()
     {

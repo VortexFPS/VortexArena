@@ -5,7 +5,7 @@ last_audited: "2026-06-27"  # Consolidated re-verify (post W16/W17) on claude/pa
 summary:
   feature_count: 9
   worst_gaps:
-    - "ONLY remaining real gap (INTENDED host divergence): server visibility tiers collapsed — no Net_LinkEntity; DrainPending is a host-local queue consumed only on the host path (NetGame.cs:2594 'if (_server is not null)'), so sv_damagetext 1/3 (spectators-only, all-players) and spectator/observer filtering are not modeled and a pure remote client sees no damage text."
+    - "Remaining real gap (INTENDED host divergence): no Net_LinkEntity — DrainPending is a host-local queue consumed only on the host path ('if (_server is not null)'), so a pure remote client sees no damage text. FIXED 2026-07-11 (parity/hitsound-feedback): the write_damagetext per-viewer visibility tiers ARE now modeled for the local viewer — DamagetextMutator.ShouldShowTo applied per drained event (tier 2 default = own hits only; observer arm at tier 1; tier 3 all). Before this every bot-vs-bot hit drew a number, with off-screen ones pinned center-screen by the 2D out-of-view fallback (playtest report)."
     - "Whole-unit caveat: the client draw/placement (2D-vs-3D heuristics, view-basis drift, drawfontscale cell scaling, color/font) is verified by codetrace + constant-match only — NOT in-game (the Godot draw node needs a live viewport+camera; no unit test). Faithful on read, confidence medium."
     - "CLOSED (prior waves, re-verified live this pass): ClientDisconnect dent_attackers clear (MutatorHooks.cs:61 -> ClientManager.cs:855 -> DamagetextMutator.cs:214-224)."
     - "CLOSED (prior waves, re-verified live this pass): Damage Text settings menu tab (DialogSettingsGameDamageText, DialogSettingsGame.cs:802; wired live at :42) faithful to ui_damagetext.qc."
@@ -135,7 +135,7 @@ features:
       - "src/XonoticGodot.Common/Gameplay/Mutators/DamagetextMutator.cs:127 (DrainPending)"
       - "game/net/NetGame.cs:2594-2608 (host-only drain -> DamageTextLayer.Add)"
     constants:
-      - { name: "sv_damagetext tiers", base: "0 off / 1 spectators+observers / 2 +attacker / 3 all", port: "2 default (xonotic-server.cfg:692); only tier-2 local-attacker realized", match: false }
+      - { name: "sv_damagetext tiers", base: "0 off / 1 spectators+observers / 2 +attacker / 3 all", port: "DamagetextMutator.ShouldShowTo applied per drained event for the LOCAL viewer (0 off / 1 observer / 2 +attacker / 3 all; follow-spec arm dormant — no host follow-spectate)", match: true }
       - { name: "PRECISION_MULTIPLIER fixed-point wire (Short/Int24 by BIG_* flags)", base: "128 + WriteShort/WriteInt24_t; armor omitted on NO_ARMOR, potential on NO_POTENTIAL", port: "no net packet; un-multiplied amounts passed in DamageTextEvent, x128 + NO_*/BIG_* reconstruction in DamageTextLayer.Add", match: false }
     status:
       logic: partial
@@ -147,12 +147,13 @@ features:
     intended_divergence: true
     divergence_rationale: "The port collapses the CSQC Net_LinkEntity temp-entity replication into an in-process host-local queue (DrainPending), consumed only on the host path (NetGame.cs 'if (_server is not null)'). Matches the port's general 'host drives the local HUD directly' model; the local attacker (sv_damagetext 2) is the common single-player/listen-host case. Documented in the DamagetextMutator header (lines 70-72)."
     gaps:
-      - "sv_damagetext 1 (spectators-only) and 3 (all-players) tiers, plus the spectator/observer filtering in write_damagetext, are not modeled — only the local attacker sees text."
       - "A pure remote client (no local server) gets no damage text at all (the drain is guarded by 'if (_server is not null)' at NetGame.cs)."
+      - "The tier-1 'spectator following the attacker' arm is dormant: the host has no follow-spectate, so ShouldShowTo's viewerSpectatesAttacker is never passed true from NetGame (free-fly observer arm IS live)."
     verification:
-      - { kind: codetrace, ref: "NetGame.cs:2594 'if (_server is not null)' guards the drain; :2604 foreach DrainPending -> DamageTextLayer.Add; in-process, no wire; the wire BIG_*/NO_* split is reconstructed client-side in DamageTextLayer.Add:104-111", result: fail }
+      - { kind: codetrace, ref: "NetGame.cs 'if (_server is not null)' guards the drain; foreach DrainPending applies DamagetextMutator.ShouldShowTo(sv_damagetext, viewer==ev.Attacker, IsObserving) -> DamageTextLayer.Add; in-process, no wire; the wire BIG_*/NO_* split is reconstructed client-side in DamageTextLayer.Add:104-111", result: fail }
+      - { kind: test, ref: "MutatorBatchT51Tests Damagetext_Visibility_Follows_The_SvDamagetext_Tiers (+ the spectator-arm fact) pin ShouldShowTo to write_damagetext's boolean (sv_damagetext.qc:32-37)", result: pass }
     confidence: high
-    notes: "2026-06-27 Wave-16 re-audit: unchanged (this is the ONLY remaining gap, an intended host divergence). The non-tier-2 visibility cases and the remote-client case are genuine functional gaps. The wire numeric reconstruction (x128 + NO_ARMOR->0 + NO_POTENTIAL->health+armor) IS faithful in DamageTextLayer.Add (game/client/DamageTextLayer.cs:104-111). Host guard relocated to NetGame.cs:2594 (line drift)."
+    notes: "2026-07-11 (parity/hitsound-feedback): the per-viewer visibility tiers are now REALIZED for the local viewer via DamagetextMutator.ShouldShowTo — the prior audit text claimed 'only tier-2 local-attacker realized' but NO filter actually existed at the drain (every queued event was drawn: bot-vs-bot hits all over the HUD, off-screen ones pinned near the crosshair by the 2D fallback — the 2026-07-11 playtest report). Remaining gaps: the remote-client no-text case and the dormant follow-spec arm. The wire numeric reconstruction (x128 + NO_ARMOR->0 + NO_POTENTIAL->health+armor) IS faithful in DamageTextLayer.Add (game/client/DamageTextLayer.cs:104-111)."
   - id: damagetext.cl.format_and_size
     name: "Label format tokens + font-size mapping (DamageText_update)"
     layer: [presentation]

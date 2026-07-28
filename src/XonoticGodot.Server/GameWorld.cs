@@ -660,6 +660,11 @@ public sealed class GameWorld
         // (CanPickupItems is tagged on each (re)spawn in ClientManager.Spawn; buff pickups self-spawn via the
         //  BuffsMutator hook in MutatorActivation.Apply above — no extra wiring needed here.)
         XonoticGodot.Common.Gameplay.StartItem.GameStartTimeProvider = () => GameStartTime;
+        // SV_CheckVelocity's universal speed limit (DP sv_maxvelocity). The DP ENGINE default is 2000, but
+        // xonotic-server.cfg:325 sets 1000000000 — so the shipped game has no clamp. Seed the sim from the live
+        // cvar here (before any entity moves) or every projectile faster than 2000 qu/s runs slow: the Blaster
+        // bolt is balanced at 6000 and was flying at a third of that.
+        XonoticGodot.Engine.Simulation.MoveTypePhysics.ApplyServerCvars(Api.Services?.Cvars);
         // LogicGates.GameStartTimeProvider feeds trigger_gamestart's deferred fire (QC game_starttime + wait) so a
         // wait>0 gamestart trigger fires relative to the real countdown end, not 0. Same live source as StartItem.
         XonoticGodot.Common.Gameplay.LogicGates.GameStartTimeProvider = () => GameStartTime;
@@ -2752,6 +2757,25 @@ public sealed class GameWorld
         // own it), so feeding it here would perpetually re-arm the window; passing no fixAngleClients is correct.
         AntiCheat.EndFrame(Simulation.FrameTime, Time);
 
+        // 4.5) QC EndFrame's hit-feedback stat flush (world.qc:2507-2528): per player, advance exactly ONE of
+        // HIT_TIME / TYPEHIT_TIME / KILL_TIME (priority typehit > kill > hit — the killing blow gives ONLY the
+        // kill sound) + the ceil'd cumulative damage total, then clear the per-frame accumulators the damage
+        // pipeline / Obituary banked this tick. Runs after the gametype/round steps so same-frame gametype
+        // kills (round-end executions etc.) flush this frame, not next. Bots' stats are set too but the
+        // owner-only Feedback privacy gate keeps them off the wire (ServerNet.RelevantEntitiesFor).
+        //
+        // TWO passes, exactly like QC. Pass 1 stamps each viewer from `IS_SPEC(it) ? it.enemy : it`, so a
+        // follow-spectator inherits the feedback of the player they are watching. Pass 2 clears every client's
+        // accumulators. Fusing them would let whichever player is iterated first consume the banked damage —
+        // a spectator would silently steal their spectatee's own hit sound.
+        foreach (Player p in Clients.Players)
+        {
+            Player source = p.Spectatee ?? p;
+            XonoticGodot.Common.Gameplay.Damage.DamageSystem.StampHitSoundStats(p, source, Time);
+        }
+        foreach (Player p in Clients.Players)
+            XonoticGodot.Common.Gameplay.Damage.DamageSystem.ClearHitSoundAccumulators(p);
+
         // 5) the post-resolution server hook (QC the tail of the server frame).
         ServerHooks.FireEndFrame(Time);
 
@@ -3278,6 +3302,11 @@ public sealed class GameWorld
                 // broadcast NotificationSystem (the MSG_CENTER/MSG_INFO routing). Without this the decisions
                 // (CheckWinner / SpawnMonsterDef) reached a null sink and the prints never went out.
                 inv.Notifications = new InvasionNotifyHost();
+                // QC MUTATOR_HOOKFUNCTION(inv, Bot_ForbidAttack) (sv_invasion.qc:426-431): Invasion is co-op —
+                // a bot may only attack MONSTERS, never players (Base also strips players from g_bot_targets on
+                // spawn; the veto here covers both).
+                Bot.BotBrain.ForbidAttackHook = (self, targ) =>
+                    (targ.Flags & XonoticGodot.Common.Framework.EntFlags.Monster) == 0;
                 break;
             case Race race:
                 race.Activate();
@@ -4900,6 +4929,10 @@ public sealed class GameWorld
             // the per-player ammo/weapon store is subsumed by the Clients.Spawn → PutClientInServer re-give below.)
             if (!p.IsObserver)
                 PlayerFrameLogic.PlayerPowerupsRemoveAll(p, true);
+            // QC reset_map (vote.qc:383): Inventory_clear(store.inventory) — wipe the per-player item PICKUP
+            // TALLY (the scoreboard's Item stats grid) so a `restart` doesn't carry the previous match's counts
+            // into the new one. Distinct from the ammo/weapon store the respawn re-gives below.
+            p.ItemPickupCounts?.Clear();
             // QC status_effects reset_map_global hook (sv_status_effects.qc:114-123): removeall(NORMAL) "just to
             // get rid of the pickup sound" then clearall, so no effect timer survives a map/round reset. (The
             // following Clients.Spawn -> PutClientInServer also clearall's, but Base plays the removal sounds here.)

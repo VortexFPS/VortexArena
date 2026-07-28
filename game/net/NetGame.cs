@@ -1811,7 +1811,10 @@ public sealed partial class NetGame : Node3D
         _damageText.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _fullHud.AddChild(_damageText);
 
-        // Hit-confirmation sound (QC HitSound): non-positional beep on the SFX bus, pitch varies by cl_hitsound mode.
+        // Hit/typehit/kill feedback sounds (QC HitSound): non-positional, SFX bus. misc/hit is the pitched
+        // damage-confirm beep (cl_hitsound modes 0-3); misc/typehit the team/chat-hit dink; misc/kill the
+        // kill confirm (which the server flush prioritizes over the beep). Fed per frame from the owner's
+        // feedback stats in UpdateCrosshairFeedback.
         _hitSound = new XonoticGodot.Game.Client.HitSound(_sharedCvars);
         if (_assets is not null)
             _hitSound.AudioLoader = _assets.LoadSound;
@@ -1988,6 +1991,28 @@ public sealed partial class NetGame : Node3D
             Name = "Scoreboard", Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         hudLayer.AddChild(_scoreboard);
+        // QC the interactive scoreboard's `localcmd(...)` sink (Scoreboard_InputEvent): join/spectate/tell/vcall
+        // are CLIENT commands the server must run, so a "cmd " prefix routes to the server the same way a typed
+        // `cmd join red` does; everything else (toggle, scoreboard_columns_set, commandmode) is a local console
+        // verb. On a listen host the client path still reaches the in-process server through the same seam.
+        _scoreboard.CommandSink = line =>
+        {
+            if (string.IsNullOrWhiteSpace(line)) return;
+            if (line.StartsWith("cmd ", System.StringComparison.Ordinal))
+            {
+                string verb = line[4..];
+                if (_serverWorld is not null) ExecuteHostConsoleCommand(verb);
+                else SendStringCommand(verb);
+                return;
+            }
+            MenuState.Interp?.ExecuteLine(line);
+        };
+        // DP commandmode: Shell owns the prompt; the direct hook preserves the prefill's quoting verbatim.
+        _scoreboard.OpenCommandPrompt = prefill => XonoticGodot.Game.Menu.MenuCommand.OpenCommandPrompt?.Invoke(prefill);
+        // Escape is owned by Shell's in-match chain (it runs in _UnhandledKeyInput, ahead of our _UnhandledInput,
+        // and marks both edges handled) — claim it from there so TAB+Escape can open the UI and Escape close it.
+        XonoticGodot.Game.Menu.MenuCommand.ScoreboardEscape = () =>
+            _scoreboard is not null && GodotObject.IsInstanceValid(_scoreboard) && _scoreboard.HandleEscape();
         LayoutScoreboard();
 
         // Screen-effects layer (damage red-flash + liquid tint) — the SAME reusable ViewEffects node T4 built for
@@ -3418,26 +3443,32 @@ public sealed partial class NetGame : Node3D
             if (_damageText is not null && Mutators.ByName("damagetext") is DamagetextMutator dtm)
             {
                 _damageText.Camera = _camera;
-                Player? localPlayer = LocalServerPlayer;
                 // QC spectatee_status != -1 (playing or following a player → a meaningful view origin, so the
                 // close-range / out-of-view 2D heuristics may apply); a free-fly observer (IsObserving) always
                 // gets a world number.
                 bool canUse2d = _client is not null && !_client.IsObserving;
+                // QC write_damagetext per-viewer visibility (sv_damagetext.qc:32-37): the queue carries EVERY
+                // hit on the server; the local viewer only sees the ones the sv_damagetext tier grants them —
+                // at the shipped default 2 that's THEIR OWN hits only (an observer sees all at tier >= 1).
+                // Without this gate every bot-vs-bot hit on the map drew a number, and the off-screen ones got
+                // pinned near the crosshair by the 2D out-of-view fallback.
+                float dtTier = _serverWorld?.Services.Cvars.GetFloat("sv_damagetext") ?? 2f;
+                Player? dtViewer = LocalServerPlayer;
+                bool dtObserver = _client?.IsObserving ?? false;
                 foreach (DamageTextEvent ev in dtm.DrainPending())
                 {
+                    if (!DamagetextMutator.ShouldShowTo(dtTier,
+                            viewerIsAttacker: dtViewer is not null && ReferenceEquals(ev.Attacker, dtViewer),
+                            viewerIsObserver: dtObserver))
+                        continue;
                     string wn = XonoticGodot.Common.Gameplay.Damage.DeathTypes.WeaponNetNameOf(ev.DeathType);
                     int colorKey = Weapons.ByName(wn) is { } w ? w.RegistryId : -1;
                     _damageText.Add(ev, Coords.ToGodot(ev.Target.Origin), colorKey, canUse2d);
-
-                    // Hit confirmation when the LOCAL player dealt the damage (not self-damage): the hitsound
-                    // beep AND the crosshair hitmarker flash (QC HitSound + the crosshair hit indication). The
-                    // crosshair pulse is otherwise unfed — CrosshairPanel.HitFlash decays itself each frame.
-                    if (localPlayer is not null && ev.Attacker == localPlayer && ev.Target != localPlayer)
-                    {
-                        _hitSound?.OnHit(ev.Health + ev.Armor);
-                        _fullHud.Crosshair.HitFlash = 1f;
-                    }
                 }
+                // (The hitsound + crosshair hit flash no longer ride these damagetext events — QC drives them
+                // from the feedback STATS, which UpdateCrosshairFeedback now does on both paths. That decouples
+                // them from sv_damagetext, skips damagetext's own gates, stops burn-tick DoT beep trails, and
+                // lets the kill sound take its EndFrame priority over the hit beep.)
             }
             if (Mutators.ByName("itemstime") is ItemstimeMutator itm && itm.IsEnabled)
             {
@@ -3458,8 +3489,9 @@ public sealed partial class NetGame : Node3D
 
             // [T41] objective-ring + hit-indication feed moved to UpdateCrosshairFeedback() (called
             // unconditionally below, like UpdateCrosshairWeaponRings) so it also runs on a pure remote client
-            // off the networked LocalState slice. The host damagetext hit path below still owns the host
-            // crosshair flash + hitsound; UpdateCrosshairFeedback only fires the hit cue on the remote path.
+            // off the networked LocalState slice. That same call now owns the hit/typehit/kill feedback
+            // sounds + the crosshair hit flash on BOTH paths (host reads the live Player stats, remote the
+            // networked Feedback block) — QC's stat-driven HitSound, no damagetext coupling.
 
             // (weapon-ring + vehicle-HUD feeders hoisted out of the host-only block — see the unconditional calls
             // before ProcessAnnouncerQueue below — so they also run for a pure remote client; each now picks its
@@ -4487,21 +4519,20 @@ public sealed partial class NetGame : Node3D
         return string.IsNullOrWhiteSpace(gt) ? _gametype : gt;
     }
 
-    // ---- crosshair objective rings + remote-client hit indication ----
-    // Remote-client hit-indication diff (QC view.qc UpdateDamage: STAT(HITSOUND_DAMAGE_DEALT_TOTAL) advances
-    // → unaccounted_damage → the crosshair hit flash + hitsound). On a pure remote client there is no local
-    // damagetext mutator, so we diff the networked cumulative-damage stat off ClientNet.LocalState instead.
-    private float _remoteHitDealtTotal;
-    private bool _remoteHitInit;
+    // ---- crosshair objective rings + hit/typehit/kill feedback ----
+    // QC view.qc UpdateDamage/HitSound run off the owner's feedback STATS (HIT/TYPEHIT/KILL_TIME + the
+    // cumulative damage total). Both paths feed the same HitSound state machine: a listen host reads the
+    // live LocalServerPlayer fields (flushed by the server's EndFrame under the sim gate), a pure client the
+    // networked LocalState slice (the EntityField.Feedback block, protocol v18).
+    private int _arcWeaponId = int.MinValue; // lazily-resolved Arc registry id (the QC have_arc check)
 
     /// <summary>
     /// Feed the crosshair panel the local player's objective-ring stats (QC view.qc HUD_Draw 1006-1022:
-    /// NADE_TIMER &gt; CAPTURE_PROGRESS &gt; REVIVE_PROGRESS) and, on the remote-client path, the hit-indication
-    /// flash (QC view.qc UpdateDamage). Runs on every path: a listen host reads the live
-    /// <see cref="LocalServerPlayer"/> (which carries STAT(NADE_TIMER)/STAT(REVIVE_PROGRESS) live); a pure
-    /// remote client reads the networked <see cref="ClientNet.LocalState"/> slice the server ships (the
-    /// EntityField.Feedback block — NadeTimer/CaptureProgress/ReviveProgress/HitDamageDealtTotal). CAPTURE has
-    /// no server producer yet, so it stays 0 and the panel hides that ring either way.
+    /// NADE_TIMER &gt; CAPTURE_PROGRESS &gt; REVIVE_PROGRESS) and drive the hit/typehit/kill feedback sounds +
+    /// the crosshair hit-indication flash (QC view.qc UpdateDamage/HitSound + crosshair.qc:387). Runs on
+    /// every path: a listen host reads the live <see cref="LocalServerPlayer"/>; a pure remote client reads
+    /// the networked <see cref="ClientNet.LocalState"/> slice the server ships. CAPTURE has no server
+    /// producer yet, so it stays 0 and the panel hides that ring either way.
     /// </summary>
     private void UpdateCrosshairFeedback()
     {
@@ -4509,10 +4540,16 @@ public sealed partial class NetGame : Node3D
             return;
         CrosshairPanel x = _fullHud.Crosshair;
 
+        // QC have_arc (view.qc:918-925): a viewmodel slot holding the Arc bypasses the beep antispam window
+        // at cl_hitsound >= 2 (the beam's pitch shift must sound continuous). _equippedWeaponId mirrors
+        // viewmodels[slot].activeweapon.
+        if (_arcWeaponId == int.MinValue)
+            _arcWeaponId = Weapons.ByName("arc") is { } arc ? arc.RegistryId : -1;
+        bool haveArc = _arcWeaponId >= 0 && _equippedWeaponId == _arcWeaponId;
+
         if (LocalServerPlayer is { } host)
         {
-            // Host / listen-server: the live local Player carries the stats. The host hit flash is driven by the
-            // damagetext drain above (so we don't diff HitDamageDealtTotal here — that would double-fire).
+            // Host / listen-server: the live local Player carries the stats.
             x.NadeTimer = host.NadeTimer;
             x.ReviveProgress = host.ReviveProgress;
             x.CaptureProgress = 0f; // no host producer yet (QC STAT(CAPTURE_PROGRESS) is gametype-set)
@@ -4524,16 +4561,39 @@ public sealed partial class NetGame : Node3D
             _fullHud.Ammo.NadeBonusTypeId = host.NadeBonusType;
             _fullHud.Ammo.NadeBonusScoreFrac = host.NadeBonusScore;
 
-            _remoteHitInit = false; // re-baseline the remote diff if we ever fall back to the client path
+            // QC UpdateDamage/HitSound off the live stats. The host CAN follow-spectate (cl_bench_spectate, the
+            // `spectate` command), and the server-side EndFrame stamp already mirrors the spectatee's feedback
+            // onto this player — so pass the real spectatee id through, or view.qc:907's "drop accumulated
+            // damage on a spectatee switch" never fires here.
+            if (_hitSound is not null
+                && _hitSound.Update(haveArc, _client?.SpectatingNetId ?? 0, host.HitTime,
+                                    host.HitsoundDamageDealtTotal, host.TypeHitTime, host.KillTime))
+                x.HitFlash = 1f;
             return;
         }
 
-        // Pure remote client: read the networked own-entity slice. No slice yet (pre-spawn) → hide the rings.
+        // Pure remote client: read the networked own-entity slice. No slice yet (pre-spawn) → hide the rings
+        // and drop the feedback baselines so the next slice re-seeds silently.
         if (_client is null || _client.LocalState is not { } ls)
         {
             x.NadeTimer = 0f; x.CaptureProgress = 0f; x.ReviveProgress = 0f;
             _fullHud.Ammo.NadeBonusCount = 0; _fullHud.Ammo.NadeBonusTypeId = 0; _fullHud.Ammo.NadeBonusScoreFrac = 0f;
-            _remoteHitInit = false;
+
+            // FOLLOW-SPECTATOR: QC stamps the spectator's own feedback stats from their spectatee
+            // (world.qc:2508 `IS_SPEC(it) ? it.enemy : it`), so watching someone frag sounds like playing.
+            // An observer has no own entity in the stream, so read the block off the WATCHED entity — the
+            // server keeps it unstripped for exactly this recipient (ServerNet.RelevantEntitiesFor).
+            int watched = _client?.SpectatingNetId ?? 0;
+            if (_hitSound is not null && watched != 0 && _client is not null
+                && _client.TryGetRemoteState(watched, out XonoticGodot.Net.NetEntityState spec))
+            {
+                if (_hitSound.Update(haveArc, watched, spec.HitTime, spec.HitDamageDealtTotal,
+                                     spec.TypeHitTime, spec.KillTime))
+                    x.HitFlash = 1f;
+                return;
+            }
+
+            _hitSound?.Reset();
             return;
         }
 
@@ -4546,16 +4606,12 @@ public sealed partial class NetGame : Node3D
         _fullHud.Ammo.NadeBonusTypeId = ls.NadeBonusType;
         _fullHud.Ammo.NadeBonusScoreFrac = ls.NadeBonusScore;
 
-        // QC UpdateDamage: when the cumulative dealt-damage stat advances, the crosshair flashes (and the
-        // hitsound beeps). Diff it against the last frame; skip the first sample so a non-zero baseline (joining
-        // mid-match) doesn't flash on the first snapshot.
-        if (_remoteHitInit && ls.HitDamageDealtTotal > _remoteHitDealtTotal)
-        {
+        // QC UpdateDamage/HitSound off the networked stats; the spectatee id drops accumulated damage on a
+        // spectatee switch (view.qc:907). The first slice seeds baselines silently (mid-match join).
+        if (_hitSound is not null
+            && _hitSound.Update(haveArc, _client.SpectateeStatus, ls.HitTime, ls.HitDamageDealtTotal,
+                                ls.TypeHitTime, ls.KillTime))
             x.HitFlash = 1f;
-            _hitSound?.OnHit(ls.HitDamageDealtTotal - _remoteHitDealtTotal);
-        }
-        _remoteHitDealtTotal = ls.HitDamageDealtTotal;
-        _remoteHitInit = true;
     }
 
     // ---- pickup feed (QC HUD_Pickup / STAT(LAST_PICKUP)) ----
@@ -5970,15 +6026,27 @@ public sealed partial class NetGame : Node3D
         }
     }
 
-    /// <summary>Size the scoreboard panel to a centered slab of the viewport (QC HUD_Panel_UpdatePosSize for the
-    /// scoreboard, simplified). Called once at setup; the panel reads its own rect via <c>Configure</c>.</summary>
+    /// <summary>
+    /// Resolve the standalone scoreboard's geometry + skin config against the LIVE viewport — QC
+    /// <c>Scoreboard_Draw</c>'s own <c>HUD_Panel_LoadCvars()</c> + the centered-slab override it applies right
+    /// after (scoreboard.qc:2466-2483). Must run EVERY FRAME, like Base: the previous one-shot
+    /// <c>Configure(...)</c> at NetGame setup froze the rect at whatever the viewport happened to be then, so
+    /// after the window resized (or the boot fullscreen transition landed) the board kept a rect computed for
+    /// e.g. 1024×768 and rendered jammed into the top-left of the real viewport. Going through
+    /// <see cref="XonoticGodot.Game.Hud.HudPanel.LoadConfig"/> ALSO gives the panel a real resolved
+    /// <c>Cfg</c> — the standalone instance is not managed by <see cref="XonoticGodot.Game.Hud.HudManager"/>, so
+    /// it had been drawing with the constructor-default config (<c>Bg = "0"</c>, fixed alphas/padding), which is
+    /// why it never painted the luma skin frame or honoured any <c>hud_panel_scoreboard_*</c> cvar.
+    /// </summary>
     private void LayoutScoreboard()
     {
-        if (_scoreboard is null) return;
+        if (_scoreboard is null || !GodotObject.IsInstanceValid(_scoreboard) || !_scoreboard.Visible) return;
         Vector2 vp = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1280, 720);
-        float w = Mathf.Min(vp.X * 0.8f, 1100f);
-        float h = vp.Y * 0.85f;
-        _scoreboard.Configure(new Rect2((vp.X - w) * 0.5f, vp.Y * 0.06f, w, h));
+        // 1) QC HUD_Panel_LoadCvars — resolve bg/skin/alphas/padding/fontsize from hud_panel_scoreboard_*.
+        _scoreboard.LoadConfig(vp, _fullHud?.HudFadeAlpha ?? 1f, _scoreboard.FadeAlpha);
+        // 2) QC the centered-slab override Scoreboard_Draw applies right after LoadCvars (the scoreboard is
+        //    PANEL_CONFIG_NO — its placement is derived, not taken from the generic pos/size cvars).
+        _scoreboard.Configure(_scoreboard.BaseGeometry(vp));
     }
 
     /// <summary>
@@ -6018,13 +6086,29 @@ public sealed partial class NetGame : Node3D
         bool deathScoreboard = deadNow && _localDeathStamp >= 0f && !ctsGame
             && (cv is null || cv.GetFloat("cl_deathscoreboard") != 0f)
             && _client.LatestServerTime - _localDeathStamp >= (cv is null ? 1f : cv.GetFloat("cl_deathscoreboard_delay"));
-        bool show = (XonoticGodot.Engine.Console.BindTable.ShowScores || intermissionShow || deathScoreboard)
+        // QC client/view.qc:1865 — the server asks for a team pick by setting `_scoreboard_team_selection`;
+        // the client opens the interactive picker and clears the flag.
+        _scoreboard.MatchIntermission = _client.MatchIntermission;
+        if (MenuState.Cvars.GetFloat("_scoreboard_team_selection") != 0f)
+        {
+            _scoreboard.UiEnable(1);
+            MenuState.Cvars.Set("_scoreboard_team_selection", "0");
+        }
+
+        // QC Scoreboard_WouldDraw's UI branch (scoreboard.qc:1766): while the interactive scoreboard is up it
+        // force-draws regardless of +showscores, and a closing one tears its state down once faded out.
+        bool uiShow = _scoreboard.UiTick();
+
+        bool show = (uiShow || XonoticGodot.Engine.Console.BindTable.ShowScores || intermissionShow || deathScoreboard)
             && !mapVoteShowing; // QC intermission==2 / clickable-radar suppression: mapvote owns the screen
         // QC scoreboard.qc:2411: drive the cross-fade via scoreboard_active (the Active setter ramps _fadeAlpha
         // in/out in _Process and hides the panel once fully faded out) rather than popping Visible — this is what
         // makes hud_panel_scoreboard_fadeinspeed/fadeoutspeed actually animate on the live path.
         if (_scoreboard.Active != show)
             _scoreboard.Active = show;
+        // QC Scoreboard_Draw re-runs HUD_Panel_LoadCvars + its centered-slab geometry EVERY draw — so must we,
+        // or the board keeps a rect computed for a stale viewport (see LayoutScoreboard).
+        LayoutScoreboard();
         // Drive the manager's non-scoreboard panel cross-fade (QC panel_fade_alpha) from the scoreboard's live fade
         // level. Without this ScoreboardFade sat at 0 forever, so the always-on HUD panels never faded when the
         // scoreboard came up — most visibly the top-left radar, whose bottom-right corner pokes into the centered
@@ -6086,6 +6170,11 @@ public sealed partial class NetGame : Node3D
             _scoreboard.RankingsSelfName = ResolveScoreboardName(_client.LocalNetId);
             // QC the race/CTS speed award (scoreboard.qc:2731): the round-best + all-time best planar speed + holders.
             _scoreboard.SetSpeedAward(sb.SpeedAward, sb.SpeedAwardHolder, sb.SpeedAwardBest, sb.SpeedAwardBestHolder);
+            // QC the per-viewer Inventory entity: this client's item-pickup tally, drawn by the scoreboard's
+            // Item stats grid (Scoreboard_ItemStats_Draw). Keyed by the item def's HUD icon name.
+            _itemStatsById.Clear();
+            foreach ((string icon, int count) in sb.ItemStats) _itemStatsById[icon] = count;
+            _scoreboard.SetItemStats(_itemStatsById);
             FeedScoreboardHeader();
         }
         else if (sb is null)
@@ -6378,6 +6467,7 @@ public sealed partial class NetGame : Node3D
 
     // [T57] last-fed accuracy generation (rebuild the dictionaries only when the server's changes). -1 = none yet.
     private int _lastFedAccuracyGen = -1;
+    private readonly System.Collections.Generic.Dictionary<string, int> _itemStatsById = new();   // item icon name -> pickup count (QC Inventory.inv_items)
     private readonly System.Collections.Generic.Dictionary<int, int> _accuracyById = new();          // weapon registry id → hit% (-1 never fired)
     private readonly System.Collections.Generic.Dictionary<string, float> _accuracyByNetName = new(); // weapon NetName → hit% (0 never fired)
 
@@ -6411,7 +6501,47 @@ public sealed partial class NetGame : Node3D
         }
         _scoreboard.SetAccuracy(_accuracyById);
         _fullHud.Weapons.SetAccuracy(_accuracyByNetName);
+        FeedScoreboardWeaponSets();
     }
+
+    /// <summary>
+    /// QC <c>WepSet_GetFromStat()</c> / <c>WepSet_GetFromStat_InMap()</c> (scoreboard.qc:1808-1809): the two sets
+    /// that decide which never-fired weapons still earn a cell in the scoreboard's accuracy grid — the weapons
+    /// the local player carries, and the weapons that exist on the loaded map. Without them the grid would list
+    /// EVERY registered weapon (including the OK/turret/vehicle variants that never appear in a normal match).
+    ///
+    /// Owned comes from the local player's live WepSet (listen server: the server Player; remote client: the HUD
+    /// mirror the owner block feeds). In-map is a listen-server scan of the spawned weapon pickups; a pure
+    /// <c>--connect</c> client has no item list of its own, so it falls back to the owned set alone (a strictly
+    /// smaller grid, never a wrong one).
+    /// </summary>
+    private void FeedScoreboardWeaponSets()
+    {
+        Entity? local = LocalServerPlayer ?? _hudMirror;
+        if (local is not null)
+        {
+            _sbOwnedWeapons.Clear();
+            foreach (Weapon w in local.OwnedWeaponSet.Weapons()) _sbOwnedWeapons.Add(w.RegistryId);
+            _scoreboard.SetOwnedWeapons(_sbOwnedWeapons);
+        }
+
+        // The in-map set only changes on map load; scan once per map.
+        if (_serverWorld is not null && _sbWeaponsInMapMap != _map)
+        {
+            _sbWeaponsInMapMap = _map;
+            _sbWeaponsInMap.Clear();
+            foreach (Entity e in _serverWorld.Services.Entities.All)
+            {
+                if (e.IsFreed || e.Pickup is not { IsWeaponPickup: true }) continue;
+                foreach (Weapon w in e.OwnedWeaponSet.Weapons()) _sbWeaponsInMap.Add(w.RegistryId);
+            }
+            _scoreboard.SetWeaponsInMap(_sbWeaponsInMap);
+        }
+    }
+
+    private readonly System.Collections.Generic.List<int> _sbOwnedWeapons = new();
+    private readonly System.Collections.Generic.HashSet<int> _sbWeaponsInMap = new();
+    private string _sbWeaponsInMapMap = "";
 
     /// <summary>The scoreboard title: the active gametype's display name from the networked ScoreInfo (else the
     /// configured gametype). QC the scoreboard header gametype name.</summary>
@@ -6524,6 +6654,29 @@ public sealed partial class NetGame : Node3D
             // the new menu state), so it stays correct even when a board is still active under a closed menu.
             GetViewport().SetInputAsHandled();
             return;
+        }
+
+        // Interactive scoreboard (QC HUD_Scoreboard_InputEvent, main.qc:500). Two entry points:
+        //   * TAB held + Escape opens the navigation UI (QC main.qc:545-551 — the ESC branch checks S_TAB);
+        //   * while it is up it owns the keyboard: arrows/TAB/Enter/Ctrl-chords all go to the panel.
+        // Placed before the radar/mapvote handlers and the gameplay binds so an arrow key navigates instead of
+        // switching weapons. Console-open still wins (handled above).
+        if (!ConsoleState.IsOpen && _scoreboard is not null && GodotObject.IsInstanceValid(_scoreboard)
+            && @event is InputEventKey { Echo: false } sbKey)
+        {
+            bool shift = sbKey.ShiftPressed, ctrl = sbKey.CtrlPressed;
+            // (Escape — open and close — is claimed by Shell's Escape chain via MenuCommand.ScoreboardEscape.)
+
+            if (_scoreboard.UiMode != 0)
+            {
+                // QC acts on the PRESS and swallows the matching release, so the key never reaches gameplay.
+                if (sbKey.Pressed ? _scoreboard.UiHandleKey(sbKey.Keycode, shift, ctrl)
+                                  : _scoreboard.UiConsumesRelease(sbKey.Keycode, ctrl))
+                {
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
         }
 
         // Maximized radar mouse input (QC HUD_Radar_Mouse / hud_panel_radar_maximized): while the radar is maximized

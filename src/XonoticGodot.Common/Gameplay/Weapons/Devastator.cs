@@ -62,6 +62,7 @@ public sealed class Devastator : Weapon
     public Devastator()
     {
         NetName = "devastator";
+        BotPickupBaseValue = 8000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type
         DisplayName = "Devastator";
         Impulse = 9;

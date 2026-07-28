@@ -51,6 +51,7 @@ public sealed class Mortar : Weapon
     public Mortar()
     {
         NetName = "mortar";
+        BotPickupBaseValue = 7000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type
         DisplayName = "Mortar";
         Impulse = 4;

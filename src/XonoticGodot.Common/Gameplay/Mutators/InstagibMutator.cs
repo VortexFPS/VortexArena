@@ -245,10 +245,12 @@ public sealed class InstagibMutator : MutatorBase
                     armor -= 1f;
                     target.SetResource(ResourceType.Armor, armor);
                     args.Damage = 0f;
-                    // QC: ++hitsound_damage_dealt on both; CENTER_INSTAGIB_LIVES_REMAINING tells the
-                    // target how many lives are left. (hitsound is a client-only feedback signal.)
-                    target.HitsoundDamageDealtTotal += 1f;
-                    attacker!.HitsoundDamageDealtTotal += 1f;
+                    // QC: ++hitsound_damage_dealt on both (the PER-FRAME accumulator, flushed to the stats by
+                    // EndFrame — the zeroed damage would otherwise skip the count block, and the TARGET also
+                    // hears a beep for the eaten life); CENTER_INSTAGIB_LIVES_REMAINING tells the target how
+                    // many lives are left.
+                    target.HitSoundDamageDealt += 1f;
+                    attacker!.HitSoundDamageDealt += 1f;
                     NotificationSystem.Center(target, "INSTAGIB_LIVES_REMAINING", armor);
                 }
             }
@@ -276,8 +278,8 @@ public sealed class InstagibMutator : MutatorBase
                 armor -= 1f;
                 attacker.SetResource(ResourceType.Armor, armor);
                 NotificationSystem.Center(attacker, "INSTAGIB_LIVES_REMAINING", armor);
-                // QC: frag_attacker.hitsound_damage_dealt += frag_mirrordamage.
-                attacker.HitsoundDamageDealtTotal += args.MirrorDamage;
+                // QC: frag_attacker.hitsound_damage_dealt += frag_mirrordamage (per-frame accumulator).
+                attacker.HitSoundDamageDealt += args.MirrorDamage;
             }
             args.MirrorDamage = 0f;
         }

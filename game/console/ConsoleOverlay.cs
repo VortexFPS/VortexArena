@@ -140,6 +140,18 @@ public partial class ConsoleOverlay : CanvasLayer
         // `editor [map]` sits beside map/devmap because it IS a map command — same changelevel path, only
         // the gametype differs. No argument re-hosts whatever is running, which is the whole point.
         interp.RegisterCommand("editor", a => MenuCommand.StartEditor?.Invoke(a.Count >= 2 ? a[1] : string.Empty));
+
+        // QC Cmd_Scoreboard_SetFields (client/hud/panel/scoreboard.qc:767), exposed in Base as the
+        // `scoreboard_columns_set` client command: set the scoreboard's column layout. No argument re-applies the
+        // saved `scoreboard_columns`; "default" / "all" select the two presets; anything else is a literal spec
+        // ("ping pl name | score deaths"). The scoreboard reads the cvar live, so writing it IS the command.
+        interp.RegisterCommand("scoreboard_columns_set", a =>
+        {
+            if (a.Count < 2) { MenuState.Cvars.Set("scoreboard_columns", MenuState.Cvars.GetString("scoreboard_columns")); return; }
+            string spec = string.Join(' ', a.Skip(1));
+            MenuState.Cvars.Set("scoreboard_columns", spec);
+        });
+
         interp.RegisterCommand("vid_restart", _ => MenuCommand.VideoRestart?.Invoke());
         interp.RegisterCommand("snd_restart", _ => MenuCommand.AudioRestart?.Invoke());
         interp.RegisterCommand("togglemenu", a =>

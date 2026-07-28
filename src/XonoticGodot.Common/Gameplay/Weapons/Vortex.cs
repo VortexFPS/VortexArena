@@ -62,6 +62,7 @@ public sealed class Vortex : Weapon
     public Vortex()
     {
         NetName = "vortex";
+        BotPickupBaseValue = 8000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Vortex";
         Impulse = 7;

@@ -58,6 +58,7 @@ public sealed class Vaporizer : Weapon
     public Vaporizer()
     {
         NetName = "vaporizer";
+        BotPickupBaseValue = 10000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Vaporizer";
         Impulse = 7;

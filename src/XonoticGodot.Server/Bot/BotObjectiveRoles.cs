@@ -21,7 +21,7 @@ namespace XonoticGodot.Server.Bot;
 public static class BotObjectiveRoles
 {
     // QC BOT_RATING_* (roles.qh) — objective goals weigh much higher than loose items.
-    private const float RatingFlag = 30000f;
+    // (CTF uses the QC per-role literal scales directly — see the CTF role bodies.)
     private const float RatingControlPoint = 10000f;
     private const float RatingBall = 8000f;
     // QC havocbot_goalrating_tkaball ratingscale_sameteam: chasing your OWN team's carrier rates lower (TKA only).
@@ -39,90 +39,509 @@ public static class BotObjectiveRoles
     private static readonly List<Entity> _scratch = new();
 
     // ============================================================================================
-    // Capture the Flag (QC havocbot_role_ctf_* + havocbot_goalrating_ctf_*)
+    // Capture the Flag (QC havocbot_role_ctf_* + havocbot_goalrating_ctf_* — sv_ctf.qc:1572-2217)
     // ============================================================================================
 
     /// <summary>
-    /// CTF role (QC the carrier/offense/defense/middle roles collapsed): if carrying the enemy flag, route to
-    /// the team base to capture; otherwise route to the enemy flag (to grab) and to our own dropped/stolen
-    /// flag (to return), plus items + roaming. A faithful behavioural collapse of the four QC CTF roles.
+    /// CTF role dispatcher — the FULL six-role QC state machine (carrier / retriever / middle / offense /
+    /// defense / escort), not a collapse. Runs every token hold: role transitions (grab/drop/steal/return
+    /// reactions, timeouts, team position balancing) happen at token cadence exactly like QC havocbot_ai:64,
+    /// while each role's goal rating is gated on the strategy clock (<see cref="BotBrain.GoalRatingTimedOut"/>).
+    /// Role state lives on the brain (<see cref="BotBrain.CtfRole"/> / CtfPreviousRole / CtfRoleTimeout).
     /// </summary>
     public static void RoleCtf(BotBrain brain, GoalRater rater)
     {
         var bot = brain.Bot;
-        rater.Start();
-
-        if (brain.GameType is Ctf ctf)
+        if (brain.GameType is not Ctf ctf || ctf.Flags.Count == 0)
         {
-            int myTeam = (int)bot.Team;
-            FlagState? carried = ctf.CarriedBy(bot);
-
-            if (carried is not null)
-            {
-                // Carrying: head home to capture (the team's own base / flag position).
-                if (TryFlagBasePosition(ctf, myTeam, out Vector3 home))
-                    rater.Rate(bot.Origin, FindFlagBaseEntity(myTeam), home, RatingFlag, 10000f);
-            }
-            else
-            {
-                // Not carrying: grab the enemy flag (at its base or wherever dropped).
-                foreach (var (team, flag) in ctf.Flags)
-                {
-                    if (team == myTeam) continue;
-                    Vector3 pos = FlagPosition(ctf, team, flag);
-                    rater.Rate(bot.Origin, flag.Carrier, pos, RatingFlag, 10000f);
-                }
-                // Return our own flag if it's away from base (dropped/carried).
-                if (ctf.Flags.TryGetValue(myTeam, out FlagState? mine) && mine.Status != FlagStatus.AtBase)
-                {
-                    Vector3 pos = FlagPosition(ctf, myTeam, mine);
-                    rater.Rate(bot.Origin, mine.Carrier, pos, RatingFlag * 0.8f, 10000f);
-                }
-            }
+            BotRoles.RoleGeneric(brain, rater); // no CTF state resolvable — still play (gates itself)
+            return;
         }
 
-        // Always also want nearby items + enemies + a roam fallback (QC the role's item/enemy goalrating).
-        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f);
-        BotRoles.GoalrateEnemyPlayers(brain, rater, bot.Origin, 7000f);
-        BotRoles.GoalrateRoamWaypoints(brain, rater, bot.Origin, 3000f);
-        rater.End();
+        int myTeam = (int)bot.Team;
+        FlagState? mf = FindFlag(ctf, myTeam, ours: true);
+        FlagState? ef = FindFlag(ctf, myTeam, ours: false);
+        if (mf is null || ef is null)
+        {
+            BotRoles.RoleGeneric(brain, rater);
+            return;
+        }
+
+        // QC havocbot_ctf_calculate_middlepoint (sv_ctf.qc:1480): middle = mean of the flag base origins;
+        // radius = distance from a base to the middle. Cheap (2-4 flags) — recompute per invocation.
+        CtfMiddle(ctf, out Vector3 middle, out float middleRadius);
+
+        if (brain.CtfRole == CtfBotRole.None)
+            CtfResetRole(brain, ctf, mf, ef, middle, middleRadius, initial: true);
+
+        switch (brain.CtfRole)
+        {
+            case CtfBotRole.Carrier:   CtfRoleCarrier(brain, rater, ctf, mf, ef, middle, middleRadius); break;
+            case CtfBotRole.Retriever: CtfRoleRetriever(brain, rater, ctf, mf, ef, middle, middleRadius); break;
+            case CtfBotRole.Middle:    CtfRoleMiddle(brain, rater, ctf, mf, ef, middle, middleRadius); break;
+            case CtfBotRole.Offense:   CtfRoleOffense(brain, rater, ctf, mf, ef, middle, middleRadius); break;
+            case CtfBotRole.Escort:    CtfRoleEscort(brain, rater, ctf, mf, ef, middle, middleRadius); break;
+            default:                   CtfRoleDefense(brain, rater, ctf, mf, ef, middle, middleRadius); break;
+        }
     }
 
-    private static Vector3 FlagPosition(Ctf ctf, int team, FlagState flag)
+    /// <summary>
+    /// QC havocbot_ctf_find_flag / _find_enemy_flag: our team's flag, or the flag to take. In one-flag mode
+    /// the "enemy" flag is the NEUTRAL flag (Teams.None) — the thing bots steal and run home. (QC's oneflag
+    /// find_enemy_flag returns an enemy TEAM flag while carrying, but its own capture rule fires at the
+    /// carrier's OWN base — sv_ctf.qc:1186, pinned by the port's OneFlag tests — so the port routes carriers
+    /// via <c>mf</c> (the capture base) and always tracks the neutral flag here.)
+    /// </summary>
+    private static FlagState? FindFlag(Ctf ctf, int myTeam, bool ours)
+    {
+        if (!ours && ctf.OneFlag)
+            return ctf.NeutralFlag;
+        foreach (var (team, flag) in ctf.Flags)
+        {
+            if (team == Teams.None) continue; // the neutral flag is nobody's team flag
+            if ((team == myTeam) == ours)
+                return flag;
+        }
+        return null;
+    }
+
+    /// <summary>Where the flag currently IS (QC the flag edict origin: carrier while carried, drop spot
+    /// while dropped, home base otherwise).</summary>
+    private static Vector3 FlagPosition(FlagState flag)
     {
         if (flag.Status == FlagStatus.Carried && flag.Carrier is not null)
             return flag.Carrier.Origin;
         if (flag.Status == FlagStatus.Dropped)
             return flag.DropOrigin;
-        // at base: use the flag base marker entity if the map has one, else fall back to a team spawn.
-        return TryFlagBasePosition(ctf, team, out Vector3 home) ? home : flag.DropOrigin;
+        return flag.HomeOrigin;
     }
 
-    private static bool TryFlagBasePosition(Ctf ctf, int team, out Vector3 pos)
+    private static void CtfMiddle(Ctf ctf, out Vector3 middle, out float radius)
     {
-        Entity? e = FindFlagBaseEntity(team);
-        if (e is not null) { pos = e.Origin; return true; }
-        pos = Vector3.Zero;
-        return false;
-    }
-
-    private static Entity? FindFlagBaseEntity(int team)
-    {
-        if (Api.Services is null) return null;
-        // map flag markers: item_flag_team1..4 (QC) — index 1..4 by team color order.
-        string cls = team switch
+        Vector3 s = Vector3.Zero, last = Vector3.Zero;
+        int n = 0;
+        foreach (var (_, flag) in ctf.Flags)
         {
-            Teams.Red => "item_flag_team1",
-            Teams.Blue => "item_flag_team2",
-            Teams.Yellow => "item_flag_team3",
-            Teams.Pink => "item_flag_team4",
-            _ => "",
-        };
-        if (cls.Length == 0) return null;
-        Api.Entities.FindByClass(cls, _scratch);
-        for (int i = 0; i < _scratch.Count; i++)
-            if (!_scratch[i].IsFreed) return _scratch[i];
-        return null;
+            last = flag.HomeOrigin;
+            s += last;
+            ++n;
+        }
+        middle = n > 0 ? s * (1f / n) : Vector3.Zero;
+        radius = n > 0 ? (last - middle).Length() : 0f;
+        if (radius <= 0f) radius = 1000f; // degenerate single-flag map: keep the radius terms sane
+    }
+
+    /// <summary>QC havocbot_ctf_teamcount: LIVING teammates (≠ this bot) within <paramref name="radius"/> of
+    /// <paramref name="org"/>.</summary>
+    private static int CtfTeamCount(BotBrain brain, Vector3 org, float radius)
+    {
+        int c = 0;
+        float r2 = radius * radius;
+        foreach (Entity e in brain.LivePlayers())
+        {
+            if (ReferenceEquals(e, brain.Bot) || e is not Player p || p.IsDead) continue;
+            if ((int)p.Team != (int)brain.Bot.Team) continue;
+            if ((p.Origin - org).LengthSquared() < r2) ++c;
+        }
+        return c;
+    }
+
+    /// <summary>
+    /// QC havocbot_role_ctf_setrole (sv_ctf.qc:2171): the role switch bookkeeping — previous-role capture for
+    /// the temporary roles, per-role timeouts, and the goal-rating force/expire that makes a switch take
+    /// effect promptly instead of waiting out the 7s strategy clock.
+    /// </summary>
+    private static void CtfSetRole(BotBrain brain, CtfBotRole role)
+    {
+        float now = Api.Clock.Time;
+        switch (role)
+        {
+            case CtfBotRole.Carrier:
+                if (brain.CtfRole != CtfBotRole.Carrier)
+                    brain.ForceGoalRating(); // QC: navigation_goalrating_timeout_force on entering carrier
+                brain.CtfRole = role;
+                brain.CtfRoleTimeout = 0f;
+                brain.CtfCantFindFlagTime = now + 10f; // QC bot.havocbot_cantfindflag = time + 10
+                break;
+            case CtfBotRole.Retriever:
+                brain.CtfPreviousRole = brain.CtfRole;
+                if (brain.CtfRole != CtfBotRole.Retriever)
+                    brain.ExpireGoalRating(2f); // QC: navigation_goalrating_timeout_expire(bot, 2)
+                brain.CtfRole = role;
+                brain.CtfRoleTimeout = now + 10f;
+                break;
+            case CtfBotRole.Escort:
+                brain.CtfPreviousRole = brain.CtfRole;
+                if (brain.CtfRole != CtfBotRole.Escort)
+                    brain.ExpireGoalRating(2f);
+                brain.CtfRole = role;
+                brain.CtfRoleTimeout = now + 30f;
+                break;
+            default: // Defense / Middle / Offense
+                brain.CtfRole = role;
+                brain.CtfRoleTimeout = 0f;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// QC havocbot_ctf_reset_role (sv_ctf.qc:1697): pick the best role from the game state — carrier while
+    /// carrying, retriever while our flag is away, middle while the enemy flag is away, else balance
+    /// defense/offense/middle by where teammates already stand. <paramref name="initial"/> stands in for the
+    /// QC "just joined" (jointime) window: fixed first roles for tiny teams and a 10-20s shakeout timeout.
+    /// </summary>
+    private static void CtfResetRole(BotBrain brain, Ctf ctf, FlagState mf, FlagState ef,
+        Vector3 middle, float middleRadius, bool initial = false)
+    {
+        var bot = brain.Bot;
+        if (bot.IsDead) return;
+
+        if (ctf.CarriedBy(bot) is not null) { CtfSetRole(brain, CtfBotRole.Carrier); return; }
+        if (mf.Status != FlagStatus.AtBase) { CtfSetRole(brain, CtfBotRole.Retriever); return; }
+        if (ef.Status != FlagStatus.AtBase) { CtfSetRole(brain, CtfBotRole.Middle); return; }
+
+        // Count teammates (QC counts all players on the team, dead or not).
+        int count = 0;
+        foreach (Entity e in brain.LivePlayers())
+            if (!ReferenceEquals(e, bot) && (int)e.Team == (int)bot.Team) ++count;
+
+        if (count == 0) { CtfSetRole(brain, CtfBotRole.Offense); return; }
+        if (initial)
+        {
+            // QC "if bots spawn all at once set good default roles" (jointime < 1s).
+            if (count == 1) { CtfSetRole(brain, CtfBotRole.Defense); return; }
+            if (count == 2) { CtfSetRole(brain, CtfBotRole.Middle); return; }
+        }
+
+        // Evaluate the least-covered position (QC teamcount over middle / our base / enemy base).
+        int cmiddle = CtfTeamCount(brain, middle, middleRadius * 0.5f);
+        int cdefense = CtfTeamCount(brain, mf.HomeOrigin, middleRadius * 0.5f);
+        int coffense = CtfTeamCount(brain, ef.HomeOrigin, middleRadius);
+
+        if (cdefense <= coffense) CtfSetRole(brain, CtfBotRole.Defense);
+        else if (coffense <= cmiddle) CtfSetRole(brain, CtfBotRole.Offense);
+        else CtfSetRole(brain, CtfBotRole.Middle);
+
+        // QC: staggered re-evaluation when a full team spawned at once.
+        if (initial && count > 2)
+            brain.CtfRoleTimeout = Api.Clock.Time + 10f + (float)Prandom.Float() * 10f;
+    }
+
+    /// <summary>
+    /// [PORT IMPROVEMENT] Pass the carried flag to the best same-team receiver: alive, empty-handed, inside
+    /// g_ctf_pass_radius, with a clear straight line (the port's pass flies straight — no arc trace). Nearest
+    /// wins. Returns true when a pass actually launched (<see cref="Ctf.PassFlag"/> applies the full rule set:
+    /// pass enabled, antispam, receiver validity).
+    /// </summary>
+    private static bool TryCarrierPass(BotBrain brain, Ctf ctf)
+    {
+        if (brain.Bot is not Player self || Api.Services is null) return false;
+        float radius = Cvars.FloatOr("g_ctf_pass_radius", 500f);
+        Player? best = null;
+        float bestD = radius;
+        Vector3 eye = self.Origin + self.ViewOfs;
+        foreach (Entity e in brain.LivePlayers())
+        {
+            if (e is not Player p || ReferenceEquals(p, self) || p.IsDead) continue;
+            if ((int)p.Team != (int)self.Team) continue;
+            if (ctf.CarriedBy(p) is not null) continue; // QC: can't pass to another carrier
+            float d = (p.Origin - self.Origin).Length();
+            if (d > bestD) continue;
+            var tr = Api.Trace.Trace(eye, Vector3.Zero, Vector3.Zero, p.Origin + p.ViewOfs,
+                MoveFilter.Normal, self);
+            if (tr.Fraction < 1f && !ReferenceEquals(tr.Ent, p)) continue; // wall in the way
+            best = p;
+            bestD = d;
+        }
+        return best is not null && ctf.PassFlag(self, best);
+    }
+
+    // ---- CTF goal-rating helpers (QC havocbot_goalrating_ctf_*) ----
+
+    /// <summary>QC havocbot_goalrating_ctf_ourbase / _enemybase: route toward a flag base (QC rates the
+    /// bot_basewaypoint; the port rates the base position directly).</summary>
+    private static void CtfRateBase(BotBrain brain, GoalRater rater, FlagState flag, float ratingscale)
+    {
+        Entity? target = flag.Status == FlagStatus.AtBase ? flag.Entity : null;
+        rater.Rate(brain.Bot.Origin, target, flag.HomeOrigin, ratingscale, 10000f);
+    }
+
+    /// <summary>QC havocbot_goalrating_ctf_enemyflag: route to the enemy flag wherever it is; when a TEAMMATE
+    /// carries it, nudge the rating by the carrier's health (escort healthy carriers harder: f = ((hp+armor)/100
+    /// clamped 0..2) - 1; scale += scale·f·0.1).</summary>
+    private static void CtfRateEnemyFlag(BotBrain brain, GoalRater rater, FlagState ef, float ratingscale)
+    {
+        var bot = brain.Bot;
+        if (ef.Status == FlagStatus.Carried && ef.Carrier is Player carrier)
+        {
+            float hp = carrier.Health + carrier.GetResource(ResourceType.Armor);
+            float f = System.Math.Clamp(hp / 100f, 0f, 2f) - 1f;
+            ratingscale += ratingscale * f * 0.1f;
+            rater.Rate(bot.Origin, carrier, carrier.Origin, ratingscale, 10000f);
+            return;
+        }
+        rater.Rate(bot.Origin, ef.Entity, FlagPosition(ef), ratingscale, 10000f);
+    }
+
+    /// <summary>QC havocbot_goalrating_ctf_ourstolenflag: route to OUR flag's carrier while it is carried
+    /// (the dropped case is handled by <see cref="CtfRateDroppedFlags"/>).</summary>
+    private static void CtfRateOurStolenFlag(BotBrain brain, GoalRater rater, FlagState mf, float ratingscale)
+    {
+        if (mf.Status == FlagStatus.Carried && mf.Carrier is not null)
+            rater.Rate(brain.Bot.Origin, mf.Carrier, mf.Carrier.Origin, ratingscale, 10000f);
+    }
+
+    /// <summary>QC havocbot_goalrating_ctf_droppedflags: route to any flag lying dropped in the field within
+    /// <paramref name="radius"/> of <paramref name="org"/> (0 = unlimited).</summary>
+    private static void CtfRateDroppedFlags(BotBrain brain, GoalRater rater, Ctf ctf, float ratingscale,
+        Vector3 org, float radius)
+    {
+        float r2 = radius * radius;
+        foreach (var (_, flag) in ctf.Flags)
+        {
+            if (flag.Status != FlagStatus.Dropped) continue;
+            if (radius > 0f && (flag.DropOrigin - org).LengthSquared() >= r2) continue;
+            rater.Rate(brain.Bot.Origin, flag.Entity, flag.DropOrigin, ratingscale, 10000f);
+        }
+    }
+
+    // ---- the six CTF roles (QC sv_ctf.qc:1788-2169) ----
+
+    /// <summary>QC havocbot_role_ctf_carrier: run the enemy flag home. When our flag is away the capture
+    /// can't complete — the base pull drops to 2000/1000 so nearby items win and the bot loiters at base.</summary>
+    private static void CtfRoleCarrier(BotBrain brain, GoalRater rater, Ctf ctf, FlagState mf, FlagState ef,
+        Vector3 middle, float middleRadius)
+    {
+        var bot = brain.Bot;
+        if (ctf.CarriedBy(bot) is null) { CtfResetRole(brain, ctf, mf, ef, middle, middleRadius); return; }
+
+        // [PORT IMPROVEMENT — Base bots never pass] A carrier about to die hands the flag off to a teammate
+        // in pass range with a clear line, keeping the run alive instead of dumping the flag on death.
+        // Runs at token cadence; PassFlag's own antispam (g_ctf_pass_wait) rate-limits retries. Skill-gated
+        // so low-skill bots keep their tunnel vision.
+        if (brain.Skill >= 3f && bot.Health + bot.GetResource(ResourceType.Armor) < 40f
+            && TryCarrierPass(brain, ctf))
+        {
+            CtfResetRole(brain, ctf, mf, ef, middle, middleRadius); // no longer carrying
+            return;
+        }
+
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
+
+        Vector3 baseOrg = mf.HomeOrigin;
+        float baseRating = mf.Status == FlagStatus.AtBase
+            ? 10000f
+            : ((bot.Origin - baseOrg).Length() > 100f ? 2000f : 1000f);
+        CtfRateBase(brain, rater, mf, baseRating);
+
+        // QC: collect items very close by, but only inside our base radius; plus the base-area items.
+        if ((bot.Origin - baseOrg).Length() < middleRadius)
+            BotRoles.GoalrateItems(brain, rater, bot.Origin, System.MathF.Min(500f, middleRadius * 0.5f), 15000f);
+        BotRoles.GoalrateItems(brain, rater, baseOrg, middleRadius * 0.5f, 10000f);
+        rater.End();
+
+        // QC havocbot_cantfindflag watchdog: a carrier that can't rate ANY goal for 10s suicides in Base
+        // (Damage DEATH_KILL) so the flag returns to play. The port has no bot-layer suicide path — clear the
+        // route instead, and re-arm so this doesn't spin every token frame.
+        if (rater.HasGoal)
+            brain.CtfCantFindFlagTime = Api.Clock.Time + 10f;
+        else if (Api.Clock.Time > brain.CtfCantFindFlagTime)
+        {
+            // [PORT IMPROVEMENT] Before giving the route search another spin, try to PASS the flag to a
+            // reachable teammate — a stuck carrier handing off beats QC's suicide and beats circling forever.
+            TryCarrierPass(brain, ctf);
+            brain.Nav.ClearRoute();
+            // NOTE: deliberately NO ForceGoalRating() here. We are inside the rating pass, and the post-pass
+            // stamp in BotBrain unconditionally clears the force flag — the call was a silent no-op. The fast
+            // retry it was reaching for already exists: this pass rated nothing and the route was just cleared,
+            // so BotBrain's "no goal captured and no route" arm re-arms the rating in 2s.
+            brain.CtfCantFindFlagTime = Api.Clock.Time + 10f;
+        }
+        // (QC also LOCKS the chosen goal for 2-3s when parked on the base waypoint waiting for our flag —
+        // the port's 7s re-rate cadence makes an explicit lock a no-op, so it is intentionally omitted.)
+    }
+
+    /// <summary>QC havocbot_role_ctf_escort: shadow our flag carrier until the enemy flag is home again.</summary>
+    private static void CtfRoleEscort(BotBrain brain, GoalRater rater, Ctf ctf, FlagState mf, FlagState ef,
+        Vector3 middle, float middleRadius)
+    {
+        var bot = brain.Bot;
+        float now = Api.Clock.Time;
+        if (ctf.CarriedBy(bot) is not null) { CtfSetRole(brain, CtfBotRole.Carrier); return; }
+
+        // Enemy flag back at its base → job done, revert to the previous role.
+        if (ef.Status == FlagStatus.AtBase)
+        {
+            brain.CtfRole = brain.CtfPreviousRole != CtfBotRole.None ? brain.CtfPreviousRole : CtfBotRole.None;
+            brain.CtfRoleTimeout = 0f;
+            return;
+        }
+        // Enemy flag dropped → re-rate soon (someone must scoop it; roles re-sort on the next pass).
+        if (ef.Status == FlagStatus.Dropped)
+        {
+            brain.ExpireGoalRating(1f);
+            return;
+        }
+        // Our carrier reached (the vicinity of) our base but can't cap (our flag away) → switch to defense.
+        if (mf.Status != FlagStatus.AtBase && (FlagPosition(ef) - mf.HomeOrigin).Length() < 900f)
+        {
+            CtfSetRole(brain, CtfBotRole.Defense);
+            return;
+        }
+
+        if (brain.CtfRoleTimeout == 0f)
+            brain.CtfRoleTimeout = now + (float)Prandom.Float() * 30f + 60f;
+        if (now > brain.CtfRoleTimeout)
+        {
+            brain.CtfRole = brain.CtfPreviousRole != CtfBotRole.None ? brain.CtfPreviousRole : CtfBotRole.None;
+            brain.CtfRoleTimeout = 0f;
+            return;
+        }
+
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
+        CtfRateEnemyFlag(brain, rater, ef, 10000f);
+        CtfRateOurStolenFlag(brain, rater, mf, 6000f);
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f, 21000f);
+        rater.End();
+    }
+
+    /// <summary>QC havocbot_role_ctf_offense: push the enemy base; peel off to retrieve or escort as the
+    /// flag states demand.</summary>
+    private static void CtfRoleOffense(BotBrain brain, GoalRater rater, Ctf ctf, FlagState mf, FlagState ef,
+        Vector3 middle, float middleRadius)
+    {
+        var bot = brain.Bot;
+        float now = Api.Clock.Time;
+        if (ctf.CarriedBy(bot) is not null) { CtfSetRole(brain, CtfBotRole.Carrier); return; }
+
+        // Our flag stolen and closer than the enemy base → go retrieve instead.
+        if (mf.Status != FlagStatus.AtBase)
+        {
+            Vector3 pos = FlagPosition(mf);
+            if ((bot.Origin - ef.HomeOrigin).LengthSquared() > (bot.Origin - pos).LengthSquared())
+            {
+                CtfSetRole(brain, CtfBotRole.Retriever);
+                return;
+            }
+        }
+        // Enemy flag taken and already away from our base → escort the carrier in.
+        if (ef.Status != FlagStatus.AtBase && (FlagPosition(ef) - mf.HomeOrigin).Length() > 700f)
+        {
+            CtfSetRole(brain, CtfBotRole.Escort);
+            return;
+        }
+
+        if (brain.CtfRoleTimeout == 0f)
+            brain.CtfRoleTimeout = now + 120f;
+        if (now > brain.CtfRoleTimeout) { CtfResetRole(brain, ctf, mf, ef, middle, middleRadius); return; }
+
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
+        CtfRateOurStolenFlag(brain, rater, mf, 10000f);
+        CtfRateBase(brain, rater, ef, 10000f); // QC havocbot_goalrating_ctf_enemybase(10000)
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f, 22000f);
+        rater.End();
+    }
+
+    /// <summary>QC havocbot_role_ctf_retriever (temporary): hunt our stolen/dropped flag down.</summary>
+    private static void CtfRoleRetriever(BotBrain brain, GoalRater rater, Ctf ctf, FlagState mf, FlagState ef,
+        Vector3 middle, float middleRadius)
+    {
+        var bot = brain.Bot;
+        float now = Api.Clock.Time;
+        if (ctf.CarriedBy(bot) is not null) { CtfSetRole(brain, CtfBotRole.Carrier); return; }
+
+        // Flag home again → back to normal duties (QC also force-rerates the bot that returned it; the port
+        // doesn't track the returner, so the reset's own expire covers it).
+        if (mf.Status == FlagStatus.AtBase) { CtfResetRole(brain, ctf, mf, ef, middle, middleRadius); return; }
+
+        if (brain.CtfRoleTimeout == 0f)
+            brain.CtfRoleTimeout = now + 20f;
+        if (now > brain.CtfRoleTimeout) { CtfResetRole(brain, ctf, mf, ef, middle, middleRadius); return; }
+
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
+        const float RtRadius = 10000f;
+        CtfRateOurStolenFlag(brain, rater, mf, 10000f);
+        CtfRateDroppedFlags(brain, rater, ctf, 12000f, bot.Origin, RtRadius);
+        CtfRateBase(brain, rater, ef, 8000f);
+        // QC: collect items very close by, but only inside the ENEMY base radius; plus the wider sweep.
+        if ((bot.Origin - ef.HomeOrigin).Length() < middleRadius)
+            BotRoles.GoalrateItems(brain, rater, bot.Origin, System.MathF.Min(500f, middleRadius * 0.5f), 27000f);
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, middleRadius, 18000f);
+        rater.End();
+    }
+
+    /// <summary>QC havocbot_role_ctf_middle: hold the map middle — intercept runners, farm the mid items.</summary>
+    private static void CtfRoleMiddle(BotBrain brain, GoalRater rater, Ctf ctf, FlagState mf, FlagState ef,
+        Vector3 middle, float middleRadius)
+    {
+        var bot = brain.Bot;
+        float now = Api.Clock.Time;
+        if (ctf.CarriedBy(bot) is not null) { CtfSetRole(brain, CtfBotRole.Carrier); return; }
+        if (mf.Status != FlagStatus.AtBase) { CtfSetRole(brain, CtfBotRole.Retriever); return; }
+
+        if (brain.CtfRoleTimeout == 0f)
+            brain.CtfRoleTimeout = now + 10f;
+        if (now > brain.CtfRoleTimeout) { CtfResetRole(brain, ctf, mf, ef, middle, middleRadius); return; }
+
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
+        Vector3 org = middle;
+        org.Z = bot.Origin.Z; // QC: org = havocbot_middlepoint; org.z = this.origin.z
+        CtfRateOurStolenFlag(brain, rater, mf, 8000f);
+        CtfRateDroppedFlags(brain, rater, ctf, 9000f, bot.Origin, 10000f);
+        BotRoles.GoalrateEnemyPlayers(brain, rater, org, middleRadius * 0.5f, 25000f);
+        BotRoles.GoalrateItems(brain, rater, org, middleRadius * 0.5f, 25000f);
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f, 18000f);
+        CtfRateBase(brain, rater, ef, 3000f);
+        rater.End();
+    }
+
+    /// <summary>QC havocbot_role_ctf_defense: guard our base — rush back when an enemy is closer to it than
+    /// we are, fight around it, farm the base items.</summary>
+    private static void CtfRoleDefense(BotBrain brain, GoalRater rater, Ctf ctf, FlagState mf, FlagState ef,
+        Vector3 middle, float middleRadius)
+    {
+        var bot = brain.Bot;
+        float now = Api.Clock.Time;
+        if (ctf.CarriedBy(bot) is not null) { CtfSetRole(brain, CtfBotRole.Carrier); return; }
+        if (mf.Status != FlagStatus.AtBase) { CtfSetRole(brain, CtfBotRole.Retriever); return; }
+
+        if (brain.CtfRoleTimeout == 0f)
+            brain.CtfRoleTimeout = now + 30f;
+        if (now > brain.CtfRoleTimeout) { CtfResetRole(brain, ctf, mf, ef, middle, middleRadius); return; }
+
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
+        Vector3 org = mf.HomeOrigin;
+
+        // QC: find the closest living player to our base; if it's an enemy and we're far from base, and we
+        // can see them (or a coin flip), fall back to the base.
+        Player? closest = null;
+        float best = 10000f;
+        foreach (Entity e in brain.LivePlayers())
+        {
+            if (e is not Player p || p.IsDead) continue;
+            float d = (org - p.Origin).Length();
+            if (d < best) { best = d; closest = p; }
+        }
+        if (closest is not null
+            && (int)closest.Team != (int)bot.Team
+            && (org - bot.Origin).Length() > 1000f
+            && (Api.Trace.CheckPvs(bot.Origin, closest.Origin) || Prandom.Float() < 0.5))
+        {
+            CtfRateBase(brain, rater, mf, 10000f);
+        }
+
+        CtfRateOurStolenFlag(brain, rater, mf, 5000f);
+        CtfRateDroppedFlags(brain, rater, ctf, 6000f, org, middleRadius);
+        BotRoles.GoalrateEnemyPlayers(brain, rater, org, middleRadius, 25000f);
+        BotRoles.GoalrateItems(brain, rater, org, middleRadius, 25000f);
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f, 18000f);
+        rater.End();
     }
 
     // ============================================================================================
@@ -137,9 +556,11 @@ public static class BotObjectiveRoles
     public static void RoleDomination(BotBrain brain, GoalRater rater)
     {
         var bot = brain.Bot;
-        rater.Start();
+        // QC havocbot_role_dom: dead → return; rate only on the goal-rating clock.
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
         GoalrateControlPoints(brain, rater, bot.Origin, 15000f);
-        BotRoles.GoalrateItems(brain, rater, bot.Origin, 8000f);
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 8000f, 20000f); // QC items(20000, org, 8000)
         BotRoles.GoalrateRoamWaypoints(brain, rater, bot.Origin, 3000f);
         rater.End();
     }
@@ -194,7 +615,6 @@ public static class BotObjectiveRoles
             brain.OnslaughtAttackTime = 0f;
             brain.OnslaughtRoleTimeout = 0f;
             bot.GtOnsTarget = null;
-            rater.Start(); rater.End();
             return;
         }
 
@@ -205,18 +625,16 @@ public static class BotObjectiveRoles
         {
             brain.OnslaughtRoleTimeout = 0f;
             bot.GtOnsTarget = null; // QC havocbot_ons_reset_role: this.havocbot_ons_target = NULL
-            rater.Start(); rater.End();
             return;
         }
 
         // QC: if(this.havocbot_attack_time > time) return — committed to the current push (skip re-rating).
         if (now < brain.OnslaughtAttackTime)
-        {
-            rater.Start(); rater.End();
             return;
-        }
 
-        rater.Start();
+        // QC: rating gated on the strategy clock (navigation_goalrating_timeout).
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
 
         // QC havocbot_goalrating_enemyplayers(this, 20000, this.origin, 650) — runs every offense re-rate.
         BotRoles.GoalrateEnemyPlayers(brain, rater, bot.Origin, 650f, 20000f);
@@ -412,7 +830,7 @@ public static class BotObjectiveRoles
     private static int CountTeamInterest(BotBrain brain, Onslaught.OnsNode node, int myTeam)
     {
         int c = 0;
-        foreach (Entity e in brain.Players())
+        foreach (Entity e in brain.LivePlayers())
         {
             if (ReferenceEquals(e, brain.Bot)) continue;            // QC: it != this
             if ((int)e.Team != myTeam) continue;                   // QC SAME_TEAM(it, this)
@@ -558,10 +976,12 @@ public static class BotObjectiveRoles
             }
         }
 
-        rater.Start();
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
         RateKeyHuntTargets(brain, rater, bot, rsTeam, rsDropped, rsEnemy);
-        BotRoles.GoalrateItems(brain, rater, bot.Origin, 8000f);
-        BotRoles.GoalrateEnemyPlayers(brain, rater, bot.Origin, 7000f);
+        // QC havocbot_goalrating_kh tail: items at 80000 (keys apart, KH bots stay stocked); QC's KH roles
+        // rate NO enemy players — the key triple already routes toward enemy carriers when appropriate.
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f, 80000f);
         BotRoles.GoalrateRoamWaypoints(brain, rater, bot.Origin, 3000f);
         rater.End();
     }
@@ -606,7 +1026,10 @@ public static class BotObjectiveRoles
     public static void RoleKeepaway(BotBrain brain, GoalRater rater)
     {
         var bot = brain.Bot;
-        rater.Start();
+        // QC havocbot_role_ka_*: no role state machine (carrier/collector split by live ball ownership);
+        // rate only on the goal-rating clock.
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
 
         Entity? ball = FindBall();
         bool carryingBall = ball is not null && ReferenceEquals(ball.GtCarrier, bot);
@@ -649,43 +1072,119 @@ public static class BotObjectiveRoles
     // Freeze Tag (QC havocbot_role_ft_offense / havocbot_role_ft_freeing + havocbot_goalrating_freeplayers)
     // ============================================================================================
 
-    /// <summary>QC <c>havocbot_goalrating_freeplayers</c> ratingscale for a frozen teammate to thaw: the freeing
-    /// role rates them at 20000 (route to them and stand by to revive); the offense role at 9000 (still help if
-    /// nearby, but prioritise items/enemies). Collapsed here into a single role like CTF/Keepaway.</summary>
-    private const float RatingFrozenTeammate = 20000f;
-
     /// <summary>
-    /// Freeze Tag role (QC the offense + freeing roles collapsed): route to any FROZEN teammate to thaw them
-    /// (havocbot_role_ft_freeing / havocbot_goalrating_freeplayers, rated 20000 so it dominates), while still
-    /// rating items, enemies, and roam waypoints (havocbot_role_ft_offense). The frozen set is read live from the
-    /// gametype's <see cref="FreezeTag.Frozen"/> map (driven each frame by GameWorld.DriveGametypeFrame). Falls
-    /// back to the DM goals when the gametype isn't FT.
+    /// Freeze Tag role (QC havocbot_role_ft_offense / havocbot_role_ft_freeing, sv_freezetag.qc:298-397): the
+    /// FULL two-role QC machine, not a collapse. The roles alternate on 20-30s timeouts (offense also flips to
+    /// freeing when its whole team is frozen); offense fights (items 12000 / enemies 10000 / frozen mates 9000)
+    /// while freeing prioritises thawing (frozen mates 20000 / items 10000 / enemies 5000). The frozen set is
+    /// read live from the gametype's <see cref="FreezeTag.Frozen"/> map. Falls back to DM goals otherwise.
     /// </summary>
     public static void RoleFreezeTag(BotBrain brain, GoalRater rater)
     {
         var bot = brain.Bot;
-        rater.Start();
-
-        if (brain.GameType is FreezeTag ft && bot is Player self)
+        if (brain.GameType is not FreezeTag ft || bot is not Player self)
         {
-            // QC havocbot_goalrating_freeplayers: rate each frozen SAME-TEAM player as a revive goal so the bot
-            // walks into reviving range. A higher rating than enemies/items makes freeing the priority behaviour.
-            foreach (var e in brain.Players())
-            {
-                if (e is not Player mate || ReferenceEquals(mate, self) || mate.IsDead)
-                    continue;
-                if (!Teams.SameTeam(self, mate) || !ft.IsFrozen(mate))
-                    continue;
-                rater.Rate(bot.Origin, mate, mate.Origin, RatingFrozenTeammate, 10000f);
-            }
+            BotRoles.RoleGeneric(brain, rater);
+            return;
         }
 
-        // QC the ft roles also rate items/enemies/roam (offense). Keep enemies modest so freeing wins when a frozen
-        // teammate is in reach but the bot still fights/collects otherwise.
-        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f);
-        BotRoles.GoalrateEnemyPlayers(brain, rater, bot.Origin, 7000f);
+        float now = Api.Clock.Time;
+
+        // QC HavocBot_ChooseRole ft (sv_freezetag.qc:965-974): initial random 50/50 pick + a 10-20s shakeout
+        // timeout so a team that spawned all at once staggers its first re-evaluation.
+        if (brain.FtRole == FtBotRole.None)
+        {
+            brain.FtRole = Prandom.Float() < 0.5 ? FtBotRole.Freeing : FtBotRole.Offense;
+            brain.FtRoleTimeout = now + 10f + (float)Prandom.Float() * 10f;
+        }
+
+        if (brain.FtRoleTimeout == 0f)
+            brain.FtRoleTimeout = now + (float)Prandom.Float() * 10f + 20f;
+
+        if (brain.FtRole == FtBotRole.Offense)
+        {
+            // QC: count unfrozen players on the team (self included).
+            int unfrozen = 0;
+            foreach (Entity e in brain.LivePlayers())
+                if (e is Player p && Teams.SameTeam(self, p) && !ft.IsFrozen(p))
+                    ++unfrozen;
+
+            // QC: last one standing (or role timed out) → start freeing teammates.
+            if ((unfrozen == 0 && !ft.IsFrozen(self)) || now > brain.FtRoleTimeout)
+            {
+                brain.FtRole = FtBotRole.Freeing;
+                brain.FtRoleTimeout = 0f;
+                return;
+            }
+
+            if (!brain.GoalRatingTimedOut) return;
+            brain.BeginGoalRating(rater);
+            BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f, 12000f);
+            BotRoles.GoalrateEnemyPlayers(brain, rater, bot.Origin, 10000f, 10000f);
+            FtRateFreePlayers(brain, rater, ft, self, 9000f, bot.Origin, 10000f);
+            BotRoles.GoalrateRoamWaypoints(brain, rater, bot.Origin, 3000f);
+            rater.End();
+            return;
+        }
+
+        // Freeing role.
+        if (now > brain.FtRoleTimeout)
+        {
+            brain.FtRole = FtBotRole.Offense;
+            brain.FtRoleTimeout = 0f;
+            return;
+        }
+
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f, 10000f);
+        BotRoles.GoalrateEnemyPlayers(brain, rater, bot.Origin, 10000f, 5000f);
+        FtRateFreePlayers(brain, rater, ft, self, 20000f, bot.Origin, 10000f);
         BotRoles.GoalrateRoamWaypoints(brain, rater, bot.Origin, 3000f);
         rater.End();
+    }
+
+    /// <summary>
+    /// QC havocbot_goalrating_ft_freeplayers (sv_freezetag.qc:303): rate every frozen same-team player within
+    /// <paramref name="sradius"/> at full scale, and — buddy grouping — the nearest healthy UNFROZEN teammate
+    /// beyond 700qu at half scale (fighting in a group beats roaming solo). A teammate already within 700qu
+    /// cancels the buddy pull entirely.
+    /// </summary>
+    private static void FtRateFreePlayers(BotBrain brain, GoalRater rater, FreezeTag ft, Player self,
+        float ratingscale, Vector3 org, float sradius)
+    {
+        var bot = brain.Bot;
+        Player? bestPl = null;
+        float bestDist2 = float.MaxValue;
+        float sradius2 = sradius * sradius;
+        foreach (var e in brain.LivePlayers())
+        {
+            if (e is not Player mate || ReferenceEquals(mate, self) || mate.IsDead) continue;
+            if (!Teams.SameTeam(self, mate)) continue;
+            if (ft.IsFrozen(mate))
+            {
+                if ((mate.Origin - org).LengthSquared() > sradius2) continue;
+                rater.Rate(bot.Origin, mate, mate.Origin, ratingscale, 2000f);
+            }
+            else if (bestDist2 > 0f
+                && mate.Health < self.Health + 30f
+                && (mate.Origin - org).LengthSquared() < bestDist2)
+            {
+                float d2 = (mate.Origin - org).LengthSquared();
+                if (d2 < 700f * 700f)
+                {
+                    bestPl = null;
+                    bestDist2 = 0f; // already close to a teammate — no buddy pull needed
+                }
+                else
+                {
+                    bestPl = mate;
+                    bestDist2 = d2;
+                }
+            }
+        }
+        if (bestPl is not null)
+            rater.Rate(bot.Origin, bestPl, bestPl.Origin, ratingscale / 2f, 2000f);
     }
 
     private static Entity? FindBall()
@@ -711,7 +1210,10 @@ public static class BotObjectiveRoles
     public static void RoleNexball(BotBrain brain, GoalRater rater)
     {
         var bot = brain.Bot;
-        rater.Start();
+        // (Base ships NO nexball bot role at all — QC nexball bots play generic. This role is a port
+        // improvement; it still honors the standard goal-rating clock.)
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
 
         if (brain.GameType is Nexball nb && nb.BallEntity is Entity ball && !ball.IsFreed)
         {
@@ -782,7 +1284,6 @@ public static class BotObjectiveRoles
         {
             brain.AssaultAttackTime = 0f;
             brain.AssaultRoleTimeout = 0f;
-            rater.Start(); rater.End();
             return;
         }
 
@@ -792,18 +1293,16 @@ public static class BotObjectiveRoles
         if (now > brain.AssaultRoleTimeout)
         {
             brain.AssaultRoleTimeout = 0f;
-            rater.Start(); rater.End();
             return;
         }
 
         // QC: if(this.havocbot_attack_time > time) return — bot is committed to the current push.
         if (now < brain.AssaultAttackTime)
-        {
-            rater.Start(); rater.End();
             return;
-        }
 
-        rater.Start();
+        // QC: rating gated on the strategy clock (navigation_goalrating_timeout).
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
 
         var asl = brain.GameType as Assault;
         bool attacker = asl is not null && (int)bot.Team == asl.AttackerTeam;
@@ -932,7 +1431,8 @@ public static class BotObjectiveRoles
             return;
         }
 
-        rater.Start();
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
 
         // QC: the bot's expected next checkpoint. A run not yet in progress (NextCheckpoint < 0, or not Running)
         // wants the start timer (cp 0); once the start is crossed (Running) it wants the stop timer (the finish).
@@ -989,7 +1489,8 @@ public static class BotObjectiveRoles
             return;
         }
 
-        rater.Start();
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
 
         // QC: int cp = this.race_checkpoint; (the bot's expected next checkpoint, -1 = none yet → match ANY).
         Race.RaceState st = race.GetState(p);
@@ -1018,6 +1519,46 @@ public static class BotObjectiveRoles
                     rater.Rate(bot.Origin, it, it.Origin, RatingRaceCheckpoint, 5000f);
             }
 
+        rater.End();
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Invasion — hunt the monster waves
+    // ----------------------------------------------------------------------------------------
+
+    /// <summary>QC BOT_RATING_ENEMY-adjacent scale for a live monster as a route goal. Modest — a wave that
+    /// spawned across the map is worth walking to, but health/armor between the bot and the monsters still
+    /// win when needed.</summary>
+    private const float RatingMonster = 2500f;
+
+    /// <summary>
+    /// Invasion role (PORT IMPROVEMENT — Base's Invasion bots run havocbot_role_generic and only fight
+    /// monsters that wander into view, since QC's goal rating covers players only): rate every LIVE monster
+    /// as a route goal so bots actively hunt the wave down instead of roaming until one finds them. Target
+    /// acquisition itself is the shared ChooseEnemy monster sweep (QC g_bot_targets); the gametype's
+    /// Bot_ForbidAttack hook (players vetoed, QC sv_invasion.qc:426) keeps the fire discipline faithful.
+    /// </summary>
+    public static void RoleInvasion(BotBrain brain, GoalRater rater)
+    {
+        var bot = brain.Bot;
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
+
+        if (Api.Services is not null)
+        {
+            Api.Entities.FindInRadius(bot.Origin, 15000f, _scratch);
+            for (int i = 0; i < _scratch.Count; i++)
+            {
+                Entity m = _scratch[i];
+                if (m.IsFreed || (m.Flags & EntFlags.Monster) == 0) continue;
+                if (m.DeadState != DeadFlag.No || m.Health <= 0f) continue;
+                Vector3 pos = (m.AbsMin != m.AbsMax) ? (m.AbsMin + m.AbsMax) * 0.5f : m.Origin;
+                rater.Rate(bot.Origin, m, pos, RatingMonster, 2000f);
+            }
+        }
+
+        BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f);
+        BotRoles.GoalrateRoamWaypoints(brain, rater, bot.Origin, 3000f);
         rater.End();
     }
 

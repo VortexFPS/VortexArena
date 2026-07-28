@@ -100,6 +100,18 @@ public sealed class BotBrain
     private readonly List<(Waypoint Wp, float Cost)> _pendingSeeds = new();
     private GoalRating _pendingGoal;
     private bool _pendingGoalSet;
+
+    /// <summary>QC WATERLEVEL_SWIMMING — waist-deep and actually swimming (the shore-waypoint push gate).</summary>
+    private const int WaterLevelSwimming = 2;
+
+    /// <summary>Scratch for the monster sweep in <see cref="ChooseEnemy"/> (alloc-free FindInRadius).</summary>
+    private readonly List<Entity> _monsterScratch = new();
+
+    // Set by BeginGoalRating during the current role invocation: whether the role actually opened a rating
+    // pass this token frame (QC: whether navigation_goalrating_start ran), and the entry-seed set its flood
+    // produced (handed to the deferred SetGoal). Reset by the strategy block before each role call.
+    private bool _ratingRan;
+    private IReadOnlyList<(Waypoint Wp, float Cost)>? _frameSeeds;
     private bool _triggerHurtEscape; // QC trigger_hurt escape (skill>6): jetpack up / Devastator rocketjump out
 
     /// <summary>
@@ -164,6 +176,33 @@ public sealed class BotBrain
     public float KhRoleTimeout;
 
     /// <summary>
+    /// QC <c>.havocbot_role</c> CTF variant (sv_ctf.qc havocbot_role_ctf_*): which of the six CTF sub-roles
+    /// this bot is currently playing. <see cref="CtfBotRole.None"/> = unassigned — the first
+    /// <see cref="BotObjectiveRoles.RoleCtf"/> call runs the QC reset_role position balancing.
+    /// </summary>
+    public CtfBotRole CtfRole;
+
+    /// <summary>QC <c>.havocbot_previous_role</c>: the role Retriever/Escort revert to when their temporary
+    /// stint ends (flag returned / timeout).</summary>
+    public CtfBotRole CtfPreviousRole;
+
+    /// <summary>QC <c>.havocbot_role_timeout</c> CTF variant: absolute sim time the current CTF role expires
+    /// (0 = unset; each role stamps its own duration on first invocation).</summary>
+    public float CtfRoleTimeout;
+
+    /// <summary>QC <c>.havocbot_cantfindflag</c> (sv_ctf.qc:1830): carrier watchdog — absolute time by which
+    /// the carrier must have found a route home; QC suicides past it (the port clears the route and forces a
+    /// re-rate instead — there is no bot-layer suicide path yet).</summary>
+    public float CtfCantFindFlagTime;
+
+    /// <summary>QC <c>.havocbot_role</c> Freeze Tag variant (sv_freezetag.qc havocbot_role_ft_offense /
+    /// _freeing). <see cref="FtBotRole.None"/> = unassigned — first call picks randomly (QC HavocBot_ChooseRole).</summary>
+    public FtBotRole FtRole;
+
+    /// <summary>QC <c>.havocbot_role_timeout</c> FT variant: absolute sim time the current FT role expires.</summary>
+    public float FtRoleTimeout;
+
+    /// <summary>
     /// QC the pre-game movement holds (bot_think:80-83 campaign hold + :122-127 countdown): when this returns
     /// true the bot keeps its buttons but emits zero movement. Wired by <see cref="BotPopulation"/> to
     /// <c>time &lt; game_starttime || (g_campaign &amp;&amp; !campaign_bots_may_start)</c>; null = no hold.
@@ -210,6 +249,103 @@ public sealed class BotBrain
         foreach (var e in Api.Entities.FindByClass("player"))
             if (!e.IsFreed)
                 yield return e;
+    }
+
+    /// <summary>
+    /// The LIVE players — QC's <c>FOREACH_CLIENT(IS_PLAYER(it), …)</c>, which is what almost every roster scan
+    /// in the roles actually wants. <see cref="Players()"/> is the bare FOREACH_CLIENT and therefore includes
+    /// OBSERVERS/spectators, who keep their <c>Team</c> and read <c>IsDead == false</c>
+    /// (ClientManager.PutObserverInServer) — so a plain team+alive filter silently accepts them. A follow
+    /// spectator is additionally glued to its spectatee's origin, so it wins any "nearest teammate" scan at
+    /// distance ~0: that made a bot carrier pass the flag to a non-solid free-fly camera, skewed the CTF
+    /// defense/offense census, and routed Freeze-Tag bots to a spectator.
+    /// </summary>
+    internal IEnumerable<Entity> LivePlayers()
+    {
+        foreach (Entity e in Players())
+            if (e is not Player { IsObserver: true })
+                yield return e;
+    }
+
+    /// <summary>QC <c>STAT(FROZEN, e) || StatusEffects_active(STATUSEFFECT_Frozen, e)</c> — a frozen player
+    /// runs no role and holds no strategy token.</summary>
+    internal static bool IsFrozen(Entity e)
+        => XonoticGodot.Common.Gameplay.StatusEffectsCatalog.Frozen is { } f
+           && XonoticGodot.Common.Gameplay.StatusEffectsCatalog.Has(e, f);
+
+    // ---- goal-rating clock API for the roles (QC navigation_goalrating_timeout family) ----
+
+    /// <summary>QC navigation_goalrating_timeout (navigation.qc:44-47): should the role re-rate goals now?
+    /// Roles call this each token frame and skip their rating block until it fires.</summary>
+    public bool GoalRatingTimedOut => _strategyForced || Now >= _strategyTime;
+
+    /// <summary>QC navigation_goalrating_timeout_force: discard the current goal decision — re-rate on the
+    /// next token hold.
+    /// <para>ONLY effective from OUTSIDE a rating pass (an event handler, a think block). Called from inside a
+    /// role while that role is rating, it is a silent NO-OP: the post-pass stamp below clears
+    /// <c>_strategyForced</c> and re-stamps the interval unconditionally whenever the pass ran. A role that
+    /// wants a fast retry should simply rate nothing and clear its route — that hits the "no goal captured and
+    /// no route" arm, which re-arms in 2s.</para></summary>
+    public void ForceGoalRating() => _strategyForced = true;
+
+    /// <summary>QC navigation_goalrating_timeout_expire(seconds): keep the current goal at most
+    /// <paramref name="seconds"/> longer (only ever SHORTENS the clock).</summary>
+    public void ExpireGoalRating(float seconds)
+    {
+        if (seconds <= 0f) { _strategyForced = true; return; }
+        float t = Now + seconds;
+        if (_strategyTime > t) _strategyTime = t;
+    }
+
+    /// <summary>
+    /// QC navigation_goalrating_start (navigation.qc:1831 — markroutes + reset best): open a rating pass for
+    /// this token frame. Floods the waypoint graph from the bot's position ONCE so every subsequent
+    /// <see cref="GoalRater.Rate"/> reads the real Dijkstra path cost, and captures the flood's entry-seed set
+    /// for the deferred route build. Roles MUST call this before rating and only after checking
+    /// <see cref="GoalRatingTimedOut"/> — the brain finishes the pass (goal capture + timeout re-stamp,
+    /// QC navigation_goalrating_end + timeout_set) after the role returns.
+    /// </summary>
+    public void BeginGoalRating(GoalRater rater)
+    {
+        using (XonoticGodot.Common.Diagnostics.Prof.Sample("bot.seed")) // [profiling] entry-seed tracewalks + flood
+            _frameSeeds = rater.SeedRoute(Network, Bot.Origin);
+        rater.Start();
+        _ratingRan = true;
+    }
+
+    /// <summary>QC IS_MOVABLE (navigation_goalrating_timeout_set): a goal that can move — a player (enemy or
+    /// flag/ball/key carrier) or anything currently in motion — re-rates on the shorter movingtarget interval.</summary>
+    private static bool IsMovableGoal(Entity? e)
+        => e is Player || (e is not null && e.Velocity != Vector3.Zero);
+
+    /// <summary>
+    /// QC havocbot_ai:68-100 — the underwater "find the shore" fallback: pick the closest waypoint that leads
+    /// UP and out (above the bot, no more than 100qu over eye level), whose top sits in empty (non-water,
+    /// non-solid) space, with a clear line from the eye, and push it as a direct route (QC
+    /// navigation_pushroute — no A*). Returns true if a shore waypoint was pushed.
+    /// </summary>
+    public bool TryPushShoreWaypoint(Player bot)
+    {
+        if (Network is null) return false;
+        Waypoint? shore = null;
+        float bestD2 = float.MaxValue;
+        Vector3 eye = bot.Origin + bot.ViewOfs;
+        foreach (var wp in Network.Nodes)
+        {
+            float d2 = (wp.Origin - bot.Origin).LengthSquared();
+            if (d2 > 10000f * 10000f || d2 >= bestD2) continue;
+            if (wp.Origin.Z < bot.Origin.Z) continue;                        // must lead UP and out
+            if (wp.Origin.Z - bot.Origin.Z - bot.ViewOfs.Z > 100f) continue; // too high to climb out to
+            // QC pointcontents(origin + maxs + '0 0 1') != CONTENT_EMPTY → still submerged/solid, skip.
+            if (Api.Trace.PointContents(wp.Origin + wp.Maxs + new Vector3(0f, 0f, 1f)) != 0) continue;
+            var tr = Api.Trace.Trace(eye, Vector3.Zero, Vector3.Zero, wp.Center, MoveFilter.Normal, bot);
+            if (tr.Fraction < 1f) continue;
+            shore = wp;
+            bestD2 = d2;
+        }
+        if (shore is null) return false;
+        Nav.PushRoute(shore.Origin); // QC navigation_pushroute(this, newgoal)
+        return true;
     }
 
     /// <summary>
@@ -298,6 +434,19 @@ public sealed class BotBrain
             if (StrategyTokenHeld) OnStrategyTokenUsed?.Invoke();
             return Emit(bot, default, jump: false, crouch: false, attack: false, attack2: false, dt);
         }
+        // FROZEN (Freeze Tag / the Frozen status effect): QC gates the whole havocbot role call on
+        // `!STAT(FROZEN, this) && !StatusEffects_active(STATUSEFFECT_Frozen, this)` (havocbot.qc:52-64) and
+        // skips frozen bots when rotating the strategy token (bot.qc:800). A frozen player keeps
+        // DeadState == No and Health 1, so without this it fell through to the full think: every frozen bot
+        // burned a token hold on a complete goal-rating flood it cannot act on (in a 5v5 with 8 frozen, the
+        // two live bots re-planned ~5x less often than Base), and its role timeout kept expiring so it thawed
+        // into a randomly re-rolled role. Consume the token like the dead branch — otherwise rotation stalls
+        // on the frozen bot and the population stops re-rating entirely.
+        if (IsFrozen(bot))
+        {
+            if (StrategyTokenHeld) OnStrategyTokenUsed?.Invoke();
+            return Emit(bot, Vector3.Zero, jump: false, crouch: false, attack: false, attack2: false, dt);
+        }
         if (bot.IsDead)
         {
             if (StrategyTokenHeld) OnStrategyTokenUsed?.Invoke();
@@ -350,37 +499,21 @@ public sealed class BotBrain
         }
 
         // 2) strategy (QC havocbot_ai:52-104): ONLY the strategy-token holder may run its role — one goal
-        // search per server frame across all bots. The role re-rates when the slow clock expired, the route is
-        // empty, or a clearroute forced a re-plan (QC navigation_goalrating_timeout/_force inside the roles).
+        // search per server frame across all bots. The ROLE runs on EVERY token hold (QC havocbot_ai:64 calls
+        // this.havocbot_role(this) each token frame) so role state machines (CTF carrier/retriever/escort,
+        // FT offense/freeing, KH, …) react at token cadence; the role itself decides whether to RE-RATE goals
+        // via the goal-rating timeout (QC navigation_goalrating_timeout inside each role → GoalRatingTimedOut
+        // here). [parity 2026-07-11: the old pass ran the WHOLE role on the 7s clock, so objective role
+        // switches — "I just grabbed the flag", "our flag was stolen" — lagged by up to a full interval.]
         if (StrategyTokenHeld)
         {
             using var _stratScope = XonoticGodot.Common.Diagnostics.Prof.Sample("bot.strategy"); // [profiling] flood + role rating
-            float strategyInterval = Cvars.FloatOr("bot_ai_strategyinterval", 7f);
-            // QC navigation_goalrating_timeout (navigation.qc:44-47): the re-rate is INTERVAL-gated ONLY — there is
-            // no "no goal → re-rate now" bypass; a goal-less bot waits out the timer (roaming meanwhile) and the
-            // forced path (navigation_goalrating_timeout_force → strategytime = 0) is _strategyForced. The old
-            // `!Nav.HasGoal` bypass here re-ran the full seed-flood + role rating EVERY THINK whenever routing
-            // failed (e.g. no tracewalk-reachable seed at the bot's spot) — with a few bots that was a
-            // 50-350ms/frame bot.strategy melt (the stormkeep "very slow with bots" report).
-            if (_strategyForced || now >= _strategyTime)
+            _ratingRan = false;
+            _frameSeeds = null;
+            using (XonoticGodot.Common.Diagnostics.Prof.Sample("bot.rate")) // [profiling] role state machine + goal-rating loop
+                Role(this, _rater);
+            if (_ratingRan)
             {
-                _strategyTime = now + strategyInterval;
-                _strategyForced = false;
-                // QC navigation_markroutes (navigation.qc): before the role rates goals, flood the waypoint graph
-                // ONCE from the bot's position so every navigation_routerating reads the real Dijkstra path cost
-                // (.wpcost) instead of straight-line distance — bots stop preferring goals that are geometrically
-                // near but graph-distant (across a wall/chasm), where GoalRater.Rate would otherwise fall back to
-                // straight-line. Token-gated + sim-thread, so the per-frame cost is paid by exactly one bot.
-                // Network == null (graphless tests/roaming) keeps the straight-line fallback.
-                // (perf 2026-07-03) The flood's entry-seed set is captured and handed to the deferred SetGoal so
-                // the tracewalk-heavy seed search runs ONCE per pass — see the _pendingSeeds field doc. The two
-                // sub-scopes split a strategy hitch into its halves (seed tracewalks vs the rating loop) so a
-                // census names the culprit directly.
-                IReadOnlyList<(Waypoint Wp, float Cost)>? seeds;
-                using (XonoticGodot.Common.Diagnostics.Prof.Sample("bot.seed")) // [profiling] entry-seed tracewalks + flood
-                    seeds = _rater.SeedRoute(Network, bot.Origin);
-                using (XonoticGodot.Common.Diagnostics.Prof.Sample("bot.rate")) // [profiling] role goal-rating loop
-                    Role(this, _rater);
                 bool captured = false;
                 if (_rater.HasGoal)
                 {
@@ -393,17 +526,31 @@ public sealed class BotBrain
                         _pendingGoalSet = true;
                         captured = true;
                         _pendingSeeds.Clear();
-                        if (seeds is not null)
-                            for (int i = 0; i < seeds.Count; i++)
-                                _pendingSeeds.Add(seeds[i]);
+                        if (_frameSeeds is not null)
+                            for (int i = 0; i < _frameSeeds.Count; i++)
+                                _pendingSeeds.Add(_frameSeeds[i]);
                     }
                 }
+                // QC navigation_goalrating_timeout_set (navigation.qc:20-26): a MOVABLE goal (a player — enemy,
+                // flag/ball/key carrier) re-rates on the shorter movingtarget interval; static goals on the
+                // full interval. Stamped AFTER the rating pass, exactly like the QC roles do.
+                _strategyForced = false;
+                _strategyTime = now + (captured && IsMovableGoal(_pendingGoal.Target)
+                    ? Cvars.FloatOr("bot_ai_strategyinterval_movingtarget", 5.5f)
+                    : Cvars.FloatOr("bot_ai_strategyinterval", 7f));
                 // QC navigation_goalrating_timeout_expire(2) idiom: a pass that produced nothing to build (no
                 // rated goal, or the winner is currently ignored and no route stands) retries SOON — on the
-                // timer, never per-think (see the gate above). A captured pass re-checks after its route build.
+                // timer, never per-think (the roles gate on GoalRatingTimedOut). A captured pass re-checks
+                // after its route build.
                 if (!captured && !Nav.HasGoal)
                     _strategyTime = now + 2f;
             }
+
+            // QC havocbot_ai:68-100: a SWIMMING bot with no goal (and none pending from this pass) pushes the
+            // closest "shore" waypoint so it doesn't tread water aimlessly between strategy passes.
+            if (!Nav.HasGoal && !_pendingGoalSet && bot.WaterLevel >= WaterLevelSwimming)
+                TryPushShoreWaypoint(bot);
+
             OnStrategyTokenUsed?.Invoke(); // QC bot_strategytoken_taken = true (used this frame)
         }
 
@@ -601,6 +748,43 @@ public sealed class BotBrain
             }
         }
 
+        // 4c-ii) SUPERBOT combat jitter (QC havocbot_movetogoal:1280-1306). A superbot fighting with nothing
+        // else going on OVERRIDES its horizontal wish-move with a fresh random direction, re-rolled on a 0.35s
+        // clock and held for the first 0.3s of each window, with a 15% chance of rolling "no direction" so the
+        // bot still drifts toward its goal between bursts. Vertical is deliberately left alone (QC: "no random
+        // vertical direction"). This runs AFTER the dodge fold and overrides it, exactly as in QC — and QC
+        // gates on `!dodge`, reading the POST-checkdanger-veto value, which is what worldDodge holds here.
+        //
+        // QC's gate is `this.aistatus == AI_STATUS_ATTACKING` — EQUALITY, not a bit test, so the jitter runs
+        // only when "enemies in sight" is the bot's ONLY active status: not bunnyhopping (RUNNING), not
+        // danger-ahead, not escaping a trigger_hurt, not out of a jumppad/water, not jetpacking, not stuck.
+        // The port has no .aistatus bitfield (parity row bot-ai.state.aistatus — the statuses live as ad-hoc
+        // per-behaviour state), so the equality is approximated by "has an enemy AND none of the statuses we
+        // do model is active". The bunnyhop exclusion is the one that matters: jittering would scrub the speed
+        // a bunnyhopping approach just built.
+        if (Skill > BotAim.SuperbotSkill
+            && enemy is { IsFreed: false }
+            && worldDodge == Vector3.Zero
+            && !dangerBrakeEngaged
+            && !_triggerHurtEscape
+            && !Nav.WantBunnyhop)
+        {
+            // QC: if (!this.randomdirectiontime || this.randomdirectiontime + 0.35 < time)
+            if (_randomDirectionTime == 0f || _randomDirectionTime + 0.35f < now)
+            {
+                // QC: 15% chance to roll "no direction"; otherwise crandom() ∈ [-1,1] scaled by maxspeed on
+                // both horizontal axes. (The QC comment above this block says "75% chance"; the code says 85%.
+                // Ported to match the CODE, which is what actually runs.)
+                _randomDirection = _rng.NextDouble() < 0.15
+                    ? Vector3.Zero
+                    : new Vector3(Crandom() * Nav.MaxSpeed, Crandom() * Nav.MaxSpeed, 0f);
+                _randomDirectionTime = now;
+            }
+            // QC: if (this.randomdirectiontime + 0.3 >= time && this.randomdirection)
+            if (_randomDirectionTime + 0.3f >= now && _randomDirection != Vector3.Zero)
+                move = new Vector3(_randomDirection.X, _randomDirection.Y, move.Z);
+        }
+
         // 4d) trigger_hurt escape (QC havocbot_movetogoal, skill > 6): jetpack up if owned (best escape — no
         // self-damage), else rocketjump out with the Devastator when HP can absorb the self-splash.
         bool wantJetpack = false;
@@ -701,6 +885,14 @@ public sealed class BotBrain
     // combat-movement state (QC havocbot_dodge: a strafe direction that flips on a clock).
     private float _dodgeFlipTime;
     private float _dodgeSign = 1f;
+
+    // QC .randomdirection / .randomdirectiontime (havocbot.qh) — the SUPERBOT combat-jitter latch: the rolled
+    // local-frame move (X forward, Y side) and the sim time it was rolled at. 0 == never rolled.
+    private Vector3 _randomDirection;
+    private float _randomDirectionTime;
+
+    /// <summary>QC <c>crandom()</c> — a random float in [-1, 1].</summary>
+    private float Crandom() => (float)(_rng.NextDouble() * 2.0 - 1.0);
 
     // QC the bot's last-attack time (used by bot_ai_weapon_combo: hold the combo weapon for combo_threshold
     // seconds after firing). Stamped when a fire button is emitted this frame.
@@ -1122,9 +1314,9 @@ public sealed class BotBrain
         // (prefer the weak/close kill) — a LOWER rating is better in both, so the radius² seeds the ceiling.
         float bestRating = EnemyDetectionRadius * EnemyDetectionRadius;
 
-        foreach (var e in Players())
+        void Consider(Entity e)
         {
-            if (!ShouldAttack(Bot, e)) continue;
+            if (!ShouldAttack(Bot, e)) return;
             var center = (e.AbsMin != e.AbsMax) ? (e.AbsMin + e.AbsMax) * 0.5f : e.Origin + e.ViewOfs;
             float d2 = (center - eye).LengthSquared();
 
@@ -1136,11 +1328,11 @@ public sealed class BotBrain
                 float hp = e.Health + e.GetResource(ResourceType.Armor);
                 rating = QMath.Bound(50f, hp, 250f) * d2;
             }
-            if (rating >= bestRating) continue;
+            if (rating >= bestRating) return;
 
             // PVS pre-filter (QC checkpvs): a target in a non-visible cluster can't possibly be seen, so skip
             // the expensive traceline. Conservative (no false negatives) and a no-op on an unvised map.
-            if (!Api.Trace.CheckPvs(eye, center)) continue;
+            if (!Api.Trace.CheckPvs(eye, center)) return;
 
             // require line of sight (QC traceline; trace_ent == it || trace_fraction >= 1)
             var tr = Api.Trace.Trace(eye, Vector3.Zero, Vector3.Zero, center, MoveFilter.Normal, Bot);
@@ -1148,6 +1340,24 @@ public sealed class BotBrain
             {
                 best = e;
                 bestRating = rating;
+            }
+        }
+
+        foreach (var e in Players())
+            Consider(e);
+
+        // QC havocbot_chooseenemy walks g_bot_targets — players AND live monsters/turrets (anything spawned
+        // with .bot_attack; sv_monsters.qc:1449 pushes every monster). The port's roster is players-only, so
+        // sweep the entity table for FL_MONSTER entities too — without this bots are blind to Invasion waves
+        // and any map monsters. (No turret system exists in the port yet.)
+        if (Api.Services is not null)
+        {
+            Api.Entities.FindInRadius(Bot.Origin, EnemyDetectionRadius, _monsterScratch);
+            for (int i = 0; i < _monsterScratch.Count; i++)
+            {
+                Entity m = _monsterScratch[i];
+                if (m.IsFreed || (m.Flags & EntFlags.Monster) == 0) continue;
+                Consider(m);
             }
         }
 

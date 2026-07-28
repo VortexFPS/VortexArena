@@ -7234,7 +7234,7 @@ public sealed partial class NetGame : Node3D
                 Vmap.EditorLightBake.SampleSpacing = Math.Clamp(
                     CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarLuxel, 48f), 16f, 256f);
                 Vmap.EditorLightBake.DirtStrength =
-                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarDirt, 0.9f);
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarDirt, 0.8f);
 
                 int bounces = 8;
                 if (Menu.MenuState.Cvars is { } bn && !string.IsNullOrEmpty(bn.GetString(Vmap.EditorLighting.CvarBakeBounces)))

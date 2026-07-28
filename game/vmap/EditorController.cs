@@ -203,7 +203,7 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarDeluxe, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarGlow, "0", CvarFlags.Save);
         c.Register(EditorLighting.CvarLuxel, "48", CvarFlags.Save);
-        c.Register(EditorLighting.CvarDirt, "0.9", CvarFlags.Save);
+        c.Register(EditorLighting.CvarDirt, "0.8", CvarFlags.Save);
     }
 
     /// <summary>

@@ -62,6 +62,11 @@ global uniform float editor_bake_gamma;    // response curve on the baked light:
 global uniform float editor_bake_range;    // HDR decode range, measured from the bake itself
 global uniform float editor_deluxe;        // 0..1 blend of the per-pixel deluxe term
 
+// How far the per-pixel term may push the baked light. Bounded on BOTH sides: the floor is what keeps a
+// normal-mapped crevice from going black, the ceiling what keeps a facing-on one from blowing out.
+const float DELUXE_FLOOR = 0.55;
+const float DELUXE_CEIL = 1.6;
+
 void vertex() {
     // CUSTOM0 carries the baked light direction. It has to be forwarded through a varying: a custom vertex
     // attribute is not visible to the fragment stage on its own.
@@ -106,7 +111,13 @@ void fragment() {
         // explode into a bright rim exactly where the bake is least certain.
         float flat_ndl = max(dot(flat_world, ldir), 0.25);
         float px_ndl = max(dot(n_world, ldir), 0.0);
-        float k = clamp(px_ndl / flat_ndl, 0.0, 2.0);
+
+        // The ratio MODULATES the baked light; it must never annihilate it. COLOR holds irradiance — the
+        // total that arrived from every direction — while v_deluxe is only its dominant one, so a pixel
+        // whose normal turns away from that one direction is still lit by the rest. Allowing the ratio to
+        // reach 0 deleted that light, and did it smoothly across a surface: the dark gradients that showed
+        // up along wall edges the moment normal maps started resolving.
+        float k = clamp(px_ndl / flat_ndl, DELUXE_FLOOR, DELUXE_CEIL);
         baked *= mix(1.0, k, editor_deluxe);
     }
     EMISSION = base * (baked + vec3(editor_bake_ambient))

@@ -115,8 +115,10 @@ public sealed class VmapEditSession
         // brush-id set to detect additions.
         var before = Snapshot(op.TouchedBrushIds);
         var patchBefore = SnapshotPatches(op.TouchedPatchIds);
+        var entityBefore = SnapshotEntities(op.TouchedEntityIds);
         var idsBefore = new HashSet<int>(Document.Brushes.Select(b => b.Id));
         var patchIdsBefore = new HashSet<int>(Document.Patches.Select(p => p.Id));
+        var entityIdsBefore = new HashSet<int>(Document.Entities.Select(e => e.Id));
 
         if (!op.Apply(Document))
             return false;
@@ -136,8 +138,16 @@ public sealed class VmapEditSession
             if (Document.FindPatch(id) is null && !patchBefore.ContainsKey(id))
                 patchBefore[id] = null;
 
+        foreach (VmapEntity e in Document.Entities)
+            if (!entityIdsBefore.Contains(e.Id))
+                entityBefore[e.Id] = null;
+        foreach (int id in entityIdsBefore)
+            if (Document.FindEntity(id) is null && !entityBefore.ContainsKey(id))
+                entityBefore[id] = null;
+
         _undo.Add(new Entry(op.Describe(), before, Snapshot(before.Keys.ToList()),
-            patchBefore, SnapshotPatches(patchBefore.Keys.ToList())));
+            patchBefore, SnapshotPatches(patchBefore.Keys.ToList()),
+            entityBefore, SnapshotEntities(entityBefore.Keys.ToList())));
         if (_undo.Count > UndoLimit)
             _undo.RemoveAt(0);
         _redo.Clear();
@@ -154,6 +164,7 @@ public sealed class VmapEditSession
         _undo.RemoveAt(_undo.Count - 1);
         Restore(e.Before);
         RestorePatches(e.PatchesBefore);
+        RestoreEntities(e.EntitiesBefore);
         _redo.Add(e);
         IsDirty = true;
         return true;
@@ -168,6 +179,7 @@ public sealed class VmapEditSession
         _redo.RemoveAt(_redo.Count - 1);
         Restore(e.After);
         RestorePatches(e.PatchesAfter);
+        RestoreEntities(e.EntitiesAfter);
         _undo.Add(e);
         IsDirty = true;
         return true;
@@ -220,7 +232,8 @@ public sealed class VmapEditSession
     private readonly record struct Entry(
         string Label,
         Dictionary<int, VmapBrush?> Before, Dictionary<int, VmapBrush?> After,
-        Dictionary<int, VmapPatch?> PatchesBefore, Dictionary<int, VmapPatch?> PatchesAfter);
+        Dictionary<int, VmapPatch?> PatchesBefore, Dictionary<int, VmapPatch?> PatchesAfter,
+        Dictionary<int, VmapEntity?> EntitiesBefore, Dictionary<int, VmapEntity?> EntitiesAfter);
 
     /// <summary>Clone the given brushes; a null value records "did not exist".</summary>
     private Dictionary<int, VmapBrush?> Snapshot(IReadOnlyList<int> ids)
@@ -238,6 +251,48 @@ public sealed class VmapEditSession
         foreach (int id in ids)
             map[id] = Document.FindPatch(id)?.Clone();
         return map;
+    }
+
+    /// <summary>Clone the given entities; a null value records "did not exist".</summary>
+    private Dictionary<int, VmapEntity?> SnapshotEntities(IReadOnlyList<int> ids)
+    {
+        var map = new Dictionary<int, VmapEntity?>();
+        foreach (int id in ids)
+            map[id] = Document.FindEntity(id)?.Clone();
+        return map;
+    }
+
+    /// <summary>
+    /// Restore an entity snapshot. Without this, undoing a paste that brought a brush entity along removes the
+    /// geometry and leaves the entity behind, owning nothing.
+    /// </summary>
+    private void RestoreEntities(Dictionary<int, VmapEntity?> snapshot)
+    {
+        foreach ((int id, VmapEntity? saved) in snapshot)
+        {
+            VmapEntity? live = Document.FindEntity(id);
+            if (saved is null)
+            {
+                if (live is not null)
+                    Document.Entities.Remove(live);
+                continue;
+            }
+
+            if (live is null)
+            {
+                Document.Entities.Add(saved.Clone());
+                continue;
+            }
+
+            live.ClassName = saved.ClassName;
+            live.Fields.Clear();
+            foreach (KeyValuePair<string, string> kv in saved.Fields)
+                live.Fields[kv.Key] = kv.Value;
+            live.BrushIds.Clear();
+            live.BrushIds.AddRange(saved.BrushIds);
+            live.PatchIds.Clear();
+            live.PatchIds.AddRange(saved.PatchIds);
+        }
     }
 
     /// <summary>Restore a patch snapshot, mirroring <see cref="Restore"/>'s replace / re-add / remove cases.</summary>

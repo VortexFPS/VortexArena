@@ -7586,13 +7586,16 @@ public sealed partial class NetGame : Node3D
             }
 
             case "paste":
+                if (_editor.Clipboard.IsEmpty)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: clipboard is empty");
+                    return;
+                }
                 // Paste is a MODE, not an action: the ghost follows the crosshair and a left-click places it
-                // (§11.9). The clipboard and the mode both exist, but PasteOp does not yet, so entering the
-                // mode would leave the mapper holding a ghost that can never land. Say so instead — E7 shipped
-                // the rails, and pretending otherwise is exactly the silent no-op the menu is designed around.
-                XonoticGodot.Common.Diagnostics.Log.Info(_editor.Clipboard.IsEmpty
-                    ? "editor: clipboard is empty"
-                    : $"editor: holding {_editor.Clipboard.Describe()} — paste placement is not built yet (roadmap E8)");
+                // (§11.9). Entering the mode is all this command does.
+                _editor.SetMode(ToolMode.Paste);
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    $"editor: placing {_editor.Clipboard.Describe()} — click to place, Esc to stop");
                 return;
 
             case "delete":

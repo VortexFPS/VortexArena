@@ -502,6 +502,15 @@ public sealed partial class EditorController : Node3D
         if (_session is null || _dragging)
             return false;
 
+        // Paste mode owns the click outright: the ghost is under the crosshair and clicking puts it down.
+        // Handled before the handle test because a fresh paste has no selection yet, so there are no handles
+        // to compete with — and after a paste there ARE, which is exactly when you want them.
+        if (Mode == ToolMode.Paste)
+        {
+            PasteAtCrosshair();
+            return false;
+        }
+
         // --- phase two: a handle is under the crosshair, so transform along it ---
         if (_hoverHandle is { } handle && _session.Selection.Count > 0)
         {
@@ -786,14 +795,18 @@ public sealed partial class EditorController : Node3D
         {
             // Rotate the whole selection about its own centre, on the axis of the ring that was grabbed.
             List<int> rotIds = _session.SelectedBrushIds();
-            if (angle == 0f || rotIds.Count == 0 || !havePivot)
+            List<int> rotPatches = SelectedPatchIds();
+            if (angle == 0f || !havePivot || (rotIds.Count == 0 && rotPatches.Count == 0))
                 return false;
 
-            if (!_session.Apply(new RotateBrushesOp(rotIds, pivot, rotAxis, angle)))
+            // ONE op for the whole selection: a mixed brush+patch rotate about a shared pivot has to be a
+            // single undo step, because a single drag produced it.
+            if (!_session.Apply(new RotateSelectionOp(rotIds, rotPatches, pivot, rotAxis, angle)))
             {
                 Log.Info("editor: rotation refused — that would break the brush");
                 return false;
             }
+
             GeometryVersion++;
             return true;
         }
@@ -841,6 +854,81 @@ public sealed partial class EditorController : Node3D
         }
 
         GeometryVersion++;
+        return true;
+    }
+
+    // =============================================================================================
+    //  Paste placement (§11.9) — the ghost follows the crosshair, a click puts it down
+    // =============================================================================================
+
+    /// <summary>
+    /// Where the clipboard would land right now: the crosshair's surface hit, snapped to the grid, or a point
+    /// out in front of the camera when the crosshair is aimed at nothing.
+    ///
+    /// Aiming at a surface rather than free-floating is what makes paste useful for the common case — dropping
+    /// a copied light fixture onto a wall lands it ON the wall instead of somewhere near it.
+    /// </summary>
+    public bool TryGetPastePoint(out NVec3 point)
+    {
+        point = NVec3.Zero;
+        if (_camera is null)
+            return false;
+
+        (NVec3 origin, NVec3 dir) = CameraRay();
+
+        if (_document is not null)
+        {
+            PickIndex.EnsureBuilt(_document, GeometryVersion, IncludeToolBrushes);
+            VmapPickResult hit = VmapPicking.Pick(
+                PickIndex, origin, dir, VmapSelectionKind.Brush, GrabRadius, PickRange);
+            if (hit.Hit)
+            {
+                point = SnapPoint(hit.Point);
+                return true;
+            }
+        }
+
+        // Nothing under the crosshair: park it a fixed distance out so the ghost is still visible and placeable
+        // in open space rather than vanishing.
+        point = SnapPoint(origin + dir * PasteFallbackDistance);
+        return true;
+    }
+
+    /// <summary>How far in front of the camera a paste lands when the crosshair is aimed at open space.</summary>
+    private const float PasteFallbackDistance = 256f;
+
+    private NVec3 SnapPoint(NVec3 p)
+    {
+        float g = EffectiveGridSnap;
+        return g <= 0f ? p : VmapEdit.SnapToGrid(p, g);
+    }
+
+    /// <summary>
+    /// Put the clipboard down at the crosshair. Returns true when something was placed.
+    ///
+    /// The paste becomes the new SELECTION, which is what lets you immediately grab a handle and nudge it —
+    /// the alternative leaves you having to find and click the thing you just created.
+    /// </summary>
+    public bool PasteAtCrosshair()
+    {
+        if (_session is null || Clipboard.IsEmpty || !TryGetPastePoint(out NVec3 at))
+            return false;
+
+        var op = new PasteOp(Clipboard, at);
+        if (!_session.Apply(op))
+        {
+            Log.Info("editor: paste refused — the pasted geometry would be invalid here");
+            return false;
+        }
+
+        _session.Selection.Clear();
+        foreach (int id in op.CreatedBrushIds)
+            _session.Selection.Add(VmapSelection.OfBrush(id));
+        foreach (int id in op.CreatedPatchIds)
+            _session.Selection.Add(VmapSelection.OfPatch(id));
+
+        GeometryVersion++;
+        Log.Info($"editor: pasted {op.CreatedBrushIds.Count} brushes, {op.CreatedPatchIds.Count} patches");
         return true;
     }
 

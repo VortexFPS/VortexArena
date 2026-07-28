@@ -147,6 +147,12 @@ public sealed partial class EditorGizmos : Node3D
             }
         }
 
+        // --- paste ghost: the clipboard outlined where a click would put it (§11.9) ---
+        if (c.Mode == ToolMode.Paste && !c.Clipboard.IsEmpty && c.TryGetPastePoint(out NVec3 pasteAt))
+        {
+            anything |= DrawClipboardGhost(c, pasteAt);
+        }
+
         // --- manipulator handles: drawn from the SAME list the ray test picks against, so the arrow you can
         //     see and the thing you can grab are one description rather than two that drift apart ---
         if (c.HandleList.Count > 0)
@@ -238,6 +244,61 @@ public sealed partial class EditorGizmos : Node3D
                     break;
             }
         }
+    }
+
+    /// <summary>Colour of the paste ghost — distinct from the drag ghost, because it is a different promise:
+    /// a drag ghost previews a move, this previews something that does not exist yet.</summary>
+    private static readonly Color PasteGhostColor = new(0.6f, 0.75f, 1f, 0.85f);
+
+    /// <summary>
+    /// Outline the clipboard where a click would place it. Drawn from the CLIPBOARD's own geometry, offset by
+    /// the pivot, rather than from anything in the document — the source brushes may have been deleted, or the
+    /// clipboard may have come from a different map entirely.
+    /// </summary>
+    private bool DrawClipboardGhost(EditorController c, NVec3 at)
+    {
+        NVec3 offset = at - c.Clipboard.Pivot;
+        bool drew = false;
+
+        foreach (VmapBrush b in c.Clipboard.Brushes)
+        {
+            foreach (NVec3[] winding in VmapWinding.BuildBrushWindings(b))
+            {
+                if (winding.Length < 3)
+                    continue;
+                DrawLoop(ToGodot(winding, offset), PasteGhostColor);
+                drew = true;
+            }
+        }
+
+        foreach (VmapPatch p in c.Clipboard.Patches)
+        {
+            // The control lattice rather than a tessellation: it is cheap, it reads clearly as "a curve goes
+            // here", and it does not need the pick index (which only knows about the live document).
+            for (int row = 0; row < p.Height; row++)
+                for (int col = 0; col < p.Width; col++)
+                {
+                    int i = row * p.Width + col;
+                    if (col + 1 < p.Width)
+                        Line(p.Controls[i] + offset, p.Controls[i + 1] + offset, PasteGhostColor);
+                    if (row + 1 < p.Height)
+                        Line(p.Controls[i] + offset, p.Controls[i + p.Width] + offset, PasteGhostColor);
+                    drew = true;
+                }
+        }
+
+        // Point entities have no geometry, so mark them with a box at their pasted origin.
+        foreach (VmapEntity e in c.Clipboard.Entities)
+        {
+            if (e.IsBrushEntity)
+                continue;
+            DrawBox(e.Origin() + offset, 8f, PasteGhostColor);
+            drew = true;
+        }
+
+        // A cross at the landing point, so the exact placement is legible even when the ghost is large.
+        DrawCross(at, VertexMarker * 2f, PasteGhostColor);
+        return drew || true;
     }
 
     /// <summary>Identity for highlighting: same kind, same axis, same side.</summary>

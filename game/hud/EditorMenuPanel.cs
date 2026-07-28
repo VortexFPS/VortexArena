@@ -350,7 +350,7 @@ public partial class EditorMenuPanel : HudPanel
     /// </summary>
     private static bool IsModeBuilt(EditorTool tool, ToolMode mode) => mode switch
     {
-        ToolMode.Move or ToolMode.Rotate or ToolMode.Scale => true,
+        ToolMode.Move or ToolMode.Rotate or ToolMode.Scale or ToolMode.Paste => true,
         ToolMode.Object or ToolMode.Face => tool == EditorTool.Select,
         _ => false,
     };

@@ -30,6 +30,13 @@ public interface IVmapOp
     /// </summary>
     IReadOnlyList<int> TouchedPatchIds => Array.Empty<int>();
 
+    /// <summary>
+    /// Entities this op reads or writes, on the same contract as <see cref="TouchedBrushIds"/>. An op that
+    /// CREATES entities need not declare anything (the session detects additions and undo removes them); an op
+    /// that MUTATES an existing entity must, or its change cannot be rolled back.
+    /// </summary>
+    IReadOnlyList<int> TouchedEntityIds => Array.Empty<int>();
+
     /// <summary>Mutate the document. Returns false (having changed nothing) when the edit is invalid.</summary>
     bool Apply(VmapDocument doc);
 }
@@ -820,6 +827,246 @@ public sealed class ScaleSelectionOp : IVmapOp
         foreach (VmapPatch patch in patches)
             for (int i = 0; i < patch.Controls.Count; i++)
                 patch.Controls[i] = _pivot + (patch.Controls[i] - _pivot) * _scale;
+
+        return true;
+    }
+}
+
+// =================================================================================================
+//  E8 — paste
+// =================================================================================================
+
+/// <summary>
+/// Drop the clipboard into the document at a chosen point (design doc §11.9).
+///
+/// Two things make this more than a copy loop.
+///
+/// <b>Ids are minted fresh, and references are REMAPPED.</b> A copied <c>func_door</c> carries the brush ids
+/// it owned in the source document; pasting it verbatim would leave the new entity pointing at the ORIGINAL
+/// brushes, so moving the pasted door would move the one it was copied from. The op therefore builds an
+/// old-id → new-id map as it goes and rewrites every owning reference through it.
+///
+/// <b>The whole paste is one op.</b> A group of brushes, its patches and the entity that owns them arrive
+/// together or not at all, which is what makes a paste exactly one undo step rather than a pile of them.
+///
+/// The clipboard is snapshotted at CONSTRUCTION rather than read at apply time, so the op stays replayable:
+/// undo, copy something else, then redo, and the redo still puts back what it originally placed.
+/// </summary>
+public sealed class PasteOp : IVmapOp
+{
+    private readonly VmapBrush[] _brushes;
+    private readonly VmapPatch[] _patches;
+    private readonly VmapEntity[] _entities;
+    private readonly Vector3 _offset;
+    private readonly List<int> _createdBrushIds = new();
+    private readonly List<int> _createdPatchIds = new();
+
+    /// <summary>
+    /// Snapshot <paramref name="clipboard"/> and place its pivot at <paramref name="at"/>.
+    /// </summary>
+    public PasteOp(VmapClipboard clipboard, Vector3 at)
+    {
+        ArgumentNullException.ThrowIfNull(clipboard);
+
+        // Clone again on the way in: the clipboard is mutable and long-lived (it deliberately outlives the
+        // session), so an op holding its live lists would paste whatever was copied MOST RECENTLY on redo.
+        _brushes = clipboard.Brushes.Select(b => b.Clone()).ToArray();
+        _patches = clipboard.Patches.Select(p => p.Clone()).ToArray();
+        _entities = clipboard.Entities.Select(e => e.Clone()).ToArray();
+        _offset = at - clipboard.Pivot;
+    }
+
+    /// <summary>Brush ids created by the paste; valid after a successful <see cref="Apply"/>.</summary>
+    public IReadOnlyList<int> CreatedBrushIds => _createdBrushIds;
+
+    /// <summary>Patch ids created by the paste; valid after a successful <see cref="Apply"/>.</summary>
+    public IReadOnlyList<int> CreatedPatchIds => _createdPatchIds;
+
+    // Nothing pre-exists to snapshot: the session detects the additions itself and undo removes them.
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    public IReadOnlyList<int> TouchedPatchIds => Array.Empty<int>();
+
+    public string Describe()
+    {
+        int n = _brushes.Length + _patches.Length + _entities.Length;
+        return n == 1 ? "Paste 1 object" : $"Paste {n} objects";
+    }
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_brushes.Length == 0 && _patches.Length == 0 && _entities.Length == 0)
+            return false;
+
+        _createdBrushIds.Clear();
+        _createdPatchIds.Clear();
+
+        var brushRemap = new Dictionary<int, int>();
+        var patchRemap = new Dictionary<int, int>();
+
+        // Allocate off a running counter rather than re-querying NextBrushId per item: the document is only
+        // appended to below, so re-querying would be O(n^2) on a big paste for the same answer.
+        int nextBrush = doc.NextBrushId();
+        int nextPatch = doc.NextPatchId();
+
+        var addedBrushes = new List<VmapBrush>(_brushes.Length);
+        foreach (VmapBrush source in _brushes)
+        {
+            VmapBrush copy = source.Clone();
+            brushRemap[source.Id] = copy.Id = nextBrush++;
+
+            foreach (VmapFace f in copy.Faces)
+            {
+                VmapPlane p = f.Plane;
+                // Translating a plane moves its distance along its own normal; the normal itself is unchanged.
+                f.Plane = new VmapPlane(p.Normal, p.Dist + Vector3.Dot(_offset, p.Normal));
+
+                // The texture projection is a world-space map, so it has to travel with the geometry or the
+                // pasted copy comes out with its texture sliding across the surface.
+                VmapTexProjection t = f.Projection;
+                f.Projection = new VmapTexProjection(
+                    t.AxisU, t.AxisV,
+                    t.OffsetU - Vector3.Dot(_offset, t.AxisU),
+                    t.OffsetV - Vector3.Dot(_offset, t.AxisV));
+            }
+
+            if (!VmapWinding.IsClosedConvex(copy))
+                return false;   // refuse the whole paste rather than landing a broken solid
+            addedBrushes.Add(copy);
+        }
+
+        var addedPatches = new List<VmapPatch>(_patches.Length);
+        foreach (VmapPatch source in _patches)
+        {
+            VmapPatch copy = source.Clone();
+            patchRemap[source.Id] = copy.Id = nextPatch++;
+            for (int i = 0; i < copy.Controls.Count; i++)
+                copy.Controls[i] += _offset;
+            addedPatches.Add(copy);
+        }
+
+        var addedEntities = new List<VmapEntity>(_entities.Length);
+        int nextEntity = doc.NextEntityId();
+        foreach (VmapEntity source in _entities)
+        {
+            VmapEntity copy = source.Clone();
+            copy.Id = nextEntity++;
+
+            // Point entities carry their position in a key rather than in geometry.
+            if (!copy.IsBrushEntity)
+                copy.SetOrigin(copy.Origin() + _offset);
+
+            // Repoint ownership at the brushes and patches THIS paste created. An id with no mapping belonged
+            // to something that was not copied, so it is dropped rather than left dangling at a stranger.
+            Remap(copy.BrushIds, brushRemap);
+            Remap(copy.PatchIds, patchRemap);
+            addedEntities.Add(copy);
+        }
+
+        // Commit only once every piece has been validated.
+        foreach (VmapBrush b in addedBrushes)
+        {
+            doc.Brushes.Add(b);
+            _createdBrushIds.Add(b.Id);
+        }
+        foreach (VmapPatch p in addedPatches)
+        {
+            doc.Patches.Add(p);
+            _createdPatchIds.Add(p.Id);
+        }
+        foreach (VmapEntity e in addedEntities)
+            doc.Entities.Add(e);
+
+        return true;
+    }
+
+    private static void Remap(List<int> ids, Dictionary<int, int> map)
+    {
+        int write = 0;
+        for (int read = 0; read < ids.Count; read++)
+            if (map.TryGetValue(ids[read], out int mapped))
+                ids[write++] = mapped;
+        ids.RemoveRange(write, ids.Count - write);
+    }
+}
+
+/// <summary>
+/// Rotate a selection about a pivot (design doc §11.9) — brushes and patches in ONE op.
+///
+/// Combined for the same reason <see cref="ScaleSelectionOp"/> is: a mixed selection turned about a shared
+/// pivot has to move together, and two ops would be two undo steps that a single drag produced. It DELEGATES
+/// the brush half to <see cref="RotateBrushesOp"/> rather than restating the plane maths, and resolves the
+/// patches up front so a bad id fails before anything has been mutated.
+///
+/// The patch half is the easy one: a patch is a list of control points with no convexity constraint, so the
+/// rotation applies directly and cannot produce something invalid.
+/// </summary>
+public sealed class RotateSelectionOp : IVmapOp
+{
+    private readonly int[] _brushIds;
+    private readonly int[] _patchIds;
+    private readonly Vector3 _pivot;
+    private readonly Vector3 _axis;
+    private readonly float _degrees;
+
+    public RotateSelectionOp(
+        IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, Vector3 pivot, Vector3 axis, float degrees)
+    {
+        _brushIds = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
+        _patchIds = patchIds?.ToArray() ?? throw new ArgumentNullException(nameof(patchIds));
+        _pivot = pivot;
+        _axis = axis;
+        _degrees = degrees;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => _brushIds;
+
+    public IReadOnlyList<int> TouchedPatchIds => _patchIds;
+
+    /// <summary>Point the rotation turns about. Read by the wire codec.</summary>
+    public Vector3 Pivot => _pivot;
+
+    /// <summary>Rotation axis (need not be normalized). Read by the wire codec.</summary>
+    public Vector3 Axis => _axis;
+
+    /// <summary>Rotation angle in degrees. Read by the wire codec.</summary>
+    public float Degrees => _degrees;
+
+    public string Describe()
+    {
+        int n = _brushIds.Length + _patchIds.Length;
+        string what = n == 1 ? "selection" : $"{n} objects";
+        return $"Rotate {what} by {_degrees:0.#}°";
+    }
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_degrees == 0f || (_brushIds.Length == 0 && _patchIds.Length == 0))
+            return false;
+
+        float axisLen = _axis.Length();
+        if (axisLen < 1e-6f)
+            return false;
+
+        // Resolve the patches BEFORE mutating anything, so a bad id cannot leave the brushes turned and the
+        // patches not.
+        var patches = new List<VmapPatch>(_patchIds.Length);
+        foreach (int id in _patchIds)
+        {
+            if (doc.FindPatch(id) is not { } p)
+                return false;
+            patches.Add(p);
+        }
+
+        if (_brushIds.Length > 0 && !new RotateBrushesOp(_brushIds, _pivot, _axis, _degrees).Apply(doc))
+            return false;
+
+        Quaternion q = Quaternion.CreateFromAxisAngle(_axis / axisLen, _degrees * MathF.PI / 180f);
+        foreach (VmapPatch patch in patches)
+            for (int i = 0; i < patch.Controls.Count; i++)
+                patch.Controls[i] = _pivot + Vector3.Transform(patch.Controls[i] - _pivot, q);
 
         return true;
     }

@@ -837,10 +837,15 @@ render-only lean/viewmodel work: presentation never leaks into simulation.)</p>
 
     <p><b>Recommendation.</b> A ladder, in this order, each rung independently useful:</p>
     <ol>
-      <li><span class="pill rec">first</span> <b>Light the editor world</b> — give the regenerated world a lit
+      <li><span class="pill rec">first · BUILT</span> <b>Light the editor world</b> — give the regenerated world a lit
         material, spawn the map's <code>light</code> entities as real Godot lights, add the sun and tiered
         shadows. Precondition for 2–4, and by itself it answers "real-time lighting while editing" and retires
-        the fullbright compromise.</li>
+        the fullbright compromise.
+        <br><i>Built 2026-07-27:</i> <code>EditorLighting</code> spawns the map's <code>light</code>
+        entities as omnis (119 on stormkeep) with a camera-nearest shadow budget, plus a directional sun
+        recovered from the sky shader's <code>q3map_sun</code>; surfaces carrying
+        <code>q3map_surfaceLight</code> are emissive. Both directives are newly parsed — compile-time keys
+        the shipped renderer never needed. <code>cl_editor_lighting 0</code> returns to fullbright.</li>
       <li><span class="pill alt">preset</span> <b>SDFGI behind a quality tier</b> for live bounce, with VoxelGI
         as the cheaper fallback. This is what UE does for the editing loop.</li>
       <li><span class="pill rec">destination</span> <b>The progressive GPU lightmapper</b>, converging into the

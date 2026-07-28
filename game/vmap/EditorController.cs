@@ -180,7 +180,7 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarShadowBudget, "6", CvarFlags.Save);
         c.Register(EditorLighting.CvarBrightness, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarAmbient, "0.18", CvarFlags.Save);
-        c.Register(EditorLighting.CvarGlobalIllumination, "1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarGlobalIllumination, "0", CvarFlags.Save);
         c.Register(EditorLighting.CvarGiCellSize, "8", CvarFlags.Save);
         c.Register(EditorLighting.CvarGiCascades, "4", CvarFlags.Save);
         c.Register(EditorLighting.CvarGiEnergy, "4", CvarFlags.Save);
@@ -191,6 +191,8 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarFalloff, "2", CvarFlags.Save);
         c.Register(EditorLighting.CvarSkyLight, "0", CvarFlags.Save);
         c.Register(EditorLighting.CvarSunShadowDistance, "6000", CvarFlags.Save);
+        c.Register(EditorLighting.CvarSunScale, "1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarRangeScale, "1", CvarFlags.Save);
     }
 
     /// <summary>

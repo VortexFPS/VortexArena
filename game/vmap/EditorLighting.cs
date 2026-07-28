@@ -48,17 +48,15 @@ public sealed partial class EditorLighting : Node3D
     public const string CvarAmbient = "cl_editor_light_ambient";
 
     /// <summary>
-    /// Global illumination (SDFGI) for live bounce — design doc §10.1 rung 2. On by default.
+    /// Global illumination (SDFGI) for live bounce — design doc §10.1 rung 2. DEFAULT OFF.
     ///
-    /// It gathers from the map's OWN point lights, which is the thing that makes it worth having here.
-    /// Measured on stormkeep with the ambient floor at zero, mean brightness over a fixed geometry crop:
-    /// with the map's lights, GI adds +2.47 (47.67 → 50.14 at energy 6); with those same lights zeroed, it
-    /// adds +0.07. So essentially all of the bounce comes from the level's own fixtures.
-    ///
-    /// (An earlier revision recorded the opposite conclusion — that SDFGI could not see point lights at all.
-    /// That was an artefact: the measurement crop was sampling the HUD panel, which does not change with
-    /// lighting, so every setting read the same number and the flatness was mistaken for evidence about
-    /// SDFGI. Measure geometry, not the overlay.)
+    /// It works, and it does gather from the map's own lights: measured on stormkeep it adds +2.47 mean
+    /// brightness with those lights present and +0.07 with them zeroed. But enabling it SUPPRESSES those same
+    /// lights' direct real-time contribution on GI-static geometry — Godot expects the GI solution to supply
+    /// them. Measured with the sun off so nothing else could contribute: point lights alone give 8.78 mean
+    /// with SDFGI off and 2.77 with it on, regardless of the lights' bake mode. Trading the map's own
+    /// fixtures for a bounce term a fraction of their size is a bad trade, so this stays off until the
+    /// interaction is understood.
     /// </summary>
     public const string CvarGlobalIllumination = "cl_editor_gi";
 
@@ -109,14 +107,23 @@ public sealed partial class EditorLighting : Node3D
 
     /// <summary>
     /// Quake light intensity → Godot omni RANGE, in Quake units. q3map2's point falloff is
-    /// <c>intensity / distance²</c> scaled by <c>-pointscale</c>; the useful radius is therefore about
-    /// sqrt(intensity) times a constant. Tuned so stormkeep's <c>light 40</c> fixtures reach across a
-    /// corridor rather than dying at the fitting.
+    /// <c>intensity / distance²</c>, so the radius at which a light stops mattering goes as sqrt(intensity)
+    /// times a constant that folds in q3map2's pointscale and its cutoff threshold.
+    ///
+    /// This constant was 48, which put a typical <c>light 40</c> fixture's range at 304 units. Measured on
+    /// stormkeep, the NEAREST fixture to the camera was 279 units away — inside its own range, but far enough
+    /// out on the falloff curve that its contribution was ~0.7%, and the map's 119 lights together moved mean
+    /// scene brightness by 0.00. That is the whole of "the built-in lights aren't working": they were on, in
+    /// the right places, and their reach stopped just short of everything. Quake rooms are 256-1024 units, so
+    /// a fixture has to carry that far to light the room it is in.
     /// </summary>
-    private const float RangePerSqrtIntensity = 48f;
+    private const float RangePerSqrtIntensity = 158f;
 
     /// <summary>Clamp so one enormous light value cannot swallow the map.</summary>
-    private const float MaxRange = 2048f;
+    private const float MaxRange = 4096f;
+
+    /// <summary>Multiplier on the derived range, for taste.</summary>
+    public const string CvarRangeScale = "cl_editor_light_range";
 
     /// <summary>
     /// Compensation for the inverse-square falloff. Godot's attenuation exponent steepens the curve toward the
@@ -127,10 +134,18 @@ public sealed partial class EditorLighting : Node3D
     /// <summary>How far from the camera the sun's shadow is computed, in Quake units.</summary>
     public const string CvarSunShadowDistance = "cl_editor_sun_shadow_distance";
 
-    private readonly List<OmniLight3D> _points = new();
+    /// <summary>
+    /// Sun brightness, separate from the fixtures' <see cref="CvarBrightness"/>. Separate because "is the sun
+    /// doing all the work" and "are the map's own lights doing anything" are different questions, and one
+    /// scale that moves both cannot answer either.
+    /// </summary>
+    public const string CvarSunScale = "cl_editor_sun_scale";
+
+    private readonly List<Light3D> _points = new();
     private DirectionalLight3D? _sun;
     private Light3D.BakeMode _bakeMode = Light3D.BakeMode.Dynamic;
     private float _falloff = 2f;
+    private float _rangeScale = 1f;
     private float _nextShadowSort;
 
     /// <summary>Number of lights built (diagnostics / HUD).</summary>
@@ -153,6 +168,7 @@ public sealed partial class EditorLighting : Node3D
         var rig = new EditorLighting { Name = "EditorLighting" };
         float brightness = ReadFloat(cvars, CvarBrightness, 1f);
         rig._falloff = ReadFloat(cvars, CvarFalloff, 2f);
+        rig._rangeScale = ReadFloat(cvars, CvarRangeScale, 1f);
         rig._bakeMode = (int)ReadFloat(cvars, CvarLightBakeMode, 2f) switch
         {
             0 => Light3D.BakeMode.Disabled,
@@ -164,7 +180,7 @@ public sealed partial class EditorLighting : Node3D
         {
             if (!entity.ClassName.Equals("light", StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (rig.TryBuildPointLight(entity, doc, brightness) is { } light)
+            if (rig.TryBuildLight(entity, doc, brightness) is { } light)
             {
                 rig._points.Add(light);
                 rig.AddChild(light);
@@ -172,13 +188,19 @@ public sealed partial class EditorLighting : Node3D
         }
 
         rig.BuildSun(doc, assets, brightness, cvars);
+
         return rig;
     }
 
     /// <summary>
-    /// One <c>light</c> entity → an omni (or a spot, when it aims at a <c>target</c>).
+    /// One <c>light</c> entity → an omni, or a SPOT when it aims at a <c>target</c>.
+    ///
+    /// A Q3 light with a <c>target</c> key is a spotlight: it points at the entity whose <c>targetname</c>
+    /// matches (usually an <c>info_null</c>) and q3map2 bakes a cone, not a sphere. Building those as omnis
+    /// lights the whole room instead of the pool the mapper aimed, which is both wrong and much brighter than
+    /// intended — stormkeep has 6 of them.
     /// </summary>
-    private OmniLight3D? TryBuildPointLight(VmapEntity entity, VmapDocument doc, float brightness)
+    private Light3D? TryBuildLight(VmapEntity entity, VmapDocument doc, float brightness)
     {
         if (!entity.Fields.TryGetValue("origin", out string? originText)
             || !TryVector(originText, out NVec3 origin))
@@ -197,7 +219,32 @@ public sealed partial class EditorLighting : Node3D
         if (entity.Fields.TryGetValue("_color", out string? colorText) && TryVector(colorText, out NVec3 c))
             color = new Color(c.X, c.Y, c.Z);
 
-        float range = Math.Min(MaxRange, MathF.Sqrt(intensity) * RangePerSqrtIntensity);
+        float range = Math.Min(MaxRange, MathF.Sqrt(intensity) * RangePerSqrtIntensity * _rangeScale);
+        float energy = brightness * Math.Clamp(intensity / 40f, 0.35f, 8f) * EnergyForFalloff;
+
+        // Aimed light: find the target and build a cone along the direction to it.
+        if (entity.Fields.TryGetValue("target", out string? target) && !string.IsNullOrWhiteSpace(target)
+            && FindTargetOrigin(doc, target) is { } aim && aim != origin)
+        {
+            var spot = new SpotLight3D
+            {
+                Name = $"EditorSpot_{entity.Id}",
+                Position = Coords.ToGodot(origin),
+                LightColor = color,
+                LightEnergy = energy,
+                SpotRange = range,
+                SpotAttenuation = _falloff,
+                // Q3's spot cone is derived from the target distance and the light's radius; without a radius
+                // key a moderate cone matches how these read in the bake far better than a full sphere.
+                SpotAngle = 45f,
+                SpotAngleAttenuation = 1f,
+                ShadowEnabled = false,
+                LightSpecular = 0.25f,
+                LightBakeMode = _bakeMode,
+            };
+            spot.LookAtFromPosition(Coords.ToGodot(origin), Coords.ToGodot(aim), Vector3.Up);
+            return spot;
+        }
 
         var light = new OmniLight3D
         {
@@ -212,7 +259,7 @@ public sealed partial class EditorLighting : Node3D
             // q3map2's own light values are the map author's statement of relative brightness and should be
             // what drives it. Normalised around a typical Xonotic fixture (light 40) so the common case lands
             // near 1 and a deliberately bright light is genuinely brighter.
-            LightEnergy = brightness * Math.Clamp(intensity / 40f, 0.35f, 8f) * EnergyForFalloff,
+            LightEnergy = energy,
             OmniRange = range,
             ShadowEnabled = false,       // granted by budget in Update()
             LightSpecular = 0.25f,
@@ -227,6 +274,18 @@ public sealed partial class EditorLighting : Node3D
     /// The sun, from the sky shader's <c>q3map_sun</c> when the map defines one. Xonotic skies usually do;
     /// when none is found a soft default from above keeps exteriors readable rather than flat.
     /// </summary>
+    /// <summary>Origin of the entity whose <c>targetname</c> matches, or null.</summary>
+    private static NVec3? FindTargetOrigin(VmapDocument doc, string target)
+    {
+        foreach (VmapEntity e in doc.Entities)
+            if (e.Fields.TryGetValue("targetname", out string? name)
+                && string.Equals(name, target, StringComparison.OrdinalIgnoreCase)
+                && e.Fields.TryGetValue("origin", out string? o)
+                && TryVector(o, out NVec3 v))
+                return v;
+        return null;
+    }
+
     private void BuildSun(VmapDocument doc, AssetSystem assets, float brightness, CvarService? cvars)
     {
         SunParms? sun = null;
@@ -267,7 +326,8 @@ public sealed partial class EditorLighting : Node3D
             LightColor = sun is not null ? new Color(sun.Red, sun.Green, sun.Blue) : new Color(1f, 0.96f, 0.9f),
             // q3map_sun intensity is in bake units (typically 50-300); map it into a sane real-time energy
             // rather than passing it through, which would blow the exposure out entirely.
-            LightEnergy = brightness * (sun is not null ? Math.Clamp(sun.Intensity / 150f, 0.15f, 2f) : 0.6f),
+            LightEnergy = ReadFloat(cvars, CvarSunScale, 1f)
+                * (sun is not null ? Math.Clamp(sun.Intensity / 150f, 0.15f, 2f) : 0.6f),
             ShadowEnabled = true,
             LightSpecular = 0.2f,
             LightBakeMode = _bakeMode,
@@ -305,7 +365,7 @@ public sealed partial class EditorLighting : Node3D
 
         if (budget <= 0)
         {
-            foreach (OmniLight3D light in _points)
+            foreach (Light3D light in _points)
                 if (GodotObject.IsInstanceValid(light))
                     light.ShadowEnabled = false;
             return;
@@ -314,19 +374,20 @@ public sealed partial class EditorLighting : Node3D
         _sorted.Clear();
         for (int i = 0; i < _points.Count; i++)
         {
-            OmniLight3D light = _points[i];
+            Light3D light = _points[i];
             if (!GodotObject.IsInstanceValid(light))
                 continue;
             // Distance to the light's REACH, not its centre: a big light whose centre is far can still be the
             // one lighting the room the camera is standing in.
-            float d = cameraPosition.DistanceTo(light.Position) - light.OmniRange;
+            float reach = light is OmniLight3D o ? o.OmniRange : ((SpotLight3D)light).SpotRange;
+            float d = cameraPosition.DistanceTo(light.Position) - reach;
             _sorted.Add((d, i));
         }
         _sorted.Sort(static (a, b) => a.Distance.CompareTo(b.Distance));
 
         for (int rank = 0; rank < _sorted.Count; rank++)
         {
-            OmniLight3D light = _points[_sorted[rank].Index];
+            Light3D light = _points[_sorted[rank].Index];
             if (GodotObject.IsInstanceValid(light))
                 light.ShadowEnabled = rank < budget;
         }

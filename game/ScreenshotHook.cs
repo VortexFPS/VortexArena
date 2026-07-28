@@ -54,6 +54,14 @@ public partial class ScreenshotHook : Node
                 break;
         }
 
+        // A running editor bake would otherwise be captured mid-flight — the frame would show whatever
+        // lighting existed BEFORE it, which silently invalidates every A/B comparison made from screenshots.
+        while (XonoticGodot.Game.Vmap.EditorLightBake.BakeRunning)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        // ...and one more frame after it lands, so the rebuild that shows the result is on screen.
+        for (int i = 0; i < 8; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
         // Deterministic-capture gate (--fx-still): wait for the demo driver to release at the exact moment.
         while (Hold)
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

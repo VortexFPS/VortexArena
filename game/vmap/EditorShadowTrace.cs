@@ -24,6 +24,15 @@ public sealed class EditorShadowTrace
     /// <summary>Q3 CONTENTS_TRANSLUCENT — glass and water do not cast a hard shadow.</summary>
     private const int ContentsTranslucent = 0x2000_0000;
 
+    /// <summary>True when any face of the brush is sky — the light comes through, not off, these.</summary>
+    private static bool IsSky(VmapBrush brush)
+    {
+        foreach (VmapFace f in brush.Faces)
+            if ((f.SurfaceFlags & VmapGeometryBuilder.SurfaceSky) != 0)
+                return true;
+        return false;
+    }
+
     private const float CellSize = 256f;
 
     /// <summary>How far off the surface a shadow ray starts, in Quake units. Stops a face shadowing itself.</summary>
@@ -58,6 +67,11 @@ public sealed class EditorShadowTrace
             if (brush.IsToolBrush)
                 continue;
             if ((brush.ContentFlags & ContentsSolid) == 0 || (brush.ContentFlags & ContentsTranslucent) != 0)
+                continue;
+            // SKY IS NOT AN OCCLUDER. In q3map2 a sky surface is where the sun and the sky dome come FROM;
+            // treating it as solid seals the map against its own light source, which is why the compiled
+            // map's sunlit floor had no counterpart here at all.
+            if (IsSky(brush))
                 continue;
             if (isVisible is not null && !isVisible(brush))
                 continue;

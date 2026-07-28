@@ -294,6 +294,11 @@ public static class Q3ShaderParser
                 ParseSun(def, p);
                 return;
 
+            case "q3map_skylight":
+                if (p.Count >= 3 && TryF(p[1], out float skyAmount) && TryF(p[2], out float skyIters))
+                    def.SkyLight = new SkyLightParms { Amount = skyAmount, Iterations = (int)skyIters };
+                return;
+
             // ---- Darkplaces extensions (already dp-prefixed by RemapDpPrefix). ----
             case "dpglosstexture":
                 if (p.Count >= 2) def.Dp.GlossTexture = p[1];
@@ -672,13 +677,14 @@ public static class Q3ShaderParser
 
     /// <summary>
     /// <c>q3map_sun &lt;r&gt; &lt;g&gt; &lt;b&gt; &lt;intensity&gt; &lt;degrees&gt; &lt;elevation&gt;</c>.
-    /// <c>q3map_sunExt</c> adds samples/deviance arguments that only soften a bake, so the leading six are
-    /// read from either spelling.
+    /// <c>q3map_sunExt &lt;r&gt; &lt;g&gt; &lt;b&gt; &lt;intensity&gt; &lt;degrees&gt; &lt;elevation&gt;
+    /// &lt;deviance&gt; &lt;samples&gt;</c> adds the sun's angular spread and its sample count, which decide
+    /// whether its shadows have a penumbra. Both spellings share the leading six.
     /// </summary>
     private static void ParseSun(ShaderDef def, List<string> p)
     {
-        var nums = new List<float>(6);
-        for (int i = 1; i < p.Count && nums.Count < 6; i++)
+        var nums = new List<float>(8);
+        for (int i = 1; i < p.Count && nums.Count < 8; i++)
             if (TryF(p[i].Trim('(', ')'), out float v))
                 nums.Add(v);
         if (nums.Count < 6)
@@ -688,6 +694,8 @@ public static class Q3ShaderParser
         {
             Red = nums[0], Green = nums[1], Blue = nums[2],
             Intensity = nums[3], Degrees = nums[4], Elevation = nums[5],
+            Deviance = nums.Count > 6 ? nums[6] : 0f,
+            Samples = nums.Count > 7 ? Math.Max(1, (int)nums[7]) : 1,
         };
     }
 

@@ -55,6 +55,12 @@ public partial class EditorPanel : HudPanel
     /// <summary>True when the baked lighting was rebuilt without tracing, so its shadows are out of date.</summary>
     public bool ShadowsStale { get; set; }
 
+    /// <summary>True while the background bake is running.</summary>
+    public bool BakeRunning { get; set; }
+
+    /// <summary>Fraction of the running bake that is done, 0..1.</summary>
+    public float BakeProgress { get; set; }
+
     /// <summary>The orthographic view, for its state line. Null outside a session.</summary>
     public EditorOrthoView? Ortho { get; set; }
 
@@ -122,7 +128,15 @@ public partial class EditorPanel : HudPanel
                 lines.Add(($"{lighting}   (cl_editor_lighting)", lit ? bright : dim));
                 // Shadow tracing costs seconds, so edits skip it and say so rather than quietly showing
                 // lighting that no longer matches the geometry.
-                if (lit && Baked && ShadowsStale)
+                if (lit && Baked && BakeRunning)
+                {
+                    // A bar, not just a number: a bake runs for minutes and the mapper needs to see it move
+                    // to tell "working" from "hung" — which is exactly the distinction that was missing.
+                    int filled = (int)(BakeProgress * 24f);
+                    lines.Add(($"  BAKING [{new string('#', filled)}{new string('.', 24 - filled)}] "
+                        + $"{BakeProgress * 100f:F0}%", new Color(0.5f, 0.85f, 1f)));
+                }
+                else if (lit && Baked && ShadowsStale)
                     lines.Add(($"  LIGHTING STALE — {Key(BindRebake)} to rebake", new Color(1f, 0.75f, 0.3f)));
 
                 lines.Add((

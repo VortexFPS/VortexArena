@@ -1,25 +1,67 @@
+using System.Threading;
 using Godot;
 using NVec3 = System.Numerics.Vector3;
 
 namespace XonoticGodot.Game.Vmap;
 
-/// <summary>One light as the baker sees it: no Godot node, just the physics.</summary>
+/// <summary>What a light emits like. Mirrors q3map2's <c>EMIT_*</c>, because the maths differ per kind.</summary>
+public enum BakedLightKind
+{
+    /// <summary>Spherical emitter: <c>photons / d^2</c>.</summary>
+    Point,
+
+    /// <summary>Cone emitter, same distance law inside the cone.</summary>
+    Spot,
+
+    /// <summary>Infinitely distant: no distance falloff at all, occlusion by one very long ray.</summary>
+    Sun,
+}
+
+/// <summary>
+/// One light as the baker sees it: no Godot node, just the physics — and specifically q3map2's physics.
+///
+/// <see cref="Photons"/> is the quantity q3map2 actually integrates: <c>intensity * pointScale</c> for an
+/// entity light (pointScale is 7500), <c>value * areaScale</c> for a surface light, the raw intensity for a
+/// sun. Carrying photons rather than a renderer's "energy" is what makes the RATIOS between a fixture, the
+/// sun and the sky match the compiled map — those ratios are the map's lighting design, and no single global
+/// scale can fix them once they are wrong.
+/// </summary>
 public readonly struct BakedLight
 {
-    public BakedLight(NVec3 position, Color color, float energy, float range, float radius = 0f)
+    public BakedLight(NVec3 position, Color color, float photons, float range, float radius = 0f,
+        BakedLightKind kind = BakedLightKind.Point, NVec3 direction = default, float coneCos = -1f)
     {
         Position = position;
         Color = color;
-        Energy = energy;
+        Photons = photons;
         Range = range;
         Radius = radius;
+        Kind = kind;
+        Direction = direction;
+        ConeCos = coneCos;
     }
+
+    /// <summary>Emitter kind — the distance law depends on it.</summary>
+    public BakedLightKind Kind { get; }
+
+    /// <summary>
+    /// For a <see cref="BakedLightKind.Sun"/>, the direction TOWARD the light. For a spot, the direction it
+    /// points.
+    /// </summary>
+    public NVec3 Direction { get; }
+
+    /// <summary>Cosine of a spot's half-angle; -1 for everything else.</summary>
+    public float ConeCos { get; }
 
     /// <summary>Quake space, matching the geometry the baker walks.</summary>
     public NVec3 Position { get; }
 
     public Color Color { get; }
-    public float Energy { get; }
+
+    /// <summary>q3map2 photons — see the type remarks.</summary>
+    public float Photons { get; }
+
+    /// <summary>Distance past which this light is skipped, from q3map2's falloff tolerance.</summary>
     public float Range { get; }
 
     /// <summary>
@@ -57,6 +99,12 @@ public static class EditorLightBake
     /// <summary>Grid cell for the light broadphase; a vertex only tests lights in neighbouring cells.</summary>
     private const float LightCell = 512f;
 
+    /// <summary>
+    /// Hard cap on a light's broadphase radius in cells. At 512 units per cell this is a 4096-unit reach,
+    /// and the cost of a light is cubic in this number — see the note in <see cref="Grid"/>.
+    /// </summary>
+    private const int MaxLightCellRadius = 8;
+
     /// <summary>Bounce gather cell: one virtual emitter per this much space. Coarse on purpose — bounce is fill.</summary>
     private const float BounceCell = 256f;
 
@@ -72,6 +120,32 @@ public static class EditorLightBake
     /// <summary>Shadow rays traced during the last bake (diagnostics).</summary>
     public static long RaysTraced;
 
+    /// <summary>
+    /// Value that encodes to full scale in the vertex COLOR channel, set from the bake's own p99.
+    ///
+    /// It is measured rather than fixed because the bake's absolute magnitude is a property of the MAP: it
+    /// follows q3map2's photon units, so a map with brighter lights or bigger emissive panels produces
+    /// larger numbers. A hardcoded range silently clamps the top of the distribution, and a clamped bake
+    /// looks exactly like a flat one — that failure has now happened twice, so the range is no longer a
+    /// constant anyone can get wrong.
+    /// </summary>
+    public static float EncodeRange { get; private set; } = 48f;
+
+    /// <summary>Set <see cref="EncodeRange"/> from a completed bake's value distribution.</summary>
+    private static void MeasureEncodeRange(Color[] values)
+    {
+        if (values.Length == 0)
+            return;
+        var mags = new float[values.Length];
+        for (int i = 0; i < values.Length; i++)
+            mags[i] = MathF.Max(values[i].R, MathF.Max(values[i].G, values[i].B));
+        Array.Sort(mags);
+        // p99, not the maximum: a handful of luxels sitting on top of an emitter would otherwise set the
+        // range for the whole map and push everything else into the noise floor.
+        float p99 = mags[(int)(0.99f * (mags.Length - 1))];
+        EncodeRange = Math.Clamp(p99, 1f, 100000f);
+    }
+
     // ---- dirtmapping (q3map2 -dirty) --------------------------------------------------------------
 
     /// <summary>
@@ -84,6 +158,13 @@ public static class EditorLightBake
     /// unlike the light rays that cross the map.
     /// </summary>
     private const int DirtRays = 12;
+
+    /// <summary>
+    /// Minimum distance used in the inverse-square law, Quake units. Pure 1/d^2 is singular and a luxel can
+    /// land arbitrarily close to a fixture's own face; clamping the DISTANCE rather than the result keeps
+    /// the pool's shape exact everywhere its shape is actually visible.
+    /// </summary>
+    private const float NearClamp = 16f;
 
     /// <summary>
     /// How far a dirt ray looks for an occluder, Quake units. 64 because that is what stormkeep was compiled
@@ -145,10 +226,26 @@ public static class EditorLightBake
         public Grid(IReadOnlyList<BakedLight> lights)
         {
             Lights = lights;
+            var suns = new List<int>();
             for (int i = 0; i < lights.Count; i++)
             {
                 BakedLight l = lights[i];
-                int r = (int)MathF.Ceiling(l.Range / LightCell);
+
+                // A SUN has no position and infinite reach, so it cannot go in a position index at all.
+                // Putting one in anyway is not merely wasteful: Range is float.MaxValue, and
+                // (int)ceil(3.4e38 / 512) overflows to int.MinValue, which silently files the sun under a
+                // garbage key where no lookup will ever find it. Suns are evaluated for every sample.
+                if (l.Kind == BakedLightKind.Sun)
+                {
+                    suns.Add(i);
+                    continue;
+                }
+
+                // Bounded on purpose. A light's radius comes from its photon count, and a big enough emitter
+                // can ask for thousands of units — which is (2r+1)^3 buckets, each an allocation, and then
+                // every sample in that volume pays a shadow trace for it. Both the memory and the ray count
+                // are cubic in a number derived from map data, so it gets a ceiling.
+                int r = Math.Clamp((int)MathF.Ceiling(l.Range / LightCell), 0, MaxLightCellRadius);
                 (int gx, int gy, int gz) = Cell(l.Position);
                 for (int x = -r; x <= r; x++)
                 for (int y = -r; y <= r; y++)
@@ -160,7 +257,11 @@ public static class EditorLightBake
                     b.Add(i);
                 }
             }
+            Suns = suns.ToArray();
         }
+
+        /// <summary>Indices of the directional lights, which apply everywhere.</summary>
+        public int[] Suns { get; }
 
         public IReadOnlyList<BakedLight> Lights { get; }
         public Dictionary<(int, int, int), List<int>> Buckets { get; } = new();
@@ -199,20 +300,207 @@ public static class EditorLightBake
     /// Arm resample-from-the-last-bake mode: <see cref="Sample"/> returns retained light instead of
     /// computing any. Used for every rebuild that is not an explicit rebake.
     /// </summary>
+    public static Color Resample(NVec3 positionQuake) => SampleCached(positionQuake);
+
     public static void BeginCached()
     {
-        _grid = null;
-        _bounceGrid = null;
-        _shadows = null;
+        // Deliberately does NOT release the indices: a background bake may be running and reading them.
+        // Resample mode is a property of what the BUILDER does, not of what the worker is allowed to use.
+        if (!BakeRunning)
+        {
+            _grid = null;
+            _bounceGrid = null;
+            _shadows = null;
+        }
         _cacheMode = true;
     }
 
+    // ---- the background bake ----------------------------------------------------------------------
+
+    /// <summary>
+    /// Vertices captured from a world build, waiting to be lit. Plain arrays of value types on purpose:
+    /// the background bake must not touch a Godot object, and this is the whole interface between the two.
+    /// </summary>
+    public sealed class SampleSet
+    {
+        public SampleSet(int capacity)
+        {
+            Positions = new List<NVec3>(capacity);
+            Normals = new List<NVec3>(capacity);
+            Albedos = new List<Color>(capacity);
+        }
+
+        public List<NVec3> Positions { get; }
+        public List<NVec3> Normals { get; }
+        public List<Color> Albedos { get; }
+        public int Count => Positions.Count;
+    }
+
+    /// <summary>
+    /// When set, a world build CAPTURES its vertices instead of lighting them, and fills their colours by
+    /// resampling the retained bake. The capture then feeds <see cref="RunBackground"/>.
+    /// </summary>
+    public static bool Deferred { get; set; }
+
+    /// <summary>The vertices captured by the last deferred build.</summary>
+    public static SampleSet? Captured { get; private set; }
+
+    /// <summary>Begin a capture for a build of roughly <paramref name="capacity"/> vertices.</summary>
+    public static void BeginCapture(int capacity) => Captured = new SampleSet(capacity);
+
+    /// <summary>Record one vertex for the background bake.</summary>
+    public static void Capture(NVec3 position, NVec3 normal, Color albedo)
+    {
+        SampleSet? set = Captured;
+        if (set is null)
+            return;
+        lock (set)
+        {
+            set.Positions.Add(position);
+            set.Normals.Add(normal);
+            set.Albedos.Add(albedo);
+        }
+    }
+
+    /// <summary>Samples lit so far by the running bake (for the progress readout).</summary>
+    public static int Progress => Volatile.Read(ref _progress);
+
+    /// <summary>Total samples the running bake will light.</summary>
+    public static int ProgressTotal { get; private set; }
+
+    /// <summary>True while a background bake is running.</summary>
+    public static bool BakeRunning => Volatile.Read(ref _running) != 0;
+
+    /// <summary>True once a background bake has finished and its result is waiting to be shown.</summary>
+    public static bool BakeFinished => Volatile.Read(ref _finished) != 0;
+
+    /// <summary>Acknowledge a finished bake (the caller is about to rebuild the world from it).</summary>
+    public static void ClearFinished() => Volatile.Write(ref _finished, 0);
+
+    private static int _progress;
+    private static int _running;
+    private static int _finished;
+    private static int _cancel;
+
+    /// <summary>
+    /// Ask a running bake to stop and wait briefly for it to notice.
+    ///
+    /// Shutdown is the reason this exists: the worker holds the light and occluder indices, and a process
+    /// that tears the scene down while minutes of ray tracing are still in flight is a process that looks
+    /// hung to whoever is closing it.
+    /// </summary>
+    public static void Cancel()
+    {
+        if (!BakeRunning)
+            return;
+        Volatile.Write(ref _cancel, 1);
+        for (int i = 0; i < 100 && BakeRunning; i++)
+            Thread.Sleep(10);
+    }
+
+    /// <summary>
+    /// Light the captured vertices off the main thread, then publish the result into the retained bake.
+    ///
+    /// Why off-thread at all: a faithful bake is not fast — q3map2 spends minutes on this map, and it is a
+    /// batch tool that nobody is looking at. Ours runs inside a live game, so the same work done on the main
+    /// thread is an unresponsive window that looks exactly like a hang, which is precisely what it was.
+    /// The editor keeps rendering the previous lighting while this runs.
+    /// </summary>
+    public static async System.Threading.Tasks.Task RunBackground()
+    {
+        SampleSet? set = Captured;
+        if (set is null || set.Count == 0 || _grid is null)
+        {
+            Volatile.Write(ref _finished, 1);
+            return;
+        }
+
+        Volatile.Write(ref _running, 1);
+        Volatile.Write(ref _progress, 0);
+        Volatile.Write(ref _cancel, 0);
+        ProgressTotal = set.Count;
+
+        try
+        {
+            NVec3[] pos = set.Positions.ToArray();
+            NVec3[] nrm = set.Normals.ToArray();
+            Color[] alb = set.Albedos.ToArray();
+            var result = new Color[pos.Length];
+            var dirt = new float[pos.Length];
+
+            await System.Threading.Tasks.Task.Run(() =>
+            {
+                // Direct + dirt, in chunks so the progress counter moves without an interlock per vertex.
+                System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, chunk =>
+                {
+                    if (Volatile.Read(ref _cancel) != 0)
+                        return;
+                    int start = chunk * ChunkSize;
+                    int end = Math.Min(start + ChunkSize, pos.Length);
+                    for (int i = start; i < end; i++)
+                    {
+                        result[i] = SampleDirect(pos[i], nrm[i], alb[i], out float d);
+                        dirt[i] = d;
+                    }
+                    Interlocked.Add(ref _progress, end - start);
+                });
+
+                if (Volatile.Read(ref _cancel) == 0 && _bounceWanted && BuildBounceLights() > 0)
+                {
+                    System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, chunk =>
+                    {
+                        if (Volatile.Read(ref _cancel) != 0)
+                            return;
+                        int start = chunk * ChunkSize;
+                        int end = Math.Min(start + ChunkSize, pos.Length);
+                        for (int i = start; i < end; i++)
+                        {
+                            Color bounce = SampleBounce(pos[i], nrm[i]);
+                            Color c = result[i];
+                            result[i] = new Color(
+                                c.R + bounce.R * dirt[i],
+                                c.G + bounce.G * dirt[i],
+                                c.B + bounce.B * dirt[i]);
+                        }
+                    });
+                }
+            }).ConfigureAwait(false);
+
+            // Publish only a COMPLETE bake: half of one written over the retained lighting would leave the
+            // map lit in patches, which is worse than the lighting it replaced.
+            if (Volatile.Read(ref _cancel) == 0)
+            {
+                MeasureEncodeRange(result);
+                CacheReset();
+                for (int i = 0; i < pos.Length; i++)
+                    CacheStore(pos[i], result[i]);
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref _running, 0);
+            Volatile.Write(ref _finished, 1);
+            Captured = null;
+        }
+    }
+
+    /// <summary>Vertices per parallel work item — big enough to amortise the progress interlock.</summary>
+    private const int ChunkSize = 2048;
+
     /// <summary>Drop the retained bake (a fresh one is about to replace it).</summary>
-    public static void CacheReset() => _cache.Clear();
+    public static void CacheReset()
+    {
+        _cache.Clear();
+        _exact.Clear();
+    }
 
     /// <summary>Retain one baked sample. Called for every vertex of a completed bake.</summary>
     public static void CacheStore(NVec3 positionQuake, Color color)
     {
+        // EXACT, keyed to a quarter unit: a rebuild of unedited geometry regenerates the very same vertex
+        // positions, so this hands back the bake bit for bit rather than a neighbourhood average.
+        _exact[ExactKey(positionQuake)] = new NVec3(color.R, color.G, color.B);
+
         var key = (
             (int)MathF.Floor(positionQuake.X / CacheCell),
             (int)MathF.Floor(positionQuake.Y / CacheCell),
@@ -221,6 +509,11 @@ public static class EditorLightBake
         _cache[key] = (acc.Sum + new NVec3(color.R, color.G, color.B), acc.Count + 1);
     }
 
+    private static (int, int, int) ExactKey(NVec3 p) => (
+        (int)MathF.Round(p.X * 4f), (int)MathF.Round(p.Y * 4f), (int)MathF.Round(p.Z * 4f));
+
+    private static readonly Dictionary<(int, int, int), NVec3> _exact = new();
+
     /// <summary>
     /// Retained light at a position: its own cell, else the mean of whatever neighbours have samples.
     /// Geometry that did not exist at bake time therefore inherits its surroundings' lighting rather than
@@ -228,6 +521,9 @@ public static class EditorLightBake
     /// </summary>
     private static Color SampleCached(NVec3 position)
     {
+        if (_exact.TryGetValue(ExactKey(position), out NVec3 exact))
+            return new Color(exact.X, exact.Y, exact.Z);
+
         int cx = (int)MathF.Floor(position.X / CacheCell);
         int cy = (int)MathF.Floor(position.Y / CacheCell);
         int cz = (int)MathF.Floor(position.Z / CacheCell);
@@ -256,18 +552,6 @@ public static class EditorLightBake
     private static EditorShadowTrace? _shadows;
     private static bool _bounceWanted;
     private static int _bounces = 8;
-    private static NVec3? _sunDir;          // direction TOWARD the sun, Quake space
-    private static Color _sunColor;
-    private static float _sunEnergy;
-
-    /// <summary>
-    /// Scale of the sun's contribution INTO THE BOUNCE. The sun's direct term stays real-time (its crisp
-    /// dynamic shadows are the one thing worth per-frame cost); what was missing is everything that light
-    /// does after it lands — on stormkeep, sun bouncing off the lit floor is a large share of the compiled
-    /// look. q3map's sun intensities dwarf its fixture values, hence the multiplier.
-    /// </summary>
-    private const float SunBounceScale = 5f;
-
     /// <summary>How far the sun-visibility ray travels before the sample counts as outdoors, Quake units.</summary>
     private const float SunRayLength = 16384f;
 
@@ -276,7 +560,7 @@ public static class EditorLightBake
     /// <param name="shadows">Occluder index for traced shadows, or null for the unshadowed bake.</param>
     /// <param name="bounce">Accumulate and re-emit indirect light (the second pass).</param>
     public static void Begin(IReadOnlyList<BakedLight> lights, EditorShadowTrace? shadows = null, bool bounce = true,
-        int bounces = 8, NVec3? sunDirToSun = null, Color sunColor = default, float sunEnergy = 0f)
+        int bounces = 8)
     {
         _cacheMode = false;
         _grid = new Grid(lights);
@@ -286,9 +570,6 @@ public static class EditorLightBake
         // appeared to do nothing.
         _bounceWanted = bounce && bounces > 0;
         _bounces = Math.Clamp(bounces, 1, 16);
-        _sunDir = sunDirToSun is { } d && d.LengthSquared() > 1e-6f ? NVec3.Normalize(d) : null;
-        _sunColor = sunColor;
-        _sunEnergy = sunEnergy;
         _bounceGrid = null;
         _bounceAccum.Clear();
     }
@@ -296,6 +577,8 @@ public static class EditorLightBake
     /// <summary>Release every index.</summary>
     public static void End()
     {
+        if (BakeRunning)
+            return;     // the worker still owns these; the poll calls End() again once it finishes
         _grid = null;
         _bounceGrid = null;
         _shadows = null;
@@ -335,6 +618,26 @@ public static class EditorLightBake
         dirt = 1f;
         if (_cacheMode)
             return SampleCached(position);
+        return SampleDirect(position, normal, albedo, out dirt);
+    }
+
+    /// <summary>
+    /// Compute light at a sample, never resampling. The background worker uses this rather than
+    /// <see cref="Sample"/> so that a main-thread rebuild flipping into resample mode mid-bake cannot
+    /// silently turn the worker's own output into a copy of the bake it is replacing.
+    /// </summary>
+    /// <summary>
+    /// Cheap preview light for a build that has no retained bake to resample: the direct term only, with
+    /// whatever occluder index is currently armed (none, on the preview pass). Without this the very first
+    /// build of a session renders BLACK for as long as the background bake takes, which reads as a broken
+    /// editor rather than a working one.
+    /// </summary>
+    public static Color Preview(NVec3 position, NVec3 normal) =>
+        SampleDirect(position, normal, _greyAlbedo, out _);
+
+    private static Color SampleDirect(NVec3 position, NVec3 normal, Color albedo, out float dirt)
+    {
+        dirt = 1f;
         if (_grid is not { } grid)
             return Colors.Black;
 
@@ -342,27 +645,9 @@ public static class EditorLightBake
         Color direct = GatherDirect(grid, position, normal);
         direct = new Color(direct.R * dirt, direct.G * dirt, direct.B * dirt);
 
-        // The SUN's landing feeds the bounce and only the bounce: its direct term is the real-time light
-        // (crisp dynamic shadows), so baking it too would double it — but the light it throws around a room
-        // after landing was simply missing, and that bounce is a large share of the compiled look.
+        // The sun and the sky dome are ordinary baked lights now (q3map2 treats them as lights too), so
+        // they are already in `direct` and therefore already feed the bounce. No special case needed.
         Color received = direct;
-        if (_bounceWanted && _sunDir is { } sunDir && _shadows is { } sunShadows)
-        {
-            float sunDot = NVec3.Dot(normal, sunDir);
-            if (sunDot > 0f)
-            {
-                System.Threading.Interlocked.Increment(ref RaysTraced);
-                NVec3 from = position + normal * EditorShadowTrace.SurfaceBias;
-                if (!sunShadows.IsOccluded(from, from + sunDir * SunRayLength))
-                {
-                    float k = _sunEnergy * sunDot * SunBounceScale;
-                    received = new Color(
-                        received.R + _sunColor.R * k,
-                        received.G + _sunColor.G * k,
-                        received.B + _sunColor.B * k);
-                }
-            }
-        }
 
         if (_bounceWanted && (received.R > 0.001f || received.G > 0.001f || received.B > 0.001f))
             AccumulateBounce(position, normal, new Color(
@@ -373,23 +658,55 @@ public static class EditorLightBake
 
     private static Color GatherDirect(Grid grid, NVec3 position, NVec3 normal)
     {
-        if (!grid.Buckets.TryGetValue(Grid.Cell(position), out List<int>? candidates))
-            return Colors.Black;
-
         float r = 0f, g = 0f, b = 0f;
-        foreach (int i in candidates)
+
+        grid.Buckets.TryGetValue(Grid.Cell(position), out List<int>? local);
+        int localCount = local?.Count ?? 0;
+        int total = localCount + grid.Suns.Length;
+
+        for (int n = 0; n < total; n++)
         {
+            int i = n < localCount ? local![n] : grid.Suns[n - localCount];
             BakedLight l = grid.Lights[i];
-            NVec3 delta = l.Position - position;
-            float dist2 = delta.LengthSquared();
-            if (dist2 >= l.Range * l.Range)
-                continue;
 
-            float dist = MathF.Sqrt(dist2);
-            if (dist < 1e-3f)
-                continue;
+            NVec3 dir;
+            float dist, attenuation;
+            if (l.Kind == BakedLightKind.Sun)
+            {
+                // A sun is infinitely distant: no falloff, and the "position" is meaningless. q3map2's
+                // EMIT_SUN contributes photons * N.L to anything that can see the sky along its direction.
+                dir = l.Direction;
+                dist = SunRayLength;
+                attenuation = 1f;
+            }
+            else
+            {
+                NVec3 delta = l.Position - position;
+                float dist2 = delta.LengthSquared();
+                if (dist2 >= l.Range * l.Range)
+                    continue;
 
-            NVec3 dir = delta / dist;
+                dist = MathF.Sqrt(dist2);
+                if (dist < 1e-3f)
+                    continue;
+                dir = delta / dist;
+
+                // q3map2, light.c: add = ( photons / ( dist * dist ) ) * angle. Pure inverse-square, with
+                // no window and no saturation — the curve IS the look of a Q3 light pool. The near clamp
+                // only keeps a luxel that lands on top of an emitter from going singular.
+                float d = MathF.Max(dist, NearClamp);
+                attenuation = 1f / (d * d);
+
+                if (l.Kind == BakedLightKind.Spot)
+                {
+                    float cone = NVec3.Dot(-dir, l.Direction);
+                    if (cone <= l.ConeCos)
+                        continue;
+                    // Soften the last few degrees so the cone edge is not a hard stamp.
+                    attenuation *= Math.Clamp((cone - l.ConeCos) / MathF.Max(1e-4f, 1f - l.ConeCos) * 4f, 0f, 1f);
+                }
+            }
+
             float ndotl = NVec3.Dot(normal, dir);
             if (ndotl <= 0f)
                 continue;   // the surface faces away; a bake has no reason to light its back
@@ -399,7 +716,13 @@ public static class EditorLightBake
             if (_shadows is { } shadows)
             {
                 NVec3 from = position + normal * EditorShadowTrace.SurfaceBias;
-                if (l.Radius <= 0f)
+                if (l.Kind == BakedLightKind.Sun)
+                {
+                    System.Threading.Interlocked.Increment(ref RaysTraced);
+                    if (shadows.IsOccluded(from, from + dir * SunRayLength))
+                        continue;
+                }
+                else if (l.Radius <= 0f)
                 {
                     // A true point: one ray, one answer. Hard shadows are what a point light casts.
                     System.Threading.Interlocked.Increment(ref RaysTraced);
@@ -438,10 +761,7 @@ public static class EditorLightBake
                 }
             }
 
-            // Inverse-square, windowed smoothly to zero at the range so a light's edge has no seam.
-            float falloff = 1f / (1f + dist * dist / (128f * 128f));
-            float window = 1f - dist / l.Range;
-            float k = l.Energy * ndotl * falloff * window * window * visibility;
+            float k = l.Photons * attenuation * ndotl * visibility;
 
             r += l.Color.R * k;
             g += l.Color.G * k;
@@ -602,7 +922,7 @@ public static class EditorLightBake
 
             float falloff = 1f / (1f + dist * dist / (320f * 320f));
             float window = 1f - dist / l.Range;
-            float k = l.Energy * ndotl * falloff * window * window;
+            float k = l.Photons * ndotl * falloff * window * window;
 
             r += l.Color.R * k;
             g += l.Color.G * k;

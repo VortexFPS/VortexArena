@@ -106,11 +106,13 @@ public static class WorldTint
         // The editor's live baked-light controls (EditorWorldShader). Registered here with the other world
         // globals; the editor updates them per frame from its cvars.
         RenderingServer.GlobalShaderParameterAdd(
-            "editor_bake_scale", RenderingServer.GlobalShaderParameterType.Float, 0.01f);
+            "editor_bake_scale", RenderingServer.GlobalShaderParameterType.Float, 0.004f);
         RenderingServer.GlobalShaderParameterAdd(
             "editor_bake_ambient", RenderingServer.GlobalShaderParameterType.Float, 0.04f);
         RenderingServer.GlobalShaderParameterAdd(
-            "editor_bake_gamma", RenderingServer.GlobalShaderParameterType.Float, 1.3f);
+            "editor_bake_gamma", RenderingServer.GlobalShaderParameterType.Float, 1.05f);
+        RenderingServer.GlobalShaderParameterAdd(
+            "editor_bake_range", RenderingServer.GlobalShaderParameterType.Float, 48f);
         _mapApplied = _entityApplied = Vector3.One;
         _gammaApplied = 0f;
     }

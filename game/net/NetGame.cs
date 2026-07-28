@@ -135,6 +135,7 @@ public sealed partial class NetGame : Node3D
     private int _editorCollisionVersion = -1;
 
     private float _bakeUniformScale = float.NaN, _bakeUniformAmbient = float.NaN, _bakeUniformGamma = float.NaN;
+    private float _bakeUniformRange = float.NaN;
 
 
     private static float CvarOr(XonoticGodot.Engine.Simulation.CvarService cvars, string name, float fallback)
@@ -2990,7 +2991,11 @@ public sealed partial class NetGame : Node3D
         return list;
     }
 
-    public override void _ExitTree() => Shutdown();
+    public override void _ExitTree()
+    {
+        Vmap.EditorLightBake.Cancel();   // never tear the scene down with rays still in flight
+        Shutdown();
+    }
 
     private bool _shutDown;
 
@@ -5814,6 +5819,19 @@ public sealed partial class NetGame : Node3D
             // Per-frame, not once at build: the environment is owned by the WorldEnvironment NODE (_worldEnv),
             // which may not exist yet when the first world is built, and the GI/ambient cvars are things a
             // mapper changes mid-session. ApplyEnvironment itself no-ops when nothing changed.
+            // The background bake publishes into the retained bake; one rebuild resamples it onto the
+            // world, which is exact because the geometry has not changed underneath it.
+            if (Vmap.EditorLightBake.BakeFinished)
+            {
+                Vmap.EditorLightBake.ClearFinished();
+                Vmap.EditorLightBake.End();
+                GD.Print($"[EditorLighting] bake: {Vmap.EditorLightBake.RaysTraced:N0} rays in "
+                    + $"{Time.GetTicksMsec() - _bakeClock} ms (background)");
+                GD.Print($"[EditorLighting] encode range p99={Vmap.EditorLightBake.EncodeRange:F1}");
+                _bakedShadowsStale = false;
+                _editorMapVersion = -1;
+            }
+
             if (_worldEnv is not null)
                 Vmap.EditorLighting.ApplyEnvironment(_worldEnv, Menu.MenuState.Cvars);
 
@@ -5826,9 +5844,9 @@ public sealed partial class NetGame : Node3D
                 // used to be a Godot environment energy (where 10 was merely strong) and is now an in-shader
                 // floor (where 10 is an opaque white wash). A value saved under the old semantics must not be
                 // able to flatten the world — clamp it rather than let a stale config outrank every default.
-                float sc2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.01f), 0f, 2f);
+                float sc2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.004f), 0f, 2f);
                 float am2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarAmbient, 0.03f), 0f, 1f);
-                float gm2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeGamma, 1.3f), 0.25f, 4f);
+                float gm2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeGamma, 1.05f), 0.25f, 4f);
                 if (sc2 != _bakeUniformScale || am2 != _bakeUniformAmbient || gm2 != _bakeUniformGamma)
                 {
                     _bakeUniformScale = sc2;
@@ -5837,6 +5855,11 @@ public sealed partial class NetGame : Node3D
                     RenderingServer.GlobalShaderParameterSet("editor_bake_scale", sc2);
                     RenderingServer.GlobalShaderParameterSet("editor_bake_ambient", am2);
                     RenderingServer.GlobalShaderParameterSet("editor_bake_gamma", gm2);
+                }
+                if (_bakeUniformRange != Vmap.EditorLightBake.EncodeRange)
+                {
+                    _bakeUniformRange = Vmap.EditorLightBake.EncodeRange;
+                    RenderingServer.GlobalShaderParameterSet("editor_bake_range", _bakeUniformRange);
                 }
             }
             Vmap.EditorLighting.SuppressSceneSun(this, true);
@@ -5854,6 +5877,10 @@ public sealed partial class NetGame : Node3D
             editorPanel.Baked = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
                 && _editorLights.Baking;
             editorPanel.ShadowsStale = _bakedShadowsStale;
+            editorPanel.BakeRunning = Vmap.EditorLightBake.BakeRunning;
+            editorPanel.BakeProgress = Vmap.EditorLightBake.ProgressTotal > 0
+                ? (float)Vmap.EditorLightBake.Progress / Vmap.EditorLightBake.ProgressTotal
+                : 0f;
             editorPanel.HasMapSun = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
                 && _editorLights.HasMapSun;
         }
@@ -6996,7 +7023,8 @@ public sealed partial class NetGame : Node3D
                 // A BAKE happens only when asked for — the first build of a session, or editor_rebake. Every
                 // other rebuild (every brush you drag) RESAMPLES the retained bake, which costs milliseconds
                 // and, more importantly, does not visibly downgrade the lighting mid-edit.
-                bool doBake = _bakeShadowsNextBuild || !Vmap.EditorLightBake.CacheReady;
+                bool doBake = (_bakeShadowsNextBuild || !Vmap.EditorLightBake.CacheReady)
+                    && !Vmap.EditorLightBake.BakeRunning;
                 bool tracedShadows = shadowsWanted && doBake;
                 _bakeShadowsNextBuild = false;
                 _bakedShadowsStale = !doBake;
@@ -7023,8 +7051,19 @@ public sealed partial class NetGame : Node3D
                 int bounces = 8;
                 if (Menu.MenuState.Cvars is { } bn && !string.IsNullOrEmpty(bn.GetString(Vmap.EditorLighting.CvarBakeBounces)))
                     bounces = (int)bn.GetFloat(Vmap.EditorLighting.CvarBakeBounces);
-                Vmap.EditorLightBake.Begin(_editorLights.BakeLights, shadowTrace, bounce, bounces,
-                    _editorLights.SunDirToSun, _editorLights.SunColor, _editorLights.SunEnergy);
+                // Armed WITHOUT the occluder index for the preview pass the build itself does: the preview
+                // must cost no rays. RunBackground re-arms with the real trace below.
+                Vmap.EditorLightBake.Begin(_editorLights.BakeLights, null, false, bounces);
+                _pendingTrace = shadowTrace;
+                _pendingBounce = bounce;
+                _pendingBounces = bounces;
+
+                // The build only CAPTURES its vertices; the lighting itself runs on a worker afterwards.
+                // The world appears immediately with the previous bake resampled onto it, and the editor
+                // stays interactive for the minutes a faithful bake can take.
+                Vmap.EditorLightBake.Deferred = true;
+                Vmap.EditorLightBake.BeginCapture(1 << 20);
+                _bakePending = true;
             }
         }
 
@@ -7041,7 +7080,21 @@ public sealed partial class NetGame : Node3D
         if (_editorLights is { Baking: true })
             GD.Print($"[EditorLighting] bake: {Vmap.EditorLightBake.RaysTraced:N0} shadow rays in "
                 + $"{Time.GetTicksMsec() - _bakeClock} ms");
-        Vmap.EditorLightBake.End();
+        if (_bakePending)
+        {
+            _bakePending = false;
+            Vmap.EditorLightBake.Deferred = false;
+            _bakeClock = Time.GetTicksMsec();
+            // Now arm the REAL bake — traced shadows, dirt and bounce — for the worker.
+            _pendingTraceCount = _pendingTrace?.OccluderCount ?? 0;
+            Vmap.EditorLightBake.Begin(_editorLights!.BakeLights, _pendingTrace, _pendingBounce, _pendingBounces);
+            _pendingTrace = null;
+            _ = Vmap.EditorLightBake.RunBackground();   // fire and forget; polled in the editor tick
+        }
+        else
+        {
+            Vmap.EditorLightBake.End();
+        }
         AddChild(_editorMapRoot);
         _editorMapVersion = viewKey;
 
@@ -7079,6 +7132,14 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>True when the next world build should trace shadows (first build, or after editor_rebake).</summary>
     private bool _bakeShadowsNextBuild = true;
+
+    /// <summary>Set when the current build is capturing vertices for a background bake.</summary>
+    private bool _bakePending;
+
+    private Vmap.EditorShadowTrace? _pendingTrace;
+    private int _pendingTraceCount;
+    private bool _pendingBounce;
+    private int _pendingBounces = 8;
 
     /// <summary>True when the live lighting was built WITHOUT tracing, so its shadows are out of date.</summary>
     private bool _bakedShadowsStale;

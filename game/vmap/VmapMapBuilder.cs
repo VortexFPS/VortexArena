@@ -110,12 +110,12 @@ public static class VmapMapBuilder
             var bakeCells = new List<CellSurface>();
             foreach (Dictionary<string, CellSurface> byMat in cells.Values)
                 bakeCells.AddRange(byMat.Values);
-            bool wasResampled = EditorLightBake.Resampling;
+            bool wasResampled = EditorLightBake.Resampling || EditorLightBake.Deferred;
             System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.BakeColors());
 
             // Radiosity's shoot/gather, once: what the direct pass RECEIVED becomes virtual emitters, and a
             // second pass adds their glow. This is what keeps traced shadows from being pitch black.
-            if (EditorLightBake.BounceActive && EditorLightBake.BuildBounceLights() > 0)
+            if (!EditorLightBake.Deferred && EditorLightBake.BounceActive && EditorLightBake.BuildBounceLights() > 0)
                 System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.AddBounceColors());
 
             // Retain the finished light in world space so the next EDIT can resample it instead of paying
@@ -162,6 +162,9 @@ public static class VmapMapBuilder
                 // block: exactly the "wrong geometry casts the shadow" symptom. Double-sided casting makes
                 // every kept face a blocker from both sides.
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.DoubleSided,
+            // Baked geometry sits on its own layer so real-time lights can skip it — its light is already
+            // in the vertex colours, and receiving the same sun again would double it.
+            Layers = Lit ? EditorLighting.WorldLayerMask : 1u,
             };
             for (int s = 0; s < materials.Count; s++)
                 instance.SetSurfaceOverrideMaterial(s, materials[s]);
@@ -646,6 +649,20 @@ public static class VmapMapBuilder
         /// </summary>
         public void BakeColors()
         {
+            // DEFERRED: hand these vertices to the background bake and show the retained lighting meanwhile.
+            if (EditorLightBake.Deferred)
+            {
+                bool haveRetained = EditorLightBake.CacheReady;
+                for (int i = 0; i < Positions.Count; i++)
+                {
+                    NVec3 dp = Coords.ToQuake(Positions[i]);
+                    NVec3 dn = Coords.ToQuake(Normals[i]);
+                    Colors[i] = haveRetained ? EditorLightBake.Resample(dp) : EditorLightBake.Preview(dp, dn);
+                    EditorLightBake.Capture(dp, dn, AlbedoAverage);
+                }
+                return;
+            }
+
             if (Dirt.Count != Positions.Count)
             {
                 Dirt.Clear();
@@ -699,8 +716,8 @@ public static class VmapMapBuilder
                 // calibrations produced identical statistics to the hundredth). Store at 1/RANGE and let the
                 // shader expand: a poor man's HDR vertex lightmap.
                 var packed = new Color[Colors.Count];
-                const float inv = 1f / EditorWorldShader.BakedColorRange;
-                static float Enc(float v) => MathF.Sqrt(Math.Clamp(v * inv, 0f, 1f));
+                float inv = 1f / EditorLightBake.EncodeRange;
+                float Enc(float v) => MathF.Sqrt(Math.Clamp(v * inv, 0f, 1f));
                 for (int i = 0; i < Colors.Count; i++)
                 {
                     Color c = Colors[i];

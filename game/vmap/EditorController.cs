@@ -195,11 +195,11 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarRangeScale, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarSurfaceLights, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarBakeLights, "1", CvarFlags.Save);
-        c.Register(EditorLighting.CvarBakeScale, "0.01", CvarFlags.Save);
+        c.Register(EditorLighting.CvarBakeScale, "0.004", CvarFlags.Save);
         c.Register(EditorLighting.CvarBakeShadows, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarBakeBounce, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarBakeBounces, "8", CvarFlags.Save);
-        c.Register(EditorLighting.CvarBakeGamma, "1.3", CvarFlags.Save);
+        c.Register(EditorLighting.CvarBakeGamma, "1.05", CvarFlags.Save);
         c.Register(EditorLighting.CvarGlow, "0", CvarFlags.Save);
         c.Register(EditorLighting.CvarLuxel, "48", CvarFlags.Save);
         c.Register(EditorLighting.CvarDirt, "0.9", CvarFlags.Save);

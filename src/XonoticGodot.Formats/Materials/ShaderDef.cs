@@ -94,6 +94,32 @@ public sealed class SunParms
 
     /// <summary>Elevation above the horizon, degrees.</summary>
     public float Elevation { get; init; }
+
+    /// <summary>
+    /// <c>q3map_sunExt</c> spread, in degrees: the angular radius the sun is jittered within. 0 is a point
+    /// sun with razor shadows; larger values give a penumbra that widens with distance from the occluder.
+    /// </summary>
+    public float Deviance { get; init; }
+
+    /// <summary>
+    /// <c>q3map_sunExt</c> sample count — how many jittered suns stand in for the disc. Only meaningful with
+    /// a non-zero <see cref="Deviance"/>; q3map2 divides the intensity between them.
+    /// </summary>
+    public int Samples { get; init; } = 1;
+}
+
+/// <summary>
+/// <c>q3map_skylight &lt;amount&gt; &lt;iterations&gt;</c> — diffuse light from the sky dome, which q3map2
+/// simulates as a hemisphere of weak suns (CreateSkyLights). This is what lights the ground of an open map
+/// everywhere the sky is visible, independently of the sun's direction.
+/// </summary>
+public sealed class SkyLightParms
+{
+    /// <summary>Total brightness spread across the dome.</summary>
+    public float Amount { get; init; }
+
+    /// <summary>Elevation subdivisions; q3map2 builds (iterations-1)*4 azimuths per elevation, plus a zenith.</summary>
+    public int Iterations { get; init; }
 }
 
 public sealed class FogParms
@@ -283,6 +309,9 @@ public sealed class ShaderDef
     /// only its point-light entities are honoured. Null when the shader does not emit.
     /// </summary>
     public float? SurfaceLight { get; set; }
+
+    /// <summary>The <c>q3map_skylight</c> directive on a sky shader, or null.</summary>
+    public SkyLightParms? SkyLight { get; set; }
 
     /// <summary>The <c>q3map_sun</c> / <c>q3map_sunExt</c> directive on a sky shader, or null.</summary>
     public SunParms? Sun { get; set; }

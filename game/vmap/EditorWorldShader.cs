@@ -56,6 +56,7 @@ uniform float glow_energy = 0.0;
 global uniform float editor_bake_scale;    // overall strength of the baked light
 global uniform float editor_bake_ambient;  // flat floor added in-shader (ambient_light_disabled blocks the scene's)
 global uniform float editor_bake_gamma;    // response curve on the baked light: >1 = punchier, more contrast
+global uniform float editor_bake_range;    // HDR decode range, measured from the bake itself
 
 void fragment() {
     vec4 t = texture(albedo_tex, UV * uv_scale);
@@ -75,7 +76,7 @@ void fragment() {
     // the LIGHT, not the albedo — the same place a lightmap's own storage response lives, and the knob that
     // separates physically-averaged-and-flat from the punchy compiled look.
     vec3 stored = max(COLOR.rgb, vec3(0.0));
-    vec3 baked = pow(stored * stored * 48.0, vec3(editor_bake_gamma)) * editor_bake_scale;
+    vec3 baked = pow(stored * stored * editor_bake_range, vec3(editor_bake_gamma)) * editor_bake_scale;
     EMISSION = base * (baked + vec3(editor_bake_ambient))
         + texture(glow_tex, UV * uv_scale).rgb * glow_energy;
 }

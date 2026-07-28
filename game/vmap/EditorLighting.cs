@@ -260,7 +260,7 @@ public sealed partial class EditorLighting : Node3D
             if (!entity.ClassName.Equals("light", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (rig.TryBuildLight(entity, doc, brightness) is { } light)
-                rig.Adopt(light);
+                rig.Adopt(light, 0f, rig._pendingPhotons);
         }
 
         rig.BuildSun(doc, assets, brightness, cvars);
@@ -297,6 +297,10 @@ public sealed partial class EditorLighting : Node3D
         Color color = Colors.White;
         if (entity.Fields.TryGetValue("_color", out string? colorText) && TryVector(colorText, out NVec3 c))
             color = new Color(c.X, c.Y, c.Z);
+
+        // q3map2 light.c: light->photons = intensity * pointScale. This is the number the whole bake is
+        // proportioned around; everything else (sun, sky, surface lights) is measured against it.
+        _pendingPhotons = intensity * PointScale * brightness;
 
         float range = Math.Min(MaxRange, MathF.Sqrt(intensity) * RangePerSqrtIntensity * _rangeScale);
         float energy = brightness * Math.Clamp(intensity / 40f, 0.35f, 8f) * EnergyForFalloff;
@@ -417,7 +421,7 @@ public sealed partial class EditorLighting : Node3D
         }
 
         // ---- one light per cluster, energy from the SUMMED emit x area ---------------------------------
-        var candidates = new List<(float Weight, OmniLight3D Light)>();
+        var candidates = new List<(float Weight, float EmitArea, OmniLight3D Light)>();
         foreach (((int, int, int) _, (NVec3 posW, NVec3 normW, float sumW)) in clusters)
         {
             if (sumW <= 0f)
@@ -454,7 +458,7 @@ public sealed partial class EditorLighting : Node3D
                 DistanceFadeBegin = 2500f,
                 DistanceFadeLength = 1500f,
             };
-            candidates.Add((energy * range, light));
+            candidates.Add((energy * range, sumW, light));
         }
 
         // Largest emitters win the cap; the rest are dropped LOUDLY (house rule: no silent truncation).
@@ -465,7 +469,10 @@ public sealed partial class EditorLighting : Node3D
         {
             // The cluster stands in for a PANEL, not a point: its bake radius is what buys the penumbra.
             OmniLight3D cl = candidates[i].Light;
-            Adopt(cl, Math.Clamp(cl.OmniRange * 0.12f, 24f, 96f));
+            // q3map2 light_bounce.c:584 — photons = value * area * areaScale. Our cluster weight is
+            // already the summed value x area of its faces, so the conversion is exact.
+            Adopt(cl, Math.Clamp(cl.OmniRange * 0.12f, 24f, 96f),
+                candidates[i].EmitArea * AreaScale * brightness);
         }
         for (int i = kept; i < candidates.Count; i++)
             candidates[i].Light.QueueFree();
@@ -481,18 +488,37 @@ public sealed partial class EditorLighting : Node3D
     /// (and nothing in the scene) when baking. One funnel so both paths always see the same light set —
     /// baked and real-time output only ever differ by HOW the same lights are applied.
     /// </summary>
-    private void Adopt(Light3D light, float areaRadius = 0f)
+    /// <param name="photons">
+    /// q3map2 photons for the bake. The Godot node's own energy is for the REAL-TIME path only; the bake
+    /// never derives from it, because a renderer's energy and q3map2's photons are not the same quantity and
+    /// converting between them was what put the sun and the fixtures in the wrong ratio.
+    /// </param>
+    private void Adopt(Light3D light, float areaRadius = 0f, float photons = 0f)
     {
         if (Baking)
         {
-            float range = light is OmniLight3D o ? o.OmniRange : ((SpotLight3D)light).SpotRange;
-            // BakedFixtureBoost: the real-time path had to keep fixtures weak so hundreds of overlapping
-            // volumes stayed affordable; a bake has no such constraint, and q3map2's look is FIXTURE-
-            // dominated with the sun as one contributor among many. The boost restores that ratio, and
-            // cl_editor_bake_scale brings the total back to the reference level.
-            _bake.Add(new BakedLight(
-                Coords.ToQuake(light.Position), light.LightColor, light.LightEnergy * BakedFixtureBoost,
-                range, areaRadius));
+            if (photons > 0f)
+            {
+                // Range from q3map2's falloff tolerance: the distance at which photons/d^2 stops mattering.
+                // q3map2's radius is where photons/d^2 falls under the tolerance. Faithful, but its inputs
+                // are map data: a big emissive surface carries millions of photons and asks for thousands of
+                // units of reach, and every unit of reach costs shadow rays for every sample inside it. The
+                // cap is a deliberate departure — beyond it a light's contribution is a rounding error next
+                // to anything nearer, and without it a single large panel can make a bake take hours.
+                float range = Math.Min(BakeRangeCap, MathF.Sqrt(photons / FalloffTolerance));
+                var kind = BakedLightKind.Point;
+                NVec3 dir = default;
+                float coneCos = -1f;
+                if (light is SpotLight3D sp)
+                {
+                    kind = BakedLightKind.Spot;
+                    dir = Coords.ToQuake(-sp.Transform.Basis.Z.Normalized());   // LOCAL: the node is not in the tree yet
+                    coneCos = MathF.Cos(Mathf.DegToRad(sp.SpotAngle));
+                }
+                _bake.Add(new BakedLight(
+                    Coords.ToQuake(light.Position), SrgbToLinear(light.LightColor), photons,
+                    range, areaRadius, kind, dir, coneCos));
+            }
             light.QueueFree();
             return;
         }
@@ -500,11 +526,43 @@ public sealed partial class EditorLighting : Node3D
         AddChild(light);
     }
 
+    /// <summary>Photons for the light most recently built, handed to <see cref="Adopt"/>.</summary>
+    private float _pendingPhotons;
+
     /// <summary>True when fixture light is precomputed into the mesh rather than rendered live.</summary>
     public bool Baking { get; private set; }
 
-    /// <summary>Fixture-energy multiplier applied only in the bake (see <see cref="Adopt"/>).</summary>
-    private const float BakedFixtureBoost = 2.6f;
+    // ---- q3map2's own constants (q3map2.h) --------------------------------------------------------
+
+    /// <summary>q3map2 <c>pointScale</c>: an entity light's <c>light</c> key is multiplied by this.</summary>
+    private const float PointScale = 7500f;
+
+    /// <summary>q3map2 <c>areaScale</c>: a <c>q3map_surfacelight</c> value is multiplied by this.</summary>
+    private const float AreaScale = 0.25f;
+
+    /// <summary>
+    /// q3map2 <c>falloffTolerance</c>: a light is ignored once <c>photons/d^2</c> drops below this, which is
+    /// what bounds its radius. Deriving the range from the tolerance instead of guessing one is why pools
+    /// now end where the compiled map's pools end.
+    /// </summary>
+    private const float FalloffTolerance = 1f;
+
+    /// <summary>
+    /// Maximum reach of a baked light, Quake units. See the note where it is applied — this bounds the bake's
+    /// cost, which is otherwise cubic in a number that comes straight out of the map.
+    /// </summary>
+    private const float BakeRangeCap = 1536f;
+
+    /// <summary>
+    /// sRGB -> linear for a colour that came out of a .map or .shader file. Xonotic compiles with
+    /// <c>-sRGBcolor</c> (game_xonotic.h sets colour sRGB true), so <c>_color "0.61 0.86 1.00"</c> is an
+    /// sRGB triple and using it raw skews every hue and lifts the mid-tones.
+    /// </summary>
+    private static float SrgbToLinear(float c) =>
+        c <= 0.04045f ? c / 12.92f : MathF.Pow((c + 0.055f) / 1.055f, 2.4f);
+
+    private static Color SrgbToLinear(Color c) =>
+        new(SrgbToLinear(c.R), SrgbToLinear(c.G), SrgbToLinear(c.B));
 
     /// <summary>
     /// Drop the fixture lights for a build that RESAMPLES the retained bake. The rig was constructed
@@ -524,6 +582,108 @@ public sealed partial class EditorLighting : Node3D
     /// <summary>Surface lights actually built (diagnostics / HUD).</summary>
     public int SurfaceLightCount { get; private set; }
 
+    /// <summary>
+    /// The sun as q3map2 bakes it: <c>photons = intensity</c> (times <c>skyScale</c>, 1 here) and a
+    /// contribution of <c>photons * N.L</c> with NO distance falloff.
+    ///
+    /// <c>q3map_sunExt</c>'s deviance and samples are honoured: q3map2 replaces one sun with
+    /// <c>samples</c> suns of <c>photons/samples</c>, each jittered inside the deviance cone, which is what
+    /// gives a sun a penumbra instead of a stencil edge. Deviance 0 collapses back to a single sharp sun,
+    /// and stormkeep's sky is exactly that.
+    /// </summary>
+    private void AddBakedSun(SunParms sun, float brightness)
+    {
+        int samples = sun.Deviance > 0f ? Math.Clamp(sun.Samples, 1, 32) : 1;
+        float photons = sun.Intensity * brightness / samples;
+        Color color = SrgbToLinear(new Color(sun.Red, sun.Green, sun.Blue));
+
+        float baseYaw = Mathf.DegToRad(sun.Degrees);
+        float basePitch = Mathf.DegToRad(sun.Elevation);
+        float deviance = Mathf.DegToRad(sun.Deviance);
+
+        for (int i = 0; i < samples; i++)
+        {
+            float yaw = baseYaw, pitch = basePitch;
+            if (i > 0)
+            {
+                // Deterministic spiral inside the deviance cone rather than q3map2's RNG: a bake that
+                // changes every time it runs cannot be compared against its predecessor.
+                float t = (i + 0.5f) / samples;
+                float radius = deviance * MathF.Sqrt(t);
+                float theta = i * 2.39996323f;
+                yaw += radius * MathF.Cos(theta);
+                pitch += radius * MathF.Sin(theta);
+            }
+
+            var toSun = new NVec3(
+                MathF.Cos(yaw) * MathF.Cos(pitch),
+                MathF.Sin(yaw) * MathF.Cos(pitch),
+                MathF.Sin(pitch));
+            _bake.Add(new BakedLight(NVec3.Zero, color, photons, float.MaxValue, 0f,
+                BakedLightKind.Sun, NVec3.Normalize(toSun)));
+        }
+    }
+
+    /// <summary>
+    /// <c>q3map_skylight &lt;amount&gt; &lt;iterations&gt;</c>, following q3map2's CreateSkyLights exactly:
+    /// a dome of weak suns, <c>(iterations-1)*4</c> azimuths at each of <c>iterations-1</c> elevations plus
+    /// one at the zenith, sharing <c>amount</c> between them.
+    ///
+    /// This is the term that lights the ground everywhere the sky is visible, independently of where the sun
+    /// is — it was missing entirely, which is why our open areas read as lit from one direction only while
+    /// the compiled map has light coming from the whole opening.
+    /// </summary>
+    private void AddBakedSkyLight(SkyLightParms sky, float brightness)
+    {
+        if (sky.Amount <= 0f || sky.Iterations < 2)
+            return;
+
+        int elevationSteps = sky.Iterations - 1;
+        int angleSteps = elevationSteps * 4;
+        float elevationStep = Mathf.DegToRad(90f / sky.Iterations);   // q3map2 skips elevation 0
+        float angleStep = Mathf.DegToRad(360f / angleSteps);
+        int numSuns = angleSteps * elevationSteps + 1;
+        float photons = sky.Amount * brightness / numSuns;
+
+        // q3map2 passes the shader's own colour, which is white unless the shader sets q3map_lightRGB.
+        Color color = Colors.White;
+
+        float elevation = elevationStep * 0.5f;
+        float angle = 0f;
+        for (int i = 0; i < elevationSteps; i++)
+        {
+            for (int j = 0; j < angleSteps; j++)
+            {
+                var toSun = new NVec3(
+                    MathF.Cos(angle) * MathF.Cos(elevation),
+                    MathF.Sin(angle) * MathF.Cos(elevation),
+                    MathF.Sin(elevation));
+                _bake.Add(new BakedLight(NVec3.Zero, color, photons, float.MaxValue, 0f,
+                    BakedLightKind.Sun, NVec3.Normalize(toSun)));
+                angle += angleStep;
+            }
+            elevation += elevationStep;
+            angle += angleStep / elevationSteps;
+        }
+
+        // and the zenith
+        _bake.Add(new BakedLight(NVec3.Zero, color, photons, float.MaxValue, 0f,
+            BakedLightKind.Sun, new NVec3(0f, 0f, 1f)));
+        SkyLightCount = numSuns;
+    }
+
+    /// <summary>
+    /// Render layer the BAKED editor world lives on, so real-time lights can be told to skip it. Layer 1 is
+    /// everything else — models, gizmos, effects — which still want ordinary lighting.
+    /// </summary>
+    public const uint WorldLayerMask = 1u << 1;
+
+    /// <summary>True when the map's sky shader declares <c>q3map_skylight</c>.</summary>
+    public bool HasSkyLight { get; private set; }
+
+    /// <summary>How many dome suns the skylight expanded into (diagnostics).</summary>
+    public int SkyLightCount { get; private set; }
+
     /// <summary>Origin of the entity whose <c>targetname</c> matches, or null.</summary>
     private static NVec3? FindTargetOrigin(VmapDocument doc, string target)
     {
@@ -539,6 +699,7 @@ public sealed partial class EditorLighting : Node3D
     private void BuildSun(VmapDocument doc, AssetSystem assets, float brightness, CvarService? cvars)
     {
         SunParms? sun = null;
+        SkyLightParms? skyLight = null;
 
         foreach (VmapBrush brush in doc.Brushes)
         {
@@ -546,17 +707,32 @@ public sealed partial class EditorLighting : Node3D
             {
                 if ((face.SurfaceFlags & VmapGeometryBuilder.SurfaceSky) == 0)
                     continue;
-                if (assets.GetShader(face.Material.Replace('\\', '/')) is { Sun: { } found })
+                if (assets.GetShader(face.Material.Replace('\\', '/')) is { } skyShader
+                    && (skyShader.Sun is not null || skyShader.SkyLight is not null))
                 {
-                    sun = found;
+                    sun = skyShader.Sun;
+                    skyLight = skyShader.SkyLight;
                     break;
                 }
             }
-            if (sun is not null)
+            if (sun is not null || skyLight is not null)
                 break;
         }
 
         HasMapSun = sun is not null;
+        HasSkyLight = skyLight is not null;
+
+        // ---- BAKED: emit the sun and the sky dome as real lights, the way q3map2 does ----------------
+        if (Baking)
+        {
+            if (sun is not null)
+                AddBakedSun(sun, brightness);
+            if (skyLight is not null)
+                AddBakedSkyLight(skyLight, brightness);
+            // ...and fall through to build the real-time sun anyway, restricted to the MODEL layer. The
+            // world has the sun baked in and must not receive it twice, but players, weapons and items are
+            // not in the bake at all and would otherwise be pitch black during a playtest.
+        }
 
         // Quake convention: `degrees` is the compass angle the light comes FROM, `elevation` its height above
         // the horizon. Build the direction it travels TOWARDS, then convert to Godot.
@@ -579,6 +755,8 @@ public sealed partial class EditorLighting : Node3D
             LightEnergy = ReadFloat(cvars, CvarSunScale, 1f)
                 * (sun is not null ? Math.Clamp(sun.Intensity / 150f, 0.15f, 2f) : 0.6f),
             ShadowEnabled = true,
+            // Baked world excluded: it already carries this sun in its vertex colours.
+            LightCullMask = Baking ? WorldLayerMask ^ 0xFFFFF : 0xFFFFF,
             LightSpecular = 0.2f,
             LightBakeMode = _bakeMode,
             // Godot's directional shadow only covers DirectionalShadowMaxDistance around the camera, and its

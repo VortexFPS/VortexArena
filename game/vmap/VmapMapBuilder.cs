@@ -37,8 +37,15 @@ public static class VmapMapBuilder
     /// Which brushes take part and whether buried faces are removed. Defaults to the editor's world view:
     /// gametype-filtered, occlusion-culled, no sky.
     /// </param>
-    public static Node3D BuildMap(VmapDocument doc, AssetSystem assets, VmapSurfaceOptions? options = null)
+    /// <param name="lit">
+    /// Build materials that RESPOND to light (design doc §10.1 rung 1) rather than fullbright ones. The
+    /// fullbright path stays because it is the only thing that is never wrong while geometry is in motion,
+    /// and because a map whose lights did not survive compilation has nothing to light it with.
+    /// </param>
+    public static Node3D BuildMap(VmapDocument doc, AssetSystem assets, VmapSurfaceOptions? options = null,
+        bool lit = false)
     {
+        Lit = lit;
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(assets);
 
@@ -232,7 +239,11 @@ public static class VmapMapBuilder
         }
     }
 
-    /// <summary>Cache so a shared material is built once per map build, not once per cell.</summary>
+    /// <summary>Whether the current build wants lit materials; set by <see cref="BuildMap"/>.</summary>
+    private static bool Lit;
+
+    /// <summary>Cache so a shared material is built once per map build, not once per cell. Keyed by shader AND
+    /// lit-ness, because the two variants of one shader are different materials.</summary>
     private static readonly Dictionary<string, Material> EditorMaterials = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -246,7 +257,8 @@ public static class VmapMapBuilder
     /// </summary>
     private static Material EditorMaterial(AssetSystem assets, string shaderName)
     {
-        if (EditorMaterials.TryGetValue(shaderName, out Material? cached) && GodotObject.IsInstanceValid(cached))
+        string key = (Lit ? "lit:" : "flat:") + shaderName;
+        if (EditorMaterials.TryGetValue(key, out Material? cached) && GodotObject.IsInstanceValid(cached))
             return cached;
 
         AssetSystem.LightmapDiffuse diffuse = assets.ResolveLightmapDiffuse(shaderName);
@@ -254,7 +266,11 @@ public static class VmapMapBuilder
 
         var mat = new StandardMaterial3D
         {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            ShadingMode = Lit ? BaseMaterial3D.ShadingModeEnum.PerPixel : BaseMaterial3D.ShadingModeEnum.Unshaded,
+            // Q3 world surfaces are diffuse masonry and panelling; a default-shiny PBR material would read as
+            // wet plastic under real lights.
+            Roughness = 0.9f,
+            Metallic = 0f,
             AlbedoTexture = albedo,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             // A shader we cannot resolve to an image becomes flat grey rather than invisible: unfound geometry
@@ -284,7 +300,20 @@ public static class VmapMapBuilder
             mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
         }
 
-        EditorMaterials[shaderName] = mat;
+        // Surface lights (q3map_surfaceLight): the glowing strips and panels that do most of an Xonotic map's
+        // lighting. Emission does not illuminate neighbours without GI — that is rung 2 — but a lit room whose
+        // light fixtures are dark reads as broken, and this is the same value an area light will consume.
+        if (Lit && assets.GetShader(shaderName.Replace('\\', '/')) is { SurfaceLight: { } emit } && emit > 0f)
+        {
+            mat.EmissionEnabled = true;
+            mat.Emission = Colors.White;
+            // q3map_surfaceLight runs from ~100 (a dim panel) to several thousand (a sky portal). Compress it
+            // into a sane emission range rather than passing it through and blowing out the tonemapper.
+            mat.EmissionEnergyMultiplier = Math.Clamp(emit / 400f, 0.2f, 6f);
+            mat.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
+        }
+
+        EditorMaterials[key] = mat;
         return mat;
     }
 

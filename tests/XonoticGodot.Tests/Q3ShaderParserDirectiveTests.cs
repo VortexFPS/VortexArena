@@ -239,8 +239,10 @@ public class Q3ShaderParserDirectiveTests
     [Fact]
     public void UnknownGlobalDirective_LandsInRaw_NotAnError()
     {
-        ShaderDef def = One("q3map_surfacelight 400\ntotally_unknown_keyword a b");
-        Assert.Equal("400", def.Raw["q3map_surfacelight"]);
+        // (This used q3map_surfacelight as its unknown example until that became a parsed directive — see the
+        // q3map2 lighting tests below. Two genuinely unrecognised keys keep the contract under test.)
+        ShaderDef def = One("q3map_tessSize 64\ntotally_unknown_keyword a b");
+        Assert.Equal("64", def.Raw["q3map_tessSize"]);
         Assert.Equal("a b", def.Raw["totally_unknown_keyword"]);
     }
 
@@ -309,5 +311,57 @@ public class Q3ShaderParserDirectiveTests
         Assert.Equal(8, def.Stages.Count);
         Assert.Equal("s0.tga", def.Stages[0].MapTexture);
         Assert.Equal("s7.tga", def.Stages[7].MapTexture);
+    }
+
+    // ---- q3map2 lighting directives (design doc §10.1 rung 1) --------------------------------------
+    // Compile-time directives the shipped renderer ignores, but the in-game editor lights the world live
+    // and needs them: which surfaces emit, and where the sun is.
+
+    [Fact]
+    public void Q3MapSurfaceLight_IsParsed()
+    {
+        ShaderDef def = One("q3map_surfaceLight 1200\nsurfaceparm nolightmap");
+        Assert.Equal(1200f, def.SurfaceLight);
+    }
+
+    [Fact]
+    public void ShaderWithoutSurfaceLight_ReportsNone()
+    {
+        // Null rather than 0 so "does not emit" is distinguishable from "emits nothing", which is what lets
+        // the editor decide whether to make a material emissive at all.
+        Assert.Null(One("surfaceparm nolightmap").SurfaceLight);
+    }
+
+    [Fact]
+    public void Q3MapSun_IsParsed()
+    {
+        ShaderDef def = One("q3map_sun 1 0.9 0.8 150 215 45\nskyParms env/sky - -");
+        Assert.NotNull(def.Sun);
+        Assert.Equal(1f, def.Sun!.Red, 3);
+        Assert.Equal(0.9f, def.Sun.Green, 3);
+        Assert.Equal(0.8f, def.Sun.Blue, 3);
+        Assert.Equal(150f, def.Sun.Intensity, 3);
+        Assert.Equal(215f, def.Sun.Degrees, 3);
+        Assert.Equal(45f, def.Sun.Elevation, 3);
+    }
+
+    [Fact]
+    public void Q3MapSunExt_ReadsTheSameLeadingSixArguments()
+    {
+        // sunExt appends samples/deviance, which only soften a bake — the direction and colour are the same
+        // six numbers, and the editor's directional light wants exactly those.
+        ShaderDef def = One("q3map_sunExt 1 1 1 100 30 60 3 16");
+        Assert.NotNull(def.Sun);
+        Assert.Equal(100f, def.Sun!.Intensity, 3);
+        Assert.Equal(30f, def.Sun.Degrees, 3);
+        Assert.Equal(60f, def.Sun.Elevation, 3);
+    }
+
+    [Fact]
+    public void MalformedSun_IsIgnoredRatherThanHalfApplied()
+    {
+        // Too few arguments to determine a direction: leaving Sun null makes the editor fall back to its
+        // default sun, where half-parsed values would aim a light at nothing.
+        Assert.Null(One("q3map_sun 1 1 1").Sun);
     }
 }

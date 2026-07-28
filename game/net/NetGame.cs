@@ -118,6 +118,9 @@ public sealed partial class NetGame : Node3D
     // geometry never reflects an edit: the overlay outline moves and the wall stays put.
     private Node3D? _editorMapRoot;
     private int _editorMapVersion = -1;
+
+    /// <summary>The editor's live light rig (design doc §10.1 rung 1); null when lighting is off.</summary>
+    private Vmap.EditorLighting? _editorLights;
     private RadarPanel _radar = null!;
     private NetHud _hud = null!;                 // crosshair + health/armor readout (the always-on lightweight HUD)
     // The full CSQC HUD panel set (weapon bar / ammo / kill-feed / centerprint / timer) on the net play path —
@@ -5749,6 +5752,8 @@ public sealed partial class NetGame : Node3D
             panOrtho.PanByAxes(BindTable.Forward, BindTable.Side, (float)GetProcessDeltaTime());
 
         RefreshEditorWorld();
+        if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights) && _camera is not null)
+            _editorLights.Update(_camera.GlobalPosition, Menu.MenuState.Cvars, (float)Time.GetTicksMsec() / 1000f);
 
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
         {
@@ -5757,6 +5762,10 @@ public sealed partial class NetGame : Node3D
             editorPanel.FlySpeed = LocalServerPlayer?.SpectatorSpeed ?? 1f;
             editorPanel.Controller = _editor;
             editorPanel.Ortho = _editorOrtho;
+            editorPanel.Lights = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
+                ? _editorLights.LightCount : -1;
+            editorPanel.HasMapSun = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
+                && _editorLights.HasMapSun;
         }
 
         InfoMessagesPanel im = _fullHud.InfoMessages;
@@ -6836,6 +6845,9 @@ public sealed partial class NetGame : Node3D
                     _editorMapRoot.QueueFree();
                 _editorMapRoot = null;
                 _editorMapVersion = -1;
+                if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
+                    _editorLights.QueueFree();
+                _editorLights = null;
                 if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
                 {
                     _mapRoot.Visible = true;
@@ -6849,9 +6861,10 @@ public sealed partial class NetGame : Node3D
 
         // The gametype filter and the tool-brush toggle change what is drawn without touching the geometry
         // version, so both have to be part of the key or flipping them would leave the old world on screen.
+        bool lit = Vmap.EditorLighting.Enabled(Menu.MenuState.Cvars);
         int viewKey = HashCode.Combine(
             _editor.GeometryVersion, _editor.GametypeFilter, _editor.IncludeToolBrushes,
-            _editor.CullOccludedFaces);
+            _editor.CullOccludedFaces, lit);
         if (_editorMapVersion == viewKey)
             return;
 
@@ -6868,9 +6881,22 @@ public sealed partial class NetGame : Node3D
             // Without this the editor draws the mapper's overlapping solids instead of the level's visible
             // skin, and you end up looking at the inside of the masonry rather than at the room.
             CullOccludedFaces = _editor.CullOccludedFaces,
-        });
+        }, lit);
         AddChild(_editorMapRoot);
         _editorMapVersion = viewKey;
+
+        // The light rig is rebuilt with the world: its lights are children of the scene, not of the map node,
+        // but their budget and the sun are derived from the same document.
+        if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
+            _editorLights.QueueFree();
+        _editorLights = null;
+        if (lit)
+        {
+            _editorLights = Vmap.EditorLighting.Build(_editor.Document!, _assets.Assets, Menu.MenuState.Cvars);
+            AddChild(_editorLights);
+            if (_camera?.GetViewport()?.World3D?.Environment is { } env)
+                Vmap.EditorLighting.ApplyAmbient(env, Menu.MenuState.Cvars);
+        }
 
         // The regenerated world carries its own "Portals" node, so the portal renderer has to be re-pointed at
         // it — including after every edit, since the rebuild frees the nodes it was holding.

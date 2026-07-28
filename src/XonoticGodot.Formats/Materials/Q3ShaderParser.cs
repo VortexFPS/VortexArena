@@ -282,6 +282,18 @@ public static class Q3ShaderParser
                 ParseFogParms(def, p);
                 return;
 
+            // ---- q3map2 lighting directives. Compile-time for the shipped renderer, but the in-game editor
+            // lights the world live and needs to know which surfaces emit and where the sun is. ----
+            case "q3map_surfacelight":
+                if (p.Count >= 2 && TryF(p[1], out float surfaceLight))
+                    def.SurfaceLight = surfaceLight;
+                return;
+
+            case "q3map_sun":
+            case "q3map_sunext":
+                ParseSun(def, p);
+                return;
+
             // ---- Darkplaces extensions (already dp-prefixed by RemapDpPrefix). ----
             case "dpglosstexture":
                 if (p.Count >= 2) def.Dp.GlossTexture = p[1];
@@ -656,6 +668,27 @@ public static class Q3ShaderParser
         string? cloud = p.Count >= 3 ? Dash(p[2]) : null;
         string? near = p.Count >= 4 ? Dash(p[3]) : null;
         def.SkyParms = new SkyParms { FarBox = far, CloudHeight = cloud, NearBox = near };
+    }
+
+    /// <summary>
+    /// <c>q3map_sun &lt;r&gt; &lt;g&gt; &lt;b&gt; &lt;intensity&gt; &lt;degrees&gt; &lt;elevation&gt;</c>.
+    /// <c>q3map_sunExt</c> adds samples/deviance arguments that only soften a bake, so the leading six are
+    /// read from either spelling.
+    /// </summary>
+    private static void ParseSun(ShaderDef def, List<string> p)
+    {
+        var nums = new List<float>(6);
+        for (int i = 1; i < p.Count && nums.Count < 6; i++)
+            if (TryF(p[i].Trim('(', ')'), out float v))
+                nums.Add(v);
+        if (nums.Count < 6)
+            return;
+
+        def.Sun = new SunParms
+        {
+            Red = nums[0], Green = nums[1], Blue = nums[2],
+            Intensity = nums[3], Degrees = nums[4], Elevation = nums[5],
+        };
     }
 
     private static void ParseFogParms(ShaderDef def, List<string> p)

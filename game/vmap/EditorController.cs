@@ -176,6 +176,10 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarSnapEnabled, "1", CvarFlags.Save);
         c.Register(CvarShowToolBrushes, "0", CvarFlags.Save);
         c.Register(CvarCullOccluded, "1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarEnabled, "1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarShadowBudget, "6", CvarFlags.Save);
+        c.Register(EditorLighting.CvarBrightness, "1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarAmbient, "0.18", CvarFlags.Save);
     }
 
     /// <summary>

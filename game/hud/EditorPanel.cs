@@ -43,6 +43,12 @@ public partial class EditorPanel : HudPanel
     /// <summary>The live editor controller, for tool/selection/coordinate readouts. Null outside a session.</summary>
     public EditorController? Controller { get; set; }
 
+    /// <summary>Point lights the live rig built; -1 when there is no rig.</summary>
+    public int Lights { get; set; } = -1;
+
+    /// <summary>True when the sun came from the map's own sky shader rather than the fallback.</summary>
+    public bool HasMapSun { get; set; }
+
     /// <summary>The orthographic view, for its state line. Null outside a session.</summary>
     public EditorOrthoView? Ortho { get; set; }
 
@@ -98,6 +104,16 @@ public partial class EditorPanel : HudPanel
             {
                 lines.Add(($"Tool: {c.Tool}  {Key(BindTool)}   Manip: {c.Manipulator}  {Key(BindManip)}", bright));
                 lines.Add(($"Showing: {c.GametypeFilterLabel}   (editor_gametype <name|all>)", dim));
+
+                // Lighting state, because it changes what every surface looks like and is otherwise a cvar
+                // nobody would guess at. Reports what the rig actually built, not just the toggle: a map
+                // compiled without -keeplights yields no point lights, and the mapper should be told that
+                // rather than left wondering why "lit" looks flat.
+                bool lit = XonoticGodot.Game.Vmap.EditorLighting.Enabled(XonoticGodot.Game.Menu.MenuState.Cvars);
+                string lighting = lit
+                    ? $"Light: ON  {(Lights >= 0 ? $"{Lights} lights" : "")}{(HasMapSun ? " + map sun" : " + default sun")}"
+                    : "Light: OFF (fullbright)";
+                lines.Add(($"{lighting}   (cl_editor_lighting)", lit ? bright : dim));
 
                 lines.Add((
                     $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +

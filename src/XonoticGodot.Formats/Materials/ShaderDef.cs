@@ -75,6 +75,27 @@ public sealed class SkyParms
 /// the Q3 format, so it is parsed when present. Color is the three floats; <see cref="Distance"/> is the
 /// opacity distance.
 /// </summary>
+/// <summary>
+/// <c>q3map_sun &lt;r&gt; &lt;g&gt; &lt;b&gt; &lt;intensity&gt; &lt;degrees&gt; &lt;elevation&gt;</c> — the
+/// directional sun a sky shader casts. <c>degrees</c> is the compass angle the light comes FROM (Quake yaw);
+/// <c>elevation</c> is its height above the horizon. Both in degrees.
+/// </summary>
+public sealed class SunParms
+{
+    public float Red { get; init; }
+    public float Green { get; init; }
+    public float Blue { get; init; }
+
+    /// <summary>Brightness in q3map2's units (typically 50-300).</summary>
+    public float Intensity { get; init; }
+
+    /// <summary>Compass angle the sunlight comes FROM, degrees.</summary>
+    public float Degrees { get; init; }
+
+    /// <summary>Elevation above the horizon, degrees.</summary>
+    public float Elevation { get; init; }
+}
+
 public sealed class FogParms
 {
     public float Red { get; init; }
@@ -254,6 +275,17 @@ public sealed class ShaderDef
 
     /// <summary>The <c>fogParms</c> directive, or null.</summary>
     public FogParms? FogParms { get; set; }
+
+    /// <summary>
+    /// <c>q3map_surfaceLight &lt;value&gt;</c> — this surface EMITS light of the given intensity. A q3map2
+    /// compile directive, so the shipped renderer never needed it; the in-game editor lights the world live
+    /// and does, because an Xonotic map is lit mostly by glowing strips and panels and is unrecognisable when
+    /// only its point-light entities are honoured. Null when the shader does not emit.
+    /// </summary>
+    public float? SurfaceLight { get; set; }
+
+    /// <summary>The <c>q3map_sun</c> / <c>q3map_sunExt</c> directive on a sky shader, or null.</summary>
+    public SunParms? Sun { get; set; }
 
     /// <summary>
     /// The <c>sort</c> directive. Q3 accepts a small set of named keys (portal, sky, opaque, banner,

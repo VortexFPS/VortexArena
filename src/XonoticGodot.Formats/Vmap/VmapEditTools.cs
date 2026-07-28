@@ -351,6 +351,7 @@ public static class EditorTools
         EditorTool.Edge => VmapSelectionKind.Edge,
         EditorTool.Vertex => VmapSelectionKind.Vertex,
         EditorTool.Patch => VmapSelectionKind.Patch,
+        EditorTool.Entity => VmapSelectionKind.Entity,
         _ => VmapSelectionKind.Face,
     };
 
@@ -371,7 +372,8 @@ public static class EditorTools
     public static bool IsImplemented(EditorTool tool) => tool switch
     {
         EditorTool.None or EditorTool.Select or EditorTool.Brush or EditorTool.Face
-            or EditorTool.Edge or EditorTool.Vertex or EditorTool.Patch or EditorTool.Clip => true,
+            or EditorTool.Edge or EditorTool.Vertex or EditorTool.Patch or EditorTool.Clip
+            or EditorTool.Entity => true,
         _ => false,
     };
 

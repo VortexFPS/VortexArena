@@ -147,6 +147,10 @@ public sealed partial class EditorGizmos : Node3D
             }
         }
 
+        // --- point entities: EDIT-only boxes from their class descriptors (§11.9) ---
+        if (c.Tool == EditorTool.Entity)
+            anything |= DrawEntityBoxes(c);
+
         // --- clip preview: the clicked points and where the plane crosses the selection (§11.9) ---
         if (c.Tool == EditorTool.Clip)
             anything |= DrawClipPreview(c, doc);
@@ -253,6 +257,93 @@ public sealed partial class EditorGizmos : Node3D
     /// <summary>Colour of the paste ghost — distinct from the drag ghost, because it is a different promise:
     /// a drag ghost previews a move, this previews something that does not exist yet.</summary>
     private static readonly Color PasteGhostColor = new(0.6f, 0.75f, 1f, 0.85f);
+
+    /// <summary>
+    /// Draw every point entity as its descriptor box, coloured the way the definition file says.
+    ///
+    /// EDIT ONLY, and only with the entity tool up. Two reasons, both from §11.9: PLAYTEST shows the SERVER's
+    /// live entities, so drawing the document's would double every pickup; and a level is dense with entities,
+    /// so boxing them while a mapper is pushing brushes around would wallpaper the view with volumes they are
+    /// not working on.
+    /// </summary>
+    private bool DrawEntityBoxes(EditorController c)
+    {
+        int selectedId = 0;
+        bool drew = false;
+
+        foreach (VmapPickIndex.EntityEntry ee in c.PickIndex.Entities)
+        {
+            EntityClassDef def = c.Defs?.GetOrPlaceholder(ee.Entity.ClassName)
+                ?? new EntityClassDef { Name = ee.Entity.ClassName };
+
+            bool isHover = c.Hover.Hit && c.Hover.Selection.Kind == VmapSelectionKind.Entity
+                           && c.Hover.Selection.EntityId == ee.Entity.Id;
+            bool isSelected = c.Session is { } s
+                              && s.Selection.Exists(x => x.Kind == VmapSelectionKind.Entity
+                                                         && x.EntityId == ee.Entity.Id);
+
+            // The class colour is the identity — it is how a mapper tells a spawn from a weapon at a glance —
+            // so hover and selection BRIGHTEN it rather than replacing it.
+            var color = new Color(def.Color.X, def.Color.Y, def.Color.Z, isSelected ? 1f : 0.72f);
+            if (isSelected)
+                color = SelectionColor;
+            else if (isHover)
+                color = HoverColor;
+
+            DrawAabb(ee.Mins, ee.Maxs, color);
+            if (isSelected)
+                selectedId = ee.Entity.Id;
+            drew = true;
+        }
+
+        // Draw the targetname->target link of whatever is selected, which is the relationship a mapper
+        // otherwise has to reconstruct by reading keys (§11.8's entity inspector arrows, in their simplest form).
+        if (selectedId != 0)
+            drew |= DrawEntityLinks(c, selectedId);
+
+        return drew;
+    }
+
+    /// <summary>Arrows from the selected entity to everything it targets.</summary>
+    private bool DrawEntityLinks(EditorController c, int fromId)
+    {
+        if (c.Document?.FindEntity(fromId) is not { } from)
+            return false;
+        if (!from.Fields.TryGetValue("target", out string? target) || target.Length == 0)
+            return false;
+
+        bool drew = false;
+        foreach (VmapEntity to in c.Document.Entities)
+        {
+            if (!to.Fields.TryGetValue("targetname", out string? name) || name != target)
+                continue;
+            Line(from.Origin(), to.Origin(), LinkColor);
+            DrawCross(to.Origin(), VertexMarker * 1.5f, LinkColor);
+            drew = true;
+        }
+        return drew;
+    }
+
+    /// <summary>Wireframe box from world-space bounds.</summary>
+    private void DrawAabb(NVec3 mins, NVec3 maxs, Color color)
+    {
+        Span<NVec3> corners = stackalloc NVec3[8];
+        for (int i = 0; i < 8; i++)
+            corners[i] = new NVec3(
+                (i & 1) == 0 ? mins.X : maxs.X,
+                (i & 2) == 0 ? mins.Y : maxs.Y,
+                (i & 4) == 0 ? mins.Z : maxs.Z);
+
+        // 0-1,2-3,4-5,6-7 along X; 0-2,1-3,4-6,5-7 along Y; 0-4,1-5,2-6,3-7 along Z.
+        for (int i = 0; i < 8; i++)
+        {
+            if ((i & 1) == 0) Line(corners[i], corners[i | 1], color);
+            if ((i & 2) == 0) Line(corners[i], corners[i | 2], color);
+            if ((i & 4) == 0) Line(corners[i], corners[i | 4], color);
+        }
+    }
+
+    private static readonly Color LinkColor = new(1f, 0.55f, 0.9f, 0.9f);
 
     private static readonly Color ClipPointColor = new(1f, 0.45f, 0.35f, 1f);
     private static readonly Color ClipPlaneColor = new(1f, 0.6f, 0.25f, 0.95f);

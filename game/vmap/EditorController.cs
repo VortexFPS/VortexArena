@@ -94,10 +94,14 @@ public sealed partial class EditorController : Node3D
             return Clipboard.IsEmpty ? "(clipboard empty)" : Clipboard.Describe();
 
         if (_session is { } s && s.Selection.Count > 0)
-            return DescribeSelection(s.Selection);
+            return s.Selection.Count == 1 && s.Selection[0].Kind == VmapSelectionKind.Entity
+                ? DescribeEntity(s.Selection[0].EntityId)
+                : DescribeSelection(s.Selection);
 
         if (Hover.Hit && !Hover.Selection.IsEmpty)
-            return DescribeOne(Hover.Selection);
+            return Hover.Selection.Kind == VmapSelectionKind.Entity
+                ? DescribeEntity(Hover.Selection.EntityId)
+                : DescribeOne(Hover.Selection);
 
         return "";
     }
@@ -123,8 +127,21 @@ public sealed partial class EditorController : Node3D
         VmapSelectionKind.Edge => $"Edge of brush #{s.BrushId}",
         VmapSelectionKind.Vertex => $"Vertex of brush #{s.BrushId}",
         VmapSelectionKind.Patch => $"Patch #{s.PatchId}",
+        VmapSelectionKind.Entity => $"entity #{s.EntityId}",
         _ => "",
     };
+
+    /// <summary>
+    /// Name an entity the way a mapper recognises it: by classname, with its targetname when it has one, since
+    /// a map with nine info_player_deathmatch entities needs something to tell them apart.
+    /// </summary>
+    private string DescribeEntity(int id)
+    {
+        if (_document?.FindEntity(id) is not { } e)
+            return $"entity #{id}";
+        string name = e.Fields.TryGetValue("targetname", out string? t) && t.Length > 0 ? $" \"{t}\"" : "";
+        return string.IsNullOrEmpty(e.ClassName) ? $"entity #{id}{name}" : $"{e.ClassName}{name}";
+    }
 
     /// <summary>
     /// The editor clipboard. Lives on the controller rather than the session because it deliberately SURVIVES
@@ -184,8 +201,29 @@ public sealed partial class EditorController : Node3D
         if (ids.Count > 0 && VmapEdit.TryGetSelectionCenter(_document, ids, out origin))
             return true;
 
-        // A patch-only selection has no brush ids; fall back to its control-point centroid.
-        return TryGetPatchSelectionCenter(out origin);
+        // A patch- or entity-only selection has no brush ids; fall back to their own centres.
+        return TryGetPatchSelectionCenter(out origin) || TryGetEntitySelectionCenter(out origin);
+    }
+
+    private bool TryGetEntitySelectionCenter(out NVec3 origin)
+    {
+        origin = NVec3.Zero;
+        if (_document is null)
+            return false;
+
+        NVec3 sum = NVec3.Zero;
+        int n = 0;
+        foreach (int id in SelectedEntityIds())
+        {
+            if (_document.FindEntity(id) is not { } e)
+                continue;
+            sum += e.Origin();
+            n++;
+        }
+        if (n == 0)
+            return false;
+        origin = sum / n;
+        return true;
     }
 
     private bool TryGetPatchSelectionCenter(out NVec3 origin)
@@ -280,6 +318,12 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>Bumped whenever geometry changes, so cached wireframe/render meshes know to rebuild.</summary>
     public int GeometryVersion { get; private set; }
+
+    /// <summary>
+    /// Mark derived geometry dirty from outside the controller — the console entity commands apply their own
+    /// ops and still need the pick index and the world rebuild to follow.
+    /// </summary>
+    public void BumpGeometryVersion() => GeometryVersion++;
 
     /// <summary>
     /// The shared broadphase cache backing picking, snapping and the ortho wireframe. Rebuilt only when
@@ -807,6 +851,20 @@ public sealed partial class EditorController : Node3D
             if (angle == 0f || !havePivot || (rotIds.Count == 0 && rotPatches.Count == 0))
                 return false;
 
+            // Entities turn about the vertical axis with their facing keys, which is a different op from the
+            // geometry rotate — a spawn's direction lives in a key, not in its shape.
+            List<int> rotEntities = SelectedEntityIds();
+            if (rotEntities.Count > 0)
+            {
+                bool turned = _session.Apply(new RotateEntitiesOp(rotEntities, pivot, angle));
+                if (rotIds.Count == 0 && rotPatches.Count == 0)
+                {
+                    if (turned)
+                        GeometryVersion++;
+                    return turned;
+                }
+            }
+
             // ONE op for the whole selection: a mixed brush+patch rotate about a shared pivot has to be a
             // single undo step, because a single drag produced it.
             if (!_session.Apply(new RotateSelectionOp(rotIds, rotPatches, pivot, rotAxis, angle)))
@@ -840,6 +898,17 @@ public sealed partial class EditorController : Node3D
 
         if (delta == NVec3.Zero)
             return false;   // a click, not a drag
+
+        // An entity-only selection moves through the entity op: a point entity has no geometry to translate,
+        // and a brush entity's move has to travel to the brushes it owns.
+        List<int> moveEntities = SelectedEntityIds();
+        if (moveEntities.Count > 0 && _session.SelectedBrushIds().Count == 0 && SelectedPatchIds().Count == 0)
+        {
+            if (!_session.Apply(new MoveEntitiesOp(moveEntities, delta, _document)))
+                return false;
+            GeometryVersion++;
+            return true;
+        }
 
         IVmapOp? op = sel.Kind switch
         {
@@ -1078,6 +1147,32 @@ public sealed partial class EditorController : Node3D
         return true;
     }
 
+    /// <summary>
+    /// Entity class descriptors, loaded from the game's own scripts/entities.ent. Fed by the host, because
+    /// reading it needs the VFS. Null until then, and everything degrades to plain boxes rather than failing.
+    /// </summary>
+    public EntityDefs? Defs
+    {
+        get => PickIndex.Defs;
+        set
+        {
+            PickIndex.Defs = value;
+            PickIndex.Invalidate();
+        }
+    }
+
+    /// <summary>Entity ids in the current selection, deduplicated.</summary>
+    public List<int> SelectedEntityIds()
+    {
+        var ids = new List<int>();
+        if (_session is null)
+            return ids;
+        foreach (VmapSelection s in _session.Selection)
+            if (s.Kind == VmapSelectionKind.Entity && !ids.Contains(s.EntityId))
+                ids.Add(s.EntityId);
+        return ids;
+    }
+
     /// <summary>Patch ids in the current selection, deduplicated — the patch counterpart of SelectedBrushIds.</summary>
     public List<int> SelectedPatchIds()
     {
@@ -1188,11 +1283,27 @@ public sealed partial class EditorController : Node3D
     {
         if (_session is null)
             return false;
+
+        List<int> entityIds = SelectedEntityIds();
         List<int> ids = _session.SelectedBrushIds();
-        if (ids.Count == 0)
+        if (ids.Count == 0 && entityIds.Count == 0)
             return false;
-        if (!_session.Apply(new DeleteBrushesOp(ids)))
+
+        bool any = false;
+
+        // Entities first. Deleting a brush entity takes its geometry with it, so doing brushes first would
+        // leave the entity op with nothing to find and the ownership links already half-unhooked.
+        if (entityIds.Count > 0 && _session.Apply(new DeleteEntitiesOp(entityIds, _document)))
+            any = true;
+
+        // Re-read: an entity delete may have removed brushes that were also selected directly.
+        List<int> remaining = ids.FindAll(id => _document?.FindBrush(id) is not null);
+        if (remaining.Count > 0 && _session.Apply(new DeleteBrushesOp(remaining)))
+            any = true;
+
+        if (!any)
             return false;
+
         _session.Selection.Clear();
         GeometryVersion++;
         return true;

@@ -17,6 +17,12 @@ public enum VmapSelectionKind
     /// edit its control grid, rather than picking faces off a hull it does not have.
     /// </summary>
     Patch,
+
+    /// <summary>
+    /// A map entity. A POINT entity is its origin key plus a descriptor box; a BRUSH entity is the geometry it
+    /// owns, so selecting one selects the solid rather than a bounding volume that does not exist.
+    /// </summary>
+    Entity,
 }
 
 /// <summary>
@@ -39,6 +45,10 @@ public readonly struct VmapSelection
     /// <see cref="BrushId"/> because brush and patch ids are independent sequences.</summary>
     public int PatchId { get; init; }
 
+    /// <summary>Entity id for <see cref="VmapSelectionKind.Entity"/>; 0 otherwise. A third independent id
+    /// sequence, for the same reason patches have their own.</summary>
+    public int EntityId { get; init; }
+
     /// <summary>World positions of the referenced vertices (one for a vertex, two for an edge).</summary>
     public IReadOnlyList<Vector3> Vertices { get; init; }
 
@@ -59,6 +69,10 @@ public readonly struct VmapSelection
 
     public static VmapSelection OfEdge(int brushId, Vector3 a, Vector3 b) => new()
     { Kind = VmapSelectionKind.Edge, BrushId = brushId, FaceIndex = -1, Vertices = new[] { a, b } };
+
+    /// <summary>Select a whole map entity.</summary>
+    public static VmapSelection OfEntity(int entityId) => new()
+    { Kind = VmapSelectionKind.Entity, EntityId = entityId, FaceIndex = -1, Vertices = Array.Empty<Vector3>() };
 
     public bool IsEmpty => Kind == VmapSelectionKind.None;
 }

@@ -7258,6 +7258,7 @@ public sealed partial class NetGame : Node3D
                 return;
             }
             _editor.OpenSession(doc);
+            LoadEntityDefs();
             // The load-time collision was built from this same document, so the live collision is already
             // current — without this seed, the first not-free-fly frame pays a pointless full rebuild.
             _editorCollisionVersion = _editor.GeometryVersion;
@@ -7479,6 +7480,41 @@ public sealed partial class NetGame : Node3D
     /// <summary>True when the next world build should trace shadows (first build, or after editor_rebake).</summary>
     private bool _bakeShadowsNextBuild = true;
 
+    /// <summary>
+    /// Load the entity class descriptors from the game's own <c>scripts/entities.ent</c> (design doc §11.9):
+    /// 186 classes with typed keys, help text, editor colours and bounding boxes, which is what NetRadiant
+    /// drives its entity inspector from.
+    ///
+    /// A missing or broken file is NOT fatal — the parser returns an empty registry and every entity falls back
+    /// to a plain box that still draws, still picks and still has editable keys. An editor that refused to open
+    /// a map because a metadata file moved would be a far worse trade.
+    /// </summary>
+    private void LoadEntityDefs()
+    {
+        if (_editor is null || _editor.Defs is not null || _assets is null)
+            return;
+
+        try
+        {
+            if (!_assets.Vfs.Exists(XonoticGodot.Formats.Vmap.EntityDefs.VirtualPath))
+            {
+                XonoticGodot.Common.Diagnostics.Log.Warn(
+                    $"editor: {XonoticGodot.Formats.Vmap.EntityDefs.VirtualPath} not found — "
+                    + "entities will draw as plain boxes");
+                return;
+            }
+
+            var defs = XonoticGodot.Formats.Vmap.EntityDefs.Parse(
+                _assets.Vfs.ReadText(XonoticGodot.Formats.Vmap.EntityDefs.VirtualPath));
+            _editor.Defs = defs;
+            XonoticGodot.Common.Diagnostics.Log.Info($"editor: {defs.Count} entity classes loaded");
+        }
+        catch (Exception ex)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"editor: could not read entity definitions: {ex.Message}");
+        }
+    }
+
     // =============================================================================================
     //  (E7) The editor command vocabulary — §11.9
     // =============================================================================================
@@ -7512,6 +7548,7 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_show_bsp", _ => ToggleEditorBspCompare());
         interp.RegisterCommand("editor_flyspeed", CmdEditorFlySpeed);
         interp.RegisterCommand("editor_clip", CmdEditorClip);
+        interp.RegisterCommand("editor_entity", CmdEditorEntity);
         Vmap.EditorBinds.RegisterCommands(interp);
 
         // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
@@ -7652,6 +7689,143 @@ public sealed partial class NetGame : Node3D
                 XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_clip keep|apply|cancel");
                 return;
         }
+    }
+
+    /// <summary>
+    /// <c>editor_entity</c> — the entity tool's console surface.
+    /// <code>
+    ///   editor_entity create &lt;classname&gt;   place one at the crosshair
+    ///   editor_entity set &lt;key&gt; &lt;value&gt;    set a key on the selection (empty value clears)
+    ///   editor_entity keys                  list the selected entity's keys and what its class allows
+    ///   editor_entity list [category]       list placeable classes
+    /// </code>
+    /// </summary>
+    private void CmdEditorEntity(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session })
+            return;
+
+        switch (args.Count > 1 ? args[1].ToLowerInvariant() : "")
+        {
+            case "create":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_entity create <classname>");
+                    return;
+                }
+                if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                    return;
+
+                var op = new XonoticGodot.Formats.Vmap.CreateEntityOp(args[2], at);
+                if (!session.Apply(op))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Warn($"editor: could not create '{args[2]}'");
+                    return;
+                }
+
+                // Select what was just made, so it can be nudged or edited without hunting for it.
+                session.Selection.Clear();
+                session.Selection.Add(XonoticGodot.Formats.Vmap.VmapSelection.OfEntity(op.CreatedEntityId));
+                _editor.BumpGeometryVersion();
+                XonoticGodot.Common.Diagnostics.Log.Info($"editor: placed {args[2]} at {at.X:0} {at.Y:0} {at.Z:0}");
+                return;
+            }
+
+            case "set":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_entity set <key> [value]");
+                    return;
+                }
+                List<int> ids = _editor.SelectedEntityIds();
+                if (ids.Count == 0)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: no entity selected");
+                    return;
+                }
+
+                // Join the tail so values with spaces ("16 32 64", a message string) work without quoting.
+                string value = args.Count > 3 ? string.Join(' ', args, 3, args.Count - 3) : "";
+                int changed = 0;
+                foreach (int id in ids)
+                    if (session.Apply(new XonoticGodot.Formats.Vmap.SetEntityKeyOp(id, args[2], value)))
+                        changed++;
+
+                XonoticGodot.Common.Diagnostics.Log.Info(changed > 0
+                    ? $"editor: set {args[2]} on {changed} entit{(changed == 1 ? "y" : "ies")}"
+                    : $"editor: {args[2]} unchanged");
+                return;
+            }
+
+            case "keys":
+                LogEntityKeys();
+                return;
+
+            case "list":
+                LogEntityClasses(args.Count > 2 ? args[2] : "");
+                return;
+
+            default:
+                XonoticGodot.Common.Diagnostics.Log.Help(
+                    "usage: editor_entity create <classname> | set <key> [value] | keys | list [category]");
+                return;
+        }
+    }
+
+    /// <summary>Print the selected entity's live keys alongside what its class documents.</summary>
+    private void LogEntityKeys()
+    {
+        if (_editor?.Document is not { } doc)
+            return;
+
+        List<int> ids = _editor.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("editor: no entity selected");
+            return;
+        }
+
+        foreach (int id in ids)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+
+            XonoticGodot.Common.Diagnostics.Log.Info($"--- {e.ClassName} (#{e.Id}) ---");
+            foreach (KeyValuePair<string, string> kv in e.Fields)
+                XonoticGodot.Common.Diagnostics.Log.Info($"  {kv.Key} = {kv.Value}");
+
+            if (_editor.Defs?.Get(e.ClassName) is not { } def)
+                continue;
+            if (def.Description.Length > 0)
+                XonoticGodot.Common.Diagnostics.Log.Info($"  ({def.Description})");
+            foreach (XonoticGodot.Formats.Vmap.EntityKeyDef k in def.Keys)
+                if (!e.Fields.ContainsKey(k.Key))
+                    XonoticGodot.Common.Diagnostics.Log.Info($"  [unset] {k.Key} ({k.Kind}) — {k.Help}");
+        }
+    }
+
+    /// <summary>List placeable classes, optionally filtered to one category.</summary>
+    private void LogEntityClasses(string category)
+    {
+        if (_editor?.Defs is not { } defs)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("editor: no entity definitions loaded");
+            return;
+        }
+
+        if (category.Length == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"editor: {defs.Count} classes in categories: {string.Join(", ", defs.Categories())}");
+            XonoticGodot.Common.Diagnostics.Log.Help("editor_entity list <category>");
+            return;
+        }
+
+        foreach (XonoticGodot.Formats.Vmap.EntityClassDef d in defs.InCategory(category))
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"  {d.Name}{(d.IsBrushEntity ? "  (brush entity)" : "")}");
     }
 
     /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>

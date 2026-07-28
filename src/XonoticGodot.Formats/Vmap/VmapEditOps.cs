@@ -1161,3 +1161,351 @@ public sealed class ClipSelectionOp : IVmapOp
         return _clipped > 0;
     }
 }
+
+// =================================================================================================
+//  E8 — entities
+// =================================================================================================
+
+/// <summary>
+/// Create a point entity of a given class at a position (design doc §11.9).
+///
+/// Point only. A BRUSH entity has no origin — it is defined by the geometry it owns — so creating one means
+/// assigning existing brushes to a new entity, which is a different gesture and a different op.
+/// </summary>
+public sealed class CreateEntityOp : IVmapOp
+{
+    private readonly string _className;
+    private readonly Vector3 _origin;
+    private readonly Dictionary<string, string> _fields;
+    private int _assignedId;
+
+    public CreateEntityOp(string className, Vector3 origin, IReadOnlyDictionary<string, string>? fields = null)
+    {
+        _className = className ?? throw new ArgumentNullException(nameof(className));
+        _origin = origin;
+        _fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (fields is not null)
+            foreach (KeyValuePair<string, string> kv in fields)
+                _fields[kv.Key] = kv.Value;
+    }
+
+    /// <summary>Id given to the created entity; valid after a successful <see cref="Apply"/>.</summary>
+    public int CreatedEntityId => _assignedId;
+
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    // Nothing pre-exists: the session detects the addition and undo removes it.
+    public IReadOnlyList<int> TouchedEntityIds => Array.Empty<int>();
+
+    public string Describe() => $"Create {_className}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_className.Length == 0)
+            return false;
+
+        _assignedId = doc.NextEntityId();
+        var e = new VmapEntity { Id = _assignedId, ClassName = _className };
+        foreach (KeyValuePair<string, string> kv in _fields)
+            e.Fields[kv.Key] = kv.Value;
+
+        // classname is mirrored into the field bag because that is where the writers read it from; keeping the
+        // hoisted property and the key in step is the whole contract of VmapEntity.
+        e.Fields["classname"] = _className;
+        e.SetOrigin(_origin);
+
+        doc.Entities.Add(e);
+        return true;
+    }
+}
+
+/// <summary>
+/// Move entities by a delta.
+///
+/// A POINT entity moves by rewriting its origin key. A BRUSH entity has no origin to rewrite, so it moves the
+/// geometry it owns instead — which is what a mapper means by "move the door": the door IS its brushes.
+/// </summary>
+public sealed class MoveEntitiesOp : IVmapOp
+{
+    private readonly int[] _entityIds;
+    private readonly Vector3 _delta;
+    private int[] _movedBrushes = Array.Empty<int>();
+    private int[] _movedPatches = Array.Empty<int>();
+
+    public MoveEntitiesOp(IReadOnlyList<int> entityIds, Vector3 delta, VmapDocument? doc = null)
+    {
+        _entityIds = entityIds?.ToArray() ?? throw new ArgumentNullException(nameof(entityIds));
+        _delta = delta;
+
+        // The touched-geometry set has to be known BEFORE Apply so the journal can snapshot it, and only the
+        // document knows which brushes an entity owns. Passing it in at construction is the honest way to get
+        // that; without it a brush entity's geometry moves un-undoably.
+        if (doc is not null)
+            ResolveOwned(doc);
+    }
+
+    private void ResolveOwned(VmapDocument doc)
+    {
+        var brushes = new List<int>();
+        var patches = new List<int>();
+        foreach (int id in _entityIds)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+            brushes.AddRange(e.BrushIds);
+            patches.AddRange(e.PatchIds);
+        }
+        _movedBrushes = brushes.ToArray();
+        _movedPatches = patches.ToArray();
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => _movedBrushes;
+
+    public IReadOnlyList<int> TouchedPatchIds => _movedPatches;
+
+    public IReadOnlyList<int> TouchedEntityIds => _entityIds;
+
+    /// <summary>Translation applied. Read by the wire codec.</summary>
+    public Vector3 Delta => _delta;
+
+    public string Describe() => $"Move {_entityIds.Length} entit{(_entityIds.Length == 1 ? "y" : "ies")}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_delta == Vector3.Zero || _entityIds.Length == 0)
+            return false;
+
+        var entities = new List<VmapEntity>(_entityIds.Length);
+        foreach (int id in _entityIds)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                return false;
+            entities.Add(e);
+        }
+
+        foreach (VmapEntity e in entities)
+        {
+            if (e.IsBrushEntity)
+            {
+                new TranslateBrushesOp(e.BrushIds, _delta).Apply(doc);
+                if (e.PatchIds.Count > 0)
+                    new TranslatePatchesOp(e.PatchIds, _delta).Apply(doc);
+                continue;
+            }
+            e.SetOrigin(e.Origin() + _delta);
+        }
+        return true;
+    }
+}
+
+/// <summary>
+/// Rotate point entities about a pivot, turning both their POSITION and their FACING.
+///
+/// The facing half is what makes this more than a move. A spawn point or a jumppad target carries its
+/// direction in an <c>angle</c> or <c>angles</c> key, and rotating the position while leaving the key alone
+/// produces a spawn that is in the right place looking the wrong way — a bug that only shows up when someone
+/// spawns there.
+/// </summary>
+public sealed class RotateEntitiesOp : IVmapOp
+{
+    private readonly int[] _entityIds;
+    private readonly Vector3 _pivot;
+    private readonly float _degrees;
+
+    /// <param name="entityIds">Entities to turn; brush entities are skipped (their geometry is rotated instead).</param>
+    /// <param name="pivot">Point to turn about.</param>
+    /// <param name="degrees">Yaw, in degrees. Rotation is about the vertical axis only: that is what the
+    /// single-value <c>angle</c> key can express, and it is the rotation a mapper actually wants on a spawn.</param>
+    public RotateEntitiesOp(IReadOnlyList<int> entityIds, Vector3 pivot, float degrees)
+    {
+        _entityIds = entityIds?.ToArray() ?? throw new ArgumentNullException(nameof(entityIds));
+        _pivot = pivot;
+        _degrees = degrees;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    public IReadOnlyList<int> TouchedEntityIds => _entityIds;
+
+    /// <summary>Point the rotation turns about. Read by the wire codec.</summary>
+    public Vector3 Pivot => _pivot;
+
+    /// <summary>Yaw in degrees. Read by the wire codec.</summary>
+    public float Degrees => _degrees;
+
+    public string Describe()
+        => $"Rotate {_entityIds.Length} entit{(_entityIds.Length == 1 ? "y" : "ies")} by {_degrees:0.#} deg";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_degrees == 0f || _entityIds.Length == 0)
+            return false;
+
+        var entities = new List<VmapEntity>(_entityIds.Length);
+        foreach (int id in _entityIds)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                return false;
+            if (!e.IsBrushEntity)
+                entities.Add(e);
+        }
+        if (entities.Count == 0)
+            return false;
+
+        float rad = _degrees * MathF.PI / 180f;
+        float cos = MathF.Cos(rad), sin = MathF.Sin(rad);
+
+        foreach (VmapEntity e in entities)
+        {
+            Vector3 rel = e.Origin() - _pivot;
+            e.SetOrigin(_pivot + new Vector3(
+                rel.X * cos - rel.Y * sin,
+                rel.X * sin + rel.Y * cos,
+                rel.Z));
+
+            RotateFacing(e, _degrees);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Add the yaw to whichever facing key the entity actually uses. <c>angles</c> ("pitch yaw roll") wins
+    /// when present because it is the more expressive of the two; otherwise the scalar <c>angle</c>.
+    /// </summary>
+    private static void RotateFacing(VmapEntity e, float degrees)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+
+        if (e.Fields.TryGetValue("angles", out string? angles)
+            && VmapEntity.TryParseVector(angles, out Vector3 pyr))
+        {
+            e.Fields["angles"] = string.Create(inv, $"{pyr.X:0.###} {Wrap(pyr.Y + degrees):0.###} {pyr.Z:0.###}");
+            return;
+        }
+
+        if (e.Fields.TryGetValue("angle", out string? angle)
+            && float.TryParse(angle, System.Globalization.NumberStyles.Float, inv, out float yaw))
+        {
+            e.Fields["angle"] = Wrap(yaw + degrees).ToString("0.###", inv);
+        }
+    }
+
+    private static float Wrap(float degrees)
+    {
+        float d = degrees % 360f;
+        return d < 0f ? d + 360f : d;
+    }
+}
+
+/// <summary>Delete entities, and the geometry a brush entity owns along with them.</summary>
+public sealed class DeleteEntitiesOp : IVmapOp
+{
+    private readonly int[] _entityIds;
+    private int[] _ownedBrushes = Array.Empty<int>();
+    private int[] _ownedPatches = Array.Empty<int>();
+
+    public DeleteEntitiesOp(IReadOnlyList<int> entityIds, VmapDocument? doc = null)
+    {
+        _entityIds = entityIds?.ToArray() ?? throw new ArgumentNullException(nameof(entityIds));
+        if (doc is null)
+            return;
+
+        var brushes = new List<int>();
+        var patches = new List<int>();
+        foreach (int id in _entityIds)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+            brushes.AddRange(e.BrushIds);
+            patches.AddRange(e.PatchIds);
+        }
+        _ownedBrushes = brushes.ToArray();
+        _ownedPatches = patches.ToArray();
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => _ownedBrushes;
+
+    public IReadOnlyList<int> TouchedPatchIds => _ownedPatches;
+
+    public IReadOnlyList<int> TouchedEntityIds => _entityIds;
+
+    public string Describe() => $"Delete {_entityIds.Length} entit{(_entityIds.Length == 1 ? "y" : "ies")}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_entityIds.Length == 0)
+            return false;
+
+        bool removed = false;
+        foreach (int id in _entityIds)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+
+            // A brush entity's geometry goes with it. Leaving the brushes behind would silently promote a
+            // deleted door's leaf into a solid wall in worldspawn, which is neither outcome the mapper meant.
+            foreach (int brushId in e.BrushIds)
+                if (doc.FindBrush(brushId) is { } b)
+                    doc.Brushes.Remove(b);
+            foreach (int patchId in e.PatchIds)
+                if (doc.FindPatch(patchId) is { } p)
+                    doc.Patches.Remove(p);
+
+            doc.Entities.Remove(e);
+            removed = true;
+        }
+        return removed;
+    }
+}
+
+/// <summary>Set (or clear) one spawn key on one entity — the inspector's edit.</summary>
+public sealed class SetEntityKeyOp : IVmapOp
+{
+    private readonly int _entityId;
+    private readonly string _key;
+    private readonly string _value;
+
+    /// <param name="entityId">Entity to edit.</param>
+    /// <param name="key">Spawn key name.</param>
+    /// <param name="value">Empty removes the key, which is how a mapper clears one back to its default.</param>
+    public SetEntityKeyOp(int entityId, string key, string value)
+    {
+        _entityId = entityId;
+        _key = key ?? throw new ArgumentNullException(nameof(key));
+        _value = value ?? "";
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    public IReadOnlyList<int> TouchedEntityIds => new[] { _entityId };
+
+    public string Describe() => _value.Length == 0 ? $"Clear {_key}" : $"Set {_key} to {_value}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_key.Length == 0 || doc.FindEntity(_entityId) is not { } e)
+            return false;
+
+        if (_value.Length == 0)
+        {
+            // classname is not optional: an entity without one is not spawnable and would be dropped on the
+            // next load, so clearing it is refused rather than quietly breaking the entity.
+            if (_key.Equals("classname", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return e.Fields.Remove(_key);
+        }
+
+        if (e.Fields.TryGetValue(_key, out string? existing) && existing == _value)
+            return false;   // no change: do not journal an empty step
+
+        e.Fields[_key] = _value;
+        if (_key.Equals("classname", StringComparison.OrdinalIgnoreCase))
+            e.ClassName = _value;
+        return true;
+    }
+}

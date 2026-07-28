@@ -347,12 +347,29 @@ public partial class EditorMenuPanel : HudPanel
             {
                 Label = EditorTools.Label(mode),
                 Detail = built ? (mode == c.Mode ? "current" : "") : Pending("E8"),
-                Command = $"editor_mode {mode}",
+                Command = EntityConsoleCommand(tool: Controller?.Tool ?? EditorTool.None, mode)
+                          ?? $"editor_mode {mode}",
                 Enabled = built,
                 Checked = built ? mode == c.Mode : null,
             });
         }
         return rows;
+    }
+
+    /// <summary>
+    /// Entity create and the key inspector have no dialog yet, so their menu rows drive the console command
+    /// that does exist. Naming that here rather than silently entering a mode with no UI behind it.
+    /// </summary>
+    private static string? EntityConsoleCommand(EditorTool tool, ToolMode mode)
+    {
+        if (tool != EditorTool.Entity)
+            return null;
+        return mode switch
+        {
+            ToolMode.Create => "editor_entity list",
+            ToolMode.Properties => "editor_entity keys",
+            _ => null,
+        };
     }
 
     /// <summary>
@@ -364,6 +381,9 @@ public partial class EditorMenuPanel : HudPanel
         ToolMode.Move or ToolMode.Rotate or ToolMode.Scale or ToolMode.Paste => true,
         ToolMode.Object or ToolMode.Face => tool == EditorTool.Select,
         ToolMode.TwoPoint or ToolMode.ThreePoint or ToolMode.ViewPlane => tool == EditorTool.Clip,
+        // Entity create and the key inspector run from the console for now (editor_entity); the dialogs are
+        // still to come, so the rows point at what exists rather than claiming a UI that does not.
+        ToolMode.Create or ToolMode.Properties => tool == EditorTool.Entity,
         _ => false,
     };
 

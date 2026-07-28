@@ -57,8 +57,29 @@ public sealed class VmapPickIndex
         public required Vector3[] Triangles { get; init; }
     }
 
+    /// <summary>
+    /// A cached POINT entity: its descriptor box in world space. Brush entities are not here — they are picked
+    /// through the geometry they own, which is already in the brush index.
+    /// </summary>
+    public sealed class EntityEntry
+    {
+        public required VmapEntity Entity { get; init; }
+        public required Vector3 Mins { get; init; }
+        public required Vector3 Maxs { get; init; }
+    }
+
     private readonly List<Entry> _entries = new();
     private readonly List<PatchEntry> _patches = new();
+    private readonly List<EntityEntry> _entities = new();
+
+    /// <summary>Cached point entities, for picking and for drawing their boxes.</summary>
+    public IReadOnlyList<EntityEntry> Entities => _entities;
+
+    /// <summary>
+    /// Class descriptors used to size entity boxes. Assign before the first build; null falls back to a small
+    /// cube per entity, which still draws and still picks.
+    /// </summary>
+    public EntityDefs? Defs { get; set; }
 
     /// <summary>Cached patches, for picking and for drawing their outlines.</summary>
     public IReadOnlyList<PatchEntry> Patches => _patches;
@@ -93,6 +114,7 @@ public sealed class VmapPickIndex
 
         _entries.Clear();
         _patches.Clear();
+        _entities.Clear();
         _doc = doc;
         Version = version;
 
@@ -156,6 +178,27 @@ public sealed class VmapPickIndex
             _patches.Add(new PatchEntry
             {
                 Patch = patch, Mins = pmins, Maxs = pmaxs, Triangles = tris.ToArray(),
+            });
+        }
+
+        // Point entities, boxed from their class descriptor. A brush entity is deliberately skipped: it has no
+        // origin, and its geometry is already pickable through the brush index — giving it a second, invisible
+        // box would mean clicking a door sometimes grabbed the door and sometimes a phantom volume around it.
+        foreach (VmapEntity ent in doc.Entities)
+        {
+            if (ent.IsBrushEntity)
+                continue;
+            if (string.Equals(ent.ClassName, "worldspawn", StringComparison.OrdinalIgnoreCase))
+                continue;   // worldspawn is the map itself, not something you click
+
+            EntityClassDef def = Defs?.GetOrPlaceholder(ent.ClassName)
+                ?? new EntityClassDef { Name = ent.ClassName };
+            Vector3 origin = ent.Origin();
+            _entities.Add(new EntityEntry
+            {
+                Entity = ent,
+                Mins = origin + def.DrawMins,
+                Maxs = origin + def.DrawMaxs,
             });
         }
     }
@@ -343,7 +386,82 @@ public static class VmapPicking
             }
         }
 
+        // --- point entities: their descriptor box, and ONLY when the entity tool asked for them.
+        //
+        // Gated on the mode rather than always tested, because an entity box is a volume floating in the air
+        // around a pickup: with it always live, aiming at the floor under a health pack would grab the pack
+        // instead of the floor, and the geometry tools would become unusable anywhere a map is furnished.
+        if (mode == VmapSelectionKind.Entity)
+        {
+            foreach (VmapPickIndex.EntityEntry ee in index.Entities)
+            {
+                if (!RayBoxEntry(origin, dir, invDir, ee.Mins, ee.Maxs, bestDistance, out float t, out Vector3 n))
+                    continue;
+
+                bestDistance = t;
+                best = new VmapPickResult
+                {
+                    Hit = true,
+                    Point = origin + dir * t,
+                    Distance = t,
+                    Normal = n,
+                    Selection = VmapSelection.OfEntity(ee.Entity.Id),
+                };
+            }
+        }
+
         return best;
+    }
+
+    /// <summary>
+    /// Ray against an axis-aligned box, returning the ENTRY distance and the face normal that was crossed.
+    ///
+    /// The slab test used by the broadphase only answers yes/no within a budget; picking needs the distance to
+    /// sort against other candidates and the normal so the hover highlight faces the right way. An eye already
+    /// inside the box counts as a hit at zero, which is what lets you grab an entity you are standing in.
+    /// </summary>
+    internal static bool RayBoxEntry(
+        Vector3 origin, Vector3 dir, Vector3 invDir, Vector3 mins, Vector3 maxs, float maxDistance,
+        out float distance, out Vector3 normal)
+    {
+        distance = 0f;
+        normal = Vector3.UnitZ;
+
+        float tmin = 0f, tmax = maxDistance;
+        int axis = 2;
+        float sign = 1f;
+
+        for (int i = 0; i < 3; i++)
+        {
+            float o = i == 0 ? origin.X : i == 1 ? origin.Y : origin.Z;
+            float inv = i == 0 ? invDir.X : i == 1 ? invDir.Y : invDir.Z;
+            float lo = i == 0 ? mins.X : i == 1 ? mins.Y : mins.Z;
+            float hi = i == 0 ? maxs.X : i == 1 ? maxs.Y : maxs.Z;
+
+            float t1 = (lo - o) * inv;
+            float t2 = (hi - o) * inv;
+            float near = MathF.Min(t1, t2);
+            float far = MathF.Max(t1, t2);
+
+            if (near > tmin)
+            {
+                tmin = near;
+                axis = i;
+                sign = t1 > t2 ? 1f : -1f;   // which slab face was crossed
+            }
+            tmax = MathF.Min(tmax, far);
+            if (tmin > tmax)
+                return false;
+        }
+
+        distance = tmin;
+        normal = axis switch
+        {
+            0 => new Vector3(sign, 0f, 0f),
+            1 => new Vector3(0f, sign, 0f),
+            _ => new Vector3(0f, 0f, sign),
+        };
+        return true;
     }
 
     /// <summary>

@@ -118,6 +118,15 @@ public sealed partial class EditorLighting : Node3D
     /// <summary>Clamp so one enormous light value cannot swallow the map.</summary>
     private const float MaxRange = 2048f;
 
+    /// <summary>
+    /// Compensation for the inverse-square falloff. Godot's attenuation exponent steepens the curve toward the
+    /// edge of the range, so matching a linear light's mid-range brightness needs more energy at the source.
+    /// </summary>
+    private const float EnergyForFalloff = 2.5f;
+
+    /// <summary>How far from the camera the sun's shadow is computed, in Quake units.</summary>
+    public const string CvarSunShadowDistance = "cl_editor_sun_shadow_distance";
+
     private readonly List<OmniLight3D> _points = new();
     private DirectionalLight3D? _sun;
     private Light3D.BakeMode _bakeMode = Light3D.BakeMode.Dynamic;
@@ -162,7 +171,7 @@ public sealed partial class EditorLighting : Node3D
             }
         }
 
-        rig.BuildSun(doc, assets, brightness);
+        rig.BuildSun(doc, assets, brightness, cvars);
         return rig;
     }
 
@@ -198,7 +207,12 @@ public sealed partial class EditorLighting : Node3D
             // Energy is deliberately NOT the raw Quake intensity: that number feeds an inverse-square bake,
             // while range already encodes the falloff here. Keeping energy near 1 leaves the map's relative
             // brightness in the range, where it reads correctly, and leaves one cvar for overall taste.
-            LightEnergy = brightness,
+            // Scaled by the map's own intensity, not flat. With inverse-square falloff (below) a flat energy
+            // makes every fixture equally weak at mid-range, which reads as "the map's lights do nothing";
+            // q3map2's own light values are the map author's statement of relative brightness and should be
+            // what drives it. Normalised around a typical Xonotic fixture (light 40) so the common case lands
+            // near 1 and a deliberately bright light is genuinely brighter.
+            LightEnergy = brightness * Math.Clamp(intensity / 40f, 0.35f, 8f) * EnergyForFalloff,
             OmniRange = range,
             ShadowEnabled = false,       // granted by budget in Update()
             LightSpecular = 0.25f,
@@ -213,7 +227,7 @@ public sealed partial class EditorLighting : Node3D
     /// The sun, from the sky shader's <c>q3map_sun</c> when the map defines one. Xonotic skies usually do;
     /// when none is found a soft default from above keeps exteriors readable rather than flat.
     /// </summary>
-    private void BuildSun(VmapDocument doc, AssetSystem assets, float brightness)
+    private void BuildSun(VmapDocument doc, AssetSystem assets, float brightness, CvarService? cvars)
     {
         SunParms? sun = null;
 
@@ -257,6 +271,15 @@ public sealed partial class EditorLighting : Node3D
             ShadowEnabled = true,
             LightSpecular = 0.2f,
             LightBakeMode = _bakeMode,
+            // Godot's directional shadow only covers DirectionalShadowMaxDistance around the camera, and its
+            // default is 100 units. A Quake map is thousands of units across, so at the default the sun is
+            // unshadowed almost everywhere — it shines straight through walls and floods a sealed interior
+            // with an even light that no geometry blocks. That is what makes a lit indoor map look like it is
+            // lit only by the sun, with nothing casting a shadow.
+            DirectionalShadowMaxDistance = ReadFloat(cvars, CvarSunShadowDistance, 6000f),
+            // Two splits, not four: the shadow cost scales with the number of cascades rendered, and a mapper
+            // needs "is this wall blocking the sun" answered, not film-quality cascade transitions.
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits,
         };
         light.LookAtFromPosition(Vector3.Zero, Coords.ToGodot(fromSun), Vector3.Up);
 

@@ -100,7 +100,13 @@ public static class LightmapShader
     /// </summary>
     public const string Code = @"// XonoticGodot lightmap-modulate shader (Q3 BSP world surfaces). Generated in C#.
 shader_type spatial;
-render_mode unshaded, cull_back, depth_draw_opaque;
+// NOT `unshaded`, so real-time point lights can reach the world (DP r_shadow_realtime_dlight): a muzzle
+// flash or an explosion should light the wall next to it. The BAKED result is written to EMISSION, which no
+// light touches, so a surface with no dynamic light near it renders byte-identically to the unshaded version;
+// ALBEDO carries the plain diffuse purely so the light() below has something to modulate.
+// `ambient_light_disabled` is essential: the scene's ambient/sky would otherwise be added on top of a
+// lightmap that already accounts for all of it, washing every map out.
+render_mode cull_back, depth_draw_opaque, ambient_light_disabled;
 
 // NOTE: albedo/lightmap are sampled RAW (no source_color) — the stock Xonotic config renders in gamma space.
 // The srgb_color path decodes them explicitly. See LightmapShader's type doc.
@@ -132,6 +138,11 @@ uniform float specular_scale = 0.15;    // DP Color_Specular (gloss intensity) �
 // RenderingServer.GlobalShaderParameterSet re-tints every world surface at once; the strength is folded into the
 // multiplier on the C# side, so this is a trivial final multiply and the registered default (1,1,1) is identity.
 global uniform vec3 map_tint;
+
+// Real-time dynamic-light strength on world surfaces (DP r_shadow_realtime_dlight). Global so one
+// RenderingServer.GlobalShaderParameterSet reaches every world surface; 0 restores the pre-dlight look
+// exactly, since the baked term lives in EMISSION and is unaffected either way.
+global uniform float world_dlight;
 
 // Per-surface tangent frame (DP VectorS/T/R = tangent/binormal/normal), captured in modelspace so the
 // modelspace deluxe light direction can be rotated into it without a view-space mismatch.
@@ -220,12 +231,29 @@ void fragment() {
     combined *= map_tint;   // dynamic whole-map tint (identity (1,1,1) when no tint is active).
     // In sRGB mode combined is linear (let Godot encode it). In the default gamma-space mode it's the
     // display-ready value, so pre-encode it to linear to cancel Godot's linear->sRGB output transform.
-    ALBEDO = srgb_color ? combined : srgb_to_linear(combined);
+    // The baked result goes to EMISSION, not ALBEDO: emission is not affected by lighting, so the static
+    // lightmap look survives exactly as-is and dynamic lights ADD to it rather than replacing it.
+    EMISSION = srgb_color ? combined : srgb_to_linear(combined);
+    // Linear diffuse for the dynamic-light term below. Tinted to match, so a dlight on a tinted map picks up
+    // the tint too.
+    ALBEDO = (srgb_color ? albedo : srgb_to_linear(albedo)) * map_tint;
     // World surfaces are OPAQUE: do NOT write ALPHA. Writing it pushes the material into Godot's transparent
     // pass, which is depth-sorted per-object and doesn't occlude — i.e. you'd see through walls. Masked
     // surfaces (grates/foliage) instead alpha-TEST via discard below, which stays in the opaque pass.
     if (alpha_cutoff > 0.0 && base.a < alpha_cutoff) {
         discard;
+    }
+}
+
+// DP's realtime-dlight model: the baked lightmap is the static term, and dynamic lights add a simple
+// Lambert diffuse on top. DIRECTIONAL lights are deliberately ignored — the scene carries a generic sun for
+// lighting player models, and letting it reach the world would add a second, constant light term to surfaces
+// whose lighting is already fully baked, flattening every map.
+void light() {
+    // Guarded rather than early-returned: Godot rejects `return` inside light().
+    if (!LIGHT_IS_DIRECTIONAL) {
+        float ndotl = clamp(dot(normalize(NORMAL), normalize(LIGHT)), 0.0, 1.0);
+        DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndotl * world_dlight;
     }
 }
 ";

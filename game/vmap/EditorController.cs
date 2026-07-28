@@ -190,6 +190,7 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarSsaoRadius, "48", CvarFlags.Save);
         c.Register(EditorLighting.CvarFalloff, "2", CvarFlags.Save);
         c.Register(EditorLighting.CvarSkyLight, "0", CvarFlags.Save);
+        c.Register(EditorLighting.CvarSunShadowDistance, "6000", CvarFlags.Save);
     }
 
     /// <summary>

@@ -7377,7 +7377,20 @@ public sealed partial class NetGame : Node3D
         // VecToAngles2 is vectoangles: +pitch means UP. View angles — what --observe takes and what the
         // player's own angles hold — use +pitch means DOWN. Printing one while the flag consumes the other
         // is a readout that reproduces the mirror image of the view it was copied from.
-        return new NVec3(-a.X, a.Y, a.Z);
+        //
+        // Its atan2-derived angles also land anywhere in [0, 360): a camera 5 degrees below level reads
+        // pitch 355, which the sign flip alone would print as "-355". Wrap to (-180, 180] so the readout
+        // says 5 — the number a person copies into --observe.
+        return new NVec3(Wrap180(-a.X), Wrap180(a.Y), Wrap180(a.Z));
+    }
+
+    /// <summary>Fold an angle in degrees into (-180, 180].</summary>
+    private static float Wrap180(float deg)
+    {
+        deg %= 360f;
+        if (deg > 180f) deg -= 360f;
+        else if (deg <= -180f) deg += 360f;
+        return deg;
     }
 
     /// <summary>

@@ -85,12 +85,29 @@ public static class EditorLightBake
     }
 
     private static Grid? _grid;
+    private static EditorShadowTrace? _shadows;
 
     /// <summary>Index the lights once per world build.</summary>
-    public static void Begin(IReadOnlyList<BakedLight> lights) => _grid = new Grid(lights);
+    /// <param name="lights">The fixtures to bake.</param>
+    /// <param name="shadows">
+    /// Occluder index for traced shadows, or null for the unshadowed bake. Supplying it is what makes a
+    /// fixture cast — the reason a baked light can do what a budgeted real-time one cannot.
+    /// </param>
+    public static void Begin(IReadOnlyList<BakedLight> lights, EditorShadowTrace? shadows = null)
+    {
+        _grid = new Grid(lights);
+        _shadows = shadows;
+    }
 
     /// <summary>Release the index.</summary>
-    public static void End() => _grid = null;
+    public static void End()
+    {
+        _grid = null;
+        _shadows = null;
+    }
+
+    /// <summary>Rays traced during the last bake (diagnostics).</summary>
+    public static long RaysTraced;
 
     /// <summary>True when a bake is armed (i.e. <see cref="Begin"/> was called with lights).</summary>
     public static bool Active => _grid is { Lights.Count: > 0 };
@@ -121,9 +138,20 @@ public static class EditorLightBake
             if (dist < 1e-3f)
                 continue;
 
-            float ndotl = NVec3.Dot(normal, delta / dist);
+            NVec3 dir = delta / dist;
+            float ndotl = NVec3.Dot(normal, dir);
             if (ndotl <= 0f)
                 continue;   // the surface faces away; a bake has no reason to light its back
+
+            // Occlusion LAST: it is by far the most expensive term, so every cheap rejection above (range,
+            // facing) runs first and spares a trace. Starting the ray slightly off the surface keeps a face
+            // from shadowing itself on its own plane.
+            if (_shadows is { } shadows)
+            {
+                System.Threading.Interlocked.Increment(ref RaysTraced);
+                if (shadows.IsOccluded(position + normal * EditorShadowTrace.SurfaceBias, l.Position))
+                    continue;
+            }
 
             // Inverse-square, windowed smoothly to zero at the range so a light's edge has no seam. The
             // reference distance keeps the numbers in the same family as the real-time path's energies.

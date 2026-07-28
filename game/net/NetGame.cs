@@ -121,6 +121,9 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>The editor's live light rig (design doc §10.1 rung 1); null when lighting is off.</summary>
     private Vmap.EditorLighting? _editorLights;
+
+    /// <summary>Wall clock at bake start, for the timing line (ms since engine start).</summary>
+    private ulong _bakeClock;
     private RadarPanel _radar = null!;
     private NetHud _hud = null!;                 // crosshair + health/armor readout (the always-on lightweight HUD)
     // The full CSQC HUD panel set (weapon bar / ammo / kill-feed / centerprint / timer) on the net play path —
@@ -5774,6 +5777,7 @@ public sealed partial class NetGame : Node3D
                 ? _editorLights.TotalLightCount : -1;
             editorPanel.Baked = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
                 && _editorLights.Baking;
+            editorPanel.ShadowsStale = _bakedShadowsStale;
             editorPanel.HasMapSun = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
                 && _editorLights.HasMapSun;
         }
@@ -6806,6 +6810,7 @@ public sealed partial class NetGame : Node3D
             // Default to the mode actually running, so the editor opens showing the map the player sees.
             _editor.SetGametypeFilter(_gametype, _droppedSubmodels);
             Menu.MenuState.Interp?.RegisterCommand("editor_gametype", CmdEditorGametype);
+            Menu.MenuState.Interp?.RegisterCommand("editor_rebake", CmdEditorRebake);
         }
         catch (Exception ex)
         {
@@ -6899,7 +6904,20 @@ public sealed partial class NetGame : Node3D
                 Vmap.VmapMapBuilder.BakeScale = Menu.MenuState.Cvars is { } bc
                     && !string.IsNullOrEmpty(bc.GetString(Vmap.EditorLighting.CvarBakeScale))
                         ? bc.GetFloat(Vmap.EditorLighting.CvarBakeScale) : 0.36f;
-                Vmap.EditorLightBake.Begin(_editorLights.BakeLights);
+                bool shadowsWanted = Menu.MenuState.Cvars is not { } sc
+                    || string.IsNullOrEmpty(sc.GetString(Vmap.EditorLighting.CvarBakeShadows))
+                    || sc.GetFloat(Vmap.EditorLighting.CvarBakeShadows) != 0f;
+                // Traced only when asked for: the first build of a session, or an explicit editor_rebake.
+                bool tracedShadows = shadowsWanted && _bakeShadowsNextBuild;
+                _bakeShadowsNextBuild = false;
+                _bakedShadowsStale = shadowsWanted && !tracedShadows;
+                var shadowTrace = tracedShadows
+                    ? new Vmap.EditorShadowTrace(_editor.Document!,
+                        b2 => b2.SubmodelIndex == 0 || !_editor.PickIndex.HiddenSubmodels.Contains(b2.SubmodelIndex))
+                    : null;
+                Vmap.EditorLightBake.RaysTraced = 0;
+                _bakeClock = Time.GetTicksMsec();
+                Vmap.EditorLightBake.Begin(_editorLights.BakeLights, shadowTrace);
             }
         }
 
@@ -6912,6 +6930,9 @@ public sealed partial class NetGame : Node3D
             // skin, and you end up looking at the inside of the masonry rather than at the room.
             CullOccludedFaces = _editor.CullOccludedFaces,
         }, lit);
+        if (_editorLights is { Baking: true })
+            GD.Print($"[EditorLighting] bake: {Vmap.EditorLightBake.RaysTraced:N0} shadow rays in "
+                + $"{Time.GetTicksMsec() - _bakeClock} ms");
         Vmap.EditorLightBake.End();
         AddChild(_editorMapRoot);
         _editorMapVersion = viewKey;
@@ -6927,6 +6948,34 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
+    /// <summary>
+    /// <c>editor_rebake</c>: recompute the lighting WITH traced shadows.
+    ///
+    /// Shadow tracing costs seconds (7.6M rays, ~2.9 s on stormkeep even across every core), which is fine
+    /// once and intolerable on every drag of a brush. So it runs on the first build of a session and whenever
+    /// this is invoked; ordinary edits rebuild the cheaper unshadowed bake and the HUD reports the shadows as
+    /// stale. That keeps editing responsive and makes the expensive, good-looking pass something you ask for
+    /// when the geometry has settled.
+    /// </summary>
+    private void CmdEditorRebake(IReadOnlyList<string> args)
+    {
+        _ = args;
+        if (_editor is not { Active: true })
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor_rebake: no editing session");
+            return;
+        }
+        _bakeShadowsNextBuild = true;
+        _editorMapVersion = -1;      // force the next RefreshEditorWorld to rebuild
+        XonoticGodot.Common.Diagnostics.Log.Info("editor_rebake: recomputing lighting with traced shadows...");
+    }
+
+    /// <summary>True when the next world build should trace shadows (first build, or after editor_rebake).</summary>
+    private bool _bakeShadowsNextBuild = true;
+
+    /// <summary>True when the live lighting was built WITHOUT tracing, so its shadows are out of date.</summary>
+    private bool _bakedShadowsStale;
+
     /// <c>editor_gametype &lt;name|all&gt;</c>: choose which gametype's geometry the editor shows. Resolves the
     /// hidden inline-model set with the SAME rule the renderer and collision builder use, so the editor shows
     /// exactly the map that mode would produce — and nothing is discarded, only hidden.

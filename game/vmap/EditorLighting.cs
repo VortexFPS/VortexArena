@@ -151,6 +151,13 @@ public sealed partial class EditorLighting : Node3D
     /// <summary>Brightness of the baked light. A shader uniform, so it re-lights with no rebuild.</summary>
     public const string CvarBakeScale = "cl_editor_bake_scale";
 
+    /// <summary>
+    /// Trace shadow rays during the bake (default on). This is what gives fixtures real shadows — the thing a
+    /// budgeted real-time light cannot do, since only a handful can afford a shadow map. Costs bake time, not
+    /// frame time.
+    /// </summary>
+    public const string CvarBakeShadows = "cl_editor_bake_shadows";
+
     /// <summary>Cap on generated surface lights (the largest emitters win). Keeps pathological maps bounded.</summary>
     private const int MaxSurfaceLights = 224;
 

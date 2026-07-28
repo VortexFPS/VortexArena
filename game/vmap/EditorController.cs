@@ -196,6 +196,7 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarSurfaceLights, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarBakeLights, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarBakeScale, "0.36", CvarFlags.Save);
+        c.Register(EditorLighting.CvarBakeShadows, "1", CvarFlags.Save);
     }
 
     /// <summary>

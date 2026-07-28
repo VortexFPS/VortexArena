@@ -100,6 +100,17 @@ public static class VmapMapBuilder
             }
         }
 
+        // ---- bake the vertex lighting ACROSS CORES -----------------------------------------------------
+        // Every vertex is independent and the light/occluder indices are read-only, so this is the one place
+        // in the build that parallelises perfectly — and it is where the shadow rays are spent.
+        if (EditorLightBake.Active)
+        {
+            var bakeCells = new List<CellSurface>();
+            foreach (Dictionary<string, CellSurface> byMat in cells.Values)
+                bakeCells.AddRange(byMat.Values);
+            System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.BakeColors());
+        }
+
         // Deterministic node order so two builds of the same document produce an identical tree.
         foreach ((int X, int Y, int Z) key in cells.Keys.OrderBy(k => k.X).ThenBy(k => k.Y).ThenBy(k => k.Z))
         {
@@ -184,11 +195,9 @@ public static class VmapMapBuilder
 
                 NVec3 p = a * u + b * vv + c * w;
                 NVec2 uv = ua * u + ub * vv + uc * w;
-                grid[row][col] = (
-                    Coords.ToGodot(p),
-                    gn,
-                    new Vector2(uv.X, uv.Y),
-                    EditorLightBake.Sample(p, normal));
+                // Colour deferred: filled by the PARALLEL pass below. Sampling here would serialise the
+                // whole bake behind geometry generation, and with shadow rays that is the expensive half.
+                grid[row][col] = (Coords.ToGodot(p), gn, new Vector2(uv.X, uv.Y), Colors.Black);
             }
         }
 
@@ -525,6 +534,20 @@ public static class VmapMapBuilder
             NVec2 uv = source.Uvs[sourceIndex];
             Uvs.Add(new Vector2(uv.X, uv.Y));
             return local;
+        }
+
+        /// <summary>
+        /// Fill every vertex colour from the light bake. Called on a worker thread — it touches only this
+        /// cell's own lists and the bake's read-only indices.
+        /// </summary>
+        public void BakeColors()
+        {
+            for (int i = 0; i < Positions.Count; i++)
+            {
+                NVec3 p = Coords.ToQuake(Positions[i]);
+                NVec3 n = Coords.ToQuake(Normals[i]);
+                Colors[i] = EditorLightBake.Sample(p, n);
+            }
         }
 
         public void Pack(ArrayMesh mesh)

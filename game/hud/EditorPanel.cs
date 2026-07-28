@@ -52,6 +52,9 @@ public partial class EditorPanel : HudPanel
     /// <summary>True when fixture light is precomputed into the mesh rather than rendered live.</summary>
     public bool Baked { get; set; }
 
+    /// <summary>True when the baked lighting was rebuilt without tracing, so its shadows are out of date.</summary>
+    public bool ShadowsStale { get; set; }
+
     /// <summary>The orthographic view, for its state line. Null outside a session.</summary>
     public EditorOrthoView? Ortho { get; set; }
 
@@ -117,6 +120,10 @@ public partial class EditorPanel : HudPanel
                     ? $"Light: ON  {(Lights >= 0 ? $"{Lights} lights" : "")}{(Baked ? " BAKED" : "")}{(HasMapSun ? " + map sun" : " + default sun")}"
                     : "Light: OFF (fullbright)";
                 lines.Add(($"{lighting}   (cl_editor_lighting)", lit ? bright : dim));
+                // Shadow tracing costs seconds, so edits skip it and say so rather than quietly showing
+                // lighting that no longer matches the geometry.
+                if (lit && Baked && ShadowsStale)
+                    lines.Add(("  shadows STALE — editor_rebake to retrace", new Color(1f, 0.75f, 0.3f)));
 
                 lines.Add((
                     $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +

@@ -349,6 +349,7 @@ public partial class EditorMenuPanel : HudPanel
                 Detail = built ? (mode == c.Mode ? "current" : "") : Pending("E8"),
                 Command = EntityConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? ShaderConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
+                          ?? WaypointConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? $"editor_mode {mode}",
                 Enabled = built,
                 Checked = built ? mode == c.Mode : null,
@@ -369,6 +370,28 @@ public partial class EditorMenuPanel : HudPanel
         {
             ToolMode.Create => "editor_entity list",
             ToolMode.Properties => "editor_entity keys",
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// Waypoint modes are one-shot verbs against the server's live graph rather than states to sit in, so the
+    /// rows fire their command directly.
+    /// </summary>
+    private static string? WaypointConsoleCommand(EditorTool tool, ToolMode mode)
+    {
+        if (tool != EditorTool.Waypoint)
+            return null;
+        return mode switch
+        {
+            ToolMode.Place => "editor_waypoint place",
+            ToolMode.PlaceJump => "editor_waypoint place jump",
+            ToolMode.PlaceCrouch => "editor_waypoint place crouch",
+            ToolMode.PlaceSupport => "editor_waypoint place support",
+            ToolMode.Remove => "editor_waypoint remove",
+            ToolMode.Hardwire => "editor_waypoint hardwire",
+            ToolMode.Unreachable => "editor_waypoint unreachable",
+            ToolMode.RelinkAll => "editor_waypoint relinkall",
             _ => null,
         };
     }
@@ -411,6 +434,9 @@ public partial class EditorMenuPanel : HudPanel
             or ToolMode.NaturalProjection or ToolMode.AxialProjection or ToolMode.ShiftUv
             or ToolMode.ScaleUv or ToolMode.RotateUv => tool == EditorTool.Shader,
         ToolMode.Distance or ToolMode.Angle or ToolMode.Reachability => tool == EditorTool.Measure,
+        ToolMode.Place or ToolMode.PlaceJump or ToolMode.PlaceCrouch or ToolMode.PlaceSupport
+            or ToolMode.Remove or ToolMode.Hardwire or ToolMode.Unreachable
+            or ToolMode.RelinkAll => tool == EditorTool.Waypoint,
         _ => false,
     };
 

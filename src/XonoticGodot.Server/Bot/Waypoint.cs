@@ -253,6 +253,47 @@ public sealed class WaypointNetwork
     }
 
     /// <summary>
+    /// Remove a waypoint from the graph, unhooking every link that pointed at it (the editor's delete).
+    ///
+    /// Two things have to happen together or the graph is left corrupt. Every INCOMING link must go: a link is
+    /// a reference held by the SOURCE node, so dropping the node from the list on its own leaves neighbours
+    /// still routing through an object no longer in the graph. And the remaining nodes must be RE-INDEXED,
+    /// because <see cref="Waypoint.Index"/> is a dense index into <see cref="Nodes"/> that the A* uses to size
+    /// and address its score arrays — a stale index past the new count reads out of bounds.
+    /// </summary>
+    public bool RemoveNode(Waypoint wp)
+    {
+        ArgumentNullException.ThrowIfNull(wp);
+        if (!_nodes.Remove(wp))
+            return false;
+
+        foreach (Waypoint other in _nodes)
+            other.Links.RemoveAll(l => ReferenceEquals(l.To, wp));
+
+        for (int i = 0; i < _nodes.Count; i++)
+            _nodes[i].Index = i;
+
+        wp.Index = -1;
+        return true;
+    }
+
+    /// <summary>
+    /// Drop every link INTO <paramref name="target"/> except the one from <paramref name="keep"/> — what a
+    /// SUPPORT waypoint does to its destination (QC: "all incoming links are removed"), forcing traffic through
+    /// the supported route instead of leaving the problematic direct link in play.
+    /// </summary>
+    public void RemoveIncomingLinksExcept(Waypoint target, Waypoint keep)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        foreach (Waypoint other in _nodes)
+        {
+            if (ReferenceEquals(other, keep) || ReferenceEquals(other, target))
+                continue;
+            other.Links.RemoveAll(l => ReferenceEquals(l.To, target));
+        }
+    }
+
+    /// <summary>
     /// Add a directed link a-&gt;b with auto-computed cost (QC waypoint_addlink). Pass
     /// <paramref name="bidirectional"/> to also add b-&gt;a.
     /// </summary>

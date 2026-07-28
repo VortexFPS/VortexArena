@@ -33,6 +33,28 @@ public sealed class BotPopulation
     /// <summary>The shared map waypoint graph (QC g_waypoints), loaded once on the first frame with bots.</summary>
     public WaypointNetwork? Network { get; private set; }
 
+    /// <summary>
+    /// The graph, loading it now if the lazy path has not fired yet.
+    ///
+    /// The waypoint editor needs this because the lazy load is gated on BOTS BEING PRESENT — an editing session
+    /// runs with none, so <see cref="Network"/> would stay null forever and the tool would report an empty map
+    /// on a level with a perfectly good graph. Marks the load done so the bot path does not redo it and discard
+    /// the mapper's edits.
+    /// </summary>
+    public WaypointNetwork? EnsureWaypointNetwork()
+    {
+        if (_waypointsLoaded)
+            return Network;
+
+        _waypointsLoaded = true;
+        Network = _world.LoadWaypointNetwork();
+        foreach (BotBrain b in _brains)
+            b.Network = Network;
+        _itemPrewarmCursor = 0;
+        _itemPrewarmDone = Network is null;
+        return Network;
+    }
+
     /// <summary>Fired when a bot leaves (fixcount removal, console remove, intermission teardown) so the net
     /// host can clean its per-player maps (ServerNet.ForgetPlayer). Fired from the disconnect chain — every
     /// removal path funnels through it.</summary>

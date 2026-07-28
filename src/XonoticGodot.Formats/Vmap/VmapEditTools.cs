@@ -374,7 +374,8 @@ public static class EditorTools
     {
         EditorTool.None or EditorTool.Select or EditorTool.Brush or EditorTool.Face
             or EditorTool.Edge or EditorTool.Vertex or EditorTool.Patch or EditorTool.Clip
-            or EditorTool.Entity or EditorTool.Shader or EditorTool.Measure => true,
+            or EditorTool.Entity or EditorTool.Shader or EditorTool.Measure
+            or EditorTool.Waypoint => true,
         _ => false,
     };
 

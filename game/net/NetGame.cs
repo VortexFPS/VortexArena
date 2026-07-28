@@ -7550,6 +7550,7 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_clip", CmdEditorClip);
         interp.RegisterCommand("editor_entity", CmdEditorEntity);
         interp.RegisterCommand("editor_shader", CmdEditorShader);
+        interp.RegisterCommand("editor_waypoint", CmdEditorWaypoint);
         Vmap.EditorBinds.RegisterCommands(interp);
 
         // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
@@ -8170,6 +8171,219 @@ public sealed partial class NetGame : Node3D
         XonoticGodot.Common.Diagnostics.Log.Help(
             "editor_shader pick|apply|set <mat>|fit [u v]|natural [units]|axial"
             + "|shift <du dv>|scale <su sv>|rotate <deg>");
+    }
+
+    /// <summary>
+    /// <c>editor_waypoint</c> — the Waypoint tool, a transcription of Base's <c>wpeditor</c> verbs
+    /// (server/command/cmd.qc:341) onto the editor's free-fly crosshair.
+    /// <code>
+    ///   place [jump|crouch|support] | remove | hardwire | link
+    ///   relinkall | unreachable | list | save
+    /// </code>
+    ///
+    /// Everything here mutates the SERVER's live graph — the one bots actually path against — so it runs under
+    /// the sim gate, the same serialisation every other world-mutating console verb takes. Editing a private
+    /// copy would be editing something nothing reads.
+    /// </summary>
+    private void CmdEditorWaypoint(IReadOnlyList<string> args)
+    {
+        if (_editor is null || !_editor.Active)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor_waypoint: no editing session");
+            return;
+        }
+
+        WithWaypointNetwork(net =>
+        {
+            string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "list";
+            switch (verb)
+            {
+                case "place":
+                {
+                    if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                        return;
+
+                    XonoticGodot.Server.Bot.WaypointFlags flags = args.Count > 2
+                        ? args[2].ToLowerInvariant() switch
+                        {
+                            "jump" => XonoticGodot.Server.Bot.WaypointFlags.Jump,
+                            "crouch" => XonoticGodot.Server.Bot.WaypointFlags.Crouch,
+                            "support" => XonoticGodot.Server.Bot.WaypointFlags.Support,
+                            _ => XonoticGodot.Server.Bot.WaypointFlags.None,
+                        }
+                        : XonoticGodot.Server.Bot.WaypointFlags.None;
+
+                    XonoticGodot.Server.Bot.Waypoint wp =
+                        XonoticGodot.Server.Bot.WaypointEditor.Place(net, at, flags);
+
+                    // A jump or support waypoint is only half a statement: Base finishes it by spawning a
+                    // second waypoint, which becomes the destination. Remember it so the next placement links.
+                    if (_pendingWaypoint is { } pending)
+                    {
+                        XonoticGodot.Server.Bot.WaypointEditor.LinkPending(net, pending, wp);
+                        _pendingWaypoint = null;
+                    }
+                    else if (flags is XonoticGodot.Server.Bot.WaypointFlags.Jump
+                             or XonoticGodot.Server.Bot.WaypointFlags.Support)
+                    {
+                        _pendingWaypoint = wp;
+                        XonoticGodot.Common.Diagnostics.Log.Info(
+                            "waypoint: now place its DESTINATION (editor_waypoint place)");
+                    }
+                    return;
+                }
+
+                case "remove":
+                {
+                    if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                        return;
+                    if (XonoticGodot.Server.Bot.WaypointEditor.Pick(net, at) is not { } wp)
+                    {
+                        XonoticGodot.Common.Diagnostics.Log.Info("waypoint: none under the crosshair");
+                        return;
+                    }
+                    XonoticGodot.Server.Bot.WaypointEditor.Remove(net, wp);
+                    return;
+                }
+
+                case "hardwire":
+                case "link":
+                {
+                    if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                        return;
+                    if (XonoticGodot.Server.Bot.WaypointEditor.Pick(net, at) is not { } wp)
+                    {
+                        XonoticGodot.Common.Diagnostics.Log.Info("waypoint: none under the crosshair");
+                        return;
+                    }
+
+                    if (_pendingWaypoint is null)
+                    {
+                        _pendingWaypoint = wp;
+                        XonoticGodot.Common.Diagnostics.Log.Info(
+                            $"waypoint: {XonoticGodot.Server.Bot.WaypointEditor.Describe(wp)} is the source — "
+                            + "now aim at the destination and repeat");
+                        return;
+                    }
+
+                    if (verb == "hardwire")
+                        XonoticGodot.Server.Bot.WaypointEditor.Hardwire(net, _pendingWaypoint, wp);
+                    else
+                        XonoticGodot.Server.Bot.WaypointEditor.LinkPending(net, _pendingWaypoint, wp);
+                    _pendingWaypoint = null;
+                    return;
+                }
+
+                case "relinkall":
+                    XonoticGodot.Server.Bot.WaypointEditor.RelinkAll(net);
+                    return;
+
+                case "unreachable":
+                {
+                    List<XonoticGodot.Server.Bot.Waypoint> bad =
+                        XonoticGodot.Server.Bot.WaypointEditor.Unreachable(net);
+                    if (bad.Count == 0)
+                    {
+                        XonoticGodot.Common.Diagnostics.Log.Info(
+                            $"waypoint: all {net.Nodes.Count} nodes have a way in and a way out");
+                        return;
+                    }
+                    XonoticGodot.Common.Diagnostics.Log.Info($"waypoint: {bad.Count} unreachable node(s):");
+                    foreach (XonoticGodot.Server.Bot.Waypoint wp in bad)
+                        XonoticGodot.Common.Diagnostics.Log.Info(
+                            $"  {XonoticGodot.Server.Bot.WaypointEditor.Describe(wp)}"
+                            + $" at {wp.Origin.X:0} {wp.Origin.Y:0} {wp.Origin.Z:0}");
+                    return;
+                }
+
+                case "save":
+                    SaveWaypoints(net);
+                    return;
+
+                default:
+                    XonoticGodot.Common.Diagnostics.Log.Info(
+                        $"waypoint: {net.Nodes.Count} nodes"
+                        + (_pendingWaypoint is null ? "" : "  (a link is half-made — aim and repeat, or 'cancel')"));
+                    XonoticGodot.Common.Diagnostics.Log.Help(
+                        "editor_waypoint place [jump|crouch|support] | remove | link | hardwire"
+                        + " | relinkall | unreachable | save");
+                    return;
+            }
+        });
+    }
+
+    /// <summary>The half-made link: a jump/support source, or the first end of a hardwire.</summary>
+    private XonoticGodot.Server.Bot.Waypoint? _pendingWaypoint;
+
+    /// <summary>
+    /// Run <paramref name="work"/> against the server's waypoint graph under the sim gate.
+    ///
+    /// The gate is the whole point. <c>sv_threaded</c> defaults on, so the sim worker owns the world while this
+    /// runs on the main thread; touching the graph without it is the same class of cross-thread mutation that
+    /// produced the mid-combat listen-server crashes. <see cref="ExecuteHostConsoleCommand"/> takes the same
+    /// lock for the same reason.
+    ///
+    /// The graph is also loaded LAZILY, on the first frame with bots present — and an editor session runs with
+    /// no bots, so it is null until something asks. This forces it.
+    /// </summary>
+    private void WithWaypointNetwork(Action<XonoticGodot.Server.Bot.WaypointNetwork> work)
+    {
+        if (_serverWorld is not { } world)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor_waypoint: waypoints need the local (listen) server");
+            return;
+        }
+
+        object? gate = _server?.SimGate;
+        if (gate is null)
+        {
+            RunWaypointWork(world, work);
+            return;
+        }
+        lock (gate)
+            RunWaypointWork(world, work);
+    }
+
+    private static void RunWaypointWork(
+        GameWorld world, Action<XonoticGodot.Server.Bot.WaypointNetwork> work)
+    {
+        XonoticGodot.Server.Bot.WaypointNetwork? net = world.Bots.EnsureWaypointNetwork();
+        if (net is null)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor_waypoint: no waypoint graph for this map");
+            return;
+        }
+        work(net);
+    }
+
+    /// <summary>
+    /// Write the three waypoint files beside the editor's other output. Base splits them deliberately — nodes,
+    /// the precomputed link cache, and the hand-authored hardwired links — and a relink regenerates the middle
+    /// one, so keeping them separate is what stops a relink eating hand-made routes.
+    /// </summary>
+    private void SaveWaypoints(XonoticGodot.Server.Bot.WaypointNetwork net)
+    {
+        try
+        {
+            string dir = Vmap.VmapService.EditorOutputDirectory();
+            System.IO.Directory.CreateDirectory(dir);
+
+            string stamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss",
+                System.Globalization.CultureInfo.InvariantCulture);
+
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, $"{_map}.waypoints"), net.SaveToText(stamp));
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(dir, $"{_map}.waypoints.cache"), net.SaveLinksToText(stamp));
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(dir, $"{_map}.waypoints.hardwired"), net.SaveHardwiredLinksToText());
+
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"waypoint: wrote {net.Nodes.Count} nodes to {dir}\\{_map}.waypoints (+ .cache, .hardwired)");
+        }
+        catch (Exception ex)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"waypoint: could not save: {ex.Message}");
+        }
     }
 
     /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>

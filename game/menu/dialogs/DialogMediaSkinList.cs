@@ -68,8 +68,12 @@ public static class MenuDataBridge
 /// the same <c>menu_skin</c> cvar the engine uses); the apply routes through <see cref="MenuCommand"/>
 /// (<c>menu_restart</c> is handled by the menu host — inert until then, logged).
 /// </summary>
-public partial class DialogMediaSkinList : Control
+public partial class DialogMediaSkinList : VBoxContainer
 {
+    // A VBoxContainer (not a plain Control): a Control reports NO minimum size for anchor-drawn children, so a
+    // parent VBox allocated this widget ~0 height and its content painted over the siblings laid out after it
+    // (the Settings→User overlap glitch). As a container, the header/list/note/button minimums propagate.
+
     private SkinSource _source = null!;
     private ItemList _list = null!;
     private Label _note = null!;
@@ -78,6 +82,7 @@ public partial class DialogMediaSkinList : Control
     {
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
         SizeFlagsVertical = SizeFlags.ExpandFill;
+        AddThemeConstantOverride("separation", 8);
 
         // skinlist.qc:getSkins / loadCvars — scan + parse + select. defstring("menu_skin") = "default".
         string defaultSkin = MenuState.Cvars.GetDefault("menu_skin");
@@ -85,18 +90,8 @@ public partial class DialogMediaSkinList : Control
             defaultSkin = "default";
         _source = new SkinSource(MenuDataBridge.Files, MenuDataBridge.ReadText, MenuDataBridge.ImageExists, defaultSkin);
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 16);
-        AddChild(margin);
-
-        var box = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        box.AddThemeConstantOverride("separation", 8);
-        margin.AddChild(box);
-
         // dialog_settings_user.qc:22 — makeXonoticHeaderLabel(_("Menu Skin")).
-        box.AddChild(Ui.Header("Menu Skin"));
+        AddChild(Ui.Header("Menu Skin"));
 
         // skinlist.qc list — one row per skin showing "Title — Author".
         _list = new ItemList
@@ -106,14 +101,14 @@ public partial class DialogMediaSkinList : Control
             CustomMinimumSize = new Vector2(0, 200),
         };
         _list.ItemActivated += OnItemActivated; // QC doubleClickListBoxItem → setSkin
-        box.AddChild(_list);
+        AddChild(_list);
 
         _note = Ui.Label("");
         _note.AddThemeColorOverride("font_color", new Color(0.70f, 0.72f, 0.78f));
-        box.AddChild(_note);
+        AddChild(_note);
 
         // dialog_settings_user.qc:27-29 — makeXonoticButton(_("Set skin")) onClick=SetSkin_Click → setSkin.
-        box.AddChild(Ui.Button("Set skin", SetSkin));
+        AddChild(Ui.Button("Set skin", SetSkin));
 
         Reload();
     }

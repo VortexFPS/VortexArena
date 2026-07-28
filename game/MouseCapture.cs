@@ -57,6 +57,28 @@ public static class MouseCapture
         }
     }
 
+    private static bool _menuWantsCursor;
+
+    /// <summary>
+    /// Shell menu override: while the menu layer (main menu or the in-game pause menu) is visible the OS pointer
+    /// must be FREE. The pause-menu path used to rely on the #19 auto-pause (<c>GetTree().Paused</c>) to stop
+    /// NetGame's per-frame capture reassert (<c>SetWantCapture(!UiOwnsCursor)</c>) — but the tree does NOT pause
+    /// with <c>cl_autopause 0</c> or with remote clients connected, so the reassert re-grabbed the pointer the
+    /// frame after Esc freed it and the pause menu sat under an invisible cursor. Set on the menu edges
+    /// (<c>Shell.OpenPauseMenu</c>/<c>Resume</c>) and re-synced per frame from <c>Shell._Process</c> off
+    /// <c>_menu.Visible</c> (same reassert-not-edge-latch reasoning as NetGame's cursor block).
+    /// </summary>
+    public static bool MenuWantsCursor
+    {
+        get => _menuWantsCursor;
+        set
+        {
+            if (_menuWantsCursor == value) return;
+            _menuWantsCursor = value;
+            Apply();
+        }
+    }
+
     /// <summary>Feed a window-focus edge (from <see cref="Shell._Notification"/>). Re-applies the mode so the
     /// grab is dropped the moment focus leaves and restored when it returns.</summary>
     public static void SetFocused(bool focused)
@@ -91,7 +113,7 @@ public static class MouseCapture
         // "not focused" is enough to free the pointer. The live checks also cover a background launch, where
         // want-capture can be requested before any focus edge has been delivered.
         bool focused = _focused && WindowReallyFocused();
-        Input.MouseModeEnum target = _wantCapture && !_hudEditorWantsCursor && focused
+        Input.MouseModeEnum target = _wantCapture && !_hudEditorWantsCursor && !_menuWantsCursor && focused
             ? Input.MouseModeEnum.Captured
             : Input.MouseModeEnum.Visible;
         if (Input.MouseMode != target)

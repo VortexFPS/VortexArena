@@ -560,6 +560,7 @@ public partial class Shell : Node
         _menu.ShowScreen(new PauseMenu());
         _menu.Visible = true;
         _paused = true;
+        MouseCapture.MenuWantsCursor = true; // survives NetGame's per-frame reassert on an unpaused tree
         MouseCapture.SetWantCapture(false);
         SyncAutoPause(); // freeze the sim iff this is a solo local listen game
     }
@@ -571,6 +572,7 @@ public partial class Shell : Node
             return;
         _menu.Visible = false;
         _paused = false;
+        MouseCapture.MenuWantsCursor = false; // clear BEFORE SetWantCapture so recapture lands this frame
         MouseCapture.SetWantCapture(true);
         SyncAutoPause();
     }
@@ -615,6 +617,11 @@ public partial class Shell : Node
                 MouseCapture.SetFocused(osFocused);
             }
         }
+
+        // The menu layer (main or pause) always owns the pointer: re-sync the MouseCapture menu override off
+        // menu visibility every frame (not just the Open/Resume edges) so any other path that shows/hides the
+        // menu keeps the cursor state consistent — same reassert-not-edge-latch reasoning as NetGame's cursor block.
+        MouseCapture.MenuWantsCursor = _menu.Visible;
 
         // Per-frame so console open/close and a remote client joining/leaving (which changes eligibility) are
         // picked up even without a discrete edge — e.g. a remote joins while the host sits in the menu → release

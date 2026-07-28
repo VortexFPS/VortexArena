@@ -36,18 +36,39 @@ public partial class DialogSettingsUser : SettingsTab
 
     protected override void Fill(VBoxContainer box)
     {
-        // --- Menu Skin (QC makeXonoticHeaderLabel("Menu Skin") + makeXonoticSkinList + "Set skin" button) ---
+        // dialog_settings_user.qc lays this tab out as TWO EXPLICIT COLUMNS on its 15.5×6 grid — LEFT: the
+        // "Menu Skin" section (header + skin list spanning nearly the full tab height + "Set skin",
+        // qc:16-31 / grid cols 0.25–2.75); RIGHT: "Text Language" (header + list + "Set language",
+        // gotoRC(0, 3.65)) with the gentle-mode checkboxes below it (gotoRC(11, 3.25)). Build the same two
+        // columns here instead of relying on SettingsTab's generic half-split, which used to land the language
+        // section in the left column on top of the skin list. (A single child also opts out of that auto-split.)
+        var columns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        columns.AddThemeConstantOverride("separation", 28);
+        box.AddChild(columns);
+
+        // QC column widths: skin section 2.5 cells, language/gentle section ~1.7–2.5 → ≈1.4 : 1.
+        var left = new VBoxContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            SizeFlagsStretchRatio = 1.4f,
+        };
+        left.AddThemeConstantOverride("separation", 6);
+        columns.AddChild(left);
+        var right = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        right.AddThemeConstantOverride("separation", 6);
+        columns.AddChild(right);
+
+        // --- LEFT: Menu Skin (QC makeXonoticHeaderLabel("Menu Skin") + makeXonoticSkinList + "Set skin" button) ---
         // The data-driven skin list box (qcsrc/menu/xonotic/skinlist.qc, embedded in dialog_settings_user.qc:16-31):
         // DialogMediaSkinList is the faithful file-scan backend (its own "Menu Skin" header, the gfx/menu/*/skinvalues.txt
         // list, and the "Set skin" button). It supersedes the old 3-name TextSlider approximation. Falls back to the
         // TextSlider only with no VFS — but the dialog itself renders an honest "no skins found" note in that case, so
         // we just embed it directly (matching QC, which embeds makeXonoticSkinList here).
-        box.AddChild(new DialogMediaSkinList { SizeFlagsHorizontal = SizeFlags.ExpandFill });
+        left.AddChild(new DialogMediaSkinList());
 
-        box.AddChild(Ui.Spacer());
-
-        // --- Text Language (QC makeXonoticHeaderLabel("Text Language") + makeXonoticLanguageList + button) ---
-        box.AddChild(Ui.Header("Text Language"));
+        // --- RIGHT: Text Language (QC makeXonoticHeaderLabel("Text Language") + makeXonoticLanguageList + button) ---
+        right.AddChild(Ui.Header("Text Language"));
 
         // QC makeXonoticLanguageList -> _menu_prvm_language. Now data-driven from languages.txt (the localized
         // name is the label, the id is the stored value), like QC; falls back to a small set headlessly. The
@@ -60,30 +81,30 @@ public partial class DialogSettingsUser : SettingsTab
         else
             foreach ((string label, string value) in LanguagesFallback)
                 lang.AddRaw(label, value);
-        box.AddChild(Ui.Row("Language:", lang));
+        right.AddChild(Ui.Row("Language:", lang));
 
         // QC makeXonoticButton("Set language") -> SetLanguage_Click ->
         // prvm_language "$_menu_prvm_language"; menu_restart; menu_cmd languageselect.
-        box.AddChild(Widgets.CommandButton("Set language",
+        right.AddChild(Widgets.CommandButton("Set language",
             "prvm_language \"$_menu_prvm_language\"; menu_restart; menu_cmd languageselect"));
 
-        box.AddChild(Ui.Spacer());
+        right.AddChild(Ui.Spacer());
 
-        // --- Gentle mode (QC trio of checkboxes) ---
+        // --- Gentle mode (QC trio of checkboxes, below the language section in the same column) ---
         // QC makeXonoticCheckBox_T(0, "cl_gentle", …) — disables gore and harsh language.
-        box.AddChild(Widgets.CheckBox("cl_gentle", "Disable gore effects and harsh language",
+        right.AddChild(Widgets.CheckBox("cl_gentle", "Disable gore effects and harsh language",
             "Replace blood and gibs with content that does not have any gore effects"));
 
         // QC makeXonoticCheckBox(0, "cl_gentle_gibs", "Just the gore"); makeMulti(e, "cl_gentle_damage").
         // The QC widget drives BOTH cl_gentle_gibs and cl_gentle_damage (makeMulti). The toolkit has no
         // multi-cvar widget, so we render the primary cvar (cl_gentle_gibs); see note in summary.
         var justGore = Widgets.CheckBox("cl_gentle_gibs", "Just the gore");
-        box.AddChild(justGore);
+        right.AddChild(justGore);
         Dependent.Bind(justGore, "cl_gentle", 0, 0); // QC setDependent(e,"cl_gentle",0,0)
 
         // QC makeXonoticCheckBox(0, "cl_gentle_messages", "Just the language").
         var justLang = Widgets.CheckBox("cl_gentle_messages", "Just the language");
-        box.AddChild(justLang);
+        right.AddChild(justLang);
         Dependent.Bind(justLang, "cl_gentle", 0, 0); // QC setDependent(e,"cl_gentle",0,0)
     }
 }

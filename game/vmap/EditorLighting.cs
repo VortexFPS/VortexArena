@@ -441,6 +441,22 @@ public sealed partial class EditorLighting : Node3D
                 Color faceColor = SurfaceLightColor(assets, face.Material);
                 clusterColors[key] = clusterColors.GetValueOrDefault(key)
                     + new NVec3(faceColor.R, faceColor.G, faceColor.B) * weight;
+
+                // BACKSPLASH, per FACE exactly as q3map2 does it (light_bounce.c:672: each area light spawns
+                // its own). The first version hung ONE splash on each 128u cluster — 5% of a whole strip's
+                // photons in a single point sitting in the slat recess, and a point at grazing angle to the
+                // ceiling casts long hard slat-shadow streaks across every panel beyond it. Many weak
+                // sources, one per face, is not just faithful: it is what prevents that geometry of failure
+                // from existing at all.
+                if (Baking)
+                {
+                    float splashPhotons = weight * AreaScale * brightness * BacksplashFraction;
+                    if (splashPhotons > 25f)   // sub-5-unit-range splashes are noise, not light
+                        _bake.Add(new BakedLight(
+                            centroid + face.Plane.Normal * BacksplashDistance,
+                            SrgbToLinear(faceColor), splashPhotons,
+                            Math.Min(BakeRangeCap, MathF.Sqrt(splashPhotons / FalloffTolerance))));
+                }
             }
         }
 
@@ -542,16 +558,6 @@ public sealed partial class EditorLighting : Node3D
                     kind = BakedLightKind.Area;
                     dir = NVec3.Normalize(emitNormal);
 
-                    // BACKSPLASH (q3map2 light_bounce.c:672, on by default for every area light): a point
-                    // light at 5% of the photons, 23 units out along the emitter's normal. This is the
-                    // mechanism that lights the surface an area light is MOUNTED ON — an area emitter's own
-                    // cosine is zero along its plane, so without this the ceiling around every recessed
-                    // fixture sits in the dark, which is exactly what adding the emitter cosine exposed.
-                    float splashPhotons = photons * BacksplashFraction;
-                    _bake.Add(new BakedLight(
-                        Coords.ToQuake(light.Position) + dir * BacksplashDistance,
-                        SrgbToLinear(light.LightColor), splashPhotons,
-                        Math.Min(BakeRangeCap, MathF.Sqrt(splashPhotons / FalloffTolerance))));
                 }
                 else if (light is SpotLight3D sp)
                 {

@@ -73,7 +73,14 @@ public static class EditorSession
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(p);
+
+        // The VIEW must not move when the body changes. A player's eye sits at origin + ViewOfs (35 standing);
+        // an observer's at its origin exactly (ViewOfs zero). Lifting the origin by the old eye offset keeps
+        // the camera where the mapper was just looking — without it, leaving playtest dropped the view 35
+        // units into the floor line.
+        Vector3 eyeOfs = p.ViewOfs;
         world.Clients.PutObserverInServer(p);
+        p.Origin += new Vector3(0f, 0f, eyeOfs.Z);
     }
 
     /// <summary>
@@ -88,8 +95,17 @@ public static class EditorSession
     {
         ArgumentNullException.ThrowIfNull(p);
 
-        if (!TryFindClearOrigin(p, p.Origin, out Vector3 origin))
+        // Aim the hull so the resulting EYE lands exactly where the free-fly camera is now: the observer's
+        // eye is its origin, the spawned player's is origin + StandViewOfs, and PutPlayerInServer will nudge
+        // the marker up by (1 - mins.z - 24). Without this compensation entering playtest jumped the view up
+        // by an eye height and then gravity dropped it to the floor — the reported "camera jumps down".
+        float zNudge = 1f - SpawnSystem.PlayerMins.Z - 24f;
+        Vector3 eyeBase = p.Origin - new Vector3(
+            0f, 0f, XonoticGodot.Common.Physics.PlayerPhysics.StandViewOfs.Z);
+
+        if (!TryFindClearOrigin(p, eyeBase, out Vector3 origin))
             return false;
+        origin -= new Vector3(0f, 0f, zNudge);
 
         // Keep pitch/yaw; zero roll, matching what spawn placement does for a map spawn point.
         Vector3 angles = new(p.Angles.X, p.Angles.Y, 0f);

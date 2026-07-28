@@ -1802,8 +1802,13 @@ public sealed partial class NetGame : Node3D
         // origin — the same X Y Z space map entities use. The panel self-gates on cl_showposition/showposition
         // (debug-default-on, like FPS) and returns null until we have a live local body (handshake assigns a
         // non-zero LocalNetId), so it draws nothing in the menu / pre-spawn.
+        // The EYE, not the player origin: the readout exists to reproduce views, --observe pins the CAMERA
+        // at the given point, and the two differ by the view offset (35 standing, 0 observing) plus bob and
+        // stair smoothing. Reporting the camera makes readout-in, camera-out exact in every state.
         _fullHud.Position.PositionProvider =
-            () => _client is { LocalNetId: not 0 } c ? c.PredictedOrigin : (NVec3?)null;
+            () => _client is { LocalNetId: not 0 } && _camera is not null && GodotObject.IsInstanceValid(_camera)
+                ? Coords.ToQuake(_camera.GlobalTransform.Origin)
+                : _client is { LocalNetId: not 0 } c ? c.PredictedOrigin : (NVec3?)null;
         // ...and the direction being looked in, which is what makes the readout enough to reproduce a view.
         _fullHud.Position.AnglesProvider = () => _viewAngles;
 

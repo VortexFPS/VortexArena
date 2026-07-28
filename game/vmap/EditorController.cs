@@ -27,6 +27,13 @@ public enum ManipulatorMode
 /// <summary>Which sub-object the pick resolves to, cycled by the tool key.</summary>
 public enum EditorTool
 {
+    /// <summary>
+    /// No tool: nothing is picked and nothing is highlighted. Useful for LOOKING at the map — the hover
+    /// outline is drawn over the very surfaces whose lighting you are trying to judge, and there is no way
+    /// to see an unmarked wall while a tool is live.
+    /// </summary>
+    None,
+
     /// <summary>Select and move whole brushes.</summary>
     Brush,
 
@@ -322,6 +329,12 @@ public sealed partial class EditorController : Node3D
         _lastPickVersion = GeometryVersion;
         _lastPickTool = Tool;
 
+        if (Tool == EditorTool.None)
+        {
+            Hover = default;   // nothing picked, nothing outlined, and no pick cost either
+            return;
+        }
+
         PickIndex.EnsureBuilt(_document!, GeometryVersion, IncludeToolBrushes);
         Hover = VmapPicking.Pick(PickIndex, origin, dir, PickMode(), GrabRadius, PickRange);
     }
@@ -555,15 +568,16 @@ public sealed partial class EditorController : Node3D
     //  Commands issued by binds
     // =============================================================================================
 
-    /// <summary>Cycle the sub-object tool (brush → face → edge → vertex).</summary>
+    /// <summary>Cycle the sub-object tool (none → brush → face → edge → vertex → none).</summary>
     public void CycleTool()
     {
         Tool = Tool switch
         {
+            EditorTool.None => EditorTool.Brush,
             EditorTool.Brush => EditorTool.Face,
             EditorTool.Face => EditorTool.Edge,
             EditorTool.Edge => EditorTool.Vertex,
-            _ => EditorTool.Brush,
+            _ => EditorTool.None,
         };
         CancelDrag();
         Log.Info($"editor tool: {Tool}");

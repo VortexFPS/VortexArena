@@ -1804,6 +1804,8 @@ public sealed partial class NetGame : Node3D
         // non-zero LocalNetId), so it draws nothing in the menu / pre-spawn.
         _fullHud.Position.PositionProvider =
             () => _client is { LocalNetId: not 0 } c ? c.PredictedOrigin : (NVec3?)null;
+        // ...and the direction being looked in, which is what makes the readout enough to reproduce a view.
+        _fullHud.Position.AnglesProvider = () => _viewAngles;
 
         // [T51] Floating damage-number layer (QC cl_damagetext). Full-rect overlay; fed each frame in _Process
         // from the server-side DamagetextMutator's drained events, projected via the first-person _camera.

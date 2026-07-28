@@ -35,6 +35,13 @@ public partial class PositionPanel : HudPanel
     /// <see cref="XonoticGodot.Game.Net.ClientNet.PredictedOrigin"/>; null on paths with no local player.</summary>
     public System.Func<NVec3?>? PositionProvider { get; set; }
 
+    /// <summary>
+    /// View angles in Quake convention (pitch, yaw, roll), appended to the readout when supplied. Shown
+    /// because a position alone cannot reproduce a view: reporting "I see it here" needs the direction too,
+    /// and the yaw/pitch pair printed here is exactly what <c>--observe "x y z yaw pitch"</c> takes.
+    /// </summary>
+    public System.Func<NVec3?>? AnglesProvider { get; set; }
+
     /// <summary>Always animating — the origin changes continuously while moving, so redraw each frame while shown.</summary>
     public override bool IsDynamic => true;
 
@@ -112,6 +119,8 @@ public partial class PositionPanel : HudPanel
 
         NVec3 o = p.Value;
         string text = $"x:{Mathf.RoundToInt(o.X)} y:{Mathf.RoundToInt(o.Y)} z:{Mathf.RoundToInt(o.Z)}";
+        if (AnglesProvider?.Invoke() is { } a)
+            text += $"  yaw:{Mathf.RoundToInt(a.Y)} pitch:{Mathf.RoundToInt(a.X)}";
         Color color = new(1f, 1f, 1f, 1f);
 
         // Match FpsPanel's sizing/placement so the readouts share a column and line height; offset up so position

@@ -685,8 +685,8 @@ public sealed partial class NetGame : Node3D
                 built = Vmap.EditorWorldCollision.Build(_preloadedEditorDoc, _droppedSubmodels);
                 collision = built.World;
                 XonoticGodot.Common.Diagnostics.Log.Info(
-                    $"editor: map is the imported document ({_preloadedEditorDoc.Brushes.Count} brushes; "
-                    + "collision from the document)");
+                    $"editor: map is the imported document ({_preloadedEditorDoc.Brushes.Count} brushes, "
+                    + $"{_preloadedEditorDoc.Patches.Count} patches; collision from the document)");
             }
             else
             {

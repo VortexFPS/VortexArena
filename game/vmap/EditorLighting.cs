@@ -198,7 +198,7 @@ public sealed partial class EditorLighting : Node3D
     public const string CvarDirt = "cl_editor_bake_dirt";
 
     /// <summary>Cap on generated surface lights (the largest emitters win). Keeps pathological maps bounded.</summary>
-    private const int MaxSurfaceLights = 224;
+    private const int MaxSurfaceLights = 768;
 
     /// <summary>
     /// Compensation for the inverse-square falloff. Godot's attenuation exponent steepens the curve toward the
@@ -221,6 +221,9 @@ public sealed partial class EditorLighting : Node3D
     private Light3D.BakeMode _bakeMode = Light3D.BakeMode.Dynamic;
     private float _falloff = 2f;
     private float _rangeScale = 1f;
+
+    /// <summary>cl_editor_sun_scale, applied to the baked sun and the sky dome alike.</summary>
+    private float _sunScale = 1f;
     private float _nextShadowSort;
 
     /// <summary>Number of lights built (diagnostics / HUD).</summary>
@@ -261,6 +264,7 @@ public sealed partial class EditorLighting : Node3D
         };
 
         rig.Baking = ReadFloat(cvars, CvarBakeLights, 1f) != 0f;
+        rig._sunScale = ReadFloat(cvars, CvarSunScale, 1f);
 
         foreach (VmapEntity entity in doc.Entities)
         {
@@ -385,8 +389,14 @@ public sealed partial class EditorLighting : Node3D
     private void BuildSurfaceLights(VmapDocument doc, AssetSystem assets, float brightness)
     {
         // ---- gather every emissive face, bucketed into coarse spatial cells ----------------------------
-        const float ClusterCell = 320f;   // Quake units; about one room section per cell
+        // q3map2 subdivides an emissive surface into patches and makes each one an area light
+        // (q3map_lightSubdivide; stormkeep's own light shaders ask for 64). Collapsing a room's worth of
+        // panels into one point put the light in the wrong PLACE and gave it the wrong shape — a long strip
+        // pooling as a circle. 128 is the compromise between that and q3map2's patch count, which is in the
+        // thousands and priced for an offline tool.
+        const float ClusterCell = 128f;
         var clusters = new Dictionary<(int, int, int), (NVec3 PosW, NVec3 NormW, float W)>();
+        var clusterColors = new Dictionary<(int, int, int), NVec3>();
         int faces = 0;
 
         foreach (VmapBrush brush in doc.Brushes)
@@ -424,12 +434,19 @@ public sealed partial class EditorLighting : Node3D
                            (int)MathF.Floor(centroid.Z / ClusterCell));
                 (NVec3 posW, NVec3 normW, float sumW) = clusters.GetValueOrDefault(key);
                 clusters[key] = (posW + centroid * weight, normW + face.Plane.Normal * weight, sumW + weight);
+
+                // q3map2 takes a surface light's COLOUR from the average of its light image
+                // (shaders.c:811 — ColorNormalize of the texture average), not from white. A rusted panel
+                // throws warm light; ours threw grey-white over the whole map.
+                Color faceColor = SurfaceLightColor(assets, face.Material);
+                clusterColors[key] = clusterColors.GetValueOrDefault(key)
+                    + new NVec3(faceColor.R, faceColor.G, faceColor.B) * weight;
             }
         }
 
         // ---- one light per cluster, energy from the SUMMED emit x area ---------------------------------
         var candidates = new List<(float Weight, float EmitArea, OmniLight3D Light)>();
-        foreach (((int, int, int) _, (NVec3 posW, NVec3 normW, float sumW)) in clusters)
+        foreach (((int, int, int) ckey, (NVec3 posW, NVec3 normW, float sumW)) in clusters)
         {
             if (sumW <= 0f)
                 continue;
@@ -449,7 +466,7 @@ public sealed partial class EditorLighting : Node3D
             {
                 Name = $"EditorSurfLight_{candidates.Count}",
                 Position = Coords.ToGodot(centre + normal * 32f),
-                LightColor = Colors.White,
+                LightColor = Normalize(clusterColors.GetValueOrDefault(ckey)),
                 LightEnergy = energy,
                 OmniRange = range,
                 // Softer than the entity lights' inverse-square: this omni stands in for an AREA source, and
@@ -601,7 +618,10 @@ public sealed partial class EditorLighting : Node3D
     private void AddBakedSun(SunParms sun, float brightness)
     {
         int samples = sun.Deviance > 0f ? Math.Clamp(sun.Samples, 1, 32) : 1;
-        float photons = sun.Intensity * brightness / samples;
+        // cl_editor_sun_scale applies to the BAKED sun too. It only ever reached the real-time
+        // DirectionalLight3D, so once the sun moved into the bake the cvar silently stopped doing anything —
+        // which also made it useless for isolating the sun's contribution while debugging.
+        float photons = sun.Intensity * brightness * _sunScale / samples;
         Color color = SrgbToLinear(new Color(sun.Red, sun.Green, sun.Blue));
 
         float baseYaw = Mathf.DegToRad(sun.Degrees);
@@ -690,6 +710,52 @@ public sealed partial class EditorLighting : Node3D
 
     /// <summary>How many dome suns the skylight expanded into (diagnostics).</summary>
     public int SkyLightCount { get; private set; }
+
+    /// <summary>
+    /// A shader's emitted colour: the average of its texture, colour-normalised so the brightest channel is
+    /// 1. That is q3map2's rule (shaders.c:811) — hue from the image, brightness from q3map_surfacelight.
+    /// </summary>
+    private static Color SurfaceLightColor(AssetSystem assets, string shaderName)
+    {
+        if (_surfaceLightColors.TryGetValue(shaderName, out Color cached))
+            return cached;
+
+        Color result = Colors.White;
+        try
+        {
+            Texture2D? tex = assets.ResolveLightmapDiffuse(shaderName).Texture ?? assets.LoadTexture(shaderName);
+            if (tex?.GetImage() is { } img)
+            {
+                if (img.IsCompressed())
+                    img.Decompress();
+                img.Resize(4, 4, Image.Interpolation.Bilinear);
+                float r = 0f, g = 0f, b = 0f;
+                for (int y = 0; y < 4; y++)
+                for (int x = 0; x < 4; x++)
+                {
+                    Color px = img.GetPixel(x, y);
+                    r += px.R; g += px.G; b += px.B;
+                }
+                result = Normalize(new NVec3(r, g, b));
+            }
+        }
+        catch (Exception)
+        {
+            result = Colors.White;   // an unreadable image must not take the light with it
+        }
+
+        _surfaceLightColors[shaderName] = result;
+        return result;
+    }
+
+    /// <summary>q3map2's ColorNormalize: scale so the largest channel is 1, keeping hue and full brightness.</summary>
+    private static Color Normalize(NVec3 c)
+    {
+        float max = MathF.Max(c.X, MathF.Max(c.Y, c.Z));
+        return max <= 1e-6f ? Colors.White : new Color(c.X / max, c.Y / max, c.Z / max);
+    }
+
+    private static readonly Dictionary<string, Color> _surfaceLightColors = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Origin of the entity whose <c>targetname</c> matches, or null.</summary>
     private static NVec3? FindTargetOrigin(VmapDocument doc, string target)

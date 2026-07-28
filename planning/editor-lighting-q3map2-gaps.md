@@ -145,3 +145,38 @@ Honouring per-shader `q3map_bounceScale` is nearly free.
 4. **3.4 area emission** and **3.5 phong** — medium, both visible on this map specifically.
 5. **3.6 patch/alpha shadows** — correctness for curved geometry.
 6. **3.7 resolution** — decide vertex-vs-atlas; everything above is worth more per hour than this.
+
+---
+
+## 5. Addendum — 2026-07-28, after implementing §3
+
+Closed since the first pass: the photon model, `q3map_skylight`, sun deviance/samples, sRGB colours,
+phong (`q3map_shadeAngle`), `-patchshadows`, `-fill`, dirtmapping, deluxemaps, and surface-light colour
+(q3map2 takes it from the light image's average, colour-normalised — shaders.c:811 — not white).
+
+**Still open, measured rather than assumed.** Our frame reads warmer than the reference: r:b of 1.97
+against 1.32 at the same camera and crop. Isolation runs, each one leg of an A/B:
+
+| leg | mean | r:b |
+|---|---|---|
+| q3map2 reference | 24.54 | **1.32** |
+| ours, defaults | 25.78 | 1.97 |
+| surface lights off | 14.29 | 1.92 |
+| bounce off | 19.00 | 1.96 |
+| luxels 24u instead of 48u | 21.43 | 1.94 |
+| ambient 0 | 27.78 | 1.96 |
+| **sun off** | 20.23 | **1.70** |
+
+So it is not the emitters, not the bounce, not the ambient floor, and not luxel density — every one of those
+leaves the cast intact. Only killing the sun moves it, and only part way. The map's 119 entity lights are
+blue (`_color 0.61 0.86 1.00`); in the compiled map they clearly dominate the walls, and in ours they do
+not. **The lead to chase is the fixture-to-sun ratio**, not the fixtures' colour.
+
+Note the trap that cost two false conclusions here: `cl_editor_sun_scale` had silently stopped applying once
+the sun moved into the bake (it only ever reached the real-time DirectionalLight3D), so the first "sun off"
+leg was not a sun-off leg at all and read as "the sun contributes nothing". Now wired.
+
+**Remaining structural gaps**, unchanged in kind: `-samples 4 -randomsamples` supersampling (we take one
+sample per vertex), `-samplesize 8` texels against our 24-48 unit vertices, area lights integrated over their
+winding with a form factor rather than as points, backsplash, alpha-tested shadow casters, and the light grid
+for dynamic models.

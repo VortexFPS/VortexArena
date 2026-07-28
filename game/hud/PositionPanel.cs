@@ -59,11 +59,12 @@ public partial class PositionPanel : HudPanel
 
     // Last-drawn snapshot for the change gate (alloc-free primitive compare, not a formatted string).
     private int _lastX = int.MinValue, _lastY = int.MinValue, _lastZ = int.MinValue;
+    private int _lastYaw = int.MinValue, _lastPitch = int.MinValue;
     private bool _lastHave;
     private int _lastWidth, _lastHeight;
 
-    /// <summary>True only when the drawn coordinates (rounded to whole units), the have-position state, or the
-    /// viewport size changed since the last draw (3.2-3).</summary>
+    /// <summary>True only when the drawn values (coordinates and angles, rounded as displayed), the
+    /// have-position state, or the viewport size changed since the last draw (3.2-3).</summary>
     public override bool NeedsRedraw()
     {
         NVec3? p = ShowMode() != 0 && PositionProvider is not null ? PositionProvider() : null;
@@ -71,10 +72,21 @@ public partial class PositionPanel : HudPanel
         int x = have ? Mathf.RoundToInt(p!.Value.X) : 0;
         int y = have ? Mathf.RoundToInt(p!.Value.Y) : 0;
         int z = have ? Mathf.RoundToInt(p!.Value.Z) : 0;
+
+        // The ANGLES are drawn too, so they have to be in the gate. Comparing position alone left the
+        // readout stale through any turn that did not also move the camera — which is exactly how a mapper
+        // lines up a shot, so the numbers were wrong precisely when they were being read.
+        NVec3? a = AnglesProvider?.Invoke();
+        int yaw = a.HasValue ? Mathf.RoundToInt(a.Value.Y) : 0;
+        int pitch = a.HasValue ? Mathf.RoundToInt(a.Value.X) : 0;
+
         int w = (int)Size2.X, h = (int)Size2.Y;
-        if (have == _lastHave && x == _lastX && y == _lastY && z == _lastZ && w == _lastWidth && h == _lastHeight)
+        if (have == _lastHave && x == _lastX && y == _lastY && z == _lastZ
+            && yaw == _lastYaw && pitch == _lastPitch && w == _lastWidth && h == _lastHeight)
             return false;
-        _lastHave = have; _lastX = x; _lastY = y; _lastZ = z; _lastWidth = w; _lastHeight = h;
+        _lastHave = have; _lastX = x; _lastY = y; _lastZ = z;
+        _lastYaw = yaw; _lastPitch = pitch;
+        _lastWidth = w; _lastHeight = h;
         return true;
     }
 

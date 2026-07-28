@@ -1509,3 +1509,233 @@ public sealed class SetEntityKeyOp : IVmapOp
         return true;
     }
 }
+
+// =================================================================================================
+//  E8 — surface / shader
+// =================================================================================================
+
+/// <summary>
+/// Set a face's texture projection — the Surface Inspector's edit (design doc §11.9).
+///
+/// The projection is an affine world-to-UV map (<c>u = dot(p, AxisU) + OffsetU</c>), so every operation the
+/// inspector offers is a transform of those four values rather than a texture-space nudge. Doing it that way
+/// is what keeps alignment correct when the face later moves: the projection is anchored to WORLD space, as
+/// q3map2 expects, not to the polygon.
+/// </summary>
+public sealed class SetFaceProjectionOp : IVmapOp
+{
+    private readonly int _brushId;
+    private readonly int _faceIndex;
+    private readonly VmapTexProjection _projection;
+
+    public SetFaceProjectionOp(int brushId, int faceIndex, VmapTexProjection projection)
+    {
+        _brushId = brushId;
+        _faceIndex = faceIndex;
+        _projection = projection;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
+
+    /// <summary>The projection being written. Read by the wire codec.</summary>
+    public VmapTexProjection Projection => _projection;
+
+    /// <summary>Face this op retextures. Read by the wire codec.</summary>
+    public int FaceIndex => _faceIndex;
+
+    public string Describe() => $"Align face {_faceIndex} of brush {_brushId}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (doc.FindBrush(_brushId) is not { } brush)
+            return false;
+        if (_faceIndex < 0 || _faceIndex >= brush.Faces.Count)
+            return false;
+        if (!_projection.IsValid)
+            return false;   // a zero axis collapses the texture to a line
+
+        brush.Faces[_faceIndex].Projection = _projection;
+        return true;
+    }
+}
+
+/// <summary>Set a face's Q3 surface and content flags — the inspector's flag checkboxes.</summary>
+public sealed class SetFaceFlagsOp : IVmapOp
+{
+    private readonly int _brushId;
+    private readonly int _faceIndex;
+    private readonly int _surfaceFlags;
+    private readonly int _contentFlags;
+
+    public SetFaceFlagsOp(int brushId, int faceIndex, int surfaceFlags, int contentFlags)
+    {
+        _brushId = brushId;
+        _faceIndex = faceIndex;
+        _surfaceFlags = surfaceFlags;
+        _contentFlags = contentFlags;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
+
+    public string Describe() => $"Set flags on face {_faceIndex} of brush {_brushId}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (doc.FindBrush(_brushId) is not { } brush)
+            return false;
+        if (_faceIndex < 0 || _faceIndex >= brush.Faces.Count)
+            return false;
+
+        VmapFace f = brush.Faces[_faceIndex];
+        if (f.SurfaceFlags == _surfaceFlags && f.ContentFlags == _contentFlags)
+            return false;   // no change: do not journal an empty step
+
+        f.SurfaceFlags = _surfaceFlags;
+        f.ContentFlags = _contentFlags;
+        return true;
+    }
+}
+
+/// <summary>
+/// The Surface Inspector's projection maths (design doc §11.9): the operations Radiant offers on a face's
+/// texture alignment, expressed as transforms of the affine world-to-UV map.
+///
+/// Every one of these is a pure function of the projection and the face, so they are here rather than in an op:
+/// the op writes the result, these decide what it should be, and both halves are testable without a document.
+/// </summary>
+public static class VmapTexAlign
+{
+    /// <summary>
+    /// Slide the texture across the face by a UV offset, in texture repeats.
+    ///
+    /// Adding to the offsets is the whole operation, but the SIGN is the part that catches people: the map is
+    /// <c>u = dot(p, AxisU) + OffsetU</c>, so increasing the offset slides the texture in +u, which moves the
+    /// visible image the other way across the surface. Shift is expressed in the direction the IMAGE moves,
+    /// which is what a mapper means by "nudge it right".
+    /// </summary>
+    public static VmapTexProjection Shift(VmapTexProjection p, float du, float dv)
+        => new(p.AxisU, p.AxisV, p.OffsetU - du, p.OffsetV - dv);
+
+    /// <summary>
+    /// Scale the texture on the face about a fixed world point.
+    ///
+    /// A LARGER scale means a bigger image, which means FEWER repeats per world unit — so the axes are divided,
+    /// not multiplied. Re-anchoring through <paramref name="anchor"/> is what keeps the texture from sliding
+    /// while it resizes; without it, scaling a wall's texture also walks it along the wall.
+    /// </summary>
+    public static VmapTexProjection Scale(VmapTexProjection p, float su, float sv, Vector3 anchor)
+    {
+        if (MathF.Abs(su) < 1e-6f || MathF.Abs(sv) < 1e-6f)
+            return p;
+
+        Vector2 before = p.Evaluate(anchor);
+        var scaled = new VmapTexProjection(p.AxisU / su, p.AxisV / sv, p.OffsetU, p.OffsetV);
+        Vector2 after = scaled.Evaluate(anchor);
+        return new VmapTexProjection(
+            scaled.AxisU, scaled.AxisV,
+            scaled.OffsetU + (before.X - after.X),
+            scaled.OffsetV + (before.Y - after.Y));
+    }
+
+    /// <summary>
+    /// Rotate the texture within the face's own plane, about a fixed world point.
+    ///
+    /// Rotating in the PLANE rather than in world space is the requirement: a texture rotated about an
+    /// arbitrary axis would shear, because the U and V axes must stay perpendicular to the face normal or the
+    /// projection stops being a valid surface mapping.
+    /// </summary>
+    public static VmapTexProjection Rotate(VmapTexProjection p, Vector3 normal, float degrees, Vector3 anchor)
+    {
+        float len = normal.Length();
+        if (len < 1e-6f)
+            return p;
+
+        Quaternion q = Quaternion.CreateFromAxisAngle(normal / len, degrees * MathF.PI / 180f);
+        Vector2 before = p.Evaluate(anchor);
+        var rotated = new VmapTexProjection(
+            Vector3.Transform(p.AxisU, q), Vector3.Transform(p.AxisV, q), p.OffsetU, p.OffsetV);
+        Vector2 after = rotated.Evaluate(anchor);
+        return new VmapTexProjection(
+            rotated.AxisU, rotated.AxisV,
+            rotated.OffsetU + (before.X - after.X),
+            rotated.OffsetV + (before.Y - after.Y));
+    }
+
+    /// <summary>
+    /// FIT: make exactly <paramref name="repeatsU"/> x <paramref name="repeatsV"/> tiles span the face.
+    ///
+    /// Radiant's most-used alignment command, and the reason is that it is the only one whose result does not
+    /// depend on where the face happens to sit in the world — you get a whole number of tiles across it,
+    /// whatever its size.
+    /// </summary>
+    public static VmapTexProjection Fit(
+        VmapTexProjection p, IReadOnlyList<Vector3> winding, float repeatsU = 1f, float repeatsV = 1f)
+    {
+        if (winding is null || winding.Count < 3 || repeatsU == 0f || repeatsV == 0f)
+            return p;
+
+        // Measure the face in its CURRENT uv space, then rescale so that span becomes the requested repeats.
+        float minU = float.MaxValue, maxU = float.MinValue;
+        float minV = float.MaxValue, maxV = float.MinValue;
+        foreach (Vector3 v in winding)
+        {
+            Vector2 uv = p.Evaluate(v);
+            minU = MathF.Min(minU, uv.X);
+            maxU = MathF.Max(maxU, uv.X);
+            minV = MathF.Min(minV, uv.Y);
+            maxV = MathF.Max(maxV, uv.Y);
+        }
+
+        float spanU = maxU - minU;
+        float spanV = maxV - minV;
+        if (MathF.Abs(spanU) < 1e-9f || MathF.Abs(spanV) < 1e-9f)
+            return p;   // the face is edge-on in uv space; nothing meaningful to fit
+
+        float su = repeatsU / spanU;
+        float sv = repeatsV / spanV;
+
+        // Scale the axes, then translate so the face's uv minimum lands on 0.
+        var scaled = new VmapTexProjection(p.AxisU * su, p.AxisV * sv, p.OffsetU * su, p.OffsetV * sv);
+        return new VmapTexProjection(
+            scaled.AxisU, scaled.AxisV,
+            scaled.OffsetU - minU * su,
+            scaled.OffsetV - minV * sv);
+    }
+
+    /// <summary>
+    /// AXIAL: reset to the dominant-axis box projection for this face's normal, at a given world scale.
+    /// The predictable fallback — no rotation, no offset, aligned to the world grid.
+    /// </summary>
+    public static VmapTexProjection Axial(Vector3 normal, float repeatsPerUnit = 1f / 64f)
+        => VmapTexProjection.AxialFor(normal, repeatsPerUnit);
+
+    /// <summary>
+    /// NATURAL: keep the current rotation, but reset the SCALE to one texture per
+    /// <paramref name="unitsPerRepeat"/> world units.
+    ///
+    /// The difference from <see cref="Axial"/> is that a mapper who has carefully rotated a texture to run
+    /// along a diagonal wall keeps that work; only the stretching is undone.
+    /// </summary>
+    public static VmapTexProjection Natural(VmapTexProjection p, float unitsPerRepeat = 64f)
+    {
+        float lu = p.AxisU.Length();
+        float lv = p.AxisV.Length();
+        if (lu < 1e-9f || lv < 1e-9f || unitsPerRepeat <= 0f)
+            return p;
+
+        float want = 1f / unitsPerRepeat;
+        return new VmapTexProjection(
+            p.AxisU / lu * want, p.AxisV / lv * want,
+            p.OffsetU * (want / lu), p.OffsetV * (want / lv));
+    }
+
+    /// <summary>Texture scale in world units per repeat, for the inspector readout.</summary>
+    public static Vector2 ScaleOf(VmapTexProjection p)
+    {
+        float lu = p.AxisU.Length();
+        float lv = p.AxisV.Length();
+        return new Vector2(lu > 1e-9f ? 1f / lu : 0f, lv > 1e-9f ? 1f / lv : 0f);
+    }
+}

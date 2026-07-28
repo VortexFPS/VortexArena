@@ -352,6 +352,7 @@ public static class EditorTools
         EditorTool.Vertex => VmapSelectionKind.Vertex,
         EditorTool.Patch => VmapSelectionKind.Patch,
         EditorTool.Entity => VmapSelectionKind.Entity,
+        EditorTool.Shader => VmapSelectionKind.Face,
         _ => VmapSelectionKind.Face,
     };
 
@@ -373,7 +374,7 @@ public static class EditorTools
     {
         EditorTool.None or EditorTool.Select or EditorTool.Brush or EditorTool.Face
             or EditorTool.Edge or EditorTool.Vertex or EditorTool.Patch or EditorTool.Clip
-            or EditorTool.Entity => true,
+            or EditorTool.Entity or EditorTool.Shader or EditorTool.Measure => true,
         _ => false,
     };
 

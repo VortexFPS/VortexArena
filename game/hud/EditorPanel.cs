@@ -367,6 +367,13 @@ public partial class EditorPanel : HudPanel
             return;
         }
 
+        // Measure's whole output is a line of text, so it belongs here rather than anywhere else.
+        if (c.Tool == EditorTool.Measure)
+        {
+            lines.Add((c.MeasureReadout(), live));
+            return;
+        }
+
         // The clip tool is the one place where clicking is not the commit — Enter is — so it needs saying.
         if (c.Tool == EditorTool.Clip)
         {

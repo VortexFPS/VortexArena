@@ -563,6 +563,13 @@ public sealed partial class EditorController : Node3D
             return false;
         }
 
+        // Measure never selects: every click is a point of the measurement.
+        if (Tool == EditorTool.Measure)
+        {
+            AddMeasurePoint();
+            return false;
+        }
+
         // --- phase two: a handle is under the crosshair, so transform along it ---
         if (_hoverHandle is { } handle && _session.Selection.Count > 0)
         {
@@ -932,6 +939,197 @@ public sealed partial class EditorController : Node3D
 
         GeometryVersion++;
         return true;
+    }
+
+    // =============================================================================================
+    //  Measure tool (§11.8, §11.9) — distance, angle, and the reachability a desktop editor cannot answer
+    // =============================================================================================
+
+    private readonly List<NVec3> _measurePoints = new();
+
+    /// <summary>Points clicked for the current measurement, for the gizmo to draw.</summary>
+    public IReadOnlyList<NVec3> MeasurePoints => _measurePoints;
+
+    /// <summary>How many points the current measure mode wants.</summary>
+    public int MeasurePointsNeeded => Mode == ToolMode.Angle ? 3 : 2;
+
+    /// <summary>Add a measure point at the crosshair, starting over once the previous measurement is complete.</summary>
+    public bool AddMeasurePoint()
+    {
+        if (Tool != EditorTool.Measure || !TryGetPastePoint(out NVec3 p))
+            return false;
+
+        if (_measurePoints.Count >= MeasurePointsNeeded)
+            _measurePoints.Clear();
+        _measurePoints.Add(p);
+        return true;
+    }
+
+    /// <summary>Drop the current measurement.</summary>
+    public void ClearMeasurePoints() => _measurePoints.Clear();
+
+    /// <summary>
+    /// The measurement as a line of text, or empty when not enough points are down.
+    ///
+    /// Reachability is the mode worth having: it answers "can a player cross this" out of the same
+    /// <c>sv_jumpvelocity</c> and <c>sv_gravity</c> the movement code runs on, which is the one question a
+    /// desktop editor structurally cannot answer.
+    /// </summary>
+    public string MeasureReadout()
+    {
+        if (_measurePoints.Count < 2)
+            return _measurePoints.Count == 1
+                ? "click a second point"
+                : "click two points";
+
+        if (Mode == ToolMode.Angle)
+        {
+            if (_measurePoints.Count < 3)
+                return "click a third point";
+            float deg = VmapMeasure.Angle(_measurePoints[0], _measurePoints[1], _measurePoints[2]);
+            return $"{deg:0.##}° at the first point";
+        }
+
+        if (Mode == ToolMode.Reachability)
+            return VmapMeasure.Describe(_measurePoints[0], _measurePoints[1], ReachParams.Default);
+
+        NVec3 a = _measurePoints[0], b = _measurePoints[1];
+        return $"{VmapMeasure.Distance(a, b):0.#}u   "
+            + $"run {VmapMeasure.HorizontalDistance(a, b):0.#}   "
+            + $"rise {VmapMeasure.Rise(a, b):+0.#;-0.#;0}";
+    }
+
+    // =============================================================================================
+    //  Shader tool (§11.9) — the Surface Inspector
+    // =============================================================================================
+
+    /// <summary>
+    /// The shader clipboard: the material and alignment lifted by the eyedropper. Separate from the geometry
+    /// clipboard because they are used together — copy a wall's shader, then paste geometry somewhere else and
+    /// apply the shader to it, without either operation clobbering the other.
+    /// </summary>
+    public string PickedMaterial { get; private set; } = "";
+
+    /// <summary>Alignment captured alongside <see cref="PickedMaterial"/>.</summary>
+    public VmapTexProjection PickedProjection { get; private set; }
+
+    /// <summary>Surface/content flags captured alongside the material.</summary>
+    public int PickedSurfaceFlags { get; private set; }
+
+    public int PickedContentFlags { get; private set; }
+
+    /// <summary>True once something has been picked up.</summary>
+    public bool HasPickedShader => PickedMaterial.Length > 0;
+
+    /// <summary>The face the crosshair is over, resolved for shader work. Null when aiming at nothing.</summary>
+    public (VmapBrush Brush, int FaceIndex)? HoveredFace()
+    {
+        if (_document is null || !Hover.Hit)
+            return null;
+        VmapSelection sel = Hover.Selection;
+        if (sel.Kind != VmapSelectionKind.Face || sel.FaceIndex < 0)
+            return null;
+        if (_document.FindBrush(sel.BrushId) is not { } brush || sel.FaceIndex >= brush.Faces.Count)
+            return null;
+        return (brush, sel.FaceIndex);
+    }
+
+    /// <summary>Eyedropper: lift the hovered face's material, alignment and flags.</summary>
+    public bool PickShaderAtCrosshair()
+    {
+        if (HoveredFace() is not { } hit)
+            return false;
+
+        VmapFace f = hit.Brush.Faces[hit.FaceIndex];
+        PickedMaterial = f.Material;
+        PickedProjection = f.Projection;
+        PickedSurfaceFlags = f.SurfaceFlags;
+        PickedContentFlags = f.ContentFlags;
+        Log.Info($"editor: picked {PickedMaterial}");
+        return true;
+    }
+
+    /// <summary>
+    /// The faces a surface edit applies to: the selection when there is one, else whatever the crosshair is
+    /// over. Aiming is the fast path for retexturing a wall at a time; selecting is how you do twenty at once.
+    /// </summary>
+    public List<(int BrushId, int FaceIndex)> ShaderTargets()
+    {
+        var targets = new List<(int, int)>();
+        if (_session is not null)
+            foreach (VmapSelection sel in _session.Selection)
+                if (sel.Kind == VmapSelectionKind.Face && sel.FaceIndex >= 0)
+                    targets.Add((sel.BrushId, sel.FaceIndex));
+
+        if (targets.Count == 0 && HoveredFace() is { } hit)
+            targets.Add((hit.Brush.Id, hit.FaceIndex));
+        return targets;
+    }
+
+    /// <summary>Apply the picked material (and its flags) to the target faces.</summary>
+    public bool ApplyShader()
+    {
+        if (_session is null || !HasPickedShader)
+        {
+            Log.Info("editor: nothing picked — aim at a face and pick first");
+            return false;
+        }
+
+        int changed = 0;
+        foreach ((int brushId, int faceIndex) in ShaderTargets())
+        {
+            if (_session.Apply(new SetFaceMaterialOp(brushId, faceIndex, PickedMaterial)))
+                changed++;
+            _session.Apply(new SetFaceFlagsOp(brushId, faceIndex, PickedSurfaceFlags, PickedContentFlags));
+        }
+
+        if (changed == 0)
+            return false;
+        GeometryVersion++;
+        Log.Info($"editor: applied {PickedMaterial} to {changed} face(s)");
+        return true;
+    }
+
+    /// <summary>
+    /// Run one alignment operation over the target faces. Returns how many faces changed.
+    ///
+    /// Each face is transformed against its OWN winding and normal rather than against a shared frame: fitting
+    /// a texture means fitting it to that face, and two faces of different sizes must end up with different
+    /// projections even though the mapper asked once.
+    /// </summary>
+    public int AlignShader(Func<VmapTexProjection, VmapFace, IReadOnlyList<NVec3>, VmapTexProjection> transform)
+    {
+        ArgumentNullException.ThrowIfNull(transform);
+        if (_session is null || _document is null)
+            return 0;
+
+        int changed = 0;
+        foreach ((int brushId, int faceIndex) in ShaderTargets())
+        {
+            if (_document.FindBrush(brushId) is not { } brush || faceIndex >= brush.Faces.Count)
+                continue;
+
+            VmapFace face = brush.Faces[faceIndex];
+            NVec3[] winding = VmapWinding.BuildFaceWinding(brush, faceIndex);
+            VmapTexProjection next = transform(face.Projection, face, winding);
+            if (_session.Apply(new SetFaceProjectionOp(brushId, faceIndex, next)))
+                changed++;
+        }
+
+        if (changed > 0)
+            GeometryVersion++;
+        return changed;
+    }
+
+    /// <summary>Centre of a face's winding — the anchor a scale or rotate turns about.</summary>
+    public static NVec3 FaceCenter(IReadOnlyList<NVec3> winding)
+    {
+        if (winding is null || winding.Count == 0)
+            return NVec3.Zero;
+        NVec3 sum = NVec3.Zero;
+        foreach (NVec3 v in winding)
+            sum += v;
+        return sum / winding.Count;
     }
 
     // =============================================================================================

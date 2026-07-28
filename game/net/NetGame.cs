@@ -7549,6 +7549,7 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_flyspeed", CmdEditorFlySpeed);
         interp.RegisterCommand("editor_clip", CmdEditorClip);
         interp.RegisterCommand("editor_entity", CmdEditorEntity);
+        interp.RegisterCommand("editor_shader", CmdEditorShader);
         Vmap.EditorBinds.RegisterCommands(interp);
 
         // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
@@ -8039,6 +8040,136 @@ public sealed partial class NetGame : Node3D
         {
             XonoticGodot.Common.Diagnostics.Log.Warn($"mapinfo: could not save: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// <c>editor_shader</c> — the Surface Inspector's console surface. Operations act on the selected faces,
+    /// or on the face under the crosshair when nothing is selected: aiming is the fast path for retexturing a
+    /// wall at a time, selecting is how you do twenty at once.
+    /// <code>
+    ///   pick | apply | set &lt;material&gt; | show
+    ///   fit [u] [v] | natural [units] | axial
+    ///   shift &lt;du&gt; &lt;dv&gt; | scale &lt;su&gt; &lt;sv&gt; | rotate &lt;degrees&gt;
+    /// </code>
+    /// </summary>
+    private void CmdEditorShader(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "show";
+
+        float Arg(int i, float fallback)
+            => args.Count > i && float.TryParse(args[i], System.Globalization.NumberStyles.Float,
+                   System.Globalization.CultureInfo.InvariantCulture, out float v)
+                ? v : fallback;
+
+        void Report(int n, string what)
+        {
+            if (n > 0)
+                RefreshEditorWorld();
+            XonoticGodot.Common.Diagnostics.Log.Info($"editor: {what} {n} face(s)");
+        }
+
+        switch (verb)
+        {
+            case "pick":
+                ed.PickShaderAtCrosshair();
+                return;
+
+            case "apply":
+                if (ed.ApplyShader())
+                    RefreshEditorWorld();
+                return;
+
+            case "set":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_shader set <material>");
+                    return;
+                }
+                int n = 0;
+                foreach ((int brushId, int faceIndex) in ed.ShaderTargets())
+                    if (ed.Session!.Apply(new XonoticGodot.Formats.Vmap.SetFaceMaterialOp(
+                            brushId, faceIndex, args[2])))
+                        n++;
+                if (n > 0)
+                    ed.BumpGeometryVersion();
+                Report(n, "retextured");
+                return;
+            }
+
+            case "fit":
+                Report(ed.AlignShader((p, _, w) =>
+                    XonoticGodot.Formats.Vmap.VmapTexAlign.Fit(p, w, Arg(2, 1f), Arg(3, 1f))), "fitted");
+                return;
+
+            case "natural":
+                Report(ed.AlignShader((p, _, _) =>
+                    XonoticGodot.Formats.Vmap.VmapTexAlign.Natural(p, Arg(2, 64f))), "reset to natural scale on");
+                return;
+
+            case "axial":
+                Report(ed.AlignShader((_, f, _) =>
+                    XonoticGodot.Formats.Vmap.VmapTexAlign.Axial(f.Plane.Normal)), "reset to axial on");
+                return;
+
+            case "shift":
+                Report(ed.AlignShader((p, _, _) =>
+                    XonoticGodot.Formats.Vmap.VmapTexAlign.Shift(p, Arg(2, 0f), Arg(3, 0f))), "shifted");
+                return;
+
+            case "scale":
+                Report(ed.AlignShader((p, _, w) =>
+                    XonoticGodot.Formats.Vmap.VmapTexAlign.Scale(
+                        p, Arg(2, 1f), Arg(3, Arg(2, 1f)), Vmap.EditorController.FaceCenter(w))), "scaled");
+                return;
+
+            case "rotate":
+                Report(ed.AlignShader((p, f, w) =>
+                    XonoticGodot.Formats.Vmap.VmapTexAlign.Rotate(
+                        p, f.Plane.Normal, Arg(2, 15f), Vmap.EditorController.FaceCenter(w))), "rotated");
+                return;
+
+            default:
+                LogShaderState(ed);
+                return;
+        }
+    }
+
+    /// <summary>Print what the eyedropper is holding and what an edit would land on.</summary>
+    private void LogShaderState(Vmap.EditorController ed)
+    {
+        if (ed.HasPickedShader)
+        {
+            System.Numerics.Vector2 s = XonoticGodot.Formats.Vmap.VmapTexAlign.ScaleOf(ed.PickedProjection);
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"picked: {ed.PickedMaterial}   scale {s.X:0.##} x {s.Y:0.##} units/repeat");
+        }
+        else
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("picked: (nothing — aim at a face and 'editor_shader pick')");
+        }
+
+        List<(int BrushId, int FaceIndex)> targets = ed.ShaderTargets();
+        if (targets.Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("target: (aim at a face, or select some)");
+        }
+        else if (ed.Document is { } doc && doc.FindBrush(targets[0].BrushId) is { } b
+                 && targets[0].FaceIndex < b.Faces.Count)
+        {
+            XonoticGodot.Formats.Vmap.VmapFace f = b.Faces[targets[0].FaceIndex];
+            System.Numerics.Vector2 s = XonoticGodot.Formats.Vmap.VmapTexAlign.ScaleOf(f.Projection);
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"target: {targets.Count} face(s); first is {f.Material}   scale {s.X:0.##} x {s.Y:0.##}"
+                + $"   surf 0x{f.SurfaceFlags:X}   cont 0x{f.ContentFlags:X}");
+        }
+
+        XonoticGodot.Common.Diagnostics.Log.Help(
+            "editor_shader pick|apply|set <mat>|fit [u v]|natural [units]|axial"
+            + "|shift <du dv>|scale <su sv>|rotate <deg>");
     }
 
     /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>

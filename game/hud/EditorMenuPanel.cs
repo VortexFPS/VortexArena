@@ -347,7 +347,8 @@ public partial class EditorMenuPanel : HudPanel
             {
                 Label = EditorTools.Label(mode),
                 Detail = built ? (mode == c.Mode ? "current" : "") : Pending("E8"),
-                Command = EntityConsoleCommand(tool: Controller?.Tool ?? EditorTool.None, mode)
+                Command = EntityConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
+                          ?? ShaderConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? $"editor_mode {mode}",
                 Enabled = built,
                 Checked = built ? mode == c.Mode : null,
@@ -373,6 +374,28 @@ public partial class EditorMenuPanel : HudPanel
     }
 
     /// <summary>
+    /// Shader modes drive the surface commands directly; there is no inspector dialog to enter yet, and a row
+    /// that switched into a mode with no UI behind it would be the silent no-op the menu exists to avoid.
+    /// </summary>
+    private static string? ShaderConsoleCommand(EditorTool tool, ToolMode mode)
+    {
+        if (tool != EditorTool.Shader)
+            return null;
+        return mode switch
+        {
+            ToolMode.PickShader => "editor_shader pick",
+            ToolMode.ApplyShader => "editor_shader apply",
+            ToolMode.FitProjection => "editor_shader fit",
+            ToolMode.NaturalProjection => "editor_shader natural",
+            ToolMode.AxialProjection => "editor_shader axial",
+            ToolMode.ShiftUv => "editor_shader shift 0.25 0",
+            ToolMode.ScaleUv => "editor_shader scale 2 2",
+            ToolMode.RotateUv => "editor_shader rotate 15",
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// Which modes actually do something today. E7 shipped the rails plus move/rotate/scale; the rest land
     /// with their tools in E8. Marking them is the honest alternative to a row that silently no-ops.
     /// </summary>
@@ -384,6 +407,10 @@ public partial class EditorMenuPanel : HudPanel
         // Entity create and the key inspector run from the console for now (editor_entity); the dialogs are
         // still to come, so the rows point at what exists rather than claiming a UI that does not.
         ToolMode.Create or ToolMode.Properties => tool == EditorTool.Entity,
+        ToolMode.PickShader or ToolMode.ApplyShader or ToolMode.FitProjection
+            or ToolMode.NaturalProjection or ToolMode.AxialProjection or ToolMode.ShiftUv
+            or ToolMode.ScaleUv or ToolMode.RotateUv => tool == EditorTool.Shader,
+        ToolMode.Distance or ToolMode.Angle or ToolMode.Reachability => tool == EditorTool.Measure,
         _ => false,
     };
 

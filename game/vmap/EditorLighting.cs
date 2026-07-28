@@ -79,6 +79,35 @@ public sealed partial class EditorLighting : Node3D
     public const string CvarLightBakeMode = "cl_editor_light_bakemode";
 
     /// <summary>
+    /// Screen-space ambient occlusion — the live stand-in for the <c>-dirty</c> pass q3map2 bakes into a
+    /// lightmap (stormkeep compiled with <c>-dirty -dirtscale 2</c>). This is what puts the dark back in
+    /// corners and creases; without it, direct light alone leaves every junction the same brightness as the
+    /// flats around it, which is most of what reads as "flat" next to a baked map.
+    /// </summary>
+    public const string CvarSsao = "cl_editor_ssao";
+
+    /// <summary>AO strength.</summary>
+    public const string CvarSsaoIntensity = "cl_editor_ssao_intensity";
+
+    /// <summary>AO sampling radius in QUAKE units — a corner is only dark within about this distance of it.</summary>
+    public const string CvarSsaoRadius = "cl_editor_ssao_radius";
+
+    /// <summary>
+    /// Light falloff exponent. 2 is inverse-square, which is what q3map2 bakes and what gives tight bright
+    /// pools falling to dark; Godot's default of 1 is a soft linear-ish ramp that spreads every fixture's
+    /// light evenly across a room and flattens it.
+    /// </summary>
+    public const string CvarFalloff = "cl_editor_light_falloff";
+
+    /// <summary>
+    /// Let the sky light the world. ON is Godot's default and it is why the editor world never went properly
+    /// dark: with a sky background every surface receives reflected sky light regardless of the map's own
+    /// lighting, measured at 42.4 of the 47.7 mean brightness on stormkeep with every light and the ambient
+    /// floor switched off. A sealed Q3 interior should be lit by its fixtures, not by the sky outside it.
+    /// </summary>
+    public const string CvarSkyLight = "cl_editor_sky_light";
+
+    /// <summary>
     /// Quake light intensity → Godot omni RANGE, in Quake units. q3map2's point falloff is
     /// <c>intensity / distance²</c> scaled by <c>-pointscale</c>; the useful radius is therefore about
     /// sqrt(intensity) times a constant. Tuned so stormkeep's <c>light 40</c> fixtures reach across a
@@ -92,6 +121,7 @@ public sealed partial class EditorLighting : Node3D
     private readonly List<OmniLight3D> _points = new();
     private DirectionalLight3D? _sun;
     private Light3D.BakeMode _bakeMode = Light3D.BakeMode.Dynamic;
+    private float _falloff = 2f;
     private float _nextShadowSort;
 
     /// <summary>Number of lights built (diagnostics / HUD).</summary>
@@ -113,6 +143,7 @@ public sealed partial class EditorLighting : Node3D
 
         var rig = new EditorLighting { Name = "EditorLighting" };
         float brightness = ReadFloat(cvars, CvarBrightness, 1f);
+        rig._falloff = ReadFloat(cvars, CvarFalloff, 2f);
         rig._bakeMode = (int)ReadFloat(cvars, CvarLightBakeMode, 2f) switch
         {
             0 => Light3D.BakeMode.Disabled,
@@ -172,6 +203,7 @@ public sealed partial class EditorLighting : Node3D
             ShadowEnabled = false,       // granted by budget in Update()
             LightSpecular = 0.25f,
             LightBakeMode = _bakeMode,
+            OmniAttenuation = _falloff,
         };
         _ = doc;
         return light;
@@ -303,7 +335,9 @@ public sealed partial class EditorLighting : Node3D
         // nothing moved — re-assigning SdfgiEnabled would otherwise restart the cascades every frame.
         int signature = HashCode.Combine(gi, ReadFloat(cvars, CvarAmbient, 0.18f),
             ReadFloat(cvars, CvarGiCellSize, 8f), ReadFloat(cvars, CvarGiCascades, 4f),
-            ReadFloat(cvars, CvarGiEnergy, 1.6f));
+            ReadFloat(cvars, CvarGiEnergy, 1.6f),
+            HashCode.Combine(ReadFloat(cvars, CvarSsao, 1f), ReadFloat(cvars, CvarSsaoIntensity, 4f),
+                ReadFloat(cvars, CvarSsaoRadius, 48f), ReadFloat(cvars, CvarSkyLight, 0f)));
         if (_appliedEnv == env && _appliedSignature == signature)
             return;
 
@@ -315,6 +349,8 @@ public sealed partial class EditorLighting : Node3D
             _savedAmbientColor = env.AmbientLightColor;
             _savedAmbientEnergy = env.AmbientLightEnergy;
             _savedSdfgi = env.SdfgiEnabled;
+            _savedReflection = env.ReflectedLightSource;
+            _savedSsao = env.SsaoEnabled;
         }
         _appliedEnv = env;
         _appliedSignature = signature;
@@ -324,6 +360,30 @@ public sealed partial class EditorLighting : Node3D
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         env.AmbientLightColor = new Color(0.55f, 0.58f, 0.66f);
         env.AmbientLightEnergy = ambient;
+
+        // The sky is not allowed to light a sealed interior. This is the single largest term in why the
+        // editor world never looked like the baked one: it lifted every surface uniformly, which is exactly
+        // the definition of flat.
+        bool skyLight = ReadFloat(cvars, CvarSkyLight, 0f) != 0f;
+        env.ReflectedLightSource = skyLight
+            ? Godot.Environment.ReflectionSource.Bg
+            : Godot.Environment.ReflectionSource.Disabled;
+
+        // AO — the live stand-in for q3map2's baked -dirty pass.
+        bool ssao = ReadFloat(cvars, CvarSsao, 1f) != 0f;
+        env.SsaoEnabled = ssao;
+        if (ssao)
+        {
+            env.SsaoRadius = ReadFloat(cvars, CvarSsaoRadius, 48f);
+            env.SsaoIntensity = ReadFloat(cvars, CvarSsaoIntensity, 4f);
+            env.SsaoPower = 2f;
+            env.SsaoDetail = 0.5f;
+            env.SsaoHorizon = 0.06f;
+            env.SsaoSharpness = 0.98f;
+            // AO darkens ambient/indirect only by default; letting it bite into direct light too is what
+            // makes a corner read as a corner when the only light in the room is a nearby fixture.
+            env.SsaoLightAffect = 0.35f;
+        }
 
         env.SdfgiEnabled = gi;
         if (!gi)
@@ -343,6 +403,47 @@ public sealed partial class EditorLighting : Node3D
         env.SdfgiReadSkyLight = true;
     }
 
+    /// <summary>
+    /// Silence the scene's generic "Sun" while the editor lights the world itself.
+    ///
+    /// The host adds a fixed <c>DirectionalLight3D</c> at a hardcoded angle (NetGame's <c>Sun</c>) so that
+    /// PLAYERS and items are lit — the shipped world never needed it, being drawn unshaded from a baked
+    /// lightmap. The moment the editor's world became lit, that light started washing every surface in the
+    /// map from one direction at full strength, independent of anything the map itself defines. It is the
+    /// single largest reason the lit editor still looked flat: 119 fixtures and a recovered sun were all
+    /// competing with a uniform floodlight nobody asked for.
+    ///
+    /// Suppressed rather than removed, and restored on the way out, because it is the host's node and the
+    /// match still needs it.
+    /// </summary>
+    public static void SuppressSceneSun(Node sceneRoot, bool suppress)
+    {
+        if (sceneRoot is null)
+            return;
+        if (sceneRoot.FindChild("Sun", true, false) is not DirectionalLight3D sun || !GodotObject.IsInstanceValid(sun))
+            return;
+
+        if (suppress)
+        {
+            if (!_sunSuppressed)
+            {
+                _savedSceneSunEnergy = sun.LightEnergy;
+                _sunSuppressed = true;
+            }
+            sun.LightEnergy = 0f;
+            sun.ShadowEnabled = false;
+        }
+        else if (_sunSuppressed)
+        {
+            sun.LightEnergy = _savedSceneSunEnergy;
+            sun.ShadowEnabled = true;
+            _sunSuppressed = false;
+        }
+    }
+
+    private static bool _sunSuppressed;
+    private static float _savedSceneSunEnergy = 1f;
+
     /// <summary>Put back the environment the match had before the editor imposed its own preset.</summary>
     public static void RestoreEnvironment()
     {
@@ -356,6 +457,8 @@ public sealed partial class EditorLighting : Node3D
         _appliedEnv.AmbientLightColor = _savedAmbientColor;
         _appliedEnv.AmbientLightEnergy = _savedAmbientEnergy;
         _appliedEnv.SdfgiEnabled = _savedSdfgi;
+        _appliedEnv.ReflectedLightSource = _savedReflection;
+        _appliedEnv.SsaoEnabled = _savedSsao;
         _appliedEnv = null;
         _appliedSignature = 0;
     }
@@ -366,6 +469,8 @@ public sealed partial class EditorLighting : Node3D
     private static Color _savedAmbientColor;
     private static float _savedAmbientEnergy;
     private static bool _savedSdfgi;
+    private static Godot.Environment.ReflectionSource _savedReflection;
+    private static bool _savedSsao;
 
     private static bool TryVector(string text, out NVec3 v)
     {

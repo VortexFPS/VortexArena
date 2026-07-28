@@ -5760,6 +5760,7 @@ public sealed partial class NetGame : Node3D
             // mapper changes mid-session. ApplyEnvironment itself no-ops when nothing changed.
             if (_worldEnv is not null)
                 Vmap.EditorLighting.ApplyEnvironment(_worldEnv, Menu.MenuState.Cvars);
+            Vmap.EditorLighting.SuppressSceneSun(this, true);
         }
 
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
@@ -6856,6 +6857,7 @@ public sealed partial class NetGame : Node3D
                     _editorLights.QueueFree();
                 _editorLights = null;
                 Vmap.EditorLighting.RestoreEnvironment();
+                Vmap.EditorLighting.SuppressSceneSun(this, false);
                 if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
                 {
                     _mapRoot.Visible = true;

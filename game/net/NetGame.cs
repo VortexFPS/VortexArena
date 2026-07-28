@@ -5902,6 +5902,7 @@ public sealed partial class NetGame : Node3D
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
         {
             editorPanel.IsEditorSession = IsEditorGametype;
+            Hud.HudPanel.EditorSession = IsEditorGametype;
             editorPanel.IsEditing = _client?.IsObserving ?? true;
             editorPanel.FlySpeed = LocalServerPlayer?.SpectatorSpeed ?? 1f;
             editorPanel.Controller = _editor;

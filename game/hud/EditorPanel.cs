@@ -94,8 +94,11 @@ public partial class EditorPanel : HudPanel
 
         int size = (int)Mathf.Clamp(Size2.Y * 0.017f, 11f, 24f);
         float lineH = size + 5f;
-        float x = 12f;
-        float y = Size2.Y * 0.30f;
+        // TOP RIGHT, right-aligned: this panel takes over the corner the scoreboard and the spectator
+        // prompt occupy in a match, both of which an editing session hides. Anchored to the right edge so
+        // the readout stays put as lines change length instead of shuffling sideways.
+        float right = Size2.X - 12f;
+        float y = 12f;
 
         bool gridOn = CvarFloat(EditorGrid.CvarEnabled) != 0f;
         float gridSize = CvarFloat(EditorGrid.CvarSize, 64f);
@@ -224,10 +227,14 @@ public partial class EditorPanel : HudPanel
         foreach ((string text, _) in lines)
             widest = MathF.Max(widest, MeasureText(text, size));
 
-        DrawRect(new Rect2(x - 6f, y - 4f, widest + 12f, lines.Count * lineH + 8f), new Color(0f, 0f, 0f, 0.45f));
+        DrawRect(new Rect2(right - widest - 6f, y - 4f, widest + 12f, lines.Count * lineH + 8f),
+            new Color(0f, 0f, 0f, 0.45f));
 
         for (int i = 0; i < lines.Count; i++)
-            DrawText(new Vector2(x, y + i * lineH), lines[i].Text, lines[i].Color, size);
+        {
+            (string text, Color color) = lines[i];
+            DrawText(new Vector2(right - MeasureText(text, size), y + i * lineH), text, color, size);
+        }
     }
 
     // The editor reuses the WEAPON binds while free-flying (NetGame.TryRunEditorBind): you cannot shoot and

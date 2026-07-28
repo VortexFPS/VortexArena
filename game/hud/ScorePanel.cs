@@ -228,6 +228,7 @@ public partial class ScorePanel : HudPanel
 
     protected override void DrawPanel()
     {
+        if (EditorSession) return;   // no standings in an editing session; the editor readout owns this corner
         if (!HasData) return; // self-blank until fed (contract §9)
 
         DrawBackground(); // skin corner frame (luma border_corner_northeast); no-op when bg is "0"

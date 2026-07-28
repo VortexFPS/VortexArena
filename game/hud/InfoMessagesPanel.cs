@@ -274,6 +274,10 @@ public partial class InfoMessagesPanel : HudPanel
 
     protected override void DrawPanel()
     {
+        // "Press primary fire to spectate" is advice for a match. A mapper flying their own level is not
+        // waiting to join anything, and the prompt sits exactly where the editor readout belongs.
+        if (EditorSession) return;
+
         // QC __hud_configure branch: in the HUD editor show the static help text so the panel is visible.
         if (Configuring)
         {

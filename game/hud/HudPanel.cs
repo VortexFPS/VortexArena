@@ -45,6 +45,13 @@ public abstract partial class HudPanel : Control
     public static Font? HudFont { get; set; }
 
     /// <summary>The font panels draw with — Xolonium when wired, else the engine fallback.</summary>
+    /// <summary>
+    /// True while the local session is a map-editing one. Panels that belong to a MATCH — the standings and
+    /// the spectator prompt — gate on this: in the editor there is no score to stand on and no team to join,
+    /// and the corner they occupy is where the editor's own readout goes.
+    /// </summary>
+    public static bool EditorSession { get; set; }
+
     protected static Font Font => HudFont ?? ThemeDB.FallbackFont;
 
     // ---- compile-time defaults kept for method signatures (the live values come from Cfg) ----

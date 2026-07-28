@@ -117,7 +117,11 @@ public sealed partial class EditorLighting : Node3D
     /// the right places, and their reach stopped just short of everything. Quake rooms are 256-1024 units, so
     /// a fixture has to carry that far to light the room it is in.
     /// </summary>
-    private const float RangePerSqrtIntensity = 158f;
+    /// (Second calibration: 158 made a light 40 fixture reach ~1000 units, and 119 such spheres overlap so
+    /// heavily that Forward+'s per-cell light cap starts dropping lights arbitrarily — rooms went DARK while
+    /// the GPU melted at 80-117 ms. Ranges must stay tight enough that only a handful of lights cover any
+    /// point; 110 puts a typical fixture at ~700 units, one room's reach.)
+    private const float RangePerSqrtIntensity = 110f;
 
     /// <summary>Clamp so one enormous light value cannot swallow the map.</summary>
     private const float MaxRange = 4096f;
@@ -297,14 +301,25 @@ public sealed partial class EditorLighting : Node3D
     /// when none is found a soft default from above keeps exteriors readable rather than flat.
     /// </summary>
     /// <summary>
-    /// One omni per <c>q3map_surfaceLight</c> face, just off the surface along its normal — the real-time
-    /// stand-in for q3map2 converting emissive surfaces into light emitters at compile time (see
-    /// <see cref="CvarSurfaceLights"/>). Energy scales with emit x area, because a long ceiling strip lights a
-    /// hall and a small button does not, and that is exactly how the bake weighs them.
+    /// Real light from <c>q3map_surfaceLight</c> faces, CLUSTERED — the live stand-in for q3map2 converting
+    /// emissive surfaces into emitters at compile time (see <see cref="CvarSurfaceLights"/>).
+    ///
+    /// Clustered, not one omni per face, for both of the reasons the per-face version failed in playtest:
+    /// <list type="bullet">
+    ///   <item><b>Correctness</b> — energy is weighted by emit x area, and a single thin strip's share is
+    ///     tiny, so per-face every fixture clamped to the minimum and threw almost nothing: bright panels,
+    ///     dark rooms. A ceiling of strips is ONE light source to the bake, and summing the cluster's
+    ///     emit x area restores the intended output.</item>
+    ///   <item><b>Cost</b> — 343 overlapping realtime omnis measured 81-117 ms of GPU on a 3080 (10 fps).
+    ///     Clustering collapses stormkeep's 469 emissive faces into a few dozen lights.</item>
+    /// </list>
     /// </summary>
     private void BuildSurfaceLights(VmapDocument doc, AssetSystem assets, float brightness)
     {
-        var candidates = new List<(float Weight, OmniLight3D Light)>();
+        // ---- gather every emissive face, bucketed into coarse spatial cells ----------------------------
+        const float ClusterCell = 320f;   // Quake units; about one room section per cell
+        var clusters = new Dictionary<(int, int, int), (NVec3 PosW, NVec3 NormW, float W)>();
+        int faces = 0;
 
         foreach (VmapBrush brush in doc.Brushes)
         {
@@ -334,30 +349,61 @@ public sealed partial class EditorLighting : Node3D
                 if (area < 4f)
                     continue;
 
-                // emit x area is the bake's weighting; the divisor normalises a typical Xonotic ceiling strip
-                // (emit ~1000, area ~4096) to roughly a bright fixture.
-                float energy = brightness * Math.Clamp(emit * area / 1_500_000f, 0.15f, 5f) * EnergyForFalloff;
-                float range = Math.Clamp(MathF.Sqrt(emit * area) * 0.5f, 192f, MaxRange) * _rangeScale;
-
-                var light = new OmniLight3D
-                {
-                    Name = $"EditorSurfLight_{candidates.Count}",
-                    Position = Coords.ToGodot(centroid + face.Plane.Normal * 24f),
-                    LightColor = Colors.White,
-                    LightEnergy = energy,
-                    OmniRange = range,
-                    OmniAttenuation = _falloff,
-                    ShadowEnabled = false,
-                    LightSpecular = 0.15f,
-                    LightBakeMode = _bakeMode,
-                };
-                candidates.Add((energy * range, light));
+                faces++;
+                float weight = emit * area;
+                var key = ((int)MathF.Floor(centroid.X / ClusterCell),
+                           (int)MathF.Floor(centroid.Y / ClusterCell),
+                           (int)MathF.Floor(centroid.Z / ClusterCell));
+                (NVec3 posW, NVec3 normW, float sumW) = clusters.GetValueOrDefault(key);
+                clusters[key] = (posW + centroid * weight, normW + face.Plane.Normal * weight, sumW + weight);
             }
+        }
+
+        // ---- one light per cluster, energy from the SUMMED emit x area ---------------------------------
+        var candidates = new List<(float Weight, OmniLight3D Light)>();
+        foreach (((int, int, int) _, (NVec3 posW, NVec3 normW, float sumW)) in clusters)
+        {
+            if (sumW <= 0f)
+                continue;
+            NVec3 centre = posW / sumW;
+            NVec3 normal = normW.LengthSquared() > 1e-6f ? NVec3.Normalize(normW) : new NVec3(0f, 0f, 1f);
+
+            // The divisor normalises "a hall's worth of ceiling strips" to a solidly bright source; the bake
+            // weighs sources exactly this way (its light per surface is emit x area at -pointscale).
+            float energy = brightness * Math.Clamp(sumW / 400_000f, 0.5f, 8f) * EnergyForFalloff;
+            // TIGHT range cap, deliberately: the first calibration let big emitters (lava pools) reach 4096
+            // units, and a map full of overlapping giant volumes trips Forward+'s per-cell light cap — lights
+            // get dropped arbitrarily, so rooms went dark even though every cluster was at maximum energy.
+            // A surface light should own its room, not the map.
+            float range = Math.Clamp(MathF.Sqrt(sumW) * 0.35f, 224f, 900f) * _rangeScale;
+
+            var light = new OmniLight3D
+            {
+                Name = $"EditorSurfLight_{candidates.Count}",
+                Position = Coords.ToGodot(centre + normal * 32f),
+                LightColor = Colors.White,
+                LightEnergy = energy,
+                OmniRange = range,
+                // Softer than the entity lights' inverse-square: this omni stands in for an AREA source, and
+                // area light falls off more gently than a point — the harsher curve read as a hotspot on the
+                // fixture with blackness a metre away, which is the reported "doesn't affect its surroundings".
+                OmniAttenuation = 1.4f,
+                ShadowEnabled = false,
+                LightSpecular = 0.1f,
+                LightBakeMode = _bakeMode,
+                // Far clusters stop costing fragment work; a mapper sees nearby rooms lit and distant ones
+                // fade to their emission-only look, which is the right trade on a 343-light budget blowout.
+                DistanceFadeEnabled = true,
+                DistanceFadeBegin = 2500f,
+                DistanceFadeLength = 1500f,
+            };
+            candidates.Add((energy * range, light));
         }
 
         // Largest emitters win the cap; the rest are dropped LOUDLY (house rule: no silent truncation).
         candidates.Sort(static (x, y) => y.Weight.CompareTo(x.Weight));
         int kept = Math.Min(MaxSurfaceLights, candidates.Count);
+        int entityLights = _points.Count;
         for (int i = 0; i < kept; i++)
         {
             _points.Add(candidates[i].Light);
@@ -367,8 +413,8 @@ public sealed partial class EditorLighting : Node3D
             candidates[i].Light.QueueFree();
 
         SurfaceLightCount = kept;
-        GD.Print($"[EditorLighting] {_points.Count - kept} entity lights, {kept} surface lights"
-            + (candidates.Count > kept ? $" ({candidates.Count - kept} smaller emitters dropped by the cap)" : "")
+        GD.Print($"[EditorLighting] {entityLights} entity lights, {kept} surface-light clusters from {faces} emissive faces"
+            + (candidates.Count > kept ? $" ({candidates.Count - kept} clusters dropped by the cap)" : "")
             + $", sun={(HasMapSun ? "map" : "default")}");
     }
 

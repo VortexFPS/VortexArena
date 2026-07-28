@@ -324,14 +324,16 @@ public static class VmapMapBuilder
                 mat.EmissionEnabled = true;
                 mat.Emission = Colors.White;
                 mat.EmissionTexture = diffuse.Glow;
-                mat.EmissionEnergyMultiplier = 2f;
+                // ~1, not the 2x it briefly shipped with: the glow page is already authored at display
+                // brightness, and doubling it blew every fixture out to a white rectangle.
+                mat.EmissionEnergyMultiplier = 1.1f;
             }
             else if (emit > 0f)
             {
                 mat.EmissionEnabled = true;
                 mat.Emission = Colors.White;
                 mat.EmissionTexture = albedo;
-                mat.EmissionEnergyMultiplier = Math.Clamp(emit / 400f, 0.5f, 4f);
+                mat.EmissionEnergyMultiplier = Math.Clamp(emit / 1000f, 0.3f, 1.5f);
             }
         }
 

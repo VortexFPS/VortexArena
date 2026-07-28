@@ -24,6 +24,19 @@ namespace XonoticGodot.Common.Framework
         public object? ItemDefRef;
 
         /// <summary>
+        /// QC <c>Inventory.inv_items[]</c> (common/items/inventory.qh:8) — how many of each item this player has
+        /// picked up, keyed by the item def's HUD icon name (QC <c>m_icon</c>, e.g. "health_mega",
+        /// "ammo_rockets"). Maintained by <c>ItemPickupRules.InventoryPickupItem</c>, networked to the owning
+        /// client, and drawn by the scoreboard's Item stats grid (QC Scoreboard_ItemStats_Draw). Null until the
+        /// player picks something up; QC <c>Inventory_clear</c> is a map/round reset, NOT a respawn (the tally is
+        /// per-match).
+        /// </summary>
+        public System.Collections.Generic.Dictionary<string, int>? ItemPickupCounts;
+
+        /// <summary>QC <c>STAT(LAST_PICKUP)</c> — sim time of this player's most recent item pickup.</summary>
+        public float LastPickupTime;
+
+        /// <summary>
         /// QC <c>.itemdef</c> typed as the carried <see cref="XonoticGodot.Common.Gameplay.Pickup"/>. Strongly-typed
         /// accessor over <see cref="ItemDefRef"/> (kept <c>object?</c> on this Framework partial to avoid a
         /// Gameplay using). Set by <see cref="XonoticGodot.Common.Gameplay.StartItem.Spawn"/>; read by

@@ -204,9 +204,26 @@ public static class ItemPickupRules
         if (worldItem.Pickup is null) worldItem.Pickup = pickup;
         bool pickedUp = ItemGiveTo(worldItem, player);
         if (!pickedUp) return false;
+        InventoryPickupItem(pickup, player); // QC Pickup.giveTo: if (b) Inventory_pickupitem(this, player)
         PlayPickupSound(worldItem, player);
         ScheduleRespawnAfterPickup(worldItem);
         return true;
+    }
+
+    /// <summary>
+    /// QC <c>Inventory_pickupitem</c> (common/items/inventory.qh:161): <c>++inventory.inv_items[def.m_id]</c> —
+    /// the per-player tally of everything picked up this match, which feeds the scoreboard's Item stats grid.
+    /// Keyed by the def's HUD icon name (QC <c>m_icon</c>) since that is exactly what the grid draws.
+    /// </summary>
+    public static void InventoryPickupItem(Pickup? def, Entity player)
+    {
+        if (def is null || player is null) return;
+        string icon = def.Icon;
+        if (string.IsNullOrEmpty(icon)) return;
+        player.ItemPickupCounts ??= new System.Collections.Generic.Dictionary<string, int>();
+        player.ItemPickupCounts.TryGetValue(icon, out int n);
+        player.ItemPickupCounts[icon] = n + 1;
+        player.LastPickupTime = Now; // QC STAT(LAST_PICKUP, player) = time
     }
 
     // QC Item_GiveAmmoTo (items.qc:485): give a resource toward a cap, honouring the live/stay marker +
@@ -404,6 +421,10 @@ public static class ItemPickupRules
             }
             return;
         }
+
+        // QC common/items/item/pickup.qc:12-14 — `bool b = Item_GiveTo(item, player); if (b)
+        // Inventory_pickupitem(this, player);`: tally the pickup for the scoreboard's Item stats grid.
+        InventoryPickupItem(item.Pickup, toucher);
 
         // ----- the give+respawn tail (LABEL pickup) -----
 

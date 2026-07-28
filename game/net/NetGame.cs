@@ -1885,6 +1885,24 @@ public sealed partial class NetGame : Node3D
             Name = "Scoreboard", Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         hudLayer.AddChild(_scoreboard);
+        // QC the interactive scoreboard's `localcmd(...)` sink (Scoreboard_InputEvent): join/spectate/tell/vcall
+        // are CLIENT commands the server must run, so a "cmd " prefix routes to the server the same way a typed
+        // `cmd join red` does; everything else (toggle, scoreboard_columns_set, commandmode) is a local console
+        // verb. On a listen host the client path still reaches the in-process server through the same seam.
+        _scoreboard.CommandSink = line =>
+        {
+            if (string.IsNullOrWhiteSpace(line)) return;
+            if (line.StartsWith("cmd ", System.StringComparison.Ordinal))
+            {
+                string verb = line[4..];
+                if (_serverWorld is not null) ExecuteHostConsoleCommand(verb);
+                else SendStringCommand(verb);
+                return;
+            }
+            MenuState.Interp?.ExecuteLine(line);
+        };
+        // DP commandmode: Shell owns the prompt; the direct hook preserves the prefill's quoting verbatim.
+        _scoreboard.OpenCommandPrompt = prefill => XonoticGodot.Game.Menu.MenuCommand.OpenCommandPrompt?.Invoke(prefill);
         LayoutScoreboard();
 
         // Screen-effects layer (damage red-flash + liquid tint) — the SAME reusable ViewEffects node T4 built for
@@ -5703,15 +5721,27 @@ public sealed partial class NetGame : Node3D
         }
     }
 
-    /// <summary>Size the scoreboard panel to a centered slab of the viewport (QC HUD_Panel_UpdatePosSize for the
-    /// scoreboard, simplified). Called once at setup; the panel reads its own rect via <c>Configure</c>.</summary>
+    /// <summary>
+    /// Resolve the standalone scoreboard's geometry + skin config against the LIVE viewport — QC
+    /// <c>Scoreboard_Draw</c>'s own <c>HUD_Panel_LoadCvars()</c> + the centered-slab override it applies right
+    /// after (scoreboard.qc:2466-2483). Must run EVERY FRAME, like Base: the previous one-shot
+    /// <c>Configure(...)</c> at NetGame setup froze the rect at whatever the viewport happened to be then, so
+    /// after the window resized (or the boot fullscreen transition landed) the board kept a rect computed for
+    /// e.g. 1024×768 and rendered jammed into the top-left of the real viewport. Going through
+    /// <see cref="XonoticGodot.Game.Hud.HudPanel.LoadConfig"/> ALSO gives the panel a real resolved
+    /// <c>Cfg</c> — the standalone instance is not managed by <see cref="XonoticGodot.Game.Hud.HudManager"/>, so
+    /// it had been drawing with the constructor-default config (<c>Bg = "0"</c>, fixed alphas/padding), which is
+    /// why it never painted the luma skin frame or honoured any <c>hud_panel_scoreboard_*</c> cvar.
+    /// </summary>
     private void LayoutScoreboard()
     {
-        if (_scoreboard is null) return;
+        if (_scoreboard is null || !GodotObject.IsInstanceValid(_scoreboard) || !_scoreboard.Visible) return;
         Vector2 vp = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1280, 720);
-        float w = Mathf.Min(vp.X * 0.8f, 1100f);
-        float h = vp.Y * 0.85f;
-        _scoreboard.Configure(new Rect2((vp.X - w) * 0.5f, vp.Y * 0.06f, w, h));
+        // 1) QC HUD_Panel_LoadCvars — resolve bg/skin/alphas/padding/fontsize from hud_panel_scoreboard_*.
+        _scoreboard.LoadConfig(vp, _fullHud?.HudFadeAlpha ?? 1f, _scoreboard.FadeAlpha);
+        // 2) QC the centered-slab override Scoreboard_Draw applies right after LoadCvars (the scoreboard is
+        //    PANEL_CONFIG_NO — its placement is derived, not taken from the generic pos/size cvars).
+        _scoreboard.Configure(_scoreboard.BaseGeometry(vp));
     }
 
     /// <summary>
@@ -5751,13 +5781,29 @@ public sealed partial class NetGame : Node3D
         bool deathScoreboard = deadNow && _localDeathStamp >= 0f && !ctsGame
             && (cv is null || cv.GetFloat("cl_deathscoreboard") != 0f)
             && _client.LatestServerTime - _localDeathStamp >= (cv is null ? 1f : cv.GetFloat("cl_deathscoreboard_delay"));
-        bool show = (XonoticGodot.Engine.Console.BindTable.ShowScores || intermissionShow || deathScoreboard)
+        // QC client/view.qc:1865 — the server asks for a team pick by setting `_scoreboard_team_selection`;
+        // the client opens the interactive picker and clears the flag.
+        _scoreboard.MatchIntermission = _client.MatchIntermission;
+        if (MenuState.Cvars.GetFloat("_scoreboard_team_selection") != 0f)
+        {
+            _scoreboard.UiEnable(1);
+            MenuState.Cvars.Set("_scoreboard_team_selection", "0");
+        }
+
+        // QC Scoreboard_WouldDraw's UI branch (scoreboard.qc:1766): while the interactive scoreboard is up it
+        // force-draws regardless of +showscores, and a closing one tears its state down once faded out.
+        bool uiShow = _scoreboard.UiTick();
+
+        bool show = (uiShow || XonoticGodot.Engine.Console.BindTable.ShowScores || intermissionShow || deathScoreboard)
             && !mapVoteShowing; // QC intermission==2 / clickable-radar suppression: mapvote owns the screen
         // QC scoreboard.qc:2411: drive the cross-fade via scoreboard_active (the Active setter ramps _fadeAlpha
         // in/out in _Process and hides the panel once fully faded out) rather than popping Visible — this is what
         // makes hud_panel_scoreboard_fadeinspeed/fadeoutspeed actually animate on the live path.
         if (_scoreboard.Active != show)
             _scoreboard.Active = show;
+        // QC Scoreboard_Draw re-runs HUD_Panel_LoadCvars + its centered-slab geometry EVERY draw — so must we,
+        // or the board keeps a rect computed for a stale viewport (see LayoutScoreboard).
+        LayoutScoreboard();
         // Drive the manager's non-scoreboard panel cross-fade (QC panel_fade_alpha) from the scoreboard's live fade
         // level. Without this ScoreboardFade sat at 0 forever, so the always-on HUD panels never faded when the
         // scoreboard came up — most visibly the top-left radar, whose bottom-right corner pokes into the centered
@@ -5819,6 +5865,11 @@ public sealed partial class NetGame : Node3D
             _scoreboard.RankingsSelfName = ResolveScoreboardName(_client.LocalNetId);
             // QC the race/CTS speed award (scoreboard.qc:2731): the round-best + all-time best planar speed + holders.
             _scoreboard.SetSpeedAward(sb.SpeedAward, sb.SpeedAwardHolder, sb.SpeedAwardBest, sb.SpeedAwardBestHolder);
+            // QC the per-viewer Inventory entity: this client's item-pickup tally, drawn by the scoreboard's
+            // Item stats grid (Scoreboard_ItemStats_Draw). Keyed by the item def's HUD icon name.
+            _itemStatsById.Clear();
+            foreach ((string icon, int count) in sb.ItemStats) _itemStatsById[icon] = count;
+            _scoreboard.SetItemStats(_itemStatsById);
             FeedScoreboardHeader();
         }
         else if (sb is null)
@@ -6111,6 +6162,7 @@ public sealed partial class NetGame : Node3D
 
     // [T57] last-fed accuracy generation (rebuild the dictionaries only when the server's changes). -1 = none yet.
     private int _lastFedAccuracyGen = -1;
+    private readonly System.Collections.Generic.Dictionary<string, int> _itemStatsById = new();   // item icon name -> pickup count (QC Inventory.inv_items)
     private readonly System.Collections.Generic.Dictionary<int, int> _accuracyById = new();          // weapon registry id → hit% (-1 never fired)
     private readonly System.Collections.Generic.Dictionary<string, float> _accuracyByNetName = new(); // weapon NetName → hit% (0 never fired)
 
@@ -6144,7 +6196,47 @@ public sealed partial class NetGame : Node3D
         }
         _scoreboard.SetAccuracy(_accuracyById);
         _fullHud.Weapons.SetAccuracy(_accuracyByNetName);
+        FeedScoreboardWeaponSets();
     }
+
+    /// <summary>
+    /// QC <c>WepSet_GetFromStat()</c> / <c>WepSet_GetFromStat_InMap()</c> (scoreboard.qc:1808-1809): the two sets
+    /// that decide which never-fired weapons still earn a cell in the scoreboard's accuracy grid — the weapons
+    /// the local player carries, and the weapons that exist on the loaded map. Without them the grid would list
+    /// EVERY registered weapon (including the OK/turret/vehicle variants that never appear in a normal match).
+    ///
+    /// Owned comes from the local player's live WepSet (listen server: the server Player; remote client: the HUD
+    /// mirror the owner block feeds). In-map is a listen-server scan of the spawned weapon pickups; a pure
+    /// <c>--connect</c> client has no item list of its own, so it falls back to the owned set alone (a strictly
+    /// smaller grid, never a wrong one).
+    /// </summary>
+    private void FeedScoreboardWeaponSets()
+    {
+        Entity? local = LocalServerPlayer ?? _hudMirror;
+        if (local is not null)
+        {
+            _sbOwnedWeapons.Clear();
+            foreach (Weapon w in local.OwnedWeaponSet.Weapons()) _sbOwnedWeapons.Add(w.RegistryId);
+            _scoreboard.SetOwnedWeapons(_sbOwnedWeapons);
+        }
+
+        // The in-map set only changes on map load; scan once per map.
+        if (_serverWorld is not null && _sbWeaponsInMapMap != _map)
+        {
+            _sbWeaponsInMapMap = _map;
+            _sbWeaponsInMap.Clear();
+            foreach (Entity e in _serverWorld.Services.Entities.All)
+            {
+                if (e.IsFreed || e.Pickup is not { IsWeaponPickup: true }) continue;
+                foreach (Weapon w in e.OwnedWeaponSet.Weapons()) _sbWeaponsInMap.Add(w.RegistryId);
+            }
+            _scoreboard.SetWeaponsInMap(_sbWeaponsInMap);
+        }
+    }
+
+    private readonly System.Collections.Generic.List<int> _sbOwnedWeapons = new();
+    private readonly System.Collections.Generic.HashSet<int> _sbWeaponsInMap = new();
+    private string _sbWeaponsInMapMap = "";
 
     /// <summary>The scoreboard title: the active gametype's display name from the networked ScoreInfo (else the
     /// configured gametype). QC the scoreboard header gametype name.</summary>
@@ -6249,6 +6341,37 @@ public sealed partial class NetGame : Node3D
             // the new menu state), so it stays correct even when a board is still active under a closed menu.
             GetViewport().SetInputAsHandled();
             return;
+        }
+
+        // Interactive scoreboard (QC HUD_Scoreboard_InputEvent, main.qc:500). Two entry points:
+        //   * TAB held + Escape opens the navigation UI (QC main.qc:545-551 — the ESC branch checks S_TAB);
+        //   * while it is up it owns the keyboard: arrows/TAB/Enter/Ctrl-chords all go to the panel.
+        // Placed before the radar/mapvote handlers and the gameplay binds so an arrow key navigates instead of
+        // switching weapons. Console-open still wins (handled above).
+        if (!ConsoleState.IsOpen && _scoreboard is not null && GodotObject.IsInstanceValid(_scoreboard)
+            && @event is InputEventKey { Echo: false } sbKey)
+        {
+            bool shift = sbKey.ShiftPressed, ctrl = sbKey.CtrlPressed;
+
+            // Open: TAB+Escape. QC filters Shift-Escape out (it is the hardcoded console shortcut).
+            if (sbKey.Pressed && sbKey.Keycode == Key.Escape && !shift
+                && _scoreboard.UiMode == 0 && XonoticGodot.Engine.Console.BindTable.ShowScores)
+            {
+                _scoreboard.UiEnable(0);
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (_scoreboard.UiMode != 0)
+            {
+                // QC acts on the PRESS and swallows the matching release, so the key never reaches gameplay.
+                if (sbKey.Pressed ? _scoreboard.UiHandleKey(sbKey.Keycode, shift, ctrl)
+                                  : _scoreboard.UiConsumesRelease(sbKey.Keycode, ctrl))
+                {
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
         }
 
         // Maximized radar mouse input (QC HUD_Radar_Mouse / hud_panel_radar_maximized): while the radar is maximized

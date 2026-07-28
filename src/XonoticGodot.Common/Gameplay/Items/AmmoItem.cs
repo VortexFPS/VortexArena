@@ -15,6 +15,10 @@ namespace XonoticGodot.Common.Gameplay;
 /// </summary>
 public abstract class AmmoPickup : Pickup
 {
+    /// <summary>QC <c>m_icon</c> for every ammo pickup is "ammo_&lt;name&gt;" (ammo.qh:60-204) — the netname with
+    /// an "ammo_" prefix, unlike health/armor/powerups whose icon IS the netname.</summary>
+    public override string Icon => "ammo_" + NetName;
+
     /// <summary>Which resource this ammo item replenishes (QC the matching RES_* / .ammo_* field).</summary>
     public ResourceType Resource;
 

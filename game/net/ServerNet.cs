@@ -275,6 +275,10 @@ public sealed class ServerNet : IDisposable
         /// bytes change.</summary>
         public uint LastModeStatusHash;
 
+        /// <summary>Hash of the item-pickup tally last sent to this peer inside the scoreboard block (QC's
+        /// Inventory entity is per-viewer, so the tally can change without any score changing).</summary>
+        public uint LastItemStatsHash;
+
         /// <summary>The accuracy-change generation last sent to this client (T57, QC ENT_CLIENT_ACCURACY's
         /// per-weapon SendFlags change detection): the owner's per-weapon accuracy byte array is re-sent only
         /// when <see cref="Scores.AccuracyGeneration"/> moves. -1 = never sent (so the first snapshot to a client
@@ -2248,13 +2252,18 @@ public sealed class ServerNet : IDisposable
                 st.SentScoreInfo = true;
             }
 
-            // scoreboard: send the block only when a score changed since this client last got it (one bool otherwise).
-            bool sendScores = st.LastScoreVersion != _scoreVersion;
+            // scoreboard: send the block only when a score changed since this client last got it (one bool
+            // otherwise). The block also carries THIS viewer's item-pickup tally (QC's per-viewer Inventory
+            // entity), which changes independently of any score — so the gate covers both.
+            CollectItemStats(owner, _itemStatsScratch, out uint itemStatsHash);
+            bool sendScores = st.LastScoreVersion != _scoreVersion || st.LastItemStatsHash != itemStatsHash;
             _snapshotWriter.WriteBool(sendScores);
             if (sendScores)
             {
-                XonoticGodot.Net.ScoreboardBlock.Serialize(_snapshotWriter, _scoreRows, _scoreTeams, _scoreRankings, _scoreSpeedAward);
+                XonoticGodot.Net.ScoreboardBlock.Serialize(_snapshotWriter, _scoreRows, _scoreTeams, _scoreRankings,
+                    _scoreSpeedAward, _itemStatsScratch);
                 st.LastScoreVersion = _scoreVersion;
+                st.LastItemStatsHash = itemStatsHash;
             }
 
             // Gametype status (T53): the per-mode round/objective HUD stats — QC STAT(REDALIVE..PINKALIVE)
@@ -3225,6 +3234,37 @@ public sealed class ServerNet : IDisposable
     /// <c>mineCounter</c> delegate to <see cref="XonoticGodot.Common.Gameplay.WepentResolver.Resolve"/>)
     /// reuse the same authoritative count.
     /// </summary>
+    /// <summary>Scratch for the per-viewer item-pickup tally written into the scoreboard block.</summary>
+    private readonly List<(string icon, int count)> _itemStatsScratch = new();
+
+    /// <summary>
+    /// QC the per-viewer <c>Inventory</c> entity (common/items/inventory.qh <c>Inventory_Send</c>, customized to
+    /// its owner + spectators): collect <paramref name="viewer"/>'s item-pickup tally into
+    /// <paramref name="into"/> and hash it so the snapshot can gate the resend. A spectator inherits the tally of
+    /// whoever they are following (QC <c>Inventory_customize</c> "sends to spectators too").
+    /// </summary>
+    private static void CollectItemStats(Player? viewer, List<(string icon, int count)> into, out uint hash)
+    {
+        into.Clear();
+        hash = 2166136261u;
+        Entity? src = viewer;
+        if (viewer?.Spectatee is { } tgt && !tgt.IsObserver) src = tgt;
+        if (src?.ItemPickupCounts is not { Count: > 0 } counts) return;
+
+        foreach (var kv in counts)
+        {
+            if (kv.Value <= 0 || string.IsNullOrEmpty(kv.Key)) continue;
+            into.Add((kv.Key, kv.Value));
+        }
+        // Stable order so the hash (and the drawn grid) don't churn with dictionary iteration order.
+        into.Sort(static (a, b) => string.CompareOrdinal(a.icon, b.icon));
+        foreach ((string icon, int count) in into)
+        {
+            foreach (char c in icon) hash = (hash ^ c) * 16777619u;
+            hash = (hash ^ (uint)count) * 16777619u;
+        }
+    }
+
     private int CountLiveMines(Player p)
     {
         int n = 0;

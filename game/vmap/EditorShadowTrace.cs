@@ -35,7 +35,6 @@ public sealed class EditorShadowTrace
 
     private const float CellSize = 256f;
 
-    /// <summary>How far off the surface a shadow ray starts, in Quake units. Stops a face shadowing itself.</summary>
     /// <summary>
     /// How far a shadow ray starts off the surface, Quake units.
     ///
@@ -171,8 +170,8 @@ public sealed class EditorShadowTrace
                 n = NVec3.Normalize(n);
 
                 var planes = new VmapPlane[5];
-                planes[0] = new VmapPlane(n, NVec3.Dot(n, a0) + PatchThickness * 0.5f);
-                planes[1] = new VmapPlane(-n, -(NVec3.Dot(n, a0) - PatchThickness * 0.5f));
+                planes[0] = new VmapPlane(n, NVec3.Dot(n, a0) - PatchFrontInset);
+                planes[1] = new VmapPlane(-n, -(NVec3.Dot(n, a0) - PatchFrontInset - PatchThickness));
                 planes[2] = EdgePlane(a0, b0, n);
                 planes[3] = EdgePlane(b0, c0, n);
                 planes[4] = EdgePlane(c0, a0, n);
@@ -195,17 +194,35 @@ public sealed class EditorShadowTrace
         return new VmapPlane(outward, NVec3.Dot(outward, from));
     }
 
-    /// <summary>Thickness given to a tessellated patch triangle, Quake units.</summary>
+    /// <summary>Thickness given to a tessellated patch triangle, Quake units — entirely BEHIND the surface.</summary>
     private const float PatchThickness = 2f;
+
+    /// <summary>
+    /// How far behind the visible surface a patch's prism STARTS.
+    ///
+    /// The prism used to straddle its triangle (±1 unit), which read as safe and was the opposite: bake
+    /// samples lie ON these very triangles, and their rays begin <see cref="SurfaceBias"/> = 0.5 above them
+    /// — inside the straddle. Every ray a patch sample fired hit the sample's own occluder at t=0 and the
+    /// buried test condemned the whole patch, so entire curved walls were discarded and repainted from
+    /// their brush-face neighbours: too bright beside lit trim, a smooth slide into darkness through the
+    /// middle. (Harmless while the bias was 2 units — the front face sat at 1 — which is why lowering the
+    /// bias is what surfaced it.)
+    ///
+    /// Starting the prism behind the surface keeps the shadow — anything crossing the patch still crosses
+    /// the prism — while guaranteeing on-surface samples stand outside their own occluder. q3map2's
+    /// -patchshadows traces zero-thickness triangles, so a quarter-unit setback also tracks the reference
+    /// more closely than the straddle did.
+    /// </summary>
+    private const float PatchFrontInset = 0.25f;
 
     /// <summary>Q3 <c>surfaceparm nonsolid</c>.</summary>
     private const int SurfaceNonSolid = 0x4000;
 
     /// <summary>
     /// True when <paramref name="point"/> sits inside a solid occluder. A bake sample can land there — a
-    /// face partly covered by an overlapping trim brush keeps its own plane, and the 2-unit lift does not
-    /// clear a brush that overlaps by more. Such a sample sees no light from anywhere and must be repaired
-    /// from its neighbours, not trusted.
+    /// face partly covered by an overlapping trim brush keeps its own plane, and the small ray-origin lift
+    /// does not clear a brush that overlaps by more. Such a sample sees no light from anywhere and must be
+    /// repaired from its neighbours, not trusted.
     /// </summary>
     public bool IsInsideSolid(NVec3 point)
     {

@@ -800,7 +800,7 @@ public static class VmapMapBuilder
                         ? EditorLightBake.Resample(dp, out ld)
                         : EditorLightBake.Preview(dp, dn, out ld);
                     Deluxe[i] = ld.LengthSquared() > 1e-8f ? ld : dn;
-                    EditorLightBake.Capture(dp, dn, AlbedoAverage);
+                    EditorLightBake.Capture(dp, dn, Coords.ToQuake(Normals[i]), AlbedoAverage);
                 }
                 return;
             }
@@ -817,7 +817,8 @@ public static class VmapMapBuilder
             {
                 NVec3 p = Coords.ToQuake(Positions[i]);
                 NVec3 n = ShadeNormal(i);
-                Colors[i] = EditorLightBake.Sample(p, n, AlbedoAverage, out float dirt);
+                Colors[i] = EditorLightBake.Sample(
+                    p, n, Coords.ToQuake(Normals[i]), AlbedoAverage, out float dirt);
                 Dirt[i] = dirt;
                 Deluxe[i] = EditorLightBake.Resample(p, out NVec3 ld) is var _ && ld.LengthSquared() > 1e-8f
                     ? ld : n;

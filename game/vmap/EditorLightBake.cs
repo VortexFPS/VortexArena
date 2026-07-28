@@ -13,6 +13,15 @@ public enum BakedLightKind
     /// <summary>Cone emitter, same distance law inside the cone.</summary>
     Spot,
 
+    /// <summary>
+    /// A surface emitter. Same inverse-square law, but its output also falls with the cosine between its
+    /// OWN normal and the direction to the receiver — a panel radiates into the hemisphere it faces, not
+    /// equally in every direction. Without that term a lava pool lights the walls beside it, the ceiling
+    /// above it and the geometry behind it all as brightly as the floor it faces, which is how one pool
+    /// came to flood a whole room.
+    /// </summary>
+    Area,
+
     /// <summary>Infinitely distant: no distance falloff at all, occlusion by one very long ray.</summary>
     Sun,
 }
@@ -254,6 +263,12 @@ public static class EditorLightBake
     /// Fraction of the hemisphere above <paramref name="normal"/> that is open, as a light multiplier.
     /// 1 = a surface in the open, ~0.1 = a tight inside corner.
     /// </summary>
+    /// <param name="normal">
+    /// The GEOMETRIC face normal, never the phong-smoothed one. The hemisphere is built around it and the
+    /// ray origin is lifted along it, because both describe where the SURFACE is — a smoothed normal at a
+    /// wall edge points diagonally between two faces, which tips half the hemisphere into the neighbouring
+    /// solid and reports a fully enclosed sample. That is the black speckle along every edge.
+    /// </param>
     private static float DirtFactor(NVec3 position, NVec3 normal)
     {
         if (_shadows is not { } shadows || _dirtStrength <= 0f)
@@ -400,7 +415,13 @@ public static class EditorLightBake
         }
 
         public List<NVec3> Positions { get; }
+
+        /// <summary>Shading normals (phong-blended) — what N.L uses.</summary>
         public List<NVec3> Normals { get; }
+
+        /// <summary>Geometric face normals — what ray origins and the dirt hemisphere use.</summary>
+        public List<NVec3> GeoNormals { get; } = new();
+
         public List<Color> Albedos { get; }
         public int Count => Positions.Count;
     }
@@ -418,7 +439,11 @@ public static class EditorLightBake
     public static void BeginCapture(int capacity) => Captured = new SampleSet(capacity);
 
     /// <summary>Record one vertex for the background bake.</summary>
-    public static void Capture(NVec3 position, NVec3 normal, Color albedo)
+    public static void Capture(NVec3 position, NVec3 normal, Color albedo) =>
+        Capture(position, normal, normal, albedo);
+
+    /// <summary>Record one vertex for the background bake, with both of its normals.</summary>
+    public static void Capture(NVec3 position, NVec3 shadeNormal, NVec3 geoNormal, Color albedo)
     {
         SampleSet? set = Captured;
         if (set is null)
@@ -426,7 +451,8 @@ public static class EditorLightBake
         lock (set)
         {
             set.Positions.Add(position);
-            set.Normals.Add(normal);
+            set.Normals.Add(shadeNormal);
+            set.GeoNormals.Add(geoNormal);
             set.Albedos.Add(albedo);
         }
     }
@@ -493,6 +519,7 @@ public static class EditorLightBake
         {
             NVec3[] pos = set.Positions.ToArray();
             NVec3[] nrm = set.Normals.ToArray();
+            NVec3[] geo = set.GeoNormals.Count == set.Normals.Count ? set.GeoNormals.ToArray() : nrm;
             Color[] alb = set.Albedos.ToArray();
             var result = new Color[pos.Length];
             var dirt = new float[pos.Length];
@@ -522,7 +549,7 @@ public static class EditorLightBake
                     int end = Math.Min(start + ChunkSize, pos.Length);
                     for (int i = start; i < end; i++)
                     {
-                        result[i] = SampleDirect(pos[i], nrm[i], alb[i], out float d, out NVec3 ld);
+                        result[i] = SampleDirect(pos[i], nrm[i], geo[i], alb[i], out float d, out NVec3 ld);
                         dirt[i] = d;
                         dirs[i] = ld;
                     }
@@ -708,12 +735,18 @@ public static class EditorLightBake
     /// The sample's openness, for the caller to apply to the bounce pass as well — computed once here
     /// because the rays are not free and both passes want the same answer.
     /// </param>
-    public static Color Sample(NVec3 position, NVec3 normal, Color albedo, out float dirt)
+    public static Color Sample(NVec3 position, NVec3 normal, Color albedo, out float dirt) =>
+        Sample(position, normal, normal, albedo, out dirt);
+
+    /// <param name="shadeNormal">Normal for N.L — phong-blended across adjacent faces.</param>
+    /// <param name="geoNormal">The face's true normal, for ray origins and the dirt hemisphere.</param>
+    public static Color Sample(
+        NVec3 position, NVec3 shadeNormal, NVec3 geoNormal, Color albedo, out float dirt)
     {
         dirt = 1f;
         if (_cacheMode)
             return SampleCached(position, out _);
-        return SampleDirect(position, normal, albedo, out dirt, out _);
+        return SampleDirect(position, shadeNormal, geoNormal, albedo, out dirt, out _);
     }
 
     /// <summary>
@@ -728,21 +761,22 @@ public static class EditorLightBake
     /// editor rather than a working one.
     /// </summary>
     public static Color Preview(NVec3 position, NVec3 normal, out NVec3 lightDir) =>
-        SampleDirect(position, normal, _greyAlbedo, out _, out lightDir);
+        SampleDirect(position, normal, normal, _greyAlbedo, out _, out lightDir);
 
     private static Color SampleDirect(
-        NVec3 position, NVec3 normal, Color albedo, out float dirt, out NVec3 lightDir)
+        NVec3 position, NVec3 shadeNormal, NVec3 geoNormal, Color albedo,
+        out float dirt, out NVec3 lightDir)
     {
         dirt = 1f;
-        lightDir = normal;
+        lightDir = shadeNormal;
         if (_grid is not { } grid)
             return Colors.Black;
 
-        dirt = DirtFactor(position, normal);
-        Color direct = GatherDirect(grid, position, normal, out NVec3 dirSum);
+        dirt = DirtFactor(position, geoNormal);
+        Color direct = GatherDirect(grid, position, shadeNormal, geoNormal, out NVec3 dirSum);
         // Fall back to the surface normal where nothing lit this sample: a zero direction would make the
         // per-pixel term meaningless rather than merely neutral.
-        lightDir = dirSum.LengthSquared() > 1e-8f ? NVec3.Normalize(dirSum) : normal;
+        lightDir = dirSum.LengthSquared() > 1e-8f ? NVec3.Normalize(dirSum) : shadeNormal;
         direct = new Color(direct.R * dirt, direct.G * dirt, direct.B * dirt);
 
         // The sun and the sky dome are ordinary baked lights now (q3map2 treats them as lights too), so
@@ -750,7 +784,7 @@ public static class EditorLightBake
         Color received = direct;
 
         if (_bounceWanted && (received.R > 0.001f || received.G > 0.001f || received.B > 0.001f))
-            AccumulateBounce(position, normal, new Color(
+            AccumulateBounce(position, shadeNormal, new Color(
                 received.R * albedo.R, received.G * albedo.G, received.B * albedo.B));
 
         return direct;
@@ -762,7 +796,8 @@ public static class EditorLightBake
     /// how much light arrived, never which way it came from, so every pixel of a face shades identically no
     /// matter what its normal map says.
     /// </param>
-    private static Color GatherDirect(Grid grid, NVec3 position, NVec3 normal, out NVec3 dirSum)
+    private static Color GatherDirect(
+        Grid grid, NVec3 position, NVec3 shadeNormal, NVec3 geoNormal, out NVec3 dirSum)
     {
         dirSum = NVec3.Zero;
         float r = 0f, g = 0f, b = 0f;
@@ -804,7 +839,14 @@ public static class EditorLightBake
                 float d = MathF.Max(dist, NearClamp);
                 attenuation = 1f / (d * d);
 
-                if (l.Kind == BakedLightKind.Spot)
+                if (l.Kind == BakedLightKind.Area)
+                {
+                    float emitCos = NVec3.Dot(l.Direction, -dir);
+                    if (emitCos <= 0f)
+                        continue;   // the receiver is behind the panel
+                    attenuation *= emitCos;
+                }
+                else if (l.Kind == BakedLightKind.Spot)
                 {
                     float cone = NVec3.Dot(-dir, l.Direction);
                     if (cone <= l.ConeCos)
@@ -814,7 +856,7 @@ public static class EditorLightBake
                 }
             }
 
-            float ndotl = NVec3.Dot(normal, dir);
+            float ndotl = NVec3.Dot(shadeNormal, dir);
             if (ndotl <= 0f)
                 continue;   // the surface faces away; a bake has no reason to light its back
 
@@ -822,7 +864,8 @@ public static class EditorLightBake
             float visibility = 1f;
             if (_shadows is { } shadows)
             {
-                NVec3 from = position + normal * EditorShadowTrace.SurfaceBias;
+                // Off the surface along its OWN plane's normal, not the shading normal.
+                NVec3 from = position + geoNormal * EditorShadowTrace.SurfaceBias;
                 if (l.Kind == BakedLightKind.Sun)
                 {
                     System.Threading.Interlocked.Increment(ref RaysTraced);
@@ -954,7 +997,7 @@ public static class EditorLightBake
             // The per-sample TEXTURE albedo is already folded in at accumulation; the constant here is only
             // the emitter-strength calibration (raised from the grey-albedo era, since real Q3 textures
             // average darker than the 0.5 grey they replaced).
-            col.Add(new NVec3(acc.R, acc.G, acc.B) * 0.22f);
+            col.Add(new NVec3(acc.R, acc.G, acc.B) * 0.0003f);
         }
 
         // Bounces 2..N as EMITTER-TO-EMITTER radiosity. Iterating at the patch level is what makes "8
@@ -995,10 +1038,15 @@ public static class EditorLightBake
         for (int i = 0; i < pos.Count; i++)
         {
             float sum = col[i].X + col[i].Y + col[i].Z;
-            if (sum < 0.02f)
+            if (sum < 1e-4f)
                 continue;
             var tint = new Color(col[i].X / sum, col[i].Y / sum, col[i].Z / sum);
-            float energy = Math.Clamp(sum, 0f, 16f);
+            // NO fixed ceiling. This was clamped to 16 when the bake ran in a renderer's energy units; in
+            // q3map2 photons a lit surface accumulates hundreds to thousands, so every emitter in the map
+            // pinned to the same value and the bounce stopped carrying any relation to how bright its source
+            // was. A lava pool then threw exactly as much indirect light as a dim corner — the wall beside
+            // it lit red by DIRECT light while the floor, which can only be reached indirectly, stayed dark.
+            float energy = sum;
             emitters.Add(new BakedLight(pos[i], tint, energy, BounceRange));
         }
 

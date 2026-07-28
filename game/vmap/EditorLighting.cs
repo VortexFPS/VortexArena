@@ -445,7 +445,7 @@ public sealed partial class EditorLighting : Node3D
         }
 
         // ---- one light per cluster, energy from the SUMMED emit x area ---------------------------------
-        var candidates = new List<(float Weight, float EmitArea, OmniLight3D Light)>();
+        var candidates = new List<(float Weight, float EmitArea, NVec3 Normal, OmniLight3D Light)>();
         foreach (((int, int, int) ckey, (NVec3 posW, NVec3 normW, float sumW)) in clusters)
         {
             if (sumW <= 0f)
@@ -482,7 +482,7 @@ public sealed partial class EditorLighting : Node3D
                 DistanceFadeBegin = 2500f,
                 DistanceFadeLength = 1500f,
             };
-            candidates.Add((energy * range, sumW, light));
+            candidates.Add((energy * range, sumW, normal, light));
         }
 
         // Largest emitters win the cap; the rest are dropped LOUDLY (house rule: no silent truncation).
@@ -496,7 +496,7 @@ public sealed partial class EditorLighting : Node3D
             // q3map2 light_bounce.c:584 — photons = value * area * areaScale. Our cluster weight is
             // already the summed value x area of its faces, so the conversion is exact.
             Adopt(cl, Math.Clamp(cl.OmniRange * 0.12f, 24f, 96f),
-                candidates[i].EmitArea * AreaScale * brightness);
+                candidates[i].EmitArea * AreaScale * brightness, candidates[i].Normal);
         }
         for (int i = kept; i < candidates.Count; i++)
             candidates[i].Light.QueueFree();
@@ -517,7 +517,11 @@ public sealed partial class EditorLighting : Node3D
     /// never derives from it, because a renderer's energy and q3map2's photons are not the same quantity and
     /// converting between them was what put the sun and the fixtures in the wrong ratio.
     /// </param>
-    private void Adopt(Light3D light, float areaRadius = 0f, float photons = 0f)
+    /// <param name="emitNormal">
+    /// For a SURFACE light, the direction the emitting face points. Non-zero switches the baked light to
+    /// <see cref="BakedLightKind.Area"/>, which adds the emitter's own cosine falloff.
+    /// </param>
+    private void Adopt(Light3D light, float areaRadius = 0f, float photons = 0f, NVec3 emitNormal = default)
     {
         if (Baking)
         {
@@ -533,7 +537,12 @@ public sealed partial class EditorLighting : Node3D
                 var kind = BakedLightKind.Point;
                 NVec3 dir = default;
                 float coneCos = -1f;
-                if (light is SpotLight3D sp)
+                if (emitNormal.LengthSquared() > 1e-6f)
+                {
+                    kind = BakedLightKind.Area;
+                    dir = NVec3.Normalize(emitNormal);
+                }
+                else if (light is SpotLight3D sp)
                 {
                     kind = BakedLightKind.Spot;
                     dir = Coords.ToQuake(-sp.Transform.Basis.Z.Normalized());   // LOCAL: the node is not in the tree yet

@@ -1,7 +1,7 @@
 unit: bot-ai
 category: bot
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-28"
+last_audited: "2026-07-27"
 # Drift RE-AUDIT (2026-06-27, THIRD pass) on branch claude/parity-port-waves, after Waves 16-17. Wave 17 made NO bot
 # changes; Wave 16 (b3a9c06) edited 5 bot files (BotBrain/BotNavigation/BotRoles/BotObjectiveRoles/Waypoint) + ~12
 # weapon files. Build green, 46 bot tests pass (BotLiveLoopTests incl.). Each Wave-16 edit was re-read for LIVENESS:
@@ -61,7 +61,7 @@ summary:
     - "Bot scripting entirely missing: the bot_cmd command queue does nothing, so map/console bot scripts, cutscene-driven bots, and g_waypointeditor bot driving are inert. (UNCHANGED.)"
     - "Jetpack NAVIGATION (cross jetpack-only gaps) is still missing; the trigger_hurt jetpack/rocketjump ESCAPE half is live (skill>6). (UNCHANGED 2026-06-28 fourth pass.)"
     - "wr_aim has no MAX_WEAPONSLOTS per-slot loop — only the ChosenWeapon's wr_aim is consulted each think; Base runs wr_aim for every owned slot. (Per-weapon coverage is faithful for the 18 headline weapons.) (UNCHANGED.)"
-    - "havocbot_dodge is ported (SUPERBOT-gated projectile flight-path evade, live) and 15 port files flag Entity.BotDodge (all weapon projectiles + OkRpc + PhaserTurret beam) vs Base's 20 producers — missing: monsters (golem/spider), the napalm nade, the grappling hook, the generic sv_turrets producer. Non-SUPERBOT bots still only strafe via the generic CombatMovement. (UNCHANGED.)"
+    - "havocbot_dodge is ported (SUPERBOT-gated projectile flight-path evade, live) and 15 port files flag Entity.BotDodge (all weapon projectiles + OkRpc + PhaserTurret beam) vs Base's 20 producers — missing: monsters (golem/spider), the napalm nade, the grappling hook, the generic sv_turrets producer. Non-SUPERBOT bots still only strafe via the generic CombatMovement. (NARROWED 2026-07-27: the SUPERBOT random-direction combat jitter is now ported, so the SUPERBOT side of this row is complete; only the 4 non-weapon producers and the invented non-SUPERBOT strafe remain.)"
     - "Ballistic aim is a closed-form gravity-drop approximation, not QC's 10-trace tracetoss search; lobbed-weapon aim (mortar/nade) is less accurate and never traces the world to confirm the toss lands. (UNCHANGED.)"
     - "Goal rating route-cost is NOW WIRED (multi-seed Dijkstra via SeedRoute, live) — residual: the generic DM role still passes a flat rangebias=2000 for items/enemies/roam (objective roles like CTS vary it), and there is no separate _movingtarget (5.5 s) strategy interval. (NARROWED 2026-06-28 fourth pass.)"
     - "Weapon picking reads the QC far/mid/close priority lists + combo-hold (faithful) but still omits bot_rangepreference (per-bot sniper/spammer range shift). (UNCHANGED.)"
@@ -175,7 +175,7 @@ features:
       - { name: "SUPERBOT think", base: "0.005 s", port: "0.005 s", match: true }
       - { name: "jump-hold", base: "bot_jump_time + 0.2 s", port: "+0.2 s", match: true }
       - { name: "bot_god", base: "0", port: "0 (cvar, re-stamped each think)", match: true }
-      - { name: "skill-based ping", base: "bound(0,0.07-0.005*skill+rand*0.01,0.65)", port: "not simulated", match: false }
+      - { name: "skill-based ping", base: "bound(0,0.07-0.005*skill+rand*0.01,0.65)", port: "not simulated (INTENDED DIVERGENCE — see bot-ai.aim.latency)", match: false }
     status:
       logic: faithful
       values: partial
@@ -186,7 +186,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Simulated bot ping/aim-latency (CS(this).ping, bot_aimlatency) is not modeled; bots have zero network latency, so their lead/reaction is slightly sharper than stock at low skill."
+      - "INTENDED DIVERGENCE (2026-07-27): simulated bot ping/aim-latency (CS(this).ping, bot_aimlatency) is not modeled; bots have zero network latency, so their lead/reaction is slightly sharper than stock at low skill. The rationale lives on bot-ai.aim.latency, which owns this decision."
     verification:
       - { kind: code, ref: "ThinkProduce throttle matches bot_think:62-75; bot_ai_thinkinterval read from cvar", result: pass }
     confidence: high
@@ -636,11 +636,13 @@ features:
     port_refs:
       - "src/XonoticGodot.Server/Bot/BotBrain.cs:HavocbotDodge"
       - "src/XonoticGodot.Server/Bot/BotBrain.cs:CombatMovement"
+      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ThinkProduce (step 4c-ii — SUPERBOT combat jitter)"
       - "src/XonoticGodot.Common/Framework/Entity.cs:BotDodge"
       - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:BotDodge (and 13 more weapon/turret producers, incl. OkRpc)"
     constants:
       - { name: "dodge applies (SUPERBOT gate)", base: "SUPERBOT only (skill>100)", port: "HavocbotDodge SUPERBOT-gated (skill>100); generic CombatMovement strafe for all skills", match: true }
       - { name: "dodge basis", base: "scan bot_dodge edicts, evade perpendicular to flight path; bestdanger=-20", port: "HavocbotDodge = faithful flight-path scan (bestDanger=-20); plus generic strafe-flip+HP-bias", match: true }
+      - { name: "SUPERBOT combat jitter", base: "havocbot_movetogoal:1280-1306 — re-roll crandom()*maxspeed on X/Y every 0.35 s, hold 0.3 s, 15% chance of no direction; gated on aistatus == AI_STATUS_ATTACKING (equality) and !dodge", port: "BotBrain.ThinkProduce step 4c-ii — same constants and clock; the aistatus EQUALITY is approximated by has-enemy and no other modelled status active (no .aistatus bitfield — see bot-ai.state.aistatus)", match: true }
       - { name: "dodge scale", base: "bound(0, 0.5 + (skill+bot_dodgeskill)*0.1, 1)", port: "clamp(0.5 + skill*0.1, 0, 1)", match: true }
       - { name: "bot_dodge producer coverage", base: "20 files / 31 setters (projectiles, beams, monsters, nades, hook, turret)", port: "15 files (Arc/Blaster/Crylink/Devastator/Electro/Fireball/Hagar/Hlac/Minelayer/Mortar/OkRpc/Porto/Seeker/Vaporizer projectiles + PhaserTurret beam); all weapon producers, missing monsters/napalm/hook/generic-turret", match: false }
     status:
@@ -655,11 +657,10 @@ features:
     gaps:
       - "15 of Base's 20 bot_dodge producer files are ported (all weapon projectiles + OkRpc + the PhaserTurret beam); the ones still missing are monsters (golem/spider), the napalm nade, the grappling hook, and the generic sv_turrets producer, so dodge does not trigger for those hazards. (NARROWED 2026-06-27 third pass: +OkRpc.)"
       - "Non-SUPERBOT bots still only do the generic CombatMovement strafe-flip + HP-bias (an invented behaviour), not a per-projectile dodge — Base also restricts havocbot_dodge to SUPERBOT, so this matches stock, but the generic strafe is not a Base behaviour. (UNCHANGED.)"
-      - "The SUPERBOT random-direction combat jitter (havocbot_movetogoal:1280-1307) is not reproduced. (UNCHANGED.)"
     verification:
       - { kind: code, ref: "HavocbotDodge is a faithful port of havocbot.qc:1773 — SUPERBOT gate, bestdanger=-20, flight-path component removal, perpendicular vs back-away branches; called live from ThinkProduce, scaled + checkdanger-vetoed + folded into the wish-move with an upward-dodge jump. 15 weapon/turret files set Entity.BotDodge on live projectile spawn paths (grep-verified: Arc/Blaster/Crylink/Devastator/Electro/Fireball/Hagar/Hlac/Minelayer/Mortar/OkRpc/PhaserTurret/Porto/Seeker/Vaporizer). CombatMovement strafe stands in for non-SUPERBOT.", result: pass }
     confidence: high
-    notes: "DRIFT FIX (2026-06-27 third pass): the bot_dodge PRODUCER coverage rose 14 -> 15 (OkRpc now flags BotDodge on its overkill rocket). Entity.BotDodge is flagged live on every weapon projectile + the PhaserTurret beam, so the already-ported SUPERBOT HavocbotDodge consumer fires routinely. Residual: the non-weapon Base producers (monsters/napalm/hook/generic-turret) are unported, and the generic CombatMovement strafe remains the invented non-SUPERBOT fallback."
+    notes: "DRIFT FIX (2026-07-27): the SUPERBOT random-direction combat jitter is now PORTED (BotBrain.ThinkProduce step 4c-ii), closing the last gap this row carried against havocbot_movetogoal. It runs after the dodge fold and overrides it, reading the post-checkdanger-veto dodge exactly as the QC !dodge gate does. Pinned by BotLiveLoopTests.SuperbotCombatJitter_VariesTheHorizontalWishMove (fails without it: 1421 in-combat frames with zero sub-run-speed wish-move) plus NonSuperbot_CombatMoveStaysPinnedToRunSpeed as the no-leak control. Note the QC comment above the block says 75% chance while the code says 85% — the CODE is what is ported. Earlier (2026-06-27 third pass): bot_dodge PRODUCER coverage rose 14 -> 15 (OkRpc now flags BotDodge on its overkill rocket). Residual: the non-weapon Base producers (monsters/napalm/hook/generic-turret) are unported, and the generic CombatMovement strafe remains the invented non-SUPERBOT fallback."
 
   - id: bot-ai.special.jetpack_rocketjump
     name: "Jetpack navigation + rocketjump/jetpack trigger_hurt escape"
@@ -824,14 +825,14 @@ features:
       presentation: na
       audio: na
       liveness: na
-    intended_divergence: false
-    divergence_rationale: null
+    intended_divergence: true
+    divergence_rationale: "Vortex Arena deliberately does not simulate bot network latency. Base gives every bot a skill-scaled fake ping (bot.qc:96-106, bound(0, 0.07 - 0.005*(skill+bot_pingskill) + rand*0.01, 0.65)) and a bot_aimlatency shot-lead delay, then feeds that ping to antilag — it makes a low-skill bot worse by pretending it is on a bad connection rather than by making it play worse. That conflates two different axes, and it expresses bot difficulty partly through the netcode path, which this port keeps reserved for real clients (our antilag/rewind story is a reimplementation and synthetic rewind traffic in it is not wanted). Skill is instead expressed purely through aim error, turn rate, reaction interval and decision cadence, all of which are ported faithfully. CONSEQUENCE, accepted: bots below SUPERBOT lead and react slightly sharper than stock at the same skill number, so our skill values are not numerically interchangeable with the upstream ones. Revisit only if bot difficulty tuning proves it cannot reach a stock-like low-skill feel without the latency term. Decided 2026-07-27; see planning/superbots-parity-2026-07-27.md."
     gaps:
-      - "Bots have zero simulated latency: no skill-based ping and no bot_aimlatency delay folded into the shot lead — BotAim.ShotLead's shotDelay parameter defaults to 0 and no live caller (BotBrain.AimAndDecideFire) passes a latency. Low-skill bots lead/react sharper than stock. (Cross-ref: bot-ai.think.throttle already records the ping gap; this row owns the aim.qh-side latency term.)"
+      - "INTENDED DIVERGENCE (2026-07-27), not an oversight: bots have zero simulated latency — no skill-based ping and no bot_aimlatency delay folded into the shot lead. BotAim.ShotLead's shotDelay parameter defaults to 0 and no live caller (BotBrain.AimAndDecideFire) passes a latency. Low-skill bots lead/react sharper than stock, so skill numbers are not numerically interchangeable with the upstream ones. See divergence_rationale. (Cross-ref: bot-ai.think.throttle owns the ping half; this row owns the aim.qh-side latency term.)"
     verification:
       - { kind: code, ref: "grep AimLatency/aimlatency/ping across src/XonoticGodot.Server/Bot: no hits; BotAim.cs:114 ShotLead(…, shotDelay = 0f) — no caller passes non-zero", result: fail }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold)."
+    notes: "added 2026-07-02 (coverage fold). Reclassified missing -> INTENDED DIVERGENCE 2026-07-27 after the superbot parity audit: the SUPERBOT ping = 0 branch (bot.qc:96) is already our behaviour by accident, but so is skill 0's — that is the real divergence, and it is now recorded deliberately instead of reading as an oversight."
 
   - id: bot-ai.aim.reset
     name: "Aim-state reset at discontinuities (bot_aim_reset on spawn / teleporter / warpzone)"

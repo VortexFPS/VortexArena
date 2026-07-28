@@ -35,6 +35,19 @@ durable paper trail, not an occasional manual scan that silently misses things.
    > and reports** how many it hid (never a silent drop), and `--all-branches` shows everything.
    > A branch we already triaged is always re-surfaced when it gets new commits, regardless of age.
 
+   > **The local clone must mirror all branches.** A `--single-branch` clone (or a submodule init)
+   > leaves `remote.origin.fetch = +refs/heads/master:refs/remotes/origin/master`, and with that
+   > refspec the branch stream sees *nothing* — the worklist reports "0 branches, 0 hidden", which
+   > reads exactly like "upstream has no open contributions". This bit the 2026-07-27 run: the `data`
+   > clone had narrowed to master-only and hid 13 of the 14 branch candidates. The harvester now
+   > **detects and reports** a narrow refspec (stderr + a banner in the worklist). To fix a clone:
+   >
+   > ```bash
+   > git -C <repo> config --unset-all remote.origin.fetch
+   > git -C <repo> config --add remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+   > git -C <repo> fetch --prune origin
+   > ```
+
 Translation churn is dropped: **Transifex/translation autosync** commits are filtered out at harvest
 time (the harvester reports how many it dropped — not a silent cap). Other low-value chores (CI,
 version bumps) are still surfaced but **flagged** low-priority, so the ledger stays honest about the

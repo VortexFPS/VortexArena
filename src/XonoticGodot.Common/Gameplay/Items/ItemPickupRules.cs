@@ -307,6 +307,12 @@ public static class ItemPickupRules
         return true;
     }
 
+    // Upstream 916d46a6 hardened the five QC pickup sites to `t = max(time, StatusEffects_gettime(...))`,
+    // because gettime could hand back a lapsed end time and the pickup would then arm a window that had
+    // already closed (with g_spawnshieldtime 0 a picked-up superweapon vanished instantly). This port is
+    // structurally immune: it works in REMAINING DURATION rather than absolute end time, and the max(0, …)
+    // below is exactly that floor — Apply() re-adds `now`, so max(0, expire-now) + duration is identical to
+    // QC's max(now, expire) + duration. Kept as a duration deliberately; do not "simplify" the floor away.
     private static float ExistingRemaining(Entity player, StatusEffectDef def)
     {
         foreach (var s in player.StatusEffects)

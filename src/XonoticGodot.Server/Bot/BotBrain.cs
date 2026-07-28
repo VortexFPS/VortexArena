@@ -748,6 +748,43 @@ public sealed class BotBrain
             }
         }
 
+        // 4c-ii) SUPERBOT combat jitter (QC havocbot_movetogoal:1280-1306). A superbot fighting with nothing
+        // else going on OVERRIDES its horizontal wish-move with a fresh random direction, re-rolled on a 0.35s
+        // clock and held for the first 0.3s of each window, with a 15% chance of rolling "no direction" so the
+        // bot still drifts toward its goal between bursts. Vertical is deliberately left alone (QC: "no random
+        // vertical direction"). This runs AFTER the dodge fold and overrides it, exactly as in QC — and QC
+        // gates on `!dodge`, reading the POST-checkdanger-veto value, which is what worldDodge holds here.
+        //
+        // QC's gate is `this.aistatus == AI_STATUS_ATTACKING` — EQUALITY, not a bit test, so the jitter runs
+        // only when "enemies in sight" is the bot's ONLY active status: not bunnyhopping (RUNNING), not
+        // danger-ahead, not escaping a trigger_hurt, not out of a jumppad/water, not jetpacking, not stuck.
+        // The port has no .aistatus bitfield (parity row bot-ai.state.aistatus — the statuses live as ad-hoc
+        // per-behaviour state), so the equality is approximated by "has an enemy AND none of the statuses we
+        // do model is active". The bunnyhop exclusion is the one that matters: jittering would scrub the speed
+        // a bunnyhopping approach just built.
+        if (Skill > BotAim.SuperbotSkill
+            && enemy is { IsFreed: false }
+            && worldDodge == Vector3.Zero
+            && !dangerBrakeEngaged
+            && !_triggerHurtEscape
+            && !Nav.WantBunnyhop)
+        {
+            // QC: if (!this.randomdirectiontime || this.randomdirectiontime + 0.35 < time)
+            if (_randomDirectionTime == 0f || _randomDirectionTime + 0.35f < now)
+            {
+                // QC: 15% chance to roll "no direction"; otherwise crandom() ∈ [-1,1] scaled by maxspeed on
+                // both horizontal axes. (The QC comment above this block says "75% chance"; the code says 85%.
+                // Ported to match the CODE, which is what actually runs.)
+                _randomDirection = _rng.NextDouble() < 0.15
+                    ? Vector3.Zero
+                    : new Vector3(Crandom() * Nav.MaxSpeed, Crandom() * Nav.MaxSpeed, 0f);
+                _randomDirectionTime = now;
+            }
+            // QC: if (this.randomdirectiontime + 0.3 >= time && this.randomdirection)
+            if (_randomDirectionTime + 0.3f >= now && _randomDirection != Vector3.Zero)
+                move = new Vector3(_randomDirection.X, _randomDirection.Y, move.Z);
+        }
+
         // 4d) trigger_hurt escape (QC havocbot_movetogoal, skill > 6): jetpack up if owned (best escape — no
         // self-damage), else rocketjump out with the Devastator when HP can absorb the self-splash.
         bool wantJetpack = false;
@@ -848,6 +885,14 @@ public sealed class BotBrain
     // combat-movement state (QC havocbot_dodge: a strafe direction that flips on a clock).
     private float _dodgeFlipTime;
     private float _dodgeSign = 1f;
+
+    // QC .randomdirection / .randomdirectiontime (havocbot.qh) — the SUPERBOT combat-jitter latch: the rolled
+    // local-frame move (X forward, Y side) and the sim time it was rolled at. 0 == never rolled.
+    private Vector3 _randomDirection;
+    private float _randomDirectionTime;
+
+    /// <summary>QC <c>crandom()</c> — a random float in [-1, 1].</summary>
+    private float Crandom() => (float)(_rng.NextDouble() * 2.0 - 1.0);
 
     // QC the bot's last-attack time (used by bot_ai_weapon_combo: hold the combo weapon for combo_threshold
     // seconds after firing). Stamped when a fire button is emitted this frame.

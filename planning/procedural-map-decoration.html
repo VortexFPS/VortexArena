@@ -731,28 +731,127 @@ render-only lean/viewmodel work: presentation never leaks into simulation.)</p>
   <li><b>Fog</b> — distance fog for the atmospheric depth on the mountains; optional small volumetric fog volumes near
       fire for the smoke-haze light shafts. Volumetrics are a quality-tier setting, off by default (perf memory:
       graphics settings need real wiring, not stubs).</li>
-  <li><b>Baked GI &amp; the real-time question</b> <i>(v1.3 — answering "can we bake in real time, or at least
-    preview in real time?": yes, as a ladder, and the chart-space architecture is what makes it cheap)</i>:
+  <li><b>Baked GI &amp; the real-time question</b> <i>(v1.3, revised 2026-07-27 with measured findings — the
+    ladder below replaces the earlier one, whose bridge rung turns out not to exist)</i>.
+
+    <p><b>The precondition nobody can skip.</b> The world is drawn by a shader declared
+    <code>render_mode unshaded</code> (<code>game/loaders/LightmapShader.cs</code>): it samples the BSP's
+    precomputed lightmap atlas through UV2 and <i>receives no Godot light at all</i>. Godot lights exist in
+    this project, but only for effects (muzzle flashes, explosions) on model materials. So <b>no GI option
+    below changes a single world pixel until the world has a lit material path.</b> That work is shared by
+    every option and is the first item whichever destination we pick.</p>
+
+    <p>Second precondition, specific to the editor: geometry regenerated from the <code>.vmap</code> document
+    carries <b>no UV2 at all</b> — which is why the editor world currently draws fullbright. Anything baked
+    needs a chart parameterization first.</p>
+
+    <p><b>Measured API facts</b> (compile-tested against this project's Godot build, not recalled):</p>
+    <ul>
+      <li><code>LightmapGI.Bake(...)</code> <b>does not exist</b> in the C# API. Godot's lightmapper is an
+        <i>editor-only</i> tool driven by the editor plugin; it cannot be invoked from a running game. This
+        kills the previously-planned "LightmapGI batch bake as the bridge" rung for anything in-game.</li>
+      <li><code>LightmapGI.LightData</code> is settable and <code>RenderingServer.LightmapCreate()</code>
+        exists, so a lightmap baked <i>elsewhere</i> can still be applied at runtime.</li>
+      <li><code>ArrayMesh.LightmapUnwrap(Transform3D, float)</code> <b>is</b> callable at runtime — Godot's
+        xatlas unwrapper. This is the missing precondition for any in-editor bake: charts can be generated
+        for regenerated geometry without an offline step.</li>
+      <li><code>VoxelGI.Bake(Node, bool)</code> <b>is</b> callable at runtime.</li>
+      <li><code>Environment.SdfgiEnabled</code> / <code>SdfgiCascades</code> exist — fully runtime, no bake.</li>
+    </ul>
+
+    <p><b>How Unreal and Unity solve this</b>, since the ask was to line up with them. Both converged on the
+    same two-track answer, and neither uses a baked lightmap for the editing loop:</p>
+    <ul>
+      <li><b>Unreal 5</b> — <i>Lumen</i> is the default: fully dynamic GI and reflections, no bake, with a
+        software ray-tracing path (screen traces + mesh distance fields) for hardware without RT. Baked
+        lightmaps remain for the low-end tier via <i>GPU Lightmass</i>, which is path-traced, GPU-driven and
+        <i>progressive</i> — you watch it converge in the viewport while you work.</li>
+      <li><b>Unity</b> — the <i>Progressive Lightmapper</i> (CPU and GPU variants) is path-traced and
+        progressive, prioritizing texels near the scene view so the area you are looking at resolves first.
+        The dynamic side has moved to probe-based GI (<i>Adaptive Probe Volumes</i>); the old realtime-GI
+        solution (Enlighten) is deprecated.</li>
+    </ul>
+    <p>The shared shape: <b>dynamic GI for the editing loop, progressive path-traced bake for shipped quality,
+    view-prioritized so it converges where you are looking.</b> Our ladder should be that shape — the earlier
+    draft already was; only its bridge rung was wrong.</p>
+
+    <table>
+      <tr><th>Option</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+      <tr>
+        <td><b>0. Fullbright</b><br><i>(what the editor does today)</i></td>
+        <td>Zero cost, zero latency, never wrong while geometry moves. Radiant's own answer.</td>
+        <td>No shape reading — you cannot judge a room's mood or contrast, or whether a corner is too dark.</td>
+        <td>Keep as a render mode, not as the only mode.</td>
+      </tr>
+      <tr>
+        <td><b>1. Dynamic Godot lights</b><br>sun + the map's own light entities, real shadows, no GI</td>
+        <td>Instant and always correct — move a brush or a torch and it is simply right. No bake, no charts,
+            no UV2. Uses light entities the map already carries. Affordable on old hardware with shadows
+            tiered down.</td>
+        <td>Direct light only: no bounce, so interiors read flat and dark next to a q3map2 bake. Many
+            simultaneous shadow-casting lights is the classic cost.</td>
+        <td><b>Do this first.</b> Shared precondition, and alone it delivers "real-time lighting in the
+            editor".</td>
+      </tr>
+      <tr>
+        <td><b>2. SDFGI</b><br>runtime cascaded GI on top of 1</td>
+        <td>Real bounce with no bake and no charts; survives geometry edits by design. The closest thing Godot
+            has to Lumen's software path. One environment flag once the world is lit.</td>
+        <td>Heavy — a quality tier, not a default, on a game that already fights for frames. Cascade artefacts
+            at the fine detail scale Q3 maps are full of. Costs frames continuously rather than once.</td>
+        <td>Ship as the "high" editing preset. Not the shipped-map answer.</td>
+      </tr>
+      <tr>
+        <td><b>3. VoxelGI runtime bake</b></td>
+        <td>Bakeable from C# in seconds; bounce without a chart atlas; re-bakeable after an edit.</td>
+        <td>Coarse and leaky at Q3 detail scale; bounded volume, so several are needed to cover a map; still a
+            per-frame lookup cost.</td>
+        <td>Cheap fallback where SDFGI is too heavy. Not a destination.</td>
+      </tr>
+      <tr>
+        <td><b>4. Progressive GPU lightmapper into our own chart atlas</b></td>
+        <td>Exactly what GPU Lightmass and Unity's progressive lightmapper do. Produces a real artefact we can
+            ship in the <code>.vmap</code> bake cache, feed to the existing unshaded parity shader, and stream
+            tile-by-tile to clients over the op channel. The dirty-tile model is <i>identical</i> to the
+            decoration masks (§5.1) — the chart-space architecture pays for itself twice. View-prioritized
+            convergence resolves the room you are standing in within seconds. Costs nothing at runtime once
+            baked, which is precisely why old hardware can run these maps.</td>
+        <td>By far the most code: chart packing, a path tracer, tile scheduling, atlas residency. Needs
+            <code>LightmapUnwrap</code> charts for regenerated geometry (available — see above).</td>
+        <td><b>The destination.</b> Everything else is scaffolding toward it.</td>
+      </tr>
+      <tr>
+        <td><b>5. Godot LightmapGI batch bake</b></td>
+        <td>Least code, good quality, already written.</td>
+        <td><b>Not callable from a running game at all</b> — editor-only (measured). Also wants to own UV2,
+            and cannot ingest the precomputed Q3 pages the parity path uses.</td>
+        <td><b>Dropped as the bridge.</b> Viable only as an offline step inside the Godot editor.</td>
+      </tr>
+      <tr>
+        <td><b>6. q3map2 <code>-light</code></b></td>
+        <td>Exact parity for untouched classic maps; already how every shipped map is lit.</td>
+        <td>External tool, whole-map only, cannot run incrementally, cannot see props or amplified geometry.</td>
+        <td>Stays for classic BSPs. Not part of the editing loop.</td>
+      </tr>
+    </table>
+
+    <p><b>Recommendation.</b> A ladder, in this order, each rung independently useful:</p>
     <ol>
-      <li><span class="pill rec">always-on preview</span> <b>Full realtime while editing</b> — sun + prop lights with
-          realtime shadows, the anatomizer's baked AO faking contact occlusion, and optional <b>SDFGI</b> for live
-          bounce light on capable machines (quality-tiered; it's heavy). Zero latency: move a torch and the lighting
-          is simply correct. This is the editing-loop default from E2 onward — and a legitimate shipping option on
-          high-end settings.</li>
-      <li><span class="pill rec">destination</span> <b>Progressive GPU lightmapper — i.e. baking <i>in</i> real
-          time</b> (elevated from "endgame") — path-traced texel batches accumulate into the chart atlas over frames:
-          dirtied tiles restart first, prioritized by the current view; the map is noisy-but-lit within seconds and
-          converges over minutes <i>while you keep editing</i>. Runs on the server as the authoritative baker with
-          result tiles streamed to clients (§11.7), or locally in a solo session. Identical tile/dirty model to the
-          masks — the chart-space architecture pays for itself a second time.</li>
-      <li><span class="pill alt">bridge</span> Godot <b>LightmapGI</b> batch bake on the server until the progressive
-          baker exists: feed it the decorated render meshes (UV2 handshake with our charts, §5.1), bake async, ship in
-          the bake cache (§11.2). Least code, decent quality, minutes per bake — the "ship it" button.</li>
-      <li><span class="pill alt">compat</span> q3map2 <code>-light</code> stays for classic untouched BSPs only — it
-          can't see props/amplified geometry and can't run incrementally.</li>
+      <li><span class="pill rec">first</span> <b>Light the editor world</b> — give the regenerated world a lit
+        material, spawn the map's <code>light</code> entities as real Godot lights, add the sun and tiered
+        shadows. Precondition for 2–4, and by itself it answers "real-time lighting while editing" and retires
+        the fullbright compromise.</li>
+      <li><span class="pill alt">preset</span> <b>SDFGI behind a quality tier</b> for live bounce, with VoxelGI
+        as the cheaper fallback. This is what UE does for the editing loop.</li>
+      <li><span class="pill rec">destination</span> <b>The progressive GPU lightmapper</b>, converging into the
+        chart atlas while the map sits still, view-prioritized, dirty-tile-scheduled, shipped in the bake
+        cache — the rung that matches GPU Lightmass and Unity's progressive lightmapper, and the only one that
+        produces something a low-end machine renders for free.</li>
     </ol>
-    The practical ladder: realtime preview (1) always on while editing; the progressive bake (2) refining underneath
-    it whenever the map sits still; the batch bake (3) as the stopgap until (2) lands.</li>
+    <p>What changed from the previous draft: rung 3 was "LightmapGI batch bake as the stopgap". It is not
+    available in-game, so the stopgap between (1) and (3) becomes SDFGI/VoxelGI — dynamic rather than baked —
+    which is also what both reference engines actually do.</p>
+  </li>
 </ul>
 
 <h3 id="skybox"><span class="secno">10.2</span>Skybox generation <span class="pill rec">v1.2 · elevated</span></h3>
@@ -1257,8 +1356,7 @@ D1–D2 is the decoration-thesis gate, unchanged from v0.</p>
       combinatorial explosion. <b>Open:</b> do decorated maps eventually want a PBR base path for stock textures
       (normal-map generation from diffuse?), or stay Q3-base + layers indefinitely?</li>
   <li><b>UV2 double-booking</b> — masks and lightmaps both want chart space. Same charts at different densities is the
-      plan (§5.1/§10); Godot's LightmapGI wanting to own UV2 for option-2 baking needs a prototype to de-risk.
-      <b>Open:</b> can we hand LightmapGI our parameterization, or does option 2 force a second unwrap?</li>
+      plan (§5.1/§10). <b>Answered 2026-07-27:</b> the question is moot for the in-game path — <code>LightmapGI.Bake</code> does not exist in the C# API at all (compile-tested), so LightmapGI never gets to own UV2 in a running game. Runtime chart generation via <code>ArrayMesh.LightmapUnwrap</code> <i>is</i> available, so our own charts stay the single parameterization for both masks and lightmaps. <b>Open:</b> chart density — one atlas at mask density with lightmaps sampled at a coarser mip, or two atlases sharing a layout?</li>
   <li><b>Bake-cache size &amp; distribution</b> — weather atlas + lightmaps + amplified meshes could be tens of MB per
       map; fine on disk, needs care on the wire (content download path, delta by tile hash). <b>Open:</b> compressed
       tile format (BC7 at rest?) and the download-resume story.</li>

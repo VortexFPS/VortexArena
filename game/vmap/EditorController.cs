@@ -511,6 +511,14 @@ public sealed partial class EditorController : Node3D
             return false;
         }
 
+        // The Clip tool's click places a plane point, except with nothing selected yet — you have to be able
+        // to pick the brushes to cut before you can aim a cut at them.
+        if (Tool == EditorTool.Clip && _session.Selection.Count > 0)
+        {
+            AddClipPoint();
+            return false;
+        }
+
         // --- phase two: a handle is under the crosshair, so transform along it ---
         if (_hoverHandle is { } handle && _session.Selection.Count > 0)
         {
@@ -854,6 +862,144 @@ public sealed partial class EditorController : Node3D
         }
 
         GeometryVersion++;
+        return true;
+    }
+
+    // =============================================================================================
+    //  Clip tool (§11.9) — click points to place a cutting plane, Enter to cut
+    // =============================================================================================
+
+    private readonly List<NVec3> _clipPoints = new();
+
+    /// <summary>Points clicked so far for the pending cut, for the gizmo to draw.</summary>
+    public IReadOnlyList<NVec3> ClipPoints => _clipPoints;
+
+    /// <summary>Which half a clip keeps. Cycled from the menu; Back is Radiant's default sense.</summary>
+    public ClipKeep ClipKeep { get; private set; } = ClipKeep.Back;
+
+    /// <summary>Cycle keep-back → keep-front → keep-both.</summary>
+    public void CycleClipKeep()
+    {
+        ClipKeep = ClipKeep switch
+        {
+            ClipKeep.Back => ClipKeep.Front,
+            ClipKeep.Front => ClipKeep.Both,
+            _ => ClipKeep.Back,
+        };
+        Log.Info($"editor: clip keeps {ClipKeep}");
+    }
+
+    /// <summary>How many points the current clip mode needs before it defines a plane.</summary>
+    public int ClipPointsNeeded => Mode switch
+    {
+        ToolMode.ThreePoint => 3,
+        ToolMode.TwoPoint => 2,
+        _ => 0,                     // ViewPlane needs none — the camera IS the plane
+    };
+
+    /// <summary>Add a clip point at the crosshair. Returns true when the point was taken.</summary>
+    public bool AddClipPoint()
+    {
+        if (Tool != EditorTool.Clip || !TryGetPastePoint(out NVec3 p))
+            return false;
+
+        // Starting a new cut after one completed clears the old points rather than accumulating: the previous
+        // plane is already applied or abandoned, and leaving its points around would silently change what the
+        // next click means.
+        if (_clipPoints.Count >= ClipPointsNeeded && ClipPointsNeeded > 0)
+            _clipPoints.Clear();
+
+        _clipPoints.Add(p);
+        return true;
+    }
+
+    /// <summary>Discard the pending cut.</summary>
+    public void ClearClipPoints() => _clipPoints.Clear();
+
+    /// <summary>
+    /// The cutting plane the current mode and points define.
+    ///
+    /// Two-point is the interesting one: two clicked points fix a LINE, not a plane, so the third constraint
+    /// has to come from somewhere. It comes from the view direction — the cut runs along the line you drew and
+    /// extends away from you, which is the gesture a mapper means by "slice it here" in a first-person view.
+    /// </summary>
+    public bool TryGetClipPlane(out VmapPlane plane)
+    {
+        plane = default;
+        if (_camera is null)
+            return false;
+
+        NVec3 forward = Coords.ToQuake(-_camera.GlobalTransform.Basis.Z);
+
+        switch (Mode)
+        {
+            case ToolMode.ViewPlane:
+            {
+                if (!TryGetPastePoint(out NVec3 at))
+                    return false;
+                plane = new VmapPlane(NVec3.Normalize(forward), NVec3.Dot(at, forward));
+                return true;
+            }
+
+            case ToolMode.TwoPoint:
+            {
+                if (_clipPoints.Count < 2)
+                    return false;
+                NVec3 along = _clipPoints[1] - _clipPoints[0];
+                if (along.LengthSquared() < 1e-6f)
+                    return false;
+                NVec3 n = NVec3.Cross(along, forward);
+                if (n.LengthSquared() < 1e-6f)
+                    return false;       // looking straight down the line: no plane is determined
+                n = NVec3.Normalize(n);
+                plane = new VmapPlane(n, NVec3.Dot(_clipPoints[0], n));
+                return true;
+            }
+
+            case ToolMode.ThreePoint:
+            {
+                if (_clipPoints.Count < 3)
+                    return false;
+                if (!VmapPlane.TryFromPoints(_clipPoints[0], _clipPoints[1], _clipPoints[2], out plane))
+                    return false;
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Apply the pending cut to the selection. Returns true when at least one brush was actually crossed.
+    /// </summary>
+    public bool ApplyClip()
+    {
+        if (_session is null || !TryGetClipPlane(out VmapPlane plane))
+            return false;
+
+        List<int> ids = _session.SelectedBrushIds();
+        if (ids.Count == 0)
+        {
+            Log.Info("editor: clip needs a selection — click the brushes to cut first");
+            return false;
+        }
+
+        var op = new ClipSelectionOp(ids, plane, ClipKeep);
+        if (!_session.Apply(op))
+        {
+            Log.Info("editor: the cutting plane missed every selected brush");
+            return false;
+        }
+
+        // The off-cuts join the selection when both halves are kept, so a split can be immediately dragged
+        // apart without re-picking the piece that did not exist a moment ago.
+        foreach (int id in op.CreatedBrushIds)
+            _session.Selection.Add(VmapSelection.OfBrush(id));
+
+        _clipPoints.Clear();
+        GeometryVersion++;
+        Log.Info($"editor: {op.Describe()}");
         return true;
     }
 

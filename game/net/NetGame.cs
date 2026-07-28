@@ -7109,6 +7109,17 @@ public sealed partial class NetGame : Node3D
                 case Key.Delete:
                     _editor.DeleteSelection();
                     return true;
+                // (E8) The clip tool commits on Enter rather than on the last click: the number of points a
+                // cut needs varies by mode, and a gesture that fires the moment you happen to place the last
+                // one gives no chance to look at the preview before committing.
+                case Key.Enter or Key.KpEnter when _editor.Tool == EditorTool.Clip:
+                    _editor.ApplyClip();
+                    RefreshEditorWorld();
+                    return true;
+                case Key.Escape when _editor.Tool == EditorTool.Clip && _editor.ClipPoints.Count > 0:
+                    _editor.ClearClipPoints();
+                    return true;
+
                 case Key.Escape when _editor.IsDragging:
                     _editor.CancelDrag();
                     return true;
@@ -7500,6 +7511,7 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_wire", _ => Vmap.EditorOrthoView.CycleWireAlpha());
         interp.RegisterCommand("editor_show_bsp", _ => ToggleEditorBspCompare());
         interp.RegisterCommand("editor_flyspeed", CmdEditorFlySpeed);
+        interp.RegisterCommand("editor_clip", CmdEditorClip);
         Vmap.EditorBinds.RegisterCommands(interp);
 
         // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
@@ -7611,6 +7623,33 @@ public sealed partial class NetGame : Node3D
             default:
                 XonoticGodot.Common.Diagnostics.Log.Help(
                     "usage: editor_select deselect|copy|paste|delete|invert|all_shader");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_clip keep|apply|cancel</c>. Bare applies the pending cut, which is what the Enter key does —
+    /// registered as a command too so it can be bound and scripted like everything else.
+    /// </summary>
+    private void CmdEditorClip(IReadOnlyList<string> args)
+    {
+        if (_editor is null)
+            return;
+
+        switch (args.Count > 1 ? args[1].ToLowerInvariant() : "apply")
+        {
+            case "keep":
+                _editor.CycleClipKeep();
+                return;
+            case "cancel":
+                _editor.ClearClipPoints();
+                return;
+            case "apply":
+                if (_editor.ApplyClip())
+                    RefreshEditorWorld();
+                return;
+            default:
+                XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_clip keep|apply|cancel");
                 return;
         }
     }

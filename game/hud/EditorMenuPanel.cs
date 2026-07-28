@@ -263,6 +263,17 @@ public partial class EditorMenuPanel : HudPanel
 
         rows.Add(new Row { Label = "Selection", SubmenuTitle = "Selection", Submenu = BuildSelection });
 
+        // The clip tool's keep-half choice is a separate axis from its placement mode, so it gets its own row
+        // rather than being folded into the mode list where picking "keep front" would deselect "two-point".
+        if (c is { Tool: EditorTool.Clip })
+            rows.Add(new Row
+            {
+                Label = "Clip keeps",
+                Detail = c.ClipKeep.ToString().ToLowerInvariant(),
+                Command = "editor_clip keep",
+                KeepOpen = true,
+            });
+
         string undoLabel = c?.Session?.UndoLabel ?? "";
         rows.Add(new Row
         {
@@ -352,6 +363,7 @@ public partial class EditorMenuPanel : HudPanel
     {
         ToolMode.Move or ToolMode.Rotate or ToolMode.Scale or ToolMode.Paste => true,
         ToolMode.Object or ToolMode.Face => tool == EditorTool.Select,
+        ToolMode.TwoPoint or ToolMode.ThreePoint or ToolMode.ViewPlane => tool == EditorTool.Clip,
         _ => false,
     };
 

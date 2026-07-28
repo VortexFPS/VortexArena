@@ -371,7 +371,7 @@ public static class EditorTools
     public static bool IsImplemented(EditorTool tool) => tool switch
     {
         EditorTool.None or EditorTool.Select or EditorTool.Brush or EditorTool.Face
-            or EditorTool.Edge or EditorTool.Vertex or EditorTool.Patch => true,
+            or EditorTool.Edge or EditorTool.Vertex or EditorTool.Patch or EditorTool.Clip => true,
         _ => false,
     };
 

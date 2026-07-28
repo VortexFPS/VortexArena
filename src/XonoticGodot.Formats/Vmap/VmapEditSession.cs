@@ -116,6 +116,21 @@ public sealed class VmapEditSession
         var before = Snapshot(op.TouchedBrushIds);
         var patchBefore = SnapshotPatches(op.TouchedPatchIds);
         var entityBefore = SnapshotEntities(op.TouchedEntityIds);
+
+        // An entity that OWNS a touched brush or patch is itself touched, whether or not the op said so. Geometry
+        // ops mutate ownership links as a side effect — a clip hands the off-cut to the same brush entity, a
+        // delete unhooks the brush from it — and an op cannot name those entities up front because it has no
+        // document until Apply. Deriving them here is what stops undo leaving an entity pointing at a brush that
+        // no longer exists.
+        foreach (VmapEntity owner in Document.Entities)
+        {
+            if (entityBefore.ContainsKey(owner.Id))
+                continue;
+            if (owner.BrushIds.Exists(op.TouchedBrushIds.Contains)
+                || owner.PatchIds.Exists(op.TouchedPatchIds.Contains))
+                entityBefore[owner.Id] = owner.Clone();
+        }
+
         var idsBefore = new HashSet<int>(Document.Brushes.Select(b => b.Id));
         var patchIdsBefore = new HashSet<int>(Document.Patches.Select(p => p.Id));
         var entityIdsBefore = new HashSet<int>(Document.Entities.Select(e => e.Id));

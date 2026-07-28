@@ -481,3 +481,180 @@ public class VmapRotateSelectionTests
             System.Array.Empty<int>(), new[] { 1 }, Vector3.Zero, Zaxis, 0f)));
     }
 }
+
+/// <summary>
+/// Covers <see cref="ClipSelectionOp"/> (phase E8) — the Clip tool's op.
+///
+/// The behaviour worth pinning is that a plane which MISSES a brush skips it rather than failing the whole
+/// gesture. Selecting a row of pillars and drawing one cut across them is the normal way to use a clipper, and
+/// refusing because of a brush the mapper was not thinking about makes it unusable at that scale.
+/// </summary>
+public class VmapClipSelectionTests
+{
+    private static VmapBrush Box(Vector3 mins, Vector3 maxs, int id = 1)
+    {
+        var b = new VmapBrush { Id = id, ContentFlags = 1 };
+        void Face(Vector3 n, float d) => b.Faces.Add(new VmapFace
+        {
+            Plane = new VmapPlane(n, d),
+            Material = "textures/test/wall",
+            Projection = VmapTexProjection.AxialFor(n),
+        });
+        Face(new Vector3(1, 0, 0), maxs.X);
+        Face(new Vector3(-1, 0, 0), -mins.X);
+        Face(new Vector3(0, 1, 0), maxs.Y);
+        Face(new Vector3(0, -1, 0), -mins.Y);
+        Face(new Vector3(0, 0, 1), maxs.Z);
+        Face(new Vector3(0, 0, -1), -mins.Z);
+        return b;
+    }
+
+    /// <summary>A plane cutting the X axis at <paramref name="x"/>, normal pointing +X.</summary>
+    private static VmapPlane CutAtX(float x) => new(new Vector3(1, 0, 0), x);
+
+    [Fact]
+    public void KeepBack_LeavesTheHalfBehindTheNormal()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(0, 0, 0), new Vector3(64, 32, 32)));
+        var session = new VmapEditSession(doc);
+
+        Assert.True(session.Apply(new ClipSelectionOp(new[] { 1 }, CutAtX(32f), ClipKeep.Back)));
+
+        Assert.Single(doc.Brushes);
+        Assert.True(VmapWinding.TryGetBounds(doc.Brushes[0], out Vector3 mins, out Vector3 maxs));
+        Assert.Equal(0f, mins.X, 2);
+        Assert.Equal(32f, maxs.X, 2);
+    }
+
+    [Fact]
+    public void KeepFront_LeavesTheOtherHalf()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(0, 0, 0), new Vector3(64, 32, 32)));
+        var session = new VmapEditSession(doc);
+
+        Assert.True(session.Apply(new ClipSelectionOp(new[] { 1 }, CutAtX(32f), ClipKeep.Front)));
+
+        Assert.Single(doc.Brushes);
+        Assert.True(VmapWinding.TryGetBounds(doc.Brushes[0], out Vector3 mins, out Vector3 maxs));
+        Assert.Equal(32f, mins.X, 2);
+        Assert.Equal(64f, maxs.X, 2);
+    }
+
+    [Fact]
+    public void KeepBoth_ProducesTwoSolidsThatAddUpToTheOriginal()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(0, 0, 0), new Vector3(64, 32, 32)));
+        var session = new VmapEditSession(doc);
+
+        var op = new ClipSelectionOp(new[] { 1 }, CutAtX(24f), ClipKeep.Both);
+        Assert.True(session.Apply(op));
+
+        Assert.Equal(2, doc.Brushes.Count);
+        Assert.Single(op.CreatedBrushIds);
+        Assert.True(VmapWinding.IsClosedConvex(doc.Brushes[0]));
+        Assert.True(VmapWinding.IsClosedConvex(doc.Brushes[1]));
+
+        Assert.True(VmapWinding.TryGetBounds(doc.Brushes[0], out Vector3 aMin, out Vector3 aMax));
+        Assert.True(VmapWinding.TryGetBounds(doc.Brushes[1], out Vector3 bMin, out Vector3 bMax));
+        Assert.Equal(24f, aMax.X, 2);
+        Assert.Equal(24f, bMin.X, 2);
+        Assert.Equal(64f, bMax.X, 2);
+    }
+
+    [Fact]
+    public void APlaneThatMissesABrush_SkipsIt_InsteadOfFailingTheWholeCut()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(0, 0, 0), new Vector3(64, 32, 32), id: 1));    // the plane crosses this
+        doc.Brushes.Add(Box(new Vector3(512, 0, 0), new Vector3(576, 32, 32), id: 2)); // and misses this
+        var session = new VmapEditSession(doc);
+
+        var op = new ClipSelectionOp(new[] { 1, 2 }, CutAtX(32f), ClipKeep.Back);
+        Assert.True(session.Apply(op));
+        Assert.Equal(1, op.ClippedCount);
+
+        Assert.True(VmapWinding.TryGetBounds(doc.Brushes[0], out _, out Vector3 cutMax));
+        Assert.Equal(32f, cutMax.X, 2);
+
+        // The far brush is untouched.
+        Assert.True(VmapWinding.TryGetBounds(doc.Brushes[1], out Vector3 farMin, out Vector3 farMax));
+        Assert.Equal(512f, farMin.X, 2);
+        Assert.Equal(576f, farMax.X, 2);
+    }
+
+    [Fact]
+    public void APlaneThatMissesEverything_IsRefused_AndJournalsNothing()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(0, 0, 0), new Vector3(64, 32, 32)));
+        var session = new VmapEditSession(doc);
+
+        Assert.False(session.Apply(new ClipSelectionOp(new[] { 1 }, CutAtX(9999f), ClipKeep.Back)));
+        Assert.False(session.CanUndo);
+        Assert.Single(doc.Brushes);
+    }
+
+    [Fact]
+    public void UndoingASplit_PutsTheBrushBackWhole()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(0, 0, 0), new Vector3(64, 32, 32)));
+        var session = new VmapEditSession(doc);
+
+        Assert.True(session.Apply(new ClipSelectionOp(new[] { 1 }, CutAtX(32f), ClipKeep.Both)));
+        Assert.Equal(2, doc.Brushes.Count);
+
+        Assert.True(session.Undo());
+        Assert.Single(doc.Brushes);
+        Assert.True(VmapWinding.TryGetBounds(doc.Brushes[0], out Vector3 mins, out Vector3 maxs));
+        Assert.Equal(0f, mins.X, 2);
+        Assert.Equal(64f, maxs.X, 2);
+    }
+
+    /// <summary>
+    /// Splitting a brush that belongs to a brush entity hands the off-cut to the same entity. Undo has to take
+    /// that reference back, or the entity is left owning a brush id that no longer exists — which the journal
+    /// missed until entity ownership was derived from the touched-brush set.
+    /// </summary>
+    [Fact]
+    public void UndoingASplitOfABrushEntity_DropsTheOffCutReference()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(0, 0, 0), new Vector3(64, 32, 32), id: 1));
+        var door = new VmapEntity { Id = 1, ClassName = "func_door" };
+        door.BrushIds.Add(1);
+        doc.Entities.Add(door);
+
+        var session = new VmapEditSession(doc);
+        Assert.True(session.Apply(new ClipSelectionOp(new[] { 1 }, CutAtX(32f), ClipKeep.Both)));
+
+        // Both halves belong to the door.
+        Assert.Equal(2, doc.Entities[0].BrushIds.Count);
+
+        Assert.True(session.Undo());
+        Assert.Single(doc.Brushes);
+        Assert.Single(doc.Entities[0].BrushIds);
+        Assert.Equal(1, doc.Entities[0].BrushIds[0]);
+    }
+
+    [Fact]
+    public void AnEmptySelection_IsRefused()
+    {
+        var doc = new VmapDocument();
+        var session = new VmapEditSession(doc);
+        Assert.False(session.Apply(new ClipSelectionOp(System.Array.Empty<int>(), CutAtX(0f), ClipKeep.Back)));
+    }
+
+    [Fact]
+    public void ADegeneratePlane_IsRefused()
+    {
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(new Vector3(0, 0, 0), new Vector3(64, 32, 32)));
+        var session = new VmapEditSession(doc);
+        Assert.False(session.Apply(
+            new ClipSelectionOp(new[] { 1 }, new VmapPlane(Vector3.Zero, 0f), ClipKeep.Back)));
+    }
+}

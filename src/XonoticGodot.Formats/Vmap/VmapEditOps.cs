@@ -1071,3 +1071,93 @@ public sealed class RotateSelectionOp : IVmapOp
         return true;
     }
 }
+
+/// <summary>Which side of the cutting plane a clip keeps.</summary>
+public enum ClipKeep
+{
+    /// <summary>Keep the half BEHIND the plane normal — <see cref="ClipBrushOp"/>'s own default.</summary>
+    Back,
+
+    /// <summary>Keep the half in FRONT of the normal (the plane is flipped before cutting).</summary>
+    Front,
+
+    /// <summary>Keep both halves, the off-cut becoming a second brush.</summary>
+    Both,
+}
+
+/// <summary>
+/// Clip every brush in a selection with one plane (design doc §11.9) — the Clip tool's op.
+///
+/// One op rather than one per brush, on the same rule as scale and rotate: a single gesture is a single undo
+/// step. It is a thin loop over <see cref="ClipBrushOp"/> rather than a reimplementation, so the plane maths
+/// and the material inheritance stay in one place.
+///
+/// Brushes the plane MISSES are skipped rather than failing the operation. That is what makes a marquee-style
+/// clip usable: you select a row of pillars, draw one cut across them, and the ones the plane happens not to
+/// cross are simply left alone — the alternative refuses the whole gesture because of a brush you were not
+/// thinking about.
+/// </summary>
+public sealed class ClipSelectionOp : IVmapOp
+{
+    private readonly int[] _brushIds;
+    private readonly VmapPlane _plane;
+    private readonly ClipKeep _keep;
+    private readonly List<int> _createdIds = new();
+    private int _clipped;
+
+    public ClipSelectionOp(IReadOnlyList<int> brushIds, VmapPlane plane, ClipKeep keep)
+    {
+        _brushIds = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
+        _plane = plane;
+        _keep = keep;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => _brushIds;
+
+    /// <summary>Off-cut brushes produced when keeping both halves; valid after a successful <see cref="Apply"/>.</summary>
+    public IReadOnlyList<int> CreatedBrushIds => _createdIds;
+
+    /// <summary>How many brushes the plane actually crossed.</summary>
+    public int ClippedCount => _clipped;
+
+    public string Describe()
+    {
+        string verb = _keep == ClipKeep.Both ? "Split" : "Clip";
+        return _clipped == 1 ? $"{verb} 1 brush" : $"{verb} {_clipped} brushes";
+    }
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_brushIds.Length == 0)
+            return false;
+
+        float len = _plane.Normal.Length();
+        if (len < 1e-6f)
+            return false;
+
+        // "Keep front" is the same cut seen from the other side, so it is expressed by flipping the plane
+        // rather than by a second code path through the split.
+        VmapPlane cut = _keep == ClipKeep.Front
+            ? new VmapPlane(-_plane.Normal, -_plane.Dist)
+            : _plane;
+
+        _createdIds.Clear();
+        _clipped = 0;
+
+        foreach (int id in _brushIds)
+        {
+            var one = new ClipBrushOp(id, cut, _keep == ClipKeep.Both);
+            if (!one.Apply(doc))
+                continue;               // the plane missed this brush — leave it alone
+
+            _clipped++;
+            if (one.CreatedBrushId != 0)
+                _createdIds.Add(one.CreatedBrushId);
+        }
+
+        // Nothing was crossed: report failure so the session does not journal an empty step, and so the caller
+        // can tell the mapper the cut went nowhere instead of leaving them wondering.
+        return _clipped > 0;
+    }
+}

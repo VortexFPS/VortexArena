@@ -367,6 +367,27 @@ public partial class EditorPanel : HudPanel
             return;
         }
 
+        // The clip tool is the one place where clicking is not the commit — Enter is — so it needs saying.
+        if (c.Tool == EditorTool.Clip)
+        {
+            if (c.Session is not { Selection.Count: > 0 })
+                lines.Add(("click the brushes to cut first", tip));
+            else if (c.ClipPoints.Count < c.ClipPointsNeeded)
+                lines.Add(($"click {c.ClipPointsNeeded - c.ClipPoints.Count} more point(s) "
+                    + $"· keeps {c.ClipKeep.ToString().ToLowerInvariant()}", tip));
+            else
+                lines.Add(($"[Enter] cut · keeps {c.ClipKeep.ToString().ToLowerInvariant()} · Esc clears", live));
+            return;
+        }
+
+        if (c.Mode == ToolMode.Paste)
+        {
+            lines.Add((c.Clipboard.IsEmpty
+                ? "nothing copied yet"
+                : "click to place · Esc to stop pasting", live));
+            return;
+        }
+
         if (c.HoverHandle is { } h)
         {
             lines.Add(($"click to {HandleVerb(h)}", live));

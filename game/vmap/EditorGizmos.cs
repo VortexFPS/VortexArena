@@ -147,6 +147,10 @@ public sealed partial class EditorGizmos : Node3D
             }
         }
 
+        // --- clip preview: the clicked points and where the plane crosses the selection (§11.9) ---
+        if (c.Tool == EditorTool.Clip)
+            anything |= DrawClipPreview(c, doc);
+
         // --- paste ghost: the clipboard outlined where a click would put it (§11.9) ---
         if (c.Mode == ToolMode.Paste && !c.Clipboard.IsEmpty && c.TryGetPastePoint(out NVec3 pasteAt))
         {
@@ -249,6 +253,58 @@ public sealed partial class EditorGizmos : Node3D
     /// <summary>Colour of the paste ghost — distinct from the drag ghost, because it is a different promise:
     /// a drag ghost previews a move, this previews something that does not exist yet.</summary>
     private static readonly Color PasteGhostColor = new(0.6f, 0.75f, 1f, 0.85f);
+
+    private static readonly Color ClipPointColor = new(1f, 0.45f, 0.35f, 1f);
+    private static readonly Color ClipPlaneColor = new(1f, 0.6f, 0.25f, 0.95f);
+
+    /// <summary>
+    /// Draw the pending cut: the clicked points, and the polygon where the plane actually crosses each selected
+    /// brush.
+    ///
+    /// Showing the real cross-section rather than an abstract plane is the point. A clip is committed blind
+    /// otherwise — the mapper has no way to tell whether the plane grazes a corner or slices cleanly until
+    /// after they have applied it and are looking at the result.
+    /// </summary>
+    private bool DrawClipPreview(EditorController c, VmapDocument doc)
+    {
+        bool drew = false;
+
+        foreach (NVec3 p in c.ClipPoints)
+        {
+            DrawCross(p, VertexMarker * 2f, ClipPointColor);
+            drew = true;
+        }
+
+        if (!c.TryGetClipPlane(out VmapPlane plane) || c.Session is not { } session)
+            return drew;
+
+        foreach (int id in session.SelectedBrushIds())
+        {
+            if (doc.FindBrush(id) is not { } brush)
+                continue;
+
+            // The cross-section is the brush's own winding for the cut plane: start from the plane's base
+            // polygon and chop it against every face, which is exactly how a brush face is derived.
+            List<NVec3>? section = VmapWinding.BaseWindingForPlane(plane);
+            if (section is null)
+                continue;
+
+            foreach (VmapFace f in brush.Faces)
+            {
+                section = VmapWinding.ChopWinding(section, f.Plane);
+                if (section is null || section.Count < 3)
+                    break;
+            }
+            if (section is null || section.Count < 3)
+                continue;
+
+            for (int i = 0; i < section.Count; i++)
+                Line(section[i], section[(i + 1) % section.Count], ClipPlaneColor);
+            drew = true;
+        }
+
+        return drew;
+    }
 
     /// <summary>
     /// Outline the clipboard where a click would place it. Drawn from the CLIPBOARD's own geometry, offset by

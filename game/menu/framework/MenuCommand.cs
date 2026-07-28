@@ -40,6 +40,12 @@ public static class MenuCommand
     /// <summary><c>map NAME</c> / <c>menu_cmd map NAME</c> — start a local match on the given map.</summary>
     public static Action<string>? StartMap;
 
+    /// <summary>
+    /// <c>editor [map]</c> — host a map in the editor gametype. Empty string means "the one already
+    /// running", so the editor is reachable from wherever you are without a trip through the menu.
+    /// </summary>
+    public static Action<string>? StartEditor;
+
     /// <summary><c>connect ADDR</c> — connect to a server.</summary>
     public static Action<string>? Connect;
 

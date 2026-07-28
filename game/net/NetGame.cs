@@ -348,11 +348,26 @@ public sealed partial class NetGame : Node3D
     /// builtin; only records the target — it's emitted (deferred) from <see cref="_Process"/> so a request made
     /// mid-tick (a clc_stringcmd <c>map</c>, or the intermission rotation) can't tear the server down under itself.
     /// </summary>
-    public void RequestMapChange(string map)
+    public void RequestMapChange(string map) => RequestMapChange(map, null);
+
+    /// <param name="gametype">
+    /// Gametype for the rebooted server, or null to keep the current one. This is what lets
+    /// <c>editor</c> drop into the map you are already playing: the changelevel machinery always carried a
+    /// gametype through to the restart, but nothing could ever ASK for a different one.
+    /// </param>
+    public void RequestMapChange(string map, string? gametype)
     {
-        if (!string.IsNullOrWhiteSpace(map))
-            _pendingMap = map;
+        if (string.IsNullOrWhiteSpace(map))
+            return;
+        _pendingMap = map;
+        _pendingGametype = string.IsNullOrWhiteSpace(gametype) ? null : gametype;
     }
+
+    /// <summary>Gametype override for the pending changelevel; null keeps the current one.</summary>
+    private string? _pendingGametype;
+
+    /// <summary>The map currently being served, for commands that re-host it.</summary>
+    public string CurrentMap => _map;
 
     // Render clock used to drive the prediction (Predict/SendInput) AND read the decaying stair/error offsets.
     // The reconciler arms those decays stamped with the SERVER time (in HandleSnapshot), so the clock we read
@@ -4146,7 +4161,8 @@ public sealed partial class NetGame : Node3D
         {
             string map = _pendingMap;
             _pendingMap = null;
-            string gametype = CurrentGametype();
+            string gametype = _pendingGametype ?? CurrentGametype();
+            _pendingGametype = null;
             int bots = _serverWorld?.Clients.BotCount ?? _botCount;
             int skill = _botSkill;
             // Campaign auto-advance (win → next level): the world store carries g_campaign + the NEXT

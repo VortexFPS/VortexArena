@@ -324,6 +324,7 @@ public partial class Shell : Node
         // QC `map`/`devmap`: in a running match this is a changelevel (keep mode + bots); at the menu it starts a
         // fresh listen server on the map then self-connects (the real "start a game" path).
         MenuCommand.StartMap = ChangeLevel;
+        MenuCommand.StartEditor = EditorMap;
         MenuCommand.Connect = OnConnect;
 
         // --- T50: the menu nav verbs + the live-match gameplay-command channel ---
@@ -865,14 +866,36 @@ public partial class Shell : Node
     /// match), start a fresh listen server on it. A pure <c>--connect</c> client has no local server to changelevel
     /// (the real server owns the map), so this no-ops there.
     /// </summary>
-    private void ChangeLevel(string map)
+    private void ChangeLevel(string map) => ChangeLevel(map, null);
+
+    /// <param name="gametype">Gametype to switch to, or null to keep the current one.</param>
+    private void ChangeLevel(string map, string? gametype)
     {
         if (string.IsNullOrWhiteSpace(map))
             return;
         if (_netGame is { ServerWorld: not null })
-            _netGame.RequestMapChange(map);                                  // in a match → server-side changelevel
+            _netGame.RequestMapChange(map, gametype);                        // in a match → server-side changelevel
         else if (_netGame is null)
-            StartListenServer(new MatchConfig { Map = map, Gametype = "dm" }); // at the menu → start a game on it
+            StartListenServer(new MatchConfig { Map = map, Gametype = gametype ?? "dm" });
+    }
+
+    /// <summary>
+    /// <c>editor [map]</c> — the map editor as a destination, alongside <c>map</c> and <c>devmap</c>.
+    ///
+    /// With no argument it re-hosts the map already running, which is the point: you are looking at
+    /// something you want to change, and getting to the editor should not mean quitting to the menu and
+    /// starting over. The gametype rides the same changelevel path every map switch uses.
+    /// </summary>
+    private void EditorMap(string map)
+    {
+        string target = !string.IsNullOrWhiteSpace(map) ? map!
+            : _netGame?.CurrentMap ?? BootMap ?? "";
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            _console.Print("editor: no map running — use `editor <map>`.");
+            return;
+        }
+        ChangeLevel(target, "editor");
     }
 
     /// <summary>

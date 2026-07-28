@@ -137,6 +137,9 @@ public partial class ConsoleOverlay : CanvasLayer
             else Print("usage: map <name>");
         });
         interp.RegisterCommand("devmap", a => { if (a.Count >= 2) MenuCommand.StartMap?.Invoke(a[1]); });
+        // `editor [map]` sits beside map/devmap because it IS a map command — same changelevel path, only
+        // the gametype differs. No argument re-hosts whatever is running, which is the whole point.
+        interp.RegisterCommand("editor", a => MenuCommand.StartEditor?.Invoke(a.Count >= 2 ? a[1] : string.Empty));
         interp.RegisterCommand("vid_restart", _ => MenuCommand.VideoRestart?.Invoke());
         interp.RegisterCommand("snd_restart", _ => MenuCommand.AudioRestart?.Invoke());
         interp.RegisterCommand("togglemenu", a =>

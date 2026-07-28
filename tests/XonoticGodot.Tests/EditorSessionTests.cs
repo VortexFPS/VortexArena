@@ -43,12 +43,15 @@ public class EditorSessionTests
         Assert.False(p.IsObserver);
         Assert.Equal(MoveType.Walk, p.MoveType);
 
-        // Position is preserved. PutPlayerInServer applies a small placement nudge on top of the origin it is
-        // handed, so allow for that rather than demanding bit-equality — what matters is that the player did
-        // not get relocated to a spawn point somewhere else in the map.
+        // The EYE is preserved, not the origin. The free-fly camera sits at the observer's ORIGIN (observer
+        // ViewOfs is zero) while the spawned player's eye sits at origin + StandViewOfs — so entering
+        // playtest aims the hull to keep the VIEW still, which is the thing the mapper is actually using.
+        // Asserting the origin itself would assert the old bug: the view jumping up an eye height on every
+        // toggle, then falling.
         Assert.Equal(1024f, p.Origin.X, 1);
         Assert.Equal(-512f, p.Origin.Y, 1);
-        Assert.True(MathF.Abs(p.Origin.Z - 96f) < 8f, $"z moved too far: {p.Origin.Z}");
+        float eyeZ = p.Origin.Z + XonoticGodot.Common.Physics.PlayerPhysics.StandViewOfs.Z;
+        Assert.True(MathF.Abs(eyeZ - 96f) < 8f, $"eye moved too far: {eyeZ}");
 
         // View direction is preserved, and FixAngle is asserted so the client snaps to it rather than keeping
         // whatever the spawn path wrote.

@@ -103,8 +103,11 @@ public sealed partial class EditorController : Node3D
     /// <summary>The document being edited, or null when no session is open.</summary>
     public VmapDocument? Document => _document;
 
-    /// <summary>Active sub-object tool.</summary>
-    public EditorTool Tool { get; private set; } = EditorTool.Face;
+    /// <summary>
+    /// Active sub-object tool. Starts at <see cref="EditorTool.None"/>: a session opens by LOOKING at the
+    /// map, and a hover outline drawn over whatever you aim at is in the way of judging it. Key 3 cycles in.
+    /// </summary>
+    public EditorTool Tool { get; private set; } = EditorTool.None;
 
     /// <summary>Active manipulator mode (translate / rotate / scale).</summary>
     public ManipulatorMode Manipulator { get; private set; } = ManipulatorMode.Translate;

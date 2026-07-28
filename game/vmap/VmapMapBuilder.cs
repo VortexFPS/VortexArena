@@ -110,12 +110,23 @@ public static class VmapMapBuilder
             var bakeCells = new List<CellSurface>();
             foreach (Dictionary<string, CellSurface> byMat in cells.Values)
                 bakeCells.AddRange(byMat.Values);
+            bool wasResampled = EditorLightBake.Resampling;
             System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.BakeColors());
 
             // Radiosity's shoot/gather, once: what the direct pass RECEIVED becomes virtual emitters, and a
             // second pass adds their glow. This is what keeps traced shadows from being pitch black.
             if (EditorLightBake.BounceActive && EditorLightBake.BuildBounceLights() > 0)
                 System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.AddBounceColors());
+
+            // Retain the finished light in world space so the next EDIT can resample it instead of paying
+            // for a bake. Only a real bake refills this — a resampled build must not overwrite its own source.
+            if (!wasResampled)
+            {
+                EditorLightBake.CacheReset();
+                foreach (CellSurface cs in bakeCells)
+                    for (int i = 0; i < cs.Positions.Count; i++)
+                        EditorLightBake.CacheStore(Coords.ToQuake(cs.Positions[i]), cs.Colors[i]);
+            }
         }
 
         // Deterministic node order so two builds of the same document produce an identical tree.

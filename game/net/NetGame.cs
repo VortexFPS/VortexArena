@@ -6993,10 +6993,19 @@ public sealed partial class NetGame : Node3D
                 bool shadowsWanted = Menu.MenuState.Cvars is not { } sc
                     || string.IsNullOrEmpty(sc.GetString(Vmap.EditorLighting.CvarBakeShadows))
                     || sc.GetFloat(Vmap.EditorLighting.CvarBakeShadows) != 0f;
-                // Traced only when asked for: the first build of a session, or an explicit editor_rebake.
-                bool tracedShadows = shadowsWanted && _bakeShadowsNextBuild;
+                // A BAKE happens only when asked for — the first build of a session, or editor_rebake. Every
+                // other rebuild (every brush you drag) RESAMPLES the retained bake, which costs milliseconds
+                // and, more importantly, does not visibly downgrade the lighting mid-edit.
+                bool doBake = _bakeShadowsNextBuild || !Vmap.EditorLightBake.CacheReady;
+                bool tracedShadows = shadowsWanted && doBake;
                 _bakeShadowsNextBuild = false;
-                _bakedShadowsStale = shadowsWanted && !tracedShadows;
+                _bakedShadowsStale = !doBake;
+                if (!doBake)
+                {
+                    Vmap.EditorLightBake.BeginCached();
+                    _editorLights.SuppressBakeLights();
+                    goto builtLights;
+                }
                 var shadowTrace = tracedShadows
                     ? new Vmap.EditorShadowTrace(_editor.Document!,
                         b2 => b2.SubmodelIndex == 0 || !_editor.PickIndex.HiddenSubmodels.Contains(b2.SubmodelIndex))
@@ -7019,6 +7028,7 @@ public sealed partial class NetGame : Node3D
             }
         }
 
+        builtLights:
         _editorMapRoot = Vmap.VmapMapBuilder.BuildMap(_editor.Document!, _assets.Assets, new VmapSurfaceOptions
         {
             // Same filter the picker uses, so what you can click is what you can see.
@@ -7046,14 +7056,13 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
-    /// <summary>
-    /// <c>editor_rebake</c>: recompute the lighting WITH traced shadows.
+    /// <c>editor_rebake</c> (bound to key 9): recompute the lighting — traced shadows, dirt, bounce, the lot.
     ///
-    /// Shadow tracing costs seconds (7.6M rays, ~2.9 s on stormkeep even across every core), which is fine
-    /// once and intolerable on every drag of a brush. So it runs on the first build of a session and whenever
-    /// this is invoked; ordinary edits rebuild the cheaper unshadowed bake and the HUD reports the shadows as
-    /// stale. That keeps editing responsive and makes the expensive, good-looking pass something you ask for
-    /// when the geometry has settled.
+    /// A full bake costs seconds (44M rays, ~9 s on stormkeep across every core), which is fine once and
+    /// intolerable on every drag of a brush. So NOTHING recomputes lighting automatically: an edit rebuilds
+    /// the geometry and RESAMPLES the retained bake onto it, the HUD says the lighting is stale, and the
+    /// mapper asks for the real thing when the geometry has settled. Recomputing a cheaper bake per edit
+    /// would be both slow and a visible downgrade — the world would flash flatter on every nudge.
     /// </summary>
     private void CmdEditorRebake(IReadOnlyList<string> args)
     {
@@ -7065,7 +7074,7 @@ public sealed partial class NetGame : Node3D
         }
         _bakeShadowsNextBuild = true;
         _editorMapVersion = -1;      // force the next RefreshEditorWorld to rebuild
-        XonoticGodot.Common.Diagnostics.Log.Info("editor_rebake: recomputing lighting with traced shadows...");
+        XonoticGodot.Common.Diagnostics.Log.Info("editor_rebake: recomputing lighting (traced shadows + dirt + bounce)...");
     }
 
     /// <summary>True when the next world build should trace shadows (first build, or after editor_rebake).</summary>
@@ -7159,9 +7168,7 @@ public sealed partial class NetGame : Node3D
     ///   1                             toggle the world grid
     ///   2                             toggle EDIT / PLAYTEST
     /// </code>
-    /// Keys 3..9 are deliberately left alone for now: they are the natural home for the selection/move/rotate
-    /// tools that arrive with E3, and binding them to nothing today is better than binding them to something
-    /// that will move.
+    ///   3 tool · 4 ortho · 5 ortho axis · 6 rotate · 7 manipulator · 8 wire alpha · 9 REBAKE lighting
     /// </summary>
     private bool TryRunEditorBind(string command)
     {
@@ -7189,6 +7196,11 @@ public sealed partial class NetGame : Node3D
                 return true;
             case 8:
                 Vmap.EditorOrthoView.CycleWireAlpha();
+                return true;
+            case 9:
+                // The number-key rebake. Lighting is never recomputed by an edit, so this is how a mapper
+                // says "now redo it properly" — deliberately a key, not an automatic reaction to editing.
+                Menu.MenuState.Interp?.ExecuteLine("editor_rebake");
                 return true;
         }
 

@@ -123,7 +123,7 @@ public partial class EditorPanel : HudPanel
                 // Shadow tracing costs seconds, so edits skip it and say so rather than quietly showing
                 // lighting that no longer matches the geometry.
                 if (lit && Baked && ShadowsStale)
-                    lines.Add(("  shadows STALE — editor_rebake to retrace", new Color(1f, 0.75f, 0.3f)));
+                    lines.Add(($"  LIGHTING STALE — {Key(BindRebake)} to rebake", new Color(1f, 0.75f, 0.3f)));
 
                 lines.Add((
                     $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +
@@ -227,6 +227,7 @@ public partial class EditorPanel : HudPanel
     private const string BindTool = "weapon_group_3";
     private const string BindManip = "weapon_group_7";
     private const string BindWire = "weapon_group_8";
+    private const string BindRebake = "weapon_group_9";
     private const string BindOrtho = "weapon_group_4";
     private const string BindOrthoAxis = "weapon_group_5";
     private const string BindGridUp = "weapnext";

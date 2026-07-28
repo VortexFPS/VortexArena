@@ -85,8 +85,11 @@ public static class EditorLightBake
     /// </summary>
     private const int DirtRays = 12;
 
-    /// <summary>How far a dirt ray looks for an occluder, Quake units (q3map2's dirtDepth is 128).</summary>
-    private const float DirtDepth = 160f;
+    /// <summary>
+    /// How far a dirt ray looks for an occluder, Quake units. 64 because that is what stormkeep was compiled
+    /// with (<c>-dirtdepth 64</c>, from Xonotic's own q3map2 line); a deeper probe over-occludes open floor.
+    /// </summary>
+    private const float DirtDepth = 64f;
 
     /// <summary>How much of the light dirt is allowed to remove, 0..1 (q3map2's dirtGain).</summary>
     private static float _dirtStrength = 0.9f;
@@ -168,6 +171,86 @@ public static class EditorLightBake
             (int)MathF.Floor(p.Z / LightCell));
     }
 
+    // ---- the retained bake ------------------------------------------------------------------------
+
+    /// <summary>
+    /// The last completed bake, as light samples in space rather than as mesh attributes. An edit rebuilds
+    /// the world mesh from scratch, which throws the vertex colours away with it — so the lighting is kept
+    /// HERE and resampled onto the new vertices.
+    ///
+    /// This is what lets an edit cost nothing in lighting. The alternative, recomputing a cheap unshadowed
+    /// bake on every edit, is both slow and a visible downgrade: the world flashes to flatter lighting the
+    /// instant you nudge a brush, which reads as the editor breaking the map.
+    /// </summary>
+    private static readonly Dictionary<(int, int, int), (NVec3 Sum, int Count)> _cache = new();
+
+    private static bool _cacheMode;
+
+    /// <summary>Cell size of the retained bake, in Quake units — the luxel spacing it was baked at.</summary>
+    private const float CacheCell = 64f;
+
+    /// <summary>True when a completed bake is available to resample.</summary>
+    public static bool CacheReady => _cache.Count > 0;
+
+    /// <summary>True when this build is resampling the retained bake rather than computing one.</summary>
+    public static bool Resampling => _cacheMode;
+
+    /// <summary>
+    /// Arm resample-from-the-last-bake mode: <see cref="Sample"/> returns retained light instead of
+    /// computing any. Used for every rebuild that is not an explicit rebake.
+    /// </summary>
+    public static void BeginCached()
+    {
+        _grid = null;
+        _bounceGrid = null;
+        _shadows = null;
+        _cacheMode = true;
+    }
+
+    /// <summary>Drop the retained bake (a fresh one is about to replace it).</summary>
+    public static void CacheReset() => _cache.Clear();
+
+    /// <summary>Retain one baked sample. Called for every vertex of a completed bake.</summary>
+    public static void CacheStore(NVec3 positionQuake, Color color)
+    {
+        var key = (
+            (int)MathF.Floor(positionQuake.X / CacheCell),
+            (int)MathF.Floor(positionQuake.Y / CacheCell),
+            (int)MathF.Floor(positionQuake.Z / CacheCell));
+        _cache.TryGetValue(key, out (NVec3 Sum, int Count) acc);
+        _cache[key] = (acc.Sum + new NVec3(color.R, color.G, color.B), acc.Count + 1);
+    }
+
+    /// <summary>
+    /// Retained light at a position: its own cell, else the mean of whatever neighbours have samples.
+    /// Geometry that did not exist at bake time therefore inherits its surroundings' lighting rather than
+    /// rendering black or white — approximate on purpose, and the stale indicator says so.
+    /// </summary>
+    private static Color SampleCached(NVec3 position)
+    {
+        int cx = (int)MathF.Floor(position.X / CacheCell);
+        int cy = (int)MathF.Floor(position.Y / CacheCell);
+        int cz = (int)MathF.Floor(position.Z / CacheCell);
+
+        if (_cache.TryGetValue((cx, cy, cz), out (NVec3 Sum, int Count) hit) && hit.Count > 0)
+            return Col(hit.Sum / hit.Count);
+
+        NVec3 sum = NVec3.Zero;
+        int n = 0;
+        for (int x = -1; x <= 1; x++)
+        for (int y = -1; y <= 1; y++)
+        for (int z = -1; z <= 1; z++)
+            if (_cache.TryGetValue((cx + x, cy + y, cz + z), out (NVec3 Sum, int Count) near) && near.Count > 0)
+            {
+                sum += near.Sum / near.Count;
+                n++;
+            }
+
+        return n > 0 ? Col(sum / n) : Colors.Black;
+
+        static Color Col(NVec3 v) => new(v.X, v.Y, v.Z);
+    }
+
     private static Grid? _grid;
     private static Grid? _bounceGrid;
     private static EditorShadowTrace? _shadows;
@@ -195,6 +278,7 @@ public static class EditorLightBake
     public static void Begin(IReadOnlyList<BakedLight> lights, EditorShadowTrace? shadows = null, bool bounce = true,
         int bounces = 8, NVec3? sunDirToSun = null, Color sunColor = default, float sunEnergy = 0f)
     {
+        _cacheMode = false;
         _grid = new Grid(lights);
         _shadows = shadows;
         // bounces <= 0 means NO bounce at all, exactly like q3map2's -bounce 0 — the earlier clamp to a
@@ -218,11 +302,11 @@ public static class EditorLightBake
         _bounceAccum.Clear();
     }
 
-    /// <summary>True when a bake is armed.</summary>
-    public static bool Active => _grid is { Lights.Count: > 0 };
+    /// <summary>True when the builder should write baked vertex colours — computing them or resampling them.</summary>
+    public static bool Active => _cacheMode || _grid is { Lights.Count: > 0 };
 
-    /// <summary>True when the armed bake wants the bounce pass.</summary>
-    public static bool BounceActive => Active && _bounceWanted;
+    /// <summary>True when the armed bake wants the bounce pass. Never in resample mode: it is already in there.</summary>
+    public static bool BounceActive => !_cacheMode && _grid is { Lights.Count: > 0 } && _bounceWanted;
 
     // ---- pass 1: direct ---------------------------------------------------------------------------
 
@@ -249,6 +333,8 @@ public static class EditorLightBake
     public static Color Sample(NVec3 position, NVec3 normal, Color albedo, out float dirt)
     {
         dirt = 1f;
+        if (_cacheMode)
+            return SampleCached(position);
         if (_grid is not { } grid)
             return Colors.Black;
 

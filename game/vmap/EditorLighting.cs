@@ -506,6 +506,13 @@ public sealed partial class EditorLighting : Node3D
     /// <summary>Fixture-energy multiplier applied only in the bake (see <see cref="Adopt"/>).</summary>
     private const float BakedFixtureBoost = 2.6f;
 
+    /// <summary>
+    /// Drop the fixture lights for a build that RESAMPLES the retained bake. The rig was constructed
+    /// expecting to be baked; without this the same fixtures would also be submitted as real-time lights and
+    /// the world would double-light itself on every edit.
+    /// </summary>
+    public void SuppressBakeLights() => _bake.Clear();
+
     /// <summary>The lights to bake; empty when rendering them in real time.</summary>
     public IReadOnlyList<BakedLight> BakeLights => _bake;
 

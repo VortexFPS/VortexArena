@@ -5919,6 +5919,9 @@ public sealed partial class NetGame : Node3D
                 GD.Print($"[EditorLighting] encode range p99={Vmap.EditorLightBake.EncodeRange:F1}, "
                     + $"filled {Vmap.EditorLightBake.FilledSamples:N0} black samples, "
                     + $"{_pendingTraceCount:N0} occluders");
+                GD.Print($"[EditorLighting] samples {Vmap.EditorLightBake.CapturedUnique:N0} unique of "
+                    + $"{Vmap.EditorLightBake.CapturedOffered:N0} vertices "
+                    + $"({Vmap.EditorLightBake.CpuBudget:P0} cpu budget)");
                 _bakedShadowsStale = false;
                 Vmap.VmapMapBuilder.BeginRecolor();
             }
@@ -7248,6 +7251,14 @@ public sealed partial class NetGame : Node3D
                     _editorLights.SuppressBakeLights();
                     goto builtLights;
                 }
+                Vmap.EditorShadowTrace.PatchShadows =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchShadows, 1f) != 0f;
+                Vmap.EditorShadowTrace.PatchThickness = Math.Clamp(
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchThickness, 0.1f), 0.01f, 8f);
+                Vmap.EditorShadowTrace.SurfaceBias = Math.Clamp(
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarSampleOffset, 1f), 0.05f, 8f);
+                Vmap.VmapMapBuilder.PhongShading =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarBakePhong, 1f) != 0f;
                 var shadowTrace = tracedShadows
                     ? new Vmap.EditorShadowTrace(_editor.Document!,
                         b2 => b2.SubmodelIndex == 0 || !_editor.PickIndex.HiddenSubmodels.Contains(b2.SubmodelIndex))

@@ -180,3 +180,132 @@ leg was not a sun-off leg at all and read as "the sun contributes nothing". Now 
 sample per vertex), `-samplesize 8` texels against our 24-48 unit vertices, area lights integrated over their
 winding with a form factor rather than as points, backsplash, alpha-tested shadow casters, and the light grid
 for dynamic models.
+
+---
+
+## 6. Addendum — 2026-07-28, the shadow-tracer audit
+
+Prompted by a reported regression: curved surfaces reading far too dark, appearing around the patch-geometry
+work rather than around the colour calibration. That framing was correct, and the cause was not any of the
+three things previously suspected.
+
+### 6.1 The measurement
+
+One camera on stormkeep's curved pillar (`--observe "819 878 210 46 -5"`), 1600x900, identical crop over the
+brickwork band only (x 620-980, y 400-600 — excludes the strip fixtures and the side walls), every leg baked
+from `--fresh-cvars` so no saved edit leaks in:
+
+| leg | mean | p10 | p50 | p90 | r:b |
+|---|---|---|---|---|---|
+| **q3map2 reference (compiled BSP)** | **29.57** | 16.86 | 30.29 | 41.08 | **1.06** |
+| ours, defaults | 14.63 | 4.57 | 13.06 | 26.99 | 1.65 |
+| ours, `cl_editor_bake_dirt 0` | 25.88 | 14.99 | 26.62 | 35.48 | 1.47 |
+| ours, `cl_editor_bake_phong 0` | 14.62 | 4.57 | 13.06 | 26.98 | 1.65 |
+| ours, `cl_editor_bake_bounces 0` | 9.31 | 1.21 | 7.71 | 19.34 | 1.87 |
+| **ours, `cl_editor_patch_shadows 0`** | **30.16** | 17.77 | 30.91 | 41.41 | 1.53 |
+
+Read the last row against the first: with patch occluders removed the whole luminance DISTRIBUTION matches
+the compiled map — not just the mean, but p10 through p90. So the pillar was never lit wrongly. It was
+**shadowed by itself**, losing half its light, and everything else about it was already right.
+
+Two secondary readings fall out of the same table. Phong is worth exactly 0.01 here, so it was never a
+suspect. And with brightness matched, the r:b column isolates the outstanding colour question cleanly:
+1.53 against 1.06, structure right and hue wrong, which is §5's open item and nothing to do with patches.
+
+### 6.2 Why it happened when it did
+
+`-patchshadows` landed with §3.6 and made every tessellated patch triangle an occluder. Patches then
+occluded themselves, but the sample offset was 2 units at the time and hid most of it. Dropping that offset
+to 0.5 — the fix for a bright band along patch seams — removed the accidental protection, and the
+self-occlusion became severe. Each change was defensible alone; the pair was not, and nothing in the build
+or the test suite could see it.
+
+### 6.3 Where we diverge from q3map2's tracer
+
+Read out of `light_trace.c`, `light_ydnar.c` and `lightmaps_ydnar.c`, not from documentation.
+
+**a. Occluder representation.** q3map2 traces a patch as its triangles — zero thickness, Moller-Trumbore
+(`TraceTriangle`, light_trace.c:1393+). We need a convex volume for the slab clip, so ours were prisms 2
+units thick. A curved surface is lit mostly by rays that skim along it, and a 2-unit slab intercepts a large
+share of them. This is the dominant term.
+
+**b. Sample offset.** `DEFAULT_LIGHTMAP_SAMPLE_OFFSET` is 1.0 (q3map2.h:272), per-shader overridable as
+`_lightmapSampleOffset`. Ours was 0.5. Halving the clearance while the occluder is 20x thicker than the
+reference's compounds a.
+
+**c. Self-shadow exemption — we have no equivalent.** q3map2 gives each trace surface a `surfaceNum`, gives
+each luxel the list of surfaces it belongs to (`trace->surfaces`), and refuses any hit within
+`SELF_SHADOW_EPSILON` (0.5) that belongs to the luxel's own surface (light_trace.c:1483-1491). It also
+rejects hits closer than `trace->inhibitRadius`. Our occluders carry no surface identity at all, so a sample
+cannot tell its own geometry from anything else's.
+
+**d. Invalid samples: nudge, don't condemn.** `MapSingleLuxel` (light_ydnar.c:462+) tries the sample point;
+if it lands in solid it walks a table of 8 offsets of ±0.5 luxel in the lightmap's own tangent vectors, then
+falls back to the drawvert origin pushed along its normal, and only then marks the luxel `CLUSTER_OCCLUDED`.
+We test once and condemn. Our own comment records the cost: the buried test took the fill pass from ~1k
+candidates to ~200k.
+
+**e. Repair is local and orientation-aware, ours is neither.** q3map2 fills an occluded luxel from its
+immediate 3x3 neighbours *within the same surface's lightmap* (`FilterRawLightmap`, light_ydnar.c:2700+),
+and where it does blend across surfaces (`StitchSurfaceLightmaps`) it requires `dot(n1, n2) >= 0.5` and
+positions within half a sample size. `FillBlackSamples` averages any lit sample in a 3x3x3 grid of 96-unit
+cells — up to 288 units away, across surfaces, with **no normal test**. A condemned patch therefore takes
+its colour from whatever faces surround it, which is precisely a smooth gradient in the wrong direction.
+
+**f. Dirtmapping.** q3map2 fires 48 vectors — 16 azimuth steps x 3 elevation rings over an 88° cone — plus
+one along the normal, and each hit contributes `1 - distance/dirtDepth`, so a far hit barely counts
+(`SetupDirt`/`DirtForSample`, light_ydnar.c:1433+). Ours fires 12 Fibonacci rays and counts each hit as a
+full occlusion regardless of distance. Two consequences: 4x coarser, and our lowest ray sits 2.4° above the
+surface where q3map2's lowest is 16.7°, so we fire grazing rays that q3map2 never fires — the rays most
+likely to clip a curved surface's own neighbouring facets.
+
+**g. `-fill` is not what we implemented.** q3map2's `-fill` fills *unused atlas pixels* to improve JPEG
+compression (`FillOutLightmap`, lightmaps_ydnar.c:2372; help.c:232). The luxel repair is (d) and (e) above.
+Our `FillBlackSamples` is documented as "-fill" and is not.
+
+**h. Phong scope.** q3map2 smooths normals only within meta surfaces sharing a shader, and patches are not
+meta surfaces — they keep their exact Bezier normals. `SmoothShadingNormals` blends globally across
+materials, including patch-to-brush junctions. Measured at 0.01 here, so this is a latent design divergence
+rather than an active defect, but it is the mechanism behind the earlier "bright line along the patch edge".
+
+**i. Still open from §5**, unchanged: `-samples 4 -randomsamples` supersampling, 8-unit texels vs our
+24-48-unit vertices, area lights integrated over their winding, alpha-tested shadow casters, the light grid.
+
+### 6.4 What was done, and what it measured
+
+**a + b, done.** Prism thickness 2.0 -> 0.1, sample offset 0.5 -> 1.0, both as cvars
+(`cl_editor_patch_thickness`, `cl_editor_sample_offset`). Attribution, same crop and camera:
+
+| leg | mean | p10 | p50 | p90 |
+|---|---|---|---|---|
+| before | 14.63 | 4.57 | 13.06 | 26.99 |
+| offset alone (2.0 / 1.0) | 19.40 | 6.21 | 15.49 | 27.14 |
+| **thickness alone (0.1 / 0.5)** | **29.45** | 17.20 | 30.20 | 40.62 |
+| both | 29.47 | 17.21 | 30.20 | 40.62 |
+| **q3map2 reference** | **29.57** | 16.86 | 30.29 | 41.08 |
+
+Thickness was the whole of it; the offset is worth 0.02 and is kept only because it is q3map2's own value.
+Final state after the perf work below: pillar **29.97** vs 29.57, window ceiling **21.83** vs 20.57.
+
+**Two defects found while verifying, both pre-existing:**
+
+- The luxel clipper fans each grid piece independently, so every luxel position was captured about six times
+  and each copy traced against every light — to produce a value the position-keyed cache can only hold once.
+  Deduping the capture: 1,849,368 -> 300,041 samples, 163.6M -> 27.1M rays, **95 s -> 14 s**.
+- Which exposed the second: bounce emitters were proportional to the **sample count** in a cell rather than
+  to lit **area**, so `cl_editor_bake_luxel` had silently been a brightness control, and removing duplicates
+  dropped all indirect light by the same 6x (a uniform x0.70 across the frame — the signature of a gain bug,
+  not a transport one). Now `sum x SampleSpacing^2 x 3.21e-6`, invariant to sample density. q3map2 scales
+  radiosity by area throughout (`light->photons = value * area * areaScale`, light_bounce.c:584).
+
+**Still to do, in order:**
+
+1. **f** — q3map2's exact dirt distribution and distance weighting. Bounded cost, removes a whole class of
+   over-darkening on curved geometry, and our grazing rays are a patch-specific hazard.
+2. **d + e** — nudge before condemning, and give the fill a normal test and a smaller radius. Still ~34k
+   samples repainted from up to 288 units away with no orientation test.
+3. **c** — surface identity through the occluder index and the sample set. The most invasive, and only worth
+   doing if 1-2 leave a residual.
+4. The colour cast, which is now cleanly separated from brightness: at the window ceiling q3map2 reads
+   R18.8 G21.0 B21.5 against our R26.9 G20.7 B17.8 — green matches, red is ~43% over, blue ~17% short. That
+   is the fixture-to-sun ratio of section 5, not a patch or a bounce problem.

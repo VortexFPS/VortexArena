@@ -36,6 +36,13 @@ public sealed class EditorShadowTrace
     private const float CellSize = 256f;
 
     /// <summary>
+    /// Whether curved surfaces cast shadows (q3map2 <c>-patchshadows</c>, which the Xonotic profile sets).
+    /// Off is not parity — it is the isolation switch that says whether a suspect artefact on a patch comes
+    /// from the patch's own occluders or from somewhere else entirely.
+    /// </summary>
+    public static bool PatchShadows { get; set; } = true;
+
+    /// <summary>
     /// How far a shadow ray starts off the surface, Quake units.
     ///
     /// It exists to stop a ray hitting the very surface it leaves, so it wants to be as SMALL as precision
@@ -44,10 +51,11 @@ public sealed class EditorShadowTrace
     /// then saw open space and took full light, so grooves that should read as dark lines came out as
     /// bright bands along the seam.
     ///
-    /// 0.5 is still a thousand times the float32 epsilon at this map's far corners (~4000 units), so it
-    /// keeps its actual job while no longer teleporting samples out of the features they describe.
+    /// q3map2's own value is <c>DEFAULT_LIGHTMAP_SAMPLE_OFFSET</c> = 1.0 (q3map2.h:272), overridable per
+    /// shader as <c>_lightmapSampleOffset</c>; that is what this tracks. Small enough not to teleport a
+    /// sample out of the feature it describes, large enough to clear the geometry it sits on.
     /// </summary>
-    public const float SurfaceBias = 0.5f;
+    public static float SurfaceBias { get; set; } = 1.0f;
 
     private readonly struct Occluder
     {
@@ -130,7 +138,7 @@ public sealed class EditorShadowTrace
     /// </summary>
     private void AddPatchOccluders(VmapDocument doc)
     {
-        if (doc.Patches.Count == 0)
+        if (doc.Patches.Count == 0 || !PatchShadows)
             return;
 
         var patchDoc = new VmapDocument();
@@ -194,8 +202,19 @@ public sealed class EditorShadowTrace
         return new VmapPlane(outward, NVec3.Dot(outward, from));
     }
 
-    /// <summary>Thickness given to a tessellated patch triangle, Quake units — entirely BEHIND the surface.</summary>
-    private const float PatchThickness = 2f;
+    /// <summary>
+    /// Thickness given to a tessellated patch triangle, Quake units — entirely BEHIND the surface.
+    ///
+    /// q3map2 traces patches as the triangles themselves: ZERO thickness (light_trace.c PopulateWithPatch →
+    /// TraceTriangle, a Moller-Trumbore test against a sheet). We need a convex VOLUME for the slab clip, so
+    /// the sheet gets a thickness — but every unit of it is a unit by which the patch over-occludes, and a
+    /// curved surface is lit largely by grazing rays that skim along it. At 2 units every patch in the map
+    /// was a two-unit-thick wall to its own light; measured on stormkeep's curved pillar, that plus the
+    /// half-size sample offset cost the surface HALF its light.
+    ///
+    /// 0.1 is ~400x the float32 epsilon at this map's far corners, so the slab clip stays well-conditioned.
+    /// </summary>
+    public static float PatchThickness { get; set; } = 0.1f;
 
     /// <summary>
     /// How far behind the visible surface a patch's prism STARTS.

@@ -109,7 +109,7 @@ public static class VmapMapBuilder
         // q3map_shadeAngle. The mesh stays faceted — this only changes the normal the bake shades with, which
         // is what stops a curved run of brushes from lighting as a row of flat panels. Done before the bake
         // because every pass downstream (direct, dirt, bounce, deluxe) wants the smoothed normal.
-        if (EditorLightBake.Active)
+        if (EditorLightBake.Active && PhongShading)
             SmoothShadingNormals(cells, assets);
 
         // ---- bake the vertex lighting ACROSS CORES -----------------------------------------------------
@@ -121,12 +121,12 @@ public static class VmapMapBuilder
             foreach (Dictionary<string, CellSurface> byMat in cells.Values)
                 bakeCells.AddRange(byMat.Values);
             bool wasResampled = EditorLightBake.Resampling || EditorLightBake.Deferred;
-            System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.BakeColors());
+            EditorLightBake.RunBudgeted(bakeCells.Count, i => bakeCells[i].BakeColors());
 
             // Radiosity's shoot/gather, once: what the direct pass RECEIVED becomes virtual emitters, and a
             // second pass adds their glow. This is what keeps traced shadows from being pitch black.
             if (!EditorLightBake.Deferred && EditorLightBake.BounceActive && EditorLightBake.BuildBounceLights() > 0)
-                System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.AddBounceColors());
+                EditorLightBake.RunBudgeted(bakeCells.Count, i => bakeCells[i].AddBounceColors());
 
             // Retain the finished light in world space so the next EDIT can resample it instead of paying
             // for a bake. Only a real bake refills this — a resampled build must not overwrite its own source.
@@ -476,6 +476,12 @@ public static class VmapMapBuilder
     /// close enough to blend with. Positions are keyed to a quarter unit so coincident vertices from
     /// different brushes actually meet.
     /// </summary>
+    /// <summary>
+    /// Whether the bake shades with phong-blended normals (q3map2 <c>q3map_shadeAngle</c>) or with each
+    /// face's own. The isolation switch for "is this artefact the smoothing?".
+    /// </summary>
+    public static bool PhongShading { get; set; } = true;
+
     private static void SmoothShadingNormals(
         Dictionary<(int, int, int), Dictionary<string, CellSurface>> cells, AssetSystem assets)
     {

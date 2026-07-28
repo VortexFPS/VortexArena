@@ -2978,6 +2978,7 @@ public sealed class GameWorld
                 if (string.IsNullOrEmpty(Api.Cvars.GetString("g_weaponarena")))
                     Api.Cvars.Set("g_weaponarena", EditorMode.DefaultWeaponArena);
                 ClientManager.EditorFreeFlyNoclip = true;   // fly through geometry while editing
+
                 break;
             case TeamMayhem tm:
                 tm.Activate();
@@ -3970,6 +3971,8 @@ public sealed class GameWorld
 
         if (Warmup.WarmupStage || Time <= GameStartTime)   // QC: <= to avoid a glitch on the very start tic
             timelimit = 0f;                                // timelimit is not made for warmup / the pre-game window
+        if (GameType is { HasTimeLimit: false })
+            timelimit = 0f;                                // a session, not a match (see GameType.HasTimeLimit)
 
         // QC: endmatch / negative timelimit ends the match immediately (handled by EndMatch elsewhere); a
         // positive timelimit is offset by game_starttime so it counts from the real match start.

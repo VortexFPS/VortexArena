@@ -1278,7 +1278,11 @@ public sealed class ServerNet : IDisposable
     private void SendMatchState()
     {
         float gameStart = _world.GameStartTime;
-        float timeLimitSec = _world.Services.Cvars.GetFloat("timelimit") * 60f;
+        // A mode with no match clock reports NO limit, whatever the cvar happens to say — that is what makes
+        // the HUD timer count up (TimerPanel: countUp = increment || timelimit <= 0).
+        float timeLimitSec = _world.GameType is { HasTimeLimit: false }
+            ? 0f
+            : _world.Services.Cvars.GetFloat("timelimit") * 60f;
         bool warmup = _world.Warmup.WarmupStage;
         float warmupLimit = _world.Warmup.WarmupLimit;
         bool intermission = _world.Intermission.Running;

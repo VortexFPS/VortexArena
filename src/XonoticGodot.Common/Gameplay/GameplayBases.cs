@@ -420,6 +420,18 @@ public abstract partial class GameType : IRegistered
     ///   • team score modes (TDM/CTF/Dom/KH/TeamMayhem/TeamKeepaway) — top two teams' primary score equal.
     /// <paramref name="roster"/> is the current player list (the FFA modes scan it; team modes read GameScores).
     /// </summary>
+    /// <summary>
+    /// Whether this mode is played against a clock. False makes the match clock a SESSION clock: the time
+    /// limit never ends the match, and the HUD timer counts up instead of down (its existing behaviour when
+    /// there is no limit). The editor is the case — an editing session has no end, and a mapper three hours
+    /// into a level should not be dropped into an intermission screen.
+    ///
+    /// A property rather than forcing <c>timelimit 0</c>, because gametype activation is not the last word on
+    /// that cvar — something later in the boot order writes the gametype default back over it — and because
+    /// the rule belongs to the mode, not to whichever cvar write happens to land last.
+    /// </summary>
+    public virtual bool HasTimeLimit => true;
+
     public virtual bool ReportsTie(System.Collections.Generic.IReadOnlyList<Player> roster) => false;
 
     /// <summary>Rebuild this gametype's OBJECTIVE waypoint sprites (flags / control points / keys …) into

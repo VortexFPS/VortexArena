@@ -52,6 +52,9 @@ public sealed class EditorMode : GameType
         "you just built, then switch back and keep working. Your position and view are preserved both ways.\n\n" +
         "There is no scoring and no time limit.";
 
+    /// <summary>An editing session has no end, so the match clock counts up and never expires.</summary>
+    public override bool HasTimeLimit => false;
+
     /// <summary>
     /// Never report a tie: the editor has no scores, so the overtime cascade must not consider it decidable
     /// one way or the other.

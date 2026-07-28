@@ -3242,8 +3242,16 @@ public sealed class ServerNet : IDisposable
         w.WriteVector(p.Origin, XonoticGodot.Net.NetPrecision.Float);
         w.WriteVector(p.Velocity, XonoticGodot.Net.NetPrecision.Float);
         w.WriteBool(p.OnGround);
-        w.WriteShort((int)p.Health);
-        w.WriteShort((int)p.ArmorValue);
+        // Health/armor ride a SIGNED 16-bit field, and WriteShort casts (silently truncating) — so a value
+        // outside ±32767 wraps and can flip sign. A player's health goes hugely negative on death: QC
+        // ClientKill_Now suicides with Damage(…, 100000, DEATH_KILL, …), whose overkill excess is passed on to
+        // PlayerCorpseDamage, which subtracts it from the corpse UNCLAMPED (Base does the same — but Base
+        // networks health as a full 32-bit stat). At ~-65000 the truncation produced a POSITIVE health on the
+        // client, so `hidden` in EquipNetworkedWeapon (Health <= 0) stayed false and the first-person weapon
+        // model kept drawing through the whole death — but only after a /kill, since a normal frag leaves health
+        // only slightly negative and round-trips fine. Clamp (preserving sign) instead of truncating.
+        w.WriteShort(System.Math.Clamp((int)p.Health, short.MinValue, short.MaxValue));
+        w.WriteShort(System.Math.Clamp((int)p.ArmorValue, short.MinValue, short.MaxValue));
         w.WriteShort(p.ActiveWeaponId); // QC wepent m_weapon — drives the local first-person viewmodel
 
         // QC STAT(RESPAWN_TIME) (server/client.qc:2419-2436): the dead-player respawn countdown / "press fire"

@@ -245,4 +245,79 @@ public sealed class TeleportersTests
         Assert.Equal(Vector3.Zero, carrier.Origin);
         Assert.False(carrier.FixAngle);
     }
+
+    // =====================================================================================
+    //  teleport_findtarget runs at INITPRIO_FINDTARGET (after the whole entity lump)
+    // =====================================================================================
+
+    /// <summary>
+    /// A <c>trigger_teleport</c> whose destination entity appears LATER in the map's entity lump must still end
+    /// up with its single destination cached in <c>.enemy</c> — QC defers <c>teleport_findtarget</c> to
+    /// <c>INITPRIO_FINDTARGET</c> (teleport.qc:131) precisely so lump order cannot matter.
+    ///
+    /// This is the fuse "teleport out location is wrong" bug: fuse writes its second <c>trigger_teleport</c>
+    /// BEFORE the <c>misc_teleporter_dest</c> it targets. Resolving the target inline at spawn found zero
+    /// destinations and left <c>.enemy</c> null, so — while the SERVER still teleported correctly (the live
+    /// re-scan in PickDestination) — <see cref="TriggerTouch.PredictTeleportsAmbient"/> refused to predict that
+    /// teleporter (it only predicts a cached single destination). The local player therefore kept predicting
+    /// straight through the trigger and was snapped to the exit a round trip later, which reads as the exit
+    /// landing somewhere it shouldn't.
+    /// </summary>
+    [Fact]
+    public void FindTarget_IsDeferred_SoLumpOrderCannotBreakTheDestinationCache()
+    {
+        Boot();
+
+        // Spawn the TELEPORTER FIRST — the destination does not exist yet (fuse's lump order).
+        Entity tele = Api.Entities.Spawn();
+        tele.Target = "late_dest";
+        tele.Mins = new Vector3(-32, -32, -32);
+        tele.Maxs = new Vector3(32, 32, 32);
+        tele.Size = tele.Maxs - tele.Mins;
+        Assert.True(SpawnFuncs.TrySpawn("trigger_teleport", tele));
+
+        // Nothing resolved yet, and the touch is not wired (QC enables it inside teleport_findtarget).
+        Assert.Null(tele.Enemy);
+        Assert.Null(tele.Touch);
+
+        // ...then the destination, as the rest of the lump spawns.
+        Entity dest = Destination(new Vector3(0, 90, 0), "late_dest");
+        dest.Origin = new Vector3(500, 600, 70);
+
+        // The post-lump INITPRIO_FINDTARGET pass.
+        Teleporters.RunDeferredInit();
+
+        Assert.Same(dest, tele.Enemy);
+        Assert.NotNull(tele.Touch);
+
+        // And with .enemy cached, the client predictor now handles this teleporter.
+        Api.Entities.SetOrigin(tele, Vector3.Zero);
+        Entity carrier = Carrier();
+        XonoticGodot.Engine.Simulation.TriggerTouch.PredictTeleportsAmbient(carrier);
+        Assert.True(carrier.FixAngle);
+        Assert.Equal(dest.Origin.X, carrier.Origin.X, 2);
+        Assert.Equal(dest.Origin.Y, carrier.Origin.Y, 2);
+    }
+
+    /// <summary>The ordinary order (destination first) must keep working — the deferred pass resolves it too.</summary>
+    [Fact]
+    public void FindTarget_DeferredPassAlsoResolvesTheDestinationFirstOrder()
+    {
+        Boot();
+
+        Entity dest = Destination(new Vector3(0, 180, 0), "early_dest");
+        dest.Origin = new Vector3(-100, 40, 12);
+
+        Entity tele = Api.Entities.Spawn();
+        tele.Target = "early_dest";
+        tele.Mins = new Vector3(-32, -32, -32);
+        tele.Maxs = new Vector3(32, 32, 32);
+        tele.Size = tele.Maxs - tele.Mins;
+        Assert.True(SpawnFuncs.TrySpawn("trigger_teleport", tele));
+
+        Teleporters.RunDeferredInit();
+
+        Assert.Same(dest, tele.Enemy);
+        Assert.NotNull(tele.Touch);
+    }
 }

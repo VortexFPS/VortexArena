@@ -573,7 +573,32 @@ public static class MoveTypePhysics
     // SV_CheckVelocity (sv_phys.c:965) — NaN scrub + max-velocity clamp.
     // =============================================================================================
 
-    public const float MaxVelocity = 2000f; // sv_maxvelocity default
+    /// <summary>
+    /// DP <c>sv_maxvelocity</c> — the universal per-entity speed limit applied by SV_CheckVelocity.
+    ///
+    /// The DarkPlaces ENGINE default is 2000, but Xonotic overrides it in <c>xonotic-server.cfg</c> with
+    /// <c>sv_maxvelocity 1000000000</c>, i.e. the clamp is effectively OFF in the shipped game. Hard-coding the
+    /// engine default here silently capped every fast projectile at 2000 qu/s: the Blaster bolt
+    /// (g_balance_blaster_primary_speed 6000) flew at ONE THIRD of its balance speed, and the HLAC (6000),
+    /// Seeker tag (5000), Crylink secondary / Seeker flac (3000), Electro primary / OK RPC (2500), Arc bolt
+    /// (2300) and Hagar (2200) bolts were all clipped too — as was any knockback/rocket-jump impulse over 2000.
+    ///
+    /// Seeded from the cvar by the host (<see cref="ApplyServerCvars"/>); the default matches Xonotic's config,
+    /// so a headless/test path with no cvar store behaves like the shipped game rather than like bare DP.
+    /// </summary>
+    public static float MaxVelocity = 1000000000f; // xonotic-server.cfg:325 sv_maxvelocity
+
+    /// <summary>Host seam: re-read <c>sv_maxvelocity</c> from the live cvar store (called on map load), so a
+    /// server that deliberately restores DP's 2000 still gets it. An unset/unparseable cvar keeps the
+    /// Xonotic-config default above.</summary>
+    public static void ApplyServerCvars(XonoticGodot.Common.Services.ICvarService? cvars)
+    {
+        if (cvars is null) return;
+        string s = cvars.GetString("sv_maxvelocity");
+        if (!string.IsNullOrEmpty(s) && float.TryParse(s, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) && v > 0f)
+            MaxVelocity = v;
+    }
 
     public static void CheckVelocity(Entity ent)
     {

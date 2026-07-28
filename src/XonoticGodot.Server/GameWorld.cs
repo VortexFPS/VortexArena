@@ -660,6 +660,11 @@ public sealed class GameWorld
         // (CanPickupItems is tagged on each (re)spawn in ClientManager.Spawn; buff pickups self-spawn via the
         //  BuffsMutator hook in MutatorActivation.Apply above — no extra wiring needed here.)
         XonoticGodot.Common.Gameplay.StartItem.GameStartTimeProvider = () => GameStartTime;
+        // SV_CheckVelocity's universal speed limit (DP sv_maxvelocity). The DP ENGINE default is 2000, but
+        // xonotic-server.cfg:325 sets 1000000000 — so the shipped game has no clamp. Seed the sim from the live
+        // cvar here (before any entity moves) or every projectile faster than 2000 qu/s runs slow: the Blaster
+        // bolt is balanced at 6000 and was flying at a third of that.
+        XonoticGodot.Engine.Simulation.MoveTypePhysics.ApplyServerCvars(Api.Services?.Cvars);
         // LogicGates.GameStartTimeProvider feeds trigger_gamestart's deferred fire (QC game_starttime + wait) so a
         // wait>0 gamestart trigger fires relative to the real countdown end, not 0. Same live source as StartItem.
         XonoticGodot.Common.Gameplay.LogicGates.GameStartTimeProvider = () => GameStartTime;

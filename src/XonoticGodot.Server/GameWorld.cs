@@ -4905,6 +4905,10 @@ public sealed class GameWorld
             // the per-player ammo/weapon store is subsumed by the Clients.Spawn → PutClientInServer re-give below.)
             if (!p.IsObserver)
                 PlayerFrameLogic.PlayerPowerupsRemoveAll(p, true);
+            // QC reset_map (vote.qc:383): Inventory_clear(store.inventory) — wipe the per-player item PICKUP
+            // TALLY (the scoreboard's Item stats grid) so a `restart` doesn't carry the previous match's counts
+            // into the new one. Distinct from the ammo/weapon store the respawn re-gives below.
+            p.ItemPickupCounts?.Clear();
             // QC status_effects reset_map_global hook (sv_status_effects.qc:114-123): removeall(NORMAL) "just to
             // get rid of the pickup sound" then clearall, so no effect timer survives a map/round reset. (The
             // following Clients.Spawn -> PutClientInServer also clearall's, but Base plays the removal sounds here.)

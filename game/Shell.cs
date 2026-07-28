@@ -464,6 +464,12 @@ public partial class Shell : Node
             _chatPrompt.Close();
             return;
         }
+        //   1b. the interactive scoreboard: Escape closes it, and Escape WHILE the scoreboard key is held opens
+        //       it (QC main.qc:545-551 checks S_TAB before falling through to the menu). Must be claimed here —
+        //       Godot runs _UnhandledKeyInput before _UnhandledInput, and this method marks both Escape edges
+        //       handled, so the play path's own handler never sees the key.
+        if (Menu.MenuCommand.ScoreboardEscape?.Invoke() == true)
+            return;
         //   2. the live HUD editor (no menu dialog up) opens its setup-exit dialog — QC menu_showhudexit —
         //      instead of the pause menu; with a dialog already up (_paused) fall through so Escape pops it.
         if (!_paused && MenuState.Cvars.GetFloat("_hud_configure") != 0f)

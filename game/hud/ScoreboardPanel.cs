@@ -339,8 +339,28 @@ public partial class ScoreboardPanel : HudPanel
     {
         if (UiMode == 0) return;
         UiDisabling = true;
+        // QC HUD_Scoreboard_UI_Disable also clears sb_showscores: without it, closing the UI with the scoreboard
+        // key still held keeps the board up, so the fade never reaches 0 and the teardown never runs.
+        XonoticGodot.Engine.Console.BindTable.ReleaseShowScores();
         Active = false;
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// The Escape edge, routed from the host's in-match Escape chain rather than from <c>_UnhandledInput</c>:
+    /// Godot dispatches <c>_UnhandledKeyInput</c> BEFORE <c>_UnhandledInput</c>, and the Shell's handler marks
+    /// both Escape edges handled while a match runs — so an Escape branch inside the play path's
+    /// <c>_UnhandledInput</c> is unreachable. Mirrors QC, where closing the UI is owned by
+    /// <c>HUD_Scoreboard_InputEvent</c> (scoreboard.qc:249) and the TAB+ESC OPEN lives in the generic Escape
+    /// handler ahead of the menu (main.qc:545-551). Returns true when it consumed the key.
+    /// </summary>
+    public bool HandleEscape()
+    {
+        if (UiMode != 0 && !UiDisabling) { UiDisable(); return true; }
+        // QC main.qc:547 — `if (hudShiftState & S_TAB)`: Escape while the scoreboard key is held opens the
+        // interactive UI instead of the pause menu.
+        if (UiMode == 0 && XonoticGodot.Engine.Console.BindTable.ShowScores) { UiEnable(0); return true; }
+        return false;
     }
 
     /// <summary>QC <c>HUD_Scoreboard_UI_Disable_Instantly</c>: drop the whole UI state now.</summary>
@@ -389,10 +409,7 @@ public partial class ScoreboardPanel : HudPanel
 
         switch (key)
         {
-            case Key.Escape:
-                UiDisable();
-                return true;
-
+            // NOTE: Escape is NOT handled here — the host's in-match Escape chain owns it (see HandleEscape).
             case Key.Tab:
                 // QC: in team-selection mode TAB IS the up/down step; otherwise it cycles the sub-panels.
                 if (UiMode == 2) { MoveSelection(shift ? -1 : +1); return true; }
@@ -461,7 +478,7 @@ public partial class ScoreboardPanel : HudPanel
         if (UiMode == 0 || UiDisabling) return false;
         return key switch
         {
-            Key.Escape or Key.Tab or Key.Up or Key.Down or Key.Left or Key.Right
+            Key.Tab or Key.Up or Key.Down or Key.Left or Key.Right
                 or Key.Enter or Key.KpEnter or Key.Space => true,
             Key.C or Key.R or Key.T or Key.K => ctrl,
             _ => false,
@@ -1269,6 +1286,25 @@ public partial class ScoreboardPanel : HudPanel
             if (!Visible) { Visible = true; QueueRedraw(); }
             else if (RespawnStat != 0f) QueueRedraw();
         }
+
+        // QC scoreboard_acc_fade_alpha / scoreboard_itemstats_fade_alpha (scoreboard.qc:1807, 1980):
+        //   fade = min(scoreboard_fade_alpha, fade + frametime * 10)
+        // These MUST advance here, not in the draw: the panel is not IsDynamic, so once the board has settled it
+        // stops repainting — a ramp stepped inside DrawPanel would freeze partway and leave the accuracy / item
+        // grids permanently dimmed. Stepping them in _Process (where the delta is a real frame time) and
+        // repainting while they move keeps the fade-in animating and then costs nothing.
+        float statTarget = _active ? PanelFade() : 0f;
+        float before = _accFade + _itemFade;
+        float step = (float)delta * 10f;
+        _accFade = _active ? Mathf.Min(statTarget, _accFade + step) : 0f;
+        _itemFade = _active ? Mathf.Min(statTarget, _itemFade + step) : 0f;
+        if (!Mathf.IsEqualApprox(before, _accFade + _itemFade))
+            QueueRedraw();
+
+        // The interactive UI animates (the focused-panel flash decays over ~0.5 s) and must feel responsive to
+        // the arrow keys, so it repaints every frame while it is up. Only while it is up.
+        if (UiMode != 0)
+            QueueRedraw();
     }
 
     /// <summary>The effective panel alpha this frame: the HUD fade × the scoreboard's own fade-in/out. When the
@@ -1625,21 +1661,26 @@ public partial class ScoreboardPanel : HudPanel
     /// </summary>
     private float DrawOneTable(float x, float w, float y, float fade, List<ScoreRow> rows, int team, Color frameRgb)
     {
-        // QC scoreboard.qc:1659-1677 — max_players from ..._maxheight (fraction of vid_conheight).
+        // QC scoreboard.qc:1659-1677 — max_players from ..._maxheight, a fraction of vid_conheight (the VIEWPORT
+        // height, not this panel's), less the block padding.
         int maxPlayers = 999;
         float maxHeightFrac = CvarF("maxheight", 0.6f);
         if (maxHeightFrac > 0f)
         {
-            float height = maxHeightFrac * Size2.Y - _bgPad * 2f;
+            float height = maxHeightFrac * GetViewportRect().Size.Y - _bgPad * 2f;
             maxPlayers = Mathf.Max(1, Mathf.FloorToInt(height / _rowH));
             if (maxPlayers == rows.Count) maxPlayers = 999;
         }
-        int shown = Mathf.Min(rows.Count, maxPlayers);
-        bool others = shown < rows.Count;
+        // QC Scoreboard_MakeTable: when the list overflows, the LAST visible slot is spent on the
+        // Scoreboard_DrawOthers summary row rather than a player — so the summary sits inside the table, not
+        // below the frame. (Drawing it after all `shown` rows put it outside the block entirely.)
+        bool others = rows.Count > maxPlayers;
+        int shown = others ? Mathf.Max(1, maxPlayers - 1) : rows.Count;
         if (others) _overflowRows += rows.Count - shown;
 
-        // QC: panel_size.y = 1.25 * hud_fontsize.y * (1 + bound(1, team_size, max_players)) — header + rows.
-        float contentH = _rowH * (1 + Mathf.Max(1, shown));
+        // QC: panel_size.y = 1.25 * hud_fontsize.y * (1 + bound(1, team_size, max_players)) — the header row plus
+        // the visible player rows, plus the others-summary row when the list overflowed.
+        float contentH = _rowH * (1 + Mathf.Max(1, shown) + (others ? 1 : 0));
         float blockTop = y;
         Rect2 content = BeginBlock(x, w, ref y, contentH, fade, null, frameRgb, 1f, out float endY);
         if (content.Size.X <= 1f) return endY;
@@ -2088,8 +2129,7 @@ public partial class ScoreboardPanel : HudPanel
         foreach ((Weapon _, int pct) in _accCells) if (pct >= 0) { sum += pct; n++; }
         int avg = n > 0 ? Mathf.FloorToInt((float)sum / n + 0.5f) : 0;
 
-        // QC scoreboard_acc_fade_alpha: the accuracy block fades in on its own ramp (min(fade, +frametime*10)).
-        _accFade = Mathf.Min(fade, _accFade + (float)GetProcessDeltaTime() * 10f);
+        // The ramp itself is stepped in _Process (see there); read it here.
         float a = _accFade;
 
         Rect2 c = BeginBlock(x, w, ref y, cellH * rows, fade,
@@ -2177,7 +2217,6 @@ public partial class ScoreboardPanel : HudPanel
 
         if (y > Size2.Y - (cellH * rows + _rowH * 2f)) return y;
 
-        _itemFade = Mathf.Min(fade, _itemFade + (float)GetProcessDeltaTime() * 10f);
         float a = _itemFade;
 
         Rect2 c = BeginBlock(x, w, ref y, cellH * rows, fade, "Item stats", _blockRgb,

@@ -1903,6 +1903,10 @@ public sealed partial class NetGame : Node3D
         };
         // DP commandmode: Shell owns the prompt; the direct hook preserves the prefill's quoting verbatim.
         _scoreboard.OpenCommandPrompt = prefill => XonoticGodot.Game.Menu.MenuCommand.OpenCommandPrompt?.Invoke(prefill);
+        // Escape is owned by Shell's in-match chain (it runs in _UnhandledKeyInput, ahead of our _UnhandledInput,
+        // and marks both edges handled) — claim it from there so TAB+Escape can open the UI and Escape close it.
+        XonoticGodot.Game.Menu.MenuCommand.ScoreboardEscape = () =>
+            _scoreboard is not null && GodotObject.IsInstanceValid(_scoreboard) && _scoreboard.HandleEscape();
         LayoutScoreboard();
 
         // Screen-effects layer (damage red-flash + liquid tint) — the SAME reusable ViewEffects node T4 built for
@@ -6352,15 +6356,7 @@ public sealed partial class NetGame : Node3D
             && @event is InputEventKey { Echo: false } sbKey)
         {
             bool shift = sbKey.ShiftPressed, ctrl = sbKey.CtrlPressed;
-
-            // Open: TAB+Escape. QC filters Shift-Escape out (it is the hardcoded console shortcut).
-            if (sbKey.Pressed && sbKey.Keycode == Key.Escape && !shift
-                && _scoreboard.UiMode == 0 && XonoticGodot.Engine.Console.BindTable.ShowScores)
-            {
-                _scoreboard.UiEnable(0);
-                GetViewport().SetInputAsHandled();
-                return;
-            }
+            // (Escape — open and close — is claimed by Shell's Escape chain via MenuCommand.ScoreboardEscape.)
 
             if (_scoreboard.UiMode != 0)
             {

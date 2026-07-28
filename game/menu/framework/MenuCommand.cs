@@ -89,6 +89,13 @@ public static class MenuCommand
     public static Action<string>? OpenCommandPrompt;
 
     /// <summary>
+    /// In-match Escape claim for the interactive scoreboard (QC HUD_Scoreboard_InputEvent's ESC branch + the
+    /// TAB+ESC opener in main.qc:545). Returns true when it consumed the key, so <c>Shell</c> stops before the
+    /// pause menu. Wired by the play path; null (and inert) at the menu.
+    /// </summary>
+    public static Func<bool>? ScoreboardEscape;
+
+    /// <summary>
     /// QC gamestatus test (<c>gamestatus &amp; (GAME_ISSERVER|GAME_CONNECTED)</c>): is a match currently live?
     /// Drives the Leave-match button's disabled state (leavematchbutton.qc). Wired by <see cref="Shell"/>;
     /// defaults to false (no match) when unwired.

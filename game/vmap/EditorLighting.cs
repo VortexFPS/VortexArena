@@ -48,22 +48,17 @@ public sealed partial class EditorLighting : Node3D
     public const string CvarAmbient = "cl_editor_light_ambient";
 
     /// <summary>
-    /// Global illumination: 0 off, 1 SDFGI, 2 VoxelGI (design doc §10.1 rung 2).
+    /// Global illumination (SDFGI) for live bounce — design doc §10.1 rung 2. On by default.
     ///
-    /// DEFAULT 0, because neither technique works on this content yet and both were measured, not assumed.
-    /// On stormkeep, with the ambient floor removed so nothing could mask the result:
-    /// <list type="bullet">
-    ///   <item><b>SDFGI</b> moved mean scene brightness 40.6 → 41.2, and stayed at ~41 no matter how cell size
-    ///     (1/4/32), cascade count or energy (up to 16×) were set. That flatness across every knob is the
-    ///     signature of a technique with nothing to gather: SDFGI takes its light from the DIRECTIONAL light
-    ///     and the sky, and an Xonotic interior has neither — 119 omni fixtures under a sealed roof, with a
-    ///     dark space skybox outside.</item>
-    ///   <item><b>VoxelGI</b> does inject point lights, but as configured it made the scene markedly DARKER
-    ///     (40.6 → 11.0) rather than adding bounce — an arena-sized volume at Subdiv256 is ~15 units per
-    ///     voxel, and something in that bake is losing light rather than propagating it.</item>
-    /// </list>
-    /// Both paths are left in and switchable so the next attempt starts from working plumbing rather than from
-    /// scratch; neither is fit to be a default.
+    /// It gathers from the map's OWN point lights, which is the thing that makes it worth having here.
+    /// Measured on stormkeep with the ambient floor at zero, mean brightness over a fixed geometry crop:
+    /// with the map's lights, GI adds +2.47 (47.67 → 50.14 at energy 6); with those same lights zeroed, it
+    /// adds +0.07. So essentially all of the bounce comes from the level's own fixtures.
+    ///
+    /// (An earlier revision recorded the opposite conclusion — that SDFGI could not see point lights at all.
+    /// That was an artefact: the measurement crop was sampling the HUD panel, which does not change with
+    /// lighting, so every setting read the same number and the flatness was mistaken for evidence about
+    /// SDFGI. Measure geometry, not the overlay.)
     /// </summary>
     public const string CvarGlobalIllumination = "cl_editor_gi";
 
@@ -75,6 +70,13 @@ public sealed partial class EditorLighting : Node3D
 
     /// <summary>Bounce strength.</summary>
     public const string CvarGiEnergy = "cl_editor_gi_energy";
+
+    /// <summary>
+    /// Light3D bake mode for the map's point lights: 0 disabled, 1 static, 2 dynamic. This is what decides
+    /// whether a light participates in global illumination at all, so it is the knob that determines whether
+    /// GI can see the lights the map is actually lit by.
+    /// </summary>
+    public const string CvarLightBakeMode = "cl_editor_light_bakemode";
 
     /// <summary>
     /// Quake light intensity → Godot omni RANGE, in Quake units. q3map2's point falloff is
@@ -89,6 +91,7 @@ public sealed partial class EditorLighting : Node3D
 
     private readonly List<OmniLight3D> _points = new();
     private DirectionalLight3D? _sun;
+    private Light3D.BakeMode _bakeMode = Light3D.BakeMode.Dynamic;
     private float _nextShadowSort;
 
     /// <summary>Number of lights built (diagnostics / HUD).</summary>
@@ -110,6 +113,12 @@ public sealed partial class EditorLighting : Node3D
 
         var rig = new EditorLighting { Name = "EditorLighting" };
         float brightness = ReadFloat(cvars, CvarBrightness, 1f);
+        rig._bakeMode = (int)ReadFloat(cvars, CvarLightBakeMode, 2f) switch
+        {
+            0 => Light3D.BakeMode.Disabled,
+            1 => Light3D.BakeMode.Static,
+            _ => Light3D.BakeMode.Dynamic,
+        };
 
         foreach (VmapEntity entity in doc.Entities)
         {
@@ -162,6 +171,7 @@ public sealed partial class EditorLighting : Node3D
             OmniRange = range,
             ShadowEnabled = false,       // granted by budget in Update()
             LightSpecular = 0.25f,
+            LightBakeMode = _bakeMode,
         };
         _ = doc;
         return light;
@@ -214,6 +224,7 @@ public sealed partial class EditorLighting : Node3D
             LightEnergy = brightness * (sun is not null ? Math.Clamp(sun.Intensity / 150f, 0.15f, 2f) : 0.6f),
             ShadowEnabled = true,
             LightSpecular = 0.2f,
+            LightBakeMode = _bakeMode,
         };
         light.LookAtFromPosition(Vector3.Zero, Coords.ToGodot(fromSun), Vector3.Up);
 
@@ -286,9 +297,7 @@ public sealed partial class EditorLighting : Node3D
         if (env is null)
             return;
 
-        int giMode = (int)ReadFloat(cvars, CvarGlobalIllumination, 1f);
-        bool gi = giMode != 0;
-        bool sdfgi = giMode == 1;
+        bool gi = ReadFloat(cvars, CvarGlobalIllumination, 1f) != 0f;
 
         // Applied repeatedly (the settings are cvars a mapper changes mid-session), so skip the write when
         // nothing moved — re-assigning SdfgiEnabled would otherwise restart the cascades every frame.
@@ -316,8 +325,8 @@ public sealed partial class EditorLighting : Node3D
         env.AmbientLightColor = new Color(0.55f, 0.58f, 0.66f);
         env.AmbientLightEnergy = ambient;
 
-        env.SdfgiEnabled = sdfgi;
-        if (!sdfgi)
+        env.SdfgiEnabled = gi;
+        if (!gi)
             return;
 
         // Q3 rooms are small: a corridor is ~128-256 units and the smallest cascade cell has to resolve
@@ -332,57 +341,6 @@ public sealed partial class EditorLighting : Node3D
         // Indoor Q3 maps are sealed, so sky light would only reach through the sky brushes that are genuinely
         // open — which is the correct behaviour and how the outdoor parts of a map get their fill.
         env.SdfgiReadSkyLight = true;
-    }
-
-    /// <summary>
-    /// Build and bake a <see cref="VoxelGI"/> covering the map — the GI technique that actually applies here.
-    ///
-    /// SDFGI gathers its light from the DIRECTIONAL light and the sky only; point lights never inject into its
-    /// cascades. An Xonotic interior is lit by neither — 119 omni fixtures under a sealed roof, with a dark
-    /// space skybox outside — so SDFGI measured a flat ~1.5% brightness change on stormkeep no matter how its
-    /// cell size, cascade count or energy were set. VoxelGI voxelises the scene and injects every light type,
-    /// which is why it is the one that can see this map's lighting at all.
-    ///
-    /// The trade is that it needs an explicit bake and a bounded volume, so it is re-baked when the world is
-    /// rebuilt rather than following edits for free.
-    /// </summary>
-    public static VoxelGI? BuildVoxelGi(VmapDocument doc, Node worldRoot, CvarService? cvars)
-    {
-        ArgumentNullException.ThrowIfNull(doc);
-        ArgumentNullException.ThrowIfNull(worldRoot);
-
-        if ((int)ReadFloat(cvars, CvarGlobalIllumination, 1f) != 2)
-            return null;
-
-        // The volume has to cover the map, and a VoxelGI's detail is its size divided by the subdivision, so an
-        // arena-sized box is inherently coarse. That is the documented cost of this rung.
-        var min = new NVec3(float.MaxValue);
-        var max = new NVec3(float.MinValue);
-        bool any = false;
-        foreach (VmapBrush brush in doc.Brushes)
-        {
-            if (brush.IsToolBrush || !VmapWinding.TryGetBounds(brush, out NVec3 bmin, out NVec3 bmax))
-                continue;
-            min = NVec3.Min(min, bmin);
-            max = NVec3.Max(max, bmax);
-            any = true;
-        }
-        if (!any)
-            return null;
-
-        Vector3 gmin = Coords.ToGodot(min), gmax = Coords.ToGodot(max);
-        Vector3 lo = gmin.Min(gmax), hi = gmin.Max(gmax);
-
-        var voxel = new VoxelGI
-        {
-            Name = "EditorVoxelGi",
-            Subdiv = VoxelGI.SubdivEnum.Subdiv256,
-            Size = (hi - lo) + new Vector3(64f, 64f, 64f),
-            Position = (lo + hi) * 0.5f,
-        };
-        worldRoot.AddChild(voxel);
-        voxel.Bake(worldRoot, true);
-        return voxel;
     }
 
     /// <summary>Put back the environment the match had before the editor imposed its own preset.</summary>

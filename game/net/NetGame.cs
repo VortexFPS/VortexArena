@@ -6902,8 +6902,6 @@ public sealed partial class NetGame : Node3D
         {
             _editorLights = Vmap.EditorLighting.Build(_editor.Document!, _assets.Assets, Menu.MenuState.Cvars);
             AddChild(_editorLights);
-            // Baked against the world node so the voxelisation sees the geometry AND the lights.
-            Vmap.EditorLighting.BuildVoxelGi(_editor.Document!, _editorMapRoot, Menu.MenuState.Cvars);
         }
 
         // The regenerated world carries its own "Portals" node, so the portal renderer has to be re-pointed at

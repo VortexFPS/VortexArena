@@ -846,8 +846,15 @@ render-only lean/viewmodel work: presentation never leaks into simulation.)</p>
         recovered from the sky shader's <code>q3map_sun</code>; surfaces carrying
         <code>q3map_surfaceLight</code> are emissive. Both directives are newly parsed — compile-time keys
         the shipped renderer never needed. <code>cl_editor_lighting 0</code> returns to fullbright.</li>
-      <li><span class="pill alt">preset</span> <b>SDFGI behind a quality tier</b> for live bounce, with VoxelGI
-        as the cheaper fallback. This is what UE does for the editing loop.</li>
+      <li><span class="pill alt">preset · BUILT</span> <b>SDFGI behind a quality tier</b> for live bounce, with VoxelGI
+        as the cheaper fallback. This is what UE does for the editing loop.
+        <br><i>Built 2026-07-27:</i> SDFGI on <code>cl_editor_gi</code>, and it does gather from the map's own
+        point lights — measured on stormkeep with the ambient floor at zero, GI adds +2.47 mean brightness
+        with the map's lights and +0.07 with them zeroed, so essentially all the bounce comes from the level's
+        own fixtures. VoxelGI was implemented as the fallback and REMOVED: it rendered black (0.01 mean) and a
+        cvar value that blanks the screen is worse than no fallback. <b>Measurement caution:</b> the first pass
+        concluded SDFGI did nothing, from a crop that was sampling the HUD panel rather than geometry — crop
+        geometry, never the overlay.</li>
       <li><span class="pill rec">destination</span> <b>The progressive GPU lightmapper</b>, converging into the
         chart atlas while the map sits still, view-prioritized, dirty-tile-scheduled, shipped in the bake
         cache — the rung that matches GPU Lightmass and Unity's progressive lightmapper, and the only one that

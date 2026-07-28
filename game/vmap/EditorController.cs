@@ -180,10 +180,11 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarShadowBudget, "6", CvarFlags.Save);
         c.Register(EditorLighting.CvarBrightness, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarAmbient, "0.18", CvarFlags.Save);
-        c.Register(EditorLighting.CvarGlobalIllumination, "0", CvarFlags.Save);
+        c.Register(EditorLighting.CvarGlobalIllumination, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarGiCellSize, "8", CvarFlags.Save);
         c.Register(EditorLighting.CvarGiCascades, "4", CvarFlags.Save);
-        c.Register(EditorLighting.CvarGiEnergy, "1.6", CvarFlags.Save);
+        c.Register(EditorLighting.CvarGiEnergy, "4", CvarFlags.Save);
+        c.Register(EditorLighting.CvarLightBakeMode, "2", CvarFlags.Save);
     }
 
     /// <summary>

@@ -7293,7 +7293,7 @@ public sealed partial class NetGame : Node3D
             // skin, and you end up looking at the inside of the masonry rather than at the room.
             CullOccludedFaces = _editor.CullOccludedFaces,
             PatchSubdivisions = (int)Math.Clamp(
-                CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchSubdiv, 6f), 2f, 24f),
+                CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchSubdiv, 8f), 2f, 24f),
         }, lit);
         if (_editorLights is { Baking: true })
             GD.Print($"[EditorLighting] bake: {Vmap.EditorLightBake.RaysTraced:N0} shadow rays in "

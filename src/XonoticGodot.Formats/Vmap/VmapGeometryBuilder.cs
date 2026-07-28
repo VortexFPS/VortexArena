@@ -87,8 +87,16 @@ public static class VmapGeometryBuilder
     /// <summary>Q3SURFACEFLAG_SKY — drawn by the sky system rather than as world geometry.</summary>
     public const int SurfaceSky = 0x0004;
 
-    /// <summary>Default bezier subdivision level (matches <see cref="Bsp.BezierPatch"/>'s default).</summary>
-    public const int DefaultPatchSubdivisions = 6;
+    /// <summary>
+    /// Default bezier subdivision level, taken FROM the BSP tessellator rather than restated.
+    ///
+    /// The comment already claimed these matched while the numbers were 6 and 8, and the two paths draw the
+    /// same patches in the same session: the compiled world at one level, the regenerated world at another.
+    /// A quadratic's chords lie INSIDE its curve, so the coarser path pulls every curved surface inward —
+    /// which reads as the patch being shifted or distorted next to geometry that was built against the true
+    /// curve. Sharing the constant is what stops them drifting apart again.
+    /// </summary>
+    public const int DefaultPatchSubdivisions = Bsp.BezierPatch.Subdivisions;
 
     /// <summary>
     /// Build every drawable surface in the document, grouped by material.

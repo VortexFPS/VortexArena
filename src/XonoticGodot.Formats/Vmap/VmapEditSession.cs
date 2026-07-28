@@ -179,8 +179,108 @@ public sealed class VmapEditSession
             entityBefore, SnapshotEntities(entityBefore.Keys.ToList())));
         if (_undo.Count > UndoLimit)
             _undo.RemoveAt(0);
-        _redo.Clear();
+
+        // Editing after undoing normally DISCARDS the redone future. Filing it as a branch instead costs the
+        // memory that was already allocated and removes the whole class of "I undid four steps, touched one
+        // thing, and lost the rest" — which the design doc calls out as strictly better than warning about it
+        // (§11.9), because a warning still ends with the work gone.
+        if (_redo.Count > 0)
+        {
+            _branches.Add(new Branch(_redo[^1].Label, _redo.ToList()));
+            if (_branches.Count > BranchLimit)
+                _branches.RemoveAt(0);
+            _redo.Clear();
+        }
+
         IsDirty = true;
+        return true;
+    }
+
+    // =============================================================================================
+    //  History (design doc §11.9) — the journal as something you can look at and travel through
+    // =============================================================================================
+
+    /// <summary>How many abandoned branches to keep before the oldest is dropped.</summary>
+    public const int BranchLimit = 8;
+
+    /// <summary>An abandoned redo stack, kept so an undo-then-edit does not destroy the work it skipped.</summary>
+    private readonly record struct Branch(string Label, List<Entry> Entries);
+
+    private readonly List<Branch> _branches = new();
+
+    /// <summary>One row of the history list.</summary>
+    /// <param name="Label">What the step did.</param>
+    /// <param name="IsCurrent">True for the step the document is currently sitting at.</param>
+    /// <param name="IsUndone">True for steps that have been undone and could be redone.</param>
+    public readonly record struct HistoryStep(string Label, bool IsCurrent, bool IsUndone);
+
+    /// <summary>
+    /// The journal as a list, oldest first: applied steps then undone ones. Index 0 is the oldest APPLIED step,
+    /// so travelling to index i means "leave i+1 steps applied".
+    /// </summary>
+    public IReadOnlyList<HistoryStep> History()
+    {
+        var rows = new List<HistoryStep>(_undo.Count + _redo.Count);
+        for (int i = 0; i < _undo.Count; i++)
+            rows.Add(new HistoryStep(_undo[i].Label, i == _undo.Count - 1, false));
+
+        // _redo is a stack: its LAST element is the next step to redo, so it reads oldest-first reversed.
+        for (int i = _redo.Count - 1; i >= 0; i--)
+            rows.Add(new HistoryStep(_redo[i].Label, false, true));
+        return rows;
+    }
+
+    /// <summary>How many steps are currently applied. 0 means the document is at its opened state.</summary>
+    public int HistoryPosition => _undo.Count;
+
+    /// <summary>Total steps known, applied plus undone.</summary>
+    public int HistoryLength => _undo.Count + _redo.Count;
+
+    /// <summary>
+    /// Travel to a point in the history: leave exactly <paramref name="appliedSteps"/> steps applied, undoing
+    /// or redoing as needed. Returns true when the position actually changed.
+    ///
+    /// Walks one step at a time through the same Undo/Redo path rather than trying to compose a jump. Each
+    /// entry's snapshot describes one transition, so composing would mean merging snapshots — and a merge that
+    /// is subtly wrong produces geometry that never existed, which is far worse than a loop that is O(steps).
+    /// </summary>
+    public bool TravelTo(int appliedSteps)
+    {
+        int target = Math.Clamp(appliedSteps, 0, HistoryLength);
+        if (target == _undo.Count)
+            return false;
+
+        while (_undo.Count > target && Undo()) { }
+        while (_undo.Count < target && Redo()) { }
+        return true;
+    }
+
+    /// <summary>Abandoned branches, newest first, for the history dialog to offer.</summary>
+    public IReadOnlyList<string> Branches()
+    {
+        var names = new List<string>(_branches.Count);
+        for (int i = _branches.Count - 1; i >= 0; i--)
+            names.Add($"{_branches[i].Entries.Count} step(s) ending in \"{_branches[i].Label}\"");
+        return names;
+    }
+
+    /// <summary>
+    /// Put an abandoned branch back on the redo stack so it can be replayed. Indexed the way
+    /// <see cref="Branches"/> lists them, newest first.
+    ///
+    /// Only restores the ABILITY to redo; it does not replay anything. The branch was abandoned from some
+    /// earlier point in the history, so replaying blind could apply it on top of a document it was never
+    /// authored against — the mapper travels back first, then redoes.
+    /// </summary>
+    public bool RestoreBranch(int index)
+    {
+        if (index < 0 || index >= _branches.Count)
+            return false;
+
+        Branch b = _branches[_branches.Count - 1 - index];
+        _branches.RemoveAt(_branches.Count - 1 - index);
+        _redo.Clear();
+        _redo.AddRange(b.Entries);
         return true;
     }
 

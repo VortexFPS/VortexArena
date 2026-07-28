@@ -7554,10 +7554,8 @@ public sealed partial class NetGame : Node3D
         // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
         // and a mapper who reaches one from the console deserves to be told it is E8 rather than to watch
         // nothing happen and assume the editor is broken.
-        interp.RegisterCommand("editor_history", _ =>
-            XonoticGodot.Common.Diagnostics.Log.Info("editor_history: not built yet (roadmap E8)"));
-        interp.RegisterCommand("editor_mapinfo", _ =>
-            XonoticGodot.Common.Diagnostics.Log.Info("editor_mapinfo: not built yet (roadmap E8)"));
+        interp.RegisterCommand("editor_history", CmdEditorHistory);
+        interp.RegisterCommand("editor_mapinfo", CmdEditorMapInfo);
     }
 
     private bool _editorCommandsRegistered;
@@ -7826,6 +7824,221 @@ public sealed partial class NetGame : Node3D
         foreach (XonoticGodot.Formats.Vmap.EntityClassDef d in defs.InCategory(category))
             XonoticGodot.Common.Diagnostics.Log.Info(
                 $"  {d.Name}{(d.IsBrushEntity ? "  (brush entity)" : "")}");
+    }
+
+    /// <summary>
+    /// <c>editor_history</c> — list the journal, travel to a step, or recover an abandoned branch.
+    /// <code>
+    ///   editor_history              list every step, marking where you are
+    ///   editor_history goto &lt;n&gt;     leave n steps applied (0 = the state the map opened in)
+    ///   editor_history branches     list abandoned redo stacks
+    ///   editor_history restore &lt;n&gt;  put branch n back on the redo stack
+    /// </code>
+    /// </summary>
+    private void CmdEditorHistory(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session })
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "";
+        switch (verb)
+        {
+            case "goto":
+            {
+                if (args.Count < 3 || !int.TryParse(args[2], out int step))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_history goto <step>");
+                    return;
+                }
+                if (session.TravelTo(step))
+                {
+                    _editor.BumpGeometryVersion();
+                    RefreshEditorWorld();
+                    XonoticGodot.Common.Diagnostics.Log.Info(
+                        $"editor: at step {session.HistoryPosition}/{session.HistoryLength}");
+                }
+                return;
+            }
+
+            case "branches":
+            {
+                IReadOnlyList<string> branches = session.Branches();
+                if (branches.Count == 0)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: no abandoned branches");
+                    return;
+                }
+                for (int i = 0; i < branches.Count; i++)
+                    XonoticGodot.Common.Diagnostics.Log.Info($"  {i}: {branches[i]}");
+                XonoticGodot.Common.Diagnostics.Log.Help("editor_history restore <n>");
+                return;
+            }
+
+            case "restore":
+            {
+                if (args.Count < 3 || !int.TryParse(args[2], out int which) || !session.RestoreBranch(which))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_history restore <n>");
+                    return;
+                }
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    "editor: branch restored — travel back to where it forked, then redo");
+                return;
+            }
+
+            default:
+            {
+                IReadOnlyList<VmapEditSession.HistoryStep> steps = session.History();
+                if (steps.Count == 0)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: nothing edited yet");
+                    return;
+                }
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    $"--- history ({session.HistoryPosition}/{session.HistoryLength} applied) ---");
+                XonoticGodot.Common.Diagnostics.Log.Info("  0: (map as opened)");
+                for (int i = 0; i < steps.Count; i++)
+                {
+                    string mark = steps[i].IsCurrent ? ">" : steps[i].IsUndone ? "~" : " ";
+                    XonoticGodot.Common.Diagnostics.Log.Info($" {mark}{i + 1}: {steps[i].Label}");
+                }
+                XonoticGodot.Common.Diagnostics.Log.Help("editor_history goto <n> | branches | restore <n>");
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_mapinfo</c> — read and edit the map's metadata.
+    /// <code>
+    ///   editor_mapinfo                     show it
+    ///   editor_mapinfo set &lt;field&gt; &lt;text&gt;  title | description | author | cdtrack
+    ///   editor_mapinfo gametype add|remove &lt;name&gt;
+    ///   editor_mapinfo save                write it back
+    /// </code>
+    /// </summary>
+    private void CmdEditorMapInfo(IReadOnlyList<string> args)
+    {
+        XonoticGodot.Formats.Vmap.MapInfo? info = EnsureMapInfo();
+        if (info is null)
+            return;
+
+        switch (args.Count > 1 ? args[1].ToLowerInvariant() : "")
+        {
+            case "set":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help(
+                        "usage: editor_mapinfo set title|description|author|cdtrack <text>");
+                    return;
+                }
+                string value = args.Count > 3 ? string.Join(' ', args, 3, args.Count - 3) : "";
+                switch (args[2].ToLowerInvariant())
+                {
+                    case "title": info.Title = value; break;
+                    case "description": info.Description = value; break;
+                    case "author": info.Author = value; break;
+                    case "cdtrack": info.CdTrack = value; break;
+                    default:
+                        XonoticGodot.Common.Diagnostics.Log.Help("fields: title description author cdtrack");
+                        return;
+                }
+                _mapInfoDirty = true;
+                XonoticGodot.Common.Diagnostics.Log.Info($"mapinfo: {args[2]} = {value}");
+                return;
+            }
+
+            case "gametype":
+            {
+                if (args.Count < 4)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_mapinfo gametype add|remove <name>");
+                    return;
+                }
+                bool add = args[2].Equals("add", StringComparison.OrdinalIgnoreCase);
+                bool changed = add ? info.AddGametype(args[3]) : info.RemoveGametype(args[3]);
+                _mapInfoDirty |= changed;
+                XonoticGodot.Common.Diagnostics.Log.Info(changed
+                    ? $"mapinfo: {(add ? "added" : "removed")} {args[3]}"
+                    : $"mapinfo: no change ({args[3]})");
+                return;
+            }
+
+            case "save":
+                SaveMapInfo(info);
+                return;
+
+            default:
+            {
+                XonoticGodot.Common.Diagnostics.Log.Info($"--- {_map}.mapinfo{(_mapInfoDirty ? " *" : "")} ---");
+                XonoticGodot.Common.Diagnostics.Log.Info($"  title       {info.Title}");
+                XonoticGodot.Common.Diagnostics.Log.Info($"  author      {info.Author}");
+                XonoticGodot.Common.Diagnostics.Log.Info($"  description {info.Description}");
+                XonoticGodot.Common.Diagnostics.Log.Info($"  cdtrack     {info.CdTrack}");
+                if (info.HasBounds)
+                    XonoticGodot.Common.Diagnostics.Log.Info(
+                        $"  bounds      {info.BoundsMin.X:0} {info.BoundsMin.Y:0} {info.BoundsMin.Z:0}"
+                        + $" .. {info.BoundsMax.X:0} {info.BoundsMax.Y:0} {info.BoundsMax.Z:0}");
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    $"  gametypes   {string.Join(", ", info.Gametypes.Select(g => g.Name))}");
+                if (info.Has.Count > 0)
+                    XonoticGodot.Common.Diagnostics.Log.Info($"  has         {string.Join(", ", info.Has)}");
+                XonoticGodot.Common.Diagnostics.Log.Help(
+                    "editor_mapinfo set <field> <text> | gametype add|remove <name> | save");
+                return;
+            }
+        }
+    }
+
+    private XonoticGodot.Formats.Vmap.MapInfo? _mapInfo;
+    private bool _mapInfoDirty;
+
+    /// <summary>Read the map's <c>.mapinfo</c> once per session, or start an empty one when it has none.</summary>
+    private XonoticGodot.Formats.Vmap.MapInfo? EnsureMapInfo()
+    {
+        if (_mapInfo is not null)
+            return _mapInfo;
+        if (_assets is null || string.IsNullOrEmpty(_map))
+            return null;
+
+        string vpath = $"maps/{_map}.mapinfo";
+        try
+        {
+            _mapInfo = _assets.Vfs.Exists(vpath)
+                ? XonoticGodot.Formats.Vmap.MapInfo.Parse(_assets.Vfs.ReadText(vpath))
+                : new XonoticGodot.Formats.Vmap.MapInfo { Title = _map };
+        }
+        catch (Exception ex)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"mapinfo: could not read {vpath}: {ex.Message}");
+            _mapInfo = new XonoticGodot.Formats.Vmap.MapInfo { Title = _map };
+        }
+        return _mapInfo;
+    }
+
+    /// <summary>
+    /// Write the mapinfo next to the edited map.
+    ///
+    /// Deliberately writes beside the .vmap package rather than back into the mounted asset tree: the source
+    /// data may be inside a .pk3, and an editor that reaches into the shipped game content to overwrite a file
+    /// is doing something a mapper did not ask for.
+    /// </summary>
+    private void SaveMapInfo(XonoticGodot.Formats.Vmap.MapInfo info)
+    {
+        try
+        {
+            string dir = Vmap.VmapService.EditorOutputDirectory();
+            System.IO.Directory.CreateDirectory(dir);
+            string path = System.IO.Path.Combine(dir, $"{_map}.mapinfo");
+            System.IO.File.WriteAllText(path, info.Write());
+            _mapInfoDirty = false;
+            XonoticGodot.Common.Diagnostics.Log.Info($"mapinfo: wrote {path}");
+        }
+        catch (Exception ex)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"mapinfo: could not save: {ex.Message}");
+        }
     }
 
     /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>

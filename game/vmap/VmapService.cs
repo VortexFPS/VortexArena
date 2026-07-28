@@ -261,6 +261,18 @@ public sealed class VmapService
         return File.Exists(asDirectory) ? asDirectory : null;
     }
 
+    /// <summary>
+    /// Where the editor writes files it authors (the .vmap package, the mapinfo). The user data directory, not
+    /// the mounted asset tree: the source content may be inside a .pk3, and an editor that reaches into shipped
+    /// game data to overwrite a file is doing something the mapper did not ask for.
+    /// </summary>
+    public static string EditorOutputDirectory()
+    {
+        string dir = ProjectSettings.GlobalizePath(VmapUserDir);
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
     private static string OutputPath(string name, bool zip)
     {
         string dir = ProjectSettings.GlobalizePath(VmapUserDir);

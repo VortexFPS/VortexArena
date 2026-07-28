@@ -184,6 +184,111 @@ public class VmapImportDiagnosticProbe
         _out.WriteLine($"--- triangle winding vs vertex normal: bsp {bspFwd} agree / {bspRev} opposed, "
             + $"vmap {vmFwd} agree / {vmRev} opposed ---");
 
+        // ---- 2g. TEXTURE ALIGNMENT. The importer recovers each brush side's projection by fitting the
+        //          compiled face's vertices; check the fit by evaluating it back at those same vertices.
+        //          A correct projection reproduces the stored UVs up to a whole-texture offset, so the
+        //          scale/rotation error is the VARIATION of (predicted - actual) across the face.
+        var planeToFace = new Dictionary<(int, int, int, int), List<VmapFace>>();
+        foreach (VmapBrush br in doc.Brushes)
+            foreach (VmapFace f in br.Faces)
+            {
+                var key = ((int)MathF.Round(f.Plane.Normal.X * 64), (int)MathF.Round(f.Plane.Normal.Y * 64),
+                    (int)MathF.Round(f.Plane.Normal.Z * 64), (int)MathF.Round(f.Plane.Dist * 4));
+                if (!planeToFace.TryGetValue(key, out List<VmapFace>? list))
+                    planeToFace[key] = list = new List<VmapFace>();
+                list.Add(f);
+            }
+
+        int uvOk = 0, uvBad = 0, uvUnmatched = 0;
+        var badByShader = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (BspFace bf in bsp.Faces)
+        {
+            if (bf.Type != BspFaceType.Flat || bf.VertexCount < 3)
+                continue;
+            string shader = bsp.Textures[bf.TextureIndex].ShaderName;
+            if (VmapBrush.IsToolMaterial(shader))
+                continue;
+
+            BspVertex a = bsp.Vertices[bf.FirstVertex], b2 = bsp.Vertices[bf.FirstVertex + 1];
+            Vector3 n = a.Normal;
+            if (n.LengthSquared() < 0.5f)
+                continue;
+            n = Vector3.Normalize(n);
+            float d = Vector3.Dot(n, a.Position);
+            var k = ((int)MathF.Round(n.X * 64), (int)MathF.Round(n.Y * 64), (int)MathF.Round(n.Z * 64),
+                (int)MathF.Round(d * 4));
+            if (!planeToFace.TryGetValue(k, out List<VmapFace>? candidates))
+            { uvUnmatched++; continue; }
+
+            // BEST of the candidates, not the first. Several brush sides legitimately share one plane and one
+            // shader (a wall built from a row of brushes), so picking arbitrarily measures the probe's guess
+            // rather than the importer's: the question is whether SOME side carries this face's alignment.
+            float worst = float.MaxValue;
+            bool any = false;
+            foreach (VmapFace cand in candidates)
+            {
+                if (!string.Equals(cand.Material, shader, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                any = true;
+                VmapTexProjection proj = cand.Projection.IsValid ? cand.Projection : VmapTexProjection.AxialFor(n);
+
+                Vector2 d0 = proj.Evaluate(a.Position) - a.TexCoord;
+                float err = 0;
+                for (int i = 1; i < bf.VertexCount; i++)
+                {
+                    BspVertex v = bsp.Vertices[bf.FirstVertex + i];
+                    Vector2 di = proj.Evaluate(v.Position) - v.TexCoord;
+                    err = MathF.Max(err, (di - d0).Length());
+                }
+                worst = MathF.Min(worst, err);
+            }
+            _ = b2;
+            if (!any)
+            { uvUnmatched++; continue; }
+
+            if (worst < 0.01f)
+                uvOk++;
+            else
+            {
+                uvBad++;
+                badByShader[shader] = badByShader.GetValueOrDefault(shader) + 1;
+            }
+        }
+        _out.WriteLine($"--- texture projection fit: {uvOk} faces correct, {uvBad} MISALIGNED, {uvUnmatched} unmatched ---");
+
+        // How many faces we actually DRAW carry a recovered alignment vs an axial guess? This is the number
+        // the mapper sees: an unrecovered side is drawn with a box projection that will not line up with its
+        // neighbours.
+        int drawnFitted = 0, drawnGuessed = 0;
+        foreach (VmapBrush br in doc.Brushes)
+        {
+            if (br.IsToolBrush)
+                continue;
+            Vector3[][] ws = VmapWinding.BuildBrushWindings(br);
+            for (int fi = 0; fi < ws.Length && fi < br.Faces.Count; fi++)
+            {
+                if (ws[fi].Length < 3 || VmapBrush.IsToolMaterial(br.Faces[fi].Material))
+                    continue;
+                if ((br.Faces[fi].SurfaceFlags & VmapGeometryBuilder.SurfaceNoDraw) != 0)
+                    continue;
+                if (br.Faces[fi].Projection.IsValid) drawnFitted++; else drawnGuessed++;
+            }
+        }
+        _out.WriteLine($"--- drawn faces: {drawnFitted} with recovered alignment, {drawnGuessed} on the axial guess ---");
+
+        foreach (int probeId in new[] { 4091, 5240, 4388 })
+        {
+            VmapBrush? pb = doc.Brushes.FirstOrDefault(x => x.Id == probeId);
+            if (pb is null) continue;
+            Vector3[][] pw = VmapWinding.BuildBrushWindings(pb);
+            _out.WriteLine($"  brush #{probeId} detail={pb.IsDetail} tool={pb.IsToolBrush}");
+            for (int i = 0; i < pb.Faces.Count && i < pw.Length; i++)
+                _out.WriteLine($"    face {i} '{pb.Faces[i].Material}' verts={pw[i].Length} "
+                    + $"fitted={pb.Faces[i].Projection.IsValid} sflags=0x{pb.Faces[i].SurfaceFlags:X}");
+        }
+        foreach (var kv in badByShader.OrderByDescending(kv => kv.Value).Take(15))
+            _out.WriteLine($"  {kv.Value,5} misaligned faces  {kv.Key}");
+
         _out.WriteLine("--- biggest AREA surpluses in vmap (drawn but the compiler drew far less) ---");
         foreach (var kv in vmapArea.OrderByDescending(kv => kv.Value - bspArea.GetValueOrDefault(kv.Key)).Take(15))
             _out.WriteLine($"  vmap {kv.Value,12:N0}  bsp {bspArea.GetValueOrDefault(kv.Key),12:N0}   {kv.Key}");

@@ -197,6 +197,34 @@ public partial class PortalRenderer : Node3D
         "    ALBEDO = texture(portal_tex, uv).rgb; }\n" +
         "}\n";
 
+    /// <summary>
+    /// Point the renderer at a DIFFERENT world root and rebuild from scratch.
+    ///
+    /// <see cref="Setup"/> deliberately builds once and latches, because on the normal path the map root lives
+    /// as long as the map does. The editor breaks that assumption: it swaps the compiled world out for one
+    /// regenerated from the document, and again on every geometry edit, so the portals built against the old
+    /// root are attached to nodes that are now hidden or freed — the warpzone stops rendering and shows its
+    /// flat placeholder shader instead.
+    /// </summary>
+    public void Rebind(Node3D mapRoot, Camera3D mainCamera)
+    {
+        foreach (Portal p in _portals)
+        {
+            // The window keeps its placeholder look rather than a material pointing at a freed viewport.
+            if (GodotObject.IsInstanceValid(p.Surface))
+                p.Surface.MaterialOverride = null;
+            if (GodotObject.IsInstanceValid(p.Notifier))
+                p.Notifier.QueueFree();
+            if (GodotObject.IsInstanceValid(p.Viewport))
+                p.Viewport.QueueFree();
+        }
+        _portals.Clear();
+        ActiveExitViewsQuake.Clear();
+        _built = false;
+        _scanned = false;
+        Setup(mapRoot, mainCamera);
+    }
+
     /// <summary>Wire the renderer: the map root (whose "Portals" child holds the window meshes) and the live
     /// first-person camera. Builds the per-portal SubViewports once; safe to call when there are no portals.</summary>
     public void Setup(Node3D mapRoot, Camera3D mainCamera)

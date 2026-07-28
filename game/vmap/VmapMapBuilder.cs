@@ -50,8 +50,25 @@ public static class VmapMapBuilder
         // Bucket every triangle into its spatial cell, keyed by cell then material.
         var cells = new Dictionary<(int X, int Y, int Z), Dictionary<string, CellSurface>>();
 
+        // Warpzone windows and their pocket decor are pulled OUT of the cell meshes into their own addressable
+        // nodes, exactly as MapLoader does — PortalRenderer finds them by node metadata and swaps a live
+        // see-through render onto the window. Left in the merged cell mesh they are unaddressable, so the
+        // warpzone draws its flat placeholder shader and the portal never appears.
+        var portalRoot = new Node3D { Name = "Portals" };
+
         foreach (VmapSurface surface in surfaces)
         {
+            if (IsPortalCameraShader(assets, surface.Material))
+            {
+                AppendPortalNodes(portalRoot, surface, assets, decor: false);
+                continue;
+            }
+            if (IsWarpzoneDecorShader(assets, surface.Material))
+            {
+                AppendPortalNodes(portalRoot, surface, assets, decor: true);
+                continue;
+            }
+
             for (int i = 0; i + 2 < surface.Indices.Count; i += 3)
             {
                 int i0 = surface.Indices[i], i1 = surface.Indices[i + 1], i2 = surface.Indices[i + 2];
@@ -103,7 +120,116 @@ public static class VmapMapBuilder
             root.AddChild(instance);
         }
 
+        if (portalRoot.GetChildCount() > 0)
+            root.AddChild(portalRoot);
+        else
+            portalRoot.QueueFree();
+
         return root;
+    }
+
+    /// <summary>
+    /// A shader that camera-renders a portal view (<c>dpcamera</c>, e.g. <c>effects_warpzone/wavy</c>).
+    /// Same authority as <see cref="MapLoader"/>: the parsed shader def, with the name patterns as the
+    /// fallback for a portal-ish shader that has no script.
+    /// </summary>
+    private static bool IsPortalCameraShader(AssetSystem assets, string shaderName)
+    {
+        string name = (shaderName ?? string.Empty).Replace('\\', '/');
+        if (assets.GetShader(name) is { } def)
+            return def.Dp.Camera;
+        string n = name.ToLowerInvariant();
+        return n.Contains("/portals/") || n.StartsWith("portals/", StringComparison.Ordinal)
+            || n.Contains("portals_") || n.Contains("mirror");
+    }
+
+    /// <summary>
+    /// Warpzone pocket DECOR — an <c>effects_warpzone/</c> shader WITHOUT <c>dpcamera</c> (the backdrop and the
+    /// blueedge/rededge rims). Drawn normally, but it has to be addressable so the portal cameras — which sit
+    /// inside the pocket, behind the exit plane — can cull it; otherwise the backdrop fills the portal view.
+    /// </summary>
+    private static bool IsWarpzoneDecorShader(AssetSystem assets, string shaderName)
+    {
+        string name = (shaderName ?? string.Empty).Replace('\\', '/');
+        if (!name.ToLowerInvariant().Contains("/effects_warpzone/"))
+            return false;
+        return assets.GetShader(name) is not { Dp.Camera: true };
+    }
+
+    /// <summary>
+    /// Emit one node per coplanar group of a portal/decor surface, carrying the metadata contract
+    /// <see cref="XonoticGodot.Game.Client.PortalRenderer"/> matches on.
+    ///
+    /// Grouping by plane is what makes a window ONE node: a warpzone surface is usually several brush faces, and
+    /// a node per face would give the renderer several overlapping portals for one opening. Unlike the BSP path
+    /// this needs no plane quantisation to recover the grouping — a regenerated face already carries its exact
+    /// plane — but the same 8-unit bucketing is kept so faces that differ by float noise still merge.
+    /// </summary>
+    private static void AppendPortalNodes(Node3D portalRoot, VmapSurface surface, AssetSystem assets, bool decor)
+    {
+        var groups = new Dictionary<(long, long, long, long), CellSurface>();
+        var planes = new Dictionary<(long, long, long, long), (NVec3 NSum, NVec3 OSum, int N)>();
+
+        for (int i = 0; i + 2 < surface.Indices.Count; i += 3)
+        {
+            int i0 = surface.Indices[i], i1 = surface.Indices[i + 1], i2 = surface.Indices[i + 2];
+            NVec3 p0 = surface.Positions[i0], p1 = surface.Positions[i1], p2 = surface.Positions[i2];
+
+            NVec3 n = surface.Normals[i0];
+            n = n.LengthSquared() > 1e-9f ? NVec3.Normalize(n) : new NVec3(0f, 0f, 1f);
+            NVec3 centre = (p0 + p1 + p2) / 3f;
+
+            var key = (
+                (long)MathF.Round(n.X * 32f), (long)MathF.Round(n.Y * 32f), (long)MathF.Round(n.Z * 32f),
+                (long)MathF.Round(NVec3.Dot(centre, n) / 8f));
+
+            if (!groups.TryGetValue(key, out CellSurface? group))
+            {
+                groups[key] = group = new CellSurface(surface.Material);
+                planes[key] = (NVec3.Zero, NVec3.Zero, 0);
+            }
+            group.AddTriangle(surface, i0, i1, i2);
+
+            (NVec3 NSum, NVec3 OSum, int N) acc = planes[key];
+            planes[key] = (acc.NSum + n, acc.OSum + centre, acc.N + 1);
+        }
+
+        foreach ((long, long, long, long) key in groups.Keys.OrderBy(k => k.Item1).ThenBy(k => k.Item2)
+                     .ThenBy(k => k.Item3).ThenBy(k => k.Item4))
+        {
+            CellSurface group = groups[key];
+            if (group.Indices.Count == 0)
+                continue;
+
+            var mesh = new ArrayMesh();
+            group.Pack(mesh);
+            mesh.SurfaceSetMaterial(0, EditorMaterial(assets, surface.Material));
+
+            (NVec3 NSum, NVec3 OSum, int N) acc = planes[key];
+            NVec3 planeN = acc.NSum.LengthSquared() > 1e-9f ? NVec3.Normalize(acc.NSum) : new NVec3(0f, 0f, 1f);
+            NVec3 planeO = acc.OSum / Math.Max(1, acc.N);
+
+            var mi = new MeshInstance3D
+            {
+                Name = decor ? $"PortalDecor_{portalRoot.GetChildCount()}" : $"Portal_{portalRoot.GetChildCount()}",
+                Mesh = mesh,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+
+            if (decor)
+            {
+                mi.SetMeta("wz_decor", true);
+            }
+            else
+            {
+                // QUAKE-space plane, stored raw in a Vector3 holder — PortalRenderer reads these back as Quake
+                // and matches them against WarpzoneManager's zones, which are also Quake. NOT Coords-converted.
+                mi.SetMeta("wz_origin", new Vector3(planeO.X, planeO.Y, planeO.Z));
+                mi.SetMeta("wz_normal", new Vector3(planeN.X, planeN.Y, planeN.Z));
+            }
+
+            portalRoot.AddChild(mi);
+        }
     }
 
     /// <summary>Cache so a shared material is built once per map build, not once per cell.</summary>

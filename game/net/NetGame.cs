@@ -6837,7 +6837,12 @@ public sealed partial class NetGame : Node3D
                 _editorMapRoot = null;
                 _editorMapVersion = -1;
                 if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
+                {
                     _mapRoot.Visible = true;
+                    // Hand the warpzone windows back to the compiled world's own portal nodes.
+                    if (_portalRenderer is not null && _camera is not null)
+                        _portalRenderer.Rebind(_mapRoot, _camera);
+                }
             }
             return;
         }
@@ -6866,6 +6871,11 @@ public sealed partial class NetGame : Node3D
         });
         AddChild(_editorMapRoot);
         _editorMapVersion = viewKey;
+
+        // The regenerated world carries its own "Portals" node, so the portal renderer has to be re-pointed at
+        // it — including after every edit, since the rebuild frees the nodes it was holding.
+        if (_portalRenderer is not null && _camera is not null)
+            _portalRenderer.Rebind(_editorMapRoot, _camera);
 
         // Hide the compiled world rather than freeing it, so leaving the editor restores it instantly.
         if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))

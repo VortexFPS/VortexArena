@@ -119,6 +119,11 @@ public static class BspToVmap
             IsDetail = (brushContents & Q3ContentsDetail) != 0,
         };
 
+        // Parallel to brush.Faces: the BSP texture index each side was built from. Kept local rather than on
+        // VmapFace because it is an artefact of THIS importer — the truth model refers to shaders by name, and
+        // a persisted lump index would be meaningless the moment the document is edited or saved.
+        var sideTextures = new List<int>(b.SideCount);
+
         int end = b.FirstSide + b.SideCount;
         for (int s = b.FirstSide; s < end; s++)
         {
@@ -142,26 +147,58 @@ public static class BspToVmap
 
             var plane = new VmapPlane(p.Normal, p.Distance);
 
-            // Recover the alignment from the compiled surface this side produced; fall back to axial mapping.
-            VmapTexProjection projection =
-                faceIndex.TryFindProjection(plane, side.TextureIndex, out VmapTexProjection fitted)
-                    ? fitted
-                    : VmapTexProjection.AxialFor(plane.Normal);
-
             brush.Faces.Add(new VmapFace
             {
                 Plane = plane,
                 Material = material,
-                Projection = projection,
+                // Left INVALID on purpose. RecoverProjections fills in the real alignment below; a side it
+                // cannot match keeps "unknown" rather than a plausible-looking axial guess, so the document
+                // records what it actually knows and the geometry builder applies the axial fallback at draw
+                // time. Baking the guess in here would make an unrecovered side indistinguishable from a
+                // recovered one, both in the file and to anyone trying to measure the recovery rate.
+                Projection = default,
                 SurfaceFlags = surfaceFlags,
                 ContentFlags = contents,
             });
+            sideTextures.Add(side.TextureIndex);
         }
 
         if (brush.Faces.Count < 4)
             return null;
         brush.IsToolBrush = brush.ClassifyToolBrush();
+        RecoverProjections(brush, sideTextures, faceIndex);
         return brush;
+    }
+
+    /// <summary>
+    /// Replace each side's placeholder axial mapping with the alignment recovered from the compiled surface it
+    /// generated.
+    ///
+    /// Deliberately a second pass: identifying the right source face needs the side's WINDING centre (see
+    /// <see cref="RenderFaceIndex.TryFindProjection"/>), and a winding cannot be evaluated until every plane of
+    /// the brush is known. Sides whose winding is empty — bevel planes, fully clipped sides — keep the axial
+    /// fallback, which is all they can have and all they need, since they generate no surface.
+    /// </summary>
+    private static void RecoverProjections(VmapBrush brush, List<int> sideTextures, RenderFaceIndex faceIndex)
+    {
+        Vector3[][] windings = VmapWinding.BuildBrushWindings(brush);
+
+        for (int i = 0; i < brush.Faces.Count && i < windings.Length; i++)
+        {
+            Vector3[] w = windings[i];
+            Vector3? centre = null;
+            if (w.Length >= 3)
+            {
+                Vector3 sum = Vector3.Zero;
+                foreach (Vector3 v in w)
+                    sum += v;
+                centre = sum / w.Length;
+            }
+
+            VmapFace face = brush.Faces[i];
+            if (faceIndex.TryFindProjection(face.Plane, sideTextures[i], centre, out VmapTexProjection fitted))
+                face.Projection = fitted;
+        }
     }
 
     // =============================================================================================
@@ -243,7 +280,7 @@ public static class BspToVmap
         private readonly BspData _bsp;
         private readonly Entry[] _entries;
 
-        private readonly record struct Entry(float Dist, Vector3 Normal, int TextureIndex, int FaceIndex);
+        private readonly record struct Entry(float Dist, Vector3 Normal, int TextureIndex, int FaceIndex, Vector3 Centre);
 
         public RenderFaceIndex(BspData bsp)
         {
@@ -260,17 +297,31 @@ public static class BspToVmap
 
                 if (!TryFacePlane(bsp, face, out Vector3 n, out float d))
                     continue;
-                list.Add(new Entry(d, n, face.TextureIndex, fi));
+
+                Vector3 centre = Vector3.Zero;
+                for (int v = 0; v < face.VertexCount; v++)
+                    centre += bsp.Vertices[face.FirstVertex + v].Position;
+                centre /= face.VertexCount;
+
+                list.Add(new Entry(d, n, face.TextureIndex, fi, centre));
             }
             list.Sort(static (a, b) => a.Dist.CompareTo(b.Dist));
             _entries = list.ToArray();
         }
 
         /// <summary>
-        /// Find a render face lying on <paramref name="plane"/> (preferring one with the same texture) and fit
-        /// its texture projection.
+        /// Find the render face this brush side generated and fit its texture projection.
         /// </summary>
-        public bool TryFindProjection(VmapPlane plane, int textureIndex, out VmapTexProjection projection)
+        /// <param name="plane">The brush side's plane.</param>
+        /// <param name="textureIndex">The side's texture, preferred over a co-planar different-texture face.</param>
+        /// <param name="near">
+        /// A point on the side (its winding centre) when one is known. Plane and texture ALONE do not identify
+        /// the source face: a long wall is normally several brushes sharing one plane and one texture, each with
+        /// its own texdef, so taking the first match hands the side a neighbour's alignment and the texture
+        /// lands shifted. Measured on stormkeep, that was 703 of 4263 matched faces. Pass <c>null</c> only when
+        /// no winding is available yet.
+        /// </param>
+        public bool TryFindProjection(VmapPlane plane, int textureIndex, Vector3? near, out VmapTexProjection projection)
         {
             projection = default;
             if (_entries.Length == 0)
@@ -281,6 +332,7 @@ public static class BspToVmap
 
             int best = -1;
             bool bestTextureMatch = false;
+            float bestDistance = float.MaxValue;
             for (int i = lo; i < _entries.Length && _entries[i].Dist <= hi; i++)
             {
                 Entry e = _entries[i];
@@ -288,15 +340,16 @@ public static class BspToVmap
                     continue;
 
                 bool textureMatch = e.TextureIndex == textureIndex;
-                // A same-texture surface is the surface this side actually generated; prefer it, but accept a
-                // co-planar different-texture face as a fallback rather than dropping to axial mapping.
-                if (best < 0 || (textureMatch && !bestTextureMatch))
-                {
-                    best = e.FaceIndex;
-                    bestTextureMatch = textureMatch;
-                    if (textureMatch)
-                        break;
-                }
+                if (bestTextureMatch && !textureMatch)
+                    continue;   // never trade a same-texture candidate for a different-texture one
+
+                float distance = near is { } p ? Vector3.DistanceSquared(e.Centre, p) : 0f;
+                if (best >= 0 && textureMatch == bestTextureMatch && distance >= bestDistance)
+                    continue;
+
+                best = e.FaceIndex;
+                bestTextureMatch = textureMatch;
+                bestDistance = distance;
             }
 
             if (best < 0)

@@ -200,7 +200,14 @@ public sealed class PlayerPhysics : IPlayerPhysics
         // ("server stopped caring", then a reconcile snap). Nudge to the nearest free spot first. Deterministic
         // and run in the shared client+server sim, so it can't desync. Gated by sv_gameplayfix_nudgeoutofsolid
         // (default ON like DP; set it to 0 to disable).
-        if (Api.Cvars.GetString("sv_gameplayfix_nudgeoutofsolid") != "0")
+        //
+        // NEVER for MOVETYPE_NOCLIP. Being inside solid is the normal, intended state of a noclip mover, not a
+        // fault to recover from — DP routes noclip through SV_Physics_Noclip, a plain linear move that never
+        // nudges. Running the nudge anyway shoves the mover back out of any wall it enters, which is
+        // indistinguishable from collision: it is what made the editor's free-fly camera still feel solid even
+        // though its movetype was right and Integrate was correctly skipping the trace.
+        if (player.MoveType != MoveType.Noclip
+            && Api.Cvars.GetString("sv_gameplayfix_nudgeoutofsolid") != "0")
             NudgeOutOfSolid(player);
 
         // ----- per-frame water detection (QC _Movetype_CheckWater) -----

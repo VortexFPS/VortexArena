@@ -276,18 +276,41 @@ public class VmapImportDiagnosticProbe
         }
         _out.WriteLine($"--- drawn faces: {drawnFitted} with recovered alignment, {drawnGuessed} on the axial guess ---");
 
-        foreach (int probeId in new[] { 4091, 5240, 4388 })
+        // The number that matters: of the area that SURVIVES occlusion culling — i.e. what the mapper actually
+        // looks at — how much is drawn on a box projection rather than a recovered one?
+        var cull2 = new VmapFaceCulling(doc);
+        double areaFitted = 0, areaGuessed = 0;
+        var guessedByShader = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (VmapBrush br in doc.Brushes)
         {
-            VmapBrush? pb = doc.Brushes.FirstOrDefault(x => x.Id == probeId);
-            if (pb is null) continue;
-            Vector3[][] pw = VmapWinding.BuildBrushWindings(pb);
-            _out.WriteLine($"  brush #{probeId} detail={pb.IsDetail} tool={pb.IsToolBrush}");
-            for (int i = 0; i < pb.Faces.Count && i < pw.Length; i++)
-                _out.WriteLine($"    face {i} '{pb.Faces[i].Material}' verts={pw[i].Length} "
-                    + $"fitted={pb.Faces[i].Projection.IsValid} sflags=0x{pb.Faces[i].SurfaceFlags:X}");
+            if (br.IsToolBrush)
+                continue;
+            Vector3[][] ws = VmapWinding.BuildBrushWindings(br);
+            for (int fi = 0; fi < ws.Length && fi < br.Faces.Count; fi++)
+            {
+                VmapFace f = br.Faces[fi];
+                if (ws[fi].Length < 3 || VmapBrush.IsToolMaterial(f.Material))
+                    continue;
+                if ((f.SurfaceFlags & VmapGeometryBuilder.SurfaceNoDraw) != 0)
+                    continue;
+
+                double a2 = 0;
+                foreach (List<Vector3> frag in cull2.Subtract(br, f.Plane, ws[fi]))
+                    for (int i = 1; i + 1 < frag.Count; i++)
+                        a2 += 0.5 * Vector3.Cross(frag[i] - frag[0], frag[i + 1] - frag[0]).Length();
+
+                if (f.Projection.IsValid) areaFitted += a2;
+                else
+                {
+                    areaGuessed += a2;
+                    guessedByShader[f.Material] = guessedByShader.GetValueOrDefault(f.Material) + a2;
+                }
+            }
         }
-        foreach (var kv in badByShader.OrderByDescending(kv => kv.Value).Take(15))
-            _out.WriteLine($"  {kv.Value,5} misaligned faces  {kv.Key}");
+        _out.WriteLine($"--- area surviving culling: {areaFitted:N0} recovered, {areaGuessed:N0} on the axial guess "
+            + $"({100.0 * areaGuessed / Math.Max(1, areaFitted + areaGuessed):F1}%) ---");
+        foreach (var kv in guessedByShader.OrderByDescending(kv => kv.Value).Take(10))
+            _out.WriteLine($"  {kv.Value,12:N0} guessed area  {kv.Key}");
 
         _out.WriteLine("--- biggest AREA surpluses in vmap (drawn but the compiler drew far less) ---");
         foreach (var kv in vmapArea.OrderByDescending(kv => kv.Value - bspArea.GetValueOrDefault(kv.Key)).Take(15))

@@ -24,6 +24,13 @@ public static class BspToVmap
     private const float DistMatchEpsilon = 0.25f;
 
     /// <summary>
+    /// Largest UV error, in texture widths, for a fitted projection to count as a genuine recovery of its
+    /// source face's alignment. Tight on purpose: an eighth of a texture is already a visible seam, and a
+    /// wrong-but-accepted fit is worse than no fit, because the axial fallback is at least predictable.
+    /// </summary>
+    private const float FitResidualEpsilon = 0.01f;
+
+    /// <summary>
     /// Convert <paramref name="bsp"/> into an editable document.
     /// </summary>
     /// <param name="bsp">The parsed BSP.</param>
@@ -186,17 +193,9 @@ public static class BspToVmap
         for (int i = 0; i < brush.Faces.Count && i < windings.Length; i++)
         {
             Vector3[] w = windings[i];
-            Vector3? centre = null;
-            if (w.Length >= 3)
-            {
-                Vector3 sum = Vector3.Zero;
-                foreach (Vector3 v in w)
-                    sum += v;
-                centre = sum / w.Length;
-            }
-
             VmapFace face = brush.Faces[i];
-            if (faceIndex.TryFindProjection(face.Plane, sideTextures[i], centre, out VmapTexProjection fitted))
+            if (faceIndex.TryFindProjection(face.Plane, sideTextures[i], w.Length >= 3 ? w : null,
+                    out VmapTexProjection fitted))
                 face.Projection = fitted;
         }
     }
@@ -280,6 +279,9 @@ public static class BspToVmap
         private readonly BspData _bsp;
         private readonly Entry[] _entries;
 
+        /// <summary>Reused candidate buffer — this runs once per brush side of the whole map.</summary>
+        private readonly List<(int Rank, float Distance, int FaceIndex)> _candidates = new();
+
         private readonly record struct Entry(float Dist, Vector3 Normal, int TextureIndex, int FaceIndex, Vector3 Centre);
 
         public RenderFaceIndex(BspData bsp)
@@ -321,8 +323,18 @@ public static class BspToVmap
         /// lands shifted. Measured on stormkeep, that was 703 of 4263 matched faces. Pass <c>null</c> only when
         /// no winding is available yet.
         /// </param>
-        public bool TryFindProjection(VmapPlane plane, int textureIndex, Vector3? near, out VmapTexProjection projection)
+        public bool TryFindProjection(VmapPlane plane, int textureIndex, IReadOnlyList<Vector3>? winding,
+            out VmapTexProjection projection)
         {
+            Vector3? near = null;
+            if (winding is { Count: >= 3 })
+            {
+                Vector3 sum = Vector3.Zero;
+                foreach (Vector3 v in winding)
+                    sum += v;
+                near = sum / winding.Count;
+            }
+
             projection = default;
             if (_entries.Length == 0)
                 return false;
@@ -330,33 +342,45 @@ public static class BspToVmap
             int lo = LowerBound(plane.Dist - DistMatchEpsilon);
             float hi = plane.Dist + DistMatchEpsilon;
 
-            int best = -1;
-            bool bestTextureMatch = false;
-            float bestDistance = float.MaxValue;
+            // Rank every co-planar candidate, then take the first whose fit VALIDATES. Committing to a single
+            // best candidate loses the side's alignment entirely when that one happens to be an unfittable
+            // triangle-soup surface, even though a perfectly good planar face sits on the same plane.
+            _candidates.Clear();
             for (int i = lo; i < _entries.Length && _entries[i].Dist <= hi; i++)
             {
                 Entry e = _entries[i];
                 if (Vector3.Dot(e.Normal, plane.Normal) < NormalMatchDot)
                     continue;
-
-                bool textureMatch = e.TextureIndex == textureIndex;
-                if (bestTextureMatch && !textureMatch)
-                    continue;   // never trade a same-texture candidate for a different-texture one
-
-                float distance = near is { } p ? Vector3.DistanceSquared(e.Centre, p) : 0f;
-                if (best >= 0 && textureMatch == bestTextureMatch && distance >= bestDistance)
+                // Rank on COVERAGE first: the face that generated this side is the one whose triangles the
+                // side's centre actually lands on. Centroid distance alone picks the wrong neighbour whenever
+                // the true source is long or L-shaped — its centroid can sit further away than a smaller
+                // unrelated face's — and the side then inherits a valid alignment belonging to someone else.
+                // Only the side's OWN shader. A co-planar face of a different shader was previously accepted as
+                // a fallback, on the theory that any real alignment beats the axial guess; it does not. Its
+                // texdef belongs to a different surface, so it lands the texture somewhere arbitrary, and
+                // unlike the axial fallback it looks deliberate.
+                if (e.TextureIndex != textureIndex)
                     continue;
-
-                best = e.FaceIndex;
-                bestTextureMatch = textureMatch;
-                bestDistance = distance;
+                bool covers = near is { } q && FaceCovers(_bsp, _bsp.Faces[e.FaceIndex], q);
+                _candidates.Add((
+                    covers ? 0 : 1,
+                    near is { } p ? Vector3.DistanceSquared(e.Centre, p) : 0f,
+                    e.FaceIndex));
             }
-
-            if (best < 0)
+            if (_candidates.Count == 0)
                 return false;
 
-            BspFace face = _bsp.Faces[best];
-            return TryFitProjection(_bsp, face, plane.Normal, out projection);
+            _candidates.Sort(static (a, b) =>
+            {
+                int byRank = a.Rank.CompareTo(b.Rank);
+                return byRank != 0 ? byRank : a.Distance.CompareTo(b.Distance);
+            });
+
+            foreach ((int _, float _, int faceIndex) in _candidates)
+                if (TryFitProjection(_bsp, _bsp.Faces[faceIndex], plane.Normal, winding, out projection))
+                    return true;
+
+            return false;
         }
 
         /// <summary>Index of the first entry whose distance is >= <paramref name="dist"/>.</summary>
@@ -379,6 +403,97 @@ public static class BspToVmap
     /// The plane of a planar render face, taken from its vertex normal (all vertices of a q3map2 planar surface
     /// share it) with the distance from the first vertex.
     /// </summary>
+    /// <summary>
+    /// Mark the face vertices belonging to triangles that lie inside <paramref name="winding"/> — the part of a
+    /// merged draw surface that this brush side is responsible for. Returns null when no winding was given or
+    /// when fewer than three vertices qualify, meaning "use the whole face".
+    /// </summary>
+    private static bool[]? SelectCoveredVertices(BspData bsp, BspFace face, IReadOnlyList<Vector3>? winding)
+    {
+        if (winding is null || winding.Count < 3)
+            return null;
+
+        var use = new bool[face.VertexCount];
+        int count = 0;
+
+        for (int i = 0; i + 2 < face.IndexCount; i += 3)
+        {
+            int i0 = face.FirstIndex + i;
+            if (i0 + 2 >= bsp.Triangles.Length)
+                break;
+            int a = bsp.Triangles[i0], b = bsp.Triangles[i0 + 1], c = bsp.Triangles[i0 + 2];
+            if (a >= face.VertexCount || b >= face.VertexCount || c >= face.VertexCount)
+                continue;
+
+            Vector3 centre = (bsp.Vertices[face.FirstVertex + a].Position
+                + bsp.Vertices[face.FirstVertex + b].Position
+                + bsp.Vertices[face.FirstVertex + c].Position) / 3f;
+            if (!WindingContains(winding, centre))
+                continue;
+
+            if (!use[a]) { use[a] = true; count++; }
+            if (!use[b]) { use[b] = true; count++; }
+            if (!use[c]) { use[c] = true; count++; }
+        }
+
+        return count >= 3 ? use : null;
+    }
+
+    /// <summary>Point-in-convex-polygon test for a brush-side winding, both already on the same plane.</summary>
+    private static bool WindingContains(IReadOnlyList<Vector3> winding, Vector3 point)
+    {
+        // The winding's own plane normal, from the first non-degenerate corner.
+        Vector3 n = Vector3.Zero;
+        for (int i = 1; i + 1 < winding.Count && n.LengthSquared() < 1e-12f; i++)
+            n = Vector3.Cross(winding[i] - winding[0], winding[i + 1] - winding[0]);
+        if (n.LengthSquared() < 1e-12f)
+            return false;
+        n = Vector3.Normalize(n);
+
+        for (int i = 0; i < winding.Count; i++)
+        {
+            Vector3 a = winding[i], b = winding[(i + 1) % winding.Count];
+            // Slack of half a unit: a triangle centre can sit exactly on a shared edge.
+            if (Vector3.Dot(Vector3.Cross(b - a, point - a), n) < -0.5f * (b - a).Length())
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="point"/> lies on one of the face's triangles (both are already known to share a
+    /// plane, so this is a 2D containment test done with 3D barycentrics).
+    /// </summary>
+    private static bool FaceCovers(BspData bsp, BspFace face, Vector3 point)
+    {
+        const float Slack = 0.5f;   // a hair outside still counts: the side's centre can land on a shared edge
+
+        for (int i = 0; i + 2 < face.IndexCount; i += 3)
+        {
+            int i0 = face.FirstIndex + i;
+            if (i0 + 2 >= bsp.Triangles.Length)
+                break;
+            Vector3 a = bsp.Vertices[face.FirstVertex + bsp.Triangles[i0]].Position;
+            Vector3 b = bsp.Vertices[face.FirstVertex + bsp.Triangles[i0 + 1]].Position;
+            Vector3 c = bsp.Vertices[face.FirstVertex + bsp.Triangles[i0 + 2]].Position;
+
+            Vector3 n = Vector3.Cross(b - a, c - a);
+            float area2 = n.Length();
+            if (area2 < 1e-6f)
+                continue;
+            n /= area2;
+
+            // Inside when the point is on the inner side of all three edges, with a little slack.
+            float e0 = Vector3.Dot(Vector3.Cross(b - a, point - a), n);
+            float e1 = Vector3.Dot(Vector3.Cross(c - b, point - b), n);
+            float e2 = Vector3.Dot(Vector3.Cross(a - c, point - c), n);
+            float tolerance = -Slack * area2;
+            if (e0 >= tolerance && e1 >= tolerance && e2 >= tolerance)
+                return true;
+        }
+        return false;
+    }
+
     private static bool TryFacePlane(BspData bsp, BspFace face, out Vector3 normal, out float dist)
     {
         normal = bsp.Vertices[face.FirstVertex].Normal;
@@ -423,6 +538,20 @@ public static class BspToVmap
     /// <c>u = A*s + B*t + C</c> by 3x3 normal equations, then lifting (A,B,C) back to world space.
     /// </summary>
     public static bool TryFitProjection(BspData bsp, BspFace face, Vector3 normal, out VmapTexProjection projection)
+        => TryFitProjection(bsp, face, normal, null, out projection);
+
+    /// <summary>
+    /// As above, but fitting only the part of the face that lies within <paramref name="winding"/>.
+    ///
+    /// A compiled face is NOT necessarily one texdef. q3map2's meta pass merges coplanar surfaces that share a
+    /// shader into a single draw surface, so one face can carry several alignments — stormkeep has a 12-vertex
+    /// trim face whose UVs no single affine map fits within 3.2 texture widths. Fitting the whole thing either
+    /// yields a wrong map or (with validation) yields none at all, and the side falls back to a box projection
+    /// or, worse, to a co-planar face of a different shader. Restricting the fit to the triangles the brush
+    /// side actually covers picks out the one alignment that belongs to it.
+    /// </summary>
+    public static bool TryFitProjection(
+        BspData bsp, BspFace face, Vector3 normal, IReadOnlyList<Vector3>? winding, out VmapTexProjection projection)
     {
         projection = default;
         if (face.VertexCount < 3)
@@ -438,14 +567,24 @@ public static class BspToVmap
         Vector3 t2 = Vector3.Cross(normal, t1);
 
         Vector3 origin = bsp.Vertices[face.FirstVertex].Position;
+        bool[]? originUse = SelectCoveredVertices(bsp, face, winding);
+        if (originUse is not null)
+            for (int i = 0; i < face.VertexCount; i++)
+                if (originUse[i]) { origin = bsp.Vertices[face.FirstVertex + i].Position; break; }
 
         // Accumulate the normal-equation matrix for [s t 1] and both right-hand sides (u and v).
         double sss = 0, sst = 0, ss1 = 0, stt = 0, st1 = 0, s11 = 0;
         double su = 0, tu = 0, ou = 0, sv = 0, tv = 0, ov = 0;
         int n = 0;
 
+        // Which of the face's vertices take part: those of triangles the brush side covers, or all of them
+        // when no winding was supplied (or none of the triangles land inside it).
+        bool[]? use = originUse;
+
         for (int i = 0; i < face.VertexCount; i++)
         {
+            if (use is not null && !use[i])
+                continue;
             BspVertex vert = bsp.Vertices[face.FirstVertex + i];
             Vector3 rel = vert.Position - origin;
             double s = Vector3.Dot(rel, t1);
@@ -485,6 +624,21 @@ public static class BspToVmap
         var fitted = new VmapTexProjection(axisU, axisV, offsetU, offsetV);
         if (!fitted.IsValid)
             return false;
+
+        // VERIFY the fit against the data it came from. A least-squares solve always returns something, and an
+        // affine position→UV map only exists if the source really is one planar surface with one texdef. A
+        // q3map2 -meta surface is a triangle SOUP — several coplanar-ish faces welded together, sometimes with
+        // different alignments — and fitting one yields a plausible-looking projection whose axes are skewed
+        // out of the plane. That is silent: the geometry is right, the texture is simply wrong, and the only
+        // way to tell is to ask whether the projection reproduces the UVs it was derived from.
+        for (int i = 0; i < face.VertexCount; i++)
+        {
+            if (use is not null && !use[i])
+                continue;
+            BspVertex v = bsp.Vertices[face.FirstVertex + i];
+            if ((fitted.Evaluate(v.Position) - v.TexCoord).Length() > FitResidualEpsilon)
+                return false;
+        }
 
         projection = fitted;
         return true;

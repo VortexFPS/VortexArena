@@ -249,7 +249,8 @@ public static class VmapMapBuilder
         if (EditorMaterials.TryGetValue(shaderName, out Material? cached) && GodotObject.IsInstanceValid(cached))
             return cached;
 
-        Texture2D? albedo = assets.ResolveLightmapDiffuse(shaderName).Texture ?? assets.LoadTexture(shaderName);
+        AssetSystem.LightmapDiffuse diffuse = assets.ResolveLightmapDiffuse(shaderName);
+        Texture2D? albedo = diffuse.Texture ?? assets.LoadTexture(shaderName);
 
         var mat = new StandardMaterial3D
         {
@@ -261,6 +262,27 @@ public static class VmapMapBuilder
             AlbedoColor = albedo is null ? new Color(0.55f, 0.55f, 0.58f) : Colors.White,
             CullMode = BaseMaterial3D.CullModeEnum.Back,
         };
+
+        // The shader's static `tcMod scale`, which the BSP path applies as albedoUvScale. Dropping it does not
+        // shift the texture, it RESIZES it — the surface is drawn at the wrong texel density and stops lining
+        // up with its neighbours, which looks exactly like a broken texture alignment even though the UVs the
+        // importer recovered are correct. Guarded against a zero scale, which would collapse the whole surface
+        // onto one texel.
+        if (diffuse.UvScale.X != 0f && diffuse.UvScale.Y != 0f)
+            mat.Uv1Scale = new Vector3(diffuse.UvScale.X, diffuse.UvScale.Y, 1f);
+
+        // Alpha-tested shaders (grates, ladders, foliage cards) are cut-outs: drawn opaque they become solid
+        // rectangles, which reads as geometry the mapper does not have.
+        if (diffuse.AlphaCutoff > 0f)
+        {
+            mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
+            mat.AlphaScissorThreshold = diffuse.AlphaCutoff;
+            mat.CullMode = BaseMaterial3D.CullModeEnum.Disabled;   // cut-outs are authored to be seen both ways
+        }
+        else if (diffuse.Translucent)
+        {
+            mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        }
 
         EditorMaterials[shaderName] = mat;
         return mat;

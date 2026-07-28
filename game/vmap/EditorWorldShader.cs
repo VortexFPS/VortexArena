@@ -67,6 +67,10 @@ global uniform float editor_deluxe;        // 0..1 blend of the per-pixel deluxe
 const float DELUXE_FLOOR = 0.55;
 const float DELUXE_CEIL = 1.6;
 
+// Added to BOTH cosines before the ratio: it bounds how hard the term can push at grazing angles without
+// biasing the ratio away from 1, which any one-sided floor does.
+const float DELUXE_SOFT = 0.25;
+
 void vertex() {
     // CUSTOM0 carries the baked light direction. It has to be forwarded through a varying: a custom vertex
     // attribute is not visible to the fragment stage on its own.
@@ -107,17 +111,19 @@ void fragment() {
         vec3 flat_world = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
         vec3 ldir = normalize(v_deluxe);
 
-        // Floor on the denominator: at grazing incidence the vertex term tends to zero and the ratio would
-        // explode into a bright rim exactly where the bake is least certain.
-        float flat_ndl = max(dot(flat_world, ldir), 0.25);
-        float px_ndl = max(dot(n_world, ldir), 0.0);
+        // SYMMETRIC softening, and that symmetry is the whole point: the ratio must be exactly 1 where the
+        // normal map does nothing, so that a flat pixel keeps precisely the irradiance the bake computed.
+        // Flooring only the denominator broke that identity — where light arrives at a shallow angle the
+        // true cosine is ~0.05 but the denominator read 0.25, so an UNPERTURBED pixel came out at a fifth
+        // of its own light. That is a smooth 45% darkening across every grazing-lit surface, which is what
+        // the dark band on the ceiling slats actually was.
+        float nd_flat = max(dot(flat_world, ldir), 0.0) + DELUXE_SOFT;
+        float nd_px = max(dot(n_world, ldir), 0.0) + DELUXE_SOFT;
 
         // The ratio MODULATES the baked light; it must never annihilate it. COLOR holds irradiance — the
         // total that arrived from every direction — while v_deluxe is only its dominant one, so a pixel
-        // whose normal turns away from that one direction is still lit by the rest. Allowing the ratio to
-        // reach 0 deleted that light, and did it smoothly across a surface: the dark gradients that showed
-        // up along wall edges the moment normal maps started resolving.
-        float k = clamp(px_ndl / flat_ndl, DELUXE_FLOOR, DELUXE_CEIL);
+        // whose normal turns away from that one direction is still lit by the rest.
+        float k = clamp(nd_px / nd_flat, DELUXE_FLOOR, DELUXE_CEIL);
         baked *= mix(1.0, k, editor_deluxe);
     }
     EMISSION = base * (baked + vec3(editor_bake_ambient))

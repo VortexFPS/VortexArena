@@ -1802,15 +1802,19 @@ public sealed partial class NetGame : Node3D
         // origin — the same X Y Z space map entities use. The panel self-gates on cl_showposition/showposition
         // (debug-default-on, like FPS) and returns null until we have a live local body (handshake assigns a
         // non-zero LocalNetId), so it draws nothing in the menu / pre-spawn.
-        // The EYE, not the player origin: the readout exists to reproduce views, --observe pins the CAMERA
-        // at the given point, and the two differ by the view offset (35 standing, 0 observing) plus bob and
-        // stair smoothing. Reporting the camera makes readout-in, camera-out exact in every state.
-        _fullHud.Position.PositionProvider =
-            () => _client is { LocalNetId: not 0 } && _camera is not null && GodotObject.IsInstanceValid(_camera)
-                ? Coords.ToQuake(_camera.GlobalTransform.Origin)
-                : _client is { LocalNetId: not 0 } c ? c.PredictedOrigin : (NVec3?)null;
-        // ...and the direction being looked in, which is what makes the readout enough to reproduce a view.
-        _fullHud.Position.AnglesProvider = () => _viewAngles;
+        // Both readouts come from the ACTIVE RENDERING CAMERA — the same transform the frame was drawn with.
+        //
+        // Anything else is a near-miss that looks authoritative. Reporting the player origin is an eye height
+        // out; reporting _viewAngles is the INPUT state, which a pinned camera (--observe) or any scripted
+        // override does not drive at all — so a screenshot could read "yaw 135 pitch 0" while the picture was
+        // taken at yaw 128 pitch -58. A view readout whose only job is to reproduce a view has to be measured
+        // from the thing that produced it.
+        _fullHud.Position.PositionProvider = () => ActiveViewCamera() is { } cam
+            ? Coords.ToQuake(cam.GlobalTransform.Origin)
+            : _client is { LocalNetId: not 0 } c ? c.PredictedOrigin : (NVec3?)null;
+        _fullHud.Position.AnglesProvider = () => ActiveViewCamera() is { } cam
+            ? CameraQuakeAngles(cam)
+            : (NVec3?)_viewAngles;
 
         // [T51] Floating damage-number layer (QC cl_damagetext). Full-rect overlay; fed each frame in _Process
         // from the server-side DamagetextMutator's drained events, projected via the first-person _camera.
@@ -7332,6 +7336,42 @@ public sealed partial class NetGame : Node3D
     /// <summary>True when the next world build should trace shadows (first build, or after editor_rebake).</summary>
     private bool _bakeShadowsNextBuild = true;
 
+    /// <summary>
+    /// The camera the frame is actually being drawn with. Godot marks exactly one Camera3D current per
+    /// viewport, so asking the viewport is the only answer that stays right when something else takes the
+    /// view (the observe pin, an ortho pane, a demo).
+    /// </summary>
+    private Camera3D? ActiveViewCamera()
+    {
+        Camera3D? cam = GetViewport()?.GetCamera3D();
+        return cam is not null && GodotObject.IsInstanceValid(cam) ? cam : null;
+    }
+
+    /// <summary>
+    /// A camera's Quake view angles (pitch, yaw, roll), derived from its BASIS rather than from any stored
+    /// angle state — see the note in the readout wiring for why the stored state is not trustworthy here.
+    /// Full-basis conversion, never a yaw-only Euler read: those disagree in handedness.
+    /// </summary>
+    private static NVec3 CameraQuakeAngles(Camera3D cam)
+    {
+        Basis b = cam.GlobalTransform.Basis;
+        NVec3 forward = Coords.ToQuake(-b.Z);
+        NVec3 up = Coords.ToQuake(b.Y);
+        NVec3 a = XonoticGodot.Common.Math.QMath.VecToAngles2(forward, up);
+
+        // VecToAngles2 is vectoangles: +pitch means UP. View angles — what --observe takes and what the
+        // player's own angles hold — use +pitch means DOWN. Printing one while the flag consumes the other
+        // is a readout that reproduces the mirror image of the view it was copied from.
+        return new NVec3(-a.X, a.Y, a.Z);
+    }
+
+    /// <summary>
+    /// Eye offset used by the --observe pin. Any positive value works: it is subtracted from the requested
+    /// origin and handed straight back as EyeHeightZ, so it cancels. It must be POSITIVE because the view
+    /// treats zero as "use the player's eye height instead", which is the trap this replaced.
+    /// </summary>
+    private const float PinEyeOfs = 1f;
+
     /// <summary>Set when the current build is capturing vertices for a background bake.</summary>
     private bool _bakePending;
 
@@ -8261,19 +8301,23 @@ public sealed partial class NetGame : Node3D
             return;
 
         // Dev/CI --observe: pin the camera at the fixed Quake-space point/angles (ObserverCamera), ignoring
-        // the local player/prediction entirely. The eye = OriginQuake + EyeHeight, so subtract it here to land
-        // the eye EXACTLY on the requested point. Velocity 0 → no bob; not dead → no event-chase.
+        // the local player/prediction entirely. Velocity 0 → no bob; not dead → no event-chase.
+        //
+        // The eye offset is subtracted here and handed back through EyeHeightZ, so the two ALWAYS cancel.
+        // Subtracting the static EyeHeight and passing 0 did not: 0 means "fall back to _view.EyeHeight",
+        // which is 0 while observing, so the pin landed 35 units BELOW the requested point — every scripted
+        // capture silently framed a different place than the one being reported.
         if (ObserverCamera.Active)
         {
             _view.Spectating = false;
             _view.CameraMode = Client.FirstPersonView.ChaseMode.None;
             var ost = new Client.FirstPersonView.ViewState
             {
-                OriginQuake = ObserverCamera.OriginQuake - new NVec3(0f, 0f, EyeHeight),
+                OriginQuake = ObserverCamera.OriginQuake - new NVec3(0f, 0f, PinEyeOfs),
                 VelocityQuake = NVec3.Zero,
                 ViewAnglesQuake = ObserverCamera.AnglesQuake,
                 IsDead = false,
-                EyeHeightZ = 0f, // fall back to the static EyeHeight the origin above compensates for
+                EyeHeightZ = PinEyeOfs,   // exactly what was subtracted above, so the camera lands on the point
             };
             _view.UpdateView(_camera, ost, dt);
             return;

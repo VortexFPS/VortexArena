@@ -294,6 +294,11 @@ public static class Q3ShaderParser
                 ParseSun(def, p);
                 return;
 
+            case "q3map_shadeangle":
+                if (p.Count >= 2 && TryF(p[1], out float shadeAngle))
+                    def.ShadeAngle = shadeAngle;
+                return;
+
             case "q3map_skylight":
                 if (p.Count >= 3 && TryF(p[1], out float skyAmount) && TryF(p[2], out float skyIters))
                     def.SkyLight = new SkyLightParms { Amount = skyAmount, Iterations = (int)skyIters };

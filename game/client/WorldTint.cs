@@ -113,6 +113,8 @@ public static class WorldTint
             "editor_bake_gamma", RenderingServer.GlobalShaderParameterType.Float, 1.05f);
         RenderingServer.GlobalShaderParameterAdd(
             "editor_bake_range", RenderingServer.GlobalShaderParameterType.Float, 48f);
+        RenderingServer.GlobalShaderParameterAdd(
+            "editor_deluxe", RenderingServer.GlobalShaderParameterType.Float, 1.0f);
         _mapApplied = _entityApplied = Vector3.One;
         _gammaApplied = 0f;
     }

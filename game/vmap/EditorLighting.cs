@@ -175,6 +175,13 @@ public sealed partial class EditorLighting : Node3D
     public const string CvarBakeGamma = "cl_editor_bake_gamma";
 
     /// <summary>
+    /// Deluxemap strength, 0..1 (live): how much the baked light is re-shaded against the per-pixel normal
+    /// map. q3map2 compiles deluxemaps for Xonotic by default, and this is the term that lets a normal-mapped
+    /// surface respond to where the light came from rather than only to how much arrived.
+    /// </summary>
+    public const string CvarDeluxe = "cl_editor_deluxe";
+
+    /// <summary>
     /// Bloom over the editor world. Default OFF: the baked light is HDR and the fixture strips sit at the
     /// top of its range, so glow smears them across the whole frame — a uniform lift that reads as flat and
     /// that no lighting knob can counteract, because bloom is downstream of all of them.

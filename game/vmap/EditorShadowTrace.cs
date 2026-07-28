@@ -82,23 +82,112 @@ public sealed class EditorShadowTrace
             for (int i = 0; i < brush.Faces.Count; i++)
                 planes[i] = brush.Faces[i].Plane;
 
-            int index = _occluders.Count;
-            _occluders.Add(new Occluder(planes, min, max));
+            Insert(new Occluder(planes, min, max));
+        }
 
-            int x0 = (int)MathF.Floor(min.X / CellSize), x1 = (int)MathF.Floor(max.X / CellSize);
-            int y0 = (int)MathF.Floor(min.Y / CellSize), y1 = (int)MathF.Floor(max.Y / CellSize);
-            int z0 = (int)MathF.Floor(min.Z / CellSize), z1 = (int)MathF.Floor(max.Z / CellSize);
-            for (int x = x0; x <= x1; x++)
-            for (int y = y0; y <= y1; y++)
-            for (int z = z0; z <= z1; z++)
+        AddPatchOccluders(doc);
+    }
+
+    /// <summary>Index one occluder into every grid cell its bounds touch.</summary>
+    private void Insert(Occluder occluder)
+    {
+        int index = _occluders.Count;
+        _occluders.Add(occluder);
+
+        int x0 = (int)MathF.Floor(occluder.Min.X / CellSize), x1 = (int)MathF.Floor(occluder.Max.X / CellSize);
+        int y0 = (int)MathF.Floor(occluder.Min.Y / CellSize), y1 = (int)MathF.Floor(occluder.Max.Y / CellSize);
+        int z0 = (int)MathF.Floor(occluder.Min.Z / CellSize), z1 = (int)MathF.Floor(occluder.Max.Z / CellSize);
+        for (int x = x0; x <= x1; x++)
+        for (int y = y0; y <= y1; y++)
+        for (int z = z0; z <= z1; z++)
+        {
+            var key = (x, y, z);
+            if (!_grid.TryGetValue(key, out List<int>? bucket))
+                _grid[key] = bucket = new List<int>();
+            bucket.Add(index);
+        }
+    }
+
+    /// <summary>
+    /// Curved surfaces cast shadows too — q3map2's <c>-patchshadows</c>, which the Xonotic game profile
+    /// turns on. Without this every arch, pipe and curved wall in the map is transparent to light, and the
+    /// shadows that ought to sit under them simply are not there.
+    ///
+    /// Each tessellated triangle becomes a THIN PRISM: the triangle's own plane, a parallel one just behind
+    /// it, and three edge planes. That keeps every occluder a convex plane set, so the existing slab clip
+    /// handles patches and brushes with the same code and no special case in the hot loop.
+    /// </summary>
+    private void AddPatchOccluders(VmapDocument doc)
+    {
+        if (doc.Patches.Count == 0)
+            return;
+
+        var patchDoc = new VmapDocument();
+        foreach (VmapPatch patch in doc.Patches)
+        {
+            if (!patch.IsValid || (patch.SurfaceFlags & SurfaceNonSolid) != 0)
+                continue;
+            if ((patch.SurfaceFlags & VmapGeometryBuilder.SurfaceSky) != 0)
+                continue;
+            patchDoc.Patches.Add(patch);
+        }
+        if (patchDoc.Patches.Count == 0)
+            return;
+
+        IReadOnlyList<VmapSurface> surfaces;
+        try
+        {
+            surfaces = VmapGeometryBuilder.BuildSurfaces(patchDoc, includeSky: false);
+        }
+        catch (Exception)
+        {
+            return;   // a malformed patch must not take the whole bake down with it
+        }
+
+        foreach (VmapSurface surface in surfaces)
+        {
+            for (int t = 0; t + 2 < surface.Indices.Count; t += 3)
             {
-                var key = (x, y, z);
-                if (!_grid.TryGetValue(key, out List<int>? bucket))
-                    _grid[key] = bucket = new List<int>();
-                bucket.Add(index);
+                NVec3 a0 = surface.Positions[surface.Indices[t]];
+                NVec3 b0 = surface.Positions[surface.Indices[t + 1]];
+                NVec3 c0 = surface.Positions[surface.Indices[t + 2]];
+
+                NVec3 edge1 = b0 - a0, edge2 = c0 - a0;
+                NVec3 n = NVec3.Cross(edge1, edge2);
+                if (n.LengthSquared() < 1e-8f)
+                    continue;   // degenerate triangle: no area, no shadow
+                n = NVec3.Normalize(n);
+
+                var planes = new VmapPlane[5];
+                planes[0] = new VmapPlane(n, NVec3.Dot(n, a0) + PatchThickness * 0.5f);
+                planes[1] = new VmapPlane(-n, -(NVec3.Dot(n, a0) - PatchThickness * 0.5f));
+                planes[2] = EdgePlane(a0, b0, n);
+                planes[3] = EdgePlane(b0, c0, n);
+                planes[4] = EdgePlane(c0, a0, n);
+
+                NVec3 min = NVec3.Min(a0, NVec3.Min(b0, c0)) - new NVec3(PatchThickness);
+                NVec3 max = NVec3.Max(a0, NVec3.Max(b0, c0)) + new NVec3(PatchThickness);
+                Insert(new Occluder(planes, min, max));
             }
         }
     }
+
+    /// <summary>The outward plane through an edge, perpendicular to the triangle's own plane.</summary>
+    private static VmapPlane EdgePlane(NVec3 from, NVec3 to, NVec3 faceNormal)
+    {
+        NVec3 outward = NVec3.Cross(to - from, faceNormal);
+        float len = outward.Length();
+        if (len < 1e-8f)
+            return new VmapPlane(faceNormal, NVec3.Dot(faceNormal, from));
+        outward /= len;
+        return new VmapPlane(outward, NVec3.Dot(outward, from));
+    }
+
+    /// <summary>Thickness given to a tessellated patch triangle, Quake units.</summary>
+    private const float PatchThickness = 2f;
+
+    /// <summary>Q3 <c>surfaceparm nonsolid</c>.</summary>
+    private const int SurfaceNonSolid = 0x4000;
 
     /// <summary>
     /// True when something solid lies between the two points.

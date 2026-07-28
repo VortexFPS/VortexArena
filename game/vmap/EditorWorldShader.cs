@@ -18,16 +18,13 @@ namespace XonoticGodot.Game.Vmap;
 public static class EditorWorldShader
 {
     /// <summary>
-    /// HDR range of the baked vertex colours. The mesh COLOR channel is 8-bit and clamps at 1, while the
-    /// bake spans a measured 0..42 (median 0.47, p99 13.3) — so the light is stored as
-    /// <c>sqrt(value / range)</c> and squared back in the shader.
+    /// Fallback HDR range for the baked vertex colours, used only until a bake measures its own.
     ///
-    /// The square root is not decoration. Storing linearly at a range wide enough for the peaks would leave
-    /// the median at ~2 of 255 levels and band every dark surface in the map; the sqrt spends its precision
-    /// where the eye is sensitive, which is exactly what real HDR lightmap encodings do. Clipping the peaks
-    /// instead — the previous range of 8 — flattened the brightest 4% of vertices, and that 4% is precisely
-    /// the pool of light directly under each fixture, which is why fixtures read as glowing decals with no
-    /// light around them.
+    /// The light is stored as <c>sqrt(value / range)</c> and squared back in the shader. The square root is
+    /// not decoration: storing linearly at a range wide enough for the peaks would leave the median at ~2 of
+    /// 255 levels and band every dark surface. The RANGE itself is measured per bake
+    /// (<see cref="EditorLightBake.EncodeRange"/>) because a fixed one silently clips the top of the
+    /// distribution, and a clipped bake looks exactly like a flat one.
     /// </summary>
     public const float BakedColorRange = 48f;
 
@@ -50,6 +47,12 @@ uniform float alpha_cutoff = 0.0;
 uniform sampler2D glow_tex : source_color, hint_default_black;  // fixture self-illumination page
 uniform float glow_energy = 0.0;
 
+uniform sampler2D normal_tex : hint_normal;   // the shader's _norm companion
+uniform float normal_strength = 0.0;          // 0 when the material has no normal map
+
+// The deluxemap: the direction the baked light arrived from, per vertex, in world space.
+varying vec3 v_deluxe;
+
 // LIVE controls, global on purpose: per-material uniforms are frozen into the material cache at build time,
 // which is exactly how the first version of these knobs came to do nothing at all. A global is one
 // RenderingServer set away from every surface, every frame, no rebuild, no rebake.
@@ -57,6 +60,13 @@ global uniform float editor_bake_scale;    // overall strength of the baked ligh
 global uniform float editor_bake_ambient;  // flat floor added in-shader (ambient_light_disabled blocks the scene's)
 global uniform float editor_bake_gamma;    // response curve on the baked light: >1 = punchier, more contrast
 global uniform float editor_bake_range;    // HDR decode range, measured from the bake itself
+global uniform float editor_deluxe;        // 0..1 blend of the per-pixel deluxe term
+
+void vertex() {
+    // CUSTOM0 carries the baked light direction. It has to be forwarded through a varying: a custom vertex
+    // attribute is not visible to the fragment stage on its own.
+    v_deluxe = CUSTOM0.xyz;
+}
 
 void fragment() {
     vec4 t = texture(albedo_tex, UV * uv_scale);
@@ -77,6 +87,28 @@ void fragment() {
     // separates physically-averaged-and-flat from the punchy compiled look.
     vec3 stored = max(COLOR.rgb, vec3(0.0));
     vec3 baked = pow(stored * stored * editor_bake_range, vec3(editor_bake_gamma)) * editor_bake_scale;
+
+    // DELUXE: re-shade the baked light against this PIXEL's normal instead of the vertex's.
+    //
+    // The bake already applied N.L using the vertex normal, so the correction is the ratio between the
+    // per-pixel and per-vertex terms — that is what makes a normal-mapped brick react to where the light
+    // actually is. Irradiance alone cannot do this: it records how much light arrived, never from where,
+    // which is why every pixel of a face shades identically without it.
+    if (normal_strength > 0.0 && editor_deluxe > 0.0) {
+        vec3 nm = texture(normal_tex, UV * uv_scale).xyz * 2.0 - 1.0;
+        nm.xy *= normal_strength;
+        vec3 n_view = normalize(TANGENT * nm.x + BINORMAL * nm.y + NORMAL * nm.z);
+        vec3 n_world = normalize((INV_VIEW_MATRIX * vec4(n_view, 0.0)).xyz);
+        vec3 flat_world = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+        vec3 ldir = normalize(v_deluxe);
+
+        // Floor on the denominator: at grazing incidence the vertex term tends to zero and the ratio would
+        // explode into a bright rim exactly where the bake is least certain.
+        float flat_ndl = max(dot(flat_world, ldir), 0.25);
+        float px_ndl = max(dot(n_world, ldir), 0.0);
+        float k = clamp(px_ndl / flat_ndl, 0.0, 2.0);
+        baked *= mix(1.0, k, editor_deluxe);
+    }
     EMISSION = base * (baked + vec3(editor_bake_ambient))
         + texture(glow_tex, UV * uv_scale).rgb * glow_energy;
 }

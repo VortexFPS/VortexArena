@@ -135,7 +135,7 @@ public sealed partial class NetGame : Node3D
     private int _editorCollisionVersion = -1;
 
     private float _bakeUniformScale = float.NaN, _bakeUniformAmbient = float.NaN, _bakeUniformGamma = float.NaN;
-    private float _bakeUniformRange = float.NaN;
+    private float _bakeUniformRange = float.NaN, _bakeUniformDeluxe = float.NaN;
 
 
     private static float CvarOr(XonoticGodot.Engine.Simulation.CvarService cvars, string name, float fallback)
@@ -5827,7 +5827,9 @@ public sealed partial class NetGame : Node3D
                 Vmap.EditorLightBake.End();
                 GD.Print($"[EditorLighting] bake: {Vmap.EditorLightBake.RaysTraced:N0} rays in "
                     + $"{Time.GetTicksMsec() - _bakeClock} ms (background)");
-                GD.Print($"[EditorLighting] encode range p99={Vmap.EditorLightBake.EncodeRange:F1}");
+                GD.Print($"[EditorLighting] encode range p99={Vmap.EditorLightBake.EncodeRange:F1}, "
+                    + $"filled {Vmap.EditorLightBake.FilledSamples:N0} black samples, "
+                    + $"{_pendingTraceCount:N0} occluders");
                 _bakedShadowsStale = false;
                 _editorMapVersion = -1;
             }
@@ -5840,6 +5842,9 @@ public sealed partial class NetGame : Node3D
             // time — which is why "_scale and _ambient don't appear to do anything" was literally true.
             if (Menu.MenuState.Cvars is { } lc)
             {
+                // The editor's baked-light globals live with the other world globals; an editor session can
+                // reach this before anything else has caused them to be registered.
+                WorldTint.EnsureRegistered();
                 // Clamped to the range these knobs MEAN, because their meaning changed: cl_editor_light_ambient
                 // used to be a Godot environment energy (where 10 was merely strong) and is now an in-shader
                 // floor (where 10 is an opaque white wash). A value saved under the old semantics must not be
@@ -5847,6 +5852,13 @@ public sealed partial class NetGame : Node3D
                 float sc2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.004f), 0f, 2f);
                 float am2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarAmbient, 0.03f), 0f, 1f);
                 float gm2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeGamma, 1.05f), 0.25f, 4f);
+                float dx2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarDeluxe, 1f), 0f, 1f);
+                if (dx2 != _bakeUniformDeluxe)
+                {
+                    _bakeUniformDeluxe = dx2;
+                    RenderingServer.GlobalShaderParameterSet("editor_deluxe", dx2);
+
+                }
                 if (sc2 != _bakeUniformScale || am2 != _bakeUniformAmbient || gm2 != _bakeUniformGamma)
                 {
                     _bakeUniformScale = sc2;

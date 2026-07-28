@@ -102,6 +102,13 @@ public static class VmapMapBuilder
             }
         }
 
+        // ---- phong: blend the LIGHTING normals across adjacent faces -----------------------------------
+        // q3map_shadeAngle. The mesh stays faceted — this only changes the normal the bake shades with, which
+        // is what stops a curved run of brushes from lighting as a row of flat panels. Done before the bake
+        // because every pass downstream (direct, dirt, bounce, deluxe) wants the smoothed normal.
+        if (EditorLightBake.Active)
+            SmoothShadingNormals(cells, assets);
+
         // ---- bake the vertex lighting ACROSS CORES -----------------------------------------------------
         // Every vertex is independent and the light/occluder indices are read-only, so this is the one place
         // in the build that parallelises perfectly — and it is where the shadow rays are spent.
@@ -400,6 +407,76 @@ public static class VmapMapBuilder
     private static bool Lit;
 
 
+    /// <summary>
+    /// Fill every cell's <see cref="CellSurface.ShadeNormals"/> by averaging the face normals that meet at
+    /// each vertex, limited to those within the material's <c>q3map_shadeAngle</c> of one another.
+    ///
+    /// Two passes because a vertex is shared across cells and materials: the first collects the distinct
+    /// normals meeting at each position in the whole map, the second decides per vertex which of them are
+    /// close enough to blend with. Positions are keyed to a quarter unit so coincident vertices from
+    /// different brushes actually meet.
+    /// </summary>
+    private static void SmoothShadingNormals(
+        Dictionary<(int, int, int), Dictionary<string, CellSurface>> cells, AssetSystem assets)
+    {
+        var meeting = new Dictionary<(int, int, int), List<NVec3>>();
+
+        foreach (Dictionary<string, CellSurface> byMat in cells.Values)
+        foreach (CellSurface cell in byMat.Values)
+        {
+            for (int i = 0; i < cell.Positions.Count; i++)
+            {
+                NVec3 n = Coords.ToQuake(cell.Normals[i]);
+                (int, int, int) key = SmoothKey(Coords.ToQuake(cell.Positions[i]));
+                if (!meeting.TryGetValue(key, out List<NVec3>? list))
+                    meeting[key] = list = new List<NVec3>(4);
+
+                bool seen = false;
+                foreach (NVec3 have in list)
+                    if (NVec3.Dot(have, n) > 0.999f)
+                    {
+                        seen = true;
+                        break;
+                    }
+                if (!seen)
+                    list.Add(n);
+            }
+        }
+
+        foreach (Dictionary<string, CellSurface> byMat in cells.Values)
+        foreach (CellSurface cell in byMat.Values)
+        {
+            float angle = 0f;
+            if (assets.GetShader(cell.Material.Replace('\\', '/')) is { ShadeAngle: > 0f } sh)
+                angle = sh.ShadeAngle;
+
+            cell.ShadeNormals.Clear();
+            float cosLimit = MathF.Cos(Mathf.DegToRad(Math.Clamp(angle, 0f, 180f)));
+
+            for (int i = 0; i < cell.Positions.Count; i++)
+            {
+                NVec3 own = Coords.ToQuake(cell.Normals[i]);
+                if (angle <= 0f
+                    || !meeting.TryGetValue(SmoothKey(Coords.ToQuake(cell.Positions[i])), out List<NVec3>? list)
+                    || list.Count < 2)
+                {
+                    cell.ShadeNormals.Add(own);
+                    continue;
+                }
+
+                NVec3 sum = NVec3.Zero;
+                foreach (NVec3 n in list)
+                    if (NVec3.Dot(own, n) >= cosLimit)
+                        sum += n;
+
+                cell.ShadeNormals.Add(sum.LengthSquared() > 1e-6f ? NVec3.Normalize(sum) : own);
+            }
+        }
+    }
+
+    private static (int, int, int) SmoothKey(NVec3 p) => (
+        (int)MathF.Round(p.X * 4f), (int)MathF.Round(p.Y * 4f), (int)MathF.Round(p.Z * 4f));
+
     /// <summary>Cache so a shared material is built once per map build, not once per cell. Keyed by shader AND
     /// lit-ness, because the two variants of one shader are different materials.</summary>
     private static readonly Dictionary<string, Material> EditorMaterials = new(StringComparer.OrdinalIgnoreCase);
@@ -479,6 +556,10 @@ public static class VmapMapBuilder
             if (diffuse.Glow is not null)
             {
                 baked.SetShaderParameter("glow_tex", diffuse.Glow);
+            // A normal map is what the deluxe term needs to have anything to say; without one the shader
+            // leaves the baked light exactly as the bake computed it.
+            baked.SetShaderParameter("normal_tex", diffuse.Normal);
+            baked.SetShaderParameter("normal_strength", diffuse.Normal is not null ? 1f : 0f);
                 baked.SetShaderParameter("glow_energy", 1.1f);
             }
             else if (bakedEmit > 0f && albedo is not null)
@@ -653,11 +734,16 @@ public static class VmapMapBuilder
             if (EditorLightBake.Deferred)
             {
                 bool haveRetained = EditorLightBake.CacheReady;
+                EnsureDeluxe();
                 for (int i = 0; i < Positions.Count; i++)
                 {
                     NVec3 dp = Coords.ToQuake(Positions[i]);
-                    NVec3 dn = Coords.ToQuake(Normals[i]);
-                    Colors[i] = haveRetained ? EditorLightBake.Resample(dp) : EditorLightBake.Preview(dp, dn);
+                    NVec3 dn = ShadeNormal(i);
+                    NVec3 ld;
+                    Colors[i] = haveRetained
+                        ? EditorLightBake.Resample(dp, out ld)
+                        : EditorLightBake.Preview(dp, dn, out ld);
+                    Deluxe[i] = ld.LengthSquared() > 1e-8f ? ld : dn;
                     EditorLightBake.Capture(dp, dn, AlbedoAverage);
                 }
                 return;
@@ -670,17 +756,45 @@ public static class VmapMapBuilder
                     Dirt.Add(1f);
             }
 
+            EnsureDeluxe();
             for (int i = 0; i < Positions.Count; i++)
             {
                 NVec3 p = Coords.ToQuake(Positions[i]);
-                NVec3 n = Coords.ToQuake(Normals[i]);
+                NVec3 n = ShadeNormal(i);
                 Colors[i] = EditorLightBake.Sample(p, n, AlbedoAverage, out float dirt);
                 Dirt[i] = dirt;
+                Deluxe[i] = EditorLightBake.Resample(p, out NVec3 ld) is var _ && ld.LengthSquared() > 1e-8f
+                    ? ld : n;
             }
         }
 
         /// <summary>Per-vertex openness from the direct pass, reused so the bounce is occluded the same way.</summary>
         public readonly List<float> Dirt = new();
+
+        /// <summary>
+        /// Per-vertex normals for LIGHTING, phong-blended across adjacent faces (q3map_shadeAngle). Quake
+        /// space, and separate from the mesh normals on purpose: the geometry is still faceted.
+        /// </summary>
+        public readonly List<NVec3> ShadeNormals = new();
+
+        /// <summary>
+        /// Per-vertex dominant light direction (Quake space) — the deluxemap. Rides in the mesh's CUSTOM0
+        /// channel so the shader can shade a NORMAL-MAPPED pixel against it.
+        /// </summary>
+        public readonly List<NVec3> Deluxe = new();
+
+        private void EnsureDeluxe()
+        {
+            if (Deluxe.Count == Positions.Count)
+                return;
+            Deluxe.Clear();
+            for (int i = 0; i < Positions.Count; i++)
+                Deluxe.Add(ShadeNormal(i));
+        }
+
+        /// <summary>The lighting normal for vertex i — the smoothed one when there is one.</summary>
+        private NVec3 ShadeNormal(int i) =>
+            i < ShadeNormals.Count ? ShadeNormals[i] : Coords.ToQuake(Normals[i]);
 
         /// <summary>Average albedo of this cell's shader — the colour its bounce light carries.</summary>
         public Color AlbedoAverage = new(0.45f, 0.45f, 0.45f);
@@ -691,7 +805,7 @@ public static class VmapMapBuilder
             for (int i = 0; i < Positions.Count; i++)
             {
                 NVec3 p = Coords.ToQuake(Positions[i]);
-                NVec3 n = Coords.ToQuake(Normals[i]);
+                NVec3 n = ShadeNormal(i);
                 Color bounce = EditorLightBake.SampleBounce(p, n);
                 // Bounce is occluded by the SAME dirt the direct pass measured. Without this the indirect
                 // pass floods exactly the enclosed corners dirt just darkened, and the depth cancels out.
@@ -699,6 +813,54 @@ public static class VmapMapBuilder
                 Color c = Colors[i];
                 Colors[i] = new Color(c.R + bounce.R * d, c.G + bounce.G * d, c.B + bounce.B * d);
             }
+        }
+
+        private uint _customFormat;
+
+        /// <summary>
+        /// Per-vertex tangents from the UV parameterisation (Lengyel's method): accumulate each triangle's
+        /// tangent weighted by its UV area, then orthonormalise against the vertex normal. Godot expects
+        /// four floats per vertex, the fourth being the bitangent's handedness.
+        /// </summary>
+        private float[] BuildTangents()
+        {
+            var tan = new Vector3[Positions.Count];
+            var bit = new Vector3[Positions.Count];
+
+            for (int t = 0; t + 2 < Indices.Count; t += 3)
+            {
+                int i0 = Indices[t], i1 = Indices[t + 1], i2 = Indices[t + 2];
+                Vector3 e1 = Positions[i1] - Positions[i0];
+                Vector3 e2 = Positions[i2] - Positions[i0];
+                Vector2 d1 = Uvs[i1] - Uvs[i0];
+                Vector2 d2 = Uvs[i2] - Uvs[i0];
+
+                float det = d1.X * d2.Y - d2.X * d1.Y;
+                if (MathF.Abs(det) < 1e-12f)
+                    continue;   // degenerate UVs carry no tangent frame
+                float r = 1f / det;
+
+                Vector3 tdir = (e1 * d2.Y - e2 * d1.Y) * r;
+                Vector3 bdir = (e2 * d1.X - e1 * d2.X) * r;
+                tan[i0] += tdir; tan[i1] += tdir; tan[i2] += tdir;
+                bit[i0] += bdir; bit[i1] += bdir; bit[i2] += bdir;
+            }
+
+            var packed = new float[Positions.Count * 4];
+            for (int i = 0; i < Positions.Count; i++)
+            {
+                Vector3 n = Normals[i];
+                Vector3 t = tan[i] - n * n.Dot(tan[i]);            // Gram-Schmidt against the normal
+                t = t.LengthSquared() > 1e-12f ? t.Normalized() : n.Cross(Vector3.Up).Normalized();
+                if (t.LengthSquared() < 0.5f)
+                    t = n.Cross(Vector3.Right).Normalized();       // the normal was parallel to up
+                float w = n.Cross(t).Dot(bit[i]) < 0f ? -1f : 1f;
+                packed[i * 4] = t.X;
+                packed[i * 4 + 1] = t.Y;
+                packed[i * 4 + 2] = t.Z;
+                packed[i * 4 + 3] = w;
+            }
+            return packed;
         }
 
         public void Pack(ArrayMesh mesh)
@@ -724,9 +886,34 @@ public static class VmapMapBuilder
                     packed[i] = new Color(Enc(c.R), Enc(c.G), Enc(c.B));
                 }
                 arrays[(int)Mesh.ArrayType.Color] = packed;
+
+                // Deluxe direction in CUSTOM0, converted to Godot space to match the shader's world basis.
+                if (Deluxe.Count == Positions.Count)
+                {
+                    var custom = new float[Positions.Count * 4];
+                    for (int i = 0; i < Positions.Count; i++)
+                    {
+                        Vector3 d = Coords.ToGodot(Deluxe[i]).Normalized();
+                        custom[i * 4] = d.X;
+                        custom[i * 4 + 1] = d.Y;
+                        custom[i * 4 + 2] = d.Z;
+                        custom[i * 4 + 3] = 1f;
+                    }
+                    arrays[(int)Mesh.ArrayType.Custom0] = custom;
+                    _customFormat = ((uint)Mesh.ArrayCustomFormat.RgbaFloat
+                            << (int)Mesh.ArrayFormat.FormatCustom0Shift)
+                        | (uint)Mesh.ArrayFormat.FormatCustom0;
+                }
+
+                // Tangents, because a normal map without them has no frame to be expressed in — the deluxe
+                // term would then shade every pixel against the flat normal and change nothing.
+                arrays[(int)Mesh.ArrayType.Tangent] = BuildTangents();
             }
             arrays[(int)Mesh.ArrayType.Index] = Indices.ToArray();
-            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            // The custom channel's FORMAT has to be declared in the surface flags or the attribute is
+            // silently dropped — the mesh builds fine and the shader reads zeros.
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays,
+                null, null, (Mesh.ArrayFormat)_customFormat);
         }
     }
 }

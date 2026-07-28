@@ -310,6 +310,13 @@ public sealed class ShaderDef
     /// </summary>
     public float? SurfaceLight { get; set; }
 
+    /// <summary>
+    /// <c>q3map_shadeAngle</c>, degrees: the widest angle between two faces whose lighting normals q3map2
+    /// still blends. It is phong shading for the lightmap only — the geometry stays faceted, the LIGHT stops
+    /// being. stormkeep's own shader sets 150, which smooths across very nearly everything.
+    /// </summary>
+    public float ShadeAngle { get; set; }
+
     /// <summary>The <c>q3map_skylight</c> directive on a sky shader, or null.</summary>
     public SkyLightParms? SkyLight { get; set; }
 

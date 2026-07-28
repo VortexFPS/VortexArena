@@ -131,6 +131,74 @@ public static class EditorLightBake
     /// </summary>
     public static float EncodeRange { get; private set; } = 48f;
 
+    /// <summary>
+    /// q3map2's <c>-fill</c>: replace samples that came out BLACK while their neighbourhood is lit.
+    ///
+    /// A vertex can land inside solid geometry — on a seam, or where two brushes meet — and every light ray
+    /// from it is then blocked at once. The value is not dark, it is zero, and on an interpolated triangle a
+    /// single zero vertex drags a visible wedge of darkness across a lit surface. Only true zeros are
+    /// touched: a legitimately unlit corner has to stay unlit.
+    /// </summary>
+    private static void FillBlackSamples(NVec3[] positions, Color[] values)
+    {
+        const float CellSize = 96f;
+        var buckets = new Dictionary<(int, int, int), List<int>>(values.Length / 8 + 1);
+        for (int i = 0; i < positions.Length; i++)
+        {
+            var key = (
+                (int)MathF.Floor(positions[i].X / CellSize),
+                (int)MathF.Floor(positions[i].Y / CellSize),
+                (int)MathF.Floor(positions[i].Z / CellSize));
+            if (!buckets.TryGetValue(key, out List<int>? list))
+                buckets[key] = list = new List<int>(8);
+            list.Add(i);
+        }
+
+        int filled = 0;
+        var patched = new List<(int Index, Color Value)>();
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i].R + values[i].G + values[i].B > 1e-4f)
+                continue;
+
+            int cx = (int)MathF.Floor(positions[i].X / CellSize);
+            int cy = (int)MathF.Floor(positions[i].Y / CellSize);
+            int cz = (int)MathF.Floor(positions[i].Z / CellSize);
+
+            float r = 0f, g = 0f, b = 0f;
+            int n = 0;
+            for (int x = -1; x <= 1; x++)
+            for (int y = -1; y <= 1; y++)
+            for (int z = -1; z <= 1; z++)
+            {
+                if (!buckets.TryGetValue((cx + x, cy + y, cz + z), out List<int>? near))
+                    continue;
+                foreach (int j in near)
+                {
+                    if (j == i || values[j].R + values[j].G + values[j].B <= 1e-4f)
+                        continue;
+                    r += values[j].R;
+                    g += values[j].G;
+                    b += values[j].B;
+                    n++;
+                }
+            }
+
+            // Needs real support before overwriting: one stray lit neighbour is not evidence.
+            if (n < 3)
+                continue;
+            patched.Add((i, new Color(r / n, g / n, b / n)));
+            filled++;
+        }
+
+        foreach ((int index, Color value) in patched)
+            values[index] = value;
+        FilledSamples = filled;
+    }
+
+    /// <summary>Samples repaired by the last fill pass (diagnostics).</summary>
+    public static int FilledSamples { get; private set; }
+
     /// <summary>Set <see cref="EncodeRange"/> from a completed bake's value distribution.</summary>
     private static void MeasureEncodeRange(Color[] values)
     {
@@ -300,7 +368,8 @@ public static class EditorLightBake
     /// Arm resample-from-the-last-bake mode: <see cref="Sample"/> returns retained light instead of
     /// computing any. Used for every rebuild that is not an explicit rebake.
     /// </summary>
-    public static Color Resample(NVec3 positionQuake) => SampleCached(positionQuake);
+    public static Color Resample(NVec3 positionQuake, out NVec3 lightDir) =>
+        SampleCached(positionQuake, out lightDir);
 
     public static void BeginCached()
     {
@@ -427,6 +496,7 @@ public static class EditorLightBake
             Color[] alb = set.Albedos.ToArray();
             var result = new Color[pos.Length];
             var dirt = new float[pos.Length];
+            var dirs = new NVec3[pos.Length];
 
             await System.Threading.Tasks.Task.Run(() =>
             {
@@ -439,8 +509,9 @@ public static class EditorLightBake
                     int end = Math.Min(start + ChunkSize, pos.Length);
                     for (int i = start; i < end; i++)
                     {
-                        result[i] = SampleDirect(pos[i], nrm[i], alb[i], out float d);
+                        result[i] = SampleDirect(pos[i], nrm[i], alb[i], out float d, out NVec3 ld);
                         dirt[i] = d;
+                        dirs[i] = ld;
                     }
                     Interlocked.Add(ref _progress, end - start);
                 });
@@ -470,10 +541,11 @@ public static class EditorLightBake
             // map lit in patches, which is worse than the lighting it replaced.
             if (Volatile.Read(ref _cancel) == 0)
             {
+                FillBlackSamples(pos, result);
                 MeasureEncodeRange(result);
                 CacheReset();
                 for (int i = 0; i < pos.Length; i++)
-                    CacheStore(pos[i], result[i]);
+                    CacheStore(pos[i], result[i], dirs[i]);
             }
         }
         finally
@@ -492,14 +564,16 @@ public static class EditorLightBake
     {
         _cache.Clear();
         _exact.Clear();
+        _exactDir.Clear();
     }
 
     /// <summary>Retain one baked sample. Called for every vertex of a completed bake.</summary>
-    public static void CacheStore(NVec3 positionQuake, Color color)
+    public static void CacheStore(NVec3 positionQuake, Color color, NVec3 lightDir = default)
     {
         // EXACT, keyed to a quarter unit: a rebuild of unedited geometry regenerates the very same vertex
         // positions, so this hands back the bake bit for bit rather than a neighbourhood average.
         _exact[ExactKey(positionQuake)] = new NVec3(color.R, color.G, color.B);
+        _exactDir[ExactKey(positionQuake)] = lightDir;
 
         var key = (
             (int)MathF.Floor(positionQuake.X / CacheCell),
@@ -514,15 +588,22 @@ public static class EditorLightBake
 
     private static readonly Dictionary<(int, int, int), NVec3> _exact = new();
 
+    /// <summary>Deluxe direction per exact vertex, so a resample keeps the per-pixel term too.</summary>
+    private static readonly Dictionary<(int, int, int), NVec3> _exactDir = new();
+
     /// <summary>
     /// Retained light at a position: its own cell, else the mean of whatever neighbours have samples.
     /// Geometry that did not exist at bake time therefore inherits its surroundings' lighting rather than
     /// rendering black or white — approximate on purpose, and the stale indicator says so.
     /// </summary>
-    private static Color SampleCached(NVec3 position)
+    private static Color SampleCached(NVec3 position, out NVec3 lightDir)
     {
+        lightDir = NVec3.Zero;
         if (_exact.TryGetValue(ExactKey(position), out NVec3 exact))
+        {
+            _exactDir.TryGetValue(ExactKey(position), out lightDir);
             return new Color(exact.X, exact.Y, exact.Z);
+        }
 
         int cx = (int)MathF.Floor(position.X / CacheCell);
         int cy = (int)MathF.Floor(position.Y / CacheCell);
@@ -617,8 +698,8 @@ public static class EditorLightBake
     {
         dirt = 1f;
         if (_cacheMode)
-            return SampleCached(position);
-        return SampleDirect(position, normal, albedo, out dirt);
+            return SampleCached(position, out _);
+        return SampleDirect(position, normal, albedo, out dirt, out _);
     }
 
     /// <summary>
@@ -632,17 +713,22 @@ public static class EditorLightBake
     /// build of a session renders BLACK for as long as the background bake takes, which reads as a broken
     /// editor rather than a working one.
     /// </summary>
-    public static Color Preview(NVec3 position, NVec3 normal) =>
-        SampleDirect(position, normal, _greyAlbedo, out _);
+    public static Color Preview(NVec3 position, NVec3 normal, out NVec3 lightDir) =>
+        SampleDirect(position, normal, _greyAlbedo, out _, out lightDir);
 
-    private static Color SampleDirect(NVec3 position, NVec3 normal, Color albedo, out float dirt)
+    private static Color SampleDirect(
+        NVec3 position, NVec3 normal, Color albedo, out float dirt, out NVec3 lightDir)
     {
         dirt = 1f;
+        lightDir = normal;
         if (_grid is not { } grid)
             return Colors.Black;
 
         dirt = DirtFactor(position, normal);
-        Color direct = GatherDirect(grid, position, normal);
+        Color direct = GatherDirect(grid, position, normal, out NVec3 dirSum);
+        // Fall back to the surface normal where nothing lit this sample: a zero direction would make the
+        // per-pixel term meaningless rather than merely neutral.
+        lightDir = dirSum.LengthSquared() > 1e-8f ? NVec3.Normalize(dirSum) : normal;
         direct = new Color(direct.R * dirt, direct.G * dirt, direct.B * dirt);
 
         // The sun and the sky dome are ordinary baked lights now (q3map2 treats them as lights too), so
@@ -656,8 +742,15 @@ public static class EditorLightBake
         return direct;
     }
 
-    private static Color GatherDirect(Grid grid, NVec3 position, NVec3 normal)
+    /// <param name="dirSum">
+    /// Accumulated light DIRECTION, weighted by each light's contribution — q3map2's deluxemap. Normalised
+    /// by the caller. This is what lets a per-pixel normal map react to baked light: irradiance alone says
+    /// how much light arrived, never which way it came from, so every pixel of a face shades identically no
+    /// matter what its normal map says.
+    /// </param>
+    private static Color GatherDirect(Grid grid, NVec3 position, NVec3 normal, out NVec3 dirSum)
     {
+        dirSum = NVec3.Zero;
         float r = 0f, g = 0f, b = 0f;
 
         grid.Buckets.TryGetValue(Grid.Cell(position), out List<int>? local);
@@ -766,6 +859,10 @@ public static class EditorLightBake
             r += l.Color.R * k;
             g += l.Color.G * k;
             b += l.Color.B * k;
+
+            // Weight the direction by the LUMINOUS contribution, so the brightest source dominates rather
+            // than the nearest or the most numerous.
+            dirSum += dir * (k * (l.Color.R + l.Color.G + l.Color.B));
         }
 
         return new Color(r, g, b);

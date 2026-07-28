@@ -182,6 +182,15 @@ public sealed partial class EditorLighting : Node3D
     public const string CvarDeluxe = "cl_editor_deluxe";
 
     /// <summary>
+    /// Show the ORIGINAL compiled BSP instead of the regenerated world (the key-0 comparison, as a cvar).
+    /// Exists so a SCRIPTED capture can take both legs with the same camera, the same post-processing and
+    /// the same session — making the world itself the only difference. Comparing an editor capture against a
+    /// separately hosted match instead leaves several other variables in the frame, which is how a
+    /// hand-written pixel rule came to report the same number for three different configurations.
+    /// </summary>
+    public const string CvarShowBsp = "cl_editor_show_bsp";
+
+    /// <summary>
     /// Bloom over the editor world. Default OFF: the baked light is HDR and the fixture strips sit at the
     /// top of its range, so glow smears them across the whole frame — a uniform lift that reads as flat and
     /// that no lighting knob can counteract, because bloom is downstream of all of them.

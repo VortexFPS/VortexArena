@@ -5983,6 +5983,17 @@ public sealed partial class NetGame : Node3D
             editorPanel.BakePhase = Vmap.EditorLightBake.ProgressPhase;
             editorPanel.ApplyRemaining = Vmap.VmapMapBuilder.RecolorRemaining;
             editorPanel.ApplyTotal = Vmap.VmapMapBuilder.RecolorTotal;
+            // The cvar is the same switch key 0 flips, so a scripted capture and a keypress cannot disagree.
+            if (Menu.MenuState.Cvars is { } bc3)
+            {
+                bool want = !string.IsNullOrEmpty(bc3.GetString(Vmap.EditorLighting.CvarShowBsp))
+                    && bc3.GetFloat(Vmap.EditorLighting.CvarShowBsp) != 0f;
+                if (want != _editorShowBsp)
+                {
+                    _editorShowBsp = want;
+                    ApplyEditorWorldVisibility();
+                }
+            }
             editorPanel.ShowingBsp = _editorShowBsp;
             editorPanel.BakeProgress = Vmap.EditorLightBake.ProgressTotal > 0
                 ? (float)Vmap.EditorLightBake.Progress / Vmap.EditorLightBake.ProgressTotal
@@ -7527,6 +7538,7 @@ public sealed partial class NetGame : Node3D
                 // instead of by relaunching into a plain match and flying back to the spot.
                 _editorShowBsp = !_editorShowBsp;
                 ApplyEditorWorldVisibility();
+                Menu.MenuState.Cvars?.Set(Vmap.EditorLighting.CvarShowBsp, _editorShowBsp ? "1" : "0");
                 return true;
         }
 

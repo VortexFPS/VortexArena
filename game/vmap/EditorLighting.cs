@@ -126,6 +126,21 @@ public sealed partial class EditorLighting : Node3D
     public const string CvarRangeScale = "cl_editor_light_range";
 
     /// <summary>
+    /// Emit real light from <c>q3map_surfaceLight</c> faces (default on).
+    ///
+    /// This is most of a Xonotic map's illumination. The point-light entities are the minority term —
+    /// stormkeep's are mostly `light 40` accents — while the glowing ceiling strips and panels carry values
+    /// like 250-3000 and are what q3map2 actually lights the rooms with, by converting each emissive surface
+    /// into light emitters at compile time. An editor that honours only the `light` entities renders those
+    /// panels dark and the rooms under them black, which is why the fixtures read as "not working" even after
+    /// every entity-light bug was fixed. One omni per emissive face, energy from emit x area, capped.
+    /// </summary>
+    public const string CvarSurfaceLights = "cl_editor_surface_lights";
+
+    /// <summary>Cap on generated surface lights (the largest emitters win). Keeps pathological maps bounded.</summary>
+    private const int MaxSurfaceLights = 224;
+
+    /// <summary>
     /// Compensation for the inverse-square falloff. Godot's attenuation exponent steepens the curve toward the
     /// edge of the range, so matching a linear light's mid-range brightness needs more energy at the source.
     /// </summary>
@@ -188,6 +203,9 @@ public sealed partial class EditorLighting : Node3D
         }
 
         rig.BuildSun(doc, assets, brightness, cvars);
+        // After the sun, so the summary line reports whether it came from the map. Order is otherwise free.
+        if (ReadFloat(cvars, CvarSurfaceLights, 1f) != 0f)
+            rig.BuildSurfaceLights(doc, assets, brightness);
 
         return rig;
     }
@@ -242,7 +260,11 @@ public sealed partial class EditorLighting : Node3D
                 LightSpecular = 0.25f,
                 LightBakeMode = _bakeMode,
             };
-            spot.LookAtFromPosition(Coords.ToGodot(origin), Coords.ToGodot(aim), Vector3.Up);
+            // A ceiling spot aims straight down, making the default up vector colinear with the aim —
+            // Godot warns per light. Any perpendicular up will do; pick one based on the aim direction.
+            Vector3 aimG = Coords.ToGodot(aim);
+            Vector3 dir = (aimG - spot.Position).Normalized();
+            spot.LookAtFromPosition(spot.Position, aimG, Mathf.Abs(dir.Y) > 0.99f ? Vector3.Right : Vector3.Up);
             return spot;
         }
 
@@ -274,6 +296,85 @@ public sealed partial class EditorLighting : Node3D
     /// The sun, from the sky shader's <c>q3map_sun</c> when the map defines one. Xonotic skies usually do;
     /// when none is found a soft default from above keeps exteriors readable rather than flat.
     /// </summary>
+    /// <summary>
+    /// One omni per <c>q3map_surfaceLight</c> face, just off the surface along its normal — the real-time
+    /// stand-in for q3map2 converting emissive surfaces into light emitters at compile time (see
+    /// <see cref="CvarSurfaceLights"/>). Energy scales with emit x area, because a long ceiling strip lights a
+    /// hall and a small button does not, and that is exactly how the bake weighs them.
+    /// </summary>
+    private void BuildSurfaceLights(VmapDocument doc, AssetSystem assets, float brightness)
+    {
+        var candidates = new List<(float Weight, OmniLight3D Light)>();
+
+        foreach (VmapBrush brush in doc.Brushes)
+        {
+            if (brush.IsToolBrush)
+                continue;
+
+            NVec3[][] windings = VmapWinding.BuildBrushWindings(brush);
+            for (int i = 0; i < windings.Length && i < brush.Faces.Count; i++)
+            {
+                NVec3[] w = windings[i];
+                if (w.Length < 3)
+                    continue;
+
+                VmapFace face = brush.Faces[i];
+                float emit = VmapMapBuilder.SurfaceEmit(assets, face.Material);
+                if (emit <= 0f)
+                    continue;
+
+                NVec3 centroid = NVec3.Zero;
+                foreach (NVec3 v in w)
+                    centroid += v;
+                centroid /= w.Length;
+
+                float area = 0f;
+                for (int t = 1; t + 1 < w.Length; t++)
+                    area += 0.5f * NVec3.Cross(w[t] - w[0], w[t + 1] - w[0]).Length();
+                if (area < 4f)
+                    continue;
+
+                // emit x area is the bake's weighting; the divisor normalises a typical Xonotic ceiling strip
+                // (emit ~1000, area ~4096) to roughly a bright fixture.
+                float energy = brightness * Math.Clamp(emit * area / 1_500_000f, 0.15f, 5f) * EnergyForFalloff;
+                float range = Math.Clamp(MathF.Sqrt(emit * area) * 0.5f, 192f, MaxRange) * _rangeScale;
+
+                var light = new OmniLight3D
+                {
+                    Name = $"EditorSurfLight_{candidates.Count}",
+                    Position = Coords.ToGodot(centroid + face.Plane.Normal * 24f),
+                    LightColor = Colors.White,
+                    LightEnergy = energy,
+                    OmniRange = range,
+                    OmniAttenuation = _falloff,
+                    ShadowEnabled = false,
+                    LightSpecular = 0.15f,
+                    LightBakeMode = _bakeMode,
+                };
+                candidates.Add((energy * range, light));
+            }
+        }
+
+        // Largest emitters win the cap; the rest are dropped LOUDLY (house rule: no silent truncation).
+        candidates.Sort(static (x, y) => y.Weight.CompareTo(x.Weight));
+        int kept = Math.Min(MaxSurfaceLights, candidates.Count);
+        for (int i = 0; i < kept; i++)
+        {
+            _points.Add(candidates[i].Light);
+            AddChild(candidates[i].Light);
+        }
+        for (int i = kept; i < candidates.Count; i++)
+            candidates[i].Light.QueueFree();
+
+        SurfaceLightCount = kept;
+        GD.Print($"[EditorLighting] {_points.Count - kept} entity lights, {kept} surface lights"
+            + (candidates.Count > kept ? $" ({candidates.Count - kept} smaller emitters dropped by the cap)" : "")
+            + $", sun={(HasMapSun ? "map" : "default")}");
+    }
+
+    /// <summary>Surface lights actually built (diagnostics / HUD).</summary>
+    public int SurfaceLightCount { get; private set; }
+
     /// <summary>Origin of the entity whose <c>targetname</c> matches, or null.</summary>
     private static NVec3? FindTargetOrigin(VmapDocument doc, string target)
     {
@@ -341,7 +442,8 @@ public sealed partial class EditorLighting : Node3D
             // needs "is this wall blocking the sun" answered, not film-quality cascade transitions.
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits,
         };
-        light.LookAtFromPosition(Vector3.Zero, Coords.ToGodot(fromSun), Vector3.Up);
+        Vector3 sunDir = Coords.ToGodot(fromSun).Normalized();
+        light.LookAtFromPosition(Vector3.Zero, sunDir, Mathf.Abs(sunDir.Y) > 0.99f ? Vector3.Right : Vector3.Up);
 
         _sun = light;
         AddChild(light);

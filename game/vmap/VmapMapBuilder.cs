@@ -123,6 +123,13 @@ public static class VmapMapBuilder
                 // SDFGI only sees geometry that opts in. Static is right even though the map is being edited:
                 // it describes how the surface participates in GI, and a rebuild re-registers it anyway.
                 GIMode = GeometryInstance3D.GIModeEnum.Static,
+                // DOUBLE-SIDED shadows, though the materials are cull_back. The occlusion-culled world keeps
+                // only the visible skin, so a roof exists solely as its interior ceiling face — which, seen
+                // from the sun outside the map, is a backface. A one-sided shadow pass skips it and the sun
+                // pours straight through the roof, while walls whose exterior faces happened to survive DO
+                // block: exactly the "wrong geometry casts the shadow" symptom. Double-sided casting makes
+                // every kept face a blocker from both sides.
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.DoubleSided,
             };
             for (int s = 0; s < materials.Count; s++)
                 instance.SetSurfaceOverrideMaterial(s, materials[s]);
@@ -303,21 +310,46 @@ public static class VmapMapBuilder
             mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
         }
 
-        // Surface lights (q3map_surfaceLight): the glowing strips and panels that do most of an Xonotic map's
-        // lighting. Emission does not illuminate neighbours without GI — that is rung 2 — but a lit room whose
-        // light fixtures are dark reads as broken, and this is the same value an area light will consume.
-        if (Lit && assets.GetShader(shaderName.Replace('\\', '/')) is { SurfaceLight: { } emit } && emit > 0f)
+        if (Lit)
         {
-            mat.EmissionEnabled = true;
-            mat.Emission = Colors.White;
-            // q3map_surfaceLight runs from ~100 (a dim panel) to several thousand (a sky portal). Compress it
-            // into a sane emission range rather than passing it through and blowing out the tonemapper.
-            mat.EmissionEnergyMultiplier = Math.Clamp(emit / 400f, 0.2f, 6f);
-            mat.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
+            // The fixture's own face must GLOW. Two sources, in order:
+            //   - the shader's glow companion page (the bright part of the light-panel textures). The BSP path
+            //     draws these additively; the lit editor material was dropping them entirely, which is why
+            //     light fixtures rendered as dark plates — "the fixtures aren't showing at all".
+            //   - for a q3map_surfaceLight shader with no glow page, the albedo itself, scaled by the emit
+            //     value. Self-glow only: the light these panels THROW is EditorLighting's surface lights.
+            float emit = SurfaceEmit(assets, shaderName);
+            if (diffuse.Glow is not null)
+            {
+                mat.EmissionEnabled = true;
+                mat.Emission = Colors.White;
+                mat.EmissionTexture = diffuse.Glow;
+                mat.EmissionEnergyMultiplier = 2f;
+            }
+            else if (emit > 0f)
+            {
+                mat.EmissionEnabled = true;
+                mat.Emission = Colors.White;
+                mat.EmissionTexture = albedo;
+                mat.EmissionEnergyMultiplier = Math.Clamp(emit / 400f, 0.5f, 4f);
+            }
         }
 
         EditorMaterials[key] = mat;
         return mat;
+    }
+
+    /// <summary>
+    /// The shader's <c>q3map_surfaceLight</c> emission value, or 0. Falls back to a modest default when the
+    /// shader def is missing but the material NAME says it is a surface light (q3map2-era content sometimes
+    /// references compiled-in shader variants that have no script on disk).
+    /// </summary>
+    internal static float SurfaceEmit(AssetSystem assets, string material)
+    {
+        string name = (material ?? string.Empty).Replace('\\', '/');
+        if (assets.GetShader(name) is { } def)
+            return def.SurfaceLight ?? 0f;
+        return name.Contains("surfacelight", StringComparison.OrdinalIgnoreCase) ? 400f : 0f;
     }
 
     /// <summary>Drop cached materials (called when a session closes so textures are not pinned forever).</summary>

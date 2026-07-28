@@ -137,7 +137,7 @@ public static class NetProtocol
     /// advertising the same version with different entity layouts, where the handshake passes and ReadDelta
     /// corrupt-decodes. That worked as designed: weapon-item-colors merged first, so this change lands as 18.
     /// Keep using the skip trick for concurrent wire branches; never reuse 16.
-    public const uint ProtocolVersion = 18;
+    public const uint ProtocolVersion = 19; // v19: the scoreboard block carries the per-viewer item-pickup tally (Item stats grid)
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;

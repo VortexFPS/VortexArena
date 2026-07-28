@@ -137,6 +137,17 @@ public partial class ConsoleOverlay : CanvasLayer
             else Print("usage: map <name>");
         });
         interp.RegisterCommand("devmap", a => { if (a.Count >= 2) MenuCommand.StartMap?.Invoke(a[1]); });
+        // QC Cmd_Scoreboard_SetFields (client/hud/panel/scoreboard.qc:767), exposed in Base as the
+        // `scoreboard_columns_set` client command: set the scoreboard's column layout. No argument re-applies the
+        // saved `scoreboard_columns`; "default" / "all" select the two presets; anything else is a literal spec
+        // ("ping pl name | score deaths"). The scoreboard reads the cvar live, so writing it IS the command.
+        interp.RegisterCommand("scoreboard_columns_set", a =>
+        {
+            if (a.Count < 2) { MenuState.Cvars.Set("scoreboard_columns", MenuState.Cvars.GetString("scoreboard_columns")); return; }
+            string spec = string.Join(' ', a.Skip(1));
+            MenuState.Cvars.Set("scoreboard_columns", spec);
+        });
+
         interp.RegisterCommand("vid_restart", _ => MenuCommand.VideoRestart?.Invoke());
         interp.RegisterCommand("snd_restart", _ => MenuCommand.AudioRestart?.Invoke());
         interp.RegisterCommand("togglemenu", a =>

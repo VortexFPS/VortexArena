@@ -67,8 +67,17 @@ public static class Teleporters
             return;
         }
 
-        // Resolve the (single) destination now if there's exactly one; otherwise pick at teleport time.
-        FindTarget(this_);
+        // QC teleport.qc:131 — InitializeEntity(this, teleport_findtarget, INITPRIO_FINDTARGET): the destination
+        // lookup is DEFERRED until the whole entity lump has spawned. Resolving it inline here made the cached
+        // single destination (.Enemy) depend on entity ORDER in the BSP lump: on fuse, the second teleporter is
+        // written BEFORE its misc_teleporter_dest, so the lookup found 0 destinations and left .Enemy null. The
+        // server still teleported correctly (PickDestination re-scans live), but TriggerTouch.PredictTeleportsAmbient
+        // only predicts a teleporter with a cached .Enemy — so that one teleporter was never client-predicted and
+        // the local player ran on past the trigger until the server correction snapped them to the exit a round
+        // trip later, which reads as the exit landing in the wrong place. Queue it for the same post-lump pass
+        // target_teleporter already uses.
+        if (!_pendingFindTarget.Contains(this_))
+            _pendingFindTarget.Add(this_);
     }
 
     /// <summary><c>spawnfunc(info_teleport_destination)</c> / <c>misc_teleporter_dest</c> — a teleport endpoint.</summary>
@@ -99,19 +108,37 @@ public static class Teleporters
     /// <summary>INITPRIO_FINDTARGET queue for <c>target_teleporter_checktarget</c> (drained by RunDeferredInit).</summary>
     private static readonly List<Entity> _pendingTargetTeleporter = new();
 
+    /// <summary>INITPRIO_FINDTARGET queue for <c>teleport_findtarget</c> — every <c>trigger_teleport</c> with a
+    /// target (QC teleport.qc:131). Drained by <see cref="RunDeferredInit"/>.</summary>
+    private static readonly List<Entity> _pendingFindTarget = new();
+
     /// <summary>
-    /// Drain the queued <c>target_teleporter</c> disambiguation (QC INITPRIO_FINDTARGET pass), run after the
-    /// whole BSP entity lump has spawned so the "is anything targeting me?" lookup sees every teleporter.
+    /// Drain the queued INITPRIO_FINDTARGET work — <c>teleport_findtarget</c> for every <c>trigger_teleport</c>
+    /// and the <c>target_teleporter</c> disambiguation — run after the whole BSP entity lump has spawned so both
+    /// the destination lookup and the "is anything targeting me?" lookup see every entity regardless of lump order.
     /// </summary>
     public static void RunDeferredInit()
     {
-        if (_pendingTargetTeleporter.Count == 0)
-            return;
-        Entity[] batch = _pendingTargetTeleporter.ToArray();
-        _pendingTargetTeleporter.Clear();
-        foreach (Entity e in batch)
-            if (!e.IsFreed)
-                TargetTeleporterCheckTarget(e);
+        if (_pendingTargetTeleporter.Count > 0)
+        {
+            Entity[] batch = _pendingTargetTeleporter.ToArray();
+            _pendingTargetTeleporter.Clear();
+            foreach (Entity e in batch)
+                if (!e.IsFreed)
+                    TargetTeleporterCheckTarget(e);
+        }
+
+        // trigger_teleport destination resolution + touch wiring (QC teleport_findtarget). Runs AFTER the
+        // target_teleporter pass, which can turn a target_teleporter into an info_teleport_destination —
+        // a teleporter targeting one must see it already re-routed.
+        if (_pendingFindTarget.Count > 0)
+        {
+            Entity[] batch = _pendingFindTarget.ToArray();
+            _pendingFindTarget.Clear();
+            foreach (Entity e in batch)
+                if (!e.IsFreed)
+                    FindTarget(e);
+        }
     }
 
     /// <summary>

@@ -149,6 +149,14 @@ public static class BindTable
     /// switched-to weapon doesn't surprise-fire the moment it raises.</summary>
     public static void ReleaseAttack() => _attack = _attack2 = false;
 
+    /// <summary>
+    /// Release the <c>+showscores</c> button (QC <c>HUD_Scoreboard_UI_Disable</c> sets <c>sb_showscores = false</c>,
+    /// scoreboard.qc:184). Closing the interactive scoreboard while the scoreboard key is still HELD must clear the
+    /// held state, or the board stays up, its fade never reaches 0, and the UI never finishes tearing down — it sits
+    /// in "disabling" limbo ignoring input until the key is physically released. Re-latches on the next press.
+    /// </summary>
+    public static void ReleaseShowScores() => ShowScores = false;
+
     /// <summary>True when a '+'/'-' bind command is one of the held engine BUTTONS <see cref="SetButton"/> tracks
     /// (movement/fire/zoom/use/hook/showscores). Anything else (e.g. +hud_panel_radar_maximized) is a press-toggle
     /// alias that <see cref="HandleBind"/> dispatches to the command sink instead of latching as a button. Kept in

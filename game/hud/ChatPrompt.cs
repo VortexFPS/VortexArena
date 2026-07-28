@@ -28,6 +28,10 @@ public partial class ChatPrompt : Control
     private const int MaxLength = 255;
 
     private bool _team;
+    /// <summary>DP <c>commandmode</c> (the <c>/</c> prompt): the typed line is a raw COMMAND, submitted verbatim
+    /// instead of being wrapped in <c>say</c>. Used by the interactive scoreboard's Ctrl+T (QC
+    /// <c>localcmd("commandmode tell \"name^7\"")</c>), which prefills the line and lets the player finish it.</summary>
+    private bool _commandMode;
     private string _text = "";
     private float _caretPhase;
 
@@ -44,10 +48,19 @@ public partial class ChatPrompt : Control
     }
 
     /// <summary>Open the prompt (QC/DP <c>messagemode</c> = public, <c>messagemode2</c> = team chat).</summary>
-    public void Open(bool team)
+    public void Open(bool team) => Open(team, commandMode: false, prefill: "");
+
+    /// <summary>
+    /// DP <c>messagemode</c> / <c>messagemode2</c> / <c>commandmode</c> with an optional prefilled line.
+    /// <paramref name="commandMode"/> submits the text as a raw console/server command (DP's <c>commandmode</c>),
+    /// which is how QC's scoreboard opens a half-typed <c>tell "player"</c> for the player to complete.
+    /// </summary>
+    public void Open(bool team, bool commandMode, string prefill)
     {
         _team = team;
-        _text = "";
+        _commandMode = commandMode;
+        _text = prefill ?? "";
+        if (_text.Length > MaxLength) _text = _text[..MaxLength];
         Visible = true;
         IsOpen = true;
         SetProcess(true); // run the caret-blink _Process while open
@@ -58,6 +71,7 @@ public partial class ChatPrompt : Control
     {
         Visible = false;
         IsOpen = false;
+        _commandMode = false;
         _text = "";
         SetProcess(false); // stop ticking when closed (the node lives for the whole session)
     }
@@ -106,7 +120,7 @@ public partial class ChatPrompt : Control
                     return; // a HELD Enter (the bind that opened us) must not auto-submit/close on its OS repeat
                 string text = _text.Trim();
                 if (text.Length > 0)
-                    Submit?.Invoke((_team ? "say_team " : "say ") + text);
+                    Submit?.Invoke(_commandMode ? text : (_team ? "say_team " : "say ") + text);
                 Close();
                 return;
             case Key.Backspace:
@@ -143,13 +157,13 @@ public partial class ChatPrompt : Control
         if (!Visible) return;
         Font font = HudPanel.HudFont ?? ThemeDB.FallbackFont;
         int fs = Mathf.Clamp((int)(GetViewportRect().Size.Y / 40f), 14, 26);
-        string prompt = _team ? "say_team:" : "say:";
+        string prompt = _commandMode ? "]" : _team ? "say_team:" : "say:";
         // DP draws the prompt at the top-left of the screen over the game view.
         var pos = new Vector2(8f, 8f + fs);
         string caret = (int)(_caretPhase * 2f) % 2 == 0 ? "_" : " ";
         // Faint backdrop band so the line reads over a bright sky.
         DrawRect(new Rect2(4f, 6f, GetViewportRect().Size.X * 0.6f, fs * 1.5f), new Color(0f, 0f, 0f, 0.35f));
         DrawString(font, pos, $"{prompt} {_text}{caret}", HorizontalAlignment.Left, -1f, fs,
-            _team ? new Color(0.55f, 1f, 0.55f) : Colors.White);
+            _commandMode ? new Color(1f, 0.9f, 0.5f) : _team ? new Color(0.55f, 1f, 0.55f) : Colors.White);
     }
 }

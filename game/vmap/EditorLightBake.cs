@@ -67,7 +67,7 @@ public static class EditorLightBake
     private const float BounceAlbedo = 0.5f;
 
     /// <summary>Reach of one bounce emitter, in Quake units.</summary>
-    private const float BounceRange = 560f;
+    private const float BounceRange = 768f;
 
     /// <summary>Shadow rays traced during the last bake (diagnostics).</summary>
     public static long RaysTraced;
@@ -109,16 +109,36 @@ public static class EditorLightBake
     private static Grid? _bounceGrid;
     private static EditorShadowTrace? _shadows;
     private static bool _bounceWanted;
+    private static int _bounces = 8;
+    private static NVec3? _sunDir;          // direction TOWARD the sun, Quake space
+    private static Color _sunColor;
+    private static float _sunEnergy;
+
+    /// <summary>
+    /// Scale of the sun's contribution INTO THE BOUNCE. The sun's direct term stays real-time (its crisp
+    /// dynamic shadows are the one thing worth per-frame cost); what was missing is everything that light
+    /// does after it lands — on stormkeep, sun bouncing off the lit floor is a large share of the compiled
+    /// look. q3map's sun intensities dwarf its fixture values, hence the multiplier.
+    /// </summary>
+    private const float SunBounceScale = 5f;
+
+    /// <summary>How far the sun-visibility ray travels before the sample counts as outdoors, Quake units.</summary>
+    private const float SunRayLength = 16384f;
 
     /// <summary>Arm a bake.</summary>
     /// <param name="lights">The fixtures to bake.</param>
     /// <param name="shadows">Occluder index for traced shadows, or null for the unshadowed bake.</param>
     /// <param name="bounce">Accumulate and re-emit indirect light (the second pass).</param>
-    public static void Begin(IReadOnlyList<BakedLight> lights, EditorShadowTrace? shadows = null, bool bounce = true)
+    public static void Begin(IReadOnlyList<BakedLight> lights, EditorShadowTrace? shadows = null, bool bounce = true,
+        int bounces = 8, NVec3? sunDirToSun = null, Color sunColor = default, float sunEnergy = 0f)
     {
         _grid = new Grid(lights);
         _shadows = shadows;
         _bounceWanted = bounce;
+        _bounces = Math.Clamp(bounces, 1, 16);
+        _sunDir = sunDirToSun is { } d && d.LengthSquared() > 1e-6f ? NVec3.Normalize(d) : null;
+        _sunColor = sunColor;
+        _sunEnergy = sunEnergy;
         _bounceGrid = null;
         _bounceAccum.Clear();
     }
@@ -152,8 +172,30 @@ public static class EditorLightBake
 
         Color direct = GatherDirect(grid, position, normal);
 
-        if (_bounceWanted && (direct.R > 0.001f || direct.G > 0.001f || direct.B > 0.001f))
-            AccumulateBounce(position, normal, direct);
+        // The SUN's landing feeds the bounce and only the bounce: its direct term is the real-time light
+        // (crisp dynamic shadows), so baking it too would double it — but the light it throws around a room
+        // after landing was simply missing, and that bounce is a large share of the compiled look.
+        Color received = direct;
+        if (_bounceWanted && _sunDir is { } sunDir && _shadows is { } sunShadows)
+        {
+            float sunDot = NVec3.Dot(normal, sunDir);
+            if (sunDot > 0f)
+            {
+                System.Threading.Interlocked.Increment(ref RaysTraced);
+                NVec3 from = position + normal * EditorShadowTrace.SurfaceBias;
+                if (!sunShadows.IsOccluded(from, from + sunDir * SunRayLength))
+                {
+                    float k = _sunEnergy * sunDot * SunBounceScale;
+                    received = new Color(
+                        received.R + _sunColor.R * k,
+                        received.G + _sunColor.G * k,
+                        received.B + _sunColor.B * k);
+                }
+            }
+        }
+
+        if (_bounceWanted && (received.R > 0.001f || received.G > 0.001f || received.B > 0.001f))
+            AccumulateBounce(position, normal, received);
 
         return direct;
     }
@@ -291,24 +333,63 @@ public static class EditorLightBake
             return 0;
         }
 
-        var emitters = new List<BakedLight>(_bounceAccum.Count);
+        var pos = new List<NVec3>(_bounceAccum.Count);
+        var nrm = new List<NVec3>(_bounceAccum.Count);
+        var col = new List<NVec3>(_bounceAccum.Count);   // rgb energy, unnormalised
         foreach (BounceAccum acc in _bounceAccum.Values)
         {
             if (acc.W <= 1e-3f)
                 continue;
+            NVec3 p2 = acc.PosW / acc.W;
+            NVec3 n2 = acc.NormW.LengthSquared() > 1e-6f ? NVec3.Normalize(acc.NormW) : new NVec3(0f, 0f, 1f);
+            pos.Add(p2 + n2 * 24f);
+            nrm.Add(n2);
+            col.Add(new NVec3(acc.R, acc.G, acc.B) * (BounceAlbedo * 0.06f));
+        }
 
-            NVec3 pos = acc.PosW / acc.W;
-            NVec3 normal = acc.NormW.LengthSquared() > 1e-6f ? NVec3.Normalize(acc.NormW) : new NVec3(0f, 0f, 1f);
-            float sum = acc.R + acc.G + acc.B;
-            var tint = new Color(acc.R / sum, acc.G / sum, acc.B / sum);
+        // Bounces 2..N as EMITTER-TO-EMITTER radiosity. Iterating at the patch level is what makes "8
+        // bounces like the map's own compile" affordable: each pass is a few hundred squared cheap pairs,
+        // instead of re-gathering over every baked vertex. Energy decays by the albedo each pass, so the
+        // series converges the same way q3map2's does.
+        int passes = _bounces - 1;
+        var add = new NVec3[pos.Count];
+        for (int pass = 0; pass < passes; pass++)
+        {
+            Array.Clear(add);
+            for (int i = 0; i < pos.Count; i++)
+            {
+                for (int j = 0; j < pos.Count; j++)
+                {
+                    if (i == j)
+                        continue;
+                    NVec3 delta = pos[i] - pos[j];
+                    float dist2 = delta.LengthSquared();
+                    if (dist2 >= BounceRange * BounceRange || dist2 < 1f)
+                        continue;
+                    float dist = MathF.Sqrt(dist2);
+                    NVec3 dir = delta / dist;
+                    float give = NVec3.Dot(nrm[j], dir);        // emitter j radiates forward
+                    float take = -NVec3.Dot(nrm[i], dir);       // receiver i faces it
+                    if (give <= 0f || take <= 0f)
+                        continue;
+                    float falloff = 1f / (1f + dist2 / (192f * 192f));
+                    float window = 1f - dist / BounceRange;
+                    add[i] += col[j] * (give * take * falloff * window * window * BounceAlbedo);
+                }
+            }
+            for (int i = 0; i < pos.Count; i++)
+                col[i] += add[i];
+        }
 
-            // Energy scales with how much lit area the cell holds (sample count x per-sample light). The
-            // constant is the calibration, folded once here rather than spread across the gather.
-            float energy = Math.Clamp(sum * BounceAlbedo * 0.06f, 0f, 3.5f);
-            if (energy < 0.02f)
+        var emitters = new List<BakedLight>(pos.Count);
+        for (int i = 0; i < pos.Count; i++)
+        {
+            float sum = col[i].X + col[i].Y + col[i].Z;
+            if (sum < 0.02f)
                 continue;
-
-            emitters.Add(new BakedLight(pos + normal * 24f, tint, energy, BounceRange));
+            var tint = new Color(col[i].X / sum, col[i].Y / sum, col[i].Z / sum);
+            float energy = Math.Clamp(sum, 0f, 5f);
+            emitters.Add(new BakedLight(pos[i], tint, energy, BounceRange));
         }
 
         _bounceGrid = emitters.Count > 0 ? new Grid(emitters) : null;

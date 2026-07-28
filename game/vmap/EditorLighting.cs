@@ -165,6 +165,9 @@ public sealed partial class EditorLighting : Node3D
     /// </summary>
     public const string CvarBakeBounce = "cl_editor_bake_bounce";
 
+    /// <summary>Bounce count for the bake. Default 8, matching stormkeep's own compile (-bounce 8).</summary>
+    public const string CvarBakeBounces = "cl_editor_bake_bounces";
+
     /// <summary>Cap on generated surface lights (the largest emitters win). Keeps pathological maps bounded.</summary>
     private const int MaxSurfaceLights = 224;
 
@@ -196,6 +199,15 @@ public sealed partial class EditorLighting : Node3D
 
     /// <summary>True when a sun was recovered from the map's sky shader rather than defaulted.</summary>
     public bool HasMapSun { get; private set; }
+
+    /// <summary>Direction TOWARD the sun (Quake space), for the bake's bounce pass.</summary>
+    public System.Numerics.Vector3 SunDirToSun { get; private set; }
+
+    /// <summary>Sun colour, for the bake's bounce pass.</summary>
+    public Color SunColor { get; private set; } = Colors.White;
+
+    /// <summary>Sun energy as built, for the bake's bounce pass.</summary>
+    public float SunEnergy { get; private set; }
 
     public static bool Enabled(CvarService? cvars) => ReadFloat(cvars, CvarEnabled, 1f) != 0f;
 
@@ -452,8 +464,13 @@ public sealed partial class EditorLighting : Node3D
         if (Baking)
         {
             float range = light is OmniLight3D o ? o.OmniRange : ((SpotLight3D)light).SpotRange;
+            // BakedFixtureBoost: the real-time path had to keep fixtures weak so hundreds of overlapping
+            // volumes stayed affordable; a bake has no such constraint, and q3map2's look is FIXTURE-
+            // dominated with the sun as one contributor among many. The boost restores that ratio, and
+            // cl_editor_bake_scale brings the total back to the reference level.
             _bake.Add(new BakedLight(
-                Coords.ToQuake(light.Position), light.LightColor, light.LightEnergy, range, areaRadius));
+                Coords.ToQuake(light.Position), light.LightColor, light.LightEnergy * BakedFixtureBoost,
+                range, areaRadius));
             light.QueueFree();
             return;
         }
@@ -463,6 +480,9 @@ public sealed partial class EditorLighting : Node3D
 
     /// <summary>True when fixture light is precomputed into the mesh rather than rendered live.</summary>
     public bool Baking { get; private set; }
+
+    /// <summary>Fixture-energy multiplier applied only in the bake (see <see cref="Adopt"/>).</summary>
+    private const float BakedFixtureBoost = 2.6f;
 
     /// <summary>The lights to bake; empty when rendering them in real time.</summary>
     public IReadOnlyList<BakedLight> BakeLights => _bake;
@@ -544,6 +564,10 @@ public sealed partial class EditorLighting : Node3D
         };
         Vector3 sunDir = Coords.ToGodot(fromSun).Normalized();
         light.LookAtFromPosition(Vector3.Zero, sunDir, Mathf.Abs(sunDir.Y) > 0.99f ? Vector3.Right : Vector3.Up);
+
+        SunDirToSun = -fromSun;   // fromSun is the direction the light TRAVELS; the bounce wants the reverse
+        SunColor = light.LightColor;
+        SunEnergy = light.LightEnergy;
 
         _sun = light;
         AddChild(light);

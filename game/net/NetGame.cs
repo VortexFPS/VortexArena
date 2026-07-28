@@ -6977,7 +6977,11 @@ public sealed partial class NetGame : Node3D
                 bool bounce = Menu.MenuState.Cvars is not { } bc2
                     || string.IsNullOrEmpty(bc2.GetString(Vmap.EditorLighting.CvarBakeBounce))
                     || bc2.GetFloat(Vmap.EditorLighting.CvarBakeBounce) != 0f;
-                Vmap.EditorLightBake.Begin(_editorLights.BakeLights, shadowTrace, bounce);
+                int bounces = 8;
+                if (Menu.MenuState.Cvars is { } bn && !string.IsNullOrEmpty(bn.GetString(Vmap.EditorLighting.CvarBakeBounces)))
+                    bounces = (int)bn.GetFloat(Vmap.EditorLighting.CvarBakeBounces);
+                Vmap.EditorLightBake.Begin(_editorLights.BakeLights, shadowTrace, bounce, bounces,
+                    _editorLights.SunDirToSun, _editorLights.SunColor, _editorLights.SunEnergy);
             }
         }
 

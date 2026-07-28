@@ -5971,6 +5971,7 @@ public sealed partial class NetGame : Node3D
                 && _editorLights.Baking;
             editorPanel.ShadowsStale = _bakedShadowsStale;
             editorPanel.BakeRunning = Vmap.EditorLightBake.BakeRunning;
+            editorPanel.ShowingBsp = _editorShowBsp;
             editorPanel.BakeProgress = Vmap.EditorLightBake.ProgressTotal > 0
                 ? (float)Vmap.EditorLightBake.Progress / Vmap.EditorLightBake.ProgressTotal
                 : 0f;
@@ -7293,9 +7294,9 @@ public sealed partial class NetGame : Node3D
         if (_portalRenderer is not null && _camera is not null)
             _portalRenderer.Rebind(_editorMapRoot, _camera);
 
-        // Hide the compiled world rather than freeing it, so leaving the editor restores it instantly.
-        if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
-            _mapRoot.Visible = false;
+        // Hide the compiled world rather than freeing it, so leaving the editor restores it instantly —
+        // unless the mapper is holding the BSP-comparison view, which a rebuild must not silently exit.
+        ApplyEditorWorldVisibility();
     }
 
     /// <summary>
@@ -7325,6 +7326,24 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Set when the current build is capturing vertices for a background bake.</summary>
     private bool _bakePending;
+
+    /// <summary>True while the editor session is showing the ORIGINAL compiled BSP for comparison (key 0).</summary>
+    private bool _editorShowBsp;
+
+    /// <summary>
+    /// Show either the regenerated document world or the original compiled BSP, never both: they occupy the
+    /// same space, and rendering the pair z-fights everywhere. The editor light rig follows the document
+    /// world — the BSP carries its own baked lightmaps and must not receive our sun a second time.
+    /// </summary>
+    private void ApplyEditorWorldVisibility()
+    {
+        if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
+            _mapRoot.Visible = _editorShowBsp;
+        if (_editorMapRoot is not null && GodotObject.IsInstanceValid(_editorMapRoot))
+            _editorMapRoot.Visible = !_editorShowBsp;
+        if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
+            _editorLights.Visible = !_editorShowBsp;
+    }
 
     private Vmap.EditorShadowTrace? _pendingTrace;
     private int _pendingTraceCount;
@@ -7420,6 +7439,7 @@ public sealed partial class NetGame : Node3D
     ///   2                             toggle EDIT / PLAYTEST
     /// </code>
     ///   3 tool · 4 ortho · 5 ortho axis · 6 rotate · 7 manipulator · 8 wire alpha · 9 REBAKE lighting
+    ///   0 compare against the ORIGINAL compiled BSP
     /// </summary>
     private bool TryRunEditorBind(string command)
     {
@@ -7452,6 +7472,13 @@ public sealed partial class NetGame : Node3D
                 // The number-key rebake. Lighting is never recomputed by an edit, so this is how a mapper
                 // says "now redo it properly" — deliberately a key, not an automatic reaction to editing.
                 Menu.MenuState.Interp?.ExecuteLine("editor_rebake");
+                return true;
+            case 14:
+                // Key 0: flip to the ORIGINAL compiled BSP and back. The ground truth is one keypress away,
+                // so "is this artifact ours or the map's?" is answered by looking, from the same camera,
+                // instead of by relaunching into a plain match and flying back to the spot.
+                _editorShowBsp = !_editorShowBsp;
+                ApplyEditorWorldVisibility();
                 return true;
         }
 

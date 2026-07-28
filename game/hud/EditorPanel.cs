@@ -58,6 +58,9 @@ public partial class EditorPanel : HudPanel
     /// <summary>True while the background bake is running.</summary>
     public bool BakeRunning { get; set; }
 
+    /// <summary>True while the session is showing the ORIGINAL compiled BSP for comparison.</summary>
+    public bool ShowingBsp { get; set; }
+
     /// <summary>Fraction of the running bake that is done, 0..1.</summary>
     public float BakeProgress { get; set; }
 
@@ -119,6 +122,15 @@ public partial class EditorPanel : HudPanel
             {
                 lines.Add(($"Tool: {c.Tool}  {Key(BindTool)}   Manip: {c.Manipulator}  {Key(BindManip)}", bright));
                 lines.Add(($"Showing: {c.GametypeFilterLabel}   (editor_gametype <name|all>)", dim));
+
+                // The comparison view is a MODE, and a mode you can be in silently is a mode you will
+                // forget you are in — edits do not draw while the BSP is up, which would read as a broken
+                // editor rather than as a held toggle.
+                if (ShowingBsp)
+                    lines.Add(($"VIEWING ORIGINAL BSP — {Key(BindBspCompare)} back to editor world",
+                        new Color(1f, 0.75f, 0.3f)));
+                else
+                    lines.Add(($"{Key(BindBspCompare)} compare original BSP", dim));
 
                 // Lighting state, because it changes what every surface looks like and is otherwise a cvar
                 // nobody would guess at. Reports what the rig actually built, not just the toggle: a map
@@ -249,6 +261,7 @@ public partial class EditorPanel : HudPanel
     private const string BindManip = "weapon_group_7";
     private const string BindWire = "weapon_group_8";
     private const string BindRebake = "weapon_group_9";
+    private const string BindBspCompare = "weapon_group_0";
     private const string BindOrtho = "weapon_group_4";
     private const string BindOrthoAxis = "weapon_group_5";
     private const string BindGridUp = "weapnext";

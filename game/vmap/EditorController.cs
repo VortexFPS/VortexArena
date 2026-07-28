@@ -179,7 +179,7 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarEnabled, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarShadowBudget, "6", CvarFlags.Save);
         c.Register(EditorLighting.CvarBrightness, "1", CvarFlags.Save);
-        c.Register(EditorLighting.CvarAmbient, "0.18", CvarFlags.Save);
+        c.Register(EditorLighting.CvarAmbient, "0.04", CvarFlags.Save);
         c.Register(EditorLighting.CvarGlobalIllumination, "0", CvarFlags.Save);
         c.Register(EditorLighting.CvarGiCellSize, "8", CvarFlags.Save);
         c.Register(EditorLighting.CvarGiCascades, "4", CvarFlags.Save);
@@ -195,8 +195,9 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarRangeScale, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarSurfaceLights, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarBakeLights, "1", CvarFlags.Save);
-        c.Register(EditorLighting.CvarBakeScale, "0.36", CvarFlags.Save);
+        c.Register(EditorLighting.CvarBakeScale, "0.24", CvarFlags.Save);
         c.Register(EditorLighting.CvarBakeShadows, "1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarBakeBounce, "1", CvarFlags.Save);
     }
 
     /// <summary>

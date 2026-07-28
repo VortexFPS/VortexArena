@@ -109,6 +109,11 @@ public static class VmapMapBuilder
             foreach (Dictionary<string, CellSurface> byMat in cells.Values)
                 bakeCells.AddRange(byMat.Values);
             System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.BakeColors());
+
+            // Radiosity's shoot/gather, once: what the direct pass RECEIVED becomes virtual emitters, and a
+            // second pass adds their glow. This is what keeps traced shadows from being pitch black.
+            if (EditorLightBake.BounceActive && EditorLightBake.BuildBounceLights() > 0)
+                System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.AddBounceColors());
         }
 
         // Deterministic node order so two builds of the same document produce an identical tree.
@@ -160,63 +165,116 @@ public static class VmapMapBuilder
     }
 
     /// <summary>
-    /// Subdivide one source triangle until its edges are about a sample apart, computing the baked light at
-    /// each generated vertex.
+    /// Tessellate one source triangle for the bake by clipping it against a WORLD-ALIGNED grid on its plane,
+    /// sampling light at every generated vertex.
     ///
-    /// Subdivision is the whole reason a VERTEX bake is usable on Q3 geometry: a 512-unit floor is two
-    /// triangles with four corners, and lighting sampled only at those corners would interpolate a fixture's
-    /// pool into a flat wash across the entire room. Splitting to roughly luxel spacing puts the samples where
-    /// a lightmap would have put them.
+    /// Grid clipping, not barycentric subdivision, and the difference is visible: a big floor polygon fans
+    /// into long thin triangles from one corner, and splitting those barycentrically keeps them thin — one
+    /// shadowed vertex then smears a dark wedge down the whole sliver, which is exactly the streaky artefact
+    /// reported in playtest. Clipping against fixed world planes cuts every face into compact, roughly
+    /// square pieces whose vertices sit where a lightmap's luxels would, and because the planes are the same
+    /// for every face, samples agree along shared edges.
     /// </summary>
     private static void AppendBakedTriangle(CellSurface cell, VmapSurface surface, int i0, int i1, int i2)
     {
         NVec3 a = surface.Positions[i0], b = surface.Positions[i1], c = surface.Positions[i2];
         NVec2 ua = surface.Uvs[i0], ub = surface.Uvs[i1], uc = surface.Uvs[i2];
         NVec3 normal = surface.Normals[i0];
-
-        // One split count for the whole triangle keeps the generated vertices coincident along shared edges,
-        // so neighbouring triangles agree at their seams and the bake shows no cracks.
-        float longest = MathF.Max((b - a).Length(), MathF.Max((c - b).Length(), (a - c).Length()));
-        int steps = (int)MathF.Ceiling(longest / EditorLightBake.SampleSpacing);
-        steps = Math.Clamp(steps, 1, MaxBakeSplits);
-
-        // Barycentric lattice: rows of vertices along the a->b and a->c edges.
-        var grid = new (Vector3 P, Vector3 N, Vector2 Uv, Color C)[steps + 1][];
         Vector3 gn = Coords.ToGodot(normal);
-        for (int row = 0; row <= steps; row++)
-        {
-            grid[row] = new (Vector3, Vector3, Vector2, Color)[row + 1];
-            for (int col = 0; col <= row; col++)
-            {
-                float v = (float)row / steps;
-                float w = row == 0 ? 0f : (float)col / row * v;
-                float u = 1f - v;
-                float vv = v - w;
 
-                NVec3 p = a * u + b * vv + c * w;
-                NVec2 uv = ua * u + ub * vv + uc * w;
-                // Colour deferred: filled by the PARALLEL pass below. Sampling here would serialise the
-                // whole bake behind geometry generation, and with shadow rays that is the expensive half.
-                grid[row][col] = (Coords.ToGodot(p), gn, new Vector2(uv.X, uv.Y), Colors.Black);
-            }
-        }
+        // The two world axes spanning the face's dominant plane.
+        float ax = MathF.Abs(normal.X), ay = MathF.Abs(normal.Y), az = MathF.Abs(normal.Z);
+        int axisU, axisV;
+        if (az >= ax && az >= ay) { axisU = 0; axisV = 1; }
+        else if (ax >= ay) { axisU = 1; axisV = 2; }
+        else { axisU = 0; axisV = 2; }
 
-        for (int row = 0; row < steps; row++)
+        // Barycentric basis for interpolating UVs at generated vertices, in the projected plane.
+        float e1u = Axis(b, axisU) - Axis(a, axisU), e1v = Axis(b, axisV) - Axis(a, axisV);
+        float e2u = Axis(c, axisU) - Axis(a, axisU), e2v = Axis(c, axisV) - Axis(a, axisV);
+        float det = e1u * e2v - e2u * e1v;
+        bool canInterp = MathF.Abs(det) > 1e-6f;
+
+        float minU = MathF.Min(Axis(a, axisU), MathF.Min(Axis(b, axisU), Axis(c, axisU)));
+        float maxU = MathF.Max(Axis(a, axisU), MathF.Max(Axis(b, axisU), Axis(c, axisU)));
+        float minV = MathF.Min(Axis(a, axisV), MathF.Min(Axis(b, axisV), Axis(c, axisV)));
+        float maxV = MathF.Max(Axis(a, axisV), MathF.Max(Axis(b, axisV), Axis(c, axisV)));
+
+        // A map-spanning face is clipped at coarser spacing rather than into thousands of pieces.
+        float spacingU = MathF.Max(EditorLightBake.SampleSpacing, (maxU - minU) / 40f);
+        float spacingV = MathF.Max(EditorLightBake.SampleSpacing, (maxV - minV) / 40f);
+
+        var strip = new List<NVec3>(8);
+        var strip2 = new List<NVec3>(8);
+        var piece = new List<NVec3>(8);
+        var final = new List<NVec3>(8);
+        var tri = new List<NVec3> { a, b, c };
+
+        int u0 = (int)MathF.Floor(minU / spacingU), u1 = (int)MathF.Ceiling(maxU / spacingU);
+        for (int uu = u0; uu < u1; uu++)
         {
-            for (int col = 0; col <= row; col++)
+            ClipAxis(tri, strip, axisU, uu * spacingU, keepAbove: true);
+            if (strip.Count < 3) continue;
+            ClipAxis(strip, strip2, axisU, (uu + 1) * spacingU, keepAbove: false);
+            if (strip2.Count < 3) continue;
+
+            int v0 = (int)MathF.Floor(minV / spacingV), v1c = (int)MathF.Ceiling(maxV / spacingV);
+            for (int vv = v0; vv < v1c; vv++)
             {
-                cell.AddBakedTriangle(grid[row][col], grid[row + 1][col], grid[row + 1][col + 1]);
-                if (col < row)
-                    cell.AddBakedTriangle(grid[row][col], grid[row + 1][col + 1], grid[row][col + 1]);
+                ClipAxis(strip2, piece, axisV, vv * spacingV, keepAbove: true);
+                if (piece.Count < 3) continue;
+                ClipAxis(piece, final, axisV, (vv + 1) * spacingV, keepAbove: false);
+                if (final.Count < 3) continue;
+
+                // Fan the (convex) piece; colours stay black here and are filled by the parallel passes.
+                (Vector3, Vector3, Vector2, Color) Vtx(NVec3 pt)
+                {
+                    NVec2 uv;
+                    if (canInterp)
+                    {
+                        float pu = Axis(pt, axisU) - Axis(a, axisU);
+                        float pv = Axis(pt, axisV) - Axis(a, axisV);
+                        float w1 = (pu * e2v - e2u * pv) / det;
+                        float w2 = (e1u * pv - pu * e1v) / det;
+                        uv = ua + (ub - ua) * w1 + (uc - ua) * w2;
+                    }
+                    else
+                        uv = ua;
+                    return (Coords.ToGodot(pt), gn, new Vector2(uv.X, uv.Y), Colors.Black);
+                }
+
+                (Vector3, Vector3, Vector2, Color) first = Vtx(final[0]);
+                for (int t = 1; t + 1 < final.Count; t++)
+                    cell.AddBakedTriangle(first, Vtx(final[t]), Vtx(final[t + 1]));
             }
         }
     }
 
-    /// <summary>
-    /// Cap on subdivisions per triangle edge. A map-spanning sky or lava face would otherwise generate
-    /// hundreds of thousands of vertices for light nobody looks closely at.
-    /// </summary>
-    private const int MaxBakeSplits = 16;
+    private static float Axis(NVec3 p, int axis) => axis == 0 ? p.X : axis == 1 ? p.Y : p.Z;
+
+    /// <summary>Sutherland-Hodgman clip of a convex polygon against one axis-aligned plane.</summary>
+    private static void ClipAxis(List<NVec3> input, List<NVec3> output, int axis, float limit, bool keepAbove)
+    {
+        output.Clear();
+        int n = input.Count;
+        for (int i = 0; i < n; i++)
+        {
+            NVec3 cur = input[i];
+            NVec3 nxt = input[(i + 1) % n];
+            float dc = Axis(cur, axis) - limit;
+            float dn = Axis(nxt, axis) - limit;
+            bool inCur = keepAbove ? dc >= 0f : dc <= 0f;
+            bool inNxt = keepAbove ? dn >= 0f : dn <= 0f;
+
+            if (inCur)
+                output.Add(cur);
+            if (inCur != inNxt)
+            {
+                float t = dc / (dc - dn);
+                output.Add(cur + (nxt - cur) * t);
+            }
+        }
+    }
 
     /// <summary>
     /// A shader that camera-renders a portal view (<c>dpcamera</c>, e.g. <c>effects_warpzone/wavy</c>).
@@ -331,7 +389,7 @@ public static class VmapMapBuilder
     /// 26.8. Because it is a shader uniform rather than part of the bake, changing it re-lights instantly with
     /// no rebuild.
     /// </summary>
-    public static float BakeScale = 0.36f;
+    public static float BakeScale = 0.24f;
 
     /// <summary>Cache so a shared material is built once per map build, not once per cell. Keyed by shader AND
     /// lit-ness, because the two variants of one shader are different materials.</summary>
@@ -547,6 +605,19 @@ public static class VmapMapBuilder
                 NVec3 p = Coords.ToQuake(Positions[i]);
                 NVec3 n = Coords.ToQuake(Normals[i]);
                 Colors[i] = EditorLightBake.Sample(p, n);
+            }
+        }
+
+        /// <summary>Add the bounce gather on top of the direct colours (worker-thread safe, own lists only).</summary>
+        public void AddBounceColors()
+        {
+            for (int i = 0; i < Positions.Count; i++)
+            {
+                NVec3 p = Coords.ToQuake(Positions[i]);
+                NVec3 n = Coords.ToQuake(Normals[i]);
+                Color bounce = EditorLightBake.SampleBounce(p, n);
+                Color c = Colors[i];
+                Colors[i] = new Color(c.R + bounce.R, c.G + bounce.G, c.B + bounce.B);
             }
         }
 

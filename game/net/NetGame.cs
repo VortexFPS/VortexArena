@@ -124,6 +124,15 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Wall clock at bake start, for the timing line (ms since engine start).</summary>
     private ulong _bakeClock;
+
+    /// <summary>
+    /// The document imported at load in the editor gametype — the single truth the session edits, the render
+    /// regenerates from, and collision is built from. Null outside the editor gametype.
+    /// </summary>
+    private XonoticGodot.Formats.Vmap.VmapDocument? _preloadedEditorDoc;
+
+    /// <summary>GeometryVersion the live collision was built from; -1 forces the first playtest rebuild check.</summary>
+    private int _editorCollisionVersion = -1;
     private RadarPanel _radar = null!;
     private NetHud _hud = null!;                 // crosshair + health/armor readout (the always-on lightweight HUD)
     // The full CSQC HUD panel set (weapon bar / ammo / kill-feed / centerprint / timer) on the net play path —
@@ -640,8 +649,25 @@ public sealed partial class NetGame : Node3D
             // brushes the render does — exactly like GameDemo (render + collision MUST agree, GameDemo.cs:134/181).
             _bsp = bsp;
             _droppedSubmodels = GameMapView.ComputeDroppedSubmodels(bsp, _gametype);
-            built = BspCollisionBuilder.Build(bsp, _droppedSubmodels);
-            collision = built.World;
+            if (IsEditorGametype)
+            {
+                // The editor plays the DOCUMENT, not the compiled map. Import once, here, and this instance
+                // becomes the single truth for the whole session: the client edits it, the render regenerates
+                // from it, and — the part that makes PLAYTEST honest — collision is built from it too, so the
+                // level you run and jump through is the level you edited, not the .bsp it started from.
+                _preloadedEditorDoc = XonoticGodot.Formats.Vmap.BspToVmap.Import(
+                    bsp, _map, $"maps/{_map}.bsp", sourceHash: "", droppedSubmodels: _droppedSubmodels);
+                built = Vmap.EditorWorldCollision.Build(_preloadedEditorDoc, _droppedSubmodels);
+                collision = built.World;
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    $"editor: map is the imported document ({_preloadedEditorDoc.Brushes.Count} brushes; "
+                    + "collision from the document)");
+            }
+            else
+            {
+                built = BspCollisionBuilder.Build(bsp, _droppedSubmodels);
+                collision = built.World;
+            }
         }
         else
         {
@@ -5737,10 +5763,28 @@ public sealed partial class NetGame : Node3D
         if (_editor is not null)
         {
             _editor.Active = editorFreeFly;
-            if (editorFreeFly)
+            // Session opens with the GAMETYPE, not with the first free-fly frame: the world swap to the
+            // document happens before the player ever sees the compiled BSP, and playtest is in the
+            // document from the first spawn.
+            if (IsEditorGametype)
                 EnsureEditorSession();
             else if (_editorOrtho is { IsOpen: true })
                 _editorOrtho.Close();   // dropping into playtest must not leave a flat wireframe camera
+
+            // Entering PLAYTEST with edits pending: rebuild collision from the document so the physics match
+            // what is on screen. Keyed on GeometryVersion, so an untouched map never pays the rebuild.
+            if (!editorFreeFly && IsEditorGametype && _editor.Document is not null
+                && _editorCollisionVersion != _editor.GeometryVersion && _serverWorld is not null)
+            {
+                _editorCollisionVersion = _editor.GeometryVersion;
+                BspCollisionBuilder.Result rebuilt =
+                    Vmap.EditorWorldCollision.Build(_editor.Document, _droppedSubmodels);
+                _serverWorld.Services.SetCollisionWorld(rebuilt.World);
+                _serverWorld.BrushModels = rebuilt.Submodels;
+                BspCollisionBuilder.RegisterSubmodels(rebuilt.Submodels, _serverWorld.Services.ModelsImpl);
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    $"editor: collision rebuilt from the document (v{_editor.GeometryVersion})");
+            }
         }
 
         // The editor aims along the crosshair, but an observer has no local player so the skinned crosshair is
@@ -6788,7 +6832,14 @@ public sealed partial class NetGame : Node3D
         {
             string? existing = Vmap.VmapService.FindPackage(_map);
             XonoticGodot.Formats.Vmap.VmapDocument doc;
-            if (existing is not null)
+            if (_preloadedEditorDoc is not null)
+            {
+                // The listen host already imported the document at load (it is what collision was built
+                // from). The session MUST edit that same instance — a copy would let the render and the
+                // playtest collision drift apart.
+                doc = _preloadedEditorDoc;
+            }
+            else if (existing is not null)
             {
                 doc = XonoticGodot.Formats.Vmap.VmapPackage.Read(existing);
                 XonoticGodot.Common.Diagnostics.Log.Info($"editor: opened {existing}");
@@ -6807,6 +6858,9 @@ public sealed partial class NetGame : Node3D
                 return;
             }
             _editor.OpenSession(doc);
+            // The load-time collision was built from this same document, so the live collision is already
+            // current — without this seed, the first not-free-fly frame pays a pointless full rebuild.
+            _editorCollisionVersion = _editor.GeometryVersion;
             // Default to the mode actually running, so the editor opens showing the map the player sees.
             _editor.SetGametypeFilter(_gametype, _droppedSubmodels);
             Menu.MenuState.Interp?.RegisterCommand("editor_gametype", CmdEditorGametype);
@@ -6849,7 +6903,10 @@ public sealed partial class NetGame : Node3D
         if (_editor is null || _assets is null)
             return;
 
-        bool wantEditorWorld = _editor.Active && _editor.Document is not null;
+        // The regenerated world is shown for the whole EDITOR SESSION, not just while free-flying: PLAYTEST
+        // must render the same world it collides with (the document), or the mapper runs through geometry
+        // that is not there and bounces off geometry that is.
+        bool wantEditorWorld = IsEditorGametype && _editor.Document is not null;
 
         if (!wantEditorWorld)
         {
@@ -6903,7 +6960,7 @@ public sealed partial class NetGame : Node3D
             {
                 Vmap.VmapMapBuilder.BakeScale = Menu.MenuState.Cvars is { } bc
                     && !string.IsNullOrEmpty(bc.GetString(Vmap.EditorLighting.CvarBakeScale))
-                        ? bc.GetFloat(Vmap.EditorLighting.CvarBakeScale) : 0.36f;
+                        ? bc.GetFloat(Vmap.EditorLighting.CvarBakeScale) : 0.24f;
                 bool shadowsWanted = Menu.MenuState.Cvars is not { } sc
                     || string.IsNullOrEmpty(sc.GetString(Vmap.EditorLighting.CvarBakeShadows))
                     || sc.GetFloat(Vmap.EditorLighting.CvarBakeShadows) != 0f;
@@ -6917,7 +6974,10 @@ public sealed partial class NetGame : Node3D
                     : null;
                 Vmap.EditorLightBake.RaysTraced = 0;
                 _bakeClock = Time.GetTicksMsec();
-                Vmap.EditorLightBake.Begin(_editorLights.BakeLights, shadowTrace);
+                bool bounce = Menu.MenuState.Cvars is not { } bc2
+                    || string.IsNullOrEmpty(bc2.GetString(Vmap.EditorLighting.CvarBakeBounce))
+                    || bc2.GetFloat(Vmap.EditorLighting.CvarBakeBounce) != 0f;
+                Vmap.EditorLightBake.Begin(_editorLights.BakeLights, shadowTrace, bounce);
             }
         }
 

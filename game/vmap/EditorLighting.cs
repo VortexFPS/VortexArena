@@ -158,6 +158,13 @@ public sealed partial class EditorLighting : Node3D
     /// </summary>
     public const string CvarBakeShadows = "cl_editor_bake_shadows";
 
+    /// <summary>
+    /// One bounce of indirect light in the bake (default on) — q3map2's <c>-bounce</c>, cheaply. This is what
+    /// keeps traced shadows readable instead of pitch black: direct light received by each region is re-emitted
+    /// as virtual sources and gathered in a second pass.
+    /// </summary>
+    public const string CvarBakeBounce = "cl_editor_bake_bounce";
+
     /// <summary>Cap on generated surface lights (the largest emitters win). Keeps pathological maps bounded.</summary>
     private const int MaxSurfaceLights = 224;
 
@@ -421,7 +428,11 @@ public sealed partial class EditorLighting : Node3D
         int kept = Math.Min(MaxSurfaceLights, candidates.Count);
         int entityLights = Baking ? _bake.Count : _points.Count;
         for (int i = 0; i < kept; i++)
-            Adopt(candidates[i].Light);
+        {
+            // The cluster stands in for a PANEL, not a point: its bake radius is what buys the penumbra.
+            OmniLight3D cl = candidates[i].Light;
+            Adopt(cl, Math.Clamp(cl.OmniRange * 0.12f, 24f, 96f));
+        }
         for (int i = kept; i < candidates.Count; i++)
             candidates[i].Light.QueueFree();
 
@@ -436,12 +447,13 @@ public sealed partial class EditorLighting : Node3D
     /// (and nothing in the scene) when baking. One funnel so both paths always see the same light set —
     /// baked and real-time output only ever differ by HOW the same lights are applied.
     /// </summary>
-    private void Adopt(Light3D light)
+    private void Adopt(Light3D light, float areaRadius = 0f)
     {
         if (Baking)
         {
             float range = light is OmniLight3D o ? o.OmniRange : ((SpotLight3D)light).SpotRange;
-            _bake.Add(new BakedLight(Coords.ToQuake(light.Position), light.LightColor, light.LightEnergy, range));
+            _bake.Add(new BakedLight(
+                Coords.ToQuake(light.Position), light.LightColor, light.LightEnergy, range, areaRadius));
             light.QueueFree();
             return;
         }
@@ -607,7 +619,7 @@ public sealed partial class EditorLighting : Node3D
 
         // Applied repeatedly (the settings are cvars a mapper changes mid-session), so skip the write when
         // nothing moved — re-assigning SdfgiEnabled would otherwise restart the cascades every frame.
-        int signature = HashCode.Combine(gi, ReadFloat(cvars, CvarAmbient, 0.18f),
+        int signature = HashCode.Combine(gi, ReadFloat(cvars, CvarAmbient, 0.04f),
             ReadFloat(cvars, CvarGiCellSize, 8f), ReadFloat(cvars, CvarGiCascades, 4f),
             ReadFloat(cvars, CvarGiEnergy, 1.6f),
             HashCode.Combine(ReadFloat(cvars, CvarSsao, 1f), ReadFloat(cvars, CvarSsaoIntensity, 4f),
@@ -630,7 +642,7 @@ public sealed partial class EditorLighting : Node3D
         _appliedSignature = signature;
 
         // With GI supplying the fill, the flat term only has to stop pure black in a cascade's blind spot.
-        float ambient = ReadFloat(cvars, CvarAmbient, 0.18f) * (gi ? 0.25f : 1f);
+        float ambient = ReadFloat(cvars, CvarAmbient, 0.04f) * (gi ? 0.25f : 1f);
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         env.AmbientLightColor = new Color(0.55f, 0.58f, 0.66f);
         env.AmbientLightEnergy = ambient;

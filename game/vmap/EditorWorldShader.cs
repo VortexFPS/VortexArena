@@ -18,11 +18,18 @@ namespace XonoticGodot.Game.Vmap;
 public static class EditorWorldShader
 {
     /// <summary>
-    /// HDR range of the baked vertex colours: they are stored divided by this (the mesh COLOR channel is
-    /// 8-bit and clamps at 1) and the shader multiplies it back. 8 covers the hottest fixture-adjacent
-    /// values the bake produces while keeping ~5 bits of precision in the darks.
+    /// HDR range of the baked vertex colours. The mesh COLOR channel is 8-bit and clamps at 1, while the
+    /// bake spans a measured 0..42 (median 0.47, p99 13.3) — so the light is stored as
+    /// <c>sqrt(value / range)</c> and squared back in the shader.
+    ///
+    /// The square root is not decoration. Storing linearly at a range wide enough for the peaks would leave
+    /// the median at ~2 of 255 levels and band every dark surface in the map; the sqrt spends its precision
+    /// where the eye is sensitive, which is exactly what real HDR lightmap encodings do. Clipping the peaks
+    /// instead — the previous range of 8 — flattened the brightest 4% of vertices, and that 4% is precisely
+    /// the pool of light directly under each fixture, which is why fixtures read as glowing decals with no
+    /// light around them.
     /// </summary>
-    public const float BakedColorRange = 8f;
+    public const float BakedColorRange = 48f;
 
 
     private static Shader? _shader;
@@ -67,7 +74,8 @@ void fragment() {
     // colour, plus the fixture's glow page for the emitting faces themselves. The gamma curve is applied to
     // the LIGHT, not the albedo — the same place a lightmap's own storage response lives, and the knob that
     // separates physically-averaged-and-flat from the punchy compiled look.
-    vec3 baked = pow(max(COLOR.rgb * 8.0, vec3(0.0)), vec3(editor_bake_gamma)) * editor_bake_scale;
+    vec3 stored = max(COLOR.rgb, vec3(0.0));
+    vec3 baked = pow(stored * stored * 48.0, vec3(editor_bake_gamma)) * editor_bake_scale;
     EMISSION = base * (baked + vec3(editor_bake_ambient))
         + texture(glow_tex, UV * uv_scale).rgb * glow_energy;
 }

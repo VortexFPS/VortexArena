@@ -72,6 +72,69 @@ public static class EditorLightBake
     /// <summary>Shadow rays traced during the last bake (diagnostics).</summary>
     public static long RaysTraced;
 
+    // ---- dirtmapping (q3map2 -dirty) --------------------------------------------------------------
+
+    /// <summary>
+    /// Ambient occlusion baked per sample — q3map2's <c>-dirty</c>, and the single largest source of the
+    /// depth a compiled Q3 map has and a plain light bake does not. Direct light alone leaves every unlit
+    /// surface at exactly the same value regardless of how enclosed it is; dirt is what darkens the inside
+    /// corner, the stair riser and the underside of the ledge, which is where the eye reads shape.
+    ///
+    /// Cheap by construction: the rays are SHORT (they terminate inside a cell or two of the DDA grid),
+    /// unlike the light rays that cross the map.
+    /// </summary>
+    private const int DirtRays = 12;
+
+    /// <summary>How far a dirt ray looks for an occluder, Quake units (q3map2's dirtDepth is 128).</summary>
+    private const float DirtDepth = 160f;
+
+    /// <summary>How much of the light dirt is allowed to remove, 0..1 (q3map2's dirtGain).</summary>
+    private static float _dirtStrength = 0.9f;
+
+    /// <summary>Set the dirt strength; 0 disables dirtmapping entirely.</summary>
+    public static float DirtStrength
+    {
+        get => _dirtStrength;
+        set => _dirtStrength = Math.Clamp(value, 0f, 1f);
+    }
+
+    /// <summary>
+    /// Fraction of the hemisphere above <paramref name="normal"/> that is open, as a light multiplier.
+    /// 1 = a surface in the open, ~0.1 = a tight inside corner.
+    /// </summary>
+    private static float DirtFactor(NVec3 position, NVec3 normal)
+    {
+        if (_shadows is not { } shadows || _dirtStrength <= 0f)
+            return 1f;
+
+        // Build a basis on the surface, then fire a fixed Fibonacci hemisphere through it. Fixed rather
+        // than random: a bake must be reproducible, and neighbouring vertices sharing directions is what
+        // keeps the result smooth instead of grainy.
+        NVec3 side = NVec3.Normalize(MathF.Abs(normal.Z) < 0.9f
+            ? NVec3.Cross(normal, new NVec3(0f, 0f, 1f))
+            : NVec3.Cross(normal, new NVec3(1f, 0f, 0f)));
+        NVec3 up = NVec3.Cross(normal, side);
+        NVec3 from = position + normal * EditorShadowTrace.SurfaceBias;
+
+        int open = 0;
+        for (int i = 0; i < DirtRays; i++)
+        {
+            // Cosine-ish distribution: z rises with i, the azimuth advances by the golden angle.
+            float z = (i + 0.5f) / DirtRays;
+            float rxy = MathF.Sqrt(1f - z * z);
+            float phi = i * 2.39996323f;
+            NVec3 dir = NVec3.Normalize(
+                side * (rxy * MathF.Cos(phi)) + up * (rxy * MathF.Sin(phi)) + normal * z);
+
+            System.Threading.Interlocked.Increment(ref RaysTraced);
+            if (!shadows.IsOccluded(from, from + dir * DirtDepth))
+                open++;
+        }
+
+        float openness = (float)open / DirtRays;
+        return 1f - _dirtStrength * (1f - openness);
+    }
+
     // ---- the light index --------------------------------------------------------------------------
 
     private sealed class Grid
@@ -168,7 +231,8 @@ public static class EditorLightBake
     /// as a colour to multiply the surface albedo by. Also feeds the bounce accumulator, so the second pass
     /// knows what this region received.
     /// </summary>
-    public static Color Sample(NVec3 position, NVec3 normal) => Sample(position, normal, _greyAlbedo);
+    public static Color Sample(NVec3 position, NVec3 normal) =>
+        Sample(position, normal, _greyAlbedo, out _);
 
     private static readonly Color _greyAlbedo = new(0.45f, 0.45f, 0.45f);
 
@@ -178,12 +242,19 @@ public static class EditorLightBake
     /// Average colour of the surface's texture: what the BOUNCE from this sample carries. Light reflecting
     /// off a rust floor is rust — feeding grey here is why bounce light used to read cold.
     /// </param>
-    public static Color Sample(NVec3 position, NVec3 normal, Color albedo)
+    /// <param name="dirt">
+    /// The sample's openness, for the caller to apply to the bounce pass as well — computed once here
+    /// because the rays are not free and both passes want the same answer.
+    /// </param>
+    public static Color Sample(NVec3 position, NVec3 normal, Color albedo, out float dirt)
     {
+        dirt = 1f;
         if (_grid is not { } grid)
             return Colors.Black;
 
+        dirt = DirtFactor(position, normal);
         Color direct = GatherDirect(grid, position, normal);
+        direct = new Color(direct.R * dirt, direct.G * dirt, direct.B * dirt);
 
         // The SUN's landing feeds the bounce and only the bounce: its direct term is the real-time light
         // (crisp dynamic shadows), so baking it too would double it — but the light it throws around a room
@@ -361,7 +432,7 @@ public static class EditorLightBake
             // The per-sample TEXTURE albedo is already folded in at accumulation; the constant here is only
             // the emitter-strength calibration (raised from the grey-albedo era, since real Q3 textures
             // average darker than the 0.5 grey they replaced).
-            col.Add(new NVec3(acc.R, acc.G, acc.B) * 0.35f);
+            col.Add(new NVec3(acc.R, acc.G, acc.B) * 0.22f);
         }
 
         // Bounces 2..N as EMITTER-TO-EMITTER radiosity. Iterating at the patch level is what makes "8

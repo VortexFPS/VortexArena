@@ -136,6 +136,7 @@ public sealed partial class NetGame : Node3D
 
     private float _bakeUniformScale = float.NaN, _bakeUniformAmbient = float.NaN, _bakeUniformGamma = float.NaN;
 
+
     private static float CvarOr(XonoticGodot.Engine.Simulation.CvarService cvars, string name, float fallback)
     {
         string v = cvars.GetString(name);
@@ -5821,9 +5822,13 @@ public sealed partial class NetGame : Node3D
             // time — which is why "_scale and _ambient don't appear to do anything" was literally true.
             if (Menu.MenuState.Cvars is { } lc)
             {
-                float sc2 = CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.01f);
-                float am2 = CvarOr(lc, Vmap.EditorLighting.CvarAmbient, 0.03f);
-                float gm2 = CvarOr(lc, Vmap.EditorLighting.CvarBakeGamma, 1.3f);
+                // Clamped to the range these knobs MEAN, because their meaning changed: cl_editor_light_ambient
+                // used to be a Godot environment energy (where 10 was merely strong) and is now an in-shader
+                // floor (where 10 is an opaque white wash). A value saved under the old semantics must not be
+                // able to flatten the world — clamp it rather than let a stale config outrank every default.
+                float sc2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.01f), 0f, 2f);
+                float am2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarAmbient, 0.03f), 0f, 1f);
+                float gm2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeGamma, 1.3f), 0.25f, 4f);
                 if (sc2 != _bakeUniformScale || am2 != _bakeUniformAmbient || gm2 != _bakeUniformGamma)
                 {
                     _bakeUniformScale = sc2;
@@ -7001,6 +7006,11 @@ public sealed partial class NetGame : Node3D
                 bool bounce = Menu.MenuState.Cvars is not { } bc2
                     || string.IsNullOrEmpty(bc2.GetString(Vmap.EditorLighting.CvarBakeBounce))
                     || bc2.GetFloat(Vmap.EditorLighting.CvarBakeBounce) != 0f;
+                Vmap.EditorLightBake.SampleSpacing = Math.Clamp(
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarLuxel, 48f), 16f, 256f);
+                Vmap.EditorLightBake.DirtStrength =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarDirt, 0.9f);
+
                 int bounces = 8;
                 if (Menu.MenuState.Cvars is { } bn && !string.IsNullOrEmpty(bn.GetString(Vmap.EditorLighting.CvarBakeBounces)))
                     bounces = (int)bn.GetFloat(Vmap.EditorLighting.CvarBakeBounces);

@@ -174,6 +174,22 @@ public sealed partial class EditorLighting : Node3D
     /// </summary>
     public const string CvarBakeGamma = "cl_editor_bake_gamma";
 
+    /// <summary>
+    /// Bloom over the editor world. Default OFF: the baked light is HDR and the fixture strips sit at the
+    /// top of its range, so glow smears them across the whole frame — a uniform lift that reads as flat and
+    /// that no lighting knob can counteract, because bloom is downstream of all of them.
+    /// </summary>
+    public const string CvarGlow = "cl_editor_glow";
+
+    /// <summary>
+    /// Distance between baked samples in Quake units — this bake's luxel size (q3map2's -samplesize, whose
+    /// default is 16). Smaller resolves finer shadows and costs samples QUADRATICALLY.
+    /// </summary>
+    public const string CvarLuxel = "cl_editor_bake_luxel";
+
+    /// <summary>Ambient-occlusion strength baked per sample, 0..1 — q3map2's -dirty. 0 disables it.</summary>
+    public const string CvarDirt = "cl_editor_bake_dirt";
+
     /// <summary>Cap on generated surface lights (the largest emitters win). Keeps pathological maps bounded.</summary>
     private const int MaxSurfaceLights = 224;
 
@@ -649,7 +665,7 @@ public sealed partial class EditorLighting : Node3D
 
         // Applied repeatedly (the settings are cvars a mapper changes mid-session), so skip the write when
         // nothing moved — re-assigning SdfgiEnabled would otherwise restart the cascades every frame.
-        int signature = HashCode.Combine(gi, ReadFloat(cvars, CvarAmbient, 0.04f),
+        int signature = HashCode.Combine(gi, ReadFloat(cvars, CvarAmbient, 0.04f), ReadFloat(cvars, CvarGlow, 0f),
             ReadFloat(cvars, CvarGiCellSize, 8f), ReadFloat(cvars, CvarGiCascades, 4f),
             ReadFloat(cvars, CvarGiEnergy, 1.6f),
             HashCode.Combine(ReadFloat(cvars, CvarSsao, 1f), ReadFloat(cvars, CvarSsaoIntensity, 4f),
@@ -670,6 +686,15 @@ public sealed partial class EditorLighting : Node3D
         }
         _appliedEnv = env;
         _appliedSignature = signature;
+
+        // Bloom is downstream of every lighting knob, so while it is on, tuning them cannot fix a washed
+        // frame. Saved and restored with the rest of the borrowed environment.
+        if (!_savedGlowValid)
+        {
+            _savedGlow = env.GlowEnabled;
+            _savedGlowValid = true;
+        }
+        env.GlowEnabled = ReadFloat(cvars, CvarGlow, 0f) != 0f;
 
         // With GI supplying the fill, the flat term only has to stop pure black in a cascade's blind spot.
         float ambient = ReadFloat(cvars, CvarAmbient, 0.04f) * (gi ? 0.25f : 1f);
@@ -757,12 +782,20 @@ public sealed partial class EditorLighting : Node3D
         }
     }
 
+    private static bool _savedGlow, _savedGlowValid;
+
     private static bool _sunSuppressed;
     private static float _savedSceneSunEnergy = 1f;
 
     /// <summary>Put back the environment the match had before the editor imposed its own preset.</summary>
     public static void RestoreEnvironment()
     {
+        if (_savedGlowValid && _appliedEnv is { } ge)
+        {
+            ge.GlowEnabled = _savedGlow;
+            _savedGlowValid = false;
+        }
+
         if (_appliedEnv is null || !GodotObject.IsInstanceValid(_appliedEnv))
         {
             _appliedEnv = null;

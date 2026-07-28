@@ -635,13 +635,24 @@ public static class VmapMapBuilder
         /// </summary>
         public void BakeColors()
         {
+            if (Dirt.Count != Positions.Count)
+            {
+                Dirt.Clear();
+                for (int i = 0; i < Positions.Count; i++)
+                    Dirt.Add(1f);
+            }
+
             for (int i = 0; i < Positions.Count; i++)
             {
                 NVec3 p = Coords.ToQuake(Positions[i]);
                 NVec3 n = Coords.ToQuake(Normals[i]);
-                Colors[i] = EditorLightBake.Sample(p, n, AlbedoAverage);
+                Colors[i] = EditorLightBake.Sample(p, n, AlbedoAverage, out float dirt);
+                Dirt[i] = dirt;
             }
         }
+
+        /// <summary>Per-vertex openness from the direct pass, reused so the bounce is occluded the same way.</summary>
+        public readonly List<float> Dirt = new();
 
         /// <summary>Average albedo of this cell's shader — the colour its bounce light carries.</summary>
         public Color AlbedoAverage = new(0.45f, 0.45f, 0.45f);
@@ -654,8 +665,11 @@ public static class VmapMapBuilder
                 NVec3 p = Coords.ToQuake(Positions[i]);
                 NVec3 n = Coords.ToQuake(Normals[i]);
                 Color bounce = EditorLightBake.SampleBounce(p, n);
+                // Bounce is occluded by the SAME dirt the direct pass measured. Without this the indirect
+                // pass floods exactly the enclosed corners dirt just darkened, and the depth cancels out.
+                float d = i < Dirt.Count ? Dirt[i] : 1f;
                 Color c = Colors[i];
-                Colors[i] = new Color(c.R + bounce.R, c.G + bounce.G, c.B + bounce.B);
+                Colors[i] = new Color(c.R + bounce.R * d, c.G + bounce.G * d, c.B + bounce.B * d);
             }
         }
 
@@ -674,13 +688,12 @@ public static class VmapMapBuilder
                 // calibrations produced identical statistics to the hundredth). Store at 1/RANGE and let the
                 // shader expand: a poor man's HDR vertex lightmap.
                 var packed = new Color[Colors.Count];
+                const float inv = 1f / EditorWorldShader.BakedColorRange;
+                static float Enc(float v) => MathF.Sqrt(Math.Clamp(v * inv, 0f, 1f));
                 for (int i = 0; i < Colors.Count; i++)
                 {
                     Color c = Colors[i];
-                    packed[i] = new Color(
-                        c.R * (1f / EditorWorldShader.BakedColorRange),
-                        c.G * (1f / EditorWorldShader.BakedColorRange),
-                        c.B * (1f / EditorWorldShader.BakedColorRange));
+                    packed[i] = new Color(Enc(c.R), Enc(c.G), Enc(c.B));
                 }
                 arrays[(int)Mesh.ArrayType.Color] = packed;
             }

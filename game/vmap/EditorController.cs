@@ -9,45 +9,6 @@ using NVec3 = System.Numerics.Vector3;
 namespace XonoticGodot.Game.Vmap;
 
 /// <summary>
-/// What the manipulator handles do — the Radiant/Blender-style mode cycle. Independent of
-/// <see cref="EditorTool"/>: the tool decides WHAT is selected, the manipulator decides HOW it transforms.
-/// </summary>
-public enum ManipulatorMode
-{
-    /// <summary>Axis arrows: drag to translate along X, Y or Z.</summary>
-    Translate,
-
-    /// <summary>Curved arcs: drag to rotate about X, Y or Z.</summary>
-    Rotate,
-
-    /// <summary>Axis boxes: drag to scale.</summary>
-    Scale,
-}
-
-/// <summary>Which sub-object the pick resolves to, cycled by the tool key.</summary>
-public enum EditorTool
-{
-    /// <summary>
-    /// No tool: nothing is picked and nothing is highlighted. Useful for LOOKING at the map — the hover
-    /// outline is drawn over the very surfaces whose lighting you are trying to judge, and there is no way
-    /// to see an unmarked wall while a tool is live.
-    /// </summary>
-    None,
-
-    /// <summary>Select and move whole brushes.</summary>
-    Brush,
-
-    /// <summary>Select faces; dragging pushes the face along its own normal.</summary>
-    Face,
-
-    /// <summary>Select edges; dragging moves both endpoints and refits the meeting planes.</summary>
-    Edge,
-
-    /// <summary>Select vertices; dragging moves one corner and refits the meeting planes.</summary>
-    Vertex,
-}
-
-/// <summary>
 /// Drives in-game geometry editing (design doc §11.4): owns the <see cref="VmapEditSession"/>, turns the
 /// camera into picks, and turns mouse drags into ops.
 ///
@@ -105,45 +66,201 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>
     /// Active sub-object tool. Starts at <see cref="EditorTool.None"/>: a session opens by LOOKING at the
-    /// map, and a hover outline drawn over whatever you aim at is in the way of judging it. Key 3 cycles in.
+    /// map, and a hover outline drawn over whatever you aim at is in the way of judging it.
     /// </summary>
     public EditorTool Tool { get; private set; } = EditorTool.None;
 
-    /// <summary>Active manipulator mode (translate / rotate / scale).</summary>
-    public ManipulatorMode Manipulator { get; private set; } = ManipulatorMode.Translate;
+    /// <summary>
+    /// What a handle drag does with the current tool. Always a mode the tool actually offers — every path that
+    /// writes it goes through <see cref="EditorTools.Supports"/> or <see cref="EditorTools.CarryMode"/>, so the
+    /// pair can never drift into a combination the menu would not show.
+    /// </summary>
+    public ToolMode Mode { get; private set; } = ToolMode.None;
 
-    /// <summary>Cycle the manipulator: translate → rotate → scale.</summary>
-    public void CycleManipulator()
+    /// <summary>Which manipulator handles the current mode draws. Derived, never stored.</summary>
+    public HandleSet Handles => EditorTools.HandlesFor(Mode);
+
+    /// <summary>The HUD action line: <c>Tool &gt; Mode: subject</c> (design doc §11.9).</summary>
+    public string ActionLine => EditorTools.ActionLine(Tool, Mode, ActionSubject());
+
+    /// <summary>
+    /// What the current tool+mode is about to act ON, in the mapper's words. Paste names the clipboard because
+    /// that is the thing about to land in the world; everything else names the selection, falling back to what
+    /// the crosshair is over so the line is never blank while you are aiming at something.
+    /// </summary>
+    private string ActionSubject()
     {
-        Manipulator = Manipulator switch
+        if (Mode == ToolMode.Paste)
+            return Clipboard.IsEmpty ? "(clipboard empty)" : Clipboard.Describe();
+
+        if (_session is { } s && s.Selection.Count > 0)
+            return DescribeSelection(s.Selection);
+
+        if (Hover.Hit && !Hover.Selection.IsEmpty)
+            return DescribeOne(Hover.Selection);
+
+        return "";
+    }
+
+    /// <summary>Name a selection the way the HUD should read it: one item spelled out, many summarised.</summary>
+    private static string DescribeSelection(IReadOnlyList<VmapSelection> sel)
+    {
+        if (sel.Count == 1)
+            return DescribeOne(sel[0]);
+
+        // Mixed selections are possible (shift-click a brush then a patch), so only claim a kind when they agree.
+        VmapSelectionKind kind = sel[0].Kind;
+        for (int i = 1; i < sel.Count; i++)
+            if (sel[i].Kind != kind)
+                return $"{sel.Count} items";
+        return $"{sel.Count} {kind.ToString().ToLowerInvariant()}s";
+    }
+
+    private static string DescribeOne(VmapSelection s) => s.Kind switch
+    {
+        VmapSelectionKind.Brush => $"Brush #{s.BrushId}",
+        VmapSelectionKind.Face => $"Face {s.FaceIndex} of brush #{s.BrushId}",
+        VmapSelectionKind.Edge => $"Edge of brush #{s.BrushId}",
+        VmapSelectionKind.Vertex => $"Vertex of brush #{s.BrushId}",
+        VmapSelectionKind.Patch => $"Patch #{s.PatchId}",
+        _ => "",
+    };
+
+    /// <summary>
+    /// The editor clipboard. Lives on the controller rather than the session because it deliberately SURVIVES
+    /// closing a map: copying a light rig out of one level and pasting it into another is a thing mappers do,
+    /// and there is no reason the document boundary should eat it.
+    /// </summary>
+    public VmapClipboard Clipboard { get; } = new();
+
+    /// <summary>
+    /// Cycle the mode within the current tool. The menu is the discoverable path; this is the keyboard one, and
+    /// it wraps within the tool so it can never land on a mode the tool does not offer.
+    /// </summary>
+    public void CycleMode()
+    {
+        IReadOnlyList<ToolMode> modes = EditorTools.ModesFor(Tool);
+        if (modes.Count == 0)
+            return;
+
+        int at = 0;
+        for (int i = 0; i < modes.Count; i++)
+            if (modes[i] == Mode)
+            {
+                at = i;
+                break;
+            }
+        SetMode(modes[(at + 1) % modes.Count]);
+    }
+
+    /// <summary>Set the mode directly. Refused (and logged) when the current tool does not offer it.</summary>
+    public bool SetMode(ToolMode mode)
+    {
+        if (mode != ToolMode.None && !EditorTools.Supports(Tool, mode))
         {
-            ManipulatorMode.Translate => ManipulatorMode.Rotate,
-            ManipulatorMode.Rotate => ManipulatorMode.Scale,
-            _ => ManipulatorMode.Translate,
-        };
-        Log.Info($"editor manipulator: {Manipulator}");
+            Log.Warn($"editor: {EditorTools.Label(Tool)} has no {EditorTools.Label(mode)} mode");
+            return false;
+        }
+        Mode = mode;
+        CancelDrag();
+        Log.Info($"editor mode: {EditorTools.ActionLine(Tool, Mode)}");
+        return true;
     }
 
     /// <summary>
-    /// World position the manipulator handles are drawn at — the centre of the current selection, or the
-    /// hovered feature when nothing is selected yet, so the handles always have somewhere meaningful to sit.
+    /// World position the manipulator handles sit at: the centre of the current SELECTION.
+    ///
+    /// Deliberately no hover fallback. Under the two-phase model (§11.9) handles are click targets, and
+    /// handles that follow whatever you happen to be aiming at would put a grabbable arrow in front of every
+    /// surface in the level — you could never click the geometry to select it in the first place.
     /// </summary>
     public bool TryGetManipulatorOrigin(out NVec3 origin)
     {
         origin = NVec3.Zero;
-        if (_session is null || _document is null)
+        if (_session is null || _document is null || _session.Selection.Count == 0)
             return false;
 
         List<int> ids = _session.SelectedBrushIds();
         if (ids.Count > 0 && VmapEdit.TryGetSelectionCenter(_document, ids, out origin))
             return true;
 
-        if (Hover.Hit)
+        // A patch-only selection has no brush ids; fall back to its control-point centroid.
+        return TryGetPatchSelectionCenter(out origin);
+    }
+
+    private bool TryGetPatchSelectionCenter(out NVec3 origin)
+    {
+        origin = NVec3.Zero;
+        if (_session is null || _document is null)
+            return false;
+
+        NVec3 sum = NVec3.Zero;
+        int n = 0;
+        foreach (VmapSelection s in _session.Selection)
         {
-            origin = Hover.Point;
-            return true;
+            if (s.Kind != VmapSelectionKind.Patch || _document.FindPatch(s.PatchId) is not { } p)
+                continue;
+            foreach (NVec3 c in p.Controls)
+            {
+                sum += c;
+                n++;
+            }
         }
-        return false;
+        if (n == 0)
+            return false;
+        origin = sum / n;
+        return true;
+    }
+
+    // =============================================================================================
+    //  Manipulator handles (§11.9) — the click targets that make a transform pick ONE axis
+    // =============================================================================================
+
+    private readonly List<EditorHandle> _handles = new();
+    private EditorHandle? _hoverHandle;
+    private EditorHandle? _grabbedHandle;
+
+    /// <summary>The live handle set, for the gizmo to draw. Empty when nothing is selected.</summary>
+    public IReadOnlyList<EditorHandle> HandleList => _handles;
+
+    /// <summary>The handle the crosshair is over, for highlighting. Null when aiming elsewhere.</summary>
+    public EditorHandle? HoverHandle => _hoverHandle;
+
+    /// <summary>The handle a live drag is riding, or null when idle.</summary>
+    public EditorHandle? GrabbedHandle => _grabbedHandle;
+
+    /// <summary>
+    /// Rebuild the handle set. Sized so it stays a constant fraction of the viewport regardless of how far
+    /// away the selection is: a fixed world size is a thumbnail across a hall and fills the screen up close,
+    /// and either way it stops being clickable.
+    /// </summary>
+    private void UpdateHandles()
+    {
+        HandleSet set = Handles;
+        if (set == HandleSet.None || _camera is null || !TryGetManipulatorOrigin(out NVec3 centre))
+        {
+            _handles.Clear();
+            _hoverHandle = null;
+            return;
+        }
+
+        NVec3 eye = Coords.ToQuake(_camera.GlobalTransform.Origin);
+        float distance = (centre - eye).Length();
+        float tanHalfFov = MathF.Tan(Mathf.DegToRad(_camera.Fov) * 0.5f);
+        VmapHandles.Build(_handles, set, centre, VmapHandles.ScreenScale(distance, tanHalfFov));
+
+        // A live drag keeps its highlight on the handle it grabbed; re-picking would let it flicker onto a
+        // neighbour as the geometry moves under the crosshair.
+        if (_dragging)
+        {
+            _hoverHandle = _grabbedHandle;
+            return;
+        }
+
+        (NVec3 rayOrigin, NVec3 rayDir) = CameraRay();
+        _hoverHandle = VmapHandles.TryPick(_handles, rayOrigin, rayDir, out EditorHandle hit, out _)
+            ? hit
+            : null;
     }
 
     /// <summary>What the crosshair is currently over (drives the hover highlight).</summary>
@@ -298,6 +415,8 @@ public sealed partial class EditorController : Node3D
         // let the highlight wander onto whatever the ghost happens to overlap.
         if (!_dragging)
             UpdateCrosshairHover();
+
+        UpdateHandles();
     }
 
     // =============================================================================================
@@ -354,42 +473,79 @@ public sealed partial class EditorController : Node3D
         return (origin, dir);
     }
 
-    private VmapSelectionKind PickMode() => Tool switch
+    private VmapSelectionKind PickMode()
     {
-        EditorTool.Brush => VmapSelectionKind.Brush,
-        EditorTool.Edge => VmapSelectionKind.Edge,
-        EditorTool.Vertex => VmapSelectionKind.Vertex,
-        _ => VmapSelectionKind.Face,
-    };
+        // Select resolves at object granularity by default, but its Face mode is exactly "pick the face
+        // instead" — the one place the tool alone does not determine the pick kind.
+        if (Tool == EditorTool.Select && Mode == ToolMode.Face)
+            return VmapSelectionKind.Face;
+        return EditorTools.PickKind(Tool);
+    }
 
     // =============================================================================================
     //  Drag lifecycle
     // =============================================================================================
 
-    /// <summary>Begin a grab on whatever the crosshair is over. No-op when nothing is hovered.</summary>
-    public void BeginDrag(bool addToSelection)
+    /// <summary>
+    /// A left-click in the 3D view. TWO-PHASE (§11.9): if the crosshair is on a manipulator handle this starts
+    /// a transform on that handle's axis; otherwise it only SELECTS.
+    ///
+    /// Dragging the object body no longer transforms anything, and that is the point. The old behaviour moved
+    /// the selection along both screen axes at once with no way to say "only Z", which is fine for shoving a
+    /// prop roughly into place and useless for the alignment work an editor exists to do. Making the axis
+    /// something you aim at turns it into a choice instead of an inference.
+    ///
+    /// Returns true when a drag actually began.
+    /// </summary>
+    public bool BeginDrag(bool addToSelection)
     {
-        if (_session is null || !Hover.Hit || _dragging)
-            return;
+        if (_session is null || _dragging)
+            return false;
+
+        // --- phase two: a handle is under the crosshair, so transform along it ---
+        if (_hoverHandle is { } handle && _session.Selection.Count > 0)
+        {
+            _grabbedHandle = handle;
+            _dragSelection = _session.Selection[0];
+            _dragStartPoint = handle.Tip;
+            _dragDistance = HandleDistance(handle);
+            _dragDelta = NVec3.Zero;
+            _dragRaw = NVec3.Zero;
+            _dragAngle = 0f;
+            _dragScale = NVec3.One;
+            _dragAxis = handle.Kind == HandleKind.ScaleUniform ? NVec3.Zero : handle.Axis;
+            _dragSnap = default;
+            _dragging = true;
+            return true;
+        }
+
+        // --- phase one: nothing grabbed, so this is a selection click ---
+        if (!Hover.Hit)
+        {
+            // Clicking empty space clears the selection, which is also how you put the handles away.
+            if (!addToSelection)
+                _session.Selection.Clear();
+            return false;
+        }
 
         if (addToSelection)
             _session.ToggleSelect(Hover.Selection);
         else
             _session.Select(Hover.Selection);
 
-        _dragSelection = Hover.Selection;
-        _dragStartPoint = Hover.Point;
-        _dragDistance = Hover.Distance;
-        _dragDelta = NVec3.Zero;
-        _dragRaw = NVec3.Zero;
-        _dragAngle = 0f;
-        _dragAxis = Manipulator == ManipulatorMode.Rotate
-            ? RotationAxis()
-            : Hover.Selection.Kind == VmapSelectionKind.Face ? Hover.Normal : NVec3.Zero;
-        if (Hover.Selection.Kind == VmapSelectionKind.Patch)
-            _dragAxis = NVec3.Zero;   // free 3D: a curved surface has no single axis to push along
-        _dragSnap = default;
-        _dragging = true;
+        // Rebuild immediately rather than waiting for the next frame, so the handles are already grabbable by
+        // the time the mapper's second click lands. At speed those two clicks are ~80ms apart.
+        UpdateHandles();
+        return false;
+    }
+
+    /// <summary>Distance from the eye to a handle, for the units-per-pixel conversion during its drag.</summary>
+    private float HandleDistance(EditorHandle handle)
+    {
+        if (_camera is null)
+            return 256f;
+        NVec3 eye = Coords.ToQuake(_camera.GlobalTransform.Origin);
+        return MathF.Max(1f, (handle.Tip - eye).Length());
     }
 
     /// <summary>
@@ -417,26 +573,91 @@ public sealed partial class EditorController : Node3D
 
         // Screen Y grows downward, so an upward drag is -Y.
         // In ROTATE mode the pointer drives an ANGLE, not a displacement: horizontal travel turns the
-        // selection about the chosen axis. Degrees-per-pixel is fixed rather than depth-scaled, because a
-        // rotation has no depth for the drag to track against.
-        if (Manipulator == ManipulatorMode.Rotate)
+        // selection about the grabbed ring's axis. Degrees-per-pixel is fixed rather than depth-scaled,
+        // because a rotation has no depth for the drag to track against.
+        if (Mode == ToolMode.Rotate)
         {
             _dragAngle += mouseDelta.X * 0.5f;
             return;
         }
 
         _dragRaw += screenRight * (mouseDelta.X * unitsPerPixel) - screenUp * (mouseDelta.Y * unitsPerPixel);
+
+        if (Mode == ToolMode.Scale)
+        {
+            UpdateScaleFromRaw();
+            return;
+        }
+
         UpdateDragFromRaw();
+    }
+
+    /// <summary>
+    /// Turn the accumulated pointer travel into per-axis scale factors. The reach (pivot to handle) is the
+    /// denominator, so dragging a handle to twice its distance from the pivot doubles the selection — which is
+    /// what makes the gesture feel proportional on a small brush and a large one alike.
+    /// </summary>
+    private void UpdateScaleFromRaw()
+    {
+        if (_grabbedHandle is not { } handle || !TryGetManipulatorOrigin(out NVec3 pivot))
+        {
+            _dragScale = NVec3.One;
+            return;
+        }
+
+        float along;
+        float reach;
+
+        if (handle.Kind == HandleKind.ScaleUniform)
+        {
+            // The centre handle sits ON the pivot, so it has no axis of its own to project onto. Drag right to
+            // grow: a horizontal gesture is the one that reads as "bigger" without an axis to follow.
+            NVec3 right = Coords.ToQuake(_camera!.GlobalTransform.Basis.X);
+            along = NVec3.Dot(_dragRaw, right);
+
+            // Scale against the selection's own size, so the same pointer travel is proportionally the same
+            // change on a 16-unit crate and a 1024-unit hall.
+            reach = SelectionReach();
+        }
+        else
+        {
+            along = NVec3.Dot(_dragRaw, handle.Axis * handle.Sign);
+            reach = MathF.Max(1f, (handle.Tip - pivot).Length());
+        }
+
+        _dragScale = VmapHandles.ScaleFactors(handle, along, reach, ScaleSelectionOp.MinFactor);
+    }
+
+    /// <summary>Half the selection's largest extent, floored so a degenerate selection cannot divide by zero.</summary>
+    private float SelectionReach()
+    {
+        if (_document is null || _session is null)
+            return 64f;
+
+        float best = 0f;
+        foreach (int id in _session.SelectedBrushIds())
+        {
+            if (_document.FindBrush(id) is not { } b || !VmapWinding.TryGetBounds(b, out NVec3 mn, out NVec3 mx))
+                continue;
+            best = MathF.Max(best, (mx - mn).Length() * 0.5f);
+        }
+        return MathF.Max(16f, best);
     }
 
     /// <summary>Accumulated, unsnapped drag offset in world space.</summary>
     private NVec3 _dragRaw;
 
-    /// <summary>Accumulated rotation in degrees while dragging in <see cref="ManipulatorMode.Rotate"/>.</summary>
+    /// <summary>Per-axis scale factors the current drag would apply (one outside a scale drag).</summary>
+    private NVec3 _dragScale = NVec3.One;
+
+    /// <summary>The pending scale, for the ghost preview and the HUD readout.</summary>
+    public NVec3 DragScale => _dragging && Mode == ToolMode.Scale ? _dragScale : NVec3.One;
+
+    /// <summary>Accumulated rotation in degrees while dragging in <see cref="ToolMode.Rotate"/>.</summary>
     private float _dragAngle;
 
     /// <summary>Snapped rotation the current drag would apply, in degrees (0 outside a rotate drag).</summary>
-    public float DragAngle => Manipulator == ManipulatorMode.Rotate && _dragging
+    public float DragAngle => Mode == ToolMode.Rotate && _dragging
         ? VmapEdit.SnapToGrid(_dragAngle, AngleSnapDegrees)
         : 0f;
 
@@ -450,11 +671,15 @@ public sealed partial class EditorController : Node3D
     public NVec3 DragAxis => _dragAxis;
 
     /// <summary>
-    /// The axis a rotate drag turns about: whichever world axis the camera is most nearly looking ALONG, so
-    /// the ring you can see face-on is the one that turns. Falls back to Z (yaw), the common case.
+    /// The axis a rotate drag turns about: the ring the mapper actually grabbed. Falls back to the world axis
+    /// the camera is most nearly looking along (so the ring you can see face-on is the one that turns) only
+    /// when a rotation is driven from a key rather than a handle.
     /// </summary>
     private NVec3 RotationAxis()
     {
+        if (_grabbedHandle is { Kind: HandleKind.RotateRing } ring)
+            return ring.Axis;
+
         if (_camera is null)
             return new NVec3(0f, 0f, 1f);
 
@@ -464,25 +689,80 @@ public sealed partial class EditorController : Node3D
         return ax >= ay ? new NVec3(1f, 0f, 0f) : new NVec3(0f, 1f, 0f);
     }
 
-    /// <summary>Resolve the raw drag into the committed delta: constrain to the axis, then snap.</summary>
+    /// <summary>
+    /// Resolve the raw drag into the committed delta: constrain to what the grabbed handle permits, then snap.
+    ///
+    /// The handle is the authority now. A face push is still one-dimensional along its own normal, but for
+    /// everything else the axis comes from the arrow or pad the mapper aimed at rather than being inferred
+    /// from the direction the mouse happened to travel.
+    /// </summary>
     private void UpdateDragFromRaw()
     {
+        NVec3 raw = _dragRaw;
+
+        // Constrain FIRST, so snapping quantizes the motion that will actually be applied rather than a
+        // free 3D position that then gets projected (which lands off-grid).
+        if (_grabbedHandle is { } handle)
+            raw = VmapHandles.ConstrainDrag(handle, raw);
+
         // A face push is one-dimensional: only motion along the face normal means anything, and allowing the
         // other two axes would let a careless drag shear the wall sideways.
         if (_dragSelection.Kind == VmapSelectionKind.Face && _dragAxis != NVec3.Zero)
         {
-            float along = VmapEdit.SnapToGrid(NVec3.Dot(_dragRaw, _dragAxis), GridSize);
+            float along = SnapDistance(NVec3.Dot(raw, _dragAxis));
             _dragDelta = _dragAxis * along;
+            _dragSnap = default;
+            return;
+        }
+
+        // An axis-constrained drag snaps per-component and skips geometry snapping: pulling the Z arrow to a
+        // vertex 300 units off in X is not what the mapper asked for, and it is exactly what the free-3D
+        // resolver would do.
+        if (_grabbedHandle is { Kind: HandleKind.MoveAxis or HandleKind.MovePlane })
+        {
+            _dragDelta = new NVec3(SnapDistance(raw.X), SnapDistance(raw.Y), SnapDistance(raw.Z));
             _dragSnap = default;
             return;
         }
 
         PickIndex.EnsureBuilt(_document!, GeometryVersion, IncludeToolBrushes);
         NVec3 resolved = VmapPicking.ResolveDragPosition(
-            PickIndex, _dragStartPoint + _dragRaw, GridSize, SnapRadius,
+            PickIndex, _dragStartPoint + raw, GridSize, SnapRadius,
             _session!.SelectedBrushIds(), out _dragSnap);
         _dragDelta = resolved - _dragStartPoint;
     }
+
+    /// <summary>
+    /// Quantize a distance to the grid, honouring the held-Ctrl inversion (§11.9): Ctrl flips whichever way
+    /// the grid toggle is currently set, so you can drop off-grid for one drag without changing the setting,
+    /// and equally snap for one drag while working freehand.
+    /// </summary>
+    private float SnapDistance(float value) => VmapEdit.SnapToGrid(value, EffectiveGridSnap);
+
+    /// <summary>
+    /// The grid step a drag actually quantizes to: the grid size when the grid is on, zero (no snapping) when
+    /// it is off, and inverted while Ctrl is held.
+    ///
+    /// Tying this to the grid TOGGLE rather than snapping unconditionally is a correctness fix as much as a
+    /// feature: the HUD has always been able to say "Grid: OFF" while every drag still quantized to 64 units,
+    /// which is a readout that contradicts what the editor does.
+    /// </summary>
+    public float EffectiveGridSnap
+    {
+        get
+        {
+            bool on = Cvar(EditorGrid.CvarEnabled, 1f) != 0f;
+            if (SnapInverted)
+                on = !on;
+            return on ? GridSize : 0f;
+        }
+    }
+
+    /// <summary>
+    /// True while the grid snap is being temporarily inverted. Set by the host from the Ctrl key; read here so
+    /// the drag maths and the HUD tip agree on one piece of state.
+    /// </summary>
+    public bool SnapInverted { get; set; }
 
     /// <summary>Commit the drag as a single op. Returns true when geometry actually changed.</summary>
     public bool EndDrag()
@@ -492,22 +772,45 @@ public sealed partial class EditorController : Node3D
 
         VmapSelection sel = _dragSelection;
         NVec3 delta = _dragDelta;
+        NVec3 scale = _dragScale;
         float angle = DragAngle;
-        ManipulatorMode mode = Manipulator;
+        ToolMode mode = Mode;
+
+        // Resolve everything that depends on the grabbed handle BEFORE clearing it: RotationAxis() reads the
+        // grabbed ring, and the manipulator origin is the scale pivot.
+        NVec3 rotAxis = RotationAxis();
+        bool havePivot = TryGetManipulatorOrigin(out NVec3 pivot);
         CancelDrag();
 
-        if (mode == ManipulatorMode.Rotate)
+        if (mode == ToolMode.Rotate)
         {
-            // Rotate the whole selection about its own centre, on the axis nearest the view direction — the
-            // axis whose handle ring is facing you is the one you are turning.
+            // Rotate the whole selection about its own centre, on the axis of the ring that was grabbed.
             List<int> rotIds = _session.SelectedBrushIds();
-            if (angle == 0f || rotIds.Count == 0
-                || !VmapEdit.TryGetSelectionCenter(_document!, rotIds, out NVec3 pivot))
+            if (angle == 0f || rotIds.Count == 0 || !havePivot)
                 return false;
 
-            if (!_session.Apply(new RotateBrushesOp(rotIds, pivot, RotationAxis(), angle)))
+            if (!_session.Apply(new RotateBrushesOp(rotIds, pivot, rotAxis, angle)))
             {
                 Log.Info("editor: rotation refused — that would break the brush");
+                return false;
+            }
+            GeometryVersion++;
+            return true;
+        }
+
+        if (mode == ToolMode.Scale)
+        {
+            if (scale == NVec3.One || !havePivot)
+                return false;
+
+            List<int> scaleBrushes = _session.SelectedBrushIds();
+            List<int> scalePatches = SelectedPatchIds();
+            if (scaleBrushes.Count == 0 && scalePatches.Count == 0)
+                return false;
+
+            if (!_session.Apply(new ScaleSelectionOp(scaleBrushes, scalePatches, pivot, scale)))
+            {
+                Log.Info("editor: scale refused — that would break the brush");
                 return false;
             }
             GeometryVersion++;
@@ -520,7 +823,7 @@ public sealed partial class EditorController : Node3D
         IVmapOp? op = sel.Kind switch
         {
             // A patch moves as a whole object — it has no plane set to push or corner to refit.
-            VmapSelectionKind.Patch => new TranslatePatchesOp(new[] { sel.PatchId }, delta),
+            VmapSelectionKind.Patch => new TranslatePatchesOp(SelectedPatchIds(), delta),
             VmapSelectionKind.Face => BuildFaceOp(sel, delta),
             VmapSelectionKind.Vertex or VmapSelectionKind.Edge => new MoveVerticesOp(sel.BrushId, sel.Vertices, delta),
             VmapSelectionKind.Brush => new TranslateBrushesOp(_session.SelectedBrushIds(), delta),
@@ -541,10 +844,24 @@ public sealed partial class EditorController : Node3D
         return true;
     }
 
+    /// <summary>Patch ids in the current selection, deduplicated — the patch counterpart of SelectedBrushIds.</summary>
+    public List<int> SelectedPatchIds()
+    {
+        var ids = new List<int>();
+        if (_session is null)
+            return ids;
+        foreach (VmapSelection s in _session.Selection)
+            if (s.Kind == VmapSelectionKind.Patch && !ids.Contains(s.PatchId))
+                ids.Add(s.PatchId);
+        return ids;
+    }
+
     /// <summary>Abandon an in-flight drag without applying anything.</summary>
     public void CancelDrag()
     {
         _dragging = false;
+        _grabbedHandle = null;
+        _dragScale = NVec3.One;
         _dragSelection = VmapSelection.None;
         _dragDelta = NVec3.Zero;
         _dragRaw = NVec3.Zero;
@@ -574,26 +891,42 @@ public sealed partial class EditorController : Node3D
     //  Commands issued by binds
     // =============================================================================================
 
-    /// <summary>Cycle the sub-object tool (none → brush → face → edge → vertex → none).</summary>
+    /// <summary>
+    /// Cycle to the next tool. Skips tools that are not implemented yet: the context menu shows them (so the
+    /// roster reads as a plan) but a keyboard cycle that can strand you in a tool which does nothing is a
+    /// different thing entirely, and there would be no feedback saying why the editor stopped responding.
+    /// </summary>
     public void CycleTool()
     {
-        Tool = Tool switch
+        IReadOnlyList<EditorTool> all = EditorTools.All;
+        int at = 0;
+        for (int i = 0; i < all.Count; i++)
+            if (all[i] == Tool)
+            {
+                at = i;
+                break;
+            }
+
+        for (int step = 1; step <= all.Count; step++)
         {
-            EditorTool.None => EditorTool.Brush,
-            EditorTool.Brush => EditorTool.Face,
-            EditorTool.Face => EditorTool.Edge,
-            EditorTool.Edge => EditorTool.Vertex,
-            _ => EditorTool.None,
-        };
-        CancelDrag();
-        Log.Info($"editor tool: {Tool}");
+            EditorTool next = all[(at + step) % all.Count];
+            if (!EditorTools.IsImplemented(next))
+                continue;
+            SetTool(next);
+            return;
+        }
     }
 
-    /// <summary>Set the tool directly.</summary>
+    /// <summary>
+    /// Set the tool directly, carrying the current mode across when the new tool also offers it (Brush→Patch
+    /// while rotating stays in Rotate) and falling back to the new tool's default when it does not.
+    /// </summary>
     public void SetTool(EditorTool tool)
     {
         Tool = tool;
+        Mode = EditorTools.CarryMode(tool, Mode);
         CancelDrag();
+        Log.Info($"editor tool: {EditorTools.ActionLine(Tool, Mode)}");
     }
 
     /// <summary>Undo one step and refresh derived geometry.</summary>

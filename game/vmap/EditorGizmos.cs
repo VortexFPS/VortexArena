@@ -147,10 +147,11 @@ public sealed partial class EditorGizmos : Node3D
             }
         }
 
-        // --- manipulator handles: axis arrows / rotation arcs / scale boxes at the selection ---
-        if (c.TryGetManipulatorOrigin(out NVec3 manipOrigin))
+        // --- manipulator handles: drawn from the SAME list the ray test picks against, so the arrow you can
+        //     see and the thing you can grab are one description rather than two that drift apart ---
+        if (c.HandleList.Count > 0)
         {
-            DrawManipulator(manipOrigin, c.Manipulator, c.DragAxis);
+            DrawHandles(c.HandleList, c.HoverHandle);
             anything = true;
         }
 
@@ -197,48 +198,91 @@ public sealed partial class EditorGizmos : Node3D
     private static readonly Color AxisZ = new(0.45f, 0.6f, 1f, 1f);
     private static readonly Color AxisActive = new(1f, 0.95f, 0.4f, 1f);
 
-    /// <summary>Handle length in world units. Fixed rather than screen-constant for now — see the note below.</summary>
-    private const float HandleLength = 48f;
-
     /// <summary>
-    /// Draw the manipulator at <paramref name="origin"/>. The three modes are visually distinct at a glance —
-    /// straight arrows translate, curved arcs rotate, boxed stubs scale — because the mode is otherwise
-    /// invisible state and acting in the wrong one is an easy, annoying mistake.
+    /// Draw the manipulator from the built handle list. The kinds are visually distinct at a glance — straight
+    /// arrows translate, curved arcs rotate, boxed stubs scale — because the mode is otherwise invisible state
+    /// and acting in the wrong one is an easy, annoying mistake.
     ///
-    /// <paramref name="activeAxis"/> (the constrained axis of a live drag) is highlighted, so the handle shows
-    /// which way the current edit is actually moving.
-    ///
-    /// NOTE: the handles are currently an INDICATOR — they are not yet click targets. Ray-vs-handle picking
-    /// (so grabbing an arrow beats grabbing the face behind it) is the remaining piece; dragging still goes
-    /// through face/vertex picking.
+    /// <paramref name="hovered"/> is highlighted, which is what tells the mapper the next click will grab THIS
+    /// axis. Under the two-phase model (§11.9) that feedback is not decoration: a click that misses every
+    /// handle re-selects instead of transforming, so knowing whether you are on one is the difference between
+    /// the edit you meant and starting over.
     /// </summary>
-    private void DrawManipulator(NVec3 origin, ManipulatorMode mode, NVec3 activeAxis)
+    private void DrawHandles(IReadOnlyList<EditorHandle> handles, EditorHandle? hovered)
     {
-        Span<NVec3> axes = stackalloc NVec3[3];
-        axes[0] = new NVec3(1f, 0f, 0f);
-        axes[1] = new NVec3(0f, 1f, 0f);
-        axes[2] = new NVec3(0f, 0f, 1f);
-        ReadOnlySpan<Color> colors = stackalloc Color[3] { AxisX, AxisY, AxisZ };
-
-        for (int i = 0; i < 3; i++)
+        foreach (EditorHandle h in handles)
         {
-            NVec3 axis = axes[i];
-            // Highlight whichever axis the live drag is constrained to.
-            bool active = activeAxis != NVec3.Zero && MathF.Abs(NVec3.Dot(activeAxis, axis)) > 0.9f;
-            Color color = active ? AxisActive : colors[i];
+            bool active = hovered is { } hv && Same(hv, h);
+            Color color = active ? AxisActive : ColorFor(h.Axis);
 
-            switch (mode)
+            switch (h.Kind)
             {
-                case ManipulatorMode.Translate:
-                    DrawArrow(origin, axis, HandleLength, color);
+                case HandleKind.MoveAxis:
+                    DrawArrow(h.Origin, h.Axis, (h.Tip - h.Origin).Length(), color);
                     break;
-                case ManipulatorMode.Rotate:
-                    DrawArc(origin, axis, HandleLength, color);
+
+                case HandleKind.MovePlane:
+                    DrawPad(h.Origin, h.Axis, h.Axis2, h.Radius, active ? AxisActive : PadColor);
                     break;
+
+                case HandleKind.RotateRing:
+                    DrawRing(h.Origin, h.Axis, h.Radius, color);
+                    break;
+
+                case HandleKind.ScaleUniform:
+                    DrawBox(h.Tip, h.Radius, active ? AxisActive : UniformColor);
+                    break;
+
                 default:
-                    DrawScaleHandle(origin, axis, HandleLength, color);
+                    DrawScaleHandle(h.Origin, h.Axis * h.Sign, (h.Tip - h.Origin).Length(), color);
                     break;
             }
+        }
+    }
+
+    /// <summary>Identity for highlighting: same kind, same axis, same side.</summary>
+    private static bool Same(EditorHandle a, EditorHandle b)
+        => a.Kind == b.Kind && a.Axis == b.Axis && a.Axis2 == b.Axis2 && a.Sign == b.Sign;
+
+    private static Color ColorFor(NVec3 axis)
+    {
+        if (MathF.Abs(axis.X) > 0.5f && MathF.Abs(axis.Y) < 0.5f && MathF.Abs(axis.Z) < 0.5f) return AxisX;
+        if (MathF.Abs(axis.Y) > 0.5f && MathF.Abs(axis.Z) < 0.5f) return AxisY;
+        if (MathF.Abs(axis.Z) > 0.5f) return AxisZ;
+        return UniformColor;
+    }
+
+    private static readonly Color PadColor = new(0.9f, 0.85f, 0.4f, 0.75f);
+    private static readonly Color UniformColor = new(0.9f, 0.9f, 0.95f, 1f);
+
+    /// <summary>A small square in the plane of two axes — the two-axis move pad.</summary>
+    private void DrawPad(NVec3 centre, NVec3 u, NVec3 v, float half, Color color)
+    {
+        NVec3 a = centre + (u + v) * half;
+        NVec3 b = centre + (u - v) * half;
+        NVec3 c = centre - (u + v) * half;
+        NVec3 d = centre - (u - v) * half;
+        Line(a, b, color);
+        Line(b, c, color);
+        Line(c, d, color);
+        Line(d, a, color);
+    }
+
+    /// <summary>
+    /// A FULL circle about the axis. Full rather than the quarter-arc the indicator used, because the ring is
+    /// now a click target and a mapper cannot be expected to find the one quadrant that happens to be live.
+    /// </summary>
+    private void DrawRing(NVec3 origin, NVec3 axis, float radius, Color color)
+    {
+        (NVec3 u, NVec3 v) = Perpendiculars(axis);
+        const int segments = 40;
+        NVec3 prev = origin + u * radius;
+        for (int i = 1; i <= segments; i++)
+        {
+            float t = i / (float)segments * MathF.Tau;
+            NVec3 p = origin + (u * MathF.Cos(t) + v * MathF.Sin(t)) * radius;
+            Line(prev, p, color);
+            prev = p;
         }
     }
 
@@ -256,29 +300,6 @@ public sealed partial class EditorGizmos : Node3D
         Line(tip, baseP - u * (head * 0.5f), color);
         Line(tip, baseP + v * (head * 0.5f), color);
         Line(tip, baseP - v * (head * 0.5f), color);
-    }
-
-    /// <summary>A quarter-circle arc about the axis — the rotate handle.</summary>
-    private void DrawArc(NVec3 origin, NVec3 axis, float radius, Color color)
-    {
-        (NVec3 u, NVec3 v) = Perpendiculars(axis);
-        const int segments = 16;
-        NVec3 prev = origin + u * radius;
-        for (int i = 1; i <= segments; i++)
-        {
-            // A quarter turn is enough to read as "rotation about this axis" without three full rings
-            // overlapping into an unreadable ball.
-            float t = i / (float)segments * (MathF.PI * 0.5f);
-            NVec3 p = origin + (u * MathF.Cos(t) + v * MathF.Sin(t)) * radius;
-            Line(prev, p, color);
-            prev = p;
-        }
-
-        // A small barb at the end so the arc reads as an arrow rather than a plain curve.
-        NVec3 endDir = NVec3.Normalize(prev - origin);
-        NVec3 tangent = NVec3.Cross(axis, endDir);
-        Line(prev, prev - tangent * (radius * 0.16f) + endDir * (radius * 0.10f), color);
-        Line(prev, prev - tangent * (radius * 0.16f) - endDir * (radius * 0.10f), color);
     }
 
     /// <summary>A stub ending in a small cube — the scale handle.</summary>

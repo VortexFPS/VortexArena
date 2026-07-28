@@ -114,7 +114,9 @@ public sealed class VmapEditSession
         // Snapshot BEFORE applying. An op that creates a brush reports no touched ids yet, so also capture the
         // brush-id set to detect additions.
         var before = Snapshot(op.TouchedBrushIds);
+        var patchBefore = SnapshotPatches(op.TouchedPatchIds);
         var idsBefore = new HashSet<int>(Document.Brushes.Select(b => b.Id));
+        var patchIdsBefore = new HashSet<int>(Document.Patches.Select(p => p.Id));
 
         if (!op.Apply(Document))
             return false;
@@ -127,7 +129,15 @@ public sealed class VmapEditSession
             if (Document.FindBrush(id) is null && !before.ContainsKey(id))
                 before[id] = null;                          // removed but unsnapshotted: cannot restore
 
-        _undo.Add(new Entry(op.Describe(), before, Snapshot(before.Keys.ToList())));
+        foreach (VmapPatch p in Document.Patches)
+            if (!patchIdsBefore.Contains(p.Id))
+                patchBefore[p.Id] = null;
+        foreach (int id in patchIdsBefore)
+            if (Document.FindPatch(id) is null && !patchBefore.ContainsKey(id))
+                patchBefore[id] = null;
+
+        _undo.Add(new Entry(op.Describe(), before, Snapshot(before.Keys.ToList()),
+            patchBefore, SnapshotPatches(patchBefore.Keys.ToList())));
         if (_undo.Count > UndoLimit)
             _undo.RemoveAt(0);
         _redo.Clear();
@@ -143,6 +153,7 @@ public sealed class VmapEditSession
         Entry e = _undo[^1];
         _undo.RemoveAt(_undo.Count - 1);
         Restore(e.Before);
+        RestorePatches(e.PatchesBefore);
         _redo.Add(e);
         IsDirty = true;
         return true;
@@ -156,6 +167,7 @@ public sealed class VmapEditSession
         Entry e = _redo[^1];
         _redo.RemoveAt(_redo.Count - 1);
         Restore(e.After);
+        RestorePatches(e.PatchesAfter);
         _undo.Add(e);
         IsDirty = true;
         return true;
@@ -204,8 +216,11 @@ public sealed class VmapEditSession
 
     // ---- snapshot plumbing -------------------------------------------------------------------
 
-    /// <summary>A journal entry: the label plus the touched brushes before and after the op.</summary>
-    private readonly record struct Entry(string Label, Dictionary<int, VmapBrush?> Before, Dictionary<int, VmapBrush?> After);
+    /// <summary>A journal entry: the label plus the touched brushes and patches before and after the op.</summary>
+    private readonly record struct Entry(
+        string Label,
+        Dictionary<int, VmapBrush?> Before, Dictionary<int, VmapBrush?> After,
+        Dictionary<int, VmapPatch?> PatchesBefore, Dictionary<int, VmapPatch?> PatchesAfter);
 
     /// <summary>Clone the given brushes; a null value records "did not exist".</summary>
     private Dictionary<int, VmapBrush?> Snapshot(IReadOnlyList<int> ids)
@@ -214,6 +229,48 @@ public sealed class VmapEditSession
         foreach (int id in ids)
             map[id] = Document.FindBrush(id)?.Clone();
         return map;
+    }
+
+    /// <summary>Clone the given patches; a null value records "did not exist".</summary>
+    private Dictionary<int, VmapPatch?> SnapshotPatches(IReadOnlyList<int> ids)
+    {
+        var map = new Dictionary<int, VmapPatch?>();
+        foreach (int id in ids)
+            map[id] = Document.FindPatch(id)?.Clone();
+        return map;
+    }
+
+    /// <summary>Restore a patch snapshot, mirroring <see cref="Restore"/>'s replace / re-add / remove cases.</summary>
+    private void RestorePatches(Dictionary<int, VmapPatch?> snapshot)
+    {
+        foreach ((int id, VmapPatch? saved) in snapshot)
+        {
+            VmapPatch? live = Document.FindPatch(id);
+            if (saved is null)
+            {
+                if (live is not null)
+                    Document.Patches.Remove(live);
+                continue;
+            }
+
+            if (live is null)
+            {
+                Document.Patches.Add(saved.Clone());
+                continue;
+            }
+
+            // Mutate in place rather than swapping the list entry: the pick index and any other cache keyed on
+            // the patch OBJECT would otherwise keep pointing at the replaced instance.
+            live.Material = saved.Material;
+            live.Width = saved.Width;
+            live.Height = saved.Height;
+            live.SurfaceFlags = saved.SurfaceFlags;
+            live.ContentFlags = saved.ContentFlags;
+            live.Controls.Clear();
+            live.Controls.AddRange(saved.Controls);
+            live.ControlUvs.Clear();
+            live.ControlUvs.AddRange(saved.ControlUvs);
+        }
     }
 
     /// <summary>Restore a snapshot: replace present brushes, re-add missing ones, remove ones that should not exist.</summary>
@@ -240,6 +297,11 @@ public sealed class VmapEditSession
                 live.Faces.Add(f);
             live.IsDetail = saved.IsDetail;
             live.ContentFlags = saved.ContentFlags;
+            // Restore the CLASSIFICATION too, not just the geometry. These two decide which gametype the brush
+            // belongs to and whether it is pickable at all, so leaving them out makes undo a lossy operation
+            // for anything an op reclassified.
+            live.SubmodelIndex = saved.SubmodelIndex;
+            live.IsToolBrush = saved.IsToolBrush;
         }
     }
 }

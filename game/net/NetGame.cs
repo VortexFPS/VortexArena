@@ -5860,6 +5860,12 @@ public sealed partial class NetGame : Node3D
         if (_editor is not null)
         {
             _editor.Active = editorFreeFly;
+
+            // (E7) Ctrl temporarily INVERTS grid snapping (§11.9). Polled per frame rather than latched on a
+            // key event, because it is a held modifier: an edge-triggered read would strand the editor in the
+            // inverted state whenever the release event went to a focused control instead of here.
+            _editor.SnapInverted = editorFreeFly && Input.IsKeyPressed(Key.Ctrl);
+
             // Session opens with the GAMETYPE, not with the first free-fly frame: the world swap to the
             // document happens before the player ever sees the compiled BSP, and playtest is in the
             // document from the first spawn.
@@ -5964,6 +5970,30 @@ public sealed partial class NetGame : Node3D
                 }
             }
             Vmap.EditorLighting.SuppressSceneSun(this, true);
+        }
+
+        // (E7) The editor context menu and the crosshair action readout: same feed pattern as EditorPanel.
+        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorMenuPanel>() is { } editorMenu)
+        {
+            editorMenu.IsEditorSession = IsEditorGametype;
+            editorMenu.Controller = _editor;
+            editorMenu.OrthoOpen = _editorOrtho is { IsOpen: true };
+            editorMenu.FlySpeed = LocalServerPlayer?.SpectatorSpeed ?? 1f;
+            // Rows carry command STRINGS, so the menu drives the editor through the same vocabulary the binds
+            // and the console use rather than growing a private API of its own.
+            editorMenu.CommandSink ??= line => Menu.MenuState.Interp?.ExecuteLine(line);
+
+            // Leaving EDIT (into playtest, or out of the gametype) must not leave a modal menu holding the
+            // cursor: there would be no way to close it, because its own keys are gone with the mode.
+            if (editorMenu.IsOpen && !(IsEditorGametype && (_client?.IsObserving ?? false)))
+                editorMenu.Close();
+        }
+
+        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorActionPanel>() is { } editorAction)
+        {
+            editorAction.IsEditorSession = IsEditorGametype;
+            editorAction.IsEditing = _client?.IsObserving ?? true;
+            editorAction.Controller = _editor;
         }
 
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorPanel>() is { } editorPanel)
@@ -6947,12 +6977,23 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
-        // (E2) Editor tool binds. While free-flying in the editor gametype the weapon keys are dead weight —
-        // you cannot shoot and edit at the same time — so they double as the editor's controls, reusing the
-        // 1..9 + mousewheel muscle memory every player already has instead of demanding a second bind set.
-        // Consumed here, before the weapon dispatch below, so the impulse never reaches the weapon system.
-        if (TryRunEditorBind(command))
-            return;
+        // (E7) The mousewheel still steps the grid while free-flying. Unlike the digits — which the editor now
+        // owns outright in HandleEditorInput — the wheel arrives here as a weapon bind, because it is bound to
+        // weapnext/weapprev and there is no editor-side keycode to intercept.
+        if (IsEditorFreeFly)
+        {
+            string? wheel = WeaponCommandToImpulse(command) switch
+            {
+                10 => "editor_grid_size +",
+                12 => "editor_grid_size -",
+                _ => null,
+            };
+            if (wheel is not null)
+            {
+                Menu.MenuState.Interp?.ExecuteLine(wheel);
+                return;
+            }
+        }
 
         int imp = WeaponCommandToImpulse(command);
         if (imp != 0)
@@ -7009,12 +7050,27 @@ public sealed partial class NetGame : Node3D
                     _editor.EndDrag();
                     return true;
                 case MouseButton.Right when mb.Pressed:
-                    // Right-click cancels an in-flight grab (the universal editor escape); with nothing being
-                    // dragged it cycles the sub-object tool instead of being dead.
+                    // Right-click still cancels an in-flight grab: that is the universal editor escape, and it
+                    // has to keep working, so the press is CONSUMED and the menu never opens mid-drag.
+                    // Otherwise the press only ARMS the menu — it opens on release, so that right-drag stays
+                    // available for anything that wants it later without fighting the menu.
                     if (_editor.IsDragging)
+                    {
                         _editor.CancelDrag();
+                        _rightPressArmedMenu = false;
+                    }
                     else
-                        _editor.CycleTool();
+                    {
+                        _rightPressArmedMenu = true;
+                    }
+                    return true;
+
+                case MouseButton.Right:
+                    if (_rightPressArmedMenu)
+                    {
+                        _rightPressArmedMenu = false;
+                        OpenEditorMenuAtCrosshair();
+                    }
                     return true;
             }
             return false;
@@ -7060,9 +7116,55 @@ public sealed partial class NetGame : Node3D
                     _editorOrtho!.Close();
                     return true;
             }
+
+            // (E7) The editor owns 0-9 outright while free-flying (§11.9). Consuming them HERE — this method
+            // runs ahead of the bind dispatch — is what makes ownership total rather than best-effort: whatever
+            // the mapper has bound to a digit stays silent for the duration of the session. The action itself
+            // is a console command, so the HUD can still resolve and display its key through the bind table.
+            int digit = EditorDigitOf(key.Keycode);
+            if (digit >= 0)
+            {
+                string cmd = Vmap.EditorBinds.CommandForDigit(digit);
+                if (cmd.Length > 0)
+                    Menu.MenuState.Interp?.ExecuteLine(cmd);
+                return true;
+            }
         }
 
         return false;
+    }
+
+    /// <summary>Digit 0-9 from a keycode (top row or numpad), or -1 for anything else.</summary>
+    private static int EditorDigitOf(Key key) => key switch
+    {
+        >= Key.Key0 and <= Key.Key9 => (int)(key - Key.Key0),
+        >= Key.Kp0 and <= Key.Kp9 => (int)(key - Key.Kp0),
+        _ => -1,
+    };
+
+    /// <summary>
+    /// True between a right-press and its release, when that press did not cancel a drag. The menu opens on
+    /// RELEASE (§11.9's "right click and immediate release"), so the flag is what carries the intent across
+    /// the two events.
+    /// </summary>
+    private bool _rightPressArmedMenu;
+
+    /// <summary>
+    /// Open the context menu beside the crosshair, or at the pointer when the ortho view owns a real cursor.
+    ///
+    /// The crosshair is the viewport centre in the 3D view, which is exactly where the mapper is already
+    /// looking; anchoring to the mouse there would put the menu wherever the OS cursor happened to be parked
+    /// while it was captured, which is nowhere in particular.
+    /// </summary>
+    private void OpenEditorMenuAtCrosshair()
+    {
+        if (_fullHud?.GetPanel<XonoticGodot.Game.Hud.EditorMenuPanel>() is not { } menu)
+            return;
+
+        Vector2 anchor = _editorOrtho is { IsOpen: true }
+            ? GetViewport().GetMousePosition()
+            : GetViewport().GetVisibleRect().Size * 0.5f;
+        menu.Toggle(anchor);
     }
 
     /// <summary>Mouse handling specific to the orthographic view: middle-drag pans, the wheel zooms.</summary>
@@ -7073,16 +7175,30 @@ public sealed partial class NetGame : Node3D
             case MouseButton.Middle:
                 _orthoPanning = mb.Pressed;
                 return true;
+
+            // The menu works in ortho too, anchored at the pointer rather than the screen centre because this
+            // view already owns a real cursor.
+            case MouseButton.Right when mb.Pressed:
+                _rightPressArmedMenu = true;
+                return true;
+            case MouseButton.Right:
+                if (_rightPressArmedMenu)
+                {
+                    _rightPressArmedMenu = false;
+                    OpenEditorMenuAtCrosshair();
+                }
+                return true;
             case MouseButton.WheelUp when mb.Pressed:
-                // Ctrl moves the floor-filter slab through the map instead of zooming, so stacked floors can
-                // be stepped through without leaving the view.
-                if (mb.CtrlPressed)
+                // ALT moves the floor-filter slab through the map instead of zooming, so stacked floors can be
+                // stepped through without leaving the view. This was Ctrl until E7 gave Ctrl a global meaning
+                // (invert grid snap, §11.9) — one modifier cannot both suspend snapping and page the slab.
+                if (mb.AltPressed)
                     _editorOrtho!.MoveSlab(_editor!.GridSize * 4f);
                 else
                     _editorOrtho!.ZoomBy(1f / 1.2f);
                 return true;
             case MouseButton.WheelDown when mb.Pressed:
-                if (mb.CtrlPressed)
+                if (mb.AltPressed)
                     _editorOrtho!.MoveSlab(-_editor!.GridSize * 4f);
                 else
                     _editorOrtho!.ZoomBy(1.2f);
@@ -7138,6 +7254,7 @@ public sealed partial class NetGame : Node3D
             _editor.SetGametypeFilter(_gametype, _droppedSubmodels);
             Menu.MenuState.Interp?.RegisterCommand("editor_gametype", CmdEditorGametype);
             Menu.MenuState.Interp?.RegisterCommand("editor_rebake", CmdEditorRebake);
+            RegisterEditorCommands();
         }
         catch (Exception ex)
         {
@@ -7351,6 +7468,188 @@ public sealed partial class NetGame : Node3D
     /// <summary>True when the next world build should trace shadows (first build, or after editor_rebake).</summary>
     private bool _bakeShadowsNextBuild = true;
 
+    // =============================================================================================
+    //  (E7) The editor command vocabulary — §11.9
+    // =============================================================================================
+
+    /// <summary>
+    /// Register the <c>editor_*</c> commands. Everything the editor can do goes through this vocabulary: the
+    /// context menu's rows, the number keys, and anything typed at the console all take the same path.
+    ///
+    /// Routing the keys through real COMMANDS rather than a hardcoded keycode switch is what keeps §11.6's
+    /// rule alive — the HUD resolves every key it displays through the bind table, so rebinding updates the
+    /// readout and an unbound action renders as <c>--</c> instead of the panel confidently lying about which
+    /// key does what. It also makes every one of them scriptable, which a switch statement never is.
+    ///
+    /// Idempotent: <c>EnsureEditorSession</c> can run more than once per session.
+    /// </summary>
+    private void RegisterEditorCommands()
+    {
+        if (_editorCommandsRegistered || Menu.MenuState.Interp is not { } interp)
+            return;
+        _editorCommandsRegistered = true;
+
+        interp.RegisterCommand("editor_tool", CmdEditorTool);
+        interp.RegisterCommand("editor_mode", CmdEditorMode);
+        interp.RegisterCommand("editor_select", CmdEditorSelect);
+        interp.RegisterCommand("editor_menu", CmdEditorMenu);
+        interp.RegisterCommand("editor_undo", _ => { if (_editor?.Undo() == true) RefreshEditorWorld(); });
+        interp.RegisterCommand("editor_redo", _ => { if (_editor?.Redo() == true) RefreshEditorWorld(); });
+        interp.RegisterCommand("editor_ortho", _ => ToggleEditorOrtho());
+        interp.RegisterCommand("editor_ortho_axis", _ => _editorOrtho?.CycleAxis());
+        interp.RegisterCommand("editor_wire", _ => Vmap.EditorOrthoView.CycleWireAlpha());
+        interp.RegisterCommand("editor_show_bsp", _ => ToggleEditorBspCompare());
+        interp.RegisterCommand("editor_flyspeed", CmdEditorFlySpeed);
+        Vmap.EditorBinds.RegisterCommands(interp);
+
+        // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
+        // and a mapper who reaches one from the console deserves to be told it is E8 rather than to watch
+        // nothing happen and assume the editor is broken.
+        interp.RegisterCommand("editor_history", _ =>
+            XonoticGodot.Common.Diagnostics.Log.Info("editor_history: not built yet (roadmap E8)"));
+        interp.RegisterCommand("editor_mapinfo", _ =>
+            XonoticGodot.Common.Diagnostics.Log.Info("editor_mapinfo: not built yet (roadmap E8)"));
+    }
+
+    private bool _editorCommandsRegistered;
+
+    /// <summary><c>editor_tool &lt;name&gt;</c>, or bare to cycle.</summary>
+    private void CmdEditorTool(IReadOnlyList<string> args)
+    {
+        if (_editor is null)
+            return;
+
+        if (args.Count < 2)
+        {
+            _editor.CycleTool();
+            return;
+        }
+
+        if (!Enum.TryParse(args[1], ignoreCase: true, out EditorTool tool))
+        {
+            XonoticGodot.Common.Diagnostics.Log.Help(
+                $"editor_tool: unknown tool '{args[1]}' (try: {string.Join(", ", EditorTools.All)})");
+            return;
+        }
+
+        if (!EditorTools.IsImplemented(tool))
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"editor_tool: {EditorTools.Label(tool)} is not built yet (roadmap E8)");
+            return;
+        }
+        _editor.SetTool(tool);
+    }
+
+    /// <summary><c>editor_mode &lt;name&gt;</c>, or bare to cycle within the current tool.</summary>
+    private void CmdEditorMode(IReadOnlyList<string> args)
+    {
+        if (_editor is null)
+            return;
+
+        if (args.Count < 2)
+        {
+            _editor.CycleMode();
+            return;
+        }
+
+        if (!Enum.TryParse(args[1], ignoreCase: true, out ToolMode mode))
+        {
+            XonoticGodot.Common.Diagnostics.Log.Help(
+                $"editor_mode: unknown mode '{args[1]}' "
+                + $"(this tool offers: {string.Join(", ", EditorTools.ModesFor(_editor.Tool))})");
+            return;
+        }
+        _editor.SetMode(mode);
+    }
+
+    /// <summary><c>editor_select deselect|copy|paste|delete|invert|all_shader</c> — the selection ACTIONS.</summary>
+    private void CmdEditorSelect(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session })
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "";
+        switch (verb)
+        {
+            case "deselect":
+                session.Selection.Clear();
+                return;
+
+            case "copy":
+            {
+                int n = _editor.Clipboard.CopyFrom(session.Document, session.Selection);
+                XonoticGodot.Common.Diagnostics.Log.Info(n > 0
+                    ? $"editor: copied {_editor.Clipboard.Describe()}"
+                    : "editor: nothing to copy");
+                return;
+            }
+
+            case "paste":
+                // Paste is a MODE, not an action: the ghost follows the crosshair and a left-click places it
+                // (§11.9). The clipboard and the mode both exist, but PasteOp does not yet, so entering the
+                // mode would leave the mapper holding a ghost that can never land. Say so instead — E7 shipped
+                // the rails, and pretending otherwise is exactly the silent no-op the menu is designed around.
+                XonoticGodot.Common.Diagnostics.Log.Info(_editor.Clipboard.IsEmpty
+                    ? "editor: clipboard is empty"
+                    : $"editor: holding {_editor.Clipboard.Describe()} — paste placement is not built yet (roadmap E8)");
+                return;
+
+            case "delete":
+                if (_editor.DeleteSelection())
+                    RefreshEditorWorld();
+                return;
+
+            case "invert":
+            case "all_shader":
+                XonoticGodot.Common.Diagnostics.Log.Info($"editor_select {verb}: not built yet (roadmap E8)");
+                return;
+
+            default:
+                XonoticGodot.Common.Diagnostics.Log.Help(
+                    "usage: editor_select deselect|copy|paste|delete|invert|all_shader");
+                return;
+        }
+    }
+
+    /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>
+    private void CmdEditorMenu(IReadOnlyList<string> args)
+    {
+        _ = args;
+        OpenEditorMenuAtCrosshair();
+    }
+
+    /// <summary>
+    /// <c>editor_flyspeed + | -</c>. The speed lives on the SERVER's player entity (QC
+    /// <c>sys_phys_spectator_control</c> steps it off impulses 10/12), so this sends the impulse rather than
+    /// writing a client value that the next snapshot would overwrite.
+    /// </summary>
+    private void CmdEditorFlySpeed(IReadOnlyList<string> args)
+    {
+        string dir = args.Count > 1 ? args[1] : "+";
+        _pendingImpulse = dir == "-" ? 12 : 10;
+    }
+
+    /// <summary>Open or close the orthographic view, seeded at the current camera position.</summary>
+    private void ToggleEditorOrtho()
+    {
+        if (_editorOrtho is null || _camera is null)
+            return;
+        _editorOrtho.Toggle(Coords.ToQuake(_camera.GlobalTransform.Origin));
+    }
+
+    /// <summary>
+    /// Flip to the ORIGINAL compiled BSP and back. The ground truth is one command away, so "is this artifact
+    /// ours or the map's?" is answered by looking from the same camera rather than by relaunching into a plain
+    /// match and flying back to the spot.
+    /// </summary>
+    private void ToggleEditorBspCompare()
+    {
+        _editorShowBsp = !_editorShowBsp;
+        ApplyEditorWorldVisibility();
+        Menu.MenuState.Cvars?.Set(Vmap.EditorLighting.CvarShowBsp, _editorShowBsp ? "1" : "0");
+    }
+
     /// <summary>
     /// The camera the frame is actually being drawn with. Godot marks exactly one Camera3D current per
     /// viewport, so asking the viewport is the only answer that stays right when something else takes the
@@ -7490,77 +7789,6 @@ public sealed partial class NetGame : Node3D
     /// weapon binds are repurposed. Playtesting is real play, so weapons behave normally there.
     /// </summary>
     private bool IsEditorFreeFly => IsEditorGametype && (_client?.IsObserving ?? false);
-
-    /// <summary>
-    /// Re-dispatch a weapon bind as an editor action while in EDIT (see <see cref="IsEditorFreeFly"/>).
-    /// Returns true when the command was consumed as an editor action.
-    ///
-    /// Current mapping — mousewheel steps the grid, and the low number keys are the toggles:
-    /// <code>
-    ///   weapnext / weapprev (wheel)   grid size up / down
-    ///   1                             toggle the world grid
-    ///   2                             toggle EDIT / PLAYTEST
-    /// </code>
-    ///   3 tool · 4 ortho · 5 ortho axis · 6 rotate · 7 manipulator · 8 wire alpha · 9 REBAKE lighting
-    ///   0 compare against the ORIGINAL compiled BSP
-    /// </summary>
-    private bool TryRunEditorBind(string command)
-    {
-        if (!IsEditorFreeFly)
-            return false;
-
-        // Keys 3-6 drive the editor directly rather than going through the console, because they act on this
-        // client's live controller state (tool, ortho view) which has no server side to route to.
-        switch (WeaponCommandToImpulse(command))
-        {
-            case 3:
-                _editor?.CycleTool();
-                return true;
-            case 4:
-                _editorOrtho?.Toggle(Coords.ToQuake(_camera.GlobalTransform.Origin));
-                return true;
-            case 5:
-                _editorOrtho?.CycleAxis();
-                return true;
-            case 6:
-                _editor?.RotateSelection(15f);
-                return true;
-            case 7:
-                _editor?.CycleManipulator();
-                return true;
-            case 8:
-                Vmap.EditorOrthoView.CycleWireAlpha();
-                return true;
-            case 9:
-                // The number-key rebake. Lighting is never recomputed by an edit, so this is how a mapper
-                // says "now redo it properly" — deliberately a key, not an automatic reaction to editing.
-                Menu.MenuState.Interp?.ExecuteLine("editor_rebake");
-                return true;
-            case 14:
-                // Key 0: flip to the ORIGINAL compiled BSP and back. The ground truth is one keypress away,
-                // so "is this artifact ours or the map's?" is answered by looking, from the same camera,
-                // instead of by relaunching into a plain match and flying back to the spot.
-                _editorShowBsp = !_editorShowBsp;
-                ApplyEditorWorldVisibility();
-                Menu.MenuState.Cvars?.Set(Vmap.EditorLighting.CvarShowBsp, _editorShowBsp ? "1" : "0");
-                return true;
-        }
-
-        string? action = WeaponCommandToImpulse(command) switch
-        {
-            10 => "editor_grid_size +",   // weapnext  — wheel up
-            12 => "editor_grid_size -",   // weapprev  — wheel down
-            1 => "editor_grid",           // weapon_group_1
-            _ => null,
-        };
-        if (action is null)
-            return false;
-
-        // Through the shared interpreter: the grid commands are registered client-side, and editor_playtest is
-        // unregistered here so it falls through the unknown-command router to the server, which owns the state.
-        Menu.MenuState.Interp?.ExecuteLine(action);
-        return true;
-    }
 
     /// <summary>
     /// Map a bound command STRING to its Xonotic impulse number (common/impulses/all.qh — the same numbers
@@ -7713,7 +7941,11 @@ public sealed partial class NetGame : Node3D
     /// quick-chat menu, or the maximized radar). The bind channel stays live so the toggling bind can still close the
     /// panel — the maximized radar's `m` toggle + Esc/right-click close all route through it.</summary>
     private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || (_radar?.Maximized ?? false)
-                                 || (_editorOrtho?.IsOpen ?? false);
+                                 || (_editorOrtho?.IsOpen ?? false) || EditorMenuOpen;
+
+    /// <summary>True while the editor's context menu is up, so it takes the cursor like any other modal HUD UI.</summary>
+    private bool EditorMenuOpen
+        => _fullHud?.GetPanel<XonoticGodot.Game.Hud.EditorMenuPanel>() is { IsOpen: true };
 
     /// <summary>Whether gameplay owns keyboard/mouse input this frame — false whenever a UI owner has it (the DP
     /// key_dest states): the pause/auto-pause, the console, the messagemode chat prompt (key_dest = message:

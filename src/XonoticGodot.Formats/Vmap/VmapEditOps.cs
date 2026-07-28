@@ -22,6 +22,14 @@ public interface IVmapOp
     /// </summary>
     IReadOnlyList<int> TouchedBrushIds { get; }
 
+    /// <summary>
+    /// Patches this op reads or writes, on the same contract as <see cref="TouchedBrushIds"/>. Defaulted to
+    /// empty because most ops are brush-only, but an op that moves a patch and does NOT declare it here is
+    /// un-undoable: the journal snapshots exactly what is declared, so an undeclared patch edit rolls back to
+    /// nothing at all and the mapper's undo silently does nothing.
+    /// </summary>
+    IReadOnlyList<int> TouchedPatchIds => Array.Empty<int>();
+
     /// <summary>Mutate the document. Returns false (having changed nothing) when the edit is invalid.</summary>
     bool Apply(VmapDocument doc);
 }
@@ -352,8 +360,11 @@ public sealed class TranslatePatchesOp : IVmapOp
         _delta = delta;
     }
 
-    /// <summary>Patches are not brushes; the snapshot journal has nothing brush-shaped to capture here.</summary>
+    /// <summary>Patches are not brushes; there is nothing brush-shaped to capture here.</summary>
     public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    /// <summary>Declared so the journal snapshots these patches and undo can put them back.</summary>
+    public IReadOnlyList<int> TouchedPatchIds => _patchIds;
 
     /// <summary>Patch ids this op moves.</summary>
     public IReadOnlyList<int> PatchIds => _patchIds;
@@ -669,5 +680,147 @@ public sealed class ClipBrushOp : IVmapOp
             ContentFlags = contents,
         });
         return copy;
+    }
+}
+
+// =================================================================================================
+//  E7 — scale
+// =================================================================================================
+
+/// <summary>
+/// Scale a selection about a pivot, per-axis or uniformly (design doc §11.9). Brushes and patches move in ONE
+/// op rather than two, because a mixed selection scaled about a shared pivot has to move together: two ops
+/// would be two undo steps, and a failure between them would leave the selection half-scaled.
+///
+/// The brush maths is the part worth stating, because the obvious version is wrong. A brush face is a PLANE,
+/// not a polygon, so it cannot simply have its points multiplied. Under the affine map
+/// <c>p → pivot + S·(p − pivot)</c> with <c>S = diag(sx,sy,sz)</c>, a plane's normal transforms by the
+/// INVERSE TRANSPOSE of S (here <c>diag(1/sx,1/sy,1/sz)</c>, since S is diagonal), not by S. Scaling the
+/// normal directly is the classic bug: it looks right for uniform scales, where the two agree up to a
+/// normalization, and skews every face the moment the axes differ.
+/// </summary>
+public sealed class ScaleSelectionOp : IVmapOp
+{
+    /// <summary>
+    /// Smallest scale factor that still yields geometry. Below this a brush is thin enough that the plane
+    /// intersections stop being numerically meaningful, and what comes back is a sliver rather than a solid.
+    /// </summary>
+    public const float MinFactor = 1e-3f;
+
+    private readonly int[] _brushIds;
+    private readonly int[] _patchIds;
+    private readonly Vector3 _pivot;
+    private readonly Vector3 _scale;
+
+    public ScaleSelectionOp(IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, Vector3 pivot, Vector3 scale)
+    {
+        _brushIds = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
+        _patchIds = patchIds?.ToArray() ?? throw new ArgumentNullException(nameof(patchIds));
+        _pivot = pivot;
+        _scale = scale;
+    }
+
+    /// <summary>Uniform-scale convenience: the same factor on all three axes.</summary>
+    public ScaleSelectionOp(IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, Vector3 pivot, float factor)
+        : this(brushIds, patchIds, pivot, new Vector3(factor, factor, factor)) { }
+
+    public IReadOnlyList<int> TouchedBrushIds => _brushIds;
+
+    public IReadOnlyList<int> TouchedPatchIds => _patchIds;
+
+    /// <summary>Point the scale expands from. Read by the wire codec.</summary>
+    public Vector3 Pivot => _pivot;
+
+    /// <summary>Per-axis scale factors. Read by the wire codec.</summary>
+    public Vector3 Scale => _scale;
+
+    /// <summary>True when all three factors agree, which is what the centre handle produces.</summary>
+    public bool IsUniform =>
+        MathF.Abs(_scale.X - _scale.Y) < 1e-6f && MathF.Abs(_scale.Y - _scale.Z) < 1e-6f;
+
+    public string Describe()
+    {
+        int n = _brushIds.Length + _patchIds.Length;
+        string what = n == 1 ? "selection" : $"{n} objects";
+        return IsUniform
+            ? $"Scale {what} by {_scale.X:0.###}x"
+            : $"Scale {what} by ({_scale.X:0.###}, {_scale.Y:0.###}, {_scale.Z:0.###})";
+    }
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        if (_brushIds.Length == 0 && _patchIds.Length == 0)
+            return false;
+        if (_scale == Vector3.One)
+            return false;
+
+        // NEGATIVE factors are refused rather than silently mirroring. A mirror inverts every plane normal,
+        // and a brush whose outward normals point inward is not a solid at all under the Quake convention
+        // (interior is dot(n,p) <= d) — it is the unbounded complement. Mirroring is a real feature, but it
+        // has to re-derive the plane set, which is a different op.
+        if (_scale.X < MinFactor || _scale.Y < MinFactor || _scale.Z < MinFactor)
+            return false;
+
+        var brushes = new List<VmapBrush>(_brushIds.Length);
+        foreach (int id in _brushIds)
+        {
+            if (doc.FindBrush(id) is not { } b)
+                return false;
+            brushes.Add(b);
+        }
+
+        var patches = new List<VmapPatch>(_patchIds.Length);
+        foreach (int id in _patchIds)
+        {
+            if (doc.FindPatch(id) is not { } p)
+                return false;
+            patches.Add(p);
+        }
+
+        // Build every scaled brush on a COPY first, so a selection where one brush degenerates leaves the
+        // whole document untouched instead of applying to the others and failing halfway.
+        var scaled = new List<VmapBrush>(brushes.Count);
+        var normalScale = new Vector3(1f / _scale.X, 1f / _scale.Y, 1f / _scale.Z);
+
+        foreach (VmapBrush b in brushes)
+        {
+            VmapBrush candidate = b.Clone();
+            foreach (VmapFace f in candidate.Faces)
+            {
+                VmapPlane p = f.Plane;
+
+                Vector3 n = p.Normal * normalScale;      // inverse-transpose, not the scale itself
+                float len = n.Length();
+                if (len < 1e-9f)
+                    return false;
+                n /= len;
+
+                // Re-anchor through a point known to be on the plane, transformed by the FORWARD map.
+                Vector3 onPlane = p.Normal * p.Dist;
+                Vector3 moved = _pivot + (onPlane - _pivot) * _scale;
+                f.Plane = new VmapPlane(n, Vector3.Dot(moved, n));
+            }
+
+            // A positive-definite scale maps convex sets to convex sets, so this should always hold; it is
+            // checked anyway because "should" and "does" diverge at the precision limit, and a silently
+            // degenerate brush is far more expensive to debug later than a refused drag is now.
+            if (!VmapWinding.IsClosedConvex(candidate))
+                return false;
+
+            scaled.Add(candidate);
+        }
+
+        for (int i = 0; i < brushes.Count; i++)
+            VmapEdit.CopyPlanesInto(scaled[i], brushes[i]);
+
+        // Patches have no convexity constraint — a control point is just a point, so the forward map applies
+        // directly and can never produce something invalid.
+        foreach (VmapPatch patch in patches)
+            for (int i = 0; i < patch.Controls.Count; i++)
+                patch.Controls[i] = _pivot + (patch.Controls[i] - _pivot) * _scale;
+
+        return true;
     }
 }

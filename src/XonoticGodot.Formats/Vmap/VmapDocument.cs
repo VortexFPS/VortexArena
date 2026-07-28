@@ -58,6 +58,44 @@ public sealed class VmapDocument
         return max + 1;
     }
 
+    /// <summary>Look up a patch by its stable <see cref="VmapPatch.Id"/>.</summary>
+    public VmapPatch? FindPatch(int id)
+    {
+        for (int i = 0; i < Patches.Count; i++)
+            if (Patches[i].Id == id)
+                return Patches[i];
+        return null;
+    }
+
+    /// <summary>The next unused patch id. Independent of the brush sequence — the two never collide.</summary>
+    public int NextPatchId()
+    {
+        int max = 0;
+        for (int i = 0; i < Patches.Count; i++)
+            if (Patches[i].Id > max)
+                max = Patches[i].Id;
+        return max + 1;
+    }
+
+    /// <summary>Look up an entity by its stable <see cref="VmapEntity.Id"/>.</summary>
+    public VmapEntity? FindEntity(int id)
+    {
+        for (int i = 0; i < Entities.Count; i++)
+            if (Entities[i].Id == id)
+                return Entities[i];
+        return null;
+    }
+
+    /// <summary>The next unused entity id.</summary>
+    public int NextEntityId()
+    {
+        int max = 0;
+        for (int i = 0; i < Entities.Count; i++)
+            if (Entities[i].Id > max)
+                max = Entities[i].Id;
+        return max + 1;
+    }
+
     /// <summary>The worldspawn entity (classname <c>worldspawn</c>), or null if the map has none.</summary>
     public VmapEntity? Worldspawn()
     {
@@ -287,7 +325,19 @@ public sealed class VmapBrush
     /// </summary>
     public VmapBrush Clone()
     {
-        var copy = new VmapBrush { Id = Id, IsDetail = IsDetail, ContentFlags = ContentFlags };
+        // SubmodelIndex and IsToolBrush must ride along. Both are classification rather than geometry, which is
+        // why they were easy to miss, and both change what the editor DOES with the brush: dropping the
+        // submodel silently moves a gametype-conditional func_wall into worldspawn, and dropping the tool flag
+        // makes a caulk volume pickable. Undo restores from a clone, so an omission here surfaces as "undoing a
+        // delete brought the brush back subtly different".
+        var copy = new VmapBrush
+        {
+            Id = Id,
+            IsDetail = IsDetail,
+            ContentFlags = ContentFlags,
+            SubmodelIndex = SubmodelIndex,
+            IsToolBrush = IsToolBrush,
+        };
         foreach (VmapFace f in Faces)
         {
             copy.Faces.Add(new VmapFace
@@ -337,6 +387,23 @@ public sealed class VmapPatch
     public bool IsValid =>
         Width >= 3 && Height >= 3 && (Width & 1) == 1 && (Height & 1) == 1
         && Controls.Count == Width * Height && ControlUvs.Count == Controls.Count;
+
+    /// <summary>Deep copy, for the undo journal and the clipboard. Same contract as <see cref="VmapBrush.Clone"/>.</summary>
+    public VmapPatch Clone()
+    {
+        var copy = new VmapPatch
+        {
+            Id = Id,
+            Material = Material,
+            Width = Width,
+            Height = Height,
+            SurfaceFlags = SurfaceFlags,
+            ContentFlags = ContentFlags,
+        };
+        copy.Controls.AddRange(Controls);
+        copy.ControlUvs.AddRange(ControlUvs);
+        return copy;
+    }
 }
 
 /// <summary>
@@ -366,6 +433,26 @@ public sealed class VmapEntity
     /// <summary>Read the <c>origin</c> key as a vector, or <see cref="Vector3.Zero"/> when absent/malformed.</summary>
     public Vector3 Origin()
         => Fields.TryGetValue("origin", out string? s) && TryParseVector(s, out Vector3 v) ? v : Vector3.Zero;
+
+    /// <summary>Write the <c>origin</c> key, in the Quake entity-lump format the readers expect.</summary>
+    public void SetOrigin(Vector3 v)
+        => Fields["origin"] = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{v.X:0.###} {v.Y:0.###} {v.Z:0.###}");
+
+    /// <summary>
+    /// Deep copy, for the undo journal and the clipboard. The field dictionary is copied, not shared: an entity
+    /// on the clipboard that still pointed at the original's dictionary would pick up every later key edit to
+    /// the thing it was copied from.
+    /// </summary>
+    public VmapEntity Clone()
+    {
+        var copy = new VmapEntity { Id = Id, ClassName = ClassName };
+        foreach (KeyValuePair<string, string> kv in Fields)
+            copy.Fields[kv.Key] = kv.Value;
+        copy.BrushIds.AddRange(BrushIds);
+        copy.PatchIds.AddRange(PatchIds);
+        return copy;
+    }
 
     /// <summary>Parse a whitespace-separated "x y z" value (the Quake entity-lump vector format).</summary>
     public static bool TryParseVector(string? s, out Vector3 v)

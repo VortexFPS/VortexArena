@@ -96,6 +96,11 @@ public static class HudLayoutDefaults
         // this table is what the generic per-panel cvars (pos/size/bg/enable) are seeded from, and a panel
         // missing from it gets no size cvar at all and resolves to a zero rect — i.e. draws nothing.
         ["editor"]       = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
+        // The editor's context menu and the crosshair action readout. Both draw themselves at a position
+        // derived from the crosshair rather than from the panel rect, so they take the full viewport and no
+        // frame, like the other port extras above.
+        ["editormenu"]   = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
+        ["editoraction"] = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
     };
 
     /// <summary>All ids in the table (for cvar registration).</summary>

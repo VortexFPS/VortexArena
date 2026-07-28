@@ -166,6 +166,12 @@ a { color: #e0a458; }
     game's own HUD/bind/cursor systems. <b>E6 core</b> (op wire format, per-brush locks, authoritative apply)
     is built and tested; routing it through ServerNet/ClientNet is the one remaining piece. Marked
     <span class="pill rec">built</span> below where shipped.<br>
+    <b>v1.4 (2026-07-28):</b> added <b>§11.9 tool selection &amp; usage</b> — the interaction model E3–E5 left
+    implicit: a right-click context menu, the tool/mode/action split, two-phase handle grabbing so a transform
+    targets one axis, an action readout saying what you are about to do to what, and the editor taking keys 0–9
+    outright instead of borrowing weapon binds. Adds the Select, Clip, Measure, Shader, Entity and Waypoint tools;
+    roadmap rows E7 (rails) and E8 (tool build-out). Corrects §13's E5 row: <code>CreateBoxBrushOp</code> and
+    <code>ClipBrushOp</code> are implemented but no tool reaches them.<br>
     Companion screenshots: the current renderer's output of the courtyard map vs. the decorated concept of the same shot (referenced throughout as <b>CURRENT</b> and <b>CONCEPT</b>).
   </div>
 </div></div>
@@ -198,6 +204,7 @@ a { color: #e0a458; }
   <a class="t2" href="#editor-hud">11.6 Editor HUD</a>
   <a class="t2" href="#format-editor">11.7 Ops, networking &amp; bake</a>
   <a class="t2" href="#editor-qol">11.8 QoL backlog</a>
+  <a class="t2" href="#editor-ux">11.9 Tool selection &amp; usage</a>
   <a class="t1" href="#gameplay">12 · Gameplay-layer systems</a>
   <a class="t2" href="#itemplace">12.1 Dynamic item placement</a>
   <a class="t2" href="#mapselect">12.2 Player-count-aware selection</a>
@@ -1003,7 +1010,8 @@ playtester or spectator. Cvar naming follows the authority convention: mode/perm
 
 <p>Design goal: manipulate geometry <i>from inside the world</i>, first-person — no 2D orthographic views in v1. All
 picking runs against the truth geometry (brushes/patches, §11.2), and every manipulation emits an op (§11.7), which is
-what makes undo, replication, and saving one mechanism. The same tools also operate in the ortho views (§11.5) —
+what makes undo, replication, and saving one mechanism. <b>How you reach these tools, and how you aim a transform at
+one axis, is §11.9</b> — this section is the vocabulary, that one is the interaction model. The same tools also operate in the ortho views (§11.5) —
 they're view-agnostic ops; only the picking and axis constraints differ per view.</p>
 
 <ul>
@@ -1127,6 +1135,11 @@ conventions. One compact corner panel:</p>
 <p>(Key choices above are placeholders — concrete defaults are an open question in §14; the HUD reading live binds is
 the design point.) In PLAYTEST the panel collapses to the state banner + toggle bind only.</p>
 
+<p><b>Superseded by §11.9.</b> The key table above is resolved there: keys 0–9 become the editor's outright, routed
+through registered <code>editor_*</code> commands so the live-bind rule this section is built around still holds.
+§11.9 also adds the two lines this sketch is missing — the action line saying what you are about to do to what, and
+a contextual tips block for the held modifiers.</p>
+
 <h3 id="format-editor"><span class="secno">11.7</span>Ops, networking &amp; bake</h3>
 <div class="flow">
   <div class="node">Client editor UI<small>paint strokes · sliders · gizmos</small></div><div class="arr">→</div>
@@ -1176,6 +1189,252 @@ ad-hoc later:</p>
   <li><b>Bots in PLAYTEST</b> — spawn bots while playtesting to feel flow and item timing; the bot-nav debug overlay
       (§11.5) shows what they can path, closing the loop with the traffic-wear generator (§6).</li>
 </ul>
+
+<h3 id="editor-ux"><span class="secno">11.9</span>Tool selection &amp; usage — the interaction model</h3>
+
+<p>§11.4 says what the tools <i>do</i>. This says how you reach them, how you know what you are about to do, and how
+you aim a transform at one axis instead of three. It supersedes the placeholder key table in §11.6 and the
+"cycle with a key" scheme E2 shipped.</p>
+
+<p>The problem it fixes is concrete. Today the tool is a cycle on one key, the manipulator is a cycle on another,
+neither has a menu, the digits are borrowed weapon binds, and a drag grabs the <i>object</i> — so the mouse moves the
+selection along two screen axes at once and there is no way to say "only Z". None of that is discoverable and the
+last part is not usable for alignment work.</p>
+
+<h4>Three orthogonal layers</h4>
+<table>
+  <tr><th style="width:16%">Layer</th><th style="width:22%">Answers</th><th>Lives in</th></tr>
+  <tr><td><b>Tool</b></td><td>What a click <i>resolves to</i></td>
+      <td>Brush, face, edge, vertex, patch, entity, waypoint, shader, decal. Drives <code>VmapPicking</code>'s
+          selection kind and nothing else.</td></tr>
+  <tr><td><b>Mode</b></td><td>What a handle drag <i>does</i></td>
+      <td>Move, rotate, scale, extrude, clip, create, paste. Per-tool: the Mode submenu only ever lists modes the
+          current tool can actually perform, so there are no dead rows.</td></tr>
+  <tr><td><b>Action</b></td><td>What fires <i>once</i>, now</td>
+      <td>Copy, delete, deselect, multiselect toggle, undo. These have no ongoing state, so they are <i>not</i>
+          modes — a "copy mode" you are sitting in does nothing. Paste is the one exception and it is genuinely a
+          mode (ghost follows the crosshair, left-click places, Esc exits).</td></tr>
+</table>
+
+<p>The split matters because it removes the repetition the first draft of this menu had: Copy and Paste appeared under
+all seven tools. They appear once, on Selection, and act on whatever the current tool selected.</p>
+
+<h4>Tool roster</h4>
+<table>
+  <tr><th style="width:14%">Tool</th><th style="width:34%">Modes</th><th>Notes</th></tr>
+  <tr><td><span class="pill rec">built</span><b>None</b></td><td>(none — Mode row hides)</td>
+      <td>No picking, no hover outline, no pick cost. Exists so you can judge <i>lighting</i>: the hover highlight is
+          drawn over the very surfaces you are trying to read.</td></tr>
+  <tr><td><b>Select</b></td><td>Object · Face</td>
+      <td>The tool a session opens in. Picks at object granularity, transforms nothing. Safe to click anything.
+          Clicking a patch here (or under Brush/Face/Edge/Vertex) switches to the Patch tool; clicking a brush
+          under Patch switches back.</td></tr>
+  <tr><td><span class="pill rec">built</span><b>Brush</b></td><td>Move · Rotate · Scale · Clip · Create · Paste</td>
+      <td>Whole-solid selection. Clip and Create both exist as ops already (<code>ClipBrushOp</code>,
+          <code>CreateBoxBrushOp</code>) and are wired to nothing.</td></tr>
+  <tr><td><span class="pill rec">built</span><b>Face</b></td><td>Move · Rotate · Extrude · Clip · Create · Paste</td>
+      <td>No Scale: a face has no size of its own, its outline is wherever the neighbouring planes cut it. What
+          "scale a face" would mean is a brush scale about the face centroid, which lives under Brush. Extrude is the
+          high-value addition (winding → prism → new brush).</td></tr>
+  <tr><td><span class="pill rec">built</span><b>Edge</b></td><td>Move · Bevel (clip)</td>
+      <td>Rotate and scale on a single edge are ill-defined; "split an edge" is inserting a bevel plane, which is the
+          clipper again.</td></tr>
+  <tr><td><span class="pill rec">built</span><b>Vertex</b></td><td>Move · Snap to grid</td>
+      <td>Kept as its own tool rather than folded into Edge. It is not a variant of Face: a face drag pushes one plane
+          along its normal and preserves topology, while a vertex drag moves a corner and re-derives <i>every</i>
+          plane meeting there through a least-squares fit. Turning a box into a wedge is a vertex operation and Face
+          can never produce it.</td></tr>
+  <tr><td><b>Patch</b></td><td>Move · Rotate · Scale · Control points · Modify… · Create… · Paste</td>
+      <td>Rotate and scale are the cheap ones here: a patch is a control-point list with no convexity constraint, so
+          both are "transform each control point about the patch centre". Control-point editing is the mode that
+          makes patches worth having.</td></tr>
+  <tr><td><b>Shader</b></td><td>Pick · Apply · Browse… · Fit / Natural / Axial · Shift · Scale UV · Rotate UV · Flags</td>
+      <td>The target is Radiant's Surface Inspector, not a texture picker. <code>SetFaceMaterialOp</code> exists; the
+          projection edits need a new <code>SetFaceProjectionOp</code> over <code>VmapTexProjection</code>, which
+          already stores the full affine map.</td></tr>
+  <tr><td><b>Entity</b></td><td>Move · Rotate · Scale · Create… · Properties… · Paste</td>
+      <td>Weapons, items, spawns, gametype objectives, teleporters, jumppads, lights, triggers, brush entities.
+          The single biggest chunk of new work; see the authority note below.</td></tr>
+  <tr><td><b>Waypoint</b></td><td>Place · Place jump · Place crouch · Place support · Remove · Hardwire · Lock · Unreachable · Relink all · Symmetry…</td>
+      <td>New UI over a finished backend: <code>WaypointNetwork</code> and the <code>.waypoints</code> / links /
+          hardwired writers are all ported. Base's <code>wpeditor</code> is not.</td></tr>
+  <tr><td><b>Clip</b></td><td>Two-point · Three-point · View plane · Keep both / keep front / keep back</td>
+      <td>Promoted from a per-tool mode to a tool because it is Radiant's most-used power tool and it is
+          convexity-safe by construction: both halves of a convex solid are convex, so it sidesteps §11.4's hard
+          part entirely. <code>ClipBrushOp</code> already implements all of it including keep-both.</td></tr>
+  <tr><td><b>Measure</b></td><td>Distance · Angle · Reachability</td>
+      <td>§11.8's entry, promoted. Reachability is the mode Radiant cannot have: colour the measured gap by whether a
+          walk / jump / crouch-jump / bhop actually clears it, run through the real movement physics.</td></tr>
+  <tr><td><span class="pill alt">later</span><b>Decal</b></td><td>Place · Move · Rotate · Scale · Delete</td>
+      <td>Deferred to the D-track (§8.2) — it needs the decal system to exist first. Listed here so the menu has a
+          slot reserved rather than being restructured later.</td></tr>
+</table>
+
+<h4>The context menu</h4>
+<p>Right-click and release opens a menu anchored to the right of the crosshair (at the pointer in ortho, which
+already owns a cursor). Right-click <i>during a drag</i> keeps its current meaning and cancels the drag, so the
+gesture never fires the menu when you meant to abort. The tool cycle that right-click used to do is retired — the
+menu replaces it.</p>
+<ul>
+  <li><b>Cursor</b> — opening takes cursor ownership through the same <code>UiOwnsCursor</code> path the maximized
+      radar and the QuickMenu use, which also suspends fly input so you don't drift while reading. Number keys stay
+      live alongside the pointer: 1–9 pick a row, 0 pages forward, exactly the QuickMenu model. Both paths reach the
+      same rows.</li>
+  <li><b>Submenus replace, they don't cascade</b> — descending swaps the row list in place with <code>← back</code>
+      at the top. No second panel to the right, no hover-to-open timing, and it survives being driven by number keys.</li>
+  <li><b>Tool → Mode chaining</b> — picking a tool from Tools descends straight into that tool's Mode list rather
+      than closing, because "switch tool" is almost always followed by "and do this with it".</li>
+</ul>
+
+<p>Root rows:</p>
+<table>
+  <tr><th style="width:20%">Row</th><th>Contents</th></tr>
+  <tr><td><b>Tools [<i>current</i>]</b></td><td>The roster above; the active tool is named on the row itself.</td></tr>
+  <tr><td><b>Mode [<i>current</i>]</b></td><td>Only the current tool's modes. Hidden entirely when the tool is None.</td></tr>
+  <tr><td><b>Selection</b></td><td>Deselect · Copy · Paste · Delete · Select all of this shader · Invert · Multiselect on/off.
+      All actions except Paste, which enters Paste mode.</td></tr>
+  <tr><td><b>Undo [<i>label</i>]</b></td><td>Names the step it will undo, from <code>VmapEditSession.UndoLabel</code>.
+      Ctrl+Z does the same thing.</td></tr>
+  <tr><td><b>History…</b></td><td>Dialog: the journal as a list, click any entry to travel to that state, plus redo.
+      <b>Abandoned branches are kept, not discarded</b> — editing after undoing files the old redo stack as a named
+      row ("abandoned, 5 steps") you can restore from. Strictly better than warning that the redo history is about to
+      be lost, and it means no modal popup in a mouse-captured view.</td></tr>
+  <tr><td><b>View</b></td><td>Switch to Ortho / Free-fly · Grid (size, opacity, major interval, on/off) ·
+      Free-fly (camera speed, FOV, acceleration) · Ortho (axis, floor-filter slab, wire alpha, and a stubbed layout
+      picker for the multi-pane views §11.5 does not have yet).</td></tr>
+  <tr><td><b>Lighting</b></td><td>Recompute lightmaps · bake quality ladder · shadows / bounce / dirt / deluxe toggles ·
+      live-vs-baked · sun scale. These are all existing <code>cl_editor_light_*</code> cvars with no UI.</td></tr>
+  <tr><td><b>MapInfo…</b></td><td>Dialog: name, title, author, description, supported gametypes and their per-mode
+      limits. <b>The port has no <code>.mapinfo</code> reader at all</b>, so this is a parser and writer from scratch,
+      not a UI over existing plumbing.</td></tr>
+  <tr><td><b>Playtest [F9]</b></td><td>The existing toggle, surfaced.</td></tr>
+</table>
+
+<h4>Handles: two-phase, one axis</h4>
+<p>The manipulator becomes a <i>target</i> rather than a mode you drag the object under. Click one selects and spawns
+the handles at the selection centre; click two must land on a handle:</p>
+<ul>
+  <li><b>Move</b> — three axis arrows + three plane pads (the pads give you controlled two-axis motion when you want
+      it, which is different from getting it by accident).</li>
+  <li><b>Rotate</b> — three rings, snapped to <code>AngleSnapDegrees</code> (15°, already defined).</li>
+  <li><b>Scale</b> — six box handles on the selection bounds for per-axis stretch, plus a centre handle for uniform
+      scale. <b>No scale op exists today</b>: <code>ManipulatorMode.Scale</code> is in the enum and drawn in the HUD,
+      and <code>EndDrag</code> handles only rotate and the translate family, so the mode currently does nothing on
+      release. Note the maths — a non-uniform scale transforms brush plane <i>normals</i> by the inverse-transpose,
+      not by the scale itself.</li>
+</ul>
+<p>Dragging the object body no longer transforms anything; it selects. That is the whole point: an axis you picked
+beats an axis inferred from which way the mouse happened to travel. Handles are ray-picked at screen-constant size
+and win ties against geometry, so a handle in front of a wall is grabbable without flying around it.</p>
+
+<h4>Status: what am I about to do, to what</h4>
+<p>Two readouts, deliberately different in density.</p>
+<ul>
+  <li><b>Main panel</b> (<code>EditorPanel</code>, top right) gains an <b>action line</b> and a <b>tips</b> block.
+      The action line reads <code>Tool &gt; Mode: subject</code> and carries the clipboard: <code>Select &gt; Copy:
+      Brush #412, Devastator (#88)</code>, <code>Brush &gt; Paste: copy of Brush #412</code>, <code>Entity &gt;
+      Create: Devastator</code>, <code>Patch &gt; Create: bevel</code>. Tips is a headerless list of what the
+      modifiers would do <i>right now</i>: hold Shift to multiselect, hold Ctrl to invert grid snap. Tips are
+      contextual, not a static legend.</li>
+  <li><b>Crosshair panel</b> (new <code>EditorActionPanel</code>, below the crosshair) is the same action line and
+      nothing else, so the thing you need in peripheral vision is where your eyes already are. Auto-registered like
+      any other <code>HudPanel</code>, so it inherits the HUD editor's drag/resize and can be turned off.</li>
+</ul>
+
+<h4>Modifiers &amp; keys</h4>
+<ul>
+  <li><b>Shift</b> — temporary multiselect. Already implemented (<code>BeginDrag(addToSelection:)</code>); only the
+      tip line is missing.</li>
+  <li><b>Ctrl</b> — temporarily <i>inverts</i> grid snap (snap off → snapped, snap on → free). This collides with
+      Ctrl+wheel, which currently moves the ortho floor-filter slab, so the slab moves to Alt+wheel.</li>
+  <li><b>0–9 are the editor's</b>, exclusively. The weapon-bind reuse is retired: it was a good trade when the editor
+      had four toggles, and it stops paying the moment the digits mean tools. <code>HandleEditorInput</code> already
+      runs ahead of the bind dispatch, so ownership is an intercept, not a bind-table fight. But the digits route
+      through registered <code>editor_*</code> commands with an editor bind layer rather than a hardcoded keycode
+      switch, so §11.6's rule survives: the HUD keeps resolving every key through the bind table, a rebind updates
+      the panel, and an unbound action still renders as <code>--</code> instead of lying.</li>
+  <li>While the context menu is open the digits pick rows instead. Two meanings, unambiguous, and it is what the
+      QuickMenu already does.</li>
+</ul>
+
+<h4>Dialogs</h4>
+<ul>
+  <li><b>Patch create</b> — the NetRadiant primitive set, each with a one-line description of what it is for:
+      simple mesh (<i>n</i>×<i>m</i>), bevel, end cap, inverted bevel, inverted end cap, cylinder (plus dense and
+      very dense), square cylinder, cone, sphere, and exact rows/columns.</li>
+  <li><b>Patch modify</b> — tabs mirroring Radiant's operations: Matrix (invert, transpose, redisperse),
+      Rows/Columns (insert, remove), Thicken, Cap selection, Texture (natural, fit, CAP, cycle).</li>
+  <li><b>Entity create / properties</b> — <b>driven from
+      <code>Base/data/xonotic-maps.pk3dir/scripts/entities.ent</code></b>, which ships 186 classes as XML with typed
+      keys, per-key help text, editor colours, bounding boxes and <code>modeldisabled=</code> model paths. That is the
+      palette, the category tree <i>and</i> the inspector schema, already written and already shipped with the game.
+      Hand-authoring an entity list would be duplicating it worse. Categories come from classname prefix
+      (<code>item_</code>, <code>weapon_</code>, <code>info_</code>, <code>func_</code>, <code>trigger_</code>,
+      <code>target_</code>, <code>misc_</code>, lights) with a curated "Common" group pinned at the top.</li>
+  <li><b>Shader browse</b> — the parsed <code>.shader</code> set (<code>Q3ShaderParser</code> exists), filtered,
+      with the surface/content flags of the hovered face shown alongside.</li>
+</ul>
+
+<h4>Entity authority — the one architectural fork</h4>
+<p>There are two entity representations and they are not the same object. <code>VmapDocument.Entities</code> is
+imported from the BSP entity lump and is what gets <i>saved</i>; the items you see floating in an editor session are
+the <i>server's</i> live entities, spawned by the ordinary game path. The editor world builder renders brushes and
+patches only, so nothing in the editor currently draws or picks the document's entities at all.</p>
+<p><b>The document is truth, and the two states show different sets.</b> EDIT draws the <i>document's</i> entities;
+PLAYTEST shows the <i>server's</i> live ones. That falls straight out of what each state is for: EDIT is where you
+author the map, so it should show what will be saved, and PLAYTEST is a real player in the real world, so it must
+show what the game actually spawned. It also removes the double-vision the naive version has, where an editor
+gizmo and a live pickup occupy the same spot and you cannot tell which one your click meant.</p>
+<p>Reconciliation therefore happens at the <b>EDIT → PLAYTEST transition</b>, not per-op: entering playtest rebuilds
+the live entity set from the document. One sync point instead of a sync path threaded through every op, and it is
+the moment where a rebuild is already expected because the player is being re-placed anyway. Editing stays cheap
+(ops touch only the document) and playtesting stays honest (what you test is what you just authored).</p>
+<p>The alternative — manipulate live entities and scrape them back into the document on save — needs no sync at all
+but silently drops anything with no live counterpart, and there are plenty: compiler-only classes
+(<code>_skybox</code>, <code>_decal</code>) never spawn, and the 186 classes in <code>entities.ent</code> do not map
+one-to-one onto the port's registered spawn functions. Silent data loss on every save is the worse trade.</p>
+<p>Point entities need what they have never had here: an EDIT-only render pass (box or <code>modeldisabled</code>
+model, coloured per <code>entities.ent</code>), a pick path in <code>VmapPicking</code>, and ops for create / move /
+rotate / delete / set-key. The render pass hides itself in PLAYTEST, which is the same show-mode gating every HUD
+panel already does.</p>
+
+<h4>Waypoints in a free-fly editor</h4>
+<p>Base's <code>wpeditor spawn</code> and <code>remove</code> require <code>IS_PLAYER</code>, because a waypoint goes
+at the player's feet with real physics. In EDIT you are a free-flying observer, so the crosshair-on-floor variant
+(Base's <code>spawn crosshair</code>) is the <i>primary</i> gesture here and the feet-relative ones only make sense
+after dropping into PLAYTEST. Everything else transcribes directly: jump / crouch / support waypoint kinds, hardwired
+link origin and destination, link-display lock, the unreachable-waypoint sweep, relink-all, and symmetry
+origin/axis get-and-set. Links draw as arrows in both the 3D and ortho views, which is the same overlay the entity
+inspector's targetname→target arrows use (§11.8).</p>
+
+<h4>New ops this section requires</h4>
+<table>
+  <tr><th style="width:34%">Op</th><th>Status</th></tr>
+  <tr><td><code>ClipBrushOp</code></td><td><span class="pill rec">exists</span>Fully implemented including keep-both-halves; referenced by nothing.</td></tr>
+  <tr><td><code>CreateBoxBrushOp</code>, <code>SetFaceMaterialOp</code></td><td><span class="pill rec">exists</span>Implemented, unwired.</td></tr>
+  <tr><td><code>ScaleSelectionOp</code></td><td><span class="pill hard">new</span>Brushes (inverse-transpose on normals), patches, entity bounds.</td></tr>
+  <tr><td><code>ExtrudeFaceOp</code></td><td><span class="pill hard">new</span>Winding → prism → new brush.</td></tr>
+  <tr><td><code>RotateFaceOp</code></td><td><span class="pill hard">new</span>Rotate the plane about the face centroid; validate like the vertex path.</td></tr>
+  <tr><td><code>RotatePatchesOp</code>, <code>ScalePatchesOp</code>, <code>MovePatchControlsOp</code></td>
+      <td><span class="pill hard">new</span>Trivial by comparison: control points, no convexity constraint.</td></tr>
+  <tr><td><code>SetFaceProjectionOp</code></td><td><span class="pill hard">new</span>Shift / scale / rotate / fit UV over <code>VmapTexProjection</code>.</td></tr>
+  <tr><td><code>CreateEntityOp</code>, <code>MoveEntitiesOp</code>, <code>RotateEntitiesOp</code>,
+          <code>DeleteEntitiesOp</code>, <code>SetEntityKeyOp</code></td>
+      <td><span class="pill hard">new</span>Each carries the live-world reconciliation described above.</td></tr>
+  <tr><td>Clipboard ops (copy is not an op; paste is)</td>
+      <td><span class="pill hard">new</span><code>PasteOp</code> deep-copies brushes, patches, entities and their
+          ownership links, re-keying ids. One op, so one undo step.</td></tr>
+</table>
+
+<h4>Order of work</h4>
+<p><b>Rails first.</b> The context menu shell, the two status readouts, digit ownership through
+<code>editor_*</code> commands, two-phase handles, and the scale op. Nothing is user-visible until the shell lands,
+but after it every tool is a menu row plus an op — and Clip is nearly free, since its op is already written. The
+alternative (ship Brush end-to-end, then Patch, then Entity) is playtestable sooner but rewrites the menu, handle and
+status code two or three times as later tools reveal what they needed.</p>
+<p><b>Ordering note:</b> everything here is client-local. <code>VmapOpWire</code> exists and nothing references it, so
+§11.7's op channel is still unbuilt and E6 co-editing will want a second look at the clipboard and the entity
+reconciliation path once ops actually travel.</p>
 
 <!-- ══════════════════════════ 12 · GAMEPLAY LAYER ══════════════════════════ -->
 <h2 id="gameplay"><span class="secno">12</span>Gameplay-layer systems <span class="pill alt">v1.3 · lower priority</span></h2>
@@ -1274,7 +1533,9 @@ and can proceed in parallel.</p>
       <td>~1–2 wk</td></tr>
   <tr><td><b>E5</b> <span class="pill rec">built</span></td>
       <td><b>Ortho views + creation + clipper</b> (§11.4–11.5): single-pane top/front/side wireframe views with
-          pan/zoom + floor-filter slab, axis-locked editing in-view, drag-out box brush creation, plane clipper.</td>
+          pan/zoom + floor-filter slab, axis-locked editing in-view, drag-out box brush creation, plane clipper.
+          <i>Caveat:</i> <code>CreateBoxBrushOp</code> and <code>ClipBrushOp</code> are both fully implemented but
+          referenced by nothing — they have no tool or menu reaching them, which E7/E8 supplies.</td>
       <td>Precision alignment work and greyboxing from nothing — the "perfectly straight lines" workflow.</td>
       <td>~2 wk</td></tr>
   <tr><td><b>E6</b> <span class="pill rec">core built</span></td>
@@ -1282,6 +1543,24 @@ and can proceed in parallel.</p>
           locks, async server bake + tile streaming groundwork.</td>
       <td>Editor becomes a product feature; two people decorating one map in one session.</td>
       <td>~2–3 wk</td></tr>
+  <tr><td><b>E7</b></td>
+      <td><b>Interaction rails</b> (§11.9): context menu shell with in-place submenus and cursor ownership; the action
+          line + tips block on <code>EditorPanel</code> and the new crosshair readout; keys 0–9 taken over through
+          registered <code>editor_*</code> commands and an editor bind layer; two-phase handle grabbing (select, then
+          grab an axis arrow / ring / box handle); the missing scale op.</td>
+      <td>Every tool after this is a menu row plus an op instead of a bespoke keybind and a cycle. Fixes the two
+          things that make the current editor unusable for alignment work: nothing is discoverable, and a drag moves
+          the selection on two screen axes at once.</td>
+      <td>~2 wk</td></tr>
+  <tr><td><b>E8</b></td>
+      <td><b>Tool build-out</b> (§11.9): Select and Clip (the clip op is already written), face extrude and rotate,
+          patch rotate / scale / control points and the create + modify dialogs, the Shader tool as a Surface
+          Inspector, the Entity tool driven from <code>entities.ent</code> with live-world reconciliation, the
+          Waypoint tool over the ported network, Measure with movement-aware reachability, History with retained
+          abandoned branches, and the MapInfo reader/writer.</td>
+      <td>The editor stops being a brush pusher. Entity work is the long pole — nothing renders or picks point
+          entities today, so it carries a render pass, a pick path and five ops of its own.</td>
+      <td>~4–6 wk</td></tr>
   <tr><td colspan="4" style="padding:10px 0 4px; color:#8a7c68; font-size:12px; letter-spacing:.08em; text-transform:uppercase;">Decoration track (on the E rails)</td></tr>
   <tr><td><b>D1</b></td>
       <td><b>Layered shader MVP</b> (§5): chart-space mask atlas over the lightmap UV2, triplanar weather layers,

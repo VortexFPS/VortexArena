@@ -129,17 +129,17 @@ public partial class EditorPanel : HudPanel
 
             if (Controller is { } c)
             {
-                lines.Add(($"Tool: {c.Tool}  {Key(BindTool)}   Manip: {c.Manipulator}  {Key(BindManip)}", bright));
+                lines.Add(($"{c.ActionLine}", new Color(1f, 0.9f, 0.55f)));
                 lines.Add(($"Showing: {c.GametypeFilterLabel}   (editor_gametype <name|all>)", dim));
 
                 // The comparison view is a MODE, and a mode you can be in silently is a mode you will
                 // forget you are in — edits do not draw while the BSP is up, which would read as a broken
                 // editor rather than as a held toggle.
                 if (ShowingBsp)
-                    lines.Add(($"VIEWING ORIGINAL BSP — {Key(BindBspCompare)} back to editor world",
+                    lines.Add(($"VIEWING ORIGINAL BSP — {EKey(CmdBspCompare)} back to editor world",
                         new Color(1f, 0.75f, 0.3f)));
                 else
-                    lines.Add(($"{Key(BindBspCompare)} compare original BSP", dim));
+                    lines.Add(($"{EKey(CmdBspCompare)} compare original BSP", dim));
 
                 // Lighting state, because it changes what every surface looks like and is otherwise a cvar
                 // nobody would guess at. Reports what the rig actually built, not just the toggle: a map
@@ -174,7 +174,7 @@ public partial class EditorPanel : HudPanel
                     lines.Add(($"  LIGHTING STALE — {Key(BindRebake)} to rebake", new Color(1f, 0.75f, 0.3f)));
 
                 lines.Add((
-                    $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +
+                    $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {EKey(CmdGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +
                     $"Snap: {(c.SnapEnabled ? "ON" : "OFF")} {Fmt(c.SnapRadiusDisplay)}u",
                     gridOn ? bright : dim));
 
@@ -213,7 +213,7 @@ public partial class EditorPanel : HudPanel
                     lines.Add(($"brush #{infoBrush.Id}  {infoBrush.Faces.Count} faces  {kind}", dim));
                 }
 
-                if (c.IsDragging && c.Manipulator == ManipulatorMode.Rotate)
+                if (c.IsDragging && c.Mode == ToolMode.Rotate)
                 {
                     lines.Add(($"rotate {c.DragAngle:0.#}°  axis {AxisName(c.DragAxis)}", new Color(0.4f, 1f, 0.55f)));
                 }
@@ -235,23 +235,25 @@ public partial class EditorPanel : HudPanel
             else
             {
                 lines.Add((
-                    $"Grid: {(gridOn ? "ON" : "OFF")}  {Fmt(gridSize)}u   {Key(BindGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}",
+                    $"Grid: {(gridOn ? "ON" : "OFF")}  {Fmt(gridSize)}u   {EKey(CmdGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}",
                     gridOn ? bright : dim));
             }
 
             if (Ortho is { IsOpen: true } ortho)
             {
-                lines.Add(($"ORTHO {ortho.AxisLabel}   {Key(BindOrtho)} close · {Key(BindOrthoAxis)} axis",
+                lines.Add(($"ORTHO {ortho.AxisLabel}   {EKey(CmdOrtho)} close · {Key(BindOrthoAxis)} axis",
                     new Color(1f, 0.85f, 0.4f)));
                 // Panning is not discoverable: the view owns the cursor, so the usual fly keys pan instead.
-                lines.Add(($"  WASD pan · wheel zoom · Ctrl+wheel floor · edges {ortho.WireAlpha * 100f:0}% {Key(BindWire)}",
+                lines.Add(($"  WASD pan · wheel zoom · Alt+wheel floor · edges {ortho.WireAlpha * 100f:0}% {Key(BindWire)}",
                     new Color(1f, 0.85f, 0.4f)));
             }
             else
-                lines.Add(($"{Key(BindOrtho)} ortho view", dim));
+                lines.Add(($"{EKey(CmdOrtho)} ortho view", dim));
 
             if (FlySpeed > 0f)
                 lines.Add(($"Fly x{FlySpeed:0.#}", dim));
+
+            AppendTips(lines);
         }
 
         float widest = 0f;
@@ -268,20 +270,20 @@ public partial class EditorPanel : HudPanel
         }
     }
 
-    // The editor reuses the WEAPON binds while free-flying (NetGame.TryRunEditorBind): you cannot shoot and
-    // edit at the same time, so the weapon keys are free, and reusing them means the editor inherits whatever
-    // keys the player already has in muscle memory instead of needing its own bind set. The HUD therefore
-    // reverse-looks-up the weapon command, which is what is actually bound to a key.
-    // The EDIT/PLAYTEST toggle rides F9 (Base's minigame-HUD bind), NOT a weapon key: in PLAYTEST the weapon
-    // binds return to selecting weapons, so a weapon-key toggle would strand the mapper in playtest.
+    // (E7) The editor owns keys 0-9 outright while free-flying, through its OWN bind layer (EditorBinds), so
+    // the player's number-row binds survive untouched and come back the moment they drop into PLAYTEST. The
+    // panel resolves those keys from that layer, and everything else from the game's shared bind table — both
+    // live, so rebinding either updates the readout instead of leaving it confidently wrong.
+    //
+    // The EDIT/PLAYTEST toggle rides F9 (Base's minigame-HUD bind) rather than a digit: it has to work from
+    // PLAYTEST too, where the editor's layer is not active.
     private const string BindPlaytest = "cl_cmd hud minigame";
-    private const string BindGrid = "weapon_group_1";
-    private const string BindTool = "weapon_group_3";
-    private const string BindManip = "weapon_group_7";
+    private const string CmdGrid = "editor_grid";
+    private const string CmdMode = "editor_mode";
+    private const string CmdOrtho = "editor_ortho";
+    private const string CmdBspCompare = "editor_show_bsp";
     private const string BindWire = "weapon_group_8";
     private const string BindRebake = "weapon_group_9";
-    private const string BindBspCompare = "weapon_group_0";
-    private const string BindOrtho = "weapon_group_4";
     private const string BindOrthoAxis = "weapon_group_5";
     private const string BindGridUp = "weapnext";
     private const string BindGridDown = "weapprev";
@@ -330,6 +332,75 @@ public partial class EditorPanel : HudPanel
     /// Matching is exact on the bound command string, so the text passed here must be exactly what the mapper
     /// would <c>bind</c>.
     /// </summary>
+    /// <summary>
+    /// The tips block (design doc §11.9): what the modifiers would do RIGHT NOW.
+    ///
+    /// Contextual rather than a static legend, and that is the whole value. "Hold Shift to multi-select" is
+    /// noise when nothing is selectable and exactly the thing you needed to know when the crosshair is on a
+    /// brush. A fixed legend gets read once and then becomes wallpaper; a list that changes gets read.
+    ///
+    /// No visible header — the tips just sit at the bottom of the panel in their own colour, because a header
+    /// would cost a line to say something the content already says.
+    /// </summary>
+    private void AppendTips(List<(string Text, Color Color)> lines)
+    {
+        if (Controller is not { } c)
+            return;
+
+        var tip = new Color(0.55f, 0.72f, 0.62f);
+        var live = new Color(0.5f, 1f, 0.7f);
+
+        // Held modifiers report their CURRENT state, so the line doubles as an indicator: while Ctrl is down
+        // it says what is happening, not what would happen.
+        if (c.SnapInverted)
+            lines.Add((c.EffectiveGridSnap > 0f
+                ? $"CTRL — snapping to {Fmt(c.EffectiveGridSnap)}u grid"
+                : "CTRL — grid snap off", live));
+        else
+            lines.Add((c.EffectiveGridSnap > 0f
+                ? "hold Ctrl to drop off-grid"
+                : "hold Ctrl to snap to grid", tip));
+
+        if (c.IsDragging)
+        {
+            lines.Add(("Esc or right-click cancels the drag", tip));
+            return;
+        }
+
+        if (c.HoverHandle is { } h)
+        {
+            lines.Add(($"click to {HandleVerb(h)}", live));
+            return;
+        }
+
+        // The two-phase model is the thing most likely to read as a broken editor: a mapper who drags the
+        // object body and sees nothing move needs to be told that the handle is the target, not the brush.
+        if (c.Session is { Selection.Count: > 0 })
+            lines.Add(("grab an axis handle to transform", tip));
+        else if (c.Hover.Hit)
+            lines.Add(("click to select · hold Shift to multi-select", tip));
+
+        lines.Add(("right-click for the editor menu", tip));
+    }
+
+    private static string HandleVerb(EditorHandle h) => h.Kind switch
+    {
+        HandleKind.MoveAxis => $"move along {Axis(h.Axis)}",
+        HandleKind.MovePlane => $"move in {Axis(h.Axis)}{Axis(h.Axis2)}",
+        HandleKind.RotateRing => $"rotate about {Axis(h.Axis)}",
+        HandleKind.ScaleUniform => "scale uniformly",
+        _ => $"scale along {Axis(h.Axis)}",
+    };
+
+    private static string Axis(NVec3 a)
+    {
+        float ax = MathF.Abs(a.X), ay = MathF.Abs(a.Y), az = MathF.Abs(a.Z);
+        if (ax >= ay && ax >= az) return "X";
+        return ay >= az ? "Y" : "Z";
+    }
+
+    private static string EKey(string command) => XonoticGodot.Game.Vmap.EditorBinds.KeyLabel(command);
+
     private static string Key(string command)
     {
         string key = BindTable.CommandKey("", command);

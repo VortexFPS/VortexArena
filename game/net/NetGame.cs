@@ -5837,6 +5837,12 @@ public sealed partial class NetGame : Node3D
             // mapper changes mid-session. ApplyEnvironment itself no-ops when nothing changed.
             // The background bake publishes into the retained bake; one rebuild resamples it onto the
             // world, which is exact because the geometry has not changed underneath it.
+            // Applying the bake is SPREAD over frames: the world already on screen has the right geometry,
+            // so only its vertex colours change, a few cell meshes per frame. A full rebuild here was ~880 ms
+            // of frozen main thread the instant a bake landed — the one moment the editor should feel free.
+            if (Vmap.VmapMapBuilder.RecolorRemaining > 0)
+                Vmap.VmapMapBuilder.RecolorStep(4);
+
             if (Vmap.EditorLightBake.BakeFinished)
             {
                 Vmap.EditorLightBake.ClearFinished();
@@ -5847,7 +5853,7 @@ public sealed partial class NetGame : Node3D
                     + $"filled {Vmap.EditorLightBake.FilledSamples:N0} black samples, "
                     + $"{_pendingTraceCount:N0} occluders");
                 _bakedShadowsStale = false;
-                _editorMapVersion = -1;
+                Vmap.VmapMapBuilder.BeginRecolor();
             }
 
             if (_worldEnv is not null)

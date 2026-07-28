@@ -102,6 +102,9 @@ public static class VmapMapBuilder
             }
         }
 
+        LiveCells.Clear();
+        RecolorRemaining = 0;
+
         // ---- phong: blend the LIGHTING normals across adjacent faces -----------------------------------
         // q3map_shadeAngle. The mesh stays faceted — this only changes the normal the bake shades with, which
         // is what stops a curved run of brushes from lighting as a row of flat panels. Done before the bake
@@ -142,6 +145,7 @@ public static class VmapMapBuilder
             Dictionary<string, CellSurface> byMaterial = cells[key];
             var mesh = new ArrayMesh();
             var materials = new List<Material>(byMaterial.Count);
+            var packedCells = new List<CellSurface>(byMaterial.Count);
 
             foreach (string material in byMaterial.Keys.OrderBy(m => m, StringComparer.Ordinal))
             {
@@ -150,10 +154,15 @@ public static class VmapMapBuilder
                     continue;
                 cell.Pack(mesh);
                 materials.Add(EditorMaterial(assets, material));
+                packedCells.Add(cell);
             }
 
             if (mesh.GetSurfaceCount() == 0)
                 continue;
+
+            // Retained for the post-bake recolour (see LiveCells): the same vertices, relit in place.
+            if (lit)
+                LiveCells.Add((mesh, packedCells, materials));
 
             var instance = new MeshInstance3D
             {
@@ -477,6 +486,51 @@ public static class VmapMapBuilder
     private static (int, int, int) SmoothKey(NVec3 p) => (
         (int)MathF.Round(p.X * 4f), (int)MathF.Round(p.Y * 4f), (int)MathF.Round(p.Z * 4f));
 
+    // ---- recolouring a finished bake onto the world already on screen ------------------------------
+
+    /// <summary>
+    /// The cells of the world currently on screen, kept so a finished bake can be applied WITHOUT rebuilding
+    /// it. A full rebuild costs ~880 ms on the main thread — a visible freeze the moment a bake lands, which
+    /// is the worst possible time for one, since the whole point of baking on a worker was that the editor
+    /// stays usable. Repacking vertex data skips tessellation, occlusion culling, material resolution and
+    /// node creation entirely.
+    /// </summary>
+    private static readonly List<(ArrayMesh Mesh, List<CellSurface> Cells, List<Material> Materials)> LiveCells
+        = new();
+
+    /// <summary>Surfaces still to recolour; 0 when idle.</summary>
+    public static int RecolorRemaining { get; private set; }
+
+    /// <summary>Begin applying the retained bake to the world on screen.</summary>
+    public static void BeginRecolor() => RecolorRemaining = LiveCells.Count;
+
+    /// <summary>
+    /// Recolour up to <paramref name="budget"/> surfaces, resampling the retained bake onto their vertices.
+    /// Called once a frame with a small budget so the cost is spread instead of landing as one hitch.
+    /// </summary>
+    public static void RecolorStep(int budget)
+    {
+        while (RecolorRemaining > 0 && budget-- > 0)
+        {
+            int index = LiveCells.Count - RecolorRemaining;
+            RecolorRemaining--;
+            (ArrayMesh mesh, List<CellSurface> cells, List<Material> materials) = LiveCells[index];
+            if (!GodotObject.IsInstanceValid(mesh))
+                continue;
+
+            // A cell's mesh holds one surface per material, and surfaces are immutable — so the whole mesh
+            // is repacked together and its materials reattached in the order they were built.
+            foreach (CellSurface cell in cells)
+                cell.ResampleColors();
+
+            mesh.ClearSurfaces();
+            foreach (CellSurface cell in cells)
+                cell.Pack(mesh);
+            for (int m = 0; m < materials.Count && m < mesh.GetSurfaceCount(); m++)
+                mesh.SurfaceSetMaterial(m, materials[m]);
+        }
+    }
+
     /// <summary>Cache so a shared material is built once per map build, not once per cell. Keyed by shader AND
     /// lit-ness, because the two variants of one shader are different materials.</summary>
     private static readonly Dictionary<string, Material> EditorMaterials = new(StringComparer.OrdinalIgnoreCase);
@@ -552,14 +606,16 @@ public static class VmapMapBuilder
                 diffuse.UvScale.X != 0f && diffuse.UvScale.Y != 0f ? diffuse.UvScale : Vector2.One);
             baked.SetShaderParameter("alpha_cutoff", diffuse.AlphaCutoff);
 
+            // A normal map is what the deluxe term needs to have anything to say; without one the shader
+            // leaves the baked light exactly as the bake computed it. EVERY surface, not just the emissive
+            // ones — nesting this in the glow branch left every wall and floor in the map without one.
+            baked.SetShaderParameter("normal_tex", diffuse.Normal);
+            baked.SetShaderParameter("normal_strength", diffuse.Normal is not null ? 1f : 0f);
+
             float bakedEmit = SurfaceEmit(assets, shaderName);
             if (diffuse.Glow is not null)
             {
                 baked.SetShaderParameter("glow_tex", diffuse.Glow);
-            // A normal map is what the deluxe term needs to have anything to say; without one the shader
-            // leaves the baked light exactly as the bake computed it.
-            baked.SetShaderParameter("normal_tex", diffuse.Normal);
-            baked.SetShaderParameter("normal_strength", diffuse.Normal is not null ? 1f : 0f);
                 baked.SetShaderParameter("glow_energy", 1.1f);
             }
             else if (bakedEmit > 0f && albedo is not null)
@@ -798,6 +854,22 @@ public static class VmapMapBuilder
 
         /// <summary>Average albedo of this cell's shader — the colour its bounce light carries.</summary>
         public Color AlbedoAverage = new(0.45f, 0.45f, 0.45f);
+
+        /// <summary>
+        /// Refill colours and deluxe directions from the retained bake, for a surface already on screen.
+        /// The geometry has not moved, so the exact-position cache returns each vertex's own baked value.
+        /// </summary>
+        public void ResampleColors()
+        {
+            EnsureDeluxe();
+            for (int i = 0; i < Positions.Count; i++)
+            {
+                NVec3 p = Coords.ToQuake(Positions[i]);
+                Colors[i] = EditorLightBake.Resample(p, out NVec3 ld);
+                if (ld.LengthSquared() > 1e-8f)
+                    Deluxe[i] = ld;
+            }
+        }
 
         /// <summary>Add the bounce gather on top of the direct colours (worker-thread safe, own lists only).</summary>
         public void AddBounceColors()

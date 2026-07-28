@@ -498,13 +498,26 @@ public static class EditorLightBake
             var dirt = new float[pos.Length];
             var dirs = new NVec3[pos.Length];
 
+            // Leave cores for the game. Parallel.For's default is "every core", which on a bake this long
+            // means the main and render threads fight the workers for a scheduler slot on every frame — the
+            // work finishes no sooner and the editor stutters throughout. Two cores held back is the
+            // difference between a bake you can fly around during and one you wait out.
+            var options = new System.Threading.Tasks.ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Max(1, System.Environment.ProcessorCount - 2),
+            };
+
             await System.Threading.Tasks.Task.Run(() =>
             {
+                // Below-normal priority on the pool threads this bake occupies, so even when every core is
+                // busy the OS still schedules the frame ahead of a ray.
+                Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
                 // Direct + dirt, in chunks so the progress counter moves without an interlock per vertex.
-                System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, chunk =>
+                System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, options, chunk =>
                 {
                     if (Volatile.Read(ref _cancel) != 0)
                         return;
+                    Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
                     int start = chunk * ChunkSize;
                     int end = Math.Min(start + ChunkSize, pos.Length);
                     for (int i = start; i < end; i++)
@@ -518,10 +531,11 @@ public static class EditorLightBake
 
                 if (Volatile.Read(ref _cancel) == 0 && _bounceWanted && BuildBounceLights() > 0)
                 {
-                    System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, chunk =>
+                    System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, options, chunk =>
                     {
                         if (Volatile.Read(ref _cancel) != 0)
                             return;
+                        Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
                         int start = chunk * ChunkSize;
                         int end = Math.Min(start + ChunkSize, pos.Length);
                         for (int i = start; i < end; i++)
@@ -860,9 +874,14 @@ public static class EditorLightBake
             g += l.Color.G * k;
             b += l.Color.B * k;
 
-            // Weight the direction by the LUMINOUS contribution, so the brightest source dominates rather
-            // than the nearest or the most numerous.
-            dirSum += dir * (k * (l.Color.R + l.Color.G + l.Color.B));
+            // q3map2 accumulates the deluxe direction WITHOUT the N.L term (light.c: addDeluxe is
+            // photons/d^2, and only gains `angle` when angledDeluxe is set, which is not the default).
+            // That distinction matters more than it looks: weighting by N.L pulls the averaged direction
+            // toward the surface normal, and the cosine is flattest exactly there — so a normal map barely
+            // moves the result. Weighted by arriving ENERGY, the direction keeps pointing at the light.
+            float deluxeWeight = l.Photons * attenuation * visibility
+                * (l.Color.R + l.Color.G + l.Color.B);
+            dirSum += dir * deluxeWeight;
         }
 
         return new Color(r, g, b);

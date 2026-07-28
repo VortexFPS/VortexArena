@@ -541,6 +541,17 @@ public sealed partial class EditorLighting : Node3D
                 {
                     kind = BakedLightKind.Area;
                     dir = NVec3.Normalize(emitNormal);
+
+                    // BACKSPLASH (q3map2 light_bounce.c:672, on by default for every area light): a point
+                    // light at 5% of the photons, 23 units out along the emitter's normal. This is the
+                    // mechanism that lights the surface an area light is MOUNTED ON — an area emitter's own
+                    // cosine is zero along its plane, so without this the ceiling around every recessed
+                    // fixture sits in the dark, which is exactly what adding the emitter cosine exposed.
+                    float splashPhotons = photons * BacksplashFraction;
+                    _bake.Add(new BakedLight(
+                        Coords.ToQuake(light.Position) + dir * BacksplashDistance,
+                        SrgbToLinear(light.LightColor), splashPhotons,
+                        Math.Min(BakeRangeCap, MathF.Sqrt(splashPhotons / FalloffTolerance))));
                 }
                 else if (light is SpotLight3D sp)
                 {
@@ -585,6 +596,12 @@ public sealed partial class EditorLighting : Node3D
     /// cost, which is otherwise cubic in a number that comes straight out of the map.
     /// </summary>
     private const float BakeRangeCap = 1536f;
+
+    /// <summary>q3map2 DEF_BACKSPLASH_FRACTION: the share of an area light's photons its backsplash gets.</summary>
+    private const float BacksplashFraction = 0.05f;
+
+    /// <summary>q3map2 DEF_BACKSPLASH_DISTANCE, Quake units out along the emitter's normal.</summary>
+    private const float BacksplashDistance = 23f;
 
     /// <summary>
     /// sRGB -> linear for a colour that came out of a .map or .shader file. Xonotic compiles with

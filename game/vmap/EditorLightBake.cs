@@ -148,7 +148,7 @@ public static class EditorLightBake
     /// single zero vertex drags a visible wedge of darkness across a lit surface. Only true zeros are
     /// touched: a legitimately unlit corner has to stay unlit.
     /// </summary>
-    private static void FillBlackSamples(NVec3[] positions, Color[] values)
+    private static void FillBlackSamples(NVec3[] positions, Color[] values, bool[]? buried = null)
     {
         const float CellSize = 96f;
         var buckets = new Dictionary<(int, int, int), List<int>>(values.Length / 8 + 1);
@@ -163,12 +163,15 @@ public static class EditorLightBake
             list.Add(i);
         }
 
-        int filled = 0;
-        var patched = new List<(int Index, Color Value)>();
-        for (int i = 0; i < values.Length; i++)
+        // PARALLEL: with buried-sample detection this pass grew from ~1k candidates to ~200k, and a serial
+        // scan of 27 neighbour buckets each tripled the whole bake's wall time. The scan is read-only over
+        // `values`; only the patch list needs guarding.
+        var patched = new System.Collections.Concurrent.ConcurrentBag<(int Index, Color Value)>();
+        System.Threading.Tasks.Parallel.For(0, values.Length, i =>
         {
-            if (values[i].R + values[i].G + values[i].B > 1e-4f)
-                continue;
+            bool isBuried = buried is not null && buried[i];
+            if (!isBuried && values[i].R + values[i].G + values[i].B > 1e-4f)
+                return;
 
             int cx = (int)MathF.Floor(positions[i].X / CellSize);
             int cy = (int)MathF.Floor(positions[i].Y / CellSize);
@@ -186,6 +189,8 @@ public static class EditorLightBake
                 {
                     if (j == i || values[j].R + values[j].G + values[j].B <= 1e-4f)
                         continue;
+                    if (buried is not null && buried[j])
+                        continue;   // a buried neighbour's value is exactly the garbage being replaced
                     r += values[j].R;
                     g += values[j].G;
                     b += values[j].B;
@@ -195,14 +200,13 @@ public static class EditorLightBake
 
             // Needs real support before overwriting: one stray lit neighbour is not evidence.
             if (n < 3)
-                continue;
+                return;
             patched.Add((i, new Color(r / n, g / n, b / n)));
-            filled++;
-        }
+        });
 
         foreach ((int index, Color value) in patched)
             values[index] = value;
-        FilledSamples = filled;
+        FilledSamples = patched.Count;
     }
 
     /// <summary>Samples repaired by the last fill pass (diagnostics).</summary>
@@ -524,6 +528,7 @@ public static class EditorLightBake
             var result = new Color[pos.Length];
             var dirt = new float[pos.Length];
             var dirs = new NVec3[pos.Length];
+            var buried = new bool[pos.Length];
 
             // Leave cores for the game. Parallel.For's default is "every core", which on a bake this long
             // means the main and render threads fight the workers for a scheduler slot on every frame — the
@@ -549,9 +554,11 @@ public static class EditorLightBake
                     int end = Math.Min(start + ChunkSize, pos.Length);
                     for (int i = start; i < end; i++)
                     {
-                        result[i] = SampleDirect(pos[i], nrm[i], geo[i], alb[i], out float d, out NVec3 ld);
+                        result[i] = SampleDirect(pos[i], nrm[i], geo[i], alb[i],
+                            out float d, out NVec3 ld, out bool b);
                         dirt[i] = d;
                         dirs[i] = ld;
+                        buried[i] = b;
                     }
                     Interlocked.Add(ref _progress, end - start);
                 });
@@ -582,7 +589,7 @@ public static class EditorLightBake
             // map lit in patches, which is worse than the lighting it replaced.
             if (Volatile.Read(ref _cancel) == 0)
             {
-                FillBlackSamples(pos, result);
+                FillBlackSamples(pos, result, buried);
                 MeasureEncodeRange(result);
                 CacheReset();
                 for (int i = 0; i < pos.Length; i++)
@@ -746,7 +753,7 @@ public static class EditorLightBake
         dirt = 1f;
         if (_cacheMode)
             return SampleCached(position, out _);
-        return SampleDirect(position, shadeNormal, geoNormal, albedo, out dirt, out _);
+        return SampleDirect(position, shadeNormal, geoNormal, albedo, out dirt, out _, out _);
     }
 
     /// <summary>
@@ -761,16 +768,22 @@ public static class EditorLightBake
     /// editor rather than a working one.
     /// </summary>
     public static Color Preview(NVec3 position, NVec3 normal, out NVec3 lightDir) =>
-        SampleDirect(position, normal, normal, _greyAlbedo, out _, out lightDir);
+        SampleDirect(position, normal, normal, _greyAlbedo, out _, out lightDir, out _);
 
     private static Color SampleDirect(
         NVec3 position, NVec3 shadeNormal, NVec3 geoNormal, Color albedo,
-        out float dirt, out NVec3 lightDir)
+        out float dirt, out NVec3 lightDir, out bool buried)
     {
         dirt = 1f;
         lightDir = shadeNormal;
+        buried = false;
         if (_grid is not { } grid)
             return Colors.Black;
+
+        // A sample buried inside a solid (overlapping trim, a seam) sees nothing real: its direct is zero
+        // and its dirt is the floor value, but the UNSHADOWED bounce still reaches it — a small wrong value
+        // that the black-fill cannot recognise. Flag it so the fill pass replaces it outright.
+        buried = _shadows is { } sh && sh.IsInsideSolid(position + geoNormal * EditorShadowTrace.SurfaceBias);
 
         dirt = DirtFactor(position, geoNormal);
         Color direct = GatherDirect(grid, position, shadeNormal, geoNormal, out NVec3 dirSum);

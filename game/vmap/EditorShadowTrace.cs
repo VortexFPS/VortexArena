@@ -190,6 +190,41 @@ public sealed class EditorShadowTrace
     private const int SurfaceNonSolid = 0x4000;
 
     /// <summary>
+    /// True when <paramref name="point"/> sits inside a solid occluder. A bake sample can land there — a
+    /// face partly covered by an overlapping trim brush keeps its own plane, and the 2-unit lift does not
+    /// clear a brush that overlaps by more. Such a sample sees no light from anywhere and must be repaired
+    /// from its neighbours, not trusted.
+    /// </summary>
+    public bool IsInsideSolid(NVec3 point)
+    {
+        var key = ((int)MathF.Floor(point.X / CellSize),
+                   (int)MathF.Floor(point.Y / CellSize),
+                   (int)MathF.Floor(point.Z / CellSize));
+        if (!_grid.TryGetValue(key, out List<int>? bucket))
+            return false;
+
+        foreach (int i in bucket)
+        {
+            Occluder o = _occluders[i];
+            if (point.X < o.Min.X || point.X > o.Max.X
+                || point.Y < o.Min.Y || point.Y > o.Max.Y
+                || point.Z < o.Min.Z || point.Z > o.Max.Z)
+                continue;
+
+            bool inside = true;
+            foreach (VmapPlane plane in o.Planes)
+                if (plane.Distance(point) > 0f)
+                {
+                    inside = false;
+                    break;
+                }
+            if (inside)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// True when something solid lies between the two points.
     ///
     /// Read-only and allocation-free, so every core can trace at once against one shared index.

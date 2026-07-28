@@ -5929,7 +5929,7 @@ public sealed partial class NetGame : Node3D
                 // used to be a Godot environment energy (where 10 was merely strong) and is now an in-shader
                 // floor (where 10 is an opaque white wash). A value saved under the old semantics must not be
                 // able to flatten the world — clamp it rather than let a stale config outrank every default.
-                float sc2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.0065f), 0f, 2f);
+                float sc2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.0043f), 0f, 2f);
                 float am2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarAmbient, 0.004f), 0f, 1f);
                 float gm2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeGamma, 1.05f), 0.25f, 4f);
                 float dx2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarDeluxe, 1f), 0f, 1f);

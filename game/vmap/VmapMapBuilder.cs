@@ -212,6 +212,7 @@ public static class VmapMapBuilder
         NVec3 a = surface.Positions[i0], b = surface.Positions[i1], c = surface.Positions[i2];
         NVec2 ua = surface.Uvs[i0], ub = surface.Uvs[i1], uc = surface.Uvs[i2];
         NVec3 normal = surface.Normals[i0];
+        NVec3 na = normal, nb = surface.Normals[i1], nc = surface.Normals[i2];
         Vector3 gn = Coords.ToGodot(normal);
 
         // The two world axes spanning the face's dominant plane.
@@ -281,6 +282,7 @@ public static class VmapMapBuilder
                 (Vector3, Vector3, Vector2, Color) Vtx(NVec3 pt)
                 {
                     NVec2 uv;
+                    Vector3 vn = gn;
                     if (canInterp)
                     {
                         float pu = Axis(pt, axisU) - Axis(a, axisU);
@@ -288,10 +290,23 @@ public static class VmapMapBuilder
                         float w1 = (pu * e2v - e2u * pv) / det;
                         float w2 = (e1u * pv - pu * e1v) / det;
                         uv = ua + (ub - ua) * w1 + (uc - ua) * w2;
+
+                        // The NORMAL is interpolated too, with the same weights the UV uses.
+                        //
+                        // Handing every generated vertex the first vertex's normal is invisible on a brush
+                        // face, where all three are identical — which is why this survived. On a CURVED
+                        // patch the three differ, so each clipped facet took whichever normal happened to
+                        // be first: the surface shades flat instead of smooth, and each facet lands
+                        // brighter or darker than it should depending on that arbitrary choice. That is the
+                        // reported "patches are brighter here and darker there", and it reaches the bake as
+                        // well as the render, since the bake shades from these normals.
+                        NVec3 ni = na + (nb - na) * w1 + (nc - na) * w2;
+                        if (ni.LengthSquared() > 1e-8f)
+                            vn = Coords.ToGodot(NVec3.Normalize(ni));
                     }
                     else
                         uv = ua;
-                    return (Coords.ToGodot(pt), gn, new Vector2(uv.X, uv.Y), Colors.Black);
+                    return (Coords.ToGodot(pt), vn, new Vector2(uv.X, uv.Y), Colors.Black);
                 }
 
                 (Vector3, Vector3, Vector2, Color) first = Vtx(final[0]);

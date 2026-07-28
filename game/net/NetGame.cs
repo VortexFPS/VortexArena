@@ -5771,7 +5771,9 @@ public sealed partial class NetGame : Node3D
             editorPanel.Controller = _editor;
             editorPanel.Ortho = _editorOrtho;
             editorPanel.Lights = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
-                ? _editorLights.LightCount : -1;
+                ? _editorLights.TotalLightCount : -1;
+            editorPanel.Baked = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
+                && _editorLights.Baking;
             editorPanel.HasMapSun = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
                 && _editorLights.HasMapSun;
         }
@@ -6883,6 +6885,24 @@ public sealed partial class NetGame : Node3D
         if (_editorMapRoot is not null && GodotObject.IsInstanceValid(_editorMapRoot))
             _editorMapRoot.QueueFree();
 
+        // Lights FIRST: when they are baked, the mesh builder needs them to compute vertex colours, so the
+        // rig has to exist before the world it lights.
+        if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
+            _editorLights.QueueFree();
+        _editorLights = null;
+        if (lit)
+        {
+            _editorLights = Vmap.EditorLighting.Build(_editor.Document!, _assets.Assets, Menu.MenuState.Cvars);
+            AddChild(_editorLights);
+            if (_editorLights.Baking)
+            {
+                Vmap.VmapMapBuilder.BakeScale = Menu.MenuState.Cvars is { } bc
+                    && !string.IsNullOrEmpty(bc.GetString(Vmap.EditorLighting.CvarBakeScale))
+                        ? bc.GetFloat(Vmap.EditorLighting.CvarBakeScale) : 0.36f;
+                Vmap.EditorLightBake.Begin(_editorLights.BakeLights);
+            }
+        }
+
         _editorMapRoot = Vmap.VmapMapBuilder.BuildMap(_editor.Document!, _assets.Assets, new VmapSurfaceOptions
         {
             // Same filter the picker uses, so what you can click is what you can see.
@@ -6892,19 +6912,9 @@ public sealed partial class NetGame : Node3D
             // skin, and you end up looking at the inside of the masonry rather than at the room.
             CullOccludedFaces = _editor.CullOccludedFaces,
         }, lit);
+        Vmap.EditorLightBake.End();
         AddChild(_editorMapRoot);
         _editorMapVersion = viewKey;
-
-        // The light rig is rebuilt with the world: its lights are children of the scene, not of the map node,
-        // but their budget and the sun are derived from the same document.
-        if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
-            _editorLights.QueueFree();
-        _editorLights = null;
-        if (lit)
-        {
-            _editorLights = Vmap.EditorLighting.Build(_editor.Document!, _assets.Assets, Menu.MenuState.Cvars);
-            AddChild(_editorLights);
-        }
 
         // The regenerated world carries its own "Portals" node, so the portal renderer has to be re-pointed at
         // it — including after every edit, since the rebuild frees the nodes it was holding.

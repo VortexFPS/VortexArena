@@ -93,7 +93,10 @@ public static class VmapMapBuilder
                     byMaterial[surface.Material] = cell;
                 }
 
-                cell.AddTriangle(surface, i0, i1, i2);
+                if (EditorLightBake.Active)
+                    AppendBakedTriangle(cell, surface, i0, i1, i2);
+                else
+                    cell.AddTriangle(surface, i0, i1, i2);
             }
         }
 
@@ -144,6 +147,67 @@ public static class VmapMapBuilder
 
         return root;
     }
+
+    /// <summary>
+    /// Subdivide one source triangle until its edges are about a sample apart, computing the baked light at
+    /// each generated vertex.
+    ///
+    /// Subdivision is the whole reason a VERTEX bake is usable on Q3 geometry: a 512-unit floor is two
+    /// triangles with four corners, and lighting sampled only at those corners would interpolate a fixture's
+    /// pool into a flat wash across the entire room. Splitting to roughly luxel spacing puts the samples where
+    /// a lightmap would have put them.
+    /// </summary>
+    private static void AppendBakedTriangle(CellSurface cell, VmapSurface surface, int i0, int i1, int i2)
+    {
+        NVec3 a = surface.Positions[i0], b = surface.Positions[i1], c = surface.Positions[i2];
+        NVec2 ua = surface.Uvs[i0], ub = surface.Uvs[i1], uc = surface.Uvs[i2];
+        NVec3 normal = surface.Normals[i0];
+
+        // One split count for the whole triangle keeps the generated vertices coincident along shared edges,
+        // so neighbouring triangles agree at their seams and the bake shows no cracks.
+        float longest = MathF.Max((b - a).Length(), MathF.Max((c - b).Length(), (a - c).Length()));
+        int steps = (int)MathF.Ceiling(longest / EditorLightBake.SampleSpacing);
+        steps = Math.Clamp(steps, 1, MaxBakeSplits);
+
+        // Barycentric lattice: rows of vertices along the a->b and a->c edges.
+        var grid = new (Vector3 P, Vector3 N, Vector2 Uv, Color C)[steps + 1][];
+        Vector3 gn = Coords.ToGodot(normal);
+        for (int row = 0; row <= steps; row++)
+        {
+            grid[row] = new (Vector3, Vector3, Vector2, Color)[row + 1];
+            for (int col = 0; col <= row; col++)
+            {
+                float v = (float)row / steps;
+                float w = row == 0 ? 0f : (float)col / row * v;
+                float u = 1f - v;
+                float vv = v - w;
+
+                NVec3 p = a * u + b * vv + c * w;
+                NVec2 uv = ua * u + ub * vv + uc * w;
+                grid[row][col] = (
+                    Coords.ToGodot(p),
+                    gn,
+                    new Vector2(uv.X, uv.Y),
+                    EditorLightBake.Sample(p, normal));
+            }
+        }
+
+        for (int row = 0; row < steps; row++)
+        {
+            for (int col = 0; col <= row; col++)
+            {
+                cell.AddBakedTriangle(grid[row][col], grid[row + 1][col], grid[row + 1][col + 1]);
+                if (col < row)
+                    cell.AddBakedTriangle(grid[row][col], grid[row + 1][col + 1], grid[row][col + 1]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Cap on subdivisions per triangle edge. A map-spanning sky or lava face would otherwise generate
+    /// hundreds of thousands of vertices for light nobody looks closely at.
+    /// </summary>
+    private const int MaxBakeSplits = 16;
 
     /// <summary>
     /// A shader that camera-renders a portal view (<c>dpcamera</c>, e.g. <c>effects_warpzone/wavy</c>).
@@ -252,6 +316,14 @@ public static class VmapMapBuilder
     /// <summary>Whether the current build wants lit materials; set by <see cref="BuildMap"/>.</summary>
     private static bool Lit;
 
+    /// <summary>
+    /// Live multiplier on the baked light (the shader's <c>baked_scale</c>). Calibrated so the bake lands near
+    /// the compiled map's own brightness: at 1.0 the editor measured 52.3 mean against the baked reference's
+    /// 26.8. Because it is a shader uniform rather than part of the bake, changing it re-lights instantly with
+    /// no rebuild.
+    /// </summary>
+    public static float BakeScale = 0.36f;
+
     /// <summary>Cache so a shared material is built once per map build, not once per cell. Keyed by shader AND
     /// lit-ness, because the two variants of one shader are different materials.</summary>
     private static readonly Dictionary<string, Material> EditorMaterials = new(StringComparer.OrdinalIgnoreCase);
@@ -267,12 +339,41 @@ public static class VmapMapBuilder
     /// </summary>
     private static Material EditorMaterial(AssetSystem assets, string shaderName)
     {
-        string key = (Lit ? "lit:" : "flat:") + shaderName;
+        string key = (Lit ? (EditorLightBake.Active ? "baked:" : "lit:") : "flat:") + shaderName;
         if (EditorMaterials.TryGetValue(key, out Material? cached) && GodotObject.IsInstanceValid(cached))
             return cached;
 
         AssetSystem.LightmapDiffuse diffuse = assets.ResolveLightmapDiffuse(shaderName);
         Texture2D? albedo = diffuse.Texture ?? assets.LoadTexture(shaderName);
+
+        // Baked path: the precomputed light rides in the mesh's COLOR channel, so the surface needs a shader
+        // that adds it as emission while leaving ALBEDO for the one real-time light left (the sun).
+        if (Lit && EditorLightBake.Active)
+        {
+            var baked = new ShaderMaterial { Shader = EditorWorldShader.Instance };
+            baked.SetShaderParameter("albedo_tex", albedo);
+            baked.SetShaderParameter("albedo_tint",
+                albedo is null ? new Vector3(0.55f, 0.55f, 0.58f) : Vector3.One);
+            baked.SetShaderParameter("uv_scale",
+                diffuse.UvScale.X != 0f && diffuse.UvScale.Y != 0f ? diffuse.UvScale : Vector2.One);
+            baked.SetShaderParameter("alpha_cutoff", diffuse.AlphaCutoff);
+            baked.SetShaderParameter("baked_scale", BakeScale);
+
+            float bakedEmit = SurfaceEmit(assets, shaderName);
+            if (diffuse.Glow is not null)
+            {
+                baked.SetShaderParameter("glow_tex", diffuse.Glow);
+                baked.SetShaderParameter("glow_energy", 1.1f);
+            }
+            else if (bakedEmit > 0f && albedo is not null)
+            {
+                baked.SetShaderParameter("glow_tex", albedo);
+                baked.SetShaderParameter("glow_energy", Math.Clamp(bakedEmit / 1000f, 0.3f, 1.5f));
+            }
+
+            EditorMaterials[key] = baked;
+            return baked;
+        }
 
         var mat = new StandardMaterial3D
         {
@@ -324,6 +425,11 @@ public static class VmapMapBuilder
                 mat.EmissionEnabled = true;
                 mat.Emission = Colors.White;
                 mat.EmissionTexture = diffuse.Glow;
+                // MULTIPLY, not the default ADD. With Add, emission = emission_color + texture, and a white
+                // emission colour saturates to 1.0 everywhere the texture is drawn — every light panel became
+                // a featureless white rectangle regardless of what its glow page contained. Multiply makes
+                // white the identity so the page's own image comes through.
+                mat.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
                 // ~1, not the 2x it briefly shipped with: the glow page is already authored at display
                 // brightness, and doubling it blew every fixture out to a white rectangle.
                 mat.EmissionEnergyMultiplier = 1.1f;
@@ -333,6 +439,7 @@ public static class VmapMapBuilder
                 mat.EmissionEnabled = true;
                 mat.Emission = Colors.White;
                 mat.EmissionTexture = albedo;
+                mat.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
                 mat.EmissionEnergyMultiplier = Math.Clamp(emit / 1000f, 0.3f, 1.5f);
             }
         }
@@ -376,6 +483,7 @@ public static class VmapMapBuilder
         public List<Vector3> Positions { get; } = new();
         public List<Vector3> Normals { get; } = new();
         public List<Vector2> Uvs { get; } = new();
+        public List<Color> Colors { get; } = new();
         public List<int> Indices { get; } = new();
 
         public void AddTriangle(VmapSurface source, int i0, int i1, int i2)
@@ -383,6 +491,25 @@ public static class VmapMapBuilder
             Indices.Add(Map(source, i0));
             Indices.Add(Map(source, i1));
             Indices.Add(Map(source, i2));
+        }
+
+        /// <summary>
+        /// Append one already-subdivided triangle with its own positions — the baked path, where vertices are
+        /// generated rather than referenced, so they cannot be shared through the source index remap.
+        /// </summary>
+        public void AddBakedTriangle(
+            (Vector3 P, Vector3 N, Vector2 Uv, Color C) a,
+            (Vector3 P, Vector3 N, Vector2 Uv, Color C) b,
+            (Vector3 P, Vector3 N, Vector2 Uv, Color C) c)
+        {
+            foreach ((Vector3 P, Vector3 N, Vector2 Uv, Color C) v in stackalloc[] { a, b, c })
+            {
+                Indices.Add(Positions.Count);
+                Positions.Add(v.P);
+                Normals.Add(v.N);
+                Uvs.Add(v.Uv);
+                Colors.Add(v.C);
+            }
         }
 
         private int Map(VmapSurface source, int sourceIndex)
@@ -407,6 +534,8 @@ public static class VmapMapBuilder
             arrays[(int)Mesh.ArrayType.Vertex] = Positions.ToArray();
             arrays[(int)Mesh.ArrayType.Normal] = Normals.ToArray();
             arrays[(int)Mesh.ArrayType.TexUV] = Uvs.ToArray();
+            if (Colors.Count == Positions.Count && Colors.Count > 0)
+                arrays[(int)Mesh.ArrayType.Color] = Colors.ToArray();
             arrays[(int)Mesh.ArrayType.Index] = Indices.ToArray();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         }

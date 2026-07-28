@@ -49,6 +49,9 @@ public partial class EditorPanel : HudPanel
     /// <summary>True when the sun came from the map's own sky shader rather than the fallback.</summary>
     public bool HasMapSun { get; set; }
 
+    /// <summary>True when fixture light is precomputed into the mesh rather than rendered live.</summary>
+    public bool Baked { get; set; }
+
     /// <summary>The orthographic view, for its state line. Null outside a session.</summary>
     public EditorOrthoView? Ortho { get; set; }
 
@@ -111,7 +114,7 @@ public partial class EditorPanel : HudPanel
                 // rather than left wondering why "lit" looks flat.
                 bool lit = XonoticGodot.Game.Vmap.EditorLighting.Enabled(XonoticGodot.Game.Menu.MenuState.Cvars);
                 string lighting = lit
-                    ? $"Light: ON  {(Lights >= 0 ? $"{Lights} lights" : "")}{(HasMapSun ? " + map sun" : " + default sun")}"
+                    ? $"Light: ON  {(Lights >= 0 ? $"{Lights} lights" : "")}{(Baked ? " BAKED" : "")}{(HasMapSun ? " + map sun" : " + default sun")}"
                     : "Light: OFF (fullbright)";
                 lines.Add(($"{lighting}   (cl_editor_lighting)", lit ? bright : dim));
 

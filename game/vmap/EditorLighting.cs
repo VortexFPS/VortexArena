@@ -141,6 +141,16 @@ public sealed partial class EditorLighting : Node3D
     /// </summary>
     public const string CvarSurfaceLights = "cl_editor_surface_lights";
 
+    /// <summary>
+    /// Precompute the fixtures' light into the mesh instead of rendering them as real-time lights (default
+    /// on). See <see cref="EditorLightBake"/> for why: a real-time light cannot be both far-reaching and
+    /// cheap, and per-pixel light cost is what made the editor scale badly with window size.
+    /// </summary>
+    public const string CvarBakeLights = "cl_editor_light_bake";
+
+    /// <summary>Brightness of the baked light. A shader uniform, so it re-lights with no rebuild.</summary>
+    public const string CvarBakeScale = "cl_editor_bake_scale";
+
     /// <summary>Cap on generated surface lights (the largest emitters win). Keeps pathological maps bounded.</summary>
     private const int MaxSurfaceLights = 224;
 
@@ -195,15 +205,14 @@ public sealed partial class EditorLighting : Node3D
             _ => Light3D.BakeMode.Dynamic,
         };
 
+        rig.Baking = ReadFloat(cvars, CvarBakeLights, 1f) != 0f;
+
         foreach (VmapEntity entity in doc.Entities)
         {
             if (!entity.ClassName.Equals("light", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (rig.TryBuildLight(entity, doc, brightness) is { } light)
-            {
-                rig._points.Add(light);
-                rig.AddChild(light);
-            }
+                rig.Adopt(light);
         }
 
         rig.BuildSun(doc, assets, brightness, cvars);
@@ -403,20 +412,46 @@ public sealed partial class EditorLighting : Node3D
         // Largest emitters win the cap; the rest are dropped LOUDLY (house rule: no silent truncation).
         candidates.Sort(static (x, y) => y.Weight.CompareTo(x.Weight));
         int kept = Math.Min(MaxSurfaceLights, candidates.Count);
-        int entityLights = _points.Count;
+        int entityLights = Baking ? _bake.Count : _points.Count;
         for (int i = 0; i < kept; i++)
-        {
-            _points.Add(candidates[i].Light);
-            AddChild(candidates[i].Light);
-        }
+            Adopt(candidates[i].Light);
         for (int i = kept; i < candidates.Count; i++)
             candidates[i].Light.QueueFree();
 
         SurfaceLightCount = kept;
         GD.Print($"[EditorLighting] {entityLights} entity lights, {kept} surface-light clusters from {faces} emissive faces"
             + (candidates.Count > kept ? $" ({candidates.Count - kept} clusters dropped by the cap)" : "")
-            + $", sun={(HasMapSun ? "map" : "default")}");
+            + $", sun={(HasMapSun ? "map" : "default")}, mode={(Baking ? "BAKED" : "realtime")}");
     }
+
+    /// <summary>
+    /// Take ownership of a light: as a live scene node when rendering in real time, or as a bake definition
+    /// (and nothing in the scene) when baking. One funnel so both paths always see the same light set —
+    /// baked and real-time output only ever differ by HOW the same lights are applied.
+    /// </summary>
+    private void Adopt(Light3D light)
+    {
+        if (Baking)
+        {
+            float range = light is OmniLight3D o ? o.OmniRange : ((SpotLight3D)light).SpotRange;
+            _bake.Add(new BakedLight(Coords.ToQuake(light.Position), light.LightColor, light.LightEnergy, range));
+            light.QueueFree();
+            return;
+        }
+        _points.Add(light);
+        AddChild(light);
+    }
+
+    /// <summary>True when fixture light is precomputed into the mesh rather than rendered live.</summary>
+    public bool Baking { get; private set; }
+
+    /// <summary>The lights to bake; empty when rendering them in real time.</summary>
+    public IReadOnlyList<BakedLight> BakeLights => _bake;
+
+    private readonly List<BakedLight> _bake = new();
+
+    /// <summary>Lights the rig owns, however they are applied (diagnostics / HUD).</summary>
+    public int TotalLightCount => Baking ? _bake.Count : _points.Count;
 
     /// <summary>Surface lights actually built (diagnostics / HUD).</summary>
     public int SurfaceLightCount { get; private set; }

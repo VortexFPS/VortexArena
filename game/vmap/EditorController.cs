@@ -120,6 +120,16 @@ public sealed partial class EditorController : Node3D
         return OpSubmit(op);
     }
 
+    /// <summary>
+    /// The same choke point, for callers OUTSIDE the controller — the editor's console commands.
+    ///
+    /// They used to reach past it to <c>Session.Apply</c> directly, which on a guest applies locally instead of
+    /// submitting, i.e. exactly the optimistic apply <see cref="OpSubmit"/> exists to prevent. Replication
+    /// still fired (it hangs off <c>VmapEditSession.Applied</c>), so the divergence was silent: the guest's
+    /// document moved, the server refused or reordered, and nothing said so.
+    /// </summary>
+    public bool CommitOp(IVmapOp op) => Commit(op);
+
     /// <summary>The document being edited, or null when no session is open.</summary>
     public VmapDocument? Document => _document;
 
@@ -606,7 +616,7 @@ public sealed partial class EditorController : Node3D
     private void UpdateEntityVisibility()
     {
         _visOn = EntityOcclusion;
-        if (!_visOn || Tool is not EditorTool.Entity)
+        if (!_visOn || Tool is not (EditorTool.Entity or EditorTool.Light))
         {
             // Drop the answers rather than keeping them: they were solved for a viewpoint the mapper has since
             // left, and a stale "hidden" is the one failure mode this feature must not have.
@@ -688,7 +698,23 @@ public sealed partial class EditorController : Node3D
     private Func<VmapEntity, bool>? _entityPickFilter;
 
     private Func<VmapEntity, bool> EntityPickFilter
-        => _entityPickFilter ??= e => IsEntityVisible(e.Id);
+        => _entityPickFilter ??= e => ShouldBoxEntity(e) && IsEntityVisible(e.Id);
+
+    /// <summary>
+    /// Whether the current tool owns this entity (backlog T2): the Light tool takes lights, everything else
+    /// takes everything that is not one.
+    ///
+    /// A PARTITION, not a preference — with both tools showing lights, splitting them would have bought
+    /// nothing, since the reason to split is that a hundred light boxes bury the twenty pickups among them.
+    /// The classification is <see cref="EntityDefs.CategoryFor"/>, the same rule the create palette groups by,
+    /// rather than a second classname test that could disagree with it.
+    /// </summary>
+    public bool ShouldBoxEntity(VmapEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        bool isLight = EntityDefs.CategoryFor(entity.ClassName) == "light";
+        return Tool == EditorTool.Light ? isLight : !isLight;
+    }
 
     // =============================================================================================
     //  Picking + hover
@@ -947,20 +973,29 @@ public sealed partial class EditorController : Node3D
         _dragScale = VmapHandles.ScaleFactors(handle, along, reach, ScaleSelectionOp.MinFactor);
     }
 
-    /// <summary>Half the selection's largest extent, floored so a degenerate selection cannot divide by zero.</summary>
+    /// <summary>
+    /// Half the diagonal of everything selected, floored so a degenerate selection cannot divide by zero.
+    ///
+    /// It is the denominator of the uniform-scale drag, so it has to be the distance from the pivot to the
+    /// farthest thing the drag will move — otherwise the same pointer travel means wildly different amounts of
+    /// scaling depending on what is selected. Reading only the BRUSHES was fine while brushes were the only
+    /// thing that could be scaled; since entity scaling landed, an entity-only selection fell through to the
+    /// 16-unit floor and its centre handle was four to forty times too sensitive.
+    ///
+    /// One union rather than the largest individual extent, because a pair of objects a thousand units apart
+    /// is a thousand-unit selection however small each of them is. For the single-brush case the two are the
+    /// same number, which is the case the old form was written against.
+    /// </summary>
     private float SelectionReach()
     {
         if (_document is null || _session is null)
             return 64f;
 
-        float best = 0f;
-        foreach (int id in _session.SelectedBrushIds())
-        {
-            if (_document.FindBrush(id) is not { } b || !VmapWinding.TryGetBounds(b, out NVec3 mn, out NVec3 mx))
-                continue;
-            best = MathF.Max(best, (mx - mn).Length() * 0.5f);
-        }
-        return MathF.Max(16f, best);
+        return VmapEdit.TryGetSelectionBounds(
+                _document, _session.SelectedBrushIds(), SelectedPatchIds(), SelectedEntityIds(), Defs,
+                out NVec3 lo, out NVec3 hi)
+            ? MathF.Max(16f, (hi - lo).Length() * 0.5f)
+            : 16f;
     }
 
     /// <summary>Accumulated, unsnapped drag offset in world space.</summary>
@@ -2234,6 +2269,12 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>Whether the world build removes faces buried inside other solids.</summary>
     public bool CullOccludedFaces => Cvar(CvarCullOccluded, 1f) != 0f;
+
+    /// <summary>
+    /// The taste multiplier on every light's derived range. Read here so the light tool's range rings are
+    /// drawn from the same number the rig builds the omni with.
+    /// </summary>
+    public float LightRangeScale => Cvar(EditorLighting.CvarRangeScale, 1f);
 
     /// <summary>
     /// Whether entity boxes behind solid geometry are hidden (backlog T1). Read ONCE per frame into

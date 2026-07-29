@@ -305,6 +305,41 @@ public sealed partial class EditorLighting : Node3D
     }
 
     /// <summary>
+    /// Quake light intensity → the range the rig will actually build, in Quake units.
+    ///
+    /// Public because the light tool's overlay draws this radius (backlog T2). A ring drawn from a second
+    /// formula would be a picture of a light the editor is not rendering, which is worse than no ring at all —
+    /// the mapper would tune reach against it and find the room lit differently.
+    /// </summary>
+    public static float RangeForIntensity(float intensity, float rangeScale)
+        => Math.Min(MaxRange, MathF.Sqrt(MathF.Max(0f, intensity)) * RangePerSqrtIntensity * rangeScale);
+
+    /// <summary>entities.ent: "radius of a spotlight at the target point (default: 64)".</summary>
+    public const float DefaultSpotRadius = 64f;
+
+    /// <summary>
+    /// Half-angle of the cone a q3map2 spot casts, in degrees — the angle that puts a circle of
+    /// <paramref name="radius"/> at the target, which is q3map2's own <c>radiusByDist</c> construction.
+    ///
+    /// This was hardcoded to 45°, with a comment admitting it was a stand-in "without a radius key". The key
+    /// exists and Xonotic's own entity definitions document it; reading it turns a guess into the mapper's
+    /// stated intent, and it is what makes a tight architectural spot look tight.
+    /// </summary>
+    public static float SpotAngleFor(float radius, float distanceToTarget)
+    {
+        float d = MathF.Max(1f, distanceToTarget);
+        float r = MathF.Max(1f, radius);
+        return Math.Clamp(Mathf.RadToDeg(MathF.Atan(r / d)), 1f, 89f);
+    }
+
+    private static float ReadFloatKey(VmapEntity entity, string key, float fallback)
+        => entity.Fields.TryGetValue(key, out string? text)
+            && float.TryParse(text, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v)
+            ? v
+            : fallback;
+
+    /// <summary>
     /// One <c>light</c> entity → an omni, or a SPOT when it aims at a <c>target</c>.
     ///
     /// A Q3 light with a <c>target</c> key is a spotlight: it points at the entity whose <c>targetname</c>
@@ -335,7 +370,7 @@ public sealed partial class EditorLighting : Node3D
         // proportioned around; everything else (sun, sky, surface lights) is measured against it.
         _pendingPhotons = intensity * PointScale * brightness;
 
-        float range = Math.Min(MaxRange, MathF.Sqrt(intensity) * RangePerSqrtIntensity * _rangeScale);
+        float range = RangeForIntensity(intensity, _rangeScale);
         float energy = brightness * Math.Clamp(intensity / 40f, 0.35f, 8f) * EnergyForFalloff;
 
         // Aimed light: find the target and build a cone along the direction to it.
@@ -350,9 +385,8 @@ public sealed partial class EditorLighting : Node3D
                 LightEnergy = energy,
                 SpotRange = range,
                 SpotAttenuation = _falloff,
-                // Q3's spot cone is derived from the target distance and the light's radius; without a radius
-                // key a moderate cone matches how these read in the bake far better than a full sphere.
-                SpotAngle = 45f,
+                SpotAngle = SpotAngleFor(ReadFloatKey(entity, "radius", DefaultSpotRadius),
+                    (aim - origin).Length()),
                 SpotAngleAttenuation = 1f,
                 ShadowEnabled = false,
                 LightSpecular = 0.25f,

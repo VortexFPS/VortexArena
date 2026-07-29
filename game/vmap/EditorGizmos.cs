@@ -148,8 +148,14 @@ public sealed partial class EditorGizmos : Node3D
         }
 
         // --- point entities: EDIT-only boxes from their class descriptors (§11.9) ---
-        if (c.Tool == EditorTool.Entity)
+        //
+        // Both entity-ish tools draw boxes; which entities they draw is the tool's partition (backlog T2).
+        if (c.Tool is EditorTool.Entity or EditorTool.Light)
             anything |= DrawEntityBoxes(c);
+
+        // --- lights: what they REACH, which is the thing a box cannot show (§11.9, backlog T2) ---
+        if (c.Tool == EditorTool.Light)
+            anything |= DrawLightGizmos(c);
 
         // --- §11.5 overlays: vertices, and the collision volumes that render nothing ---
         if (c.ShowVertices || c.ShowCollision)
@@ -295,6 +301,12 @@ public sealed partial class EditorGizmos : Node3D
                               && s.Selection.Exists(x => x.Kind == VmapSelectionKind.Entity
                                                          && x.EntityId == ee.Entity.Id);
 
+            // Entities the current tool does not own (backlog T2: lights belong to the Light tool and nothing
+            // else). A SELECTED one still draws — carrying a selection across a tool switch and watching it
+            // vanish, handles and all, would read as the editor having lost it.
+            if (!isSelected && !c.ShouldBoxEntity(ee.Entity))
+                continue;
+
             // Hover and selection always draw. Hiding what is selected would leave the manipulator handles —
             // which are drawn depth-off — floating over nothing, and the mapper unable to see what they are
             // about to transform.
@@ -321,6 +333,88 @@ public sealed partial class EditorGizmos : Node3D
             drew |= DrawEntityLinks(c, selectedId);
 
         return drew;
+    }
+
+    private static readonly Color LightRangeColor = new(1f, 0.85f, 0.45f, 0.5f);
+    private static readonly Color LightConeColor = new(1f, 0.7f, 0.25f, 0.85f);
+
+    /// <summary>
+    /// Draw what a light DOES rather than only where it sits: the sphere it reaches, and for an aimed light
+    /// the cone it actually casts (backlog T2).
+    ///
+    /// The radius comes from <see cref="EditorLighting.RangeForIntensity"/>, the same expression the rig
+    /// builds the omni with. A ring drawn from its own formula would be a picture of a light that is not in
+    /// the level, and a mapper would tune reach against it and be wrong.
+    ///
+    /// Only for the SELECTED or HOVERED light. A ring is hundreds of units across and a map has a hundred
+    /// lights; drawing them all would wallpaper the view exactly the way the entity-box comment above warns
+    /// about, and none of them would be legible.
+    /// </summary>
+    private bool DrawLightGizmos(EditorController c)
+    {
+        if (c.Document is not { } doc)
+            return false;
+
+        bool drew = false;
+        foreach (VmapPickIndex.EntityEntry ee in c.PickIndex.Entities)
+        {
+            VmapEntity e = ee.Entity;
+            if (!c.ShouldBoxEntity(e))
+                continue;
+
+            bool isHover = c.Hover.Hit && c.Hover.Selection.Kind == VmapSelectionKind.Entity
+                           && c.Hover.Selection.EntityId == e.Id;
+            bool isSelected = c.Session is { } s
+                              && s.Selection.Exists(x => x.Kind == VmapSelectionKind.Entity
+                                                         && x.EntityId == e.Id);
+            if (!isHover && !isSelected)
+                continue;
+
+            NVec3 at = e.Origin();
+            float range = EditorLighting.RangeForIntensity(KeyFloat(e, "light", 300f), c.LightRangeScale);
+            if (range > 1f)
+            {
+                DrawRing(at, new NVec3(1f, 0f, 0f), range, LightRangeColor);
+                DrawRing(at, new NVec3(0f, 1f, 0f), range, LightRangeColor);
+                DrawRing(at, new NVec3(0f, 0f, 1f), range, LightRangeColor);
+                drew = true;
+            }
+
+            // An aimed light is a q3map2 spot, and its cone is the one thing about it that cannot be read off
+            // the keys — it comes from the radius AND the distance to whatever it points at.
+            if (!e.Fields.TryGetValue("target", out string? target) || string.IsNullOrWhiteSpace(target))
+                continue;
+            if (FindTargetOrigin(doc, target) is not { } aim || aim == at)
+                continue;
+
+            float radius = MathF.Max(1f, KeyFloat(e, "radius", EditorLighting.DefaultSpotRadius));
+            NVec3 axis = NVec3.Normalize(aim - at);
+            DrawRing(aim, axis, radius, LightConeColor);
+            (NVec3 u, NVec3 v) = Perpendiculars(axis);
+            Line(at, aim + u * radius, LightConeColor);
+            Line(at, aim - u * radius, LightConeColor);
+            Line(at, aim + v * radius, LightConeColor);
+            Line(at, aim - v * radius, LightConeColor);
+            drew = true;
+        }
+
+        return drew;
+    }
+
+    private static float KeyFloat(VmapEntity e, string key, float fallback)
+        => e.Fields.TryGetValue(key, out string? text)
+            && float.TryParse(text, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v)
+            ? v
+            : fallback;
+
+    private static NVec3? FindTargetOrigin(VmapDocument doc, string target)
+    {
+        foreach (VmapEntity e in doc.Entities)
+            if (e.Fields.TryGetValue("targetname", out string? name)
+                && string.Equals(name, target, StringComparison.OrdinalIgnoreCase))
+                return e.Origin();
+        return null;
     }
 
     /// <summary>Arrows from the selected entity to everything it targets.</summary>

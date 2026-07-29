@@ -7992,6 +7992,7 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_flyspeed", CmdEditorFlySpeed);
         interp.RegisterCommand("editor_clip", CmdEditorClip);
         interp.RegisterCommand("editor_entity", CmdEditorEntity);
+        interp.RegisterCommand("editor_light", CmdEditorLight);
         interp.RegisterCommand("editor_shader", CmdEditorShader);
         interp.RegisterCommand("editor_waypoint", CmdEditorWaypoint);
         interp.RegisterCommand("editor_patch", CmdEditorPatch);
@@ -8226,15 +8227,21 @@ public sealed partial class NetGame : Node3D
                     return;
 
                 var op = new XonoticGodot.Formats.Vmap.CreateEntityOp(args[2], at);
-                if (!session.Apply(op))
+                // Through the controller, not the session: on a guest the op has to be SUBMITTED rather than
+                // applied locally, and that decision lives in exactly one place (EditorController.Commit).
+                if (!_editor.CommitOp(op))
                 {
                     XonoticGodot.Common.Diagnostics.Log.Warn($"editor: could not create '{args[2]}'");
                     return;
                 }
 
-                // Select what was just made, so it can be nudged or edited without hunting for it.
-                session.Selection.Clear();
-                session.Selection.Add(XonoticGodot.Formats.Vmap.VmapSelection.OfEntity(op.CreatedEntityId));
+                // Select what was just made, so it can be nudged or edited without hunting for it. Skipped on
+                // a guest: nothing exists until the server's echo lands, so there is no id yet to select.
+                if (!_editor.LastOpDeferred)
+                {
+                    session.Selection.Clear();
+                    session.Selection.Add(XonoticGodot.Formats.Vmap.VmapSelection.OfEntity(op.CreatedEntityId));
+                }
                 _editor.BumpGeometryVersion();
                 XonoticGodot.Common.Diagnostics.Log.Info($"editor: placed {args[2]} at {at.X:0} {at.Y:0} {at.Z:0}");
                 return;
@@ -8258,12 +8265,29 @@ public sealed partial class NetGame : Node3D
                 string value = args.Count > 3 ? string.Join(' ', args, 3, args.Count - 3) : "";
                 int changed = 0;
                 foreach (int id in ids)
-                    if (session.Apply(new XonoticGodot.Formats.Vmap.SetEntityKeyOp(id, args[2], value)))
+                    if (_editor.CommitOp(new XonoticGodot.Formats.Vmap.SetEntityKeyOp(id, args[2], value)))
                         changed++;
+
+                // Without this the edit is invisible. The editor world and the lighting rig only rebuild when
+                // the geometry version moves, so changing a light's `light` or `_color` key used to do nothing
+                // on screen until some unrelated edit happened to bump it.
+                if (changed > 0)
+                    _editor.BumpGeometryVersion();
 
                 XonoticGodot.Common.Diagnostics.Log.Info(changed > 0
                     ? $"editor: set {args[2]} on {changed} entit{(changed == 1 ? "y" : "ies")}"
                     : $"editor: {args[2]} unchanged");
+                return;
+            }
+
+            case "flag":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_entity flag <NAME>");
+                    return;
+                }
+                ToggleEntitySpawnflag(args[2]);
                 return;
             }
 
@@ -8286,9 +8310,239 @@ public sealed partial class NetGame : Node3D
 
             default:
                 XonoticGodot.Common.Diagnostics.Log.Help(
-                    "usage: editor_entity create <classname> | set <key> [value] | keys | list [category]");
+                    "usage: editor_entity create <classname> | set <key> [value] | flag <NAME> | keys "
+                    + "| list [category]");
                 return;
         }
+    }
+
+    /// <summary>
+    /// Flip one named spawnflag on the selection.
+    ///
+    /// The inspector used to show a spawnflag as the text "bit 4" next to a field you typed the whole
+    /// <c>spawnflags</c> number into — so setting NOGRIDLIGHT meant knowing that entities.ent's <c>bit=</c> is
+    /// an INDEX, computing 1&lt;&lt;4, and OR-ing it into whatever was already there by hand. The editor knows
+    /// all three of those things.
+    ///
+    /// The FIRST selected entity decides the new state and the rest follow it, which is how
+    /// <see cref="Vmap.EditorController.ToggleFaceFlag"/> already handles a mixed selection: flipping each
+    /// entity's own bit scatters a mixed set further instead of resolving it.
+    /// </summary>
+    private void ToggleEntitySpawnflag(string flagName)
+    {
+        if (_editor is not { Document: { } doc } ed)
+            return;
+
+        List<int> ids = ed.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("editor: no entity selected");
+            return;
+        }
+        if (doc.FindEntity(ids[0]) is not { } lead)
+            return;
+
+        XonoticGodot.Formats.Vmap.EntityClassDef def = ed.Defs?.GetOrPlaceholder(lead.ClassName)
+            ?? new XonoticGodot.Formats.Vmap.EntityClassDef { Name = lead.ClassName };
+
+        int bitValue = 0;
+        foreach (XonoticGodot.Formats.Vmap.EntityFlagDef f in def.Flags)
+            if (string.Equals(f.Name, flagName, StringComparison.OrdinalIgnoreCase))
+            {
+                bitValue = f.Value;
+                break;
+            }
+        if (bitValue == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"editor: {lead.ClassName} has no spawnflag '{flagName}'");
+            return;
+        }
+
+        bool turnOn = (SpawnflagsOf(lead) & bitValue) == 0;
+        int changed = 0;
+        foreach (int id in ids)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+            int next = turnOn ? SpawnflagsOf(e) | bitValue : SpawnflagsOf(e) & ~bitValue;
+            if (ed.CommitOp(new XonoticGodot.Formats.Vmap.SetEntityKeyOp(
+                    id, "spawnflags", next.ToString(System.Globalization.CultureInfo.InvariantCulture))))
+                changed++;
+        }
+
+        if (changed > 0)
+            ed.BumpGeometryVersion();
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"editor: {flagName} {(turnOn ? "ON" : "OFF")} on {changed} entit{(changed == 1 ? "y" : "ies")}");
+    }
+
+    private static int SpawnflagsOf(XonoticGodot.Formats.Vmap.VmapEntity e)
+        => e.Fields.TryGetValue("spawnflags", out string? s)
+            && int.TryParse(s, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out int v)
+            ? v
+            : 0;
+
+    /// <summary>
+    /// <c>editor_light</c> — the light tool's console surface (backlog T2).
+    /// <code>
+    ///   editor_light create [intensity]   place a light at the crosshair
+    ///   editor_light set &lt;key&gt; [value]    set a key on the selected lights
+    ///   editor_light aim                  drop an info_null at the crosshair and aim the light at it
+    ///   editor_light dialog               open the light dialog (bare does the same)
+    /// </code>
+    ///
+    /// A thin layer over the entity ops rather than a parallel set of them — a light IS an entity, and giving
+    /// it private ops would mean two code paths that have to agree about undo, replication and ownership.
+    /// What it adds is the two gestures the generic inspector cannot express: creating a light with its
+    /// intensity in one go, and AIMING one, which needs two entities and a minted targetname.
+    /// </summary>
+    private void CmdEditorLight(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session } ed)
+            return;
+
+        switch (args.Count > 1 ? args[1].ToLowerInvariant() : "")
+        {
+            case "create":
+            {
+                if (!ed.TryGetPastePoint(out System.Numerics.Vector3 at))
+                    return;
+
+                float intensity = args.Count > 2 && float.TryParse(args[2],
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : 300f;
+
+                var op = new XonoticGodot.Formats.Vmap.CreateEntityOp("light", at);
+                if (!ed.CommitOp(op))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Warn("editor: could not create a light there");
+                    return;
+                }
+
+                if (!ed.LastOpDeferred)
+                {
+                    ed.CommitOp(new XonoticGodot.Formats.Vmap.SetEntityKeyOp(op.CreatedEntityId, "light",
+                        intensity.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)));
+                    session.Selection.Clear();
+                    session.Selection.Add(
+                        XonoticGodot.Formats.Vmap.VmapSelection.OfEntity(op.CreatedEntityId));
+                }
+                ed.BumpGeometryVersion();
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    $"editor: light {intensity:0.#} at {at.X:0} {at.Y:0} {at.Z:0}");
+                return;
+            }
+
+            case "set":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_light set <key> [value]");
+                    return;
+                }
+                // Same verb, same op, same undo step as the generic key edit — deliberately not a second one.
+                CmdEditorEntity(new[] { "editor_entity", "set" }
+                    .Concat(args.Skip(2)).ToArray());
+                return;
+            }
+
+            case "flag":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_light flag <NAME>");
+                    return;
+                }
+                ToggleEntitySpawnflag(args[2]);
+                return;
+            }
+
+            case "aim":
+                AimSelectedLight();
+                return;
+
+            case "palette":
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    "editor: 'editor_light create [intensity]' places one — the light tool has no palette, "
+                    + "there is only one class");
+                return;
+
+            case "":
+            case "dialog":
+                OpenLightDialog();
+                return;
+
+            default:
+                XonoticGodot.Common.Diagnostics.Log.Help(
+                    "usage: editor_light create [intensity] | set <key> [value] | flag <NAME> | aim | dialog");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Turn the selected light into a q3map2 SPOT: place an <c>info_null</c> where the crosshair is aimed,
+    /// give it a fresh targetname, and point the light at it.
+    ///
+    /// Two ops for one gesture, and the only practical way to author an aimed light. Doing it by hand means
+    /// creating an info_null, inventing a name that collides with nothing already in the map, typing it twice,
+    /// and getting both halves right — for something a mapper does by looking at where they want the pool of
+    /// light to land.
+    /// </summary>
+    private void AimSelectedLight()
+    {
+        if (_editor is not { Document: { } doc } ed)
+            return;
+
+        List<int> ids = ed.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("editor: select a light first");
+            return;
+        }
+        if (!ed.TryGetPastePoint(out System.Numerics.Vector3 at))
+            return;
+
+        // A name nothing already in the document answers to, so aiming a second light cannot silently
+        // re-target the first.
+        string name = "light_aim_1";
+        for (int n = 1; n < 10000; n++)
+        {
+            name = $"light_aim_{n}";
+            bool taken = false;
+            foreach (XonoticGodot.Formats.Vmap.VmapEntity e in doc.Entities)
+                if (e.Fields.TryGetValue("targetname", out string? t)
+                    && string.Equals(t, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    taken = true;
+                    break;
+                }
+            if (!taken)
+                break;
+        }
+
+        var mark = new XonoticGodot.Formats.Vmap.CreateEntityOp("info_null", at);
+        if (!ed.CommitOp(mark))
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor: could not place the aim point");
+            return;
+        }
+        if (ed.LastOpDeferred)
+        {
+            // On a guest the info_null does not exist yet, so there is no id to name. Submitting the light's
+            // target key now would point it at nothing.
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                "editor: aim point submitted — set the light's target once it lands");
+            return;
+        }
+
+        ed.CommitOp(new XonoticGodot.Formats.Vmap.SetEntityKeyOp(mark.CreatedEntityId, "targetname", name));
+        foreach (int id in ids)
+            ed.CommitOp(new XonoticGodot.Formats.Vmap.SetEntityKeyOp(id, "target", name));
+
+        ed.BumpGeometryVersion();
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"editor: {ids.Count} light(s) now aim at {name} ({at.X:0} {at.Y:0} {at.Z:0})");
     }
 
     /// <summary>Print the selected entity's live keys alongside what its class documents.</summary>
@@ -9059,6 +9313,21 @@ public sealed partial class NetGame : Node3D
         var rows = new List<Hud.EditorDialogPanel.DialogRow>();
         foreach (string category in defs.Categories())
         {
+            // Lights have their own tool now (backlog T2). Leaving them here as well would undo the split the
+            // moment a mapper reached for the palette, which is the one place they were hardest to find.
+            if (category == "light")
+            {
+                rows.Add(new Hud.EditorDialogPanel.DialogRow
+                {
+                    Label = "light",
+                    Group = "light",
+                    Value = "own tool",
+                    Detail = "lights live under the Light tool — 'editor_tool Light', then 'editor_light create'",
+                    Command = "editor_tool Light",
+                });
+                continue;
+            }
+
             foreach (XonoticGodot.Formats.Vmap.EntityClassDef d in defs.InCategory(category))
             {
                 rows.Add(new Hud.EditorDialogPanel.DialogRow
@@ -9140,14 +9409,16 @@ public sealed partial class NetGame : Node3D
 
         foreach (XonoticGodot.Formats.Vmap.EntityFlagDef flag in def.Flags)
         {
+            // Shown as ON/OFF and confirmed to TOGGLE. The row used to read "bit 4" beside a field you typed
+            // the whole spawnflags number into — which needed the mapper to know that entities.ent's bit= is
+            // an index, work out 1<<4, and OR it into whatever was already set. All three are the editor's job.
             rows.Add(new Hud.EditorDialogPanel.DialogRow
             {
                 Label = flag.Name,
-                Value = $"bit {flag.Bit}",
+                Value = (SpawnflagsOf(ent) & flag.Value) != 0 ? "on" : "off",
                 Group = "spawnflags",
-                Detail = flag.Help,
-                Editable = true,
-                Command = $"editor_entity set spawnflags %v",
+                Detail = $"{flag.Help} (spawnflags {flag.Value})",
+                Command = $"editor_entity flag {flag.Name}",
             });
         }
 
@@ -9155,6 +9426,118 @@ public sealed partial class NetGame : Node3D
             $"{ent.ClassName} #{ent.Id}", rows,
             "Enter edits · type the value · empty clears the key · Esc closes");
     }
+
+    /// <summary>
+    /// The LIGHT dialog (backlog T2): the keys a light actually has, what the editor's rig does with each,
+    /// and what it will build from them.
+    ///
+    /// The generic key inspector can already edit all of these — what it cannot say is which of them MEAN
+    /// anything here. Xonotic's entities.ent documents ten keys for class <c>light</c> and this editor's rig
+    /// reads four of them; a mapper who sets <c>fade</c> and sees nothing change has no way to tell whether
+    /// the key is wrong, the value is wrong, or the editor ignores it. So the unread ones are shown, grouped
+    /// and labelled, in the same voice the tool menu marks unbuilt tools.
+    ///
+    /// The derived group is the other half: range and cone angle are computed, not typed, and seeing the
+    /// number the rig will use is what makes the intensity value mean something before you commit to it.
+    /// </summary>
+    private void OpenLightDialog()
+    {
+        if (EditorDialog is not { } dialog || _editor is not { Document: { } doc } ed)
+            return;
+
+        List<int> ids = ed.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                "editor: select a light first ('editor_light create' places one)");
+            return;
+        }
+        if (doc.FindEntity(ids[0]) is not { } ent)
+            return;
+
+        XonoticGodot.Formats.Vmap.EntityClassDef def = ed.Defs?.GetOrPlaceholder(ent.ClassName)
+            ?? new XonoticGodot.Formats.Vmap.EntityClassDef { Name = ent.ClassName };
+
+        string Key(string k) => ent.Fields.TryGetValue(k, out string? v) ? v : "";
+        float KeyF(string k, float fallback)
+            => float.TryParse(Key(k), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : fallback;
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        void Row(string group, string key, string detail) => rows.Add(new Hud.EditorDialogPanel.DialogRow
+        {
+            Label = key,
+            Value = Key(key),
+            Group = group,
+            Detail = detail.Length > 0 ? detail : HelpFor(def, key),
+            Editable = true,
+            Command = $"editor_light set {key} %v",
+        });
+
+        Row("light", "light", "");
+        Row("light", "_color", "");
+        Row("spot", "target", "aim at the entity with this targetname — 'editor_light aim' does it for you");
+        Row("spot", "radius", "");
+
+        // Read by entities.ent, not by this editor's rig. Named rather than hidden: a key that silently does
+        // nothing is worse than one labelled as not wired.
+        foreach (string k in UnreadLightKeys)
+            Row("not read by the editor bake", k, $"{HelpFor(def, k)} — not read by the editor bake yet");
+
+        foreach (XonoticGodot.Formats.Vmap.EntityFlagDef flag in def.Flags)
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = flag.Name,
+                // 1 << Bit, because entities.ent's bit= is an INDEX. The value is what lands in spawnflags.
+                Value = (SpawnflagsOf(ent) & flag.Value) != 0 ? "on" : "off",
+                Group = "spawnflags",
+                Detail = $"{flag.Help} (spawnflags {flag.Value}) — not read by the editor bake yet",
+                Command = $"editor_light flag {flag.Name}",
+            });
+
+        float intensity = KeyF("light", 300f);
+        float range = Vmap.EditorLighting.RangeForIntensity(intensity, ed.LightRangeScale);
+        rows.Add(new Hud.EditorDialogPanel.DialogRow
+        {
+            Label = "range",
+            Value = $"{range:0}u",
+            Group = "derived",
+            Detail = "how far the omni this builds actually reaches — the ring the overlay draws",
+        });
+
+        string cone = "n/a (not aimed)";
+        if (Key("target") is { Length: > 0 } target)
+            foreach (XonoticGodot.Formats.Vmap.VmapEntity other in doc.Entities)
+                if (other.Fields.TryGetValue("targetname", out string? name)
+                    && string.Equals(name, target, StringComparison.OrdinalIgnoreCase))
+                {
+                    float distance = (other.Origin() - ent.Origin()).Length();
+                    cone = $"{Vmap.EditorLighting.SpotAngleFor(KeyF("radius", Vmap.EditorLighting.DefaultSpotRadius), distance):0.#}°"
+                        + $" at {distance:0}u";
+                    break;
+                }
+        rows.Add(new Hud.EditorDialogPanel.DialogRow
+        {
+            Label = "spot cone",
+            Value = cone,
+            Group = "derived",
+            Detail = "half-angle of the cone, from radius and the distance to the target",
+        });
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Properties,
+            $"{ent.ClassName} #{ent.Id}" + (ids.Count > 1 ? $" (+{ids.Count - 1} more selected)" : ""),
+            rows,
+            "Enter edits · the real-time rig follows immediately · editor_rebake re-traces the shadows · Esc closes");
+    }
+
+    /// <summary>
+    /// Keys entities.ent documents for class <c>light</c> that <c>EditorLighting</c> does not consume. Listed
+    /// so the dialog can say so, rather than offering a field that quietly does nothing.
+    /// </summary>
+    private static readonly string[] UnreadLightKeys =
+    {
+        "_anglescale", "fade", "_filterradius", "_sun", "_samples", "_deviance",
+    };
 
     private static string HelpFor(XonoticGodot.Formats.Vmap.EntityClassDef def, string key)
     {

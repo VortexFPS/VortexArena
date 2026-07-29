@@ -45,8 +45,19 @@ public enum EditorTool
     /// <summary>Material and texture-projection work — the Surface Inspector.</summary>
     Shader,
 
-    /// <summary>Point and brush entities: items, spawns, objectives, triggers, lights.</summary>
+    /// <summary>Point and brush entities: items, spawns, objectives, triggers. Not lights — see <see cref="Light"/>.</summary>
     Entity,
+
+    /// <summary>
+    /// Lights, out of the generic entity palette and into their own tool (backlog T2).
+    ///
+    /// A light IS an entity and every entity op works on one, so this is not a new object kind — it is a
+    /// PARTITION of the entity set, and the reason for it is density. A Xonotic map carries north of a hundred
+    /// lights, they are the thing a mapper tunes most, and every one of them has to be found among the spawns
+    /// and pickups in a list ordered by classname. Splitting them means the entity tool shows the map's
+    /// furniture and the light tool shows its lighting, and neither buries the other.
+    /// </summary>
+    Light,
 
     /// <summary>Bot navigation nodes and their links.</summary>
     Waypoint,
@@ -249,8 +260,8 @@ public static class EditorTools
     public static readonly IReadOnlyList<EditorTool> All = new[]
     {
         EditorTool.None, EditorTool.Select, EditorTool.Brush, EditorTool.Face, EditorTool.Edge,
-        EditorTool.Vertex, EditorTool.Patch, EditorTool.Shader, EditorTool.Entity, EditorTool.Waypoint,
-        EditorTool.Clip, EditorTool.Measure,
+        EditorTool.Vertex, EditorTool.Patch, EditorTool.Shader, EditorTool.Entity, EditorTool.Light,
+        EditorTool.Waypoint, EditorTool.Clip, EditorTool.Measure,
     };
 
     private static readonly ToolMode[] NoModes = Array.Empty<ToolMode>();
@@ -303,6 +314,14 @@ public static class EditorTools
             ToolMode.Properties, ToolMode.Paste,
         },
 
+        // No Rotate: a point light has no facing of its own — where it AIMS is the `target` key, which is a
+        // relationship to another entity rather than an angle. No Scale either: what a bigger light means is
+        // a bigger `light` value, and that is a number the dialog sets, not a drag.
+        EditorTool.Light => new[]
+        {
+            ToolMode.Move, ToolMode.Create, ToolMode.Properties, ToolMode.Paste,
+        },
+
         EditorTool.Waypoint => new[]
         {
             ToolMode.Place, ToolMode.PlaceJump, ToolMode.PlaceCrouch, ToolMode.PlaceSupport,
@@ -351,7 +370,7 @@ public static class EditorTools
         EditorTool.Edge => VmapSelectionKind.Edge,
         EditorTool.Vertex => VmapSelectionKind.Vertex,
         EditorTool.Patch => VmapSelectionKind.Patch,
-        EditorTool.Entity => VmapSelectionKind.Entity,
+        EditorTool.Entity or EditorTool.Light => VmapSelectionKind.Entity,
         EditorTool.Shader => VmapSelectionKind.Face,
         _ => VmapSelectionKind.Face,
     };
@@ -374,7 +393,7 @@ public static class EditorTools
     {
         EditorTool.None or EditorTool.Select or EditorTool.Brush or EditorTool.Face
             or EditorTool.Edge or EditorTool.Vertex or EditorTool.Patch or EditorTool.Clip
-            or EditorTool.Entity or EditorTool.Shader or EditorTool.Measure
+            or EditorTool.Entity or EditorTool.Light or EditorTool.Shader or EditorTool.Measure
             or EditorTool.Waypoint => true,
         _ => false,
     };
@@ -391,6 +410,7 @@ public static class EditorTools
         EditorTool.Patch => "Patch",
         EditorTool.Shader => "Shader",
         EditorTool.Entity => "Entity",
+        EditorTool.Light => "Light",
         EditorTool.Waypoint => "Waypoint",
         EditorTool.Clip => "Clip",
         EditorTool.Measure => "Measure",

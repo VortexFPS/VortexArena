@@ -245,6 +245,85 @@ public static class VmapEdit
         center = (mins + maxs) * 0.5f;
         return true;
     }
+
+    /// <summary>
+    /// Axis-aligned bounds of a WHOLE selection — brushes, patches and entities together.
+    ///
+    /// One union, because what callers want out of it is a property of the selection as a whole: the reach a
+    /// proportional drag divides by, the box a region isolates. A pair of objects a thousand units apart is a
+    /// thousand-unit selection however small each of them is.
+    ///
+    /// An entity contributes what it actually occupies: a brush entity the geometry it owns, a point entity
+    /// the descriptor box <paramref name="defs"/> gives its class — falling back to the same small cube the
+    /// pick index uses, so an unrecognised class is still a shape rather than a point.
+    /// </summary>
+    public static bool TryGetSelectionBounds(
+        VmapDocument doc,
+        IReadOnlyList<int>? brushIds,
+        IReadOnlyList<int>? patchIds,
+        IReadOnlyList<int>? entityIds,
+        EntityDefs? defs,
+        out Vector3 mins,
+        out Vector3 maxs)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        Vector3 lo = new(float.MaxValue), hi = new(float.MinValue);
+        bool any = false;
+
+        void Cover(Vector3 a, Vector3 b)
+        {
+            lo = Vector3.Min(lo, a);
+            hi = Vector3.Max(hi, b);
+            any = true;
+        }
+
+        void CoverBrush(int id)
+        {
+            if (doc.FindBrush(id) is { } b && VmapWinding.TryGetBounds(b, out Vector3 bl, out Vector3 bh))
+                Cover(bl, bh);
+        }
+
+        void CoverPatch(int id)
+        {
+            if (doc.FindPatch(id) is not { } p)
+                return;
+            foreach (Vector3 c in p.Controls)
+                Cover(c, c);
+        }
+
+        if (brushIds is not null)
+            foreach (int id in brushIds)
+                CoverBrush(id);
+
+        if (patchIds is not null)
+            foreach (int id in patchIds)
+                CoverPatch(id);
+
+        if (entityIds is not null)
+            foreach (int id in entityIds)
+            {
+                if (doc.FindEntity(id) is not { } e)
+                    continue;
+
+                if (e.IsBrushEntity)
+                {
+                    foreach (int bid in e.BrushIds)
+                        CoverBrush(bid);
+                    foreach (int pid in e.PatchIds)
+                        CoverPatch(pid);
+                    continue;
+                }
+
+                EntityClassDef def = defs?.GetOrPlaceholder(e.ClassName)
+                    ?? new EntityClassDef { Name = e.ClassName };
+                Vector3 origin = e.Origin();
+                Cover(origin + def.DrawMins, origin + def.DrawMaxs);
+            }
+
+        mins = any ? lo : Vector3.Zero;
+        maxs = any ? hi : Vector3.Zero;
+        return any;
+    }
 }
 
 // =================================================================================================

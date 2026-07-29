@@ -125,6 +125,37 @@ public class EntityDefsTests
         Assert.Equal(1, flag.Bit);
     }
 
+    /// <summary>
+    /// <c>bit=</c> is an INDEX, not the value. The two agree for 0 and 1 — which is why the mistake survives
+    /// every small example — and diverge for everything above, up to <c>func_door</c>'s <c>bit="12"</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 2)]
+    [InlineData(4, 16)]
+    [InlineData(12, 4096)]
+    public void ASpawnflagBitIsAnIndexNotAValue(int bit, int expected)
+        => Assert.Equal(expected, new EntityFlagDef { Bit = bit }.Value);
+
+    /// <summary>A malformed bit index must not shift into the sign bit or undefined territory.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(31)]
+    [InlineData(9999)]
+    public void AnOutOfRangeSpawnflagBitHasNoValue(int bit)
+        => Assert.Equal(0, new EntityFlagDef { Bit = bit }.Value);
+
+    /// <summary>Lights are their own editor tool now, so the category rule they are partitioned by matters.</summary>
+    [Theory]
+    [InlineData("light", "light")]
+    [InlineData("lightJunior", "light")]
+    [InlineData("light_something", "light")]
+    [InlineData("info_player_deathmatch", "info")]
+    [InlineData("weapon_devastator", "weapon")]
+    [InlineData("func_door", "func")]
+    public void CategoryForClassifiesLightsApartFromEverythingElse(string className, string category)
+        => Assert.Equal(category, EntityDefs.CategoryFor(className));
+
     // ---------------------------------------------------------------- text handling
 
     [Fact]

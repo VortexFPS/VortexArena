@@ -367,6 +367,7 @@ public partial class EditorMenuPanel : HudPanel
                 Label = EditorTools.Label(mode),
                 Detail = built ? (mode == c.Mode ? "current" : "") : Pending("E8"),
                 Command = EntityConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
+                          ?? LightConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? ShaderConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? WaypointConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? PatchConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
@@ -391,6 +392,22 @@ public partial class EditorMenuPanel : HudPanel
         {
             ToolMode.Create => "editor_entity palette",
             ToolMode.Properties => "editor_entity keys",
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// The light tool's rows (backlog T2). Create places one straight away rather than opening a palette —
+    /// there is exactly one light class, so a list of one would be a dialog that only wastes a keypress.
+    /// </summary>
+    private static string? LightConsoleCommand(EditorTool tool, ToolMode mode)
+    {
+        if (tool != EditorTool.Light)
+            return null;
+        return mode switch
+        {
+            ToolMode.Create => "editor_light create",
+            ToolMode.Properties => "editor_light dialog",
             _ => null,
         };
     }
@@ -481,12 +498,13 @@ public partial class EditorMenuPanel : HudPanel
         ToolMode.TwoPoint or ToolMode.ThreePoint or ToolMode.ViewPlane => tool == EditorTool.Clip,
         // Entity create and the key inspector run from the console for now (editor_entity); the dialogs are
         // still to come, so the rows point at what exists rather than claiming a UI that does not.
-        ToolMode.Create => tool is EditorTool.Entity or EditorTool.Patch or EditorTool.Brush or EditorTool.Face,
+        ToolMode.Create => tool is EditorTool.Entity or EditorTool.Light or EditorTool.Patch
+            or EditorTool.Brush or EditorTool.Face,
         ToolMode.Extrude => tool == EditorTool.Face,
         ToolMode.Bevel => tool == EditorTool.Edge,
         ToolMode.SnapToGrid => tool == EditorTool.Vertex,
         ToolMode.Flags => tool == EditorTool.Shader,
-        ToolMode.Properties => tool == EditorTool.Entity,
+        ToolMode.Properties => tool is EditorTool.Entity or EditorTool.Light,
         ToolMode.Modify => tool == EditorTool.Patch,
         ToolMode.ControlPoints => tool == EditorTool.Patch,
         ToolMode.PickShader or ToolMode.ApplyShader or ToolMode.FitProjection

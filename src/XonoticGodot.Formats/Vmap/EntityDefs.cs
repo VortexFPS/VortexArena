@@ -50,8 +50,17 @@ public sealed class EntityFlagDef
 {
     public string Name { get; init; } = "";
 
-    /// <summary>Bit VALUE (1, 2, 4, …), as the file's <c>bit=</c> attribute gives it.</summary>
+    /// <summary>
+    /// Bit INDEX, as the file's <c>bit=</c> attribute gives it — 0, 1, 2, … NOT 1, 2, 4.
+    ///
+    /// Worth spelling out, because the two readings agree for 0 and 1 and diverge silently after that.
+    /// Xonotic's own file writes <c>&lt;flag key="LINEAR" bit="0"&gt;</c>, <c>NOANGLE bit="1"</c>,
+    /// <c>NOGRIDLIGHT bit="4"</c>, and <c>func_door</c> reaches <c>bit="12"</c> — an index, not 4096.
+    /// </summary>
     public int Bit { get; init; }
+
+    /// <summary>What to OR into <c>spawnflags</c> to set this flag: <c>1 &lt;&lt; Bit</c>.</summary>
+    public int Value => Bit is >= 0 and < 31 ? 1 << Bit : 0;
 
     public string Help { get; init; } = "";
 }

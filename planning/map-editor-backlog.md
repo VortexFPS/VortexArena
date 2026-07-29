@@ -159,7 +159,7 @@ Consequences worth writing down before building it:
 
 | ID | Item | Status |
 |---|---|---|
-| **T1** | **Depth-checked entity boxes.** Entity bboxes draw through walls, so a big map shows every entity at once. Wants an occlusion test per box and a cvar to switch it off (seeing through walls is sometimes the point). | open |
+| **T1** | **Depth-checked entity boxes.** Entity bboxes draw through walls, so a big map shows every entity at once. Wants an occlusion test per box and a cvar to switch it off (seeing through walls is sometimes the point). | **done** (`4382762`) |
 | **T2** | **Lights get their own tool.** Out of the entity palette, into `EditorTool.Light` with its own dialog — intensity, radius, colour, spot cone, the q3map2 keys the bake actually reads. Lights are the thing you tune most and the least like other entities. | open |
 | **T3** | **Split visual grid from alignment grid.** One grid size currently drives both what you see and what you snap to. Two sizes, two controls; the drawn grid is a reference, the snap grid is a constraint, and they are not the same decision. | open |
 | **T4** | **Scroll wheel drives camera speed.** Free-fly speed is what you adjust constantly; grid size is not. Move grid size behind a held **G** — tap G to toggle the grid, hold G and scroll to change the alignment grid (T3's, not the visual one). | open |

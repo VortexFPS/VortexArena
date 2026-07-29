@@ -109,7 +109,7 @@ public static class VmapMapBuilder
         // q3map_shadeAngle. The mesh stays faceted — this only changes the normal the bake shades with, which
         // is what stops a curved run of brushes from lighting as a row of flat panels. Done before the bake
         // because every pass downstream (direct, dirt, bounce, deluxe) wants the smoothed normal.
-        if (EditorLightBake.Active)
+        if (EditorLightBake.Active && PhongShading)
             SmoothShadingNormals(cells, assets);
 
         // ---- bake the vertex lighting ACROSS CORES -----------------------------------------------------
@@ -121,12 +121,12 @@ public static class VmapMapBuilder
             foreach (Dictionary<string, CellSurface> byMat in cells.Values)
                 bakeCells.AddRange(byMat.Values);
             bool wasResampled = EditorLightBake.Resampling || EditorLightBake.Deferred;
-            System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.BakeColors());
+            EditorLightBake.RunBudgeted(bakeCells.Count, i => bakeCells[i].BakeColors());
 
             // Radiosity's shoot/gather, once: what the direct pass RECEIVED becomes virtual emitters, and a
             // second pass adds their glow. This is what keeps traced shadows from being pitch black.
             if (!EditorLightBake.Deferred && EditorLightBake.BounceActive && EditorLightBake.BuildBounceLights() > 0)
-                System.Threading.Tasks.Parallel.ForEach(bakeCells, static cell => cell.AddBounceColors());
+                EditorLightBake.RunBudgeted(bakeCells.Count, i => bakeCells[i].AddBounceColors());
 
             // Retain the finished light in world space so the next EDIT can resample it instead of paying
             // for a bake. Only a real bake refills this — a resampled build must not overwrite its own source.
@@ -212,6 +212,7 @@ public static class VmapMapBuilder
         NVec3 a = surface.Positions[i0], b = surface.Positions[i1], c = surface.Positions[i2];
         NVec2 ua = surface.Uvs[i0], ub = surface.Uvs[i1], uc = surface.Uvs[i2];
         NVec3 normal = surface.Normals[i0];
+        NVec3 na = normal, nb = surface.Normals[i1], nc = surface.Normals[i2];
         Vector3 gn = Coords.ToGodot(normal);
 
         // The two world axes spanning the face's dominant plane.
@@ -281,6 +282,7 @@ public static class VmapMapBuilder
                 (Vector3, Vector3, Vector2, Color) Vtx(NVec3 pt)
                 {
                     NVec2 uv;
+                    Vector3 vn = gn;
                     if (canInterp)
                     {
                         float pu = Axis(pt, axisU) - Axis(a, axisU);
@@ -288,10 +290,37 @@ public static class VmapMapBuilder
                         float w1 = (pu * e2v - e2u * pv) / det;
                         float w2 = (e1u * pv - pu * e1v) / det;
                         uv = ua + (ub - ua) * w1 + (uc - ua) * w2;
+
+                        // The NORMAL is interpolated too, with the same weights the UV uses.
+                        //
+                        // Handing every generated vertex the first vertex's normal is invisible on a brush
+                        // face, where all three are identical — which is why this survived. On a CURVED
+                        // patch the three differ, so each clipped facet took whichever normal happened to
+                        // be first: the surface shades flat instead of smooth, and each facet lands
+                        // brighter or darker than it should depending on that arbitrary choice. That is the
+                        // reported "patches are brighter here and darker there", and it reaches the bake as
+                        // well as the render, since the bake shades from these normals.
+                        NVec3 ni = na + (nb - na) * w1 + (nc - na) * w2;
+                        if (ni.LengthSquared() > 1e-8f)
+                            vn = Coords.ToGodot(NVec3.Normalize(ni));
                     }
                     else
+                    {
+                        // Degenerate in the projection (a sliver, or a triangle edge-on to the chosen
+                        // plane) — patch tessellation produces plenty of these. Barycentric weights are
+                        // meaningless here, but the FIRST vertex's normal is still the wrong answer: fall
+                        // back to the nearest source vertex, which is at least a normal that belongs to
+                        // this part of the surface.
                         uv = ua;
-                    return (Coords.ToGodot(pt), gn, new Vector2(uv.X, uv.Y), Colors.Black);
+                        float da = (pt - a).LengthSquared();
+                        float db = (pt - b).LengthSquared();
+                        float dc = (pt - c).LengthSquared();
+                        NVec3 nn = da <= db && da <= dc ? na : db <= dc ? nb : nc;
+                        uv = da <= db && da <= dc ? ua : db <= dc ? ub : uc;
+                        if (nn.LengthSquared() > 1e-8f)
+                            vn = Coords.ToGodot(NVec3.Normalize(nn));
+                    }
+                    return (Coords.ToGodot(pt), vn, new Vector2(uv.X, uv.Y), Colors.Black);
                 }
 
                 (Vector3, Vector3, Vector2, Color) first = Vtx(final[0]);
@@ -447,6 +476,12 @@ public static class VmapMapBuilder
     /// close enough to blend with. Positions are keyed to a quarter unit so coincident vertices from
     /// different brushes actually meet.
     /// </summary>
+    /// <summary>
+    /// Whether the bake shades with phong-blended normals (q3map2 <c>q3map_shadeAngle</c>) or with each
+    /// face's own. The isolation switch for "is this artefact the smoothing?".
+    /// </summary>
+    public static bool PhongShading { get; set; } = true;
+
     private static void SmoothShadingNormals(
         Dictionary<(int, int, int), Dictionary<string, CellSurface>> cells, AssetSystem assets)
     {

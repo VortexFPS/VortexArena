@@ -5980,6 +5980,9 @@ public sealed partial class NetGame : Node3D
                 GD.Print($"[EditorLighting] encode range p99={Vmap.EditorLightBake.EncodeRange:F1}, "
                     + $"filled {Vmap.EditorLightBake.FilledSamples:N0} black samples, "
                     + $"{_pendingTraceCount:N0} occluders");
+                GD.Print($"[EditorLighting] samples {Vmap.EditorLightBake.CapturedUnique:N0} unique of "
+                    + $"{Vmap.EditorLightBake.CapturedOffered:N0} vertices "
+                    + $"({Vmap.EditorLightBake.CpuBudget:P0} cpu budget)");
                 _bakedShadowsStale = false;
                 Vmap.VmapMapBuilder.BeginRecolor();
             }
@@ -7797,6 +7800,14 @@ public sealed partial class NetGame : Node3D
                     _editorLights.SuppressBakeLights();
                     goto builtLights;
                 }
+                Vmap.EditorShadowTrace.PatchShadows =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchShadows, 1f) != 0f;
+                Vmap.EditorShadowTrace.PatchThickness = Math.Clamp(
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchThickness, 0.1f), 0.01f, 8f);
+                Vmap.EditorShadowTrace.SurfaceBias = Math.Clamp(
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarSampleOffset, 1f), 0.05f, 8f);
+                Vmap.VmapMapBuilder.PhongShading =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarBakePhong, 1f) != 0f;
                 var shadowTrace = tracedShadows
                     ? new Vmap.EditorShadowTrace(_editor.Document!,
                         b2 => b2.SubmodelIndex == 0 || !_editor.PickIndex.HiddenSubmodels.Contains(b2.SubmodelIndex))
@@ -10530,7 +10541,20 @@ public sealed partial class NetGame : Node3D
         // VecToAngles2 is vectoangles: +pitch means UP. View angles — what --observe takes and what the
         // player's own angles hold — use +pitch means DOWN. Printing one while the flag consumes the other
         // is a readout that reproduces the mirror image of the view it was copied from.
-        return new NVec3(-a.X, a.Y, a.Z);
+        //
+        // Its atan2-derived angles also land anywhere in [0, 360): a camera 5 degrees below level reads
+        // pitch 355, which the sign flip alone would print as "-355". Wrap to (-180, 180] so the readout
+        // says 5 — the number a person copies into --observe.
+        return new NVec3(Wrap180(-a.X), Wrap180(a.Y), Wrap180(a.Z));
+    }
+
+    /// <summary>Fold an angle in degrees into (-180, 180].</summary>
+    private static float Wrap180(float deg)
+    {
+        deg %= 360f;
+        if (deg > 180f) deg -= 360f;
+        else if (deg <= -180f) deg += 360f;
+        return deg;
     }
 
     /// <summary>

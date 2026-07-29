@@ -203,6 +203,18 @@ public sealed partial class EditorLighting : Node3D
     /// </summary>
     public const string CvarPatchSubdiv = "cl_editor_patch_subdiv";
 
+    /// <summary>Curved surfaces cast shadows (q3map2 <c>-patchshadows</c>). Default 1; 0 isolates them.</summary>
+    public const string CvarPatchShadows = "cl_editor_patch_shadows";
+
+    /// <summary>Bake with phong-blended normals (<c>q3map_shadeAngle</c>). Default 1; 0 isolates them.</summary>
+    public const string CvarBakePhong = "cl_editor_bake_phong";
+
+    /// <summary>Thickness of a patch's shadow prism, Quake units (q3map2 traces zero-thickness triangles).</summary>
+    public const string CvarPatchThickness = "cl_editor_patch_thickness";
+
+    /// <summary>How far a light/shadow sample sits off its surface (q3map2 <c>_lightmapSampleOffset</c>, 1.0).</summary>
+    public const string CvarSampleOffset = "cl_editor_sample_offset";
+
     /// <summary>
     /// Bloom over the editor world. Default OFF: the baked light is HDR and the fixture strips sit at the
     /// top of its range, so glow smears them across the whole frame — a uniform lift that reads as flat and

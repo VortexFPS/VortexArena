@@ -35,8 +35,27 @@ public sealed class EditorShadowTrace
 
     private const float CellSize = 256f;
 
-    /// <summary>How far off the surface a shadow ray starts, in Quake units. Stops a face shadowing itself.</summary>
-    public const float SurfaceBias = 2f;
+    /// <summary>
+    /// Whether curved surfaces cast shadows (q3map2 <c>-patchshadows</c>, which the Xonotic profile sets).
+    /// Off is not parity — it is the isolation switch that says whether a suspect artefact on a patch comes
+    /// from the patch's own occluders or from somewhere else entirely.
+    /// </summary>
+    public static bool PatchShadows { get; set; } = true;
+
+    /// <summary>
+    /// How far a shadow ray starts off the surface, Quake units.
+    ///
+    /// It exists to stop a ray hitting the very surface it leaves, so it wants to be as SMALL as precision
+    /// allows — not as large as seems safe. At 2 units it was lifting samples clear of the geometry they
+    /// belong to: out of a narrow panel recess, or off a trim strip only a few units wide. Those samples
+    /// then saw open space and took full light, so grooves that should read as dark lines came out as
+    /// bright bands along the seam.
+    ///
+    /// q3map2's own value is <c>DEFAULT_LIGHTMAP_SAMPLE_OFFSET</c> = 1.0 (q3map2.h:272), overridable per
+    /// shader as <c>_lightmapSampleOffset</c>; that is what this tracks. Small enough not to teleport a
+    /// sample out of the feature it describes, large enough to clear the geometry it sits on.
+    /// </summary>
+    public static float SurfaceBias { get; set; } = 1.0f;
 
     private readonly struct Occluder
     {
@@ -119,7 +138,7 @@ public sealed class EditorShadowTrace
     /// </summary>
     private void AddPatchOccluders(VmapDocument doc)
     {
-        if (doc.Patches.Count == 0)
+        if (doc.Patches.Count == 0 || !PatchShadows)
             return;
 
         var patchDoc = new VmapDocument();
@@ -159,8 +178,8 @@ public sealed class EditorShadowTrace
                 n = NVec3.Normalize(n);
 
                 var planes = new VmapPlane[5];
-                planes[0] = new VmapPlane(n, NVec3.Dot(n, a0) + PatchThickness * 0.5f);
-                planes[1] = new VmapPlane(-n, -(NVec3.Dot(n, a0) - PatchThickness * 0.5f));
+                planes[0] = new VmapPlane(n, NVec3.Dot(n, a0) - PatchFrontInset);
+                planes[1] = new VmapPlane(-n, -(NVec3.Dot(n, a0) - PatchFrontInset - PatchThickness));
                 planes[2] = EdgePlane(a0, b0, n);
                 planes[3] = EdgePlane(b0, c0, n);
                 planes[4] = EdgePlane(c0, a0, n);
@@ -183,17 +202,46 @@ public sealed class EditorShadowTrace
         return new VmapPlane(outward, NVec3.Dot(outward, from));
     }
 
-    /// <summary>Thickness given to a tessellated patch triangle, Quake units.</summary>
-    private const float PatchThickness = 2f;
+    /// <summary>
+    /// Thickness given to a tessellated patch triangle, Quake units — entirely BEHIND the surface.
+    ///
+    /// q3map2 traces patches as the triangles themselves: ZERO thickness (light_trace.c PopulateWithPatch →
+    /// TraceTriangle, a Moller-Trumbore test against a sheet). We need a convex VOLUME for the slab clip, so
+    /// the sheet gets a thickness — but every unit of it is a unit by which the patch over-occludes, and a
+    /// curved surface is lit largely by grazing rays that skim along it. At 2 units every patch in the map
+    /// was a two-unit-thick wall to its own light; measured on stormkeep's curved pillar, that plus the
+    /// half-size sample offset cost the surface HALF its light.
+    ///
+    /// 0.1 is ~400x the float32 epsilon at this map's far corners, so the slab clip stays well-conditioned.
+    /// </summary>
+    public static float PatchThickness { get; set; } = 0.1f;
+
+    /// <summary>
+    /// How far behind the visible surface a patch's prism STARTS.
+    ///
+    /// The prism used to straddle its triangle (±1 unit), which read as safe and was the opposite: bake
+    /// samples lie ON these very triangles, and their rays begin <see cref="SurfaceBias"/> = 0.5 above them
+    /// — inside the straddle. Every ray a patch sample fired hit the sample's own occluder at t=0 and the
+    /// buried test condemned the whole patch, so entire curved walls were discarded and repainted from
+    /// their brush-face neighbours: too bright beside lit trim, a smooth slide into darkness through the
+    /// middle. (Harmless while the bias was 2 units — the front face sat at 1 — which is why lowering the
+    /// bias is what surfaced it.)
+    ///
+    /// Starting the prism behind the surface keeps the shadow — anything crossing the patch still crosses
+    /// the prism — while guaranteeing on-surface samples stand outside their own occluder. q3map2's
+    /// -patchshadows traces zero-thickness triangles, so a quarter-unit setback also tracks the reference
+    /// more closely than the straddle did.
+    /// </summary>
+    private const float PatchFrontInset = 0.25f;
 
     /// <summary>Q3 <c>surfaceparm nonsolid</c>.</summary>
     private const int SurfaceNonSolid = 0x4000;
 
     /// <summary>
     /// True when <paramref name="point"/> sits inside a solid occluder. A bake sample can land there — a
-    /// face partly covered by an overlapping trim brush keeps its own plane, and the 2-unit lift does not
-    /// clear a brush that overlaps by more. Such a sample sees no light from anywhere and must be repaired
-    /// from its neighbours, not trusted.
+    /// face partly covered by an overlapping trim brush keeps its own plane, and the small ray-origin lift
+    /// does not clear a brush that overlaps by more. Such a sample sees no light from anywhere and must be
+    /// repaired from its neighbours, not trusted.
     /// </summary>
     public bool IsInsideSolid(NVec3 point)
     {

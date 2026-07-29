@@ -540,6 +540,10 @@ public sealed partial class EditorController : Node3D
         c.Register(EditorLighting.CvarShowBsp, "0", CvarFlags.None);
         c.Register(EditorLighting.CvarBakeCpu, "0.75", CvarFlags.Save);
         c.Register(EditorLighting.CvarPatchSubdiv, "8", CvarFlags.Save);
+        c.Register(EditorLighting.CvarPatchShadows, "1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarBakePhong, "1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarPatchThickness, "0.1", CvarFlags.Save);
+        c.Register(EditorLighting.CvarSampleOffset, "1.0", CvarFlags.Save);
         c.Register(EditorLighting.CvarGlow, "0", CvarFlags.Save);
         c.Register(EditorLighting.CvarLuxel, "24", CvarFlags.Save);
         c.Register(EditorLighting.CvarDirt, "0.8", CvarFlags.Save);

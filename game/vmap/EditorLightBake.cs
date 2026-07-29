@@ -118,6 +118,13 @@ public static class EditorLightBake
     private const float BounceCell = 256f;
 
     /// <summary>
+    /// Bounce emitter strength per unit of lit surface area. Empirical, like q3map2's own
+    /// <c>RADIOSITY_VALUE</c>/<c>bounceScale</c> pair; carried over from the calibration that matched the
+    /// compiled map, converted from per-sample to per-area (see <see cref="BuildBounceLights"/>).
+    /// </summary>
+    private const float BounceEmitterScale = 3.21e-6f;
+
+    /// <summary>
     /// Fraction of received light a surface re-emits. Q3 textures are mostly dark masonry; q3map2 derives
     /// per-texture reflectivity, and 0.5 sits in the range it lands on for this content.
     /// </summary>
@@ -166,12 +173,17 @@ public static class EditorLightBake
         // PARALLEL: with buried-sample detection this pass grew from ~1k candidates to ~200k, and a serial
         // scan of 27 neighbour buckets each tripled the whole bake's wall time. The scan is read-only over
         // `values`; only the patch list needs guarding.
+        // Budgeted like every other pass: with buried detection this is ~200k candidates each scanning 27
+        // buckets, which is not a rounding error on the machine's responsiveness.
         var patched = new System.Collections.Concurrent.ConcurrentBag<(int Index, Color Value)>();
-        System.Threading.Tasks.Parallel.For(0, values.Length, i =>
+        RunBudgeted((values.Length + ChunkSize - 1) / ChunkSize, chunk =>
+        {
+        int chunkEnd = Math.Min(chunk * ChunkSize + ChunkSize, values.Length);
+        for (int i = chunk * ChunkSize; i < chunkEnd; i++)
         {
             bool isBuried = buried is not null && buried[i];
             if (!isBuried && values[i].R + values[i].G + values[i].B > 1e-4f)
-                return;
+                continue;
 
             int cx = (int)MathF.Floor(positions[i].X / CellSize);
             int cy = (int)MathF.Floor(positions[i].Y / CellSize);
@@ -200,8 +212,9 @@ public static class EditorLightBake
 
             // Needs real support before overwriting: one stray lit neighbour is not evidence.
             if (n < 3)
-                return;
+                continue;
             patched.Add((i, new Color(r / n, g / n, b / n)));
+        }
         });
 
         foreach ((int index, Color value) in patched)
@@ -428,6 +441,12 @@ public static class EditorLightBake
 
         public List<Color> Albedos { get; }
         public int Count => Positions.Count;
+
+        /// <summary>Quarter-unit positions already captured — see the dedupe note in <see cref="Capture"/>.</summary>
+        public HashSet<(int, int, int)> Seen { get; } = new();
+
+        /// <summary>Vertices offered to <see cref="Capture"/>, including the ones deduped away.</summary>
+        public int Offered;
     }
 
     /// <summary>
@@ -454,12 +473,34 @@ public static class EditorLightBake
             return;
         lock (set)
         {
+            set.Offered++;
+
+            // DEDUPE, and it is nearly free information: a finished bake is read back out of a cache keyed
+            // by quarter-unit POSITION (see CacheStore/ExactKey), so two captured vertices at the same point
+            // can only ever yield one answer — but without this each was first traced against every light in
+            // the map. The luxel clipper fans every grid piece independently, so a large face emits about six
+            // copies of each of its grid corners. On stormkeep that was 163.6M shadow rays to compute a
+            // result that a fraction of them determines.
+            //
+            // Coincident vertices with DIFFERENT normals (a wall meeting a floor) collapse to one sample,
+            // which is what already happened: they both wrote the same cache key and the last one won. This
+            // picks the first instead of the last — the same arbitrary choice, made once instead of twice.
+            // Keying the cache by position AND normal would fix that properly; it is a separate change.
+            if (!set.Seen.Add(ExactKey(position)))
+                return;
+
             set.Positions.Add(position);
             set.Normals.Add(shadeNormal);
             set.GeoNormals.Add(geoNormal);
             set.Albedos.Add(albedo);
         }
     }
+
+    /// <summary>Vertices offered to the last capture, before dedupe (diagnostics).</summary>
+    public static int CapturedOffered { get; private set; }
+
+    /// <summary>Distinct samples the last capture kept (diagnostics).</summary>
+    public static int CapturedUnique { get; private set; }
 
     /// <summary>Work units done so far (for the progress readout) — spans BOTH passes, not just direct.</summary>
     public static int Progress => Volatile.Read(ref _progress);
@@ -526,6 +567,8 @@ public static class EditorLightBake
         // then sit there through the whole bounce gather and finalize — a full bar that is still working is
         // indistinguishable from a hang, which is the exact confusion a progress bar exists to remove.
         ProgressTotal = set.Count * (_bounceWanted ? 2 : 1);
+        CapturedOffered = set.Offered;
+        CapturedUnique = set.Count;
         _phase = "direct";
 
         try
@@ -539,27 +582,14 @@ public static class EditorLightBake
             var dirs = new NVec3[pos.Length];
             var buried = new bool[pos.Length];
 
-            // How much of the machine this bake may take (cl_editor_bake_cpu). Parallel.For's default is
-            // "every core", which on a bake this long means the main and render threads fight the workers
-            // for a scheduler slot on every frame — the work finishes no sooner and the whole desktop
-            // stutters throughout.
-            var options = new System.Threading.Tasks.ParallelOptions
-            {
-                MaxDegreeOfParallelism = BudgetThreads,
-            };
-            ThreadPriority priority = BudgetPriority;
-
             await System.Threading.Tasks.Task.Run(() =>
             {
-                // Below-normal priority on the pool threads this bake occupies, so even when every core is
-                // busy the OS still schedules the frame ahead of a ray.
-                Thread.CurrentThread.Priority = priority;
                 // Direct + dirt, in chunks so the progress counter moves without an interlock per vertex.
-                System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, options, chunk =>
+                // RunBudgeted owns its threads: see its note for why Parallel.For could not hold the budget.
+                RunBudgeted((pos.Length + ChunkSize - 1) / ChunkSize, chunk =>
                 {
                     if (Volatile.Read(ref _cancel) != 0)
                         return;
-                    Thread.CurrentThread.Priority = priority;
                     int start = chunk * ChunkSize;
                     int end = Math.Min(start + ChunkSize, pos.Length);
                     for (int i = start; i < end; i++)
@@ -576,11 +606,10 @@ public static class EditorLightBake
                 _phase = "bounce";
                 if (Volatile.Read(ref _cancel) == 0 && _bounceWanted && BuildBounceLights() > 0)
                 {
-                    System.Threading.Tasks.Parallel.For(0, (pos.Length + ChunkSize - 1) / ChunkSize, options, chunk =>
+                    RunBudgeted((pos.Length + ChunkSize - 1) / ChunkSize, chunk =>
                     {
                         if (Volatile.Read(ref _cancel) != 0)
                             return;
-                        Thread.CurrentThread.Priority = priority;
                         int start = chunk * ChunkSize;
                         int end = Math.Min(start + ChunkSize, pos.Length);
                         for (int i = start; i < end; i++)
@@ -651,7 +680,73 @@ public static class EditorLightBake
 
     /// <summary>Priority for the current budget — see <see cref="CpuBudget"/>.</summary>
     private static ThreadPriority BudgetPriority =>
-        _cpuBudget < 0.5f ? ThreadPriority.Lowest : ThreadPriority.Normal;
+        _cpuBudget < 0.5f ? ThreadPriority.Lowest : ThreadPriority.BelowNormal;
+
+    /// <summary>
+    /// Run <paramref name="body"/> over <c>[0, count)</c> on DEDICATED threads, honouring the CPU budget in
+    /// both width and priority.
+    ///
+    /// Not <c>Parallel.For</c>, which was the reason the budget did not work. Two problems with it here.
+    /// Its <c>MaxDegreeOfParallelism</c> caps a single loop, so every parallel region has to remember to pass
+    /// the options — three of the bake's five did not, and those ran at full machine width no matter what
+    /// the budget said. And it runs on the THREAD POOL, where setting the priority of the borrowed thread
+    /// both leaks that priority onto unrelated work and is undone whenever the pool hands the thread back;
+    /// the pool also injects extra threads under load, defeating the cap it was given.
+    ///
+    /// Owning the threads makes the budget mean exactly what it says: this many, at this priority, and
+    /// nothing else on the machine touched.
+    /// </summary>
+    public static void RunBudgeted(int count, Action<int> body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        if (count <= 0)
+            return;
+
+        int threads = Math.Clamp(BudgetThreads, 1, count);
+        ThreadPriority priority = BudgetPriority;
+        int next = -1;
+        Exception? failure = null;
+
+        void Work()
+        {
+            try
+            {
+                int i;
+                while ((i = Interlocked.Increment(ref next)) < count)
+                    body(i);
+            }
+            catch (Exception ex)
+            {
+                // An unhandled exception on a bare Thread takes the PROCESS down; hold it and rethrow on
+                // the caller, which is where a bake failure is already handled.
+                Interlocked.CompareExchange(ref failure, ex, null);
+            }
+        }
+
+        if (threads == 1)
+        {
+            Work();
+        }
+        else
+        {
+            var workers = new Thread[threads];
+            for (int t = 0; t < threads; t++)
+            {
+                workers[t] = new Thread(Work)
+                {
+                    IsBackground = true,
+                    Priority = priority,
+                    Name = "editor-bake",
+                };
+                workers[t].Start();
+            }
+            foreach (Thread w in workers)
+                w.Join();
+        }
+
+        if (failure is not null)
+            throw new InvalidOperationException("baked lighting worker failed", failure);
+    }
 
     /// <summary>Drop the retained bake (a fresh one is about to replace it).</summary>
     public static void CacheReset()
@@ -1006,8 +1101,9 @@ public static class EditorLightBake
         _bounceAccum = new();
 
     /// <summary>
-    /// Record light RECEIVED at a sample, so the region can re-emit it. Samples are roughly uniform (the
-    /// tessellation spaces them at luxel distance), so a plain sum weights by lit area — what radiosity wants.
+    /// Record light RECEIVED at a sample, so the region can re-emit it. The sum over a cell weights by lit
+    /// AREA — what radiosity wants — but only because samples are one-per-luxel-position; see
+    /// <see cref="BuildBounceLights"/> for the area conversion that makes that true independent of density.
     /// </summary>
     private static void AccumulateBounce(NVec3 position, NVec3 normal, Color direct)
     {
@@ -1056,10 +1152,20 @@ public static class EditorLightBake
             NVec3 n2 = acc.NormW.LengthSquared() > 1e-6f ? NVec3.Normalize(acc.NormW) : new NVec3(0f, 0f, 1f);
             pos.Add(p2 + n2 * 24f);
             nrm.Add(n2);
-            // The per-sample TEXTURE albedo is already folded in at accumulation; the constant here is only
-            // the emitter-strength calibration (raised from the grey-albedo era, since real Q3 textures
-            // average darker than the 0.5 grey they replaced).
-            col.Add(new NVec3(acc.R, acc.G, acc.B) * 0.0003f);
+            // Per-sample TEXTURE albedo is already folded in at accumulation. What is left is turning a sum
+            // over SAMPLES into energy over AREA, which is the only form radiosity is meaningful in.
+            //
+            // This used to be the raw sum times a constant, on the stated assumption that samples were
+            // spaced one luxel apart. They were not: the luxel clipper fans every grid piece independently,
+            // so each position appeared about six times and the sum was inflated by a factor that varied
+            // with face size. Deduplicating the capture made the assumption true for the first time and, in
+            // doing so, dropped every bounce emitter by that same factor — a 30% darkening of the map that
+            // had nothing to do with light transport.
+            //
+            // Multiplying by the luxel's own area states the intent directly: one sample stands for one
+            // luxel of surface. The result no longer moves when sample density does, so cl_editor_bake_luxel
+            // is now a quality knob rather than a brightness knob, which it had silently been all along.
+            col.Add(new NVec3(acc.R, acc.G, acc.B) * (BounceEmitterScale * SampleSpacing * SampleSpacing));
         }
 
         // Bounces 2..N as EMITTER-TO-EMITTER radiosity. Iterating at the patch level is what makes "8

@@ -6,8 +6,9 @@ resolving the same conflict a hundred times.
 Companion to [`planning/repo-restructure-2026-07-29.md`](../planning/repo-restructure-2026-07-29.md),
 gotcha **G8**. Read that first if you want to know *why* the paths moved.
 
-**This is the primary path, not a fallback.** Only `feature/map-editor` landed before the
-restructure. The other seven branches all come through here:
+**This is the primary path, not a fallback.** `feature/map-editor` landed before the restructure
+(along with `claude/tool-selection-usage-design-8159cd`, which carried the `.vmap` text format). Seven
+branches come through here:
 
 | Branch | Note |
 |---|---|
@@ -21,6 +22,20 @@ restructure. The other seven branches all come through here:
 
 Migrate them as a batch soon after the restructure. Every one accrues drift while it waits, and none
 of their authors can merge `main` in the meantime without doing this anyway.
+
+**Check the branch is actually open before migrating it.** Eight refs still exist that are fully merged
+into `main` and carry no unique commits — `feature/map-editor`,
+`claude/tool-selection-usage-design-8159cd`, `claude/map-editor-backlog-continue-6865a0`,
+`claude/viberadiant-review-vortex-204d70`, `claude/vortex-arena-anti-cheat-b51f29`,
+`claude/vortex-startup-disclaimer-949f5e`, `fix/editor-grid-stringname-alloc`,
+`parity/port-recent-fixes`. Running this playbook against one of them is wasted work. A merged branch
+looks identical to an open one in `git branch`, so check:
+
+```bash
+git rev-list --count main..my-branch
+```
+
+Zero means delete it, not migrate it.
 
 > **Do this after the restructure has landed on `main`, never before.** The script below transforms a
 > branch to match `main`; running it against a `main` that has not moved yet just breaks the branch.
@@ -36,8 +51,16 @@ Five mechanical transformations, all scriptable:
 | T1 | `XonoticGodot.*` → `VortexArena.*` namespaces and `using` lines | ~250 files |
 | T2 | `src/XonoticGodot.<X>/` → `src/VortexArena.<X>/`, plus `.sln` / `.csproj` filenames, `RootNamespace`, `AssemblyName` | 6 projects |
 | T3 | `assets/data` → `data`, and the `.pk3dir` suffixes on `core` / `music` / `font-*` | every path literal |
-| T4 | `XG_DATA_DIR` → `VA_DATA_DIR`, `XONOTIC_USERDIR` → `VORTEX_USERDIR`, artifact filenames | scattered |
+| T4 | all twelve `XG_*` / `Xg*` env vars and MSBuild properties → `VA_*` / `Va*`, `XONOTIC_USERDIR` → `VORTEX_USERDIR`, artifact filenames | scattered |
 | T5 | `bryankruman/VortexArena` → `VortexFPS/VortexArena` in URLs | 6 files |
+
+T4 is the one most often done half-way. The full set is `XG_DATA_DIR`, `XG_BENCH`, `XG_BOTPLAYER`,
+`XG_BOTS`, `XG_MAPS`, `XG_TICKS`, `XG_PERF_ASSERT`, `XG_MAP`, `XG_PROBE_BSP`, `XG_BASE_DIR`, plus the
+MSBuild properties `XgBotPlayer` and `XgDebugUnoptimized`. Sweep with:
+
+```bash
+git ls-files | xargs grep -ohE '\bXG_[A-Z_]+|\bXg[A-Z][A-Za-z]+' | sort -u
+```
 
 None of them is a semantic change. That is the whole basis of the strategy below.
 
@@ -140,7 +163,14 @@ Work through these in order. Each one catches a different class of miss.
   not merged. Check whether the intent survives in `tools/data/fetch-maps.py`.
 - **Branches with hardcoded test paths** — any test the branch added likely copied the
   `private const string DataDir = @"C:\Users\Bryan\..."` pattern (G13). The transform does not fix
-  those; point them at the shared `TestPaths` helper by hand.
+  those; point them at the shared `TestPaths` helper by hand. The helper landed before the restructure
+  (Stage −1), so it is already on `main` when you merge.
+- **Branches that edit a `*-xonotic.cfg`** — those edits do not survive. D8 (restructure §11) keeps the
+  Xonotic config files byte-identical to upstream and puts all divergence in `vortex-*.cfg`. Re-express
+  the branch's intent as an assignment in the matching layer file (`vortex-physics.cfg`,
+  `vortex-balance.cfg`, `vortex-binds.cfg`, …), and use plain `set` rather than `seta` unless the cvar
+  is genuinely meant to be archiveable. Do not rename the provenance comments that cite upstream cfg
+  filenames — those stay.
 - **Your git remote** — the repo moved to the `VortexFPS` organization. Run `git remote set-url origin
   git@github.com:VortexFPS/VortexArena.git` on any checkout predating the transfer. GitHub redirects,
   so a stale remote keeps working rather than failing loudly, which is how it goes unnoticed.

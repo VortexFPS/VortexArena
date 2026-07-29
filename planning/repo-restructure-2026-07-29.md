@@ -1,6 +1,14 @@
 # Repo restructure, data consolidation, and the Tier-1 rename
 
-**Date:** 2026-07-29 · **Status:** plan, not yet executed
+**Date:** 2026-07-29 · **Status:** plan, not yet executed · **Revised:** 2026-07-29 (readiness pass)
+
+> **Readiness pass, 2026-07-29.** Every count and path below was re-verified against the working tree.
+> Four things had drifted since the first draft and are corrected in place: `feature/map-editor` has
+> **landed** (so Stage 0 item 1 is done), the repo **moved on disk** from
+> `Projects\Xonotic\XonoticGodot` to `Projects\Vortex\VortexArena` (so several source paths in Stage 0
+> and Stage 1 were dead), the touch-list counts had grown, and G13 turned out to be a **prerequisite**
+> rather than a stage-3 item — it now has its own Stage −1. One decision was added: **D8**, the Vortex
+> config layer (§11), which replaces the config half of the old item 36.
 
 Vortex Arena currently builds its content tree by cloning four upstream Xonotic repositories at
 build time. This plan stops that, moves the runtime content into the game repo, splits map sources
@@ -57,6 +65,7 @@ trackers) is done and stays as-is.
 | D5 | The Tier-1 rename from REBRANDING.md Decision 3 lands in the same motion. |
 | D6 | **No Git LFS.** Reasoning in §3. |
 | D7 | Compiled maps are **not committed** anywhere. `VortexMaps` CI publishes them as GitHub Release assets; the game repo pins them in a lockfile and fetches them (§5.3.1). The line: hand-edited content is committed, compiled output is fetched. |
+| D8 | **The Xonotic config files are never edited.** Vortex divergence lives in an additive `vortex-*.cfg` layer exec'd after them and before `LockDefaults()`. This replaces the config-rename half of the old item 36, which is dropped rather than deferred. Reasoning and wiring in **§11**. |
 
 ---
 
@@ -263,7 +272,9 @@ VortexArena/
 │   ├── .gdignore                    keeps the Godot editor out of 17k files
 │   ├── .gitattributes               `* -text` (G2)
 │   ├── core.pk3dir/                 runtime content (ex-xonotic-data.pk3dir, pruned)
-│   │   └── textures/ models/ gfx/ sound/ particles/ scripts/
+│   │   ├── textures/ models/ gfx/ sound/ particles/ scripts/
+│   │   ├── *-xonotic.cfg  physicsX.cfg  …   upstream, never edited (D8, §11)
+│   │   └── vortex-*.cfg             our divergence layer, exec'd after them (D8, §11)
 │   ├── music.pk3dir/                44 ogg tracks
 │   ├── font-{dejavu,nimbussansl,unifont,xolonium}.pk3dir/
 │   ├── maps.lock.json               ← TRACKED. pins the VortexMaps release + per-map sha256
@@ -445,9 +456,9 @@ rather than a `filter-repo` run.
 ### 6.1 Gotcha register
 
 Every trap this plan knows about, labelled so the stage items can point at them. G1 through G7 are
-one-shot migration hazards; G8 through G14 are standing hazards, or hazards that outlive the
+one-shot migration hazards; G8 through G15 are standing hazards, or hazards that outlive the
 migration. G13 and G14 came out of the completeness pass on 2026-07-29 and are the reason §6.2
-exists.
+exists; G15 came out of the readiness pass the same day, with D8.
 
 ---
 
@@ -565,22 +576,38 @@ exists.
 
 ---
 
-**G8 — Eight open branches will conflict on nearly every file.**
+**G8 — Seven open branches will conflict on nearly every file.**
 
 - **Breaks:** every open feature branch, simultaneously. This restructure moves every asset path,
   relocates the solution file, and renames every namespace in `src/`.
 - **Why:** the conflicts are not semantic, they are path-level, so git's rename detection helps less
   than usual and there is no merge strategy that resolves them cheaply.
-- **Status:** **Decided 2026-07-29.** Only **`feature/map-editor`** lands before the restructure. The
-  other seven migrate afterwards, one at a time, through `docs/BRANCH-MIGRATION.md`.
-- **Lands first:** `feature/map-editor` — 25+ commits, 26 `Vmap*` files, and the branch this whole
-  §9 discussion is about. Landing it first also means the vmap code is on `main` when the restructure
-  runs, so §9's layout is applied to real files rather than anticipated.
-- **Migrates after:** `feature/launcher-updater` (which becomes the stage 6 extraction rather than a
-  merge), `feature/demo-merge`, `feature/dedicated-server-v2`, `feature/anim-smoothness-ragdolls`,
-  `feature/player-soft-collision`, `feature/playermodel-lean`, `fix/warpzone-view-smoothing`.
+- **Status:** **Decided 2026-07-29; the landing half is done.** Seven branches migrate afterwards, one
+  at a time, through `docs/BRANCH-MIGRATION.md`.
+- **Landed already (2026-07-29):** `feature/map-editor` — 46 commits, 26 `Vmap*` files, and the branch
+  this whole §9 discussion is about. `claude/tool-selection-usage-design-8159cd` landed with it, which
+  is why §9's `.vmap` single-text-file format is described as current rather than proposed. The vmap
+  code is on `main`, so §9's layout applies to real files.
+- **Merged, so delete rather than migrate — eight refs.** Each is `ahead=0` of `main` and carries no
+  unique commits: `feature/map-editor`, `claude/tool-selection-usage-design-8159cd`,
+  `claude/map-editor-backlog-continue-6865a0`, `claude/viberadiant-review-vortex-204d70`,
+  `claude/vortex-arena-anti-cheat-b51f29`, `claude/vortex-startup-disclaimer-949f5e`,
+  `fix/editor-grid-stringname-alloc`, `parity/port-recent-fixes`. Running
+  `docs/BRANCH-MIGRATION.md` against any of them is wasted work; prune them in Stage −1 so the
+  migration queue is unambiguous.
+- **Migrates after — the real seven:** `feature/launcher-updater` (3 commits; becomes the stage 6
+  extraction rather than a merge), `feature/demo-merge` (13), `feature/dedicated-server-v2` (12),
+  `feature/anim-smoothness-ragdolls` (3), `feature/player-soft-collision` (2),
+  `feature/playermodel-lean` (4), `fix/warpzone-view-smoothing` (3).
+- **Verify the split before trusting it**, since a merged branch looks identical to an open one in
+  `git branch`:
+
+  ```bash
+  git for-each-ref --format='%(refname:short)' refs/heads | while read b; do
+    printf '%-50s ahead=%s\n' "$b" "$(git rev-list --count main..$b)"; done
+  ```
 - **What this changes:** `docs/BRANCH-MIGRATION.md` stops being a fallback and becomes the **primary
-  path for seven of eight branches**. That makes `tools/migrate-branch.sh` a deliverable of the
+  path for all seven surviving branches**. That makes `tools/migrate-branch.sh` a deliverable of the
   restructure itself, not a thing to improvise later — it has to exist and be proven on the first
   branch before the others queue up behind it. Added as stage 3 item 28e.
 - **Consequence worth pricing in:** each of those seven branches accrues additional drift for as long
@@ -672,31 +699,45 @@ exists.
 
 ### 6.2 The complete touch list
 
-Counted against the tracked tree on 2026-07-29, excluding `planning/legacy/` and `planning/wave-a*`
-(frozen snapshots, deliberately left with their old paths). **80 tracked files** reference
-`assets/data`, `download-assets`, or `assets/*`; **34 test files** additionally hardcode an absolute
-dev-box path (G13). Earlier drafts of §6 named about fifteen of these.
+Re-counted against the tracked tree on 2026-07-29 (readiness pass), excluding `planning/legacy/` and
+`planning/wave-a*` (frozen snapshots, deliberately left with their old paths). **126 tracked files**
+reference `assets/data`, `download-assets`, or `assets/*`. A separate, partly overlapping **71 tracked
+files** hardcode an absolute dev-box path, 42 of them under `tests/` (G13).
+
+> **These counts go stale every time a branch lands.** The first draft said 80 in prose while its own
+> table summed to 117, and the real figure was already 126 — the gap being almost entirely the
+> `feature/map-editor` merge, which added test files carrying both patterns. That is G8's drift
+> argument turned on this document. **Regenerate rather than trust:**
+>
+> ```bash
+> git ls-files | xargs grep -l 'assets/data\|download-assets' \
+>   | grep -v 'planning/legacy/\|planning/wave-a' | wc -l
+> git ls-files | xargs grep -l 'Users.Bryan.Projects' | wc -l
+> ```
 
 | Group | Files | Notes |
 |---|---:|---|
-| **Runtime code** | 6 | `game/DataPaths.cs` (7 hits), `Main.cs`, `game/Shell.cs`, `game/menu/dialogs/DialogWinner.cs`, `game/client/EffectInfo.cs`, `game/client/particles/EffectInfoOverlay.cs` |
-| **Tests** | 34 | G13. Plus `VisualQaTests`, `ViewModelDepthHackTests` which also carry `assets/data` strings |
-| **Build & CI** | 9 | `tools/package.sh` (8), `ci/ci.sh` (8), `export_presets.cfg` (6), `.github/workflows/release.yml` (6), `ci.yml`, `.gitignore` (2), `run-release.sh`, `run-release.ps1`, `XonoticGodot.sln` |
-| **Tools** | 5 | `tools/run-dedicated.sh` (5), `tools/run-client.sh` (5), `tools/parity-asset-check.py` (4), `tools/visual-qa.sh` (2), `tools/camera-ref/README.md` |
-| **Docs** | 5 | `docs/RUNNING.md` (7), `docs/REBRANDING.md` (7), `docs/RELEASING.md` (6), `README.md` (6), `COPYING` |
-| **Parity registry & specs** | 48 | `planning/parity/registry/*.yaml`, `specs/*.md`, `_wave13-units.json`, two `*.workflow.js`. Read by `tools/parity-asset-check.py`, so this is machine-checked data, not prose |
-| **ADRs & planning prose** | 5 | ADR-0014 (9 hits), `HUD_PARITY_CONTRACT.md`, `playtest-bugs.md`, two `handoff-*.md` |
-| **IDE / misc** | 5 | `.run/*.run.xml` ×4 (JetBrains run configs naming the exe), `Directory.Build.props` |
+| **Parity registry & specs** | 49 | `planning/parity/registry/*.yaml`, `specs/*.md`, `_wave13-units.json`, two `*.workflow.js`. Read by `tools/parity-asset-check.py`, so this is machine-checked data, not prose |
+| **Tests** | 43 | G13 (42 of them also carry the dead absolute path). Plus `VisualQaTests`, `ViewModelDepthHackTests` which carry `assets/data` strings |
+| **Root** | 9 | `.gitignore` (2), `COPYING`, `Main.cs`, `README.md` (6), `XonoticGodot.sln`, `download-assets.sh`, `export_presets.cfg`, `run-release.sh`, `run-release.ps1` |
+| **Planning prose** | 7 | ADR-0014 (9 hits), `HUD_PARITY_CONTRACT.md`, `playtest-bugs.md`, two `handoff-*.md`, this file |
+| **Tools** | 6 | `tools/run-dedicated.sh` (5), `tools/run-client.sh` (5), `tools/parity-asset-check.py` (4), `tools/visual-qa.sh` (2), `tools/camera-ref/README.md` |
+| **Runtime code** | 5 | `game/DataPaths.cs` (7 hits), `game/Shell.cs`, `game/menu/dialogs/DialogWinner.cs`, `game/client/EffectInfo.cs`, `game/client/particles/EffectInfoOverlay.cs` (+ `Main.cs`, counted under Root) |
+| **Docs** | 4 | `docs/RUNNING.md` (7), `docs/REBRANDING.md` (7), `docs/RELEASING.md` (6) (+ `COPYING`, counted under Root) |
+| **CI** | 3 | `.github/workflows/release.yml` (6), `ci.yml`, `ci/ci.sh` (8) |
 
-Three of these groups were missing from the change list entirely and are the reason this pass was
-worth doing:
+Two groups were missing from the original change list and are the reason this pass was worth doing:
 
-- **The 48 parity files are data, not documentation.** `tools/parity-asset-check.py` reads the
+- **The 49 parity files are data, not documentation.** `tools/parity-asset-check.py` reads the
   registry YAMLs and resolves asset paths out of them. Leaving them pointing at `assets/data` breaks
   the parity gate rather than merely reading stale.
-- **The 34 hardcoded test paths** are G13.
-- **`.run/*.run.xml` and `Directory.Build.props`** carry the artifact and assembly names, so they
-  belong to the Tier-1 rename (stage 5), not the path move.
+- **The 42 hardcoded test paths** are G13, now Stage −1.
+
+And one item in the original list is **wrong and should be dropped**: `.run/*.run.xml` do not name the
+executable. All four are `ShConfigurationType` configs invoking `$PROJECT_DIR$/run-release.sh`, so they
+are path-agnostic and need no change. `Directory.Build.props` is real, but for the rename rather than
+the path move: it carries the `XonoticGodotTfm` property, `XgBotPlayer`, and `XonoticGodot.csproj` in a
+comment.
 
 ### 6.3 New ADRs this plan owes
 
@@ -708,6 +749,9 @@ project's record of that kind of choice, so:
 - **Write ADR-0017 — "Engine patches are fetched, not committed"** covering §7.3, since it
   establishes a mechanism (lockfile + prebuilt template + pre-export assertion) that outlives this
   migration.
+- **Write ADR-0018 — "Vortex config is a layer, not a fork of the Xonotic config"** covering D8 and
+  §11. It is the decision most likely to be quietly violated by a future contributor who just edits
+  `balance-xonotic.cfg`, so it needs a record with the reasoning attached.
 - **Amend ADR-0006** (asset pipeline): the offline-conversion half it specified is now partly built,
   as TGA to PNG.
 - **Amend ADR-0014** (CI/packaging): it names `download-assets.sh` as the single source of asset
@@ -715,43 +759,106 @@ project's record of that kind of choice, so:
 - **Amend or supersede ADR-0008** (solution structure): the `Client`/`Menu` project drift, §10.
 
 ---
-**G13 — 34 test files hardcode an absolute dev-box path.**
+**G13 — 42 test files hardcode an absolute dev-box path, and that path is already dead.**
 
-- **Breaks:** the asset-dependent half of the suite on every machine that is not Bryan's, and every
-  one of them moves when `assets/data` becomes `data/`.
-- **Why:** the pattern is `private const string DataDir =
-  @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";`, repeated across
-  `AssetParserTests`, `BspCollisionTests`, `BspPvsTests`, `Md3ReaderTests`, `IqmReaderTests`,
-  `ConfigTests`, `PoCatalogTests`, `SkinValuesTests`, the four `Perf/*Bench` files, and 22 more.
-  Some also hardcode `C:\Users\Bryan\Projects\Xonotic\Base\data\...` for the upstream parity
-  comparison.
+- **Status:** **Promoted to a prerequisite, 2026-07-29 — this is now Stage −1, not a stage-3 item.**
+- **Breaks:** the asset-dependent half of the suite, **on every machine including this one**, and
+  every occurrence moves again when `assets/data` becomes `data/`.
+- **Why it is worse than the first draft said:** the pattern is `private const string DataDir =
+  @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";` — and the repo has since moved to
+  `C:\Users\Bryan\Projects\Vortex\VortexArena`, with the upstream reference tree moving from
+  `Projects\Xonotic\Base` to `Projects\Vortex\Base`. **Both prefixes now resolve to nothing.**
+  Measured: 325 occurrences of the old repo prefix and 3 of the old `Base` prefix, spread over
+  **42 tracked files under `tests/`** and **71 tracked files repo-wide** — the extra 29 being
+  `.claude/workflows/{parity-diff,upstream-watch}.js`, `export_presets.cfg`, four `tools/*-ref/`
+  docs, and the parity prose. The first draft's "34" predated the `feature/map-editor` merge, which
+  added `VmapTextFormatTests`, `Perf/VmapVsBspLoadBench` and `Perf/EditorOcclusionBench` to the set.
 - **This is G10 again in a different file type.** An absolute path to one workstation, load-bearing,
   invisible until someone else runs the thing. The `Perf/*Bench` files already do it correctly with
-  `?? @"C:\..."` behind an env-var lookup; the other 30 do not.
-- **Detect:** `rg "Users.Bryan.Projects" tests/` — expect zero when this is done.
+  `?? @"C:\..."` behind an env-var lookup; the rest do not.
+- **Detect:** `git ls-files | xargs grep -l "Users.Bryan.Projects"` — expect zero when this is done.
 - **Do:** one shared `TestPaths` helper resolving `VA_DATA_DIR`, else a repo-relative walk up from
-  `AppContext.BaseDirectory`, else skip. Replace all 34. Keep the `Base/data` lookups separate and
-  env-driven too (`VA_BASE_DIR`), since that tree stays outside the repo by design.
-- **Do it in stage 3**, with the rest of the path rewrites, not as a follow-up.
+  `AppContext.BaseDirectory`, else skip. Replace all 42. Keep the `Base/data` lookups separate and
+  env-driven too, since that tree stays outside the repo by design — note `XG_BASE_DIR` **already
+  exists** (one call site), so that is a rename to `VA_BASE_DIR`, not a new mechanism.
+- **Why it moved to the front:** Stage 5 item 37 makes "clean build plus the full ~2,950-test suite
+  green" the proof for the largest mechanical change in the repo's history. That gate is
+  **unverifiable today** — the asset-dependent tests cannot pass anywhere, so "green" would mean
+  "green with a silent skip of exactly the tests that read the tree we just moved." Fixing the paths
+  first is what makes the restructure's own proof mean something. It is also the cheapest possible
+  ordering: the paths are broken already, so the fix is pure gain and carries no restructure risk.
 
 ---
 
-**G14 — Seven git worktrees are live and each is a full working copy.**
+**G14 — Nine git worktrees are registered, and all nine are already stale.**
 
 - **Breaks:** every worktree under `.claude/worktrees/`, in the same way and at the same time as the
   branches in G8, but silently — a worktree is not something `git branch` reminds you about.
-- **Scale:** `dedicated-slim`, `happy-moore-abb8f0`, `map-editor-backlog-continue-6865a0`,
+- **Scale:** nine, not seven. The first draft missed `merge-branch-to-main-cb8172` and
+  `zz-merge-trial`; the full set is `dedicated-slim`, `happy-moore-abb8f0`,
+  `map-editor-backlog-continue-6865a0`, `merge-branch-to-main-cb8172`,
   `viberadiant-review-vortex-204d70`, `vortex-arena-anti-cheat-b51f29`,
-  `vortex-startup-disclaimer-949f5e`, `xonotic-upstream-analysis-bc54bb`.
+  `vortex-startup-disclaimer-949f5e`, `xonotic-upstream-analysis-bc54bb`, `zz-merge-trial`.
+- **All nine are `prunable` already.** They are registered at the pre-move path
+  `C:/Users/Bryan/Projects/Xonotic/XonoticGodot/.claude/worktrees/…`, which no longer exists, so
+  `git worktree list` reports every one as prunable. Seven of the nine also point at branches that
+  are now fully merged, so there is nothing in them to migrate.
 - **Why it is worse than a branch:** worktrees share one `.git` but have independent working trees
   and their own `assets/` state. The project's own convention is to build and run *inside* the
-  worktree, so each one needs its own content tree or `--data` pointer after the move.
-- **Do:** treat each worktree as a branch for G8 purposes and run `docs/BRANCH-MIGRATION.md` in it,
-  or delete the ones whose work has landed. Prune before starting; seven stale copies of a 1.2 GB
-  content tree is its own problem.
+  worktree, so a surviving one needs its own content tree or `--data` pointer after the move.
+- **Nothing recoverable is inside them — checked 2026-07-29 before pruning.** Every worktree's
+  `assets/` holds exactly one file, the 246-byte `.gdignore`; none has a content tree, and a search for
+  `physicsBryan*` across all nine (and across `Projects/Vortex/` and the user data dir) found nothing.
+  Seven of the nine also point at now-merged branches. So the prune is safe in both senses: no unique
+  commits and no unique files.
+- **Do:** `git worktree prune` first — it is a metadata-only operation and, with every entry already
+  prunable, it is risk-free. Then check `.claude/worktrees/` on disk: the directory survived the move
+  and has accumulated loose `*.log` files at its top level alongside the worktree copies. Delete the
+  copies whose branches are merged; only a worktree on one of G8's seven surviving branches needs
+  `docs/BRANCH-MIGRATION.md`.
 
 ---
 
+**G15 — A `vortex-*.cfg` exec'd after `LockDefaults()` becomes a user value, not a default.** *(§11)*
+
+- **Breaks:** every cvar the Vortex layer sets gets written into the player's `config.cfg` and then
+  outranks anything we ship later, so a balance or physics revision silently fails to reach anyone who
+  has already launched the game once.
+- **Why:** `MenuState.Boot` runs the config chain, then `_cvars.LockDefaults()` (`MenuState.cs:208`),
+  then `LoadUserConfig()` (`:227`). `LockDefaults` is DP's `Cvar_LockDefaults` — it freezes each
+  cvar's *current* value as its default. A cvar assigned before the lock becomes the shipped default
+  and is persisted only if the player moves it; a cvar assigned after the lock is indistinguishable
+  from something the player typed. The existing video overrides at `MenuState.cs:190-200` carry a
+  comment block explaining exactly this, so the precedent is there to follow rather than rediscover.
+- **Detect:** boot once, change nothing, quit, and read the generated `config.cfg`. Any
+  `vortex-*.cfg` cvar appearing in it means the layer ran too late.
+- **Do:** exec the whole Vortex layer inside the same `ConfigLoader.Load` call as the Xonotic entries,
+  appended after them, so the ordering is structural rather than a separate call someone can later
+  move. §11.2 wires it that way for this reason.
+- **Related, same hazard one level down:** `ConfigLoader.cs:44-47` records that the shipped cfgs, not
+  the C# registration tables, are the authority on which cvars are archiveable. A `seta` in the Vortex
+  layer widens `config.cfg` beyond what upstream archives, so the layer uses plain `set` unless it is
+  deliberately introducing a new archiveable cvar.
+
+---
+
+### Stage −1 — prerequisites (no restructure risk, do these first)
+
+These three are independently correct, already-broken-today fixes. None depends on any decision in
+this plan, and each one shrinks the migration's surface or makes its proof gate meaningful.
+
+-3. **Replace the 42 hardcoded test paths with a shared `TestPaths` helper** — **G13**. Resolves
+   `VA_DATA_DIR`, else a repo-relative walk from `AppContext.BaseDirectory`, else skip; `VA_BASE_DIR`
+   (renamed from the existing `XG_BASE_DIR`) for the upstream parity tree. Gate:
+   `git ls-files | xargs grep -l "Users.Bryan.Projects"` returns nothing, and the asset-dependent
+   suite actually runs. **This is the gate Stage 5 item 37 depends on**, so it cannot come later.
+-2. **Prune the stale git state** — **G8**, **G14**. `git worktree prune` (all nine entries are
+   already prunable), delete the eight merged branch refs, and clear the loose `*.log` files out of
+   `.claude/worktrees/`.
+-1. **Repoint `custom_template/release` at the engine build that exists** — **G10**, §7.2. It names
+   `C:/Users/Bryan/Projects/Xonotic/godot-4.6.3-inputfix/…`; the binary is at
+   `C:/Users/Bryan/Projects/Vortex/godot-4.6.3-inputfix/bin/`. A one-line fix that restores Windows
+   export on the dev box immediately, and it does not wait for the Stage 4 lockfile work.
 
 ### Stage 0 — prepare, before anything is committed
 
@@ -759,10 +866,10 @@ project's record of that kind of choice, so:
    + `VortexFPS/VortexLauncher` (§5.0). First, so every URL below is written once. Then
    `git remote set-url origin`, sweep the six tracked files that name the old owner, regenerate
    `LEDGER.html`, and check the org's default Actions permissions before relying on `release.yml`.
-1. **Land `feature/map-editor`** — **G8**. It is the only branch landing before the restructure; the
-   other seven migrate afterwards via `docs/BRANCH-MIGRATION.md`.
-1b. **Prune the `.claude/worktrees/` copies** — **G14**. Delete the ones whose work has landed; the
-   survivors migrate with their branches.
+1. ~~**Land `feature/map-editor`**~~ — **G8. Done 2026-07-29** (46 commits, merged; the vmap code and
+   the `989cd59` single-text-file `.vmap` format are on `main`). The seven surviving branches migrate
+   afterwards via `docs/BRANCH-MIGRATION.md`.
+1b. ~~**Prune the `.claude/worktrees/` copies**~~ — **G14. Moved to Stage −1 item −2.**
 2. **Write `data/.gitattributes` containing `* -text`** — **G2**. Must exist in the same commit that
    first introduces content, not after.
 3. **Write `data/.gdignore`** — **G4**, before the Godot editor next opens the project.
@@ -773,15 +880,47 @@ project's record of that kind of choice, so:
 
 ### Stage 1 — build the content trees on disk (still nothing committed)
 
-6. Create `VortexMaps`. Seed from the current `xonotic-maps.pk3dir` working tree with its upstream
-   `.git` discarded, so history starts clean rather than importing a 1.3 GB pack.
+> **The source tree is `C:\Users\Bryan\Projects\Vortex\Base\data\`, not `assets/data`.** The repo's
+> `assets/data` is a **symlink** to `Projects/Xonotic/Base/data`, a path that no longer exists — so
+> `assets/data` currently resolves to nothing and every "seed from the current tree" instruction below
+> has to name `../Base/data/` explicitly. Two consequences worth stating:
+>
+> - **This box never used `download-assets.sh` output.** It symlinked straight to the upstream
+>   reference checkout, which is why §4.1's inventory and its "four upstream clones" are really
+>   describing `Base`'s clones. The measurements hold; the path in them does not.
+> - **`Base` is also the parity baseline** (`VA_BASE_DIR`, `tools/parity-asset-check.py`,
+>   `tools/parity-cvar-diff.py`). Staging `data/core.pk3dir/` from it means the migration source and
+>   the parity reference are the same tree, which is fine — but it means **G7's "archive the
+>   pre-conversion tree" cannot be satisfied by "Base still has it."** Base is a live upstream
+>   checkout that gets updated; the archive has to be a separate frozen copy.
+
+6. Create `VortexMaps`. Seed from `../Base/data/xonotic-maps.pk3dir` with its upstream `.git`
+   discarded, so history starts clean rather than importing a 1.3 GB pack.
 7. Extract both compiled map packs. Route the 97 MB of `.map`, `.ase`, `.obj` and q3map2 residue to
    `VortexMaps/sources/<map>/`; the runtime remainder becomes
    `VortexMaps/builds/q3map2/<map>.pk3dir/` in the type-rooted layout of §9.3.
-8. Stage `xonotic-data.pk3dir` → `data/core.pk3dir/`, dropping `qcsrc/`, `.tmp/`, `demos/`, `.tx/`,
-   `cmake/`, every `*.import` (**G3**), and the six `progs`/`csprogs`/`menu` `.dat`/`.lno` files. Removes
-   81 MB the port cannot execute plus 5.9 MB of stale sidecars.
+7b. **Decide where `scripts/shaderlist.txt` goes — it is the one real content collision in the
+   split.** Both trees ship one and they differ: `xonotic-data.pk3dir`'s lists 21 entries (gameplay
+   effect shaders), `xonotic-maps.pk3dir`'s lists 71 (every `map_*` and `skies_*`). Today the maps
+   copy wins, because `xonotic-maps.pk3dir` sorts above `xonotic-data.pk3dir` and mounts higher. The
+   port reads the file **nowhere** — zero hits across tracked sources — so there is no runtime
+   consequence either way, but **q3map2 does read it**, so the 71-entry copy has to land in
+   `VortexMaps/` for the map build, and the 21-entry copy is what `data/core.pk3dir/` keeps. Choose it
+   deliberately here; letting the copy step pick is how one of them silently disappears.
+8. Stage `../Base/data/xonotic-data.pk3dir` → `data/core.pk3dir/`, dropping `qcsrc/`, `.tmp/`,
+   `demos/`, `.tx/`, `cmake/`, every `*.import` (**G3**), and the six `progs`/`csprogs`/`menu`
+   `.dat`/`.lno` files. Removes 81 MB the port cannot execute plus 5.9 MB of stale sidecars.
+   **Keep every `*-xonotic.cfg` byte-identical to upstream** — **D8**, §11.
 9. Stage music → `data/music.pk3dir/`, fonts → `data/font-*.pk3dir/` (keep the `.pk3dir` suffix — §5.1).
+9b. **Verify the map-source tree really is only a build input, before deleting it from the mount set.**
+   The plan asserts this; it is now measured, and the check belongs in the migration so it stays true.
+   4,190 files exist only in `xonotic-maps.pk3dir` — but normalising the `dds/` prefix away and
+   dropping extensions (`ResolveImage` probes `.tga`/`.png`/`.jpg`, and `DdsDecoder` handles the
+   `dds/` mirror), only **13** image stems are unreachable from the rest of the runtime mount, all
+   `textures/map_*/{*_alpha,*_bump}`, and **none of them is referenced by any of the 135 shipped
+   `.shader` files**. Skyboxes were the worry and they are safe: `env/calm_sea/calm_sea_bk.jpg` and
+   the other eight sets ship inside `xonotic-20230620-maps.pk3`, not in the source tree. Re-run this
+   as a gate rather than trusting the number, since a future map addition can break it.
 
 ### Stage 2 — convert, verify, then commit
 
@@ -848,16 +987,27 @@ project's record of that kind of choice, so:
     `custom_template/release` in `export_presets.cfg` (§7.2). Edit both by hand, and add a test that
     pins the three timing values so a future editor save that drops them fails the suite instead of
     shipping a regression nobody can feel until playtest.
-27. Rename the test env var `XG_DATA_DIR` → `VA_DATA_DIR` alongside the Tier-0
-    `XONOTIC_USERDIR` → `VORTEX_USERDIR` rename.
+27. Rename the env vars and MSBuild properties, alongside the Tier-0 `XONOTIC_USERDIR` →
+    `VORTEX_USERDIR` rename. **There are twelve, not one** — earlier drafts named only `XG_DATA_DIR`:
+    `XG_DATA_DIR` (26 hits), `XG_BENCH` (14), `XG_BOTPLAYER` (11), `XgBotPlayer` (8, MSBuild),
+    `XG_BOTS` (9), `XG_MAPS` (6), `XG_TICKS` (5), `XG_PERF_ASSERT` (5), `XG_MAP` (5),
+    `XgDebugUnoptimized` (3), `XG_PROBE_BSP` (2), `XG_BASE_DIR` (1). Sweep with
+    `git ls-files | xargs grep -ohE '\bXG_[A-Z_]+|\bXg[A-Z][A-Za-z]+' | sort -u` and expect an empty
+    result afterwards. Note `XG_DATA_DIR` and `XG_BASE_DIR` are already renamed by Stage −1, so this
+    item covers the remaining ten.
 28. `README.md`: replace the Assets section. Post-clone is now one command, `tools/data/fetch-maps.py`,
     and `git clone --filter=blob:none` becomes the documented default.
-28a. **The 34 hardcoded test paths** — **G13**. One shared `TestPaths` helper resolving `VA_DATA_DIR`,
-    else a repo-relative walk from `AppContext.BaseDirectory`, else skip. Keep the `Base/data` lookups
-    separate under `VA_BASE_DIR`. Gate: `rg "Users.Bryan.Projects" tests/` returns nothing.
-28b. **The 48 parity registry and spec files** (§6.2) plus `tools/parity-asset-check.py`. This is
+28a. ~~**The hardcoded test paths**~~ — **G13. Moved to Stage −1 item −3**, since Stage 5's proof gate
+    depends on it. What remains here is only the second rewrite: the `TestPaths` helper's repo-relative
+    fallback and its `VA_DATA_DIR` default change from `assets/data` to `data` along with everything
+    else. One file, not 42.
+28b. **The 49 parity registry and spec files** (§6.2) plus `tools/parity-asset-check.py`. This is
     machine-checked data feeding the parity gate, not prose, so it moves with the code. Re-run
     `python tools/parity-asset-check.py` as the proof.
+28f. **Wire the Vortex config layer** — **D8**, **G15**, §11.2. Five call-site edits
+    (`ConfigLoader.cs:25-31,69`, `MenuState.cs:162`, `MenuState.cs:184`, `MenuState.cs:262`) plus the
+    seven `vortex-*.cfg` files in `data/core.pk3dir/`. Do **not** touch any `*-xonotic.cfg`, and do not
+    rename the ~100 provenance comments that cite them. Gate: the two checks at the end of §11.5.
 28c. **The remaining tools and scripts**: `tools/run-client.sh`, `tools/run-dedicated.sh`,
     `tools/visual-qa.sh`, `run-release.sh`, `run-release.ps1`, `tools/camera-ref/README.md`.
 28d. **Docs**: `docs/RUNNING.md`, `docs/RELEASING.md`, `docs/REBRANDING.md`, `COPYING`, and the four
@@ -891,13 +1041,26 @@ Land after Stage 3 so the mechanical sweep sits alone in history and stays bisec
 35. **Trap:** the launcher's `latest.json` loses update continuity across the artifact rename. The
     first `VortexArena`-named release is a deliberate cutover; document it in the launcher repo and
     in `docs/RELEASING.md` before tagging.
-35a. `.run/*.run.xml` (four JetBrains run configurations naming the executable) and
-    `Directory.Build.props` (assembly metadata). Both carry artifact/assembly names, so they move with
-    the rename rather than the path change (§6.2).
-36. Tier-0 items still open from REBRANDING.md: campaign id `xonoticbeta` → `vortexbeta`,
-    `hostname` defaults, macOS bundle id, and the `xonotic-client.cfg` / `xonotic-server.cfg` /
-    `binds-xonotic.cfg` filenames.
-37. **Proof:** clean `dotnet build` plus the full ~2,950-test suite green, then `ci/ci.sh`.
+35a. `Directory.Build.props` (the `XonoticGodotTfm` property, `XgBotPlayer`, and `XonoticGodot.csproj`
+    in a comment). **`.run/*.run.xml` are not in scope** — they invoke `$PROJECT_DIR$/run-release.sh`
+    and name no executable, so the original §6.2 entry for them was wrong.
+35b. **Regenerate the Godot UID cache after the `src/` moves.** 451 of the repo's 914 committed
+    `*.cs.uid` sidecars live under `src/`, which item 31 relocates wholesale. The sidecars travel with
+    their files, so nothing is lost — but `.godot/uid_cache.bin` maps uid → *path* and is stale the
+    moment the directories move. Open the editor once (or delete the cache and let it rebuild) and
+    check that no `.cs.uid` was orphaned: every `*.cs.uid` should still sit beside a `*.cs`.
+36. ~~Tier-0 config filenames~~ — **split, 2026-07-29.**
+    - **Dropped, not deferred:** renaming `xonotic-client.cfg` / `xonotic-server.cfg` /
+      `binds-xonotic.cfg`. **D8** replaces it with the additive `vortex-*.cfg` layer in §11, which
+      gets the same divergence without touching upstream files.
+    - **Deferred out of this migration:** the remaining REBRANDING.md Tier-0 items — campaign id
+      `xonoticbeta` → `vortexbeta`, `hostname` defaults, macOS bundle id. They are user-visible
+      identity changes with their own continuity questions, they share nothing mechanically with the
+      path move or the namespace sweep, and Stage 5 is already the largest mechanical change in the
+      repo's history. Track them in `docs/REBRANDING.md`, not here.
+37. **Proof:** clean `dotnet build` plus the full ~2,950-test suite green, then `ci/ci.sh`. This gate
+    is only meaningful because **Stage −1 item −3** made the asset-dependent tests runnable; before
+    that fix, "green" meant "green with those tests silently skipped."
 
 ### Stage 6 — extract the launcher
 
@@ -910,9 +1073,13 @@ Land after Stage 3 so the mechanical sweep sits alone in history and stays bisec
 
 ### Stage 7 — record the decisions
 
-41. Write **ADR-0016** (Vortex Arena owns its content) and **ADR-0017** (engine patches are fetched),
-    and amend **ADR-0006**, **ADR-0014**, **ADR-0008**. Details in §6.3. Last, not first: the ADRs
-    should record what was built, and stages 1 through 6 will have changed some of it.
+41. Write **ADR-0016** (Vortex Arena owns its content), **ADR-0017** (engine patches are fetched) and
+    **ADR-0018** (Vortex config is a layer, not a fork), and amend **ADR-0006**, **ADR-0014**,
+    **ADR-0008**. Details in §6.3. Last, not first: the ADRs should record what was built, and stages 1
+    through 6 will have changed some of it.
+42. Add all three to `planning/decisions/README.md`, which currently indexes 13 ADRs. Note ADR-0015
+    never existed on `main` — it lives only on `feature/launcher-updater` — so after the stage 6
+    extraction the on-`main` sequence reads 0014 → (0015 pointer stub) → 0016.
 
 ---
 
@@ -951,7 +1118,11 @@ on stock, +0.01 ms patched. It ships upstream in Godot 4.8; we are on 4.6.3.
 
 Applying it requires a **custom-built Windows export template**, and here is the problem:
 
-- `export_presets.cfg:49` → `custom_template/release="C:/Users/Bryan/Projects/Xonotic/godot-4.6.3-inputfix/bin/godot.windows.template_release.x86_64.mono.exe"`, an absolute path to one dev box.
+- `export_presets.cfg:49` → `custom_template/release="C:/Users/Bryan/Projects/Xonotic/godot-4.6.3-inputfix/bin/godot.windows.template_release.x86_64.mono.exe"`, an absolute path to one dev box —
+  **and as of the repo move that path is dead on the dev box too.** The binary exists, at
+  `C:/Users/Bryan/Projects/Vortex/godot-4.6.3-inputfix/bin/`. So this is not "CI cannot export
+  Windows" any more, it is **nobody can**, which is why Stage −1 item −1 repoints it immediately
+  rather than waiting for the Stage 4 lockfile.
 - `release.yml:100` provisions Godot on `windows-latest` via `chickensoft-games/setup-godot@v2` with
   stock `include-templates: true`. That path does not exist there.
 - Godot aborts an export whose custom template is missing (`ERR_FILE_NOT_FOUND`), producing no binary.
@@ -1297,14 +1468,19 @@ everything. One mount rule, one lockfile, one directory, and a map can hold a `.
 
 **ADR-0008 has drifted.** It specifies `XonoticGodot.Client` and `XonoticGodot.Menu` as separate
 projects; both live in the root Godot host under `game/client/` and `game/menu/`. The rename in
-Stage 4 forces a choice: amend the ADR to record what was built, or split the projects out. The
-recommendation is to amend. The split buys separation the codebase has not asked for, and Stage 4
+**Stage 5** forces a choice: amend the ADR to record what was built, or split the projects out. The
+recommendation is to amend. The split buys separation the codebase has not asked for, and Stage 5
 is already the largest mechanical change in the repo's history.
 
 **Upstream content updates.** After D1 there is no path for an upstream Xonotic asset fix to reach
 Vortex Arena. That is the intent of a fork, but the parity tooling in `planning/parity/` and
 `tools/parity-asset-check.py` compares against `Base/data/`, which stays an upstream reference
-checkout outside the repo. Confirm those tools still resolve after `assets/data` moves to `data/`.
+checkout outside the repo. Confirm those tools still resolve after `assets/data` moves to `data/` —
+and note that `assets/data` is a **dead symlink** into the pre-move path today, so the fix is to point
+them at `../Base/data` explicitly rather than at anything inside the repo (Stage 1 preamble).
+**D8 narrows this problem for config specifically**: because no `*-xonotic.cfg` is ever edited, an
+upstream config refresh is a file replacement rather than a merge (§11.5). The equivalent guarantee for
+art and models does not exist and is not attempted.
 
 **License and attribution.** The content stops being downloaded from upstream and starts being
 redistributed by us. `COPYING` currently describes the code lineage only. Redistributing GPLv2+ and
@@ -1326,3 +1502,178 @@ enough that `git clone --filter=blob:none` belongs in `README.md` as the documen
 **Release durability — settled, see G12.** A tag-protection ruleset on `VortexMaps` blocking tag
 deletion and update, plus `fetch-maps.py --rebuild` compiling from the pinned `maps-src` submodule
 when a fetch fails, so the distributed git sources are the real backup. No external mirror for now.
+
+---
+
+## 11. The Vortex config layer (D8)
+
+Decided 2026-07-29, replacing the config half of the old item 36. **The Xonotic config files are
+never edited. Vortex divergence is an additive `vortex-*.cfg` layer exec'd after them.**
+
+### 11.1 The evidence for doing it this way
+
+There is already one Vortex config divergence, and it has already been lost once.
+
+`ConfigLoader.cs:16` documents the shipped default physics as `physicsBryan.cfg` — "stock Xonotic +
+`sv_step_upspeed_max 1`" — and `planning/parity/cvar-diff-known.yaml:10-11` records how it was
+applied: *"Shipped as physicsBryan.cfg; xonotic-server.cfg execs it instead of physicsX.cfg."* So the
+mechanism was **edit upstream's `xonotic-server.cfg`, and drop a new file beside it.**
+
+Checked against the tree today:
+
+| Claim | Reality |
+|---|---|
+| `physicsBryan.cfg` exists | **No.** 33 `physics*.cfg` files in `xonotic-data.pk3dir`; that is not one of them |
+| `xonotic-server.cfg` execs it | **No.** Line 675 reads `exec physicsX.cfg`, unmodified upstream |
+| the tree carries local edits | **No.** `git status --porcelain -- '*.cfg'` in the clone is empty |
+
+The divergence is gone. It did not survive `assets/data` being re-pointed at a clean upstream
+checkout, and nothing failed loudly when it vanished — the game just quietly runs stock physics while
+two files in the repo describe it as running ours. That is the failure mode a hand-edit against a
+re-cloneable tree always has, and D2 alone does not fix it: committing the tree makes the edit
+*durable*, but it also makes every upstream refresh a merge conflict against files we have no reason
+to own.
+
+The second reason is bigger and shows up in the touch list. Roughly a hundred tracked files name
+`bal-wep-xonotic.cfg`, `balance-xonotic.cfg` and friends — but **almost all of them are provenance
+comments**, of the form `// balance from bal-wep-xonotic.cfg (g_balance_arc_*)` on the weapon classes
+in `src/VortexArena.Common/Gameplay/Weapons/`. Those citations are load-bearing documentation: they
+are how a reader checks a ported value against its upstream source, and they are what
+`tools/parity-cvar-diff.py` and the `planning/parity/` registry are written against. Renaming the
+files would invalidate every one of them for no gain. Keeping the names pristine and layering on top
+costs five call-site edits.
+
+### 11.2 The wiring
+
+**The override mechanism already exists.** `ConfigLoader.Load` takes `params string[] entryFiles` and
+its own doc comment states the semantics: *"Later files override earlier ones (DP `set` semantics) —
+pass a balance variant after the server entry to mod it."* D8 is a policy plus five edits, not new
+machinery.
+
+The load-bearing config sites are exactly these — everything else that names a `*-xonotic.cfg` is a
+comment:
+
+| Site | Today | Change |
+|---|---|---|
+| `ConfigLoader.cs:25` | `ServerEntry = "xonotic-server.cfg"` | unchanged; add `VortexCommonEntry = "vortex-common.cfg"` beside it |
+| `ConfigLoader.cs:28` | `CommonEntry = "xonotic-common.cfg"` | unchanged |
+| `ConfigLoader.cs:31` | `NotificationsEntry = "notifications.cfg"` | unchanged |
+| `ConfigLoader.cs:69` | `LoadServerConfig` → `ServerEntry, NotificationsEntry` | append `VortexCommonEntry` |
+| `MenuState.cs:162` | `"xonotic-client.cfg", "xonotic-server.cfg", "notifications.cfg"` | append `"vortex-common.cfg"` |
+| `MenuState.cs:184`, `:262` | `ExecuteFile("binds-xonotic.cfg")` | follow each with `ExecuteFile("vortex-binds.cfg")` |
+
+Three constraints govern the ordering, and all three are already documented in the code:
+
+- **Before `LockDefaults()` — G15.** `MenuState.Boot` runs the chain, then `LockDefaults()` at
+  `:208`, then `LoadUserConfig()` at `:227`. The layer must run inside the first step so its values
+  become shipped defaults rather than indistinguishable-from-user-typed values.
+- **Binds are a special case and need both call sites.** `binds-xonotic.cfg` is exec'd twice on
+  purpose: `xonotic-client.cfg:603` pulls it in before any `bind` sink is registered, so those binds
+  are dropped, and `MenuState.cs:184` re-execs it after `BindInput.RegisterBindCommands` to actually
+  fill `BindTable`. `MenuState.cs:262` does the same for the settings scratch interpreter.
+  `vortex-binds.cfg` has to follow it at **both** sites or the Vortex binds land in one code path and
+  not the other.
+- **Plain `set`, not `seta`.** Per `ConfigLoader.cs:44-47` the shipped cfgs are the authority on which
+  cvars are archiveable. `seta` in the Vortex layer widens the player's `config.cfg` beyond upstream's
+  set; use it only when deliberately introducing a new archiveable cvar.
+
+A missing layer file is a no-op, not a crash: `ExecuteFile` returns false and increments
+`FilesMissing` (pinned by `ConfigTests.cs:108`). So the layer can ship one file at a time.
+
+### 11.3 The files
+
+Committed to `data/core.pk3dir/`, beside the untouched Xonotic set:
+
+```
+data/core.pk3dir/
+├── xonotic-{client,server,common}.cfg   ← upstream, byte-identical, never edited
+├── balance-xonotic.cfg  bal-wep-xonotic.cfg  binds-xonotic.cfg  physicsX.cfg  …  ← same
+│
+├── vortex-common.cfg      the layer's only entry point; execs the five below
+├── vortex-physics.cfg     replaces the lost physicsBryan.cfg (sv_step_upspeed_max 1, …)
+├── vortex-balance.cfg     g_balance_* divergence
+├── vortex-bal-wep.cfg     per-weapon divergence
+├── vortex-server.cfg      server-side rules, gametype and mutator divergence
+├── vortex-client.cfg      client/video/HUD divergence
+└── vortex-binds.cfg       bind divergence — exec'd separately, see §11.2
+```
+
+One entry point matters: `vortex-common.cfg` execs the rest, so the C# side names a single file and
+adding a sixth layer file later is a content change with no code change.
+
+### 11.4 What moves into the layer
+
+Two things exist today that the layer gives a home to.
+
+**The physics preset — recovered in full, and it is three lines.** Traced 2026-07-29; no archaeology
+needed, because only the config half was ever lost. The C# half is intact and tested.
+
+`physicsBryan` was **`physicsX.cfg` (stock Xonotic) plus one port-added knob**, not a fork of another
+preset. Both `ConfigLoader.cs:17` and `cvar-diff-known.yaml:9` say "stock Xonotic values +
+`sv_step_upspeed_max 1`", and `physicsX.cfg` is the file headed `g_mod_physics Xonotic` /
+"current Xonotic physics". `sv_step_upspeed_max` appears **nowhere in `Base/data/`** — it is a port
+extension, default `-1` = disabled, and `planning/parity/registry/physics-player.yaml:405` records that
+at stock defaults it is "a strict no-op … byte-identical to Base."
+
+So the whole divergence is:
+
+```
+// data/core.pk3dir/vortex-physics.cfg
+set sv_step_upspeed_max 1                       // the step-up launch cap (port extension, off by default)
+set g_physics_bryan_step_upspeed_max 1          // same knob for the client-selectable "bryan" set
+set g_physics_clientselect_options "xonotic nexuiz vecxis quake quake2 quake3 cpma bones xdf warsow bryan"
+```
+
+Upstream's list is the same string without `warsow bryan` (`physics.cfg:10`), so the third line is an
+append rather than a rewrite — worth writing out in full anyway, since a cvar assignment cannot append.
+
+**This is the strongest argument for D8 in the whole plan.** The old mechanism was: copy a 60-line
+upstream preset, hand-edit it, and hand-edit `xonotic-server.cfg` to exec the copy — three touched
+files, two of them upstream, and the result evaporated on the next re-clone. The same divergence as a
+layer is three lines in a file nobody upstream owns, with `xonotic-server.cfg:675` left execing
+`physicsX.cfg` exactly as shipped.
+
+> **Not `physicsSamual.cfg`.** Worth recording because the two are easy to conflate: `physicsSamual.cfg`
+> is `g_mod_physics Samual`, a materially different movement model — `sv_maxspeed` 420/235 against
+> physicsX's 360/360, `sv_accelerate` 6 against 15, `sv_airaccelerate` 6 against 2, `sv_jumpvelocity`
+> 300 against 260, `sv_stepheight` 34 against 31, and air-strafe and air-control zeroed out entirely.
+> Shipping it would change how the game plays. The name overlaps for two innocent reasons: `physicsX.cfg`
+> carries a Samual-derived `sv_stepheight 31` with the comment "Samual: 31 (just below 32, keeping things
+> smooth without allowing 32qu steps)", so Samual is cited *inside* stock; and upstream defines no
+> `g_physics_samual_*` family at all, so `bryan` was added to the selectable list alongside `warsow`
+> rather than replacing a samual entry.
+
+The preset framework itself never broke: `PhysicsPreset.Resolve` handles `g_physics_<set>_*` with a
+fallback to the global cvar (`PhysicsPreset.cs:73-76`), and `PhysicsPresetTests.cs:238-252` already pins
+`g_physics_bryan_step_upspeed_max = 1` end to end. Only the `.cfg` wiring that fed it went missing,
+which is exactly the half D8 makes durable.
+
+**The C#-side video overrides.** `MenuState.cs:190-200` sets `vid_fullscreen 2` and `vid_vsync 0` in
+code, with a comment explaining that these "override Xonotic's SHIPPED cfg values" and must run before
+`LockDefaults`. That is precisely what `vortex-client.cfg` is for, and config is the better home:
+visible to the player, greppable, changeable without a rebuild, and covered by the same
+`FilesExecuted`/`CvarsAssigned` accounting as everything else. Move them, keep the comment's reasoning
+with them, and leave the C# path only for values that genuinely cannot be expressed as a cvar
+assignment.
+
+### 11.5 What this does to the parity tooling
+
+It improves the signal, and one known-difference entry has to be rewritten.
+
+`planning/parity/cvar-diff-known.yaml` currently encodes the hand-edit as expected chain divergence:
+`physicsX.cfg` Base-only, `physicsBryan.cfg` port-only. Under D8 the Xonotic chain stops diverging at
+all — `xonotic-server.cfg` execs `physicsX.cfg` exactly as upstream does — so those entries are
+replaced by a single, stronger invariant:
+
+> The `*-xonotic.cfg` chain matches `Base/data/` byte-for-byte. Every port-side cvar difference is
+> attributable to a `vortex-*.cfg` file.
+
+That is a cheaper check than diffing an edited chain and a better one: it turns "which of these
+hundreds of cvar differences did we mean?" into "the diff is the layer, and the layer is six files
+you can read." It also makes an upstream content refresh a file replacement rather than a merge, which
+is the thing §10's "Upstream content updates" open item was worried about.
+
+Add both as gates in `ci/ci.sh` alongside the §8.4 checks:
+
+- no `*-xonotic.cfg` under `data/core.pk3dir/` differs from the pinned upstream reference;
+- booting once with a clean profile writes no `vortex-*.cfg` cvar into `config.cfg` (**G15**).

@@ -118,14 +118,40 @@ bitset if a bigger match shows it on a profile. No portal-flood vis compiler, at
 | ID | Item | Status |
 |---|---|---|
 | **F1** | **Face layer stacks.** A face is a stack of layers, each with its own material, projection and blend, instead of one material. Persisted, replicated, rendered as a `next_pass` chain, undo-safe. Single-layer faces write the bytes they always did. | **done** (`82c8b27`) |
-| **F2** | **Per-vertex blend weights.** The follow-on to F1: `VmapBlend.Vertex` layers currently draw at full strength because the mesh carries no weight channel. Needs weights on `CUSTOM0` (COLOR is the bake's, on the world mesh), a shader that reads them, and the format already has `WeightChannel`. | open |
-| **F3** | **A weight-painting tool.** What makes F2 usable: a `ToolMode` that paints weights per vertex, one op, replicates for free through the existing choke point. | open |
+| **F2** | **Blend maps — paintable layer weights.** *Redesigned 2026-07-29, see below.* A weight TEXTURE with its own planar projection, sampled per-texel, not a per-vertex weight. | open |
+| **F3** | **The paint tool.** What makes F2 usable: a brush that paints into the blend map, sized and softened, one stroke = one op. | open |
 | **F4** | **Brush entities can be created.** Nothing turns a selection into a `func_door` — they import and their keys edit, but the editor authors only static geometry and point entities, and every dynamic element in a Xonotic map is a brush entity. An op assigning selected brush/patch ids to a new entity; the ownership plumbing exists everywhere else already. | open |
 | **F5** | **CSG: subtract.** Radiant's carving workflow. No workaround today. | open |
 | **F6** | **CSG: merge and hollow/room.** Lower value than F5; hollow is a convenience over six clipped brushes. | open |
-| **F7** | **Texture lock.** `TranslateBrushesOp` moves planes and leaves the projection alone, so a moved brush slides its texture and alignment work is lost on every move. `PasteOp` already offsets the projection with the geometry, so the behaviour is inconsistent as well as wrong. Wants a cvar; default ON. | open |
+| **F7** | **Texture lock.** *(done — `f50c2a9`)*  `TranslateBrushesOp` moves planes and leaves the projection alone, so a moved brush slides its texture and alignment work is lost on every move. `PasteOp` already offsets the projection with the geometry, so the behaviour is inconsistent as well as wrong. Wants a cvar; default ON. | open |
 | **F8** | **Grouping and layers.** Named sets of objects, hidden/shown and selected together. | open |
+| **F10** | **`.map` export must flatten a layer stack** — tracked as P2. | see P2 |
 | **F9** | **Region / hide / isolate.** Narrow what you are working on — and what gets rebuilt — on a 2666-brush map. The one of F8/F9 that matters more. | open |
+
+### F2 — why blend weights are a texture, not a vertex attribute
+
+The first design put the weight on the mesh VERTEX, with `VmapFaceLayer.WeightChannel` indexing R/G/B/A of a
+custom vertex channel. That is how terrain systems do it, and it is wrong here for a reason that only shows up
+when you try to use it: **a brush face is a convex polygon with as few as three vertices.** A flat wall would
+offer four control points to "paint" with. Terrain meshes get away with it because they are already a dense
+grid; brush faces are not, and subdividing them to gain paint resolution would mean inventing a second,
+denser geometry representation purely so the painting had somewhere to live.
+
+So the weights live in a **blend map**: an RGBA texture (up to four layer weights) with its own planar
+projection over the face — the same trick `VmapTexProjection` already uses for diffuse, so brushes need no UV
+unwrap. Painted at texel resolution, sampled in the shader, resolution set by an author-controlled
+texels-per-unit the way a lightmap sample size is.
+
+Consequences worth writing down before building it:
+
+- **It is SOURCE data, not derived.** The mapper painted it, so it belongs in the `.vmap` package, not the P6
+  build cache. That means the package gains binary image data for the first time.
+- **Undo cannot snapshot it the way it snapshots a brush.** A journal entry holding a full texture per stroke
+  would be enormous. Strokes want to be the undo unit, replayed or inverted, rather than the bitmap.
+- **Replication travels strokes, not bitmaps.** Same reasoning: an op carrying a whole blend map would not fit
+  the wire (and the wire already caps a line).
+- **`WeightChannel` survives the redesign** — it still selects which of the four channels a layer reads. Only
+  where the weight comes FROM changes.
 
 ---
 
@@ -139,7 +165,7 @@ bitset if a bigger match shows it on a profile. No portal-flood vis compiler, at
 | **T4** | **Scroll wheel drives camera speed.** Free-fly speed is what you adjust constantly; grid size is not. Move grid size behind a held **G** — tap G to toggle the grid, hold G and scroll to change the alignment grid (T3's, not the visual one). | open |
 | **T5** | **Snap to adjacent brush / plane.** Toggleable, with a snap distance you can raise and lower. Snap candidates: nearby face planes, edges and vertices of neighbouring brushes, so things line up without hand-typing coordinates. The measure tool's picking already finds nearby geometry and is the obvious starting point. | open |
 | **T6** | **Texture browser thumbnails.** It is a name list grouped by path segment. Nobody picks a wall texture from strings. | open |
-| **T7** | **Entity scaling.** `ScaleSelectionOp` takes brush and patch ids only. A brush entity should scale the geometry it owns (like `MoveEntitiesOp` resolves its brushes); a point entity should write a `scale`/`modelscale` key. See B4. | open |
+| **T7** | **Entity scaling.** *(done — `348c16d`)*  `ScaleSelectionOp` takes brush and patch ids only. A brush entity should scale the geometry it owns (like `MoveEntitiesOp` resolves its brushes); a point entity should write a `scale`/`modelscale` key. See B4. | open |
 
 ---
 
@@ -150,8 +176,8 @@ bitset if a bigger match shows it on a profile. No portal-flood vis compiler, at
 | **B1** | **Entities would not move.** `SelectedBrushIds()` returned a phantom brush id 0 for entity and patch selections, so the entity-move gate (`SelectedBrushIds().Count == 0`) never opened; the drag fell through to a switch with no `Entity` case and returned false silently. | **fixed** (`d48a6c8`) |
 | **B2** | **Scale said "that would break the brush" for an entity.** Same phantom 0 — `ScaleSelectionOp` got brush id 0, `FindBrush(0)` failed, and the op reported invalid geometry for a brush that was never selected. The nonsense message is gone. | **fixed** (`d48a6c8`) |
 | **B3** | **Items sit wrong on patches (Stormkeep mega health).** Root-caused: patch **collision** tessellates at 3 subdivisions (`BspCollisionBuilder.PatchCollisionSubdivisions`) while **render** uses 8 (`BezierPatch.Subdivisions`). On a curve the coarse hull deviates from the drawn surface, so a dropped item rests at the wrong height. Measured on the 15 curved patches under the mega health at (1696, −256, −32) in `stormkeep.map`: **worst deviation 6.49 units**. DP builds collision from the same subdivision it renders, which is why Base looks right. Fix wants to be curvature-adaptive and walkable-biased rather than a flat bump to 8 — flat patches are exact at any level, and uniform 8 is ~7× the slab count (~12k → ~85k on stormkeep). | open, diagnosed |
-| **B4** | **Scaling an entity still does nothing.** B2 removed the wrong message; the capability was never there. Tracked as T7. | open |
-| **B5** | **No texture lock** — see F7. Filed as a feature, but a mapper will report it as a bug. | open |
+| **B4** | **Scaling an entity still does nothing.** *(fixed — `348c16d`)*  B2 removed the wrong message; the capability was never there. Tracked as T7. | open |
+| **B5** | **No texture lock** — see F7. *(fixed — `f50c2a9`)* Filed as a feature, but a mapper will report it as a bug. | open |
 
 *Fixed during the 2026-07-29 review and listed for the record: a remote OOM in the op codec, packets corrupted
 by any sizeable paste, a guest that could not paste, shift-multiselect deselecting instead of adding, every

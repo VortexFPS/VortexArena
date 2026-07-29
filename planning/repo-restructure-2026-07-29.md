@@ -463,9 +463,10 @@ rather than a `filter-repo` run.
 ### 6.1 Gotcha register
 
 Every trap this plan knows about, labelled so the stage items can point at them. G1 through G7 are
-one-shot migration hazards; G8 through G15 are standing hazards, or hazards that outlive the
+one-shot migration hazards; G8 through G16 are standing hazards, or hazards that outlive the
 migration. G13 and G14 came out of the completeness pass on 2026-07-29 and are the reason §6.2
-exists; G15 came out of the readiness pass the same day, with D8.
+exists; G15 came out of the readiness pass the same day, with D8; G16 came out of executing
+stage 1 and is the only one here that was found by being bitten rather than by review.
 
 ---
 
@@ -825,6 +826,35 @@ project's record of that kind of choice, so:
   and has accumulated loose `*.log` files at its top level alongside the worktree copies. Delete the
   copies whose branches are merged; only a worktree on one of G8's seven surviving branches needs
   `docs/BRANCH-MIGRATION.md`.
+
+---
+
+**G16 — An absolute-path symlink in build output silently breaks the host build after a repo move.**
+
+- **Status:** **Hit and fixed 2026-07-29.** Recorded because the diagnosis was misleading, not because
+  the fix was hard.
+- **Breaks:** `dotnet build XonoticGodot.csproj` — the documented host build command — with
+  `MSB3552: Resource file "**/*.resx" cannot be found`, which names neither the real file nor the real
+  cause. The test project is unaffected, so the whole suite can be green while the game does not build.
+- **Why:** `dist/windows-client/assets/data` was a symlink to
+  `Projects/Xonotic/XonoticGodot/assets/data`, written by an earlier `package.sh` run and left dangling
+  by the repo move. MSBuild's `FileMatcher` expands the SDK's default `**/*.resx` glob by walking the
+  project root; the walk throws on the dangling reparse point, and MSBuild's response is to **give up
+  and pass the literal glob through as if it were a filename**. `-v:diag` says so plainly:
+  *"An exception occurred while expanding a fileSpec with globs … assuming it is a file name."*
+- **The trap in diagnosing it:** the failure appeared in the same session that committed `data/`, and a
+  worktree at the previous commit built fine — which looks like proof that `data/` caused it. It is not:
+  a fresh worktree has no `dist/` at all, because `dist/` is gitignored build output. Two variables
+  changed, not one.
+- **`DefaultItemExcludes` does not help**, which is worth knowing before reaching for it: excludes are
+  applied *after* the include glob expands, so they cannot prevent the walk that throws.
+- **Detect:** `find . -xtype l -not -path './.git/*'` — expect nothing. Cheap, and it catches the whole
+  class.
+- **Do:** delete the dangling link. More generally, treat `dist/` as suspect after any move: it is 1.9 GB
+  of stale output here and nothing regenerates it but `tools/package.sh`.
+- **Family resemblance:** this is the fourth thing the repo move broke silently, after the 42 test paths
+  (G13), the export template (G10) and the `assets/data` symlink itself. All four were absolute paths
+  baked into something that outlives a checkout.
 
 ---
 

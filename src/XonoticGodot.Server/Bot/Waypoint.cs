@@ -253,6 +253,32 @@ public sealed class WaypointNetwork
     }
 
     /// <summary>
+    /// Rebuild the whole node list to <paramref name="count"/> entries — the undo journal's restore path.
+    ///
+    /// Two passes on purpose. Every node must exist before any link is wired, because a link holds a
+    /// REFERENCE and a snapshot's links are stored as indices into the list being rebuilt; wiring as we go
+    /// would mean half the targets did not exist yet.
+    /// </summary>
+    public void ReplaceAll(
+        int count,
+        Action<int, Waypoint> fill,
+        Action<int, Waypoint, IReadOnlyList<Waypoint>> link)
+    {
+        ArgumentNullException.ThrowIfNull(fill);
+        ArgumentNullException.ThrowIfNull(link);
+
+        _nodes.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            var wp = new Waypoint { Index = i };
+            fill(i, wp);
+            _nodes.Add(wp);
+        }
+        for (int i = 0; i < count; i++)
+            link(i, _nodes[i], _nodes);
+    }
+
+    /// <summary>
     /// Remove a waypoint from the graph, unhooking every link that pointed at it (the editor's delete).
     ///
     /// Two things have to happen together or the graph is left corrupt. Every INCOMING link must go: a link is

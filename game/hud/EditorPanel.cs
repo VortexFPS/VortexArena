@@ -229,6 +229,11 @@ public partial class EditorPanel : HudPanel
                     lines.Add(($"cur  {Coord(c.Hover.Point)}", dim));
                 }
 
+                // Unsaved work gets its own line, in warning colour. It is the one piece of editor state whose
+                // cost is unrecoverable, so it does not share a line with anything.
+                if (c.Session is { IsDirty: true })
+                    lines.Add(("UNSAVED CHANGES   (editor_save)", new Color(1f, 0.75f, 0.3f)));
+
                 if (c.Session is { CanUndo: true } undoable)
                     lines.Add(($"[Ctrl+Z] undo: {undoable.UndoLabel}", dim));
             }

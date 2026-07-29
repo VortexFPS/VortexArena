@@ -70,7 +70,7 @@ public sealed class GameWorld
     /// <summary>The default gametype NetName when none is requested (QC fallback to deathmatch).</summary>
     public const string DefaultGameType = "dm";
 
-    private readonly IReadOnlyList<EntityDict> _mapEntities;
+    private IReadOnlyList<EntityDict> _mapEntities;
 
     /// <summary>The static map geometry this world traces against (QC the BSP collision hull).</summary>
     public CollisionWorld Collision { get; }
@@ -4574,10 +4574,17 @@ public sealed class GameWorld
     /// <see cref="SpawnSystem.SelectSpawnPoint"/> finds them via <c>FindByClass</c> precisely because we keep
     /// them here. "worldspawn" is handled specially via <see cref="ApplyWorldspawn"/> (it configures globals).
     /// </summary>
+    /// <summary>
+    /// Entities produced by the last <see cref="SpawnMapEntities"/> run, so the editor's rebuild can remove
+    /// exactly what the map put there and leave players, projectiles and anything else alone.
+    /// </summary>
+    private readonly List<Entity> _spawnedMapEntities = new();
+
     private void SpawnMapEntities()
     {
         SpawnedEntityCount = 0;
         _unhandledClasses.Clear();
+        _spawnedMapEntities.Clear();
 
         // QC SV_OnEntityPreSpawnFunction gate: an entity whose gametypefilter (or Q3/QL compat keys) excludes
         // it for the active gametype is deleted before its spawnfunc runs. The context (gametype short name,
@@ -4615,6 +4622,8 @@ public sealed class GameWorld
                 continue;
             }
 
+            _spawnedMapEntities.Add(e);
+
             if (SpawnFuncs.TrySpawn(cls, e))
             {
                 SpawnedEntityCount++;
@@ -4633,6 +4642,32 @@ public sealed class GameWorld
                     _unhandledClasses.Add(cls);
             }
         }
+    }
+
+    /// <summary>
+    /// Replace the map's entity set and respawn it — the editor's EDIT to PLAYTEST reconciliation
+    /// (design doc §11.9).
+    ///
+    /// The document is entity truth while editing and the server's live set is what PLAYTEST must show, so the
+    /// two are brought together at the transition rather than kept in step edit by edit. Respawning wholesale
+    /// rather than diffing is correct by construction: every filter, mutator veto and spawnfunc side effect
+    /// runs exactly as it does on a fresh map load, which a hand-written delta would have to reproduce and
+    /// would eventually get wrong.
+    ///
+    /// Only entities THIS spawned are removed. Players, projectiles, and anything a gametype created stay put,
+    /// so dropping into playtest does not reset the session around you.
+    /// </summary>
+    public void RespawnMapEntities(IReadOnlyList<EntityDict> entities)
+    {
+        ArgumentNullException.ThrowIfNull(entities);
+
+        foreach (Entity e in _spawnedMapEntities)
+            if (e is not null && !e.IsFreed)
+                Api.Entities.Remove(e);
+        _spawnedMapEntities.Clear();
+
+        _mapEntities = entities;
+        SpawnMapEntities();
     }
 
     /// <summary>

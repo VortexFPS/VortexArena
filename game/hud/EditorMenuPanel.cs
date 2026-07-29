@@ -304,6 +304,15 @@ public partial class EditorMenuPanel : HudPanel
 
         rows.Add(new Row
         {
+            Label = "Save map",
+            // Unsaved work is the one state a mapper must never be unsure about, so the row says it outright
+            // rather than leaving them to guess from a title bar.
+            Detail = c?.Session is { IsDirty: true } ? "UNSAVED CHANGES" : "saved",
+            Command = "editor_save",
+        });
+
+        rows.Add(new Row
+        {
             Label = "Playtest",
             Detail = BoundKey("editor_playtest"),
             Command = "editor_playtest",

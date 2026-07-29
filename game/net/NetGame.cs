@@ -5866,6 +5866,13 @@ public sealed partial class NetGame : Node3D
             // inverted state whenever the release event went to a focused control instead of here.
             _editor.SnapInverted = editorFreeFly && Input.IsKeyPressed(Key.Ctrl);
 
+            // (B2) The EDIT -> PLAYTEST edge: reconcile the live entity set with the document, so what you
+            // playtest is what you just authored. Edge-triggered, not polled — a respawn every frame while
+            // playtesting would reset the map continuously.
+            if (IsEditorGametype && _wasEditing && !editorFreeFly)
+                ReconcileEntitiesForPlaytest();
+            _wasEditing = editorFreeFly;
+
             // Session opens with the GAMETYPE, not with the first free-fly frame: the world swap to the
             // document happens before the player ever sees the compiled BSP, and playtest is in the
             // document from the first spawn.
@@ -7108,13 +7115,13 @@ public sealed partial class NetGame : Node3D
             switch (key.Keycode)
             {
                 case Key.Z when key.CtrlPressed && key.ShiftPressed:
-                    _editor.Redo();
+                    EditorRedo();
                     return true;
                 case Key.Z when key.CtrlPressed:
-                    _editor.Undo();
+                    EditorUndo();
                     return true;
                 case Key.Y when key.CtrlPressed:
-                    _editor.Redo();
+                    EditorRedo();
                     return true;
                 case Key.Delete:
                     _editor.DeleteSelection();
@@ -7550,8 +7557,8 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_mode", CmdEditorMode);
         interp.RegisterCommand("editor_select", CmdEditorSelect);
         interp.RegisterCommand("editor_menu", CmdEditorMenu);
-        interp.RegisterCommand("editor_undo", _ => { if (_editor?.Undo() == true) RefreshEditorWorld(); });
-        interp.RegisterCommand("editor_redo", _ => { if (_editor?.Redo() == true) RefreshEditorWorld(); });
+        interp.RegisterCommand("editor_undo", _ => EditorUndo());
+        interp.RegisterCommand("editor_redo", _ => EditorRedo());
         interp.RegisterCommand("editor_ortho", _ => ToggleEditorOrtho());
         interp.RegisterCommand("editor_ortho_axis", _ => _editorOrtho?.CycleAxis());
         interp.RegisterCommand("editor_wire", _ => Vmap.EditorOrthoView.CycleWireAlpha());
@@ -7562,6 +7569,7 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_shader", CmdEditorShader);
         interp.RegisterCommand("editor_waypoint", CmdEditorWaypoint);
         interp.RegisterCommand("editor_patch", CmdEditorPatch);
+        interp.RegisterCommand("editor_save", CmdEditorSave);
         Vmap.EditorBinds.RegisterCommands(interp);
 
         // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
@@ -8237,8 +8245,14 @@ public sealed partial class NetGame : Node3D
                         }
                         : XonoticGodot.Server.Bot.WaypointFlags.None;
 
-                    XonoticGodot.Server.Bot.Waypoint wp =
-                        XonoticGodot.Server.Bot.WaypointEditor.Place(net, at, flags);
+                    XonoticGodot.Server.Bot.Waypoint? wp = null;
+                    _waypointJournal.Apply(net, "Place waypoint", () =>
+                    {
+                        wp = XonoticGodot.Server.Bot.WaypointEditor.Place(net, at, flags);
+                        return true;
+                    });
+                    if (wp is null)
+                        return;
 
                     // A jump or support waypoint is only half a statement: Base finishes it by spawning a
                     // second waypoint, which becomes the destination. Remember it so the next placement links.
@@ -8266,7 +8280,8 @@ public sealed partial class NetGame : Node3D
                         XonoticGodot.Common.Diagnostics.Log.Info("waypoint: none under the crosshair");
                         return;
                     }
-                    XonoticGodot.Server.Bot.WaypointEditor.Remove(net, wp);
+                    _waypointJournal.Apply(net, "Remove waypoint",
+                        () => XonoticGodot.Server.Bot.WaypointEditor.Remove(net, wp));
                     return;
                 }
 
@@ -8290,16 +8305,40 @@ public sealed partial class NetGame : Node3D
                         return;
                     }
 
-                    if (verb == "hardwire")
-                        XonoticGodot.Server.Bot.WaypointEditor.Hardwire(net, _pendingWaypoint, wp);
-                    else
-                        XonoticGodot.Server.Bot.WaypointEditor.LinkPending(net, _pendingWaypoint, wp);
+                    XonoticGodot.Server.Bot.Waypoint from = _pendingWaypoint;
+                    _waypointJournal.Apply(net, verb == "hardwire" ? "Hardwire link" : "Link waypoints", () =>
+                    {
+                        if (verb == "hardwire")
+                        {
+                            XonoticGodot.Server.Bot.WaypointEditor.Hardwire(net, from, wp);
+                            return true;
+                        }
+                        return XonoticGodot.Server.Bot.WaypointEditor.LinkPending(net, from, wp);
+                    });
                     _pendingWaypoint = null;
                     return;
                 }
 
                 case "relinkall":
-                    XonoticGodot.Server.Bot.WaypointEditor.RelinkAll(net);
+                    // Relink re-derives every link through a tracewalk, so there is no inverse to apply — only
+                    // the previous graph to restore, which is exactly what the snapshot journal is for.
+                    _waypointJournal.Apply(net, "Relink all waypoints", () =>
+                    {
+                        XonoticGodot.Server.Bot.WaypointEditor.RelinkAll(net);
+                        return true;
+                    });
+                    return;
+
+                case "undo":
+                    XonoticGodot.Common.Diagnostics.Log.Info(_waypointJournal.Undo(net)
+                        ? "waypoint: undone"
+                        : "waypoint: nothing to undo");
+                    return;
+
+                case "redo":
+                    XonoticGodot.Common.Diagnostics.Log.Info(_waypointJournal.Redo(net)
+                        ? "waypoint: redone"
+                        : "waypoint: nothing to redo");
                     return;
 
                 case "unreachable":
@@ -8336,8 +8375,49 @@ public sealed partial class NetGame : Node3D
         });
     }
 
+    /// <summary>
+    /// One Undo for the whole editor. The geometry journal and the waypoint journal are separate structures
+    /// for good reasons, but a mapper pressing Ctrl+Z does not know or care which of them their last edit
+    /// went into — so geometry is tried first, and the waypoint graph picks it up when there was no geometry
+    /// step to roll back.
+    /// </summary>
+    private void EditorUndo()
+    {
+        if (_editor?.Undo() == true)
+        {
+            RefreshEditorWorld();
+            return;
+        }
+        WithWaypointNetwork(net =>
+        {
+            if (_waypointJournal.Undo(net))
+                XonoticGodot.Common.Diagnostics.Log.Info("waypoint: undone");
+        });
+    }
+
+    private void EditorRedo()
+    {
+        if (_editor?.Redo() == true)
+        {
+            RefreshEditorWorld();
+            return;
+        }
+        WithWaypointNetwork(net =>
+        {
+            if (_waypointJournal.Redo(net))
+                XonoticGodot.Common.Diagnostics.Log.Info("waypoint: redone");
+        });
+    }
+
     /// <summary>The half-made link: a jump/support source, or the first end of a hardwire.</summary>
     private XonoticGodot.Server.Bot.Waypoint? _pendingWaypoint;
+
+    /// <summary>
+    /// Undo/redo for the waypoint graph. Separate from the geometry journal because the graph is not in the
+    /// document — it lives on the server and saves to its own Base-compatible files — but a mapper reaching
+    /// for undo does not care which of those is true, so the editor's own Undo reaches it too.
+    /// </summary>
+    private readonly XonoticGodot.Server.Bot.WaypointJournal _waypointJournal = new();
 
     /// <summary>
     /// Run <paramref name="work"/> against the server's waypoint graph under the sim gate.
@@ -8400,6 +8480,7 @@ public sealed partial class NetGame : Node3D
                 System.IO.Path.Combine(dir, $"{_map}.waypoints.cache"), net.SaveLinksToText(stamp));
             System.IO.File.WriteAllText(
                 System.IO.Path.Combine(dir, $"{_map}.waypoints.hardwired"), net.SaveHardwiredLinksToText());
+            _waypointJournal.MarkSaved();
 
             XonoticGodot.Common.Diagnostics.Log.Info(
                 $"waypoint: wrote {net.Nodes.Count} nodes to {dir}\\{_map}.waypoints (+ .cache, .hardwired)");
@@ -8743,6 +8824,136 @@ public sealed partial class NetGame : Node3D
             ? $"Patch #{p.Id}  ({p.Width}x{p.Height})"
             : "Patch";
         dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, what, rows);
+    }
+
+    /// <summary>
+    /// <c>editor_save [name]</c> — write the edited document back to a <c>.vmap</c> package.
+    ///
+    /// Writes to the editor's user directory rather than over the source: the map may have come out of a
+    /// read-only <c>.pk3</c>, and an editor that overwrites shipped game content is doing something the mapper
+    /// did not ask for. Passing a name saves under that name instead, which is how you keep the original.
+    /// </summary>
+    private void CmdEditorSave(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session } ed)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor_save: no editing session");
+            return;
+        }
+
+        string name = args.Count > 1 ? SanitizeMapName(args[1]) : _map;
+        if (name.Length == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor_save: no map name");
+            return;
+        }
+
+        try
+        {
+            string dir = Vmap.VmapService.EditorOutputDirectory();
+            string path = System.IO.Path.Combine(dir, name + XonoticGodot.Formats.Vmap.VmapPackage.Extension);
+            ed.Save(path);
+
+            // The mapinfo is part of the map, so a save that wrote geometry and left stale metadata behind
+            // would be half a save.
+            if (_mapInfo is { } info && _mapInfoDirty)
+                SaveMapInfo(info);
+
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"editor: saved {session.Document.Brushes.Count} brushes, {session.Document.Patches.Count} patches,"
+                + $" {session.Document.Entities.Count} entities to {path}");
+        }
+        catch (Exception ex)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"editor_save: {ex.Message}");
+        }
+    }
+
+    /// <summary>Strip path separators from a console-supplied name so a save cannot escape its directory.</summary>
+    private static string SanitizeMapName(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return "";
+        string name = raw.Trim().Replace('\\', '/');
+        int slash = name.LastIndexOf('/');
+        if (slash >= 0)
+            name = name[(slash + 1)..];
+        foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+            name = name.Replace(c.ToString(), string.Empty);
+        return name.Trim('.');
+    }
+
+    /// <summary>
+    /// True while the local client was free-flying on the previous frame, so the EDIT to PLAYTEST edge can be
+    /// detected rather than polled.
+    /// </summary>
+    private bool _wasEditing = true;
+
+    /// <summary>
+    /// Bring the server's live entity set up to date with the edited document (design doc §11.9).
+    ///
+    /// EDIT draws the DOCUMENT's entities and PLAYTEST shows the SERVER's, so the two are reconciled at the
+    /// transition rather than kept in step edit by edit — one sync point instead of a path threaded through
+    /// every op, at the moment a rebuild is already expected because the player is being re-placed anyway.
+    ///
+    /// Runs under the sim gate: sv_threaded defaults on, so the worker owns the world while this runs on the
+    /// main thread.
+    /// </summary>
+    private void ReconcileEntitiesForPlaytest()
+    {
+        if (_editor?.Document is not { } doc || _serverWorld is not { } world)
+            return;
+
+        List<EntityDict> dicts = BuildEntityDictsFromDocument(doc);
+
+        object? gate = _server?.SimGate;
+        if (gate is null)
+            world.RespawnMapEntities(dicts);
+        else
+            lock (gate)
+                world.RespawnMapEntities(dicts);
+
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            $"editor: playtest rebuilt {dicts.Count} map entities from the document");
+    }
+
+    /// <summary>
+    /// Convert the document's entities into the spawn dictionaries the world loads a map from.
+    ///
+    /// Straight key/value passthrough, because that is exactly what the BSP entity lump gave the world in the
+    /// first place: the document holds the same fields, and anything the editor does not understand rides
+    /// along untouched rather than being dropped on the way through.
+    /// </summary>
+    private static List<EntityDict> BuildEntityDictsFromDocument(XonoticGodot.Formats.Vmap.VmapDocument doc)
+    {
+        var dicts = new List<EntityDict>(doc.Entities.Count);
+        foreach (XonoticGodot.Formats.Vmap.VmapEntity e in doc.Entities)
+        {
+            if (string.IsNullOrEmpty(e.ClassName))
+                continue;
+
+            var dict = new EntityDict { ClassName = e.ClassName };
+            foreach (KeyValuePair<string, string> kv in e.Fields)
+                dict.Fields[kv.Key] = kv.Value;
+
+            dict.Origin = e.Origin();
+            if (e.Fields.TryGetValue("angles", out string? angles)
+                && XonoticGodot.Formats.Vmap.VmapEntity.TryParseVector(angles, out System.Numerics.Vector3 pyr))
+            {
+                dict.Angles = pyr;
+            }
+            else if (e.Fields.TryGetValue("angle", out string? angle)
+                     && float.TryParse(angle, System.Globalization.NumberStyles.Float,
+                         System.Globalization.CultureInfo.InvariantCulture, out float yaw))
+            {
+                // The scalar `angle` key is yaw only — pitch and roll stay zero, matching how the entity lump
+                // is read on a normal map load.
+                dict.Angles = new System.Numerics.Vector3(0f, yaw, 0f);
+            }
+
+            dicts.Add(dict);
+        }
+        return dicts;
     }
 
     /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>

@@ -18,6 +18,17 @@ namespace XonoticGodot.Engine.Collision;
 public static class VmapCollisionBuilder
 {
     /// <summary>
+    /// How far a curved patch's collision hull may sit from the surface the renderer draws, in world units
+    /// (backlog B3). Matches <c>BspCollisionBuilder</c>'s tolerance, because a patch should collide the same
+    /// way whether it arrived from a compiled map or from the document.
+    /// </summary>
+    private const float PatchCollisionTolerance = 1.0f;
+
+    /// <inheritdoc cref="BspCollisionBuilder"/>
+    /// <summary>The looser tolerance a near-vertical patch gets — same reasoning as the BSP builder's.</summary>
+    private const float PatchWallTolerance = 6.0f;
+
+    /// <summary>
     /// Build the static world (brushes not owned by any brush entity) plus one submodel per brush entity.
     /// Brush entities that lack a <c>model</c> key are assigned the next free <c>"*N"</c> name, and the key is
     /// written back onto the entity so the server's <c>setmodel</c> resolves it.
@@ -220,8 +231,22 @@ public static class VmapCollisionBuilder
 
         var doc = new VmapDocument();
         doc.Patches.Add(patch);
+
+        // Subdivision measured from the patch, not inherited (backlog B3). The editor's RENDER subdivision is
+        // cvar-driven (cl_editor_patch_subdiv, 2..24) while this used the fixed default, so the two disagreed
+        // about where a curve is the moment a mapper touched that cvar — the same class of bug as the
+        // collision/render mismatch on the BSP side, just harder to notice because it depends on a setting.
+        // Asking the geometry instead makes collision accurate on its own terms and independent of how
+        // finely anyone happens to be drawing.
+        float horizontality = XonoticGodot.Formats.Bsp.BezierPatch.Horizontality(
+            patch.Controls, patch.Width, patch.Height);
+        float tolerance = float.Lerp(PatchWallTolerance, PatchCollisionTolerance, horizontality);
+        int subdivisions = XonoticGodot.Formats.Bsp.BezierPatch.SubdivisionsFor(
+            patch.Controls, patch.Width, patch.Height, tolerance);
+
         // Sky-flagged patches still need collision, so ask for them explicitly.
-        IReadOnlyList<VmapSurface> surfaces = VmapGeometryBuilder.BuildSurfaces(doc, includeSky: true);
+        IReadOnlyList<VmapSurface> surfaces =
+            VmapGeometryBuilder.BuildSurfaces(doc, includeSky: true, patchSubdivisions: subdivisions);
 
         int contents = SuperContents.FromQ3Native(patch.ContentFlags != 0 ? patch.ContentFlags : Q3Contents.Solid);
         string? texture = NullIfEmpty(patch.Material);

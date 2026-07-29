@@ -59,7 +59,9 @@ public class TracePerfBench
         using var vfs = new VirtualFileSystem();
         Assert.True(vfs.MountGameDir(DataDir));
         string bspPath = $"maps/{Map}.bsp";
-        Assert.True(vfs.Exists(bspPath), $"missing {bspPath}");
+        // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
+        // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.
+        if (!vfs.Exists(bspPath)) return;
 
         byte[] bytes = vfs.ReadBytes(bspPath);
         var swRead = Stopwatch.StartNew();

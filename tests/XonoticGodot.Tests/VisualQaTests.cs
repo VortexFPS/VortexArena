@@ -350,7 +350,11 @@ public class VisualQaTests
 
         var texts = vfs.Find("scripts/", "shader").Select(vfs.ReadText);
         IReadOnlyDictionary<string, ShaderDef> shaders = Q3ShaderParser.ParseFiles(texts);
-        Assert.True(shaders.Count >= 500,
-            $"expected 500+ compiled materials from the stock shader scripts, got {shaders.Count}");
+        // Floor depends on whether the fetched map packs are present — they carry about half the
+        // stock shader scripts. See restructure D7.
+        int floor = TestPaths.HasMaps ? 500 : 200;
+        Assert.True(shaders.Count >= floor,
+            $"expected {floor}+ compiled materials from the stock shader scripts, got {shaders.Count} "
+            + $"(maps present: {TestPaths.HasMaps})");
     }
 }

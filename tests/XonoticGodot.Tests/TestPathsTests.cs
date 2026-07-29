@@ -30,6 +30,17 @@ public class TestPathsTests
     [Fact]
     public void Data_Resolves_When_A_Content_Tree_Is_Present()
     {
+        // VA_DATA_DIR is the documented first resolution step, so when it is set it IS the expectation —
+        // comparing against the repo-relative tree would fail a legitimate override.
+        string? fromEnv = Environment.GetEnvironmentVariable("VA_DATA_DIR");
+        if (!string.IsNullOrWhiteSpace(fromEnv))
+        {
+            Assert.Equal(
+                Path.GetFullPath(fromEnv).TrimEnd(Path.DirectorySeparatorChar),
+                Path.GetFullPath(TestPaths.Data).TrimEnd(Path.DirectorySeparatorChar));
+            return;
+        }
+
         string? repo = RepoRoot();
         if (repo is null)
             return;

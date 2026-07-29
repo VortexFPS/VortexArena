@@ -16,11 +16,20 @@ namespace XonoticGodot.Game.Menu;
 /// </summary>
 public partial class DialogWinner : MenuScreen
 {
-    // Candidate resource paths for the QC "/gfx/winner" banner (the asset repo is mounted under res://).
+    // Candidate paths for the QC "/gfx/winner" banner, in QC's fall-through order.
+    //
+    // The first is a bare, extension-agnostic VFS name, which is how the rest of the game reaches art:
+    // ResolveImage probes .tga/.png/.jpg, so it survives the TGA->PNG conversion without an edit. The
+    // res:// entry stays only as a fallback for art shipped as a Godot resource.
+    //
+    // It used to be three res:// paths under res://assets/data/, and none of them ever resolved — the
+    // content root holds .pk3dir packages, never a loose gfx/, so the banner has silently never drawn.
+    // Repointing them at res://data/ would not have fixed it either: the content tree carries a
+    // .gdignore (G4), so Godot does not import it and ResourceLoader cannot see anything under it. The
+    // content is reachable only through the VFS, which is what this now uses.
     private static readonly string[] WinnerImagePaths =
     {
-        "res://assets/data/gfx/winner.png",
-        "res://assets/data/gfx/winner.tga",
+        "gfx/winner",
         "res://gfx/winner.png",
     };
 
@@ -74,10 +83,7 @@ public partial class DialogWinner : MenuScreen
 
     /// <summary>Load the "/gfx/winner" banner if a resource for it exists; otherwise null (show the note).</summary>
     private static Texture2D? LoadWinnerBanner()
-    {
-        foreach (string path in WinnerImagePaths)
-            if (ResourceLoader.Exists(path))
-                return ResourceLoader.Load<Texture2D>(path);
-        return null;
-    }
+        // TextureCache routes a bare name through the VFS resolver and a res:// path through the resource
+        // loader, caching both outcomes including the miss. Null still means "no banner", as before.
+        => XonoticGodot.Game.Hud.TextureCache.GetFirst(WinnerImagePaths);
 }

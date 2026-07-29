@@ -189,11 +189,26 @@ public class ShaderPreviewTests
                 missing.Add($"{kv.Key} -> {image}");
         }
 
-        Assert.True(considered > 200, $"only {considered} texture shaders parsed — is the data dir right?");
+        // Most texture shaders live in the map packs, which are fetched rather than committed (D7).
+        int minConsidered = TestPaths.HasMaps ? 200 : 0;
+        Assert.True(considered > minConsidered,
+            $"only {considered} texture shaders parsed (maps present: {TestPaths.HasMaps}) "
+            + "— is the data dir right?");
+        if (considered == 0) return;
         double rate = resolved * 100.0 / considered;
         _out.WriteLine($"{resolved}/{considered} texture shaders resolve to a real image ({rate:0.#}%)");
         foreach (string m in missing)
             _out.WriteLine($"  unresolved: {m}");
+
+        // The rate only means something over a representative sample. Without the fetched map packs the
+        // core tree yields a handful of texture shaders, and one of those pointing at map art reads as
+        // 0% — a statement about what is installed, not about the precedence chain.
+        if (!TestPaths.HasMaps || considered < 50)
+        {
+            _out.WriteLine($"resolution-rate assertion skipped: {considered} texture shaders, "
+                           + $"maps present: {TestPaths.HasMaps}. {TestPaths.NoMapsReason}");
+            return;
+        }
 
         // Not 100%: some shaders point at art the free data set does not ship, and some tool shaders name
         // nothing at all. Well under 85% would mean the precedence chain, not the content.

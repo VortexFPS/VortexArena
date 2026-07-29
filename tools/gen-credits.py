@@ -106,14 +106,16 @@ def main() -> int:
         if not OUTPUT.exists():
             print(f"MISSING: {OUTPUT.relative_to(ROOT)} — run python tools/gen-credits.py")
             return 1
-        if OUTPUT.read_text(encoding="utf-8") != rendered:
+        if OUTPUT.read_bytes() != rendered.encode("utf-8"):
             print(f"STALE: {OUTPUT.relative_to(ROOT)} — run python tools/gen-credits.py")
             return 1
         print(f"up to date ({len(sections)} sections, {total} names)")
         return 0
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(rendered, encoding="utf-8")
+    # write_bytes, not write_text: text mode translates \n to \r\n on Windows, so the committed file
+    # would not match what a Linux regeneration produces and the --check gate would fail on CI.
+    OUTPUT.write_bytes(rendered.encode("utf-8"))
     print(f"wrote {OUTPUT.relative_to(ROOT)} ({len(sections)} sections, {total} names)")
     return 0
 

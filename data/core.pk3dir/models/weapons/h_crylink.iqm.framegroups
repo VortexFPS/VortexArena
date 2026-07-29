@@ -1,0 +1,9 @@
+/*
+Generated framegroups file for h_crylink
+Used by DarkPlaces to simulate frame groups in DPM models.
+*/
+
+1 26 30 0 // h_crylink fire
+27 26 30 0 // h_crylink fire
+53 101 3 1 // h_crylink idle
+154 101 3 1 // h_crylink idle

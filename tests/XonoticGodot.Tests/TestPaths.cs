@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.IO;
 
 namespace XonoticGodot.Tests;
@@ -56,6 +57,47 @@ internal static class TestPaths
 
     /// <summary>True when a real content tree resolved, for tests that want an explicit guard.</summary>
     public static bool HasData => Directory.Exists(Data);
+
+    /// <summary>
+    /// True when compiled map content (BSPs and their art) is present.
+    ///
+    /// Separate from <see cref="HasData"/> because the two now arrive by different routes: the core
+    /// content is committed and comes with the clone, while compiled maps are build output fetched per
+    /// <c>data/maps.lock.json</c> from a VortexMaps release (restructure D7, section 5.3.1). So a
+    /// perfectly good checkout legitimately has core content and no maps, and the map-dependent tests
+    /// have to distinguish "not fetched" from "broken".
+    ///
+    /// Probes both layouts: per-map <c>.pk3dir</c> packages under <c>data/maps/</c> after the
+    /// restructure, and the bundled <c>*-maps.pk3</c> / <c>*-nexcompat.pk3</c> archives before it.
+    /// </summary>
+    public static bool HasMaps { get; } = ResolveHasMaps();
+
+    private static bool ResolveHasMaps()
+    {
+        if (!Directory.Exists(Data))
+            return false;
+
+        // Post-restructure: fetch-maps.py extracts to data/maps/<map>.pk3dir/maps/<map>.bsp.
+        string maps = Path.Combine(Data, "maps");
+        if (Directory.Exists(maps)
+            && Directory.EnumerateFiles(maps, "*.bsp", SearchOption.AllDirectories).Any())
+            return true;
+
+        // Pre-restructure: the BSPs live inside the shipped .pk3 archives at the data root. Presence of
+        // the archive is enough — opening it to confirm would cost a zip scan for a guard.
+        if (Directory.EnumerateFiles(Data, "*.pk3", SearchOption.TopDirectoryOnly)
+            .Any(p => Path.GetFileName(p).Contains("maps", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        // Either layout can also carry loose BSPs in a pk3dir (a locally built or authored map).
+        return Directory.EnumerateFiles(Data, "*.bsp", SearchOption.AllDirectories).Any();
+    }
+
+    /// <summary>
+    /// Message for a map-dependent test to explain a skip, so "0 assertions ran" is never silent.
+    /// </summary>
+    public const string NoMapsReason =
+        "compiled map content is not present — run tools/data/fetch-maps.py (restructure D7)";
 
     private static string ResolveData()
     {

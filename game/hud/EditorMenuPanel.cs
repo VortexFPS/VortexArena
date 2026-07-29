@@ -665,9 +665,13 @@ public partial class EditorMenuPanel : HudPanel
 
     private List<Row> BuildGrid()
     {
-        bool on = GlobalF(EditorGrid.CvarEnabled, 1f) != 0f;
+        bool drawn = GlobalF(EditorGrid.CvarEnabled, 1f) != 0f;
         float size = GlobalF(EditorGrid.CvarSize, 64f);
+        bool align = GlobalF(EditorGrid.CvarSnapEnabled, 1f) != 0f;
+        float alignSize = GlobalF(EditorGrid.CvarSnapSize, 16f);
 
+        // Two grids, listed as two groups, because they are two decisions. What is drawn is a reference you
+        // coarsen to see the room; what edits align to is a constraint you tighten to do precise work.
         return new List<Row>
         {
             new()
@@ -675,21 +679,43 @@ public partial class EditorMenuPanel : HudPanel
                 Label = "Show grid",
                 Detail = BoundKey("editor_grid"),
                 Command = "editor_grid",
-                Checked = on,
+                Checked = drawn,
                 KeepOpen = true,
             },
             new()
             {
-                Label = "Grid size up",
+                Label = "Drawn size up",
                 Detail = $"{size:0.###}u",
                 Command = "editor_grid_size +",
                 KeepOpen = true,
             },
             new()
             {
-                Label = "Grid size down",
+                Label = "Drawn size down",
                 Detail = $"{size:0.###}u",
                 Command = "editor_grid_size -",
+                KeepOpen = true,
+            },
+            new()
+            {
+                Label = "Align to grid",
+                Detail = BoundKey("editor_grid_snap"),
+                Command = "editor_grid_snap",
+                Checked = align,
+                KeepOpen = true,
+            },
+            new()
+            {
+                Label = "Align size up",
+                Detail = $"{alignSize:0.###}u  (hold G + wheel)",
+                Command = "editor_grid_snap_size +",
+                KeepOpen = true,
+            },
+            new()
+            {
+                Label = "Align size down",
+                Detail = $"{alignSize:0.###}u",
+                Command = "editor_grid_snap_size -",
                 KeepOpen = true,
             },
             new()

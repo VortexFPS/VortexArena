@@ -896,7 +896,7 @@ public sealed partial class EditorController : Node3D
 
         PickIndex.EnsureBuilt(_document!, GeometryVersion, IncludeToolBrushes);
         NVec3 resolved = VmapPicking.ResolveDragPosition(
-            PickIndex, _dragStartPoint + raw, GridSize, SnapRadius,
+            PickIndex, _dragStartPoint + raw, GridSnapSize, SnapRadius,
             _session!.SelectedBrushIds(), out _dragSnap);
         _dragDelta = resolved - _dragStartPoint;
     }
@@ -920,10 +920,13 @@ public sealed partial class EditorController : Node3D
     {
         get
         {
-            bool on = Cvar(EditorGrid.CvarEnabled, 1f) != 0f;
+            // Gated on the SNAP toggle, not the draw toggle: whether the grid is visible and whether edits
+            // align to it are now separate questions, and a mapper who hides the lines to see the room has not
+            // asked for their next drag to stop aligning.
+            bool on = Cvar(EditorGrid.CvarSnapEnabled, 1f) != 0f;
             if (SnapInverted)
                 on = !on;
-            return on ? GridSize : 0f;
+            return on ? GridSnapSize : 0f;
         }
     }
 
@@ -1844,7 +1847,7 @@ public sealed partial class EditorController : Node3D
         if (!TryGetPastePoint(out NVec3 at))
             return false;
 
-        float half = MathF.Max(16f, GridSize) * 0.5f;
+        float half = MathF.Max(16f, GridSnapSize) * 0.5f;
         mins = at - new NVec3(half, half, half);
         maxs = at + new NVec3(half, half, half);
         return true;
@@ -2024,8 +2027,19 @@ public sealed partial class EditorController : Node3D
     //  Cvar reads
     // =============================================================================================
 
-    /// <summary>Current grid size, shared with the world grid so what you see is what you snap to.</summary>
+    /// <summary>
+    /// Spacing of the DRAWN grid. A reference, not a constraint — nothing snaps to this (backlog T3).
+    /// </summary>
     public float GridSize => Cvar(EditorGrid.CvarSize, 64f);
+
+    /// <summary>
+    /// Spacing of the ALIGNMENT grid: what an edit actually quantizes to.
+    ///
+    /// Separate from the drawn size because the two are read for opposite reasons. You coarsen what is drawn
+    /// until the lines stop being noise in a big room; coarsening what you snap to, to get that, quietly
+    /// starts rounding the work. Sharing one value made every mapper trade one against the other.
+    /// </summary>
+    public float GridSnapSize => Cvar(EditorGrid.CvarSnapSize, 16f);
 
     private float GrabRadius => Cvar(CvarGrabRadius, 12f);
 

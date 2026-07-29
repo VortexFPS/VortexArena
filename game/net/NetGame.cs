@@ -7034,24 +7034,6 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
-        // (E7) The mousewheel still steps the grid while free-flying. Unlike the digits — which the editor now
-        // owns outright in HandleEditorInput — the wheel arrives here as a weapon bind, because it is bound to
-        // weapnext/weapprev and there is no editor-side keycode to intercept.
-        if (IsEditorFreeFly)
-        {
-            string? wheel = WeaponCommandToImpulse(command) switch
-            {
-                10 => "editor_grid_size +",
-                12 => "editor_grid_size -",
-                _ => null,
-            };
-            if (wheel is not null)
-            {
-                Menu.MenuState.Interp?.ExecuteLine(wheel);
-                return;
-            }
-        }
-
         int imp = WeaponCommandToImpulse(command);
         if (imp != 0)
         {
@@ -7129,6 +7111,19 @@ public sealed partial class NetGame : Node3D
                         OpenEditorMenuAtCrosshair();
                     }
                     return true;
+
+                // (T4) The wheel drives FLY SPEED, which is the thing a mapper adjusts constantly while
+                // moving around a room. Grid size is not — it changes a few times a session — so it moves
+                // behind a held modifier rather than owning the most reachable control on the mouse.
+                case MouseButton.WheelUp when mb.Pressed:
+                    AdjustEditorWheel(+1);
+                    return true;
+                case MouseButton.WheelDown when mb.Pressed:
+                    AdjustEditorWheel(-1);
+                    return true;
+                case MouseButton.WheelUp:
+                case MouseButton.WheelDown:
+                    return true;   // swallow the release so it cannot fall through to a weapon bind
             }
             return false;
         }
@@ -7158,10 +7153,28 @@ public sealed partial class NetGame : Node3D
             }
         }
 
+        if (@event is InputEventKey { Pressed: false, Echo: false, Keycode: Key.G })
+        {
+            bool tapped = _editorGridKeyHeld && !_editorGridKeyScrolled;
+            _editorGridKeyHeld = false;
+            if (tapped)
+                Menu.MenuState.Interp?.ExecuteLine("editor_grid");
+            return true;
+        }
+
         if (@event is InputEventKey { Pressed: true, Echo: false } key)
         {
             switch (key.Keycode)
             {
+                // (T4) G is a MODIFIER first and a toggle second. Held, it redirects the wheel to the
+                // alignment grid; tapped, it toggles the drawn grid. Deciding on RELEASE — and only when the
+                // wheel never fired — is what lets one key do both without the toggle firing every time you
+                // hold it to resize.
+                case Key.G when !key.CtrlPressed && !key.AltPressed:
+                    _editorGridKeyHeld = true;
+                    _editorGridKeyScrolled = false;
+                    return true;
+
                 case Key.Z when key.CtrlPressed && key.ShiftPressed:
                     EditorRedo();
                     return true;
@@ -7226,6 +7239,32 @@ public sealed partial class NetGame : Node3D
     /// RELEASE (§11.9's "right click and immediate release"), so the flag is what carries the intent across
     /// the two events.
     /// </summary>
+    /// <summary>True while the T4 grid modifier (G) is held. See <see cref="AdjustEditorWheel"/>.</summary>
+    private bool _editorGridKeyHeld;
+
+    /// <summary>True once a held G has been used to scroll, so its release does not also toggle the grid.</summary>
+    private bool _editorGridKeyScrolled;
+
+    /// <summary>
+    /// One wheel notch in the 3D editor view (backlog T4).
+    ///
+    /// Bare, it steps FLY SPEED — the control a mapper reaches for constantly while moving through a room.
+    /// With the grid modifier held it steps the ALIGNMENT grid instead, which is the size that actually
+    /// constrains an edit; the drawn size is a reference and lives in the menu.
+    /// </summary>
+    private void AdjustEditorWheel(int direction)
+    {
+        if (_editorGridKeyHeld)
+        {
+            _editorGridKeyScrolled = true;
+            Menu.MenuState.Interp?.ExecuteLine(
+                direction > 0 ? "editor_grid_snap_size +" : "editor_grid_snap_size -");
+            return;
+        }
+
+        Menu.MenuState.Interp?.ExecuteLine(direction > 0 ? "editor_flyspeed +" : "editor_flyspeed -");
+    }
+
     private bool _rightPressArmedMenu;
 
     /// <summary>
@@ -7317,13 +7356,13 @@ public sealed partial class NetGame : Node3D
                 // stepped through without leaving the view. This was Ctrl until E7 gave Ctrl a global meaning
                 // (invert grid snap, §11.9) — one modifier cannot both suspend snapping and page the slab.
                 if (mb.AltPressed)
-                    _editorOrtho!.MoveSlab(_editor!.GridSize * 4f);
+                    _editorOrtho!.MoveSlab(_editor!.GridSnapSize * 4f);
                 else
                     _editorOrtho!.ZoomBy(1f / 1.2f);
                 return true;
             case MouseButton.WheelDown when mb.Pressed:
                 if (mb.AltPressed)
-                    _editorOrtho!.MoveSlab(-_editor!.GridSize * 4f);
+                    _editorOrtho!.MoveSlab(-_editor!.GridSnapSize * 4f);
                 else
                     _editorOrtho!.ZoomBy(1.2f);
                 return true;
@@ -7963,14 +8002,14 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_extrude", a =>
         {
             float d = a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : (_editor?.GridSize ?? 64f);
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : (_editor?.GridSnapSize ?? 64f);
             if (_editor?.ExtrudeFace(d) == true)
                 RefreshEditorWorld();
         });
         interp.RegisterCommand("editor_bevel", a =>
         {
             float sz = a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : (_editor?.GridSize ?? 16f);
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : (_editor?.GridSnapSize ?? 16f);
             if (_editor?.BevelEdge(sz) == true)
                 RefreshEditorWorld();
         });

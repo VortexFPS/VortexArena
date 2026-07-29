@@ -189,6 +189,33 @@ public static class VmapEdit
     public static Vector3 SnapToGrid(Vector3 v, float grid)
         => grid <= 0f ? v : new Vector3(SnapToGrid(v.X, grid), SnapToGrid(v.Y, grid), SnapToGrid(v.Z, grid));
 
+    /// <summary>
+    /// Step a grid size one rung up or down Radiant's power-of-two ladder, clamped (backlog T3/T4).
+    ///
+    /// Snaps ONTO the ladder rather than just doubling: a size typed as 100 steps to 128 or 64, not 200 or 50,
+    /// so a hand-entered value cannot leave the mapper stepping through 100/200/400 forever. Pure and here
+    /// rather than in the Godot layer so it is testable — the ladder is exactly the kind of off-by-one that
+    /// nobody notices until they are three rungs from where they meant to be.
+    /// </summary>
+    public static float StepGridSize(float current, int direction, float min, float max)
+    {
+        if (min <= 0f)
+            min = 1f;
+        if (max < min)
+            max = min;
+
+        float clamped = Math.Clamp(current, min, max);
+        float exponent = MathF.Log2(clamped);
+
+        // Up rounds the exponent DOWN before adding, so an off-ladder size lands on the next rung above it
+        // rather than overshooting; down mirrors that.
+        float target = direction >= 0
+            ? MathF.Floor(exponent) + 1f
+            : MathF.Ceiling(exponent) - 1f;
+
+        return Math.Clamp(MathF.Pow(2f, target), min, max);
+    }
+
     /// <summary>The corner vertices of every brush in <paramref name="ids"/>, for snapping and gizmo placement.</summary>
     public static List<Vector3> CollectVertices(VmapDocument doc, IReadOnlyList<int> ids)
     {

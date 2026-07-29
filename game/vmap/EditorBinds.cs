@@ -36,7 +36,8 @@ public static class EditorBinds
         ("6", "editor_tool Patch"),
         ("7", "editor_mode"),
         ("8", "editor_ortho"),
-        ("9", "editor_grid"),
+        ("9", "editor_grid_snap"),
+        ("g", "editor_grid"),
         ("0", "editor_show_bsp"),
     };
 

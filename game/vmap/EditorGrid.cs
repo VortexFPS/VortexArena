@@ -32,8 +32,21 @@ public sealed partial class EditorGrid : MeshInstance3D
     /// <summary>Cvar: master on/off for the world grid (toggled by the <c>editor_grid</c> bind).</summary>
     public const string CvarEnabled = "cl_editor_grid";
 
-    /// <summary>Cvar: grid spacing in Quake units (Radiant's power-of-two ladder, 1..1024).</summary>
+    /// <summary>Cvar: spacing of the DRAWN grid in Quake units (Radiant's power-of-two ladder, 1..1024).</summary>
     public const string CvarSize = "cl_editor_grid_size";
+
+    /// <summary>
+    /// Cvar: spacing of the ALIGNMENT grid — what an edit snaps to (backlog T3).
+    ///
+    /// Split from the drawn size because they answer different questions. The drawn grid is a reference you
+    /// want readable, so on a big room you coarsen it until the lines stop being noise; the alignment grid is
+    /// a constraint you want tight, and coarsening it to see better silently starts rounding your work. One
+    /// value forced every mapper to trade one against the other.
+    /// </summary>
+    public const string CvarSnapSize = "cl_editor_grid_snap_size";
+
+    /// <summary>Cvar: whether edits snap to the alignment grid at all. Independent of whether it is DRAWN.</summary>
+    public const string CvarSnapEnabled = "cl_editor_grid_snap";
 
     /// <summary>Cvar: how many minor lines make one brighter major line (Radiant shows a heavier line every 8).</summary>
     public const string CvarMajorEvery = "cl_editor_grid_major";
@@ -60,6 +73,8 @@ public sealed partial class EditorGrid : MeshInstance3D
         ArgumentNullException.ThrowIfNull(c);
         c.Register(CvarEnabled, "0", CvarFlags.Save);
         c.Register(CvarSize, "64", CvarFlags.Save);
+        c.Register(CvarSnapSize, "16", CvarFlags.Save);
+        c.Register(CvarSnapEnabled, "1", CvarFlags.Save);
         c.Register(CvarMajorEvery, "8", CvarFlags.Save);
         c.Register(CvarFadeStart, "1024", CvarFlags.Save);
         c.Register(CvarFadeEnd, "6144", CvarFlags.Save);
@@ -168,27 +183,53 @@ public sealed partial class EditorGrid : MeshInstance3D
         });
 
         interp.RegisterCommand("editor_grid_size", argv =>
+            StepSizeCommand(cvars, CvarSize, argv, "grid size", "editor_grid_size"));
+
+        interp.RegisterCommand("editor_grid_snap_size", argv =>
+            StepSizeCommand(cvars, CvarSnapSize, argv, "alignment grid", "editor_grid_snap_size"));
+
+        interp.RegisterCommand("editor_grid_snap", argv =>
         {
-            float current = Mathf.Clamp(cvars.GetFloat(CvarSize), MinSize, MaxSize);
-            float next = current;
-
-            string arg = argv.Count >= 2 ? argv[1] : "";
-            if (arg is "+" or "up")
-                next = MathF.Min(MaxSize, current * 2f);
-            else if (arg is "-" or "down")
-                next = MathF.Max(MinSize, current / 2f);
-            else if (float.TryParse(arg, System.Globalization.NumberStyles.Float,
-                         System.Globalization.CultureInfo.InvariantCulture, out float exact))
-                next = Mathf.Clamp(exact, MinSize, MaxSize);
-            else if (arg.Length > 0)
-            {
-                Log.Help("usage: editor_grid_size [ + | - | <units> ]");
-                return;
-            }
-
-            cvars.Set(CvarSize, Fmt(next));
-            Log.Info($"grid size {Fmt(next)}u");
+            bool on = cvars.GetFloat(CvarSnapEnabled) == 0f;
+            if (argv.Count >= 2 && float.TryParse(argv[1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float explicitValue))
+                on = explicitValue != 0f;
+            cvars.Set(CvarSnapEnabled, on ? "1" : "0");
+            Log.Info($"grid snapping {(on ? "ON" : "OFF")} ({Fmt(cvars.GetFloat(CvarSnapSize))}u)");
         });
+    }
+
+    /// <summary>
+    /// The shared <c>[ + | - | &lt;units&gt; ]</c> handler behind both size commands. One implementation so the
+    /// drawn grid and the alignment grid step the same ladder — two copies would drift the moment either
+    /// gained a bound or a rounding rule.
+    /// </summary>
+    private static void StepSizeCommand(
+        CvarService cvars, string cvar, IReadOnlyList<string> argv, string label, string usage)
+    {
+        float current = Mathf.Clamp(cvars.GetFloat(cvar), MinSize, MaxSize);
+        string arg = argv.Count >= 2 ? argv[1] : "";
+
+        float next;
+        if (arg is "+" or "up")
+            next = VmapEdit.StepGridSize(current, +1, MinSize, MaxSize);
+        else if (arg is "-" or "down")
+            next = VmapEdit.StepGridSize(current, -1, MinSize, MaxSize);
+        else if (float.TryParse(arg, System.Globalization.NumberStyles.Float,
+                     System.Globalization.CultureInfo.InvariantCulture, out float exact))
+            next = Mathf.Clamp(exact, MinSize, MaxSize);
+        else if (arg.Length > 0)
+        {
+            Log.Help($"usage: {usage} [ + | - | <units> ]");
+            return;
+        }
+        else
+        {
+            next = current;
+        }
+
+        cvars.Set(cvar, Fmt(next));
+        Log.Info($"{label} {Fmt(next)}u");
     }
 
     private static string Fmt(float v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);

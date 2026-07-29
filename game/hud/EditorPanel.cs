@@ -114,6 +114,8 @@ public partial class EditorPanel : HudPanel
 
         bool gridOn = CvarFloat(EditorGrid.CvarEnabled) != 0f;
         float gridSize = CvarFloat(EditorGrid.CvarSize, 64f);
+        bool alignOn = CvarFloat(EditorGrid.CvarSnapEnabled, 1f) != 0f;
+        float alignSize = CvarFloat(EditorGrid.CvarSnapSize, 16f);
 
         var lines = new List<(string Text, Color Color)>
         {
@@ -173,10 +175,14 @@ public partial class EditorPanel : HudPanel
                 else if (lit && Baked && ShadowsStale)
                     lines.Add(($"  LIGHTING STALE — {Key(BindRebake)} to rebake", new Color(1f, 0.75f, 0.3f)));
 
+                // Three separate things, so three separate words. "Grid" is what is DRAWN, "Align" is what
+                // edits quantize to, and "Snap" has always meant snapping to nearby GEOMETRY — reusing that
+                // label for the alignment grid would have made the one readout that already existed wrong.
                 lines.Add((
-                    $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {EKey(CmdGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}   " +
+                    $"Grid: {(gridOn ? "ON" : "OFF")} {Fmt(gridSize)}u  {EKey(CmdGrid)}   " +
+                    $"Align: {(alignOn ? "ON" : "OFF")} {Fmt(alignSize)}u  hold {EKey(CmdGrid)}+wheel   " +
                     $"Snap: {(c.SnapEnabled ? "ON" : "OFF")} {Fmt(c.SnapRadiusDisplay)}u",
-                    gridOn ? bright : dim));
+                    alignOn ? bright : dim));
 
                 // Selection + live coordinates. During a drag the delta is what the mapper is actually steering,
                 // so it takes the line; otherwise the selection centre anchors where they are working.
@@ -240,7 +246,7 @@ public partial class EditorPanel : HudPanel
             else
             {
                 lines.Add((
-                    $"Grid: {(gridOn ? "ON" : "OFF")}  {Fmt(gridSize)}u   {EKey(CmdGrid)} · {Key(BindGridUp)}/{Key(BindGridDown)}",
+                    $"Grid: {(gridOn ? "ON" : "OFF")}  {Fmt(gridSize)}u   {EKey(CmdGrid)}",
                     gridOn ? bright : dim));
             }
 
@@ -290,8 +296,6 @@ public partial class EditorPanel : HudPanel
     private const string BindWire = "weapon_group_8";
     private const string BindRebake = "weapon_group_9";
     private const string BindOrthoAxis = "weapon_group_5";
-    private const string BindGridUp = "weapnext";
-    private const string BindGridDown = "weapprev";
 
     /// <summary>Trim a long shader path to its last two components, which is the part that identifies it.</summary>
     private static string Shorten(string material)

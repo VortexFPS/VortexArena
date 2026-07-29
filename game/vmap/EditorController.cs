@@ -59,6 +59,16 @@ public sealed partial class EditorController : Node3D
     /// </summary>
     public const string CvarTextureLock = "cl_editor_texture_lock";
 
+    /// <summary>
+    /// Hide entity boxes that solid geometry stands in front of (backlog T1). Default ON: the overlay draws
+    /// with depth testing off, so without this a big map shows every one of its entities at once, through the
+    /// walls, and the ones you are working on are lost among them.
+    ///
+    /// Worth turning OFF sometimes, which is why it is a cvar rather than a constant — seeing an item through
+    /// a wall is exactly what you want when you are checking how far apart two pickups are.
+    /// </summary>
+    public const string CvarEntityOcclusion = "cl_editor_entity_occlusion";
+
     /// <summary>Maximum pick range in world units.</summary>
     private const float PickRange = 8192f;
 
@@ -427,6 +437,7 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarShowToolBrushes, "0", CvarFlags.Save);
         c.Register(CvarCullOccluded, "1", CvarFlags.Save);
         c.Register(CvarTextureLock, "1", CvarFlags.Save);
+        c.Register(CvarEntityOcclusion, "1", CvarFlags.Save);
         c.Register(CvarShowVertices, "0", CvarFlags.Save);
         c.Register(CvarShowCollision, "0", CvarFlags.Save);
         c.Register(CvarOverlayRange, "1024", CvarFlags.Save);
@@ -533,12 +544,151 @@ public sealed partial class EditorController : Node3D
 
         // The hover is frozen mid-drag: the crosshair is parked on the grabbed feature, and re-picking would
         // let the highlight wander onto whatever the ghost happens to overlap.
+        // Before the hover: the pick honours the visibility map, so solving it against this frame's answers
+        // rather than last frame's is what stops a box that just went behind a wall staying grabbable.
+        UpdateEntityVisibility();
+
         if (!_dragging)
             UpdateCrosshairHover();
 
         UpdateHandles();
         UpdateControlHandles();
     }
+
+    // =============================================================================================
+    //  Entity box occlusion (backlog T1)
+    // =============================================================================================
+
+    /// <summary>Per-entity answer to "is anything in front of it". Absent means "not tested yet" — see below.</summary>
+    private readonly Dictionary<int, bool> _entityVisible = new();
+
+    private readonly HashSet<int> _visLive = new();
+    private readonly List<int> _visDead = new();
+
+    /// <summary>The eye the current sweep is answering FOR, so every box in it agrees on one viewpoint.</summary>
+    private NVec3 _visEye;
+
+    private int _visVersion = -1;
+    private int _visCursor;
+    private bool _visOn = true;
+
+    /// <summary>Bumped whenever an answer flips, so the hover re-solves while a sweep is still filling in.</summary>
+    private int _visStamp;
+
+    /// <summary>
+    /// Entity boxes re-tested per frame. The sweep is deliberately budgeted rather than exhaustive: a level
+    /// holds hundreds of entities, and one occlusion ray each is a per-frame cost the editor has no reason to
+    /// pay when the answer changes only as fast as a mapper can fly.
+    /// </summary>
+    private const int EntityVisibilityBudget = 24;
+
+    /// <summary>How far the eye may travel before the sweep restarts from the top, squared.</summary>
+    private const float EntityVisibilityMoveSq = 32f * 32f;
+
+    /// <summary>
+    /// Whether an entity's box should be drawn and picked (backlog T1).
+    ///
+    /// Fails OPEN in every uncertain case — occlusion switched off, an id the sweep has not reached yet, an
+    /// entity created this frame. A box drawn when it could have been hidden is a moment of clutter; a box
+    /// hidden when it should have been drawn is an entity the mapper cannot find, and they have no way to tell
+    /// it is being hidden rather than missing.
+    /// </summary>
+    public bool IsEntityVisible(int entityId)
+        => !_visOn || !_entityVisible.TryGetValue(entityId, out bool visible) || visible;
+
+    /// <summary>
+    /// Re-test a slice of the entity boxes against the geometry between them and the eye.
+    ///
+    /// Runs only with an entity-ish tool up, because that is the only time the boxes are drawn, and inside the
+    /// existing <c>editor.ctrl</c> profiler scope rather than adding a top-level one — it is a slice of the
+    /// controller's frame, not a system of its own.
+    /// </summary>
+    private void UpdateEntityVisibility()
+    {
+        _visOn = EntityOcclusion;
+        if (!_visOn || Tool is not EditorTool.Entity)
+        {
+            // Drop the answers rather than keeping them: they were solved for a viewpoint the mapper has since
+            // left, and a stale "hidden" is the one failure mode this feature must not have.
+            if (_entityVisible.Count > 0)
+            {
+                _entityVisible.Clear();
+                _visStamp++;
+                _visVersion = -1;
+            }
+            return;
+        }
+
+        PickIndex.EnsureBuilt(_document!, GeometryVersion, IncludeToolBrushes);
+        IReadOnlyList<VmapPickIndex.EntityEntry> boxes = PickIndex.Entities;
+        if (boxes.Count == 0)
+            return;
+
+        NVec3 eye = OverlayCenter;
+        if (_visVersion != GeometryVersion)
+        {
+            // Ids are stable across rebuilds, so a deleted entity would otherwise leave its answer behind for
+            // the rest of the session — and a recycled id would inherit it.
+            _visVersion = GeometryVersion;
+            _visEye = eye;
+            _visCursor = 0;
+            PruneVisibility(boxes);
+        }
+        else if ((eye - _visEye).LengthSquared() > EntityVisibilityMoveSq)
+        {
+            _visEye = eye;
+            _visCursor = 0;
+        }
+
+        int budget = Math.Min(EntityVisibilityBudget, boxes.Count);
+        for (int n = 0; n < budget; n++)
+        {
+            if (_visCursor >= boxes.Count)
+                _visCursor = 0;
+            VmapPickIndex.EntityEntry ee = boxes[_visCursor++];
+
+            NVec3 centre = (ee.Mins + ee.Maxs) * 0.5f;
+            float half = (ee.Maxs - ee.Mins).Length() * 0.5f;
+
+            // Standing inside the box is visible by definition: the pick skips back faces, so an eye inside a
+            // solid sees nothing blocking, and an entity you are stood in would otherwise flicker.
+            bool visible = (centre - _visEye).LengthSquared() <= half * half
+                           || !VmapPicking.IsOccluded(PickIndex, _visEye, centre);
+
+            if (!_entityVisible.TryGetValue(ee.Entity.Id, out bool was) || was != visible)
+                _visStamp++;
+            _entityVisible[ee.Entity.Id] = visible;
+        }
+    }
+
+    private void PruneVisibility(IReadOnlyList<VmapPickIndex.EntityEntry> boxes)
+    {
+        if (_entityVisible.Count == 0)
+            return;
+
+        _visLive.Clear();
+        foreach (VmapPickIndex.EntityEntry ee in boxes)
+            _visLive.Add(ee.Entity.Id);
+
+        _visDead.Clear();
+        foreach (int id in _entityVisible.Keys)
+            if (!_visLive.Contains(id))
+                _visDead.Add(id);
+
+        foreach (int id in _visDead)
+            _entityVisible.Remove(id);
+        if (_visDead.Count > 0)
+            _visStamp++;
+    }
+
+    /// <summary>
+    /// Which entities a pick may return. Allocated once and reused: it is handed to the pick every frame, and
+    /// a fresh closure per frame is garbage the editor does not need to make.
+    /// </summary>
+    private Func<VmapEntity, bool>? _entityPickFilter;
+
+    private Func<VmapEntity, bool> EntityPickFilter
+        => _entityPickFilter ??= e => IsEntityVisible(e.Id);
 
     // =============================================================================================
     //  Picking + hover
@@ -548,6 +698,7 @@ public sealed partial class EditorController : Node3D
     private NVec3 _lastPickOrigin;
     private NVec3 _lastPickDir;
     private int _lastPickVersion = -1;
+    private int _lastPickVisStamp = -1;
     private EditorTool _lastPickTool = (EditorTool)(-1);
 
     /// <summary>
@@ -567,12 +718,16 @@ public sealed partial class EditorController : Node3D
         bool sameRay = (origin - _lastPickOrigin).LengthSquared() < 4e-4f
                        && NVec3.Dot(dir, _lastPickDir) > 0.9999985f;
 
-        if (sameRay && _lastPickVersion == GeometryVersion && _lastPickTool == Tool)
+        // ...and when the entity-visibility sweep has changed its mind: an entity that just went behind a wall
+        // must stop being grabbable even though nothing about the ray moved.
+        if (sameRay && _lastPickVersion == GeometryVersion && _lastPickTool == Tool
+            && _lastPickVisStamp == _visStamp)
             return;
 
         _lastPickOrigin = origin;
         _lastPickDir = dir;
         _lastPickVersion = GeometryVersion;
+        _lastPickVisStamp = _visStamp;
         _lastPickTool = Tool;
 
         if (Tool == EditorTool.None)
@@ -582,7 +737,7 @@ public sealed partial class EditorController : Node3D
         }
 
         PickIndex.EnsureBuilt(_document!, GeometryVersion, IncludeToolBrushes);
-        Hover = VmapPicking.Pick(PickIndex, origin, dir, PickMode(), GrabRadius, PickRange);
+        Hover = VmapPicking.Pick(PickIndex, origin, dir, PickMode(), GrabRadius, PickRange, EntityPickFilter);
     }
 
     /// <summary>The camera ray in Quake space â€” the crosshair is the view centre, so this is simply forward.</summary>
@@ -2079,6 +2234,13 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>Whether the world build removes faces buried inside other solids.</summary>
     public bool CullOccludedFaces => Cvar(CvarCullOccluded, 1f) != 0f;
+
+    /// <summary>
+    /// Whether entity boxes behind solid geometry are hidden (backlog T1). Read ONCE per frame into
+    /// <see cref="IsEntityVisible"/>'s gate rather than per entity: the gizmo asks the question hundreds of
+    /// times a frame and a cvar read is a dictionary lookup and a parse.
+    /// </summary>
+    public bool EntityOcclusion => Cvar(CvarEntityOcclusion, 1f) != 0f;
 
     /// <summary>
     /// Whether a geometry move carries its texture along (backlog F7). Read at the moment the op is BUILT and

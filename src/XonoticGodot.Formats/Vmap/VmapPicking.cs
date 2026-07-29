@@ -72,6 +72,55 @@ public sealed class VmapPickIndex
     private readonly List<PatchEntry> _patches = new();
     private readonly List<EntityEntry> _entities = new();
 
+    // Brush and patch bounds again, as flat floats (six per item, parallel to Entries/Patches): min x/y/z then
+    // max x/y/z. The same numbers the Entry objects hold, laid out contiguously.
+    //
+    // One crosshair pick a frame can afford to walk a List of heap objects; the entity-occlusion sweep
+    // (backlog T1) fires many rays a frame, and there the cost is the pointer chase rather than the slab
+    // arithmetic. Flattening keeps the reject pass in cache and costs one array per rebuild.
+    private float[] _brushBounds = Array.Empty<float>();
+    private float[] _patchBounds = Array.Empty<float>();
+
+    /// <summary>Flat brush bounds, six floats per <see cref="Entries"/> item.</summary>
+    internal float[] BrushBounds => _brushBounds;
+
+    /// <summary>Flat patch bounds, six floats per <see cref="Patches"/> item.</summary>
+    internal float[] PatchBounds => _patchBounds;
+
+    // Segment broadphase, built LAZILY: only the occlusion sweep needs it, and an editing session that never
+    // opens the entity tool should not pay to bucket 75,000 brushes after every edit.
+    private readonly VmapCellGrid _brushGrid = new();
+    private readonly VmapCellGrid _patchGrid = new();
+    private readonly List<int> _brushCandidates = new();
+    private readonly List<int> _patchCandidates = new();
+
+    /// <summary>
+    /// Indices into <see cref="Entries"/> that a segment could cross. The returned list is REUSED between
+    /// calls — copy it if you need it to outlive the next query.
+    /// </summary>
+    internal List<int> BrushesAlong(Vector3 from, Vector3 to)
+    {
+        if (!_brushGrid.Built)
+            _brushGrid.Build(_brushBounds, _entries.Count);
+        _brushGrid.Segment(from, to, _brushCandidates);
+        return _brushCandidates;
+    }
+
+    /// <summary>Indices into <see cref="Patches"/> that a segment could cross. Same reuse caveat.</summary>
+    internal List<int> PatchesAlong(Vector3 from, Vector3 to)
+    {
+        if (!_patchGrid.Built)
+            _patchGrid.Build(_patchBounds, _patches.Count);
+        _patchGrid.Segment(from, to, _patchCandidates);
+        return _patchCandidates;
+    }
+
+    /// <summary>Cell size the brush broadphase settled on, in world units. Diagnostics only.</summary>
+    public float BrushGridCellSize => _brushGrid.CellSize;
+
+    /// <summary>Brushes too large to bucket, so tested on every segment query. Diagnostics only.</summary>
+    public int BrushGridOversized => _brushGrid.OversizedCount;
+
     /// <summary>Cached point entities, for picking and for drawing their boxes.</summary>
     public IReadOnlyList<EntityEntry> Entities => _entities;
 
@@ -201,6 +250,28 @@ public sealed class VmapPickIndex
                 Maxs = origin + def.DrawMaxs,
             });
         }
+
+        _brushBounds = FlattenBounds(_entries.Count, i => (_entries[i].Mins, _entries[i].Maxs));
+        _patchBounds = FlattenBounds(_patches.Count, i => (_patches[i].Mins, _patches[i].Maxs));
+        _brushGrid.Reset();
+        _patchGrid.Reset();
+    }
+
+    private static float[] FlattenBounds(int count, Func<int, (Vector3 Mins, Vector3 Maxs)> at)
+    {
+        var flat = new float[count * 6];
+        for (int i = 0; i < count; i++)
+        {
+            (Vector3 mins, Vector3 maxs) = at(i);
+            int b = i * 6;
+            flat[b] = mins.X;
+            flat[b + 1] = mins.Y;
+            flat[b + 2] = mins.Z;
+            flat[b + 3] = maxs.X;
+            flat[b + 4] = maxs.Y;
+            flat[b + 5] = maxs.Z;
+        }
+        return flat;
     }
 
     /// <summary>Whether this index was built including tool brushes (drives the per-face pick filter too).</summary>
@@ -228,6 +299,30 @@ public sealed class VmapPickIndex
 
         t0 = (mins.Z - origin.Z) * invDir.Z;
         t1 = (maxs.Z - origin.Z) * invDir.Z;
+        tmin = MathF.Max(tmin, MathF.Min(t0, t1));
+        tmax = MathF.Min(tmax, MathF.Max(t0, t1));
+
+        return tmax >= MathF.Max(tmin, 0f) && tmin <= maxDistance;
+    }
+
+    /// <summary>
+    /// The same slab test against <see cref="BrushBounds"/>-style flat storage: six floats from
+    /// <paramref name="at"/>. Identical maths to <see cref="RayHitsBox"/>, reading contiguous memory.
+    /// </summary>
+    internal static bool RayHitsFlatBox(Vector3 origin, Vector3 invDir, float[] b, int at, float maxDistance)
+    {
+        float t0 = (b[at] - origin.X) * invDir.X;
+        float t1 = (b[at + 3] - origin.X) * invDir.X;
+        float tmin = MathF.Min(t0, t1);
+        float tmax = MathF.Max(t0, t1);
+
+        t0 = (b[at + 1] - origin.Y) * invDir.Y;
+        t1 = (b[at + 4] - origin.Y) * invDir.Y;
+        tmin = MathF.Max(tmin, MathF.Min(t0, t1));
+        tmax = MathF.Min(tmax, MathF.Max(t0, t1));
+
+        t0 = (b[at + 2] - origin.Z) * invDir.Z;
+        t1 = (b[at + 5] - origin.Z) * invDir.Z;
         tmin = MathF.Max(tmin, MathF.Min(t0, t1));
         tmax = MathF.Min(tmax, MathF.Max(t0, t1));
 
@@ -285,13 +380,20 @@ public static class VmapPicking
     /// The accelerated pick: same result as the document overload, but resolved against a prebuilt
     /// <see cref="VmapPickIndex"/> so a per-frame crosshair query does not rebuild every brush's geometry.
     /// </summary>
+    /// <param name="entityFilter">
+    /// Which point entities this pick may return. Null accepts them all. The caller supplies the rule rather
+    /// than the pick inventing one, because the two rules that exist are the caller's business: the Light tool
+    /// takes only lights (backlog T2), and no tool should return an entity whose box is hidden behind a wall
+    /// (backlog T1) — clicking something you cannot see is the same bug as drawing it.
+    /// </param>
     public static VmapPickResult Pick(
         VmapPickIndex index,
         Vector3 origin,
         Vector3 direction,
         VmapSelectionKind mode = VmapSelectionKind.Face,
         float grabRadius = 8f,
-        float maxDistance = 8192f)
+        float maxDistance = 8192f,
+        Func<VmapEntity, bool>? entityFilter = null)
     {
         ArgumentNullException.ThrowIfNull(index);
 
@@ -395,6 +497,8 @@ public static class VmapPicking
         {
             foreach (VmapPickIndex.EntityEntry ee in index.Entities)
             {
+                if (entityFilter is not null && !entityFilter(ee.Entity))
+                    continue;
                 if (!RayBoxEntry(origin, dir, invDir, ee.Mins, ee.Maxs, bestDistance, out float t, out Vector3 n))
                     continue;
 
@@ -411,6 +515,105 @@ public static class VmapPicking
         }
 
         return best;
+    }
+
+    /// <summary>
+    /// Is there solid, VISIBLE geometry between two points? (backlog T1.)
+    ///
+    /// A BOOLEAN test, not a pick: the first blocker ends it, nothing is sorted, and nothing is allocated. That
+    /// is what makes it affordable to run many times a frame, which is what the entity overlay needs — a level
+    /// holds hundreds of entities and each one's box has to answer "am I behind a wall" independently.
+    ///
+    /// "Visible" means the same thing it means to <see cref="Pick"/>: a face that draws nothing (caulk, nodraw,
+    /// the common/* shader families) does not block. Without that, every entity inside a caulk shell — which is
+    /// most of them, since a Xonotic map's architecture is wrapped in one — would be hidden behind a wall the
+    /// editor does not draw.
+    ///
+    /// Entities are deliberately not tested. One entity's box must never hide another's, or a rack of pickups
+    /// would show only its nearest item.
+    /// </summary>
+    /// <param name="index">Prebuilt geometry cache to test against.</param>
+    /// <param name="from">Eye position (world/Quake space).</param>
+    /// <param name="to">The point being tested for visibility.</param>
+    /// <param name="bias">
+    /// Shorten the ray by this much, so a surface the target is sitting ON does not occlude it. An entity box
+    /// resting against a floor is the common case, not the exception.
+    /// </param>
+    public static bool IsOccluded(VmapPickIndex index, Vector3 from, Vector3 to, float bias = 1f)
+    {
+        ArgumentNullException.ThrowIfNull(index);
+
+        Vector3 seg = to - from;
+        float length = seg.Length();
+        float reach = length - MathF.Max(0f, bias);
+        if (reach <= 0f)
+            return false;      // the target is at (or inside) the eye: nothing can be between them
+
+        Vector3 dir = seg / length;
+        Vector3 invDir = new(
+            MathF.Abs(dir.X) > 1e-8f ? 1f / dir.X : 1e30f,
+            MathF.Abs(dir.Y) > 1e-8f ? 1f / dir.Y : 1e30f,
+            MathF.Abs(dir.Z) > 1e-8f ? 1f / dir.Z : 1e30f);
+
+        // Narrow to the solids the segment could reach before touching a single winding. A flat slab test over
+        // every brush measured 850 µs a ray on catharsis (75,537 of them); the cell walk is what makes a sweep
+        // of one ray per entity a per-frame cost rather than a stall.
+        float[] brushBounds = index.BrushBounds;
+        IReadOnlyList<VmapPickIndex.Entry> entries = index.Entries;
+        List<int> brushCandidates = index.BrushesAlong(from, from + dir * reach);
+        for (int c = 0; c < brushCandidates.Count; c++)
+        {
+            int e = brushCandidates[c];
+            if (!VmapPickIndex.RayHitsFlatBox(from, invDir, brushBounds, e * 6, reach))
+                continue;
+
+            VmapPickIndex.Entry entry = entries[e];
+            VmapBrush brush = entry.Brush;
+            Vector3[][] windings = entry.Windings;
+            for (int f = 0; f < windings.Length; f++)
+            {
+                Vector3[] w = windings[f];
+                if (w.Length < 3)
+                    continue;
+
+                VmapFace pf = brush.Faces[f];
+                if (!index.IncludesToolBrushes && !IsPickableFace(pf))
+                    continue;
+
+                VmapPlane plane = pf.Plane;
+
+                // Front faces only, exactly as Pick does: a ray leaving the eye meets the outside of a solid
+                // first, and testing back faces too would make a room's far wall occlude everything in it.
+                float denom = Vector3.Dot(plane.Normal, dir);
+                if (denom >= -1e-6f)
+                    continue;
+
+                float t = (plane.Dist - Vector3.Dot(plane.Normal, from)) / denom;
+                if (t < 0f || t >= reach)
+                    continue;
+
+                if (PointInPolygon(w, plane.Normal, from + dir * t))
+                    return true;
+            }
+        }
+
+        float[] patchBounds = index.PatchBounds;
+        IReadOnlyList<VmapPickIndex.PatchEntry> patches = index.Patches;
+        List<int> patchCandidates = index.PatchesAlong(from, from + dir * reach);
+        for (int c = 0; c < patchCandidates.Count; c++)
+        {
+            int p = patchCandidates[c];
+            if (!VmapPickIndex.RayHitsFlatBox(from, invDir, patchBounds, p * 6, reach))
+                continue;
+
+            Vector3[] tris = patches[p].Triangles;
+            for (int i = 0; i + 2 < tris.Length; i += 3)
+                if (RayTriangle(from, dir, tris[i], tris[i + 1], tris[i + 2], out float t, out _)
+                    && t >= 0f && t < reach)
+                    return true;
+        }
+
+        return false;
     }
 
     /// <summary>

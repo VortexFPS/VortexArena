@@ -273,6 +273,11 @@ public sealed partial class EditorGizmos : Node3D
     /// live entities, so drawing the document's would double every pickup; and a level is dense with entities,
     /// so boxing them while a mapper is pushing brushes around would wallpaper the view with volumes they are
     /// not working on.
+    ///
+    /// Boxes the controller's occlusion sweep says are behind geometry are skipped entirely (backlog T1). The
+    /// test is on the CPU and hides the WHOLE box, because the overlay material has depth testing off for the
+    /// selection's sake — letting the GPU clip these would leave half-boxes poking through floors, which reads
+    /// as broken geometry rather than as hidden.
     /// </summary>
     private bool DrawEntityBoxes(EditorController c)
     {
@@ -289,6 +294,12 @@ public sealed partial class EditorGizmos : Node3D
             bool isSelected = c.Session is { } s
                               && s.Selection.Exists(x => x.Kind == VmapSelectionKind.Entity
                                                          && x.EntityId == ee.Entity.Id);
+
+            // Hover and selection always draw. Hiding what is selected would leave the manipulator handles —
+            // which are drawn depth-off — floating over nothing, and the mapper unable to see what they are
+            // about to transform.
+            if (!isHover && !isSelected && !c.IsEntityVisible(ee.Entity.Id))
+                continue;
 
             // The class colour is the identity — it is how a mapper tells a spawn from a weapon at a glance —
             // so hover and selection BRIGHTEN it rather than replacing it.

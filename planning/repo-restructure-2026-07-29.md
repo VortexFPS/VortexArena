@@ -968,13 +968,30 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
 
 ### Stage 2 — convert, verify, then commit
 
-10. Write `tools/data/convert-tga.py`: walk a staged tree, re-encode `.tga` to `.png` at
-    `-compression_level 9` **without** a `-pix_fmt` override so source bit depth is preserved, then
-    delete the `.tga`. Idempotent, resumable, and it must refuse to touch `.dds` or `.jpg`.
-11. **Verify losslessness by pixels, not by exit code** — **G6**. For every converted file, decode both forms
-    and assert identical dimensions and identical pixel data. A conversion that silently drops an
-    alpha channel or quantizes a 16-bit TGA produces a file that loads fine and renders wrong, which
-    is the failure mode least likely to be noticed before release.
+10. ~~Write `tools/data/convert-tga.py`~~ — **done 2026-07-29.** Walks a staged tree, re-encodes `.tga`
+    to `.png` at `-compression_level 9` with **no** `-pix_fmt` override so source bit depth carries
+    through, then deletes the `.tga`. Idempotent and resumable (an existing `.png` is re-verified, not
+    trusted), globs only `.tga` so `.dds`/`.jpg` cannot be touched, and **refuses to run inside a
+    directory named `Base/`** so the parity baseline cannot be converted in place by accident.
+11. ~~**Verify losslessness by pixels, not by exit code**~~ — **G6. Done, and proven adversarially.**
+    Every file has both forms decoded to `rgba64le` and hashed, plus a dimension check. Deliberately
+    wider than TGA's 8-bit-per-channel maximum, so a bit-depth surprise surfaces as a mismatch instead
+    of being quantized away by the comparison itself.
+    - **Proof the gate has teeth**, since a verification that never fires is worse than none: against a
+      real 32-bit source, an honest conversion verifies, an `-pix_fmt rgb24` re-encode is caught as
+      *"pixel data differs (alpha dropped or channel depth changed)"*, and a half-scale re-encode is
+      caught by the dimension check. That first case is exactly the silent failure G6 was written for.
+    - **A real bug the run surfaced.** The first implementation wrote to a `foo.png.part` temp before
+      the atomic rename; ffmpeg picks its output muxer from the **extension**, so every encode failed
+      with `Error opening output files: Invalid argument`. The temp is now `foo.part.png`, and a
+      startup sweep clears any stranded `*.part.png`. Worth noting how it failed: all 65 sample files
+      errored and **not one `.tga` was deleted**, because the delete only happens after verification
+      passes. Fail-closed behaviour, confirmed by accident.
+    - **Measured on a 65-file, 144.3 MiB stratified sample** of the real 2,233-file / 2,310 MiB
+      `xonotic-data.pk3dir` corpus (54 `bgra`, 10 `bgr24`, 1 `gray` — all three decode paths):
+      **30.9 MiB out, 21.4% of source**, zero failures. That is materially better than section 4.2's
+      projected 38.6%, but **do not restate the projection from it**: this sample was deliberately
+      weighted toward large files, which compress best. Take the real figure from the full Stage 2 run.
 12. Run it over both staged trees: 2,233 files / 2,310 MB in `data/`, 3,031 files / 2,941 MB in
     `VortexMaps`.
 13. **Now** make the first commits — **G1**, the point the ordering exists for. `VortexMaps`: commit, push, tag `v0`. `VortexArena`: remove

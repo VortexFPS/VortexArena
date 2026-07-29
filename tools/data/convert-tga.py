@@ -108,10 +108,39 @@ def encode(ffmpeg: str, tga: Path, png: Path) -> str | None:
     return None
 
 
+def tga_header_dimensions(path: Path) -> tuple[int, int] | None:
+    """Width/height straight out of the 18-byte TGA header, without going through ffmpeg.
+
+    This exists because the G6 comparison below decodes BOTH forms with ffmpeg, so a decoder bug is
+    invisible to it: both sides share the same wrong pixels and the hashes match. Reading the header
+    ourselves gives one fact ffmpeg cannot contaminate, and it caught a real case —
+    textures/phillipk1x/trim/pk01_trims01b_glow.tga, which ffmpeg reports as 300x216 pal8 while the
+    header says 256x512 24bpp and the byte count agrees with the header.
+    """
+    try:
+        head = path.open("rb").read(18)
+    except OSError:
+        return None
+    if len(head) < 18:
+        return None
+    width = head[12] | (head[13] << 8)
+    height = head[14] | (head[15] << 8)
+    if width <= 0 or height <= 0:
+        return None
+    return width, height
+
+
 def verify(ffmpeg: str, ffprobe: str, tga: Path, png: Path) -> str | None:
     """G6: assert the PNG decodes to exactly the TGA's pixels. Returns an error string or None."""
     tga_dim = probe_dimensions(ffprobe, tga)
     png_dim = probe_dimensions(ffprobe, png)
+
+    # Cross-check ffmpeg against the source header before trusting either decode.
+    header_dim = tga_header_dimensions(tga)
+    if header_dim is not None and tga_dim is not None and header_dim != tga_dim:
+        return (f"decoder disagrees with the TGA header: header says "
+                f"{header_dim[0]}x{header_dim[1]}, ffmpeg says {tga_dim[0]}x{tga_dim[1]} "
+                f"- refusing to convert, decode this one with an independent reader")
     if tga_dim is None:
         return "source .tga does not decode"
     if png_dim is None:

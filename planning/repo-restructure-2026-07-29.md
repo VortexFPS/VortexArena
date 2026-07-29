@@ -481,12 +481,71 @@ a lockfile instead of the bytes:
 extracts to `data/maps/<map>.pk3dir/` (§9.3), which is gitignored. `ci/ci.sh` and `tools/package.sh` call it
 automatically; a developer runs it once after cloning.
 
+#### The archive unit: one shared pack plus one per map
+
+**Decided 2026-07-29, after measuring — and it corrects the arithmetic this section originally used.**
+The compiled pack does not divide evenly by map, because most of it is not map-specific:
+
+| | files | compressed |
+|---|---:|---:|
+| map-specific (`maps/<x>.*`, `*/map_<x>/*`, `gfx/<x>_mini.*`) | 787 | **190.8 MB** |
+| **shared** (2,962 dds, 389 models, 94 sound, 79 scripts, 66 env, 6 cubemaps) | 3,604 | **405.5 MB** |
+| total | 4,391 | 596.3 MB |
+
+**68% of the pack is shared art.** So naive per-map archives would either duplicate 405 MB of shared
+textures across 31 maps, or need per-map dependency analysis to subset it — reintroducing exactly the
+classification problem §5.2 declined. And a single bundled archive throws away the incremental property
+D7 exists for.
+
+So split by **role**, matching the source-tree decision:
+
+- **`shared-<version>.zip`** — 405 MB, one entry in the lockfile. Changes only when the shared art set
+  changes, which for a frozen 0.8.6 content set is close to never.
+- **`<map>-q3map2.zip`** ×31 — 190.8 MB total. **Median 4.1 MB, mean 5.3 MB**, largest `erbium` at
+  20.5 MB (then `xoylent` 20.3, `catharsis` 18.8).
+
+A map revision therefore costs a **~4 MB** fetch, not 19 and not 596. Shared art downloads once. The
+lockfile grows by one entry, and a community map either brings its own art or declares a dependency on
+the shared pack — which is the same shape, so the code path is identical.
+
+**None of this is visible to players** (§8.7): maps reach them inside the fat/core zips that
+`release.yml` assembles. The only three consumers are a developer after a clone, CI, and the packaging
+job. That makes this a developer-ergonomics choice rather than a download-size one — and it is a second
+reason to prefer small units, because the resume-and-retry helpers §8.1 ports from
+`download-assets.sh` (`curl -C -`) work far better over 4 MB units than over one 596 MB blob.
+
+#### `publish.py` must carry the per-item licence notices into the archives
+
+**A requirement, not a nicety, and it is easy to miss because the files sit in the wrong tree.** Some
+Xonotic content carries its own licence or credit file *next to the art*, in the map **source** tree —
+which under this plan does not ship. The art it covers does ship. Measured against the compiled pack:
+
+| notice, in `sources/` | art it covers, in the shipped pack |
+|---|---:|
+| `textures/phillipk1x/_GPL.txt` + `_readme.txt` | **214 files** |
+| `textures/phillipk2x/_GPL.txt` + `_readme.txt` | **289 files** |
+| `models/xonotic_jumppad01/…_readme.txt` | 68 files |
+| `sound/map_xoylent/sources.txt` | 95 files |
+| `textures/map_boil/credit.png` (a credit rendered as an image) | 6 files |
+| `maps/atelier.license.txt`, `maps/trident.LICENSE` | those maps |
+
+So without this step a release ships **503 files of Philip Klevestav's GPLv2-or-later textures with his
+copyright notice left behind in a repo the recipient never fetches.** The phillipk sets are the sharpest
+case because they are third-party work relicensed for Xonotic, not Team Xonotic's own.
+
+`publish.py` copies each notice into the archive carrying the art it covers — the shared sets into
+`shared-<version>.zip`, the per-map ones into that map's archive — and the gate is the inverse check:
+**no archive contains a `map_<x>/` or shared texture directory whose source directory has a licence file
+the archive lacks.** Cheap to assert, and the only thing standing between a correct release and a
+silently non-compliant one.
+
 Why this is the right shape:
 
 - **Release asset bandwidth is unmetered** (§3.1), so fetching costs nothing no matter how many
   people clone. This is the same reason the fat zips are safe.
 - **The game repo stops growing when maps change.** A map revision is a one-line lockfile diff.
-- **Per-map archives mean a map fix re-downloads ~19 MB**, not 600 MB.
+- **Per-map archives mean a map fix re-downloads ~4 MB**, not 600 MB. See the split below — the
+  original "~19 MB" figure assumed the pack divides evenly by map, and it does not.
 - **It is ADR-0015's mechanism, not a new one.** The launcher already pins a content-addressed
   `assets-<hash12>.zip` by absolute URL in `latest.json` and dedupes uploads across releases. Maps
   become a second artifact class in that same scheme.
@@ -643,6 +702,21 @@ else already does).
   distinct decode paths and only one of them is the common case.
 - **Detect:** decode both forms to raw and compare, rather than trusting the encoder:
   `ffmpeg -i x.tga -f rawvideo -pix_fmt rgba -` against the same for the PNG, hashed.
+- **The blind spot in that check, found 2026-07-29 by hitting it.** Decoding *both* forms with ffmpeg
+  means a decoder bug is invisible: both sides share the same wrong pixels and the hashes agree. Exactly
+  one file in 5,264 triggered it — `textures/phillipk1x/trim/pk01_trims01b_glow.tga`, which ffmpeg
+  reports as 300x216 paletted and decodes as multiple frames, while its 18-byte header says 256x512
+  24-bit uncompressed and the byte count agrees with the header (256·512·3 = 393,216, plus an 18-byte
+  header and a 26-byte TGA-2.0 footer = the file's 393,260). PIL agrees with the header; ffmpeg is
+  simply wrong about this file.
+  - It failed loudly here only by luck — the misdecode also broke the *encode*, so the converter's
+    fail-closed path kept the `.tga`. A misdecode that still encoded would have produced a wrong PNG and
+    passed verification silently.
+  - **Fix applied:** `convert-tga.py` now parses the TGA header itself and refuses to convert when
+    ffmpeg's reported dimensions disagree with it. One fact ffmpeg cannot contaminate, and it turns this
+    class from silent into loud. The file itself was converted with PIL and verified against the header.
+  - **The general lesson for any verify step:** comparing two outputs of the same tool proves they
+    agree, not that they are right. Cross-check against something the tool did not produce.
 - **Do:** make that comparison a per-file assertion inside `convert-tga.py`, not a spot check. 5,264
   files is small enough to verify exhaustively, and this is the failure least likely to be caught by
   any other gate.
@@ -1075,9 +1149,12 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
 >   pre-conversion tree" cannot be satisfied by "Base still has it."** Base is a live upstream
 >   checkout that gets updated; the archive has to be a separate frozen copy.
 
-6. Create `VortexMaps`. Seed from `../Base/data/xonotic-maps.pk3dir` with its upstream `.git`
-   discarded, so history starts clean rather than importing a 1.4 GB pack.
-   - **Repo created 2026-07-29; empty. Seeding not started — this is where the migration stands.**
+6. ~~Create `VortexMaps`. Seed from `../Base/data/xonotic-maps.pk3dir`~~ — **done 2026-07-29**
+   (`101cebc`). 4,163 files, 1.6 GB, type-rooted `sources/`, all PNG. G1 verified the same way as the
+   game repo: object store 1.23 GiB against a 1.6 GB working tree, so no dead blobs. Excluded
+   deliberately: upstream's `.gitattributes` (the `mapclean` filter, below), 3,472 `*.import`,
+   `maps/_init/_init.bsp` and 32 `*.waypoints.cache` as compiled/derived output — `.waypoints` and
+   `.waypoints.hardwired` are authored and stay.
    - **Drop that tree's `.gitattributes` too.** It is 4,655 bytes and, unlike the two in the core and
      music packs, it governs real files: `*.map -crlf filter=mapclean` covers **150 `.map` files** and
      names a filter driver that is not defined anywhere in this project. Carrying it over means every
@@ -1486,6 +1563,41 @@ q3map2 (§9.2), so their reproducibility question is a different one — the bak
 the hash of the truth sections, and a mismatch regenerates rather than needing a pinned external
 toolchain. The reason to keep the q3map2 baseline reproducible is **parity comparison**: judging whether
 a decorated map lights *consistently with the stock set* requires the stock set to be re-derivable.
+
+### 8.3.1 Running q3map2 on GitHub-hosted runners
+
+Assessed 2026-07-29. **Yes, and a self-hosted runner should not be needed except possibly for the
+heaviest one or two maps.**
+
+**Minutes are free.** `VortexMaps` is public, and GitHub Actions minutes are unmetered on public
+repositories. This is the same asymmetry §3.1 relies on for release assets: the metered things (LFS
+bandwidth, private-repo minutes) are the things this plan does not use.
+
+**q3map2 builds headless.** `tools/quake3/CMakeLists.txt` declares `find_package` for GLIB, JPEG, PNG,
+WebP, LibXml2 and Minizip — all apt-installable (`libglib2.0-dev libjpeg-dev libpng-dev libwebp-dev
+libxml2-dev libminizip-dev`). GTK3 is looked up `QUIET`, i.e. optional, and belongs to the Radiant GUI
+rather than the compiler; X11 is a `-dev` package at configure time, not a running display. Build it
+once in a prep job and pass the binary to the fan-out as an artifact.
+
+**The real constraints are per-job, so make the matrix per-map.** A GitHub-hosted `ubuntu-latest` runner
+is 4 vCPU / 16 GB RAM / ~14 GB disk with a **6-hour limit per job**. One job per map gives each map its
+own 6-hour budget and runs them concurrently, instead of serialising 31 compiles into one job that would
+blow the limit. It also means only changed maps rebuild, which is the same property the per-map archives
+give on the download side.
+
+**Where it might not fit, and the escape hatch.** `-vis` and `-light -bounce` are the expensive stages,
+and `catharsis` is the outlier — 1,085,397 faces (§9.1), which is where a 16 GB ceiling or a 6-hour wall
+would bite first. Source size is no guide here: catharsis's `.map` is only 2.8 MB while `bromine.map` is
+6.0 MB. If a map does exceed the runner, nothing in the design breaks: the artifact is a release asset,
+so a locally-built or self-hosted-built archive publishes through the identical path. **Take the
+self-hosted runner as a contingency for specific maps, not as a prerequisite for the pipeline.**
+
+> **Found while checking this: the stock maps were not all built with the same q3map2.**
+> `catharsis.map.options` records `Version: 5e`, `stormkeep.map.options` records `Version: 12g`. So
+> §8.3's "pin the q3map2 version" is not one version — pinning a single compiler will not reproduce
+> every stock lightmap byte-for-byte. Either record the version per map (the `.map.options` files
+> already do, which is the cheap answer) or accept that a rebuild diverges from the shipped baseline and
+> say so where the baseline is used for comparison.
 
 ### 8.4 Drift detection
 

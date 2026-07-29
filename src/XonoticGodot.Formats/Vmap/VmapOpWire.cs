@@ -46,6 +46,10 @@ public static class VmapOpWire
                 AppendIds(sb, t.TouchedBrushIds);
                 sb.Append(' ');
                 AppendVec(sb, t.Delta);
+                // Texture lock rides as a TRAILING token, which is what makes it compatible in both
+                // directions: an older decoder stops before it and reads the move exactly as it always did,
+                // and a newer one treats its absence as off — which is the behaviour that predates the flag.
+                sb.Append(' ').Append(t.TextureLock ? 1 : 0);
                 return sb.ToString();
 
             case MoveFaceOp f:
@@ -72,7 +76,7 @@ public static class VmapOpWire
                 AppendVec(sb, r.Pivot);
                 sb.Append(' ');
                 AppendVec(sb, r.Axis);
-                sb.Append(' ').Append(Fmt(r.Degrees));
+                sb.Append(' ').Append(Fmt(r.Degrees)).Append(' ').Append(r.TextureLock ? 1 : 0);
                 return sb.ToString();
 
             case DeleteBrushesOp d:
@@ -89,6 +93,7 @@ public static class VmapOpWire
                 AppendVec(sb, sc.Pivot);
                 sb.Append(' ');
                 AppendVec(sb, sc.Scale);
+                sb.Append(' ').Append(sc.TextureLock ? 1 : 0);
                 return sb.ToString();
 
             case RotateSelectionOp rs:
@@ -100,7 +105,7 @@ public static class VmapOpWire
                 AppendVec(sb, rs.Pivot);
                 sb.Append(' ');
                 AppendVec(sb, rs.Axis);
-                sb.Append(' ').Append(Fmt(rs.Degrees));
+                sb.Append(' ').Append(Fmt(rs.Degrees)).Append(' ').Append(rs.TextureLock ? 1 : 0);
                 return sb.ToString();
 
             case DeletePatchesOp dp:
@@ -291,7 +296,7 @@ public static class VmapOpWire
                 {
                     if (!TryReadIds(tok, 1, out int[] ids, out int next) || tok.Length < next + 3)
                         return null;
-                    return new TranslateBrushesOp(ids, ReadVec(tok, next));
+                    return new TranslateBrushesOp(ids, ReadVec(tok, next), ReadFlag(tok, next + 3));
                 }
                 case "face":
                 {
@@ -319,7 +324,8 @@ public static class VmapOpWire
                         return null;
                     Vector3 pivot = ReadVec(tok, next);
                     Vector3 axis = ReadVec(tok, next + 3);
-                    return new RotateBrushesOp(ids, pivot, axis, ReadFloat(tok[next + 6]));
+                    return new RotateBrushesOp(
+                        ids, pivot, axis, ReadFloat(tok[next + 6]), ReadFlag(tok, next + 7));
                 }
                 case "delete":
                 {
@@ -333,7 +339,8 @@ public static class VmapOpWire
                         || !TryReadIds(tok, n1, out int[] patchIds, out int n2)
                         || tok.Length < n2 + 6)
                         return null;
-                    return new ScaleSelectionOp(brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3));
+                    return new ScaleSelectionOp(
+                        brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3), ReadFlag(tok, n2 + 6));
                 }
                 case "rotsel":
                 {
@@ -342,7 +349,8 @@ public static class VmapOpWire
                         || tok.Length < n2 + 7)
                         return null;
                     return new RotateSelectionOp(
-                        brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3), ReadFloat(tok[n2 + 6]));
+                        brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3), ReadFloat(tok[n2 + 6]),
+                        ReadFlag(tok, n2 + 7));
                 }
                 case "patchdel":
                 {
@@ -578,6 +586,12 @@ public static class VmapOpWire
         => new(ReadFloat(tok[i]), ReadFloat(tok[i + 1]), ReadFloat(tok[i + 2]));
 
     private static float ReadFloat(string s) => float.Parse(s, CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// An optional trailing boolean. Absent means false, which is how a line written before the flag existed
+    /// decodes to the behaviour it had at the time.
+    /// </summary>
+    private static bool ReadFlag(string[] tok, int at) => at < tok.Length && tok[at] == "1";
 
     /// <summary>Round-trip ("R") formatting so a decoded float is bit-identical to the encoded one.</summary>
     private static string Fmt(float f) => f.ToString("R", CultureInfo.InvariantCulture);

@@ -233,16 +233,28 @@ public sealed class TranslateBrushesOp : IVmapOp
     private readonly int[] _ids;
     private readonly Vector3 _delta;
 
+    /// <param name="textureLock">Carry the texture with the geometry (backlog F7). Travels ON the op rather
+    /// than being read from a cvar at apply time, so a replaying peer does what the author did — a receiver
+    /// reading its own setting would produce a differently-textured map from the same edit.</param>
+    public TranslateBrushesOp(IReadOnlyList<int> brushIds, Vector3 delta, bool textureLock)
+        : this(brushIds, delta)
+        => _textureLock = textureLock;
+
     public TranslateBrushesOp(IReadOnlyList<int> brushIds, Vector3 delta)
     {
         _ids = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
         _delta = delta;
     }
 
+    private readonly bool _textureLock;
+
     public IReadOnlyList<int> TouchedBrushIds => _ids;
 
     /// <summary>Translation applied to every selected brush. Read by the wire codec.</summary>
     public Vector3 Delta => _delta;
+
+    /// <summary>Whether the texture travelled with the geometry. Read by the wire codec.</summary>
+    public bool TextureLock => _textureLock;
 
     public string Describe() => $"Move {_ids.Length} brush{(_ids.Length == 1 ? "" : "es")}";
 
@@ -260,8 +272,13 @@ public sealed class TranslateBrushesOp : IVmapOp
         }
 
         foreach (VmapBrush b in brushes)
+        {
             foreach (VmapFace f in b.Faces)
                 f.Plane = new VmapPlane(f.Plane.Normal, f.Plane.Dist + Vector3.Dot(f.Plane.Normal, _delta));
+
+            if (_textureLock)
+                VmapTexLock.ApplyToBrush(b, p => VmapTexLock.Translate(p, _delta));
+        }
 
         return true;
     }
@@ -452,15 +469,23 @@ public sealed class RotateBrushesOp : IVmapOp
     private readonly Vector3 _axis;
     private readonly float _degrees;
 
-    public RotateBrushesOp(IReadOnlyList<int> brushIds, Vector3 pivot, Vector3 axis, float degrees)
+    private readonly bool _textureLock;
+
+    /// <inheritdoc cref="TranslateBrushesOp(IReadOnlyList{int}, Vector3, bool)"/>
+    public RotateBrushesOp(
+        IReadOnlyList<int> brushIds, Vector3 pivot, Vector3 axis, float degrees, bool textureLock = false)
     {
         _ids = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
         _pivot = pivot;
         _axis = axis;
         _degrees = degrees;
+        _textureLock = textureLock;
     }
 
     public IReadOnlyList<int> TouchedBrushIds => _ids;
+
+    /// <summary>Whether the texture travelled with the geometry. Read by the wire codec.</summary>
+    public bool TextureLock => _textureLock;
 
     /// <summary>Point the rotation turns about. Read by the wire codec.</summary>
     public Vector3 Pivot => _pivot;
@@ -501,8 +526,81 @@ public sealed class RotateBrushesOp : IVmapOp
                 Vector3 newPoint = _pivot + Vector3.Transform(onPlane - _pivot, q);
                 f.Plane = new VmapPlane(newNormal, Vector3.Dot(newPoint, newNormal));
             }
+
+            if (_textureLock)
+                VmapTexLock.ApplyToBrush(b, p => VmapTexLock.Rotate(p, q, _pivot));
         }
         return true;
+    }
+}
+
+/// <summary>
+/// Texture lock (backlog F7): carry a face's texture projection along with the geometry, so a moved, turned
+/// or scaled brush keeps the texture where the mapper put it.
+///
+/// Without it every move slides the texture across the surface and alignment work is lost, which is why
+/// modern Radiant defaults it on. <see cref="PasteOp"/> has always done the translate case correctly (a
+/// pasted copy that slid its texture would be obviously wrong); this generalises the same identity to
+/// rotation and scale and puts it where every op can reach it.
+///
+/// The identity. A texture coordinate is <c>u(p) = dot(p, AxisU) + OffsetU</c>. Under a geometric transform
+/// <c>T</c>, keeping the texture stuck to the surface means finding <c>AxisU'</c> and <c>OffsetU'</c> with
+/// <c>u'(T(p)) = u(p)</c> for every p on the face. Working that through gives one rule per transform, and for
+/// both rotation and scale the offset correction is the SAME expression — <c>dot(pivot, Axis - Axis')</c>.
+///
+/// Applied per LAYER, because each layer of a face carries its own projection and a layered wall would
+/// otherwise keep its base aligned while every blend slid out from under it.
+/// </summary>
+public static class VmapTexLock
+{
+    /// <summary>Slide the projection with a translation: <c>u(p + d)</c> must equal the old <c>u(p)</c>.</summary>
+    public static VmapTexProjection Translate(VmapTexProjection p, Vector3 delta) => new(
+        p.AxisU, p.AxisV,
+        p.OffsetU - Vector3.Dot(delta, p.AxisU),
+        p.OffsetV - Vector3.Dot(delta, p.AxisV));
+
+    /// <summary>
+    /// Turn the projection with a rotation about a pivot. The axes rotate with the surface; the offsets take
+    /// the correction that keeps the texture anchored where the pivot is.
+    /// </summary>
+    public static VmapTexProjection Rotate(VmapTexProjection p, Quaternion q, Vector3 pivot)
+    {
+        Vector3 u = Vector3.Transform(p.AxisU, q);
+        Vector3 v = Vector3.Transform(p.AxisV, q);
+        return new VmapTexProjection(
+            u, v,
+            p.OffsetU + Vector3.Dot(pivot, p.AxisU - u),
+            p.OffsetV + Vector3.Dot(pivot, p.AxisV - v));
+    }
+
+    /// <summary>
+    /// Scale the projection about a pivot. The axis divides by the scale rather than multiplying — the same
+    /// inverse relationship a plane normal has, and for the same reason: an axis is a gradient, not a point.
+    /// A texture on a brush stretched 2x horizontally stays stuck to it, so it stretches too.
+    /// </summary>
+    public static VmapTexProjection Scale(VmapTexProjection p, Vector3 scale, Vector3 pivot)
+    {
+        // A zero component would send the axis to infinity; the op that owns the scale already refuses those
+        // (ScaleSelectionOp.MinFactor), so this is belt-and-braces for a caller that does not.
+        var inv = new Vector3(
+            MathF.Abs(scale.X) < 1e-6f ? 1f : 1f / scale.X,
+            MathF.Abs(scale.Y) < 1e-6f ? 1f : 1f / scale.Y,
+            MathF.Abs(scale.Z) < 1e-6f ? 1f : 1f / scale.Z);
+
+        Vector3 u = p.AxisU * inv;
+        Vector3 v = p.AxisV * inv;
+        return new VmapTexProjection(
+            u, v,
+            p.OffsetU + Vector3.Dot(pivot, p.AxisU - u),
+            p.OffsetV + Vector3.Dot(pivot, p.AxisV - v));
+    }
+
+    /// <summary>Apply a per-projection transform to every layer of every face of a brush.</summary>
+    public static void ApplyToBrush(VmapBrush brush, Func<VmapTexProjection, VmapTexProjection> transform)
+    {
+        foreach (VmapFace f in brush.Faces)
+            foreach (VmapFaceLayer l in f.Layers)
+                l.Projection = transform(l.Projection);
     }
 }
 
@@ -791,12 +889,18 @@ public sealed class ScaleSelectionOp : IVmapOp
     private readonly Vector3 _pivot;
     private readonly Vector3 _scale;
 
-    public ScaleSelectionOp(IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, Vector3 pivot, Vector3 scale)
+    private readonly bool _textureLock;
+
+    /// <inheritdoc cref="TranslateBrushesOp(IReadOnlyList{int}, Vector3, bool)"/>
+    public ScaleSelectionOp(
+        IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, Vector3 pivot, Vector3 scale,
+        bool textureLock = false)
     {
         _brushIds = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
         _patchIds = patchIds?.ToArray() ?? throw new ArgumentNullException(nameof(patchIds));
         _pivot = pivot;
         _scale = scale;
+        _textureLock = textureLock;
     }
 
     /// <summary>Uniform-scale convenience: the same factor on all three axes.</summary>
@@ -812,6 +916,9 @@ public sealed class ScaleSelectionOp : IVmapOp
 
     /// <summary>Per-axis scale factors. Read by the wire codec.</summary>
     public Vector3 Scale => _scale;
+
+    /// <summary>Whether the texture travelled with the geometry. Read by the wire codec.</summary>
+    public bool TextureLock => _textureLock;
 
     /// <summary>True when all three factors agree, which is what the centre handle produces.</summary>
     public bool IsUniform =>
@@ -892,7 +999,14 @@ public sealed class ScaleSelectionOp : IVmapOp
         }
 
         for (int i = 0; i < brushes.Count; i++)
+        {
             VmapEdit.CopyPlanesInto(scaled[i], brushes[i]);
+
+            // AFTER the copy, and on the LIVE brush: CopyPlanesInto carries planes only, so a projection
+            // written onto the validation clone above would be thrown away with it.
+            if (_textureLock)
+                VmapTexLock.ApplyToBrush(brushes[i], p => VmapTexLock.Scale(p, _scale, _pivot));
+        }
 
         // Patches have no convexity constraint — a control point is just a point, so the forward map applies
         // directly and can never produce something invalid.
@@ -1090,15 +1204,23 @@ public sealed class RotateSelectionOp : IVmapOp
     private readonly Vector3 _axis;
     private readonly float _degrees;
 
+    private readonly bool _textureLock;
+
+    /// <inheritdoc cref="TranslateBrushesOp(IReadOnlyList{int}, Vector3, bool)"/>
     public RotateSelectionOp(
-        IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, Vector3 pivot, Vector3 axis, float degrees)
+        IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, Vector3 pivot, Vector3 axis, float degrees,
+        bool textureLock = false)
     {
         _brushIds = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
         _patchIds = patchIds?.ToArray() ?? throw new ArgumentNullException(nameof(patchIds));
         _pivot = pivot;
         _axis = axis;
         _degrees = degrees;
+        _textureLock = textureLock;
     }
+
+    /// <summary>Whether the texture travelled with the geometry. Read by the wire codec.</summary>
+    public bool TextureLock => _textureLock;
 
     public IReadOnlyList<int> TouchedBrushIds => _brushIds;
 
@@ -1140,7 +1262,8 @@ public sealed class RotateSelectionOp : IVmapOp
             patches.Add(p);
         }
 
-        if (_brushIds.Length > 0 && !new RotateBrushesOp(_brushIds, _pivot, _axis, _degrees).Apply(doc))
+        if (_brushIds.Length > 0
+            && !new RotateBrushesOp(_brushIds, _pivot, _axis, _degrees, _textureLock).Apply(doc))
             return false;
 
         Quaternion q = Quaternion.CreateFromAxisAngle(_axis / axisLen, _degrees * MathF.PI / 180f);

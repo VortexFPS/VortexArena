@@ -52,6 +52,13 @@ public sealed partial class EditorController : Node3D
     /// </summary>
     public const string CvarCullOccluded = "cl_editor_cull_occluded";
 
+    /// <summary>
+    /// Texture lock (backlog F7): carry a face's texture with the geometry when a brush is moved, turned or
+    /// scaled. Default ON, which is modern Radiant's default and the one that preserves alignment work — with
+    /// it off every move slides the texture across the surface.
+    /// </summary>
+    public const string CvarTextureLock = "cl_editor_texture_lock";
+
     /// <summary>Maximum pick range in world units.</summary>
     private const float PickRange = 8192f;
 
@@ -419,6 +426,7 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarSnapEnabled, "1", CvarFlags.Save);
         c.Register(CvarShowToolBrushes, "0", CvarFlags.Save);
         c.Register(CvarCullOccluded, "1", CvarFlags.Save);
+        c.Register(CvarTextureLock, "1", CvarFlags.Save);
         c.Register(CvarShowVertices, "0", CvarFlags.Save);
         c.Register(CvarShowCollision, "0", CvarFlags.Save);
         c.Register(CvarOverlayRange, "1024", CvarFlags.Save);
@@ -970,7 +978,7 @@ public sealed partial class EditorController : Node3D
 
             // ONE op for the whole selection: a mixed brush+patch rotate about a shared pivot has to be a
             // single undo step, because a single drag produced it.
-            if (!Commit(new RotateSelectionOp(rotIds, rotPatches, pivot, rotAxis, angle)))
+            if (!Commit(new RotateSelectionOp(rotIds, rotPatches, pivot, rotAxis, angle, TextureLock)))
             {
                 Log.Info("editor: rotation refused â€” that would break the brush");
                 return false;
@@ -990,7 +998,7 @@ public sealed partial class EditorController : Node3D
             if (scaleBrushes.Count == 0 && scalePatches.Count == 0)
                 return false;
 
-            if (!Commit(new ScaleSelectionOp(scaleBrushes, scalePatches, pivot, scale)))
+            if (!Commit(new ScaleSelectionOp(scaleBrushes, scalePatches, pivot, scale, TextureLock)))
             {
                 Log.Info("editor: scale refused â€” that would break the brush");
                 return false;
@@ -1019,7 +1027,7 @@ public sealed partial class EditorController : Node3D
             VmapSelectionKind.Patch => new TranslatePatchesOp(SelectedPatchIds(), delta),
             VmapSelectionKind.Face => BuildFaceOp(sel, delta),
             VmapSelectionKind.Vertex or VmapSelectionKind.Edge => new MoveVerticesOp(sel.BrushId, sel.Vertices, delta),
-            VmapSelectionKind.Brush => new TranslateBrushesOp(_session.SelectedBrushIds(), delta),
+            VmapSelectionKind.Brush => new TranslateBrushesOp(_session.SelectedBrushIds(), delta, TextureLock),
             _ => null,
         };
         if (op is null)
@@ -1990,7 +1998,7 @@ public sealed partial class EditorController : Node3D
         List<int> ids = _session.SelectedBrushIds();
         if (ids.Count == 0 || !VmapEdit.TryGetSelectionCenter(_document!, ids, out NVec3 center))
             return false;
-        if (!Commit(new RotateBrushesOp(ids, center, new NVec3(0f, 0f, 1f), degrees)))
+        if (!Commit(new RotateBrushesOp(ids, center, new NVec3(0f, 0f, 1f), degrees, TextureLock)))
             return false;
         GeometryVersion++;
         return true;
@@ -2051,6 +2059,13 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>Whether the world build removes faces buried inside other solids.</summary>
     public bool CullOccludedFaces => Cvar(CvarCullOccluded, 1f) != 0f;
+
+    /// <summary>
+    /// Whether a geometry move carries its texture along (backlog F7). Read at the moment the op is BUILT and
+    /// baked into it, never at apply time: the op replicates, and a peer that consulted its own setting would
+    /// build a differently-textured map from the same edit.
+    /// </summary>
+    public bool TextureLock => Cvar(CvarTextureLock, 1f) != 0f;
 
     private static float Cvar(string name, float fallback)
     {

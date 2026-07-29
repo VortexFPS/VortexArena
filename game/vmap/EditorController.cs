@@ -995,12 +995,18 @@ public sealed partial class EditorController : Node3D
 
             List<int> scaleBrushes = _session.SelectedBrushIds();
             List<int> scalePatches = SelectedPatchIds();
-            if (scaleBrushes.Count == 0 && scalePatches.Count == 0)
+            List<int> scaleEntities = SelectedEntityIds();
+            if (scaleBrushes.Count == 0 && scalePatches.Count == 0 && scaleEntities.Count == 0)
                 return false;
 
-            if (!Commit(new ScaleSelectionOp(scaleBrushes, scalePatches, pivot, scale, TextureLock)))
+            if (!Commit(new ScaleSelectionOp(
+                    scaleBrushes, scalePatches, pivot, scale, TextureLock, scaleEntities, _document)))
             {
-                Log.Info("editor: scale refused â€” that would break the brush");
+                // Only a BRUSH can refuse a scale (a degenerate solid); patches and point entities cannot.
+                // Saying "brush" when none was selected is what made this read as a different bug than it was.
+                Log.Info(scaleBrushes.Count > 0
+                    ? "editor: scale refused - that would break the brush"
+                    : "editor: nothing in the selection can be scaled");
                 return false;
             }
             GeometryVersion++;

@@ -93,7 +93,9 @@ public static class VmapOpWire
                 AppendVec(sb, sc.Pivot);
                 sb.Append(' ');
                 AppendVec(sb, sc.Scale);
-                sb.Append(' ').Append(sc.TextureLock ? 1 : 0);
+                sb.Append(' ').Append(sc.TextureLock ? 1 : 0).Append(' ');
+                // Trailing, like the lock flag, so a line from before entity scaling still decodes.
+                AppendIds(sb, sc.EntityIds);
                 return sb.ToString();
 
             case RotateSelectionOp rs:
@@ -339,8 +341,12 @@ public static class VmapOpWire
                         || !TryReadIds(tok, n1, out int[] patchIds, out int n2)
                         || tok.Length < n2 + 6)
                         return null;
+                    int[] scaleEntities = Array.Empty<int>();
+                    if (n2 + 7 < tok.Length && TryReadIds(tok, n2 + 7, out int[] se, out _))
+                        scaleEntities = se;
                     return new ScaleSelectionOp(
-                        brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3), ReadFlag(tok, n2 + 6));
+                        brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3), ReadFlag(tok, n2 + 6),
+                        scaleEntities, doc);
                 }
                 case "rotsel":
                 {

@@ -891,16 +891,64 @@ public sealed class ScaleSelectionOp : IVmapOp
 
     private readonly bool _textureLock;
 
+    private readonly int[] _entityIds;
+    private readonly int[] _pointEntities;
+
     /// <inheritdoc cref="TranslateBrushesOp(IReadOnlyList{int}, Vector3, bool)"/>
+    /// <param name="entityIds">
+    /// Entities in the selection (backlog T7). A BRUSH entity scales the geometry it owns — its position IS
+    /// that geometry — so its brushes and patches are folded into the sets below. A POINT entity has no
+    /// geometry, so what scales is its ORIGIN about the pivot: scaling a selection spreads its entities apart
+    /// with the walls, which is what every editor does and what a mapper means by the gesture. Making the
+    /// entity itself bigger is a <c>modelscale</c> property edit, and belongs in the entity dialog.
+    /// </param>
+    /// <param name="doc">
+    /// Needed at CONSTRUCTION to resolve which geometry each brush entity owns: the journal snapshots what an
+    /// op DECLARES, and it reads that before Apply. Without it a brush entity's geometry scales un-undoably —
+    /// the same reason <see cref="MoveEntitiesOp"/> takes one.
+    /// </param>
     public ScaleSelectionOp(
         IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, Vector3 pivot, Vector3 scale,
-        bool textureLock = false)
+        bool textureLock = false,
+        IReadOnlyList<int>? entityIds = null, VmapDocument? doc = null)
     {
-        _brushIds = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
-        _patchIds = patchIds?.ToArray() ?? throw new ArgumentNullException(nameof(patchIds));
+        ArgumentNullException.ThrowIfNull(brushIds);
+        ArgumentNullException.ThrowIfNull(patchIds);
+
         _pivot = pivot;
         _scale = scale;
         _textureLock = textureLock;
+        _entityIds = entityIds?.ToArray() ?? Array.Empty<int>();
+
+        // Deduped: a brush can be selected directly AND owned by a selected entity, and scaling it twice
+        // would move it to the square of the factor.
+        var brushes = new List<int>(brushIds);
+        var patches = new List<int>(patchIds);
+        var points = new List<int>();
+
+        if (doc is not null)
+        {
+            foreach (int id in _entityIds)
+            {
+                if (doc.FindEntity(id) is not { } e)
+                    continue;
+                if (!e.IsBrushEntity)
+                {
+                    points.Add(id);
+                    continue;
+                }
+                foreach (int b in e.BrushIds)
+                    if (!brushes.Contains(b))
+                        brushes.Add(b);
+                foreach (int p in e.PatchIds)
+                    if (!patches.Contains(p))
+                        patches.Add(p);
+            }
+        }
+
+        _brushIds = brushes.ToArray();
+        _patchIds = patches.ToArray();
+        _pointEntities = points.ToArray();
     }
 
     /// <summary>Uniform-scale convenience: the same factor on all three axes.</summary>
@@ -911,6 +959,8 @@ public sealed class ScaleSelectionOp : IVmapOp
 
     public IReadOnlyList<int> TouchedPatchIds => _patchIds;
 
+    public IReadOnlyList<int> TouchedEntityIds => _entityIds;
+
     /// <summary>Point the scale expands from. Read by the wire codec.</summary>
     public Vector3 Pivot => _pivot;
 
@@ -920,13 +970,16 @@ public sealed class ScaleSelectionOp : IVmapOp
     /// <summary>Whether the texture travelled with the geometry. Read by the wire codec.</summary>
     public bool TextureLock => _textureLock;
 
+    /// <summary>Entities in the selection. Read by the wire codec.</summary>
+    public IReadOnlyList<int> EntityIds => _entityIds;
+
     /// <summary>True when all three factors agree, which is what the centre handle produces.</summary>
     public bool IsUniform =>
         MathF.Abs(_scale.X - _scale.Y) < 1e-6f && MathF.Abs(_scale.Y - _scale.Z) < 1e-6f;
 
     public string Describe()
     {
-        int n = _brushIds.Length + _patchIds.Length;
+        int n = _brushIds.Length + _patchIds.Length + _pointEntities.Length;
         string what = n == 1 ? "selection" : $"{n} objects";
         return IsUniform
             ? $"Scale {what} by {_scale.X:0.###}x"
@@ -937,7 +990,7 @@ public sealed class ScaleSelectionOp : IVmapOp
     {
         ArgumentNullException.ThrowIfNull(doc);
 
-        if (_brushIds.Length == 0 && _patchIds.Length == 0)
+        if (_brushIds.Length == 0 && _patchIds.Length == 0 && _pointEntities.Length == 0)
             return false;
         if (_scale == Vector3.One)
             return false;
@@ -1013,6 +1066,12 @@ public sealed class ScaleSelectionOp : IVmapOp
         foreach (VmapPatch patch in patches)
             for (int i = 0; i < patch.Controls.Count; i++)
                 patch.Controls[i] = _pivot + (patch.Controls[i] - _pivot) * _scale;
+
+        // Point entities spread apart with the geometry. Their origin is all they have, so it takes the same
+        // forward map every control point above did.
+        foreach (int id in _pointEntities)
+            if (doc.FindEntity(id) is { } e)
+                e.SetOrigin(_pivot + (e.Origin() - _pivot) * _scale);
 
         return true;
     }

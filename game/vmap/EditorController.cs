@@ -69,6 +69,24 @@ public sealed partial class EditorController : Node3D
     /// </summary>
     public const string CvarEntityOcclusion = "cl_editor_entity_occlusion";
 
+    /// <summary>
+    /// Texture browser shows a grid of thumbnails rather than a name list (backlog T6). Default ON; the list
+    /// remains the fallback for reading whole paths, and for art that will not decode.
+    /// </summary>
+    public const string CvarThumbnails = "cl_editor_thumbnails";
+
+    /// <summary>
+    /// Thumbnail SOURCE resolution in pixels. Draw size follows the viewport; this is what is decoded and
+    /// held, so it is the memory knob — 96² RGBA8 is 36 KB apiece.
+    /// </summary>
+    public const string CvarThumbSize = "cl_editor_thumb_size";
+
+    /// <summary>
+    /// Resident thumbnails before the least recently drawn are freed. The cap is the whole point: the shader
+    /// list is around two thousand entries and holding them all at full resolution is gigabytes.
+    /// </summary>
+    public const string CvarThumbCache = "cl_editor_thumb_cache";
+
     /// <summary>Maximum pick range in world units.</summary>
     private const float PickRange = 8192f;
 
@@ -448,6 +466,9 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarCullOccluded, "1", CvarFlags.Save);
         c.Register(CvarTextureLock, "1", CvarFlags.Save);
         c.Register(CvarEntityOcclusion, "1", CvarFlags.Save);
+        c.Register(CvarThumbnails, "1", CvarFlags.Save);
+        c.Register(CvarThumbSize, "96", CvarFlags.Save);
+        c.Register(CvarThumbCache, "512", CvarFlags.Save);
         c.Register(CvarShowVertices, "0", CvarFlags.Save);
         c.Register(CvarShowCollision, "0", CvarFlags.Save);
         c.Register(CvarOverlayRange, "1024", CvarFlags.Save);

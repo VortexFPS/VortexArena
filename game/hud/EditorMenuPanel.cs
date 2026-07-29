@@ -834,6 +834,22 @@ public partial class EditorMenuPanel : HudPanel
             Checked = GlobalF(EditorLighting.CvarShowBsp, 0f) != 0f,
             KeepOpen = true,
         },
+        new()
+        {
+            Label = "Hide entities behind walls",
+            Detail = "the overlay draws through geometry; this culls the boxes that are behind it",
+            Command = $"toggle {EditorController.CvarEntityOcclusion}",
+            Checked = GlobalF(EditorController.CvarEntityOcclusion, 1f) != 0f,
+            KeepOpen = true,
+        },
+        new()
+        {
+            Label = "Texture browser thumbnails",
+            Detail = "off falls back to the name list, which is what you want for reading whole paths",
+            Command = $"toggle {EditorController.CvarThumbnails}",
+            Checked = GlobalF(EditorController.CvarThumbnails, 1f) != 0f,
+            KeepOpen = true,
+        },
     };
 
     /// <summary>Mark a row that exists in the design but not yet in the build.</summary>

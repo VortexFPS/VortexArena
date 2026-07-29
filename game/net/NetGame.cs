@@ -3159,6 +3159,9 @@ public sealed partial class NetGame : Node3D
         // Drop any unconsumed predecoded texture images (a model whose staged build never completed —
         // entity died mid-stream / map change) so decoded pixels don't outlive the session.
         _assets?.Assets.ClearPredecodedImages();
+        // Same reasoning for the editor's thumbnail grid: free its textures HERE rather than leaving them to
+        // the finalizer thread, which would race the renderer.
+        _editorThumbs?.Clear();
         _client?.Dispose();
         // S5: join the server-sim worker BEFORE disposing ServerNet/the world, so the socket + world teardown is
         // single-threaded and no in-flight tick races the Dispose (the worker holds the gate around its whole
@@ -6040,6 +6043,7 @@ public sealed partial class NetGame : Node3D
         {
             editorDialog.IsEditorSession = IsEditorGametype;
             editorDialog.CommandSink ??= line => Menu.MenuState.Interp?.ExecuteLine(line);
+            editorDialog.Thumbnails ??= EditorThumbnails();
 
             // Leaving EDIT must not strand a modal dialog holding the cursor, same as the context menu.
             if (editorDialog.IsOpen && !(IsEditorGametype && (_client?.IsObserving ?? false)))
@@ -9569,6 +9573,8 @@ public sealed partial class NetGame : Node3D
             {
                 Label = name,
                 Group = GroupOfShader(name),
+                // A grid cell shows only the leaf of the path; the detail pane is where the full name lives.
+                Detail = name,
                 Command = $"editor_shader set {name}",
             });
         }
@@ -9579,8 +9585,17 @@ public sealed partial class NetGame : Node3D
             return g != 0 ? g : string.CompareOrdinal(a.Label, b.Label);
         });
 
-        dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, "Shaders", rows,
-            "arrows move · Enter applies to the selection or the aimed face · type to filter · Esc closes");
+        // Thumbnails by default (backlog T6): nobody picks a wall texture from a list of strings. The list is
+        // still there for reading whole paths, and for the case where the art will not decode.
+        bool thumbs = Menu.MenuState.Cvars is not { } cv
+            || CvarOr(cv, Vmap.EditorController.CvarThumbnails, 1f) != 0f;
+
+        dialog.Open(
+            thumbs ? Hud.EditorDialogPanel.DialogKind.Gallery : Hud.EditorDialogPanel.DialogKind.Browser,
+            "Shaders", rows,
+            thumbs
+                ? "arrows move · Enter applies to the selection or the aimed face · type to search · Esc closes"
+                : "arrows move · Enter applies to the selection or the aimed face · type to filter · Esc closes");
     }
 
     /// <summary>
@@ -11570,6 +11585,42 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Non-null off-thread wrapper for a (possibly failed) skeletal parse — see ResolvePlayerModel.</summary>
     private sealed record SkeletalParseBox(AssetLoader.SkeletalModelParse? Parse);
+
+    /// <summary>
+    /// Non-null off-thread wrapper for a (possibly missing) editor thumbnail.
+    ///
+    /// The streamer DROPS a null off-thread result silently, so its main phase never runs. A shader with no
+    /// resolvable image would then stay pending forever: never drawn as a miss, never retried, and holding an
+    /// in-flight slot until the cap starves the whole grid. Same reason SkeletalParseBox exists.
+    /// </summary>
+    private sealed record ThumbBox(Image? Image);
+
+    private XonoticGodot.Game.Hud.EditorThumbnailCache? _editorThumbs;
+
+    /// <summary>
+    /// The editor's thumbnail cache, wired to the asset system and the background streamer (backlog T6).
+    /// Built once and reused: it holds GPU textures, and a fresh one per frame would rebuild them all.
+    /// </summary>
+    private XonoticGodot.Game.Hud.EditorThumbnailCache EditorThumbnails()
+    {
+        if (_editorThumbs is not null)
+            return _editorThumbs;
+
+        var cache = new XonoticGodot.Game.Hud.EditorThumbnailCache();
+        if (_assets is { } loader)
+            cache.Decode = (name, size) => loader.Assets.LoadThumbnailImage(name, size);
+        if (_streamer is { } streamer)
+            cache.Schedule = (work, done) => streamer.Request(
+                () => new ThumbBox(work()),
+                box => done(box.Image),
+                // LOW: a live player-model resolve must always beat browser art, in a co-editing session
+                // most of all.
+                XonoticGodot.Game.Client.BackgroundAssetStreamer.Priority.Low,
+                label: "editor thumbnail");
+
+        _editorThumbs = cache;
+        return cache;
+    }
 
     /// <summary>
     /// (§12.3-1/§12.6) Enqueue the staged main-thread half of a skeletal-model build: one streamer job per

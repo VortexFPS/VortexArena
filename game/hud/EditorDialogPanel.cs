@@ -8,10 +8,11 @@ namespace XonoticGodot.Game.Hud;
 /// The map editor's dialog surface (design doc §11.9): the entity palette, the key inspector, the shader
 /// browser and the patch dialogs, all through ONE panel.
 ///
-/// Shared rather than one panel per dialog, because they are the same two shapes underneath. A BROWSER is a
-/// grouped list plus a description of whatever is highlighted plus a confirm; a PROPERTY GRID is a list of
-/// rows you edit in place. Three bespoke dialogs would be three times the input handling, three sets of
-/// keyboard conventions to remember, and three places for them to drift apart.
+/// Shared rather than one panel per dialog, because they are the same few shapes underneath. A BROWSER is a
+/// grouped list plus a description of whatever is highlighted plus a confirm; a GALLERY is that browser laid
+/// out as a grid of pictures; a PROPERTY GRID is a list of rows you edit in place. Bespoke dialogs would be
+/// several times the input handling, several sets of keyboard conventions to remember, and several places for
+/// them to drift apart.
 ///
 /// Driven the same way the context menu is: rows carry console COMMANDS, so every dialog action is scriptable
 /// and the dialog never becomes a second, private half of the editor's API. Where a row needs a value the
@@ -25,11 +26,18 @@ public partial class EditorDialogPanel : HudPanel
     /// <summary>Which of the two shapes this dialog is.</summary>
     public enum DialogKind
     {
-        /// <summary>Grouped list + description + confirm. The palette, the shader browser, patch create.</summary>
+        /// <summary>Grouped list + description + confirm. The palette, patch create.</summary>
         Browser,
 
-        /// <summary>Rows edited in place. The entity key inspector.</summary>
+        /// <summary>Rows edited in place. The entity key inspector, the light dialog.</summary>
         Properties,
+
+        /// <summary>
+        /// A browser laid out as a THUMBNAIL grid — same confirm and close semantics, a two-dimensional
+        /// cursor, one picture per entry (backlog T6). Only the shader browser wants it: nobody picks a wall
+        /// texture from a list of strings, and nothing else the editor lists has a picture to show.
+        /// </summary>
+        Gallery,
     }
 
     /// <summary>One selectable row.</summary>
@@ -57,9 +65,24 @@ public partial class EditorDialogPanel : HudPanel
         public bool Editable;
     }
 
+    /// <summary>
+    /// One drawn line: either a group heading, or a run of cells (one in a list, up to <c>_cols</c> in a
+    /// gallery).
+    ///
+    /// Scrolling and hit-testing work in THIS space, and that is the point of having it. The draw loop always
+    /// gave a heading its own vertical line while the hit test computed the row as if every entry were exactly
+    /// one line, so a click selected the wrong entry — off by the number of headings above it, growing as you
+    /// scrolled — and the last page could not be reached at all. In the shader browser, where every entry
+    /// carries a group, that is every click.
+    /// </summary>
+    private readonly record struct VisualRow(string Heading, int First, int Count);
+
     // ---- state ----
     private readonly List<DialogRow> _rows = new();
     private readonly List<int> _visible = new();     // indices into _rows after filtering
+    private readonly List<VisualRow> _lines = new(); // scroll and hit-test space
+    private readonly List<int> _lineOfCell = new();  // parallel to _visible: cell -> line index
+    private int _cols = 1;                           // 1 in Browser/Properties, N in Gallery
     private bool _open;
     private DialogKind _kind = DialogKind.Browser;
     private string _title = "";
@@ -72,6 +95,12 @@ public partial class EditorDialogPanel : HudPanel
 
     /// <summary>Where confirmed commands go — the shared console interpreter.</summary>
     public Action<string>? CommandSink { get; set; }
+
+    /// <summary>
+    /// Thumbnails for <see cref="DialogKind.Gallery"/>, wired once by the host. Null draws swatches, which is
+    /// what a session with no asset system gets and is still a usable grid.
+    /// </summary>
+    public EditorThumbnailCache? Thumbnails { get; set; }
 
     /// <summary>True once the host confirms an editor session; silent until then.</summary>
     public bool IsEditorSession { get; set; }
@@ -140,9 +169,25 @@ public partial class EditorDialogPanel : HudPanel
         bool show = IsEditorSession && _open && ShowModeCvar() != 0;
         if (show != Visible)
             Visible = show;
-        if (show)
-            QueueRedraw();
+        if (!show)
+            return;
+
+        if (IsGallery && Thumbnails is { } thumbs)
+        {
+            // Pushed rather than read at the point of use: SetSize discards the cache, so it has to happen
+            // once a frame at a known point and not in the middle of a draw pass.
+            thumbs.SetSize((int)GlobalF(ThumbSizeCvar, 96f));
+            thumbs.Capacity = (int)Mathf.Clamp(GlobalF(ThumbCacheCvar, 512f), 32f, 4096f);
+        }
+
+        QueueRedraw();
     }
+
+    /// <summary>Mirrors <c>EditorController.CvarThumbSize</c>; game/hud does not reference game/vmap.</summary>
+    private const string ThumbSizeCvar = "cl_editor_thumb_size";
+
+    /// <summary>Mirrors <c>EditorController.CvarThumbCache</c>.</summary>
+    private const string ThumbCacheCvar = "cl_editor_thumb_cache";
 
     /// <summary>Re-apply the filter and clamp the cursor into whatever survived it.</summary>
     private void Rebuild()
@@ -158,16 +203,59 @@ public partial class EditorDialogPanel : HudPanel
 
         if (_cursor >= _visible.Count)
             _cursor = Math.Max(0, _visible.Count - 1);
+        BuildLines();
         ClampScroll();
     }
 
+    /// <summary>
+    /// Flatten the visible entries into drawn lines: a heading whenever the group changes, then the run of
+    /// entries chunked <c>_cols</c> wide. Cheap (one pass over what survived the filter) and re-run only when
+    /// the filter or the column count actually changes.
+    /// </summary>
+    private void BuildLines()
+    {
+        _lines.Clear();
+        _lineOfCell.Clear();
+
+        string lastGroup = "";
+        int i = 0;
+        while (i < _visible.Count)
+        {
+            string group = _rows[_visible[i]].Group;
+            if (group.Length > 0 && group != lastGroup)
+            {
+                _lines.Add(new VisualRow(group, 0, 0));
+                lastGroup = group;
+            }
+
+            // A run is the entries sharing this group; it wraps at _cols and stops at the next group, so a
+            // heading always starts a fresh line rather than appearing mid-row.
+            int run = 0;
+            while (i + run < _visible.Count && run < _cols
+                   && _rows[_visible[i + run]].Group == group)
+                run++;
+
+            int line = _lines.Count;
+            for (int c = 0; c < run; c++)
+                _lineOfCell.Add(line);
+            _lines.Add(new VisualRow("", i, run));
+            i += run;
+        }
+    }
+
+    /// <summary>Which drawn line a cell sits on; 0 when the model has not been built yet.</summary>
+    private int LineOf(int cell)
+        => cell >= 0 && cell < _lineOfCell.Count ? _lineOfCell[cell] : 0;
+
     private void ClampScroll()
     {
-        if (_cursor < _scroll)
-            _scroll = _cursor;
-        else if (_cursor >= _scroll + PageRows)
-            _scroll = _cursor - PageRows + 1;
-        _scroll = Math.Max(0, Math.Min(_scroll, Math.Max(0, _visible.Count - PageRows)));
+        int page = PageLines;
+        int line = LineOf(_cursor);
+        if (line < _scroll)
+            _scroll = line;
+        else if (line >= _scroll + page)
+            _scroll = line - page + 1;
+        _scroll = Math.Max(0, Math.Min(_scroll, Math.Max(0, _lines.Count - page)));
     }
 
     private DialogRow? Current
@@ -182,13 +270,17 @@ public partial class EditorDialogPanel : HudPanel
         if (!_open)
             return;
 
+        // The column count follows the frame, which follows the viewport, so it can change under a resize
+        // with no other event. Cheap to re-derive and it keeps input and drawing in one geometry.
+        SyncColumns();
+
         if (@event is InputEventMouseButton { Pressed: true } mb)
         {
             switch (mb.ButtonIndex)
             {
                 case MouseButton.Left:
                 {
-                    int row = RowAt(mb.Position);
+                    int row = CellAt(mb.Position);
                     if (row >= 0)
                     {
                         // A click moves the cursor; a click on the ALREADY selected row confirms it. That makes
@@ -207,7 +299,7 @@ public partial class EditorDialogPanel : HudPanel
                     AcceptEvent();
                     return;
                 case MouseButton.WheelDown:
-                    _scroll = Math.Min(Math.Max(0, _visible.Count - PageRows), _scroll + 3);
+                    _scroll = Math.Min(Math.Max(0, _lines.Count - PageLines), _scroll + 3);
                     AcceptEvent();
                     return;
             }
@@ -232,27 +324,35 @@ public partial class EditorDialogPanel : HudPanel
                 AcceptEvent();
                 return;
 
+            // Up/Down move by a whole ROW of cells, which in a list is one entry and in a gallery is _cols of
+            // them. Left/Right step one cell, and only in a gallery — in a list they would duplicate Up/Down.
             case Key.Up:
-                _cursor = Math.Max(0, _cursor - 1);
-                ClampScroll();
+                MoveCursor(-_cols);
                 AcceptEvent();
                 return;
 
             case Key.Down:
-                _cursor = Math.Min(Math.Max(0, _visible.Count - 1), _cursor + 1);
-                ClampScroll();
+                MoveCursor(+_cols);
+                AcceptEvent();
+                return;
+
+            case Key.Left when _kind == DialogKind.Gallery:
+                MoveCursor(-1);
+                AcceptEvent();
+                return;
+
+            case Key.Right when _kind == DialogKind.Gallery:
+                MoveCursor(+1);
                 AcceptEvent();
                 return;
 
             case Key.Pageup:
-                _cursor = Math.Max(0, _cursor - PageRows);
-                ClampScroll();
+                MoveCursor(-PageLines * _cols);
                 AcceptEvent();
                 return;
 
             case Key.Pagedown:
-                _cursor = Math.Min(Math.Max(0, _visible.Count - 1), _cursor + PageRows);
-                ClampScroll();
+                MoveCursor(+PageLines * _cols);
                 AcceptEvent();
                 return;
 
@@ -291,6 +391,12 @@ public partial class EditorDialogPanel : HudPanel
             Rebuild();
             AcceptEvent();
         }
+    }
+
+    private void MoveCursor(int by)
+    {
+        _cursor = Math.Clamp(_cursor + by, 0, Math.Max(0, _visible.Count - 1));
+        ClampScroll();
     }
 
     private void HandleEditKey(InputEventKey key)
@@ -345,9 +451,9 @@ public partial class EditorDialogPanel : HudPanel
         string cmd = row.Command.Replace("%v", value, StringComparison.Ordinal);
         CommandSink?.Invoke(cmd);
 
-        // A property grid stays open — you are usually setting several keys — while a browser has done its
-        // job the moment you picked something.
-        if (_kind == DialogKind.Browser)
+        // A property grid stays open — you are usually setting several keys — while a browser (list or grid)
+        // has done its job the moment you picked something.
+        if (_kind != DialogKind.Properties)
             Close();
         else
             row.Value = value;
@@ -361,10 +467,25 @@ public partial class EditorDialogPanel : HudPanel
 
     private float RowH => FontPx + 7f;
 
+    private bool IsGallery => _kind == DialogKind.Gallery;
+
+    /// <summary>Drawn edge of a thumbnail, in pixels. Follows the viewport so the grid reads at any size.</summary>
+    private float ThumbPx => Mathf.Clamp(Size2.Y * 0.105f, 48f, 128f);
+
+    private float CellW => ThumbPx + 10f;
+
+    /// <summary>Image plus one label line under it.</summary>
+    private float CellH => ThumbPx + RowH + 6f;
+
+    /// <summary>Height of one drawn line — a grid cell in a gallery, a text row otherwise.</summary>
+    private float LineH => IsGallery ? CellH : RowH;
+
     private Rect2 Frame()
     {
-        float w = Mathf.Clamp(Size2.X * 0.52f, 380f, 900f);
-        float h = HeaderH + PageRows * RowH + DetailH + FooterH + 16f;
+        float w = IsGallery
+            ? Mathf.Clamp(Size2.X * 0.74f, 560f, 1400f)
+            : Mathf.Clamp(Size2.X * 0.52f, 380f, 900f);
+        float h = HeaderH + (IsGallery ? 6f * CellH : PageRows * RowH) + DetailH + FooterH + 16f;
         h = MathF.Min(h, Size2.Y * 0.9f);
         return new Rect2((Size2.X - w) * 0.5f, (Size2.Y - h) * 0.5f, w, h);
     }
@@ -375,18 +496,63 @@ public partial class EditorDialogPanel : HudPanel
 
     private float FooterH => RowH * 1.3f;
 
-    /// <summary>Row index under a panel-local point, or -1.</summary>
-    private int RowAt(Vector2 pos)
+    /// <summary>Height available for lines, between the header and the detail pane.</summary>
+    private float ListH
+    {
+        get
+        {
+            Rect2 f = Frame();
+            return MathF.Max(LineH, f.Size.Y - HeaderH - DetailH - FooterH - 8f);
+        }
+    }
+
+    /// <summary>How many drawn lines fit. Replaces the fixed <see cref="PageRows"/> once a gallery reflows.</summary>
+    private int PageLines => Math.Max(1, (int)(ListH / LineH));
+
+    /// <summary>
+    /// Re-derive the column count from the current frame, rebuilding the line model if it changed. Called
+    /// from both draw and input so the two never disagree about where a cell is.
+    /// </summary>
+    private void SyncColumns()
+    {
+        int cols = IsGallery
+            ? Math.Max(1, (int)((Frame().Size.X - 24f) / CellW))
+            : 1;
+        if (cols == _cols)
+            return;
+        _cols = cols;
+        BuildLines();
+        ClampScroll();
+    }
+
+    /// <summary>
+    /// Visible-entry index under a panel-local point, or -1 for empty space or a group heading.
+    ///
+    /// Resolved through the line model rather than dividing the offset by a row height: headings occupy a
+    /// line without being selectable, which is exactly what the old arithmetic could not express.
+    /// </summary>
+    private int CellAt(Vector2 pos)
     {
         Rect2 f = Frame();
         float top = f.Position.Y + HeaderH;
-        if (pos.X < f.Position.X || pos.X > f.Position.X + f.Size.X)
-            return -1;
-        if (pos.Y < top)
+        if (pos.X < f.Position.X || pos.X > f.Position.X + f.Size.X || pos.Y < top)
             return -1;
 
-        int row = (int)((pos.Y - top) / RowH) + _scroll;
-        return row >= 0 && row < _visible.Count && row < _scroll + PageRows ? row : -1;
+        int line = (int)((pos.Y - top) / LineH) + _scroll;
+        if (line < 0 || line >= _lines.Count || line >= _scroll + PageLines)
+            return -1;
+
+        VisualRow row = _lines[line];
+        if (row.Count == 0)
+            return -1;                                     // a heading: no entry under the pointer
+
+        if (!IsGallery)
+            return row.First;
+
+        int col = (int)((pos.X - (f.Position.X + 12f)) / CellW);
+        if (col < 0 || col >= row.Count)
+            return -1;
+        return row.First + col;
     }
 
     private static readonly Color Bg = new(0.04f, 0.05f, 0.07f, 0.94f);
@@ -399,10 +565,17 @@ public partial class EditorDialogPanel : HudPanel
     private static readonly Color SelBg = new(0.2f, 0.45f, 0.65f, 0.55f);
     private static readonly Color EditColor = new(0.45f, 1f, 0.6f);
 
+    private static readonly Color ThumbBg = new(0.10f, 0.11f, 0.13f, 0.9f);
+    private static readonly Color ThumbEdge = new(1f, 1f, 1f, 0.10f);
+    private static readonly Color FieldBg = new(0f, 0f, 0f, 0.35f);
+    private static readonly Color FieldEdge = new(1f, 1f, 1f, 0.14f);
+
     protected override void DrawPanel()
     {
         if (!_open || ShowModeCvar() == 0)
             return;
+
+        SyncColumns();
 
         Rect2 f = Frame();
         int px = FontPx;
@@ -414,34 +587,59 @@ public partial class EditorDialogPanel : HudPanel
         DrawRect(new Rect2(f.Position.X, f.Position.Y, 1f, f.Size.Y), Edge);
         DrawRect(new Rect2(f.Position.X + f.Size.X - 1f, f.Position.Y, 1f, f.Size.Y), Edge);
 
-        // --- header: title, and the filter as you type it ---
-        string head = _filter.Length > 0 ? $"{_title}   filter: {_filter}_" : _title;
-        DrawText(new Vector2(f.Position.X + 12f, f.Position.Y + 6f), head, TitleColor, px);
-        DrawText(new Vector2(f.Position.X + f.Size.X - 12f - MeasureText($"{_visible.Count}", px),
-                f.Position.Y + 6f), $"{_visible.Count}", GroupColor, px);
-
-        // --- rows ---
-        float y = f.Position.Y + HeaderH;
-        string lastGroup = "";
-        for (int i = _scroll; i < _visible.Count && i < _scroll + PageRows; i++)
+        // --- header: title, a real search field, and how much of the list survived it ---
+        //
+        // The keyboard side already worked; it just had nowhere to show. A grid of two thousand textures is
+        // unusable without search, and a filter that only appears once you have guessed it exists is not a
+        // feature a mapper will find.
+        DrawText(new Vector2(f.Position.X + 12f, f.Position.Y + 6f), _title, TitleColor, px);
+        float fieldX = f.Position.X + 12f + MeasureText(_title, px) + 16f;
+        float fieldW = MathF.Max(80f, f.Size.X * 0.42f);
+        if (fieldX + fieldW < f.Position.X + f.Size.X - 90f)
         {
-            DialogRow r = _rows[_visible[i]];
+            var box = new Rect2(fieldX, f.Position.Y + 5f, fieldW, rh - 2f);
+            DrawRect(box, FieldBg);
+            DrawRect(box, FieldEdge, filled: false, width: 1f);
+            DrawText(box.Position + new Vector2(6f, 2f),
+                _filter.Length > 0 ? _filter + "_" : "type to search",
+                _filter.Length > 0 ? LabelColor : GroupColor, px - 1);
+        }
+        string count = _filter.Length > 0 ? $"{_visible.Count}/{_rows.Count}" : $"{_rows.Count}";
+        DrawText(new Vector2(f.Position.X + f.Size.X - 12f - MeasureText(count, px), f.Position.Y + 6f),
+            count, GroupColor, px);
 
+        // --- lines: headings and entries, in the same space the hit test uses ---
+        //
+        // Before the loop, so every Peek below counts as "used this frame" and the eviction order reflects
+        // what is actually on screen.
+        if (IsGallery)
+            Thumbnails?.BeginFrame();
+
+        float y = f.Position.Y + HeaderH;
+        float lineH = LineH;
+        for (int l = _scroll; l < _lines.Count && l < _scroll + PageLines; l++, y += lineH)
+        {
+            VisualRow line = _lines[l];
+
+            if (line.Count == 0)
+            {
+                // Group headings drawn inline as the list crosses into a new one, so a 186-row palette reads
+                // as sections without needing a second column or a tree widget.
+                DrawText(new Vector2(f.Position.X + 12f, y + 3f), line.Heading.ToUpperInvariant(),
+                    GroupColor, px - 1);
+                continue;
+            }
+
+            if (IsGallery)
+            {
+                DrawGalleryLine(f, line, y, px);
+                continue;
+            }
+
+            int i = line.First;
+            DialogRow r = _rows[_visible[i]];
             if (i == _cursor)
                 DrawRect(new Rect2(f.Position.X + 1f, y, f.Size.X - 2f, rh), SelBg);
-
-            // Group headings are drawn inline as the list crosses into a new one, so a 186-row palette reads
-            // as sections without needing a second column or a tree widget.
-            if (r.Group.Length > 0 && r.Group != lastGroup)
-            {
-                DrawText(new Vector2(f.Position.X + 12f, y + 3f), r.Group.ToUpperInvariant(), GroupColor, px - 1);
-                lastGroup = r.Group;
-                y += rh;
-                if (y > f.Position.Y + HeaderH + PageRows * rh)
-                    break;
-                if (i == _cursor)
-                    DrawRect(new Rect2(f.Position.X + 1f, y, f.Size.X - 2f, rh), SelBg);
-            }
 
             DrawText(new Vector2(f.Position.X + 22f, y + 3f), r.Label, LabelColor, px);
 
@@ -450,8 +648,14 @@ public partial class EditorDialogPanel : HudPanel
             if (value.Length > 0)
                 DrawText(new Vector2(f.Position.X + f.Size.X - 12f - MeasureText(value, px), y + 3f),
                     value, editingThis ? EditColor : ValueColor, px);
+        }
 
-            y += rh;
+        // Ask for one line beyond each edge as well, so an unhurried scroll never runs into empty cells. The
+        // request pass is idempotent and capped in flight, so overshooting costs nothing.
+        if (IsGallery && Thumbnails is { } thumbs)
+        {
+            Prefetch(thumbs, _scroll - 1);
+            Prefetch(thumbs, _scroll + PageLines);
         }
 
         // --- detail pane: whatever the highlighted row documents ---
@@ -466,6 +670,73 @@ public partial class EditorDialogPanel : HudPanel
             : _footer.Length > 0 ? _footer
             : "arrows move · Enter picks · type to filter · Esc closes";
         DrawText(new Vector2(f.Position.X + 12f, f.Position.Y + f.Size.Y - FooterH + 2f), footer, GroupColor, px - 1);
+    }
+
+    /// <summary>
+    /// One row of thumbnail cells: the picture, a frame, and the leaf of the shader path under it.
+    ///
+    /// A cell is NEVER blank. A missing thumbnail draws a dark swatch, and a material that is known to have
+    /// no resolvable image draws a "?" instead of being asked for again — a grid that silently retries a
+    /// thousand misses every frame would spend the whole in-flight budget on them.
+    /// </summary>
+    private void DrawGalleryLine(Rect2 f, VisualRow line, float y, int px)
+    {
+        float thumb = ThumbPx;
+        float cellW = CellW;
+
+        for (int c = 0; c < line.Count; c++)
+        {
+            int vi = line.First + c;
+            if (vi >= _visible.Count)
+                break;
+            DialogRow r = _rows[_visible[vi]];
+
+            var cell = new Rect2(f.Position.X + 12f + c * cellW, y, cellW - 4f, CellH - 4f);
+            var img = new Rect2(cell.Position.X + 2f, cell.Position.Y + 2f, thumb, thumb);
+
+            if (vi == _cursor)
+                DrawRect(cell, SelBg);
+
+            Texture2D? tex = Thumbnails?.Peek(r.Label);
+            if (tex is not null)
+            {
+                DrawTextureRect(tex, img, false, Colors.White);
+            }
+            else
+            {
+                DrawRect(img, ThumbBg);
+                if (Thumbnails is null || Thumbnails.IsMiss(r.Label))
+                    DrawTextCentered(img.Position + new Vector2(0f, img.Size.Y * 0.38f), img.Size.X, "?",
+                        GroupColor, px - 2);
+                else
+                    Thumbnails.Request(r.Label);   // lazy: only what is on screen, only once
+            }
+            DrawRect(img, ThumbEdge, filled: false, width: 1f);
+
+            DrawTextCentered(new Vector2(cell.Position.X, img.Position.Y + thumb + 2f), cell.Size.X,
+                Leaf(r.Label), vi == _cursor ? LabelColor : GroupColor, px - 2);
+        }
+    }
+
+    /// <summary>Queue the thumbnails for one off-screen line, drawing nothing.</summary>
+    private void Prefetch(EditorThumbnailCache thumbs, int lineIndex)
+    {
+        if (lineIndex < 0 || lineIndex >= _lines.Count)
+            return;
+        VisualRow line = _lines[lineIndex];
+        for (int c = 0; c < line.Count && line.First + c < _visible.Count; c++)
+        {
+            string label = _rows[_visible[line.First + c]].Label;
+            if (!thumbs.IsMiss(label) && thumbs.Peek(label) is null)
+                thumbs.Request(label);
+        }
+    }
+
+    /// <summary>The last path segment — a cell is too narrow for <c>textures/facility114x/…</c>.</summary>
+    private static string Leaf(string path)
+    {
+        int slash = path.LastIndexOf('/');
+        return slash >= 0 && slash + 1 < path.Length ? path[(slash + 1)..] : path;
     }
 
     /// <summary>Word-wrap the detail text into the pane rather than letting it run off the edge.</summary>

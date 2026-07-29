@@ -583,6 +583,52 @@ public sealed class AssetSystem
         return vpath == null ? null : LoadImageFromVpath(vpath);
     }
 
+    /// <summary>
+    /// OFF-THREAD-SAFE. A small preview image for a material — the editor's texture browser (backlog T6).
+    /// Its <c>qer_editorimage</c>, else its diffuse stage, else its name (see
+    /// <see cref="ShaderPreview.ImageName"/>), decoded, decompressed and scaled to
+    /// <paramref name="size"/>² RGBA8. NOT cached and NOT uploaded — the caller owns both.
+    ///
+    /// Deliberately not <see cref="LoadTexture"/>: that is the WORLD's texture cache and it never evicts, so
+    /// browsing a ~2000-entry shader list through it would permanently retain every diffuse in the game —
+    /// 512²-1024² apiece, gigabytes — plus a multi-second synchronous decode on the frame the dialog opens.
+    /// Deliberately not <see cref="PredecodeTexture"/> either: that parks a FULL-resolution image that only a
+    /// matching <see cref="LoadTexture"/> drains, so a browse would leak one per thumbnail.
+    ///
+    /// Off-thread safety is the chain <see cref="PredecodeTexture"/> already runs on a worker: a
+    /// concurrent-dictionary VFS resolve, a <c>[ThreadStatic]</c>-scratch decode, and pure-CPU image work.
+    /// </summary>
+    public Image? LoadThumbnailImage(string materialName, int size)
+    {
+        string? name = ShaderPreview.ImageName(materialName, GetShader(materialName));
+        if (string.IsNullOrEmpty(name) || size < 1)
+            return null;
+
+        Image? img = LoadImage(name);
+        if (img is null || img.IsEmpty())
+            return null;
+
+        try
+        {
+            // A full-chain DXT .dds passes through this loader still COMPRESSED, and Image.Resize refuses a
+            // compressed format — so decompress, and drop the mip chain that came with it, before scaling.
+            if (img.IsCompressed() && img.Decompress() != Error.Ok)
+                return null;
+            if (img.HasMipmaps())
+                img.ClearMipmaps();
+            if (img.GetWidth() != size || img.GetHeight() != size)
+                img.Resize(size, size, Image.Interpolation.Bilinear);
+            if (img.GetFormat() != Image.Format.Rgba8)
+                img.Convert(Image.Format.Rgba8);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[AssetSystem] thumbnail for '{materialName}' failed: {ex.Message}");
+            return null;
+        }
+        return img;
+    }
+
     // -------------------------------------------------------------------------------------------------
     //  (§12.3-1) Decoded-image handoff — the off-thread half of a texture load. A model build's dominant
     //  cost was the SYNCHRONOUS texture pipeline (VFS read + TGA/DDS decode + GPU upload, ~395 ms of a

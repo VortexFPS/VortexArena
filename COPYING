@@ -39,15 +39,35 @@ vendored in this repository; builds that bundle the Godot runtime must include
 Godot's copyright notice and MIT license text, as required by the MIT terms.
 
 
-Assets
-------
+Game content
+------------
 
-Game assets are downloaded from the upstream Xonotic repositories by
-download-assets.sh and are not committed to this repository. They remain under
-their original licenses as established by the Xonotic project — primarily GPLv2+
-for code-adjacent assets, with various Creative Commons and other free-content
-licenses for art, music, and sound. See the Xonotic project's licensing
-documentation for specifics.
+The game content — textures, models, sounds, music, fonts, and the configuration
+files that drive gameplay — is committed to this repository under data/ and is
+redistributed by this project. It was authored by the Xonotic project and its
+contributors; Vortex Arena is a fork.
+
+Team Xonotic's licensing document grants "GPL version 3 or any later version, at
+your choice" for all source files in its scope, which covers official Xonotic
+releases and the Team Xonotic-owned branches of git://git.xonotic.org/xonotic/ —
+the origin of this content. That document is reproduced verbatim, together with
+the license texts it refers to, in:
+
+    data/licenses/COPYING.xonotic    Team Xonotic's licensing document
+    data/licenses/GPL-3              GPL version 3
+    data/licenses/GPL-2              GPL version 2
+    data/licenses/CREDITS            attribution for the content's authors
+    data/licenses/README             what each of the above covers
+
+Attribution is also carried in the game's own credits screen
+(game/menu/CreditsScreen.cs), of which data/licenses/CREDITS is a generated
+plain-text rendering so that it ships with the content in release archives as
+well as in the running game.
+
+This replaces an earlier arrangement in which the content was downloaded from
+upstream at build time by download-assets.sh and committed nowhere. Under that
+arrangement the license texts stayed behind in the upstream checkout; now that
+this project redistributes the content, the license travels with it.
 
 
 Contributions

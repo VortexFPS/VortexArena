@@ -67,3 +67,6 @@ _*.log
 # Python bytecode from the tools/ scripts (perf-report, wobble-detect, find-cvars, …)
 __pycache__/
 *.pyc
+
+# Compiled maps are fetched per data/maps.lock.json, never committed (restructure D7).
+data/maps/

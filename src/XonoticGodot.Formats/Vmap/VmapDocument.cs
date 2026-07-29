@@ -39,6 +39,40 @@ public sealed class VmapDocument
     /// </summary>
     public List<VmapEntity> Entities { get; } = new();
 
+    /// <summary>
+    /// Named object sets (backlog F8). Empty on every map that has none, and written to the package only when
+    /// non-empty, so an existing <c>.vmap</c> round-trips byte for byte.
+    /// </summary>
+    public List<VmapGroup> Groups { get; } = new();
+
+    /// <summary>Look up a group by its stable <see cref="VmapGroup.Id"/>.</summary>
+    public VmapGroup? FindGroup(int id)
+    {
+        for (int i = 0; i < Groups.Count; i++)
+            if (Groups[i].Id == id)
+                return Groups[i];
+        return null;
+    }
+
+    /// <summary>Look up a group by name, case-insensitively — how a mapper refers to one.</summary>
+    public VmapGroup? FindGroup(string name)
+    {
+        for (int i = 0; i < Groups.Count; i++)
+            if (string.Equals(Groups[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                return Groups[i];
+        return null;
+    }
+
+    /// <summary>The next unused group id. Id 0 is reserved for "ungrouped".</summary>
+    public int NextGroupId()
+    {
+        int max = 0;
+        for (int i = 0; i < Groups.Count; i++)
+            if (Groups[i].Id > max)
+                max = Groups[i].Id;
+        return max + 1;
+    }
+
     /// <summary>Look up a brush by its stable <see cref="VmapBrush.Id"/> (ids survive edits; list order does not).</summary>
     public VmapBrush? FindBrush(int id)
     {
@@ -128,6 +162,27 @@ public sealed class VmapDocument
                 return Entities[i];
         return null;
     }
+}
+
+/// <summary>
+/// A named set of objects that select, hide and show together (backlog F8).
+///
+/// DOCUMENT state, not view state: a group and whether it is hidden are properties of the map, so they save
+/// and they replicate. That is the line between this and <see cref="VmapVisibility"/>'s ad-hoc hide, which is
+/// one mapper's temporary view and belongs to nobody else.
+/// </summary>
+public sealed class VmapGroup
+{
+    /// <summary>Stable identifier, unique within the document. Never 0 — that value means "ungrouped".</summary>
+    public int Id { get; set; }
+
+    /// <summary>What the mapper called it.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Hidden as a unit.</summary>
+    public bool Hidden { get; set; }
+
+    public VmapGroup Clone() => new() { Id = Id, Name = Name, Hidden = Hidden };
 }
 
 /// <summary>Map-level identity, provenance and environment settings (the <c>map.json</c> manifest).</summary>
@@ -408,6 +463,15 @@ public sealed class VmapBrush
     public bool IsToolBrush { get; set; }
 
     /// <summary>
+    /// The <see cref="VmapGroup"/> this object belongs to, or 0 for none (backlog F8).
+    ///
+    /// EXCLUSIVE membership, which is Radiant's model rather than a layer stack: object-to-group is then one
+    /// field to read, one field to snapshot, and undo is exact. Multi-membership would need a side table and
+    /// would make "which group does clicking this select" a question with several answers.
+    /// </summary>
+    public int GroupId { get; set; }
+
+    /// <summary>
     /// Classify from the faces: every face draws nothing (Q3 SURF_NODRAW) or names a <c>common/</c> tool
     /// shader. "Every" rather than "any" matters — a normal brush may legitimately have caulked back faces.
     /// </summary>
@@ -474,6 +538,7 @@ public sealed class VmapBrush
             ContentFlags = ContentFlags,
             SubmodelIndex = SubmodelIndex,
             IsToolBrush = IsToolBrush,
+            GroupId = GroupId,
         };
         // Through VmapFace.Clone so the whole LAYER STACK comes along. Copying Material/Projection by hand
         // would silently flatten a layered face to its base every time undo snapshotted it — the same class of
@@ -514,6 +579,15 @@ public sealed class VmapPatch
     /// <summary>Q3 native content flags for the patch's shader.</summary>
     public int ContentFlags { get; set; }
 
+    /// <summary>
+    /// The <see cref="VmapGroup"/> this object belongs to, or 0 for none (backlog F8).
+    ///
+    /// EXCLUSIVE membership, which is Radiant's model rather than a layer stack: object-to-group is then one
+    /// field to read, one field to snapshot, and undo is exact. Multi-membership would need a side table and
+    /// would make "which group does clicking this select" a question with several answers.
+    /// </summary>
+    public int GroupId { get; set; }
+
     /// <summary>True when the grid dimensions and buffer sizes are self-consistent.</summary>
     public bool IsValid =>
         Width >= 3 && Height >= 3 && (Width & 1) == 1 && (Height & 1) == 1
@@ -530,6 +604,7 @@ public sealed class VmapPatch
             Height = Height,
             SurfaceFlags = SurfaceFlags,
             ContentFlags = ContentFlags,
+            GroupId = GroupId,
         };
         copy.Controls.AddRange(Controls);
         copy.ControlUvs.AddRange(ControlUvs);
@@ -561,6 +636,12 @@ public sealed class VmapEntity
     /// <summary>True when this entity owns geometry (a brush entity rather than a point entity).</summary>
     public bool IsBrushEntity => BrushIds.Count > 0 || PatchIds.Count > 0;
 
+    /// <summary>
+    /// The <see cref="VmapGroup"/> this entity belongs to, or 0 for none (backlog F8). Exclusive membership,
+    /// same as brushes and patches.
+    /// </summary>
+    public int GroupId { get; set; }
+
     /// <summary>Read the <c>origin</c> key as a vector, or <see cref="Vector3.Zero"/> when absent/malformed.</summary>
     public Vector3 Origin()
         => Fields.TryGetValue("origin", out string? s) && TryParseVector(s, out Vector3 v) ? v : Vector3.Zero;
@@ -577,7 +658,7 @@ public sealed class VmapEntity
     /// </summary>
     public VmapEntity Clone()
     {
-        var copy = new VmapEntity { Id = Id, ClassName = ClassName };
+        var copy = new VmapEntity { Id = Id, ClassName = ClassName, GroupId = GroupId };
         foreach (KeyValuePair<string, string> kv in Fields)
             copy.Fields[kv.Key] = kv.Value;
         copy.BrushIds.AddRange(BrushIds);

@@ -1285,15 +1285,13 @@ public sealed class PasteOp : IVmapOp
                 VmapPlane p = f.Plane;
                 // Translating a plane moves its distance along its own normal; the normal itself is unchanged.
                 f.Plane = new VmapPlane(p.Normal, p.Dist + Vector3.Dot(_offset, p.Normal));
-
-                // The texture projection is a world-space map, so it has to travel with the geometry or the
-                // pasted copy comes out with its texture sliding across the surface.
-                VmapTexProjection t = f.Projection;
-                f.Projection = new VmapTexProjection(
-                    t.AxisU, t.AxisV,
-                    t.OffsetU - Vector3.Dot(_offset, t.AxisU),
-                    t.OffsetV - Vector3.Dot(_offset, t.AxisV));
             }
+
+            // The projection is a world-space map, so it travels with the geometry or the pasted copy comes
+            // out with its texture sliding across the surface. Through the layer walker rather than
+            // face.Projection, which is a compat accessor onto the BASE layer: writing that alone would keep
+            // a layered wall's base aligned and slide every blend out from under it.
+            VmapTexLock.ApplyToBrush(copy, proj => VmapTexLock.Translate(proj, _offset));
 
             if (!VmapWinding.IsClosedConvex(copy))
                 return false;   // refuse the whole paste rather than landing a broken solid
@@ -1636,6 +1634,170 @@ public sealed class CreateEntityOp : IVmapOp
 }
 
 /// <summary>
+/// Put objects in a named GROUP, or take them out of one (backlog F8).
+///
+/// One op for the whole vocabulary — create, rename, hide, re-populate, dissolve — because they are all the
+/// same edit: "this group now has this name, this hidden flag and these members". A separate dissolve verb
+/// would be a second way to express `members = nothing`, and two peers would have to agree about both.
+///
+/// Membership is EXCLUSIVE. An object in another group moves; a group left with nothing is removed.
+/// </summary>
+public sealed class SetGroupOp : IVmapOp
+{
+    private readonly int _forcedId;
+    private readonly string _name;
+    private readonly bool _hidden;
+    private readonly int[] _brushIds;
+    private readonly int[] _patchIds;
+    private readonly int[] _entityIds;
+    private readonly int[] _touchedBrushes;
+    private readonly int[] _touchedPatches;
+    private readonly int[] _touchedEntities;
+    private int _assignedId;
+
+    /// <param name="forcedId">
+    /// Group id to reuse instead of minting one — set when editing an existing group, and when replaying a
+    /// server-applied op.
+    /// </param>
+    /// <param name="doc">
+    /// Needed at CONSTRUCTION to fold the group's CURRENT members into the touched sets. An object being
+    /// removed from the group has its GroupId changed too, and the journal snapshots exactly what an op
+    /// declares — so without this, taking something out of a group is not undoable.
+    /// </param>
+    public SetGroupOp(
+        string name,
+        bool hidden,
+        IReadOnlyList<int> brushIds,
+        IReadOnlyList<int> patchIds,
+        IReadOnlyList<int> entityIds,
+        VmapDocument? doc = null,
+        int forcedId = 0)
+    {
+        _name = name ?? throw new ArgumentNullException(nameof(name));
+        _hidden = hidden;
+        _brushIds = Distinct(brushIds ?? throw new ArgumentNullException(nameof(brushIds)));
+        _patchIds = Distinct(patchIds ?? throw new ArgumentNullException(nameof(patchIds)));
+        _entityIds = Distinct(entityIds ?? throw new ArgumentNullException(nameof(entityIds)));
+        _forcedId = forcedId;
+
+        var brushes = new List<int>(_brushIds);
+        var patches = new List<int>(_patchIds);
+        var entities = new List<int>(_entityIds);
+
+        if (doc is not null && forcedId != 0)
+        {
+            foreach (VmapBrush b in doc.Brushes)
+                if (b.GroupId == forcedId && !brushes.Contains(b.Id))
+                    brushes.Add(b.Id);
+            foreach (VmapPatch p in doc.Patches)
+                if (p.GroupId == forcedId && !patches.Contains(p.Id))
+                    patches.Add(p.Id);
+            foreach (VmapEntity e in doc.Entities)
+                if (e.GroupId == forcedId && !entities.Contains(e.Id))
+                    entities.Add(e.Id);
+        }
+
+        _touchedBrushes = brushes.ToArray();
+        _touchedPatches = patches.ToArray();
+        _touchedEntities = entities.ToArray();
+    }
+
+    private static int[] Distinct(IReadOnlyList<int> ids)
+    {
+        var seen = new List<int>(ids.Count);
+        foreach (int id in ids)
+            if (!seen.Contains(id))
+                seen.Add(id);
+        return seen.ToArray();
+    }
+
+    /// <summary>Id given to the group; valid after a successful <see cref="Apply"/>.</summary>
+    public int GroupId => _assignedId;
+
+    /// <summary>The id this op carries on the wire — assigned once it has run, requested before that.</summary>
+    public int WireId => _assignedId != 0 ? _assignedId : _forcedId;
+
+    /// <summary>Group name. Read by the wire codec.</summary>
+    public string Name => _name;
+
+    /// <summary>Whether the group is hidden. Read by the wire codec.</summary>
+    public bool Hidden => _hidden;
+
+    /// <summary>New brush members. Read by the wire codec.</summary>
+    public IReadOnlyList<int> BrushIds => _brushIds;
+
+    /// <summary>New patch members. Read by the wire codec.</summary>
+    public IReadOnlyList<int> PatchIds => _patchIds;
+
+    /// <summary>New entity members. Read by the wire codec.</summary>
+    public IReadOnlyList<int> EntityIds => _entityIds;
+
+    public IReadOnlyList<int> TouchedBrushIds => _touchedBrushes;
+
+    public IReadOnlyList<int> TouchedPatchIds => _touchedPatches;
+
+    public IReadOnlyList<int> TouchedEntityIds => _touchedEntities;
+
+    public string Describe()
+    {
+        int n = _brushIds.Length + _patchIds.Length + _entityIds.Length;
+        return n == 0
+            ? $"Dissolve group {_name}"
+            : $"Group {n} object{(n == 1 ? "" : "s")} as {_name}";
+    }
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        bool empty = _brushIds.Length == 0 && _patchIds.Length == 0 && _entityIds.Length == 0;
+        if (empty && _forcedId == 0)
+            return false;      // creating an empty group is not an edit
+
+        _assignedId = _forcedId != 0 ? _forcedId : doc.NextGroupId();
+
+        VmapGroup? group = doc.FindGroup(_assignedId);
+        if (group is null && !empty)
+        {
+            group = new VmapGroup { Id = _assignedId };
+            doc.Groups.Add(group);
+        }
+        if (group is null)
+            return false;      // dissolving a group that is not there
+
+        group.Name = _name;
+        group.Hidden = _hidden;
+
+        // Anything that was in this group and is not in the new list comes out of it. That is how a dissolve
+        // is expressed: an empty member list.
+        foreach (VmapBrush b in doc.Brushes)
+            if (b.GroupId == _assignedId && !_brushIds.Contains(b.Id))
+                b.GroupId = 0;
+        foreach (VmapPatch p in doc.Patches)
+            if (p.GroupId == _assignedId && !_patchIds.Contains(p.Id))
+                p.GroupId = 0;
+        foreach (VmapEntity e in doc.Entities)
+            if (e.GroupId == _assignedId && !_entityIds.Contains(e.Id))
+                e.GroupId = 0;
+
+        foreach (int id in _brushIds)
+            if (doc.FindBrush(id) is { } b)
+                b.GroupId = _assignedId;
+        foreach (int id in _patchIds)
+            if (doc.FindPatch(id) is { } p)
+                p.GroupId = _assignedId;
+        foreach (int id in _entityIds)
+            if (doc.FindEntity(id) is { } e)
+                e.GroupId = _assignedId;
+
+        if (empty)
+            doc.Groups.Remove(group);
+
+        return true;
+    }
+}
+
+/// <summary>
 /// Turn a selection into a BRUSH ENTITY: mint an entity of the given class and hand it the selected brushes
 /// and patches (backlog F4).
 ///
@@ -1871,13 +2033,29 @@ public sealed class MoveEntitiesOp : IVmapOp
 {
     private readonly int[] _entityIds;
     private readonly Vector3 _delta;
+    private readonly bool _textureLock;
     private int[] _movedBrushes = Array.Empty<int>();
     private int[] _movedPatches = Array.Empty<int>();
 
+    /// <summary>Whether the texture travelled with the geometry. Read by the wire codec.</summary>
+    public bool TextureLock => _textureLock;
+
     public MoveEntitiesOp(IReadOnlyList<int> entityIds, Vector3 delta, VmapDocument? doc = null)
+        : this(entityIds, delta, doc, textureLock: false)
+    {
+    }
+
+    /// <param name="textureLock">
+    /// Carry the texture with the geometry (backlog F7). An overload rather than a defaulted parameter so no
+    /// existing call site silently changes meaning; the flag rides ON the op and is never re-read from a cvar,
+    /// or a peer would apply the same drag with its own setting and build a differently-textured map.
+    /// </param>
+    public MoveEntitiesOp(
+        IReadOnlyList<int> entityIds, Vector3 delta, VmapDocument? doc, bool textureLock)
     {
         _entityIds = entityIds?.ToArray() ?? throw new ArgumentNullException(nameof(entityIds));
         _delta = delta;
+        _textureLock = textureLock;
 
         // The touched-geometry set has to be known BEFORE Apply so the journal can snapshot it, and only the
         // document knows which brushes an entity owns. Passing it in at construction is the honest way to get
@@ -1930,7 +2108,7 @@ public sealed class MoveEntitiesOp : IVmapOp
         {
             if (e.IsBrushEntity)
             {
-                new TranslateBrushesOp(e.BrushIds, _delta).Apply(doc);
+                new TranslateBrushesOp(e.BrushIds, _delta, _textureLock).Apply(doc);
                 if (e.PatchIds.Count > 0)
                     new TranslatePatchesOp(e.PatchIds, _delta).Apply(doc);
                 continue;
@@ -3222,9 +3400,24 @@ public sealed class SetObjectsOp : IVmapOp
             if (!VmapWinding.IsClosedConvex(source))
                 return false;
             if (doc.FindBrush(source.Id) is { } live)
-                VmapEdit.CopyPlanesInto(source, live);
+            {
+                // Whole FACES, not just planes. The wire carries projections, layer stacks and the
+                // classification fields, and an undo replicates as one of these — so restoring planes alone
+                // meant a host's Ctrl+Z put its own textures back and left every guest's where the move had
+                // dragged them. Same shape as VmapEditSession.Restore, for the same reason.
+                live.Faces.Clear();
+                foreach (VmapFace f in source.Clone().Faces)
+                    live.Faces.Add(f);
+                live.IsDetail = source.IsDetail;
+                live.ContentFlags = source.ContentFlags;
+                live.SubmodelIndex = source.SubmodelIndex;
+                live.IsToolBrush = source.IsToolBrush;
+                live.GroupId = source.GroupId;
+            }
             else
+            {
                 doc.Brushes.Add(source.Clone());
+            }
         }
 
         foreach (VmapPatch source in _patches)
@@ -3242,6 +3435,7 @@ public sealed class SetObjectsOp : IVmapOp
                 live.Controls.AddRange(source.Controls);
                 live.ControlUvs.Clear();
                 live.ControlUvs.AddRange(source.ControlUvs);
+                live.GroupId = source.GroupId;
             }
             else
             {
@@ -3261,6 +3455,7 @@ public sealed class SetObjectsOp : IVmapOp
                 live.BrushIds.AddRange(source.BrushIds);
                 live.PatchIds.Clear();
                 live.PatchIds.AddRange(source.PatchIds);
+                live.GroupId = source.GroupId;
             }
             else
             {

@@ -76,6 +76,12 @@ public sealed partial class EditorController : Node3D
     public const string CvarThumbnails = "cl_editor_thumbnails";
 
     /// <summary>
+    /// Clicking one member of a group selects the whole group (backlog F8). Default ON — that is what a group
+    /// is for. Off is how you get at one brush of a fixture without ungrouping it first.
+    /// </summary>
+    public const string CvarGroupSelect = "cl_editor_group_select";
+
+    /// <summary>
     /// Thumbnail SOURCE resolution in pixels. Draw size follows the viewport; this is what is decoded and
     /// held, so it is the memory knob — 96² RGBA8 is 36 KB apiece.
     /// </summary>
@@ -449,6 +455,15 @@ public sealed partial class EditorController : Node3D
     /// </summary>
     public VmapPickIndex PickIndex { get; } = new();
 
+    /// <summary>
+    /// What this mapper is currently SHOWING (backlog F8, F9): the gametype filter, per-group visibility, the
+    /// ad-hoc hide set and the region box, in one object the renderer and the picker both read.
+    ///
+    /// VIEW state, not document state — it is not saved, not replicated and not undoable. A co-editing peer's
+    /// region has nothing to do with yours, and narrowing your own view is not an edit to the map.
+    /// </summary>
+    public VmapVisibility Visibility { get; } = new();
+
     /// <summary>True when this client is in the editor gametype and free-flying (set by the host each frame).</summary>
     public bool Active { get; set; }
 
@@ -467,6 +482,7 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarTextureLock, "1", CvarFlags.Save);
         c.Register(CvarEntityOcclusion, "1", CvarFlags.Save);
         c.Register(CvarThumbnails, "1", CvarFlags.Save);
+        c.Register(CvarGroupSelect, "1", CvarFlags.Save);
         c.Register(CvarThumbSize, "96", CvarFlags.Save);
         c.Register(CvarThumbCache, "512", CvarFlags.Save);
         c.Register(CvarShowVertices, "0", CvarFlags.Save);
@@ -529,9 +545,14 @@ public sealed partial class EditorController : Node3D
         GametypeFilter = string.Equals(gametype, "all", StringComparison.OrdinalIgnoreCase) ? "" : gametype ?? "";
 
         PickIndex.HiddenSubmodels.Clear();
+        Visibility.HiddenSubmodels.Clear();
         if (hiddenSubmodels is not null)
             foreach (int i in hiddenSubmodels)
+            {
                 PickIndex.HiddenSubmodels.Add(i);
+                Visibility.HiddenSubmodels.Add(i);
+            }
+        Visibility.Bump();
         PickIndex.Invalidate();
 
         // The wireframe and any cached derived geometry must rebuild against the new visible set.
@@ -540,7 +561,11 @@ public sealed partial class EditorController : Node3D
     }
 
     /// <summary>Point the controller at the scene camera it should pick along.</summary>
-    public void Attach(Camera3D camera) => _camera = camera;
+    public void Attach(Camera3D camera)
+    {
+        _camera = camera;
+        PickIndex.Visibility = Visibility;
+    }
 
     /// <summary>
     /// Begin editing a document. Called by the host when an editor session opens a map.
@@ -910,10 +935,7 @@ public sealed partial class EditorController : Node3D
             return false;
         }
 
-        if (addToSelection)
-            _session.ToggleSelect(Hover.Selection);
-        else
-            _session.Select(Hover.Selection);
+        SelectWithGroup(Hover.Selection, addToSelection);
 
         // Rebuild immediately rather than waiting for the next frame, so the handles are already grabbable by
         // the time the mapper's second click lands. At speed those two clicks are ~80ms apart.
@@ -1265,7 +1287,7 @@ public sealed partial class EditorController : Node3D
         List<int> moveEntities = SelectedEntityIds();
         if (moveEntities.Count > 0 && _session.SelectedBrushIds().Count == 0 && SelectedPatchIds().Count == 0)
         {
-            if (!Commit(new MoveEntitiesOp(moveEntities, delta, _document)))
+            if (!Commit(new MoveEntitiesOp(moveEntities, delta, _document, TextureLock)))
                 return false;
             GeometryVersion++;
             return true;
@@ -2350,6 +2372,324 @@ public sealed partial class EditorController : Node3D
         return true;
     }
 
+    // =============================================================================================
+    //  Hide / isolate / region (backlog F9) — narrowing what you are working on
+    // =============================================================================================
+
+    /// <summary>Hide everything selected. The selection is cleared: you cannot act on what you cannot see.</summary>
+    public bool HideSelection()
+    {
+        if (_session is null)
+            return false;
+
+        List<int> brushes = _session.SelectedBrushIds();
+        List<int> patches = SelectedPatchIds();
+        List<int> entities = SelectedEntityIds();
+        if (brushes.Count == 0 && patches.Count == 0 && entities.Count == 0)
+        {
+            Log.Info("editor: select something to hide");
+            return false;
+        }
+
+        foreach (int id in brushes)
+            Visibility.HiddenBrushIds.Add(id);
+        foreach (int id in patches)
+            Visibility.HiddenPatchIds.Add(id);
+        foreach (int id in entities)
+            Visibility.HiddenEntityIds.Add(id);
+
+        _session.Selection.Clear();
+        RefreshVisibility();
+        Log.Info($"editor: {Visibility.ExplicitHiddenCount} object(s) hidden (editor_hide show brings them back)");
+        return true;
+    }
+
+    /// <summary>
+    /// Hide everything NOT selected — the isolate gesture, and the one that pays on a 2666-brush map: it is
+    /// how you work on one room without the rest of the level in the way.
+    /// </summary>
+    public bool IsolateSelection()
+    {
+        if (_session is null || _document is null)
+            return false;
+
+        var keepBrushes = new HashSet<int>(_session.SelectedBrushIds());
+        var keepPatches = new HashSet<int>(SelectedPatchIds());
+        var keepEntities = new HashSet<int>(SelectedEntityIds());
+
+        // A selected brush entity keeps the geometry it owns, or isolating a door would hide the door.
+        foreach (int id in SelectedEntityIds())
+        {
+            if (_document.FindEntity(id) is not { } e)
+                continue;
+            foreach (int b in e.BrushIds)
+                keepBrushes.Add(b);
+            foreach (int pid in e.PatchIds)
+                keepPatches.Add(pid);
+        }
+
+        if (keepBrushes.Count == 0 && keepPatches.Count == 0 && keepEntities.Count == 0)
+        {
+            Log.Info("editor: select what to isolate");
+            return false;
+        }
+
+        foreach (VmapBrush b in _document.Brushes)
+            if (!keepBrushes.Contains(b.Id))
+                Visibility.HiddenBrushIds.Add(b.Id);
+        foreach (VmapPatch p in _document.Patches)
+            if (!keepPatches.Contains(p.Id))
+                Visibility.HiddenPatchIds.Add(p.Id);
+        foreach (VmapEntity e in _document.Entities)
+            if (!e.IsBrushEntity && !keepEntities.Contains(e.Id))
+                Visibility.HiddenEntityIds.Add(e.Id);
+
+        RefreshVisibility();
+        Log.Info($"editor: isolated — {Visibility.ExplicitHiddenCount} object(s) hidden");
+        return true;
+    }
+
+    /// <summary>Show everything hidden one at a time. Groups and the gametype filter are left alone.</summary>
+    public bool ShowAllHidden()
+    {
+        if (Visibility.ExplicitHiddenCount == 0)
+        {
+            Log.Info("editor: nothing is hidden");
+            return false;
+        }
+
+        int was = Visibility.ExplicitHiddenCount;
+        Visibility.ShowAllHidden();
+        RefreshVisibility();
+        Log.Info($"editor: {was} object(s) shown");
+        return true;
+    }
+
+    /// <summary>
+    /// Narrow the view to the selection's bounds (backlog F9). Anything TOUCHING the box stays visible, which
+    /// is Radiant's rule and the one that keeps the walls of the room you regioned.
+    /// </summary>
+    public bool SetRegionToSelection()
+    {
+        if (_session is null || _document is null)
+            return false;
+
+        if (!VmapEdit.TryGetSelectionBounds(
+                _document, _session.SelectedBrushIds(), SelectedPatchIds(), SelectedEntityIds(), Defs,
+                out NVec3 mins, out NVec3 maxs))
+        {
+            Log.Info("editor: select the area to region");
+            return false;
+        }
+
+        // A little slack, so the brushes that define the region are themselves inside it.
+        var pad = new NVec3(1f, 1f, 1f);
+        Visibility.SetRegion(mins - pad, maxs + pad);
+        RefreshVisibility();
+        Log.Info($"editor: region ON ({maxs.X - mins.X:0}x{maxs.Y - mins.Y:0}x{maxs.Z - mins.Z:0}u)"
+                 + " — editor_region off shows the whole map again");
+        return true;
+    }
+
+    /// <summary>Drop the region and show the whole map again.</summary>
+    public bool ClearRegion()
+    {
+        if (!Visibility.HasRegion)
+        {
+            Log.Info("editor: no region is set");
+            return false;
+        }
+        Visibility.ClearRegion();
+        RefreshVisibility();
+        Log.Info("editor: region off");
+        return true;
+    }
+
+    /// <summary>
+    /// Everything a visibility change has to do: invalidate the pick cache and make the world rebuild.
+    ///
+    /// Not a GeometryVersion bump — the geometry did not change, and pretending it did would re-run the
+    /// lighting bake every time a mapper hid a brush. The world rebuild keys on the visibility version
+    /// separately for exactly that reason.
+    /// </summary>
+    private void RefreshVisibility()
+    {
+        Visibility.Bump();
+        PickIndex.Invalidate();
+    }
+
+    // =============================================================================================
+    //  Groups (backlog F8)
+    // =============================================================================================
+
+    /// <summary>Put the selection in a named group, creating or replacing it.</summary>
+    public bool GroupSelection(string name)
+    {
+        if (_session is null || _document is null || string.IsNullOrWhiteSpace(name))
+            return false;
+
+        List<int> brushes = _session.SelectedBrushIds();
+        List<int> patches = SelectedPatchIds();
+        List<int> entities = SelectedEntityIds();
+        if (brushes.Count == 0 && patches.Count == 0 && entities.Count == 0)
+        {
+            Log.Info("editor: select the objects to group");
+            return false;
+        }
+
+        // Re-using an existing group by NAME is what makes "group these too" work; a second group with the
+        // same name would be indistinguishable in every list the mapper reads.
+        int existing = _document.FindGroup(name)?.Id ?? 0;
+        var op = new SetGroupOp(name, hidden: false, brushes, patches, entities, _document, existing);
+        if (!Commit(op))
+        {
+            Log.Info($"editor: could not group as '{name}'");
+            return false;
+        }
+
+        GeometryVersion++;
+        Log.Info($"editor: '{name}' now has {brushes.Count + patches.Count + entities.Count} object(s)");
+        return true;
+    }
+
+    /// <summary>Take the selection out of whatever groups it is in.</summary>
+    public bool UngroupSelection()
+    {
+        if (_session is null || _document is null)
+            return false;
+
+        var ids = new List<int>();
+        void Note(int groupId)
+        {
+            if (groupId != 0 && !ids.Contains(groupId))
+                ids.Add(groupId);
+        }
+
+        foreach (int id in _session.SelectedBrushIds())
+            Note(_document.FindBrush(id)?.GroupId ?? 0);
+        foreach (int id in SelectedPatchIds())
+            Note(_document.FindPatch(id)?.GroupId ?? 0);
+        foreach (int id in SelectedEntityIds())
+            Note(_document.FindEntity(id)?.GroupId ?? 0);
+
+        if (ids.Count == 0)
+        {
+            Log.Info("editor: nothing selected is in a group");
+            return false;
+        }
+
+        bool any = false;
+        foreach (int groupId in ids)
+        {
+            VmapGroup? g = _document.FindGroup(groupId);
+            if (g is null)
+                continue;
+            // An empty member list IS the dissolve: one op, no second verb for two peers to disagree about.
+            any |= Commit(new SetGroupOp(g.Name, g.Hidden, Array.Empty<int>(), Array.Empty<int>(),
+                Array.Empty<int>(), _document, groupId));
+        }
+
+        if (!any)
+            return false;
+        GeometryVersion++;
+        Log.Info($"editor: dissolved {ids.Count} group(s)");
+        return true;
+    }
+
+    /// <summary>Show or hide a named group. The flag is DOCUMENT state, so it saves and it replicates.</summary>
+    public bool SetGroupHidden(string name, bool hidden)
+    {
+        if (_session is null || _document is null)
+            return false;
+        if (_document.FindGroup(name) is not { } g)
+        {
+            Log.Info($"editor: no group called '{name}'");
+            return false;
+        }
+
+        var brushes = new List<int>();
+        var patches = new List<int>();
+        var entities = new List<int>();
+        foreach (VmapBrush b in _document.Brushes)
+            if (b.GroupId == g.Id)
+                brushes.Add(b.Id);
+        foreach (VmapPatch p in _document.Patches)
+            if (p.GroupId == g.Id)
+                patches.Add(p.Id);
+        foreach (VmapEntity e in _document.Entities)
+            if (e.GroupId == g.Id)
+                entities.Add(e.Id);
+
+        if (!Commit(new SetGroupOp(g.Name, hidden, brushes, patches, entities, _document, g.Id)))
+            return false;
+
+        SyncHiddenGroups();
+        GeometryVersion++;
+        Log.Info($"editor: '{g.Name}' {(hidden ? "hidden" : "shown")}");
+        return true;
+    }
+
+    /// <summary>
+    /// Mirror every group's persisted Hidden flag into the view filter.
+    ///
+    /// Two representations because they are two different things: the flag is the map's, the filter is this
+    /// mapper's view. Copying one into the other at the few points that change it is cheaper than making
+    /// every visibility query walk the group list.
+    /// </summary>
+    public void SyncHiddenGroups()
+    {
+        if (_document is null)
+            return;
+
+        Visibility.HiddenGroups.Clear();
+        foreach (VmapGroup g in _document.Groups)
+            if (g.Hidden)
+                Visibility.HiddenGroups.Add(g.Id);
+        RefreshVisibility();
+    }
+
+    /// <summary>
+    /// Expand a selection to the whole group its target belongs to (backlog F8). That is what a group IS from
+    /// the mapper's side: clicking one brush of a light fixture takes the fixture.
+    /// </summary>
+    private void SelectWithGroup(VmapSelection sel, bool addToSelection)
+    {
+        if (_session is null)
+            return;
+
+        int groupId = GroupOf(sel);
+        if (groupId == 0 || _document is null || !GroupSelectEnabled)
+        {
+            if (addToSelection)
+                _session.ToggleSelect(sel);
+            else
+                _session.Select(sel);
+            return;
+        }
+
+        if (!addToSelection)
+            _session.Selection.Clear();
+
+        foreach (VmapBrush b in _document.Brushes)
+            if (b.GroupId == groupId)
+                _session.Selection.Add(VmapSelection.OfBrush(b.Id));
+        foreach (VmapPatch p in _document.Patches)
+            if (p.GroupId == groupId)
+                _session.Selection.Add(VmapSelection.OfPatch(p.Id));
+        foreach (VmapEntity e in _document.Entities)
+            if (e.GroupId == groupId)
+                _session.Selection.Add(VmapSelection.OfEntity(e.Id));
+    }
+
+    private int GroupOf(VmapSelection sel) => sel.Kind switch
+    {
+        VmapSelectionKind.Brush or VmapSelectionKind.Face or VmapSelectionKind.Edge
+            or VmapSelectionKind.Vertex => _document?.FindBrush(sel.BrushId)?.GroupId ?? 0,
+        VmapSelectionKind.Patch => _document?.FindPatch(sel.PatchId)?.GroupId ?? 0,
+        VmapSelectionKind.Entity => _document?.FindEntity(sel.EntityId)?.GroupId ?? 0,
+        _ => 0,
+    };
+
     /// <summary>
     /// Turn the selected geometry into a brush entity of <paramref name="className"/> (backlog F4).
     ///
@@ -2481,6 +2821,9 @@ public sealed partial class EditorController : Node3D
     private float GrabRadius => Cvar(CvarGrabRadius, 12f);
 
     private float SnapRadius => Cvar(CvarSnapEnabled, 1f) != 0f ? Cvar(CvarSnapRadius, 16f) : 0f;
+
+    /// <summary>Whether clicking one member of a group takes the whole group.</summary>
+    public bool GroupSelectEnabled => Cvar(CvarGroupSelect, 1f) != 0f;
 
     /// <summary>True when geometry snapping is enabled (shown in the HUD).</summary>
     public bool SnapEnabled => Cvar(CvarSnapEnabled, 1f) != 0f;

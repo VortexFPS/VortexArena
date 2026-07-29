@@ -503,6 +503,7 @@ public sealed class VmapEditSession
             live.BrushIds.AddRange(saved.BrushIds);
             live.PatchIds.Clear();
             live.PatchIds.AddRange(saved.PatchIds);
+            live.GroupId = saved.GroupId;
         }
     }
 
@@ -536,6 +537,7 @@ public sealed class VmapEditSession
             live.Controls.AddRange(saved.Controls);
             live.ControlUvs.Clear();
             live.ControlUvs.AddRange(saved.ControlUvs);
+            live.GroupId = saved.GroupId;
         }
     }
 
@@ -568,6 +570,7 @@ public sealed class VmapEditSession
             // for anything an op reclassified.
             live.SubmodelIndex = saved.SubmodelIndex;
             live.IsToolBrush = saved.IsToolBrush;
+            live.GroupId = saved.GroupId;
         }
     }
 }

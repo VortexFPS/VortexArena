@@ -263,6 +263,7 @@ public partial class EditorMenuPanel : HudPanel
 
         rows.Add(new Row { Label = "Selection", SubmenuTitle = "Selection", Submenu = BuildSelection });
         rows.Add(new Row { Label = "CSG", SubmenuTitle = "CSG", Submenu = BuildCsg });
+        rows.Add(new Row { Label = "Hide / Region", SubmenuTitle = "Hide / Region", Submenu = BuildRegion });
 
         // The clip tool's keep-half choice is a separate axis from its placement mode, so it gets its own row
         // rather than being folded into the mode list where picking "keep front" would deselect "two-point".
@@ -565,6 +566,75 @@ public partial class EditorMenuPanel : HudPanel
                     : "select at least two brushes",
                 Command = "editor_csg merge",
                 Enabled = brushes >= 2,
+            },
+        };
+    }
+
+    /// <summary>
+    /// Narrowing the view (backlog F9) and grouping (backlog F8), which share a menu because they are the same
+    /// question from a mapper's side: what am I working on right now.
+    ///
+    /// The "show everything" row stays enabled and states the count, because the whole hazard here is
+    /// forgetting that something is hidden.
+    /// </summary>
+    private List<Row> BuildRegion()
+    {
+        VmapVisibility? vis = Controller?.Visibility;
+        int selected = Controller?.Session?.Selection.Count ?? 0;
+        int hidden = vis?.ExplicitHiddenCount ?? 0;
+
+        return new List<Row>
+        {
+            new()
+            {
+                Label = "Hide selection",
+                Detail = selected > 0 ? $"{selected} selected" : "nothing selected",
+                Command = "editor_hide",
+                Enabled = selected > 0,
+            },
+            new()
+            {
+                Label = "Isolate selection",
+                Detail = selected > 0 ? "hide everything else" : "nothing selected",
+                Command = "editor_hide unselected",
+                Enabled = selected > 0,
+            },
+            new()
+            {
+                Label = "Show all hidden",
+                Detail = hidden > 0 ? $"{hidden} hidden" : "nothing is hidden",
+                Command = "editor_hide show",
+                Enabled = hidden > 0,
+                KeepOpen = true,
+            },
+            new()
+            {
+                Label = "Region to selection",
+                Detail = selected > 0 ? "clip the view to its bounds" : "nothing selected",
+                Command = "editor_region",
+                Enabled = selected > 0,
+            },
+            new()
+            {
+                Label = "Region off",
+                Detail = vis is { HasRegion: true } ? "show the whole map" : "no region set",
+                Command = "editor_region off",
+                Enabled = vis is { HasRegion: true },
+                KeepOpen = true,
+            },
+            new()
+            {
+                Label = "Ungroup selection",
+                Detail = selected > 0 ? "dissolve the groups it belongs to" : "nothing selected",
+                Command = "editor_group off",
+                Enabled = selected > 0,
+            },
+            new()
+            {
+                Label = "List groups",
+                Detail = "to the console",
+                Command = "editor_group list",
+                KeepOpen = true,
             },
         };
     }

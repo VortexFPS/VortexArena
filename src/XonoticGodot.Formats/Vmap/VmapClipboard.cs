@@ -154,17 +154,15 @@ public sealed class VmapClipboard
             copy.Id = 0;                                  // the server names it
             foreach (VmapFace f in copy.Faces)
             {
-                // Translating a plane moves its distance along its own normal; the normal is unchanged. The
-                // texture projection is a world-space map, so it has to travel with the geometry or the pasted
-                // copy comes out with its texture sliding across the surface.
+                // Translating a plane moves its distance along its own normal; the normal is unchanged.
                 VmapPlane p = f.Plane;
                 f.Plane = new VmapPlane(p.Normal, p.Dist + Vector3.Dot(offset, p.Normal));
-                VmapTexProjection t = f.Projection;
-                f.Projection = new VmapTexProjection(
-                    t.AxisU, t.AxisV,
-                    t.OffsetU - Vector3.Dot(offset, t.AxisU),
-                    t.OffsetV - Vector3.Dot(offset, t.AxisV));
             }
+
+            // The projection is a world-space map, so it travels with the geometry or the pasted copy comes
+            // out with its texture sliding. Through the layer walker: face.Projection is a compat accessor
+            // onto the BASE layer, so writing it alone leaves every blend layer behind.
+            VmapTexLock.ApplyToBrush(copy, proj => VmapTexLock.Translate(proj, offset));
             brushes.Add(copy);
         }
 

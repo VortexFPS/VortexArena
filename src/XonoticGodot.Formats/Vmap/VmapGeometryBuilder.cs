@@ -68,15 +68,32 @@ public sealed class VmapSurfaceOptions
     /// </summary>
     public bool CullOccludedFaces { get; init; }
 
+    /// <summary>
+    /// The editor's live view filter — group visibility, ad-hoc hide, region (backlog F8, F9). Null for every
+    /// non-editor consumer: collision wants whole volumes, and single-brush picking has no view to filter by.
+    ///
+    /// Kept alongside the two older fields rather than replacing them, so the fifteen callers that only ever
+    /// wanted "hide these submodels" are untouched.
+    /// </summary>
+    public VmapVisibility? Visibility { get; init; }
+
     /// <summary>Whether a brush belongs to the view these options describe.</summary>
     public bool IsBrushVisible(VmapBrush brush)
     {
         ArgumentNullException.ThrowIfNull(brush);
         if (brush.IsToolBrush && !IncludeToolBrushes)
             return false;
-        return brush.SubmodelIndex == 0
-            || HiddenSubmodels is null
-            || !HiddenSubmodels.Contains(brush.SubmodelIndex);
+        if (brush.SubmodelIndex != 0 && HiddenSubmodels is not null
+            && HiddenSubmodels.Contains(brush.SubmodelIndex))
+            return false;
+        return Visibility?.IsBrushVisible(brush) ?? true;
+    }
+
+    /// <summary>Whether a patch belongs to the view. Always true without a <see cref="Visibility"/>.</summary>
+    public bool IsPatchVisible(VmapPatch patch)
+    {
+        ArgumentNullException.ThrowIfNull(patch);
+        return Visibility?.IsPatchVisible(patch) ?? true;
     }
 }
 
@@ -150,7 +167,13 @@ public static class VmapGeometryBuilder
         }
 
         foreach (VmapPatch patch in doc.Patches)
+        {
+            // Patches had no visibility check at all: a gametype filter or a region that ignored curves would
+            // look broken on any map with patch architecture, and there was nothing in a log to explain it.
+            if (!options.IsPatchVisible(patch))
+                continue;
             AppendPatch(patch, byMaterial, options.IncludeSky, options.PatchSubdivisions);
+        }
 
         var result = new List<VmapSurface>(byMaterial.Count);
         // Deterministic output order so two builds of the same document produce identical meshes.

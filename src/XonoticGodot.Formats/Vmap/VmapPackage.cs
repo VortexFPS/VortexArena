@@ -37,6 +37,12 @@ public static class VmapPackage
     public const string GeometrySection = "geometry.json";
     public const string EntitiesSection = "entities.json";
 
+    /// <summary>
+    /// Named object sets (backlog F8). OPTIONAL, and written only when the map has any — so a package with no
+    /// groups is byte-for-byte the package it always was, and an older reader still loads the map.
+    /// </summary>
+    public const string GroupsSection = "groups.json";
+
     /// <summary>Canonical container extension.</summary>
     public const string Extension = ".vmap";
 
@@ -75,7 +81,8 @@ public static class VmapPackage
         return Assemble(
             ReadTextFile(Path.Combine(dir, ManifestSection), required: true)!,
             ReadTextFile(Path.Combine(dir, GeometrySection), required: false),
-            ReadTextFile(Path.Combine(dir, EntitiesSection), required: false));
+            ReadTextFile(Path.Combine(dir, EntitiesSection), required: false),
+            ReadTextFile(Path.Combine(dir, GroupsSection), required: false));
     }
 
     /// <summary>Read a package from a zip stream (the shipping layout).</summary>
@@ -86,7 +93,8 @@ public static class VmapPackage
         return Assemble(
             ReadZipEntry(archive, ManifestSection, required: true)!,
             ReadZipEntry(archive, GeometrySection, required: false),
-            ReadZipEntry(archive, EntitiesSection, required: false));
+            ReadZipEntry(archive, EntitiesSection, required: false),
+            ReadZipEntry(archive, GroupsSection, required: false));
     }
 
     /// <summary>
@@ -125,7 +133,8 @@ public static class VmapPackage
         return reader.ReadToEnd();
     }
 
-    private static VmapDocument Assemble(string manifestJson, string? geometryJson, string? entitiesJson)
+    private static VmapDocument Assemble(
+        string manifestJson, string? geometryJson, string? entitiesJson, string? groupsJson = null)
     {
         var doc = new VmapDocument();
 
@@ -143,12 +152,23 @@ public static class VmapPackage
             SourceHash = manifest.SourceHash ?? string.Empty,
         };
 
+        if (groupsJson is not null)
+        {
+            GroupsDto groups = Deserialize<GroupsDto>(groupsJson, GroupsSection);
+            foreach (GroupDto g in groups.Groups ?? Array.Empty<GroupDto>())
+                doc.Groups.Add(
+                    new VmapGroup { Id = g.Id, Name = g.Name ?? string.Empty, Hidden = g.Hidden });
+        }
+
         if (geometryJson is not null)
         {
             GeometryDto geo = Deserialize<GeometryDto>(geometryJson, GeometrySection);
             foreach (BrushDto b in geo.Brushes ?? Array.Empty<BrushDto>())
             {
-                var brush = new VmapBrush { Id = b.Id, IsDetail = b.Detail, ContentFlags = b.Contents };
+                var brush = new VmapBrush
+                {
+                    Id = b.Id, IsDetail = b.Detail, ContentFlags = b.Contents, GroupId = b.Group,
+                };
                 foreach (FaceDto f in b.Faces ?? Array.Empty<FaceDto>())
                 {
                     // The flat fields ARE the base layer, so a package written before layers existed reads
@@ -187,6 +207,7 @@ public static class VmapPackage
                     Height = p.Height,
                     SurfaceFlags = p.Surface,
                     ContentFlags = p.Contents,
+                    GroupId = p.Group,
                 };
                 float[] ctrl = p.Controls ?? Array.Empty<float>();
                 for (int i = 0; i + 2 < ctrl.Length; i += 3)
@@ -203,7 +224,10 @@ public static class VmapPackage
             EntitiesDto ents = Deserialize<EntitiesDto>(entitiesJson, EntitiesSection);
             foreach (EntityDto e in ents.Entities ?? Array.Empty<EntityDto>())
             {
-                var ent = new VmapEntity { Id = e.Id, ClassName = e.ClassName ?? string.Empty };
+                var ent = new VmapEntity
+                {
+                    Id = e.Id, ClassName = e.ClassName ?? string.Empty, GroupId = e.Group,
+                };
                 foreach (KeyValuePair<string, string> kv in e.Fields ?? new Dictionary<string, string>())
                     ent.Fields[kv.Key] = kv.Value;
                 if (!string.IsNullOrEmpty(ent.ClassName))
@@ -250,6 +274,7 @@ public static class VmapPackage
         string manifest = SerializeManifest(doc);
         string geometry = SerializeGeometry(doc);
         string entities = SerializeEntities(doc);
+        string? groups = SerializeGroups(doc);
 
         // Written beside the real files and moved into place, rather than written over them. The three
         // sections are one document: a process that dies between the second and third write would leave new
@@ -258,6 +283,14 @@ public static class VmapPackage
         WriteAtomic(Path.Combine(dir, ManifestSection), manifest);
         WriteAtomic(Path.Combine(dir, GeometrySection), geometry);
         WriteAtomic(Path.Combine(dir, EntitiesSection), entities);
+
+        // Written only when there ARE groups, and REMOVED when the last one goes: a stale groups.json
+        // naming sets that nothing belongs to any more would be read straight back on the next load.
+        string groupsPath = Path.Combine(dir, GroupsSection);
+        if (groups is not null)
+            WriteAtomic(groupsPath, groups);
+        else if (File.Exists(groupsPath))
+            File.Delete(groupsPath);
     }
 
     /// <summary>
@@ -285,6 +318,8 @@ public static class VmapPackage
         WriteZipEntry(archive, ManifestSection, SerializeManifest(doc));
         WriteZipEntry(archive, GeometrySection, SerializeGeometry(doc));
         WriteZipEntry(archive, EntitiesSection, SerializeEntities(doc));
+        if (SerializeGroups(doc) is { } groups)
+            WriteZipEntry(archive, GroupsSection, groups);
     }
 
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
@@ -347,6 +382,7 @@ public static class VmapPackage
                 Id = b.Id,
                 Detail = b.IsDetail,
                 Contents = b.ContentFlags,
+                Group = b.GroupId,
                 Faces = faces,
             };
         }
@@ -375,6 +411,7 @@ public static class VmapPackage
                 Height = p.Height,
                 Surface = p.SurfaceFlags,
                 Contents = p.ContentFlags,
+                Group = p.GroupId,
                 Controls = ctrl,
                 Uvs = uvs,
             };
@@ -402,7 +439,25 @@ public static class VmapPackage
                 Fields = fields,
                 Brushes = e.BrushIds.ToArray(),
                 Patches = e.PatchIds.ToArray(),
+                Group = e.GroupId,
             };
+        }
+        return JsonSerializer.Serialize(dto, JsonOptions);
+    }
+
+    /// <summary>
+    /// The groups section, or null when the map has none — in which case it is not written at all.
+    /// </summary>
+    private static string? SerializeGroups(VmapDocument doc)
+    {
+        if (doc.Groups.Count == 0)
+            return null;
+
+        var dto = new GroupsDto { Groups = new GroupDto[doc.Groups.Count] };
+        for (int i = 0; i < doc.Groups.Count; i++)
+        {
+            VmapGroup g = doc.Groups[i];
+            dto.Groups[i] = new GroupDto { Id = g.Id, Name = g.Name, Hidden = g.Hidden };
         }
         return JsonSerializer.Serialize(dto, JsonOptions);
     }
@@ -454,6 +509,14 @@ public static class VmapPackage
         [JsonPropertyName("detail")] public bool Detail { get; set; }
         [JsonPropertyName("contents")] public int Contents { get; set; }
         [JsonPropertyName("faces")] public FaceDto[]? Faces { get; set; }
+
+        /// <summary>
+        /// Group membership (backlog F8). Omitted when 0, which is every object on every map that has no
+        /// groups, so no existing package changes a byte on its next save.
+        /// </summary>
+        [JsonPropertyName("group")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public int Group { get; set; }
     }
 
     private sealed class FaceDto
@@ -519,6 +582,14 @@ public static class VmapPackage
         [JsonPropertyName("contents")] public int Contents { get; set; }
         [JsonPropertyName("controls")] public float[]? Controls { get; set; }
         [JsonPropertyName("uvs")] public float[]? Uvs { get; set; }
+
+        /// <summary>
+        /// Group membership (backlog F8). Omitted when 0, which is every object on every map that has no
+        /// groups, so no existing package changes a byte on its next save.
+        /// </summary>
+        [JsonPropertyName("group")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public int Group { get; set; }
     }
 
     private sealed class EntitiesDto
@@ -533,5 +604,25 @@ public static class VmapPackage
         [JsonPropertyName("fields")] public Dictionary<string, string>? Fields { get; set; }
         [JsonPropertyName("brushes")] public int[]? Brushes { get; set; }
         [JsonPropertyName("patches")] public int[]? Patches { get; set; }
+
+        /// <summary>
+        /// Group membership (backlog F8). Omitted when 0, which is every object on every map that has no
+        /// groups, so no existing package changes a byte on its next save.
+        /// </summary>
+        [JsonPropertyName("group")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public int Group { get; set; }
+    }
+
+    private sealed class GroupsDto
+    {
+        [JsonPropertyName("groups")] public GroupDto[]? Groups { get; set; }
+    }
+
+    private sealed class GroupDto
+    {
+        [JsonPropertyName("id")] public int Id { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("hidden")] public bool Hidden { get; set; }
     }
 }

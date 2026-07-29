@@ -121,8 +121,8 @@ bitset if a bigger match shows it on a profile. No portal-flood vis compiler, at
 | **F2** | **Blend maps — paintable layer weights.** *Redesigned 2026-07-29, see below.* A weight TEXTURE with its own planar projection, sampled per-texel, not a per-vertex weight. | open |
 | **F3** | **The paint tool.** What makes F2 usable: a brush that paints into the blend map, sized and softened, one stroke = one op. | open |
 | **F4** | **Brush entities can be created.** Nothing turns a selection into a `func_door` — they import and their keys edit, but the editor authors only static geometry and point entities, and every dynamic element in a Xonotic map is a brush entity. An op assigning selected brush/patch ids to a new entity; the ownership plumbing exists everywhere else already. | **done** (`f722a13`) |
-| **F5** | **CSG: subtract.** Radiant's carving workflow. No workaround today. | open |
-| **F6** | **CSG: merge and hollow/room.** Lower value than F5; hollow is a convenience over six clipped brushes. | open |
+| **F5** | **CSG: subtract.** Radiant's carving workflow. No workaround today. | **done** (`c8d3d77`) |
+| **F6** | **CSG: merge and hollow/room.** Lower value than F5; hollow is a convenience over six clipped brushes. | **done** (`c8d3d77`) |
 | **F7** | **Texture lock.** *(done — `f50c2a9`)*  `TranslateBrushesOp` moves planes and leaves the projection alone, so a moved brush slides its texture and alignment work is lost on every move. `PasteOp` already offsets the projection with the geometry, so the behaviour is inconsistent as well as wrong. Wants a cvar; default ON. | open |
 | **F8** | **Grouping and layers.** Named sets of objects, hidden/shown and selected together. | open |
 | **F10** | **`.map` export must flatten a layer stack** — tracked as P2. | see P2 |

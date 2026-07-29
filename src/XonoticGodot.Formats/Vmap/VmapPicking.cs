@@ -135,11 +135,18 @@ public sealed class VmapPickIndex
     private VmapDocument? _doc;
     private bool _includedTools;
     private int _hiddenStamp;
+    private int _visStamp = -1;
 
     /// <summary>
     /// Inline model indices hidden by the gametype filter. Assign, then call <see cref="Invalidate"/>.
     /// </summary>
     public HashSet<int> HiddenSubmodels { get; } = new();
+
+    /// <summary>
+    /// The editor's live view filter (backlog F8, F9). The picker and the renderer read the SAME object, which
+    /// is what stops the map growing brushes you can click but not see.
+    /// </summary>
+    public VmapVisibility? Visibility { get; set; }
 
     /// <summary>Geometry version this cache was built for; -1 when never built.</summary>
     public int Version { get; private set; } = -1;
@@ -155,11 +162,16 @@ public sealed class VmapPickIndex
     public void EnsureBuilt(VmapDocument doc, int version, bool includeToolBrushes = false)
     {
         ArgumentNullException.ThrowIfNull(doc);
+        // The submodel stamp is a COUNT, so swapping one hidden submodel for another of the same set size
+        // would reuse a stale index. The visibility object carries a monotonic version instead, which is why
+        // it is the one new axes key on.
+        int visStamp = Visibility?.Version ?? 0;
         if (Version == version && ReferenceEquals(_doc, doc) && _includedTools == includeToolBrushes
-            && _hiddenStamp == HiddenSubmodels.Count)
+            && _hiddenStamp == HiddenSubmodels.Count && _visStamp == visStamp)
             return;
         _includedTools = includeToolBrushes;
         _hiddenStamp = HiddenSubmodels.Count;
+        _visStamp = visStamp;
 
         _entries.Clear();
         _patches.Clear();
@@ -175,6 +187,8 @@ public sealed class VmapPickIndex
             // func_wall while editing for deathmatch). Hidden, never discarded.
             if (brush.SubmodelIndex != 0 && HiddenSubmodels.Contains(brush.SubmodelIndex))
                 continue;
+            if (Visibility is { } vis && !vis.IsBrushVisible(brush))
+                continue;   // hidden, out of region, or in a hidden group: not clickable either
 
             Vector3[][] windings = VmapWinding.BuildBrushWindings(brush);
 
@@ -202,6 +216,8 @@ public sealed class VmapPickIndex
         foreach (VmapPatch patch in doc.Patches)
         {
             if (!patch.IsValid)
+                continue;
+            if (Visibility is { } patchVis && !patchVis.IsPatchVisible(patch))
                 continue;
 
             var single = new VmapDocument();
@@ -239,6 +255,8 @@ public sealed class VmapPickIndex
                 continue;
             if (string.Equals(ent.ClassName, "worldspawn", StringComparison.OrdinalIgnoreCase))
                 continue;   // worldspawn is the map itself, not something you click
+            if (Visibility is { } entVis && !entVis.IsEntityVisible(ent))
+                continue;
 
             EntityClassDef def = Defs?.GetOrPlaceholder(ent.ClassName)
                 ?? new EntityClassDef { Name = ent.ClassName };

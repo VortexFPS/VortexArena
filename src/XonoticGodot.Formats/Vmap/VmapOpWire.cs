@@ -178,6 +178,7 @@ public static class VmapOpWire
                 AppendIds(sb, me.TouchedEntityIds);
                 sb.Append(' ');
                 AppendVec(sb, me.Delta);
+                sb.Append(' ').Append(me.TextureLock ? 1 : 0);
                 return sb.ToString();
 
             case RotateEntitiesOp rot:
@@ -243,6 +244,16 @@ public static class VmapOpWire
             case ExtrudeFaceOp ex:
                 return string.Create(CultureInfo.InvariantCulture,
                     $"extrude {ex.WireId} {ex.SourceBrushId} {ex.FaceIndex} {Fmt(ex.Distance)}");
+
+            case SetGroupOp grp:
+                sb.Append("group ").Append(grp.WireId).Append(' ').Append(grp.Hidden ? 1 : 0)
+                    .Append(' ').Append(Escape(grp.Name)).Append(' ');
+                AppendIds(sb, grp.BrushIds);
+                sb.Append(' ');
+                AppendIds(sb, grp.PatchIds);
+                sb.Append(' ');
+                AppendIds(sb, grp.EntityIds);
+                return sb.ToString();
 
             case SubtractBrushesOp sub:
                 sb.Append("csgsub ").Append(sub.CutterBrushId).Append(' ');
@@ -494,7 +505,9 @@ public static class VmapOpWire
                 {
                     if (!TryReadIds(tok, 1, out int[] ids, out int next) || tok.Length < next + 3)
                         return null;
-                    return new MoveEntitiesOp(ids, ReadVec(tok, next), doc);
+                    // Trailing flag, absent on a line from a build that predates texture lock: decoding it as
+                    // false is what keeps those lines meaning what they meant.
+                    return new MoveEntitiesOp(ids, ReadVec(tok, next), doc, ReadFlag(tok, next + 3));
                 }
                 case "entrot":
                 {
@@ -580,6 +593,19 @@ public static class VmapOpWire
                         int.Parse(tok[2], CultureInfo.InvariantCulture),
                         int.Parse(tok[3], CultureInfo.InvariantCulture), ReadFloat(tok[4]),
                         int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "group":
+                {
+                    if (tok.Length < 4)
+                        return null;
+                    int groupId = int.Parse(tok[1], CultureInfo.InvariantCulture);
+                    bool groupHidden = int.Parse(tok[2], CultureInfo.InvariantCulture) != 0;
+                    string groupName = Unescape(tok[3]);
+                    if (!TryReadIds(tok, 4, out int[] gBrushes, out int afterGb)
+                        || !TryReadIds(tok, afterGb, out int[] gPatches, out int afterGp)
+                        || !TryReadIds(tok, afterGp, out int[] gEntities, out _))
+                        return null;
+                    return new SetGroupOp(groupName, groupHidden, gBrushes, gPatches, gEntities, doc, groupId);
                 }
                 case "csgsub":
                 {

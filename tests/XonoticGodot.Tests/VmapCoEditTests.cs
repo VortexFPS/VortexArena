@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using XonoticGodot.Formats.Vmap;
@@ -81,6 +82,10 @@ public class VmapCoEditTests
         new SnapBrushToGridOp(new[] { 1, 2, 3 }, 16f),
         new SetEntityKeyOp(5, "target", "door_1"),
         new MoveEntitiesOp(new[] { 5, 6 }, new Vector3(0f, 128f, 0f)),
+        new MoveEntitiesOp(new[] { 5 }, new Vector3(0f, 64f, 0f), doc: null, textureLock: true),
+        new TranslateBrushesOp(new[] { 1 }, new Vector3(8f, 0f, 0f), textureLock: true),
+        new RotateBrushesOp(new[] { 2 }, new Vector3(16, 16, 0), new Vector3(0, 0, 1), 90f,
+            textureLock: true),
         new RotateEntitiesOp(new[] { 5 }, new Vector3(64, 64, 0), 45f),
         new DeleteEntitiesOp(new[] { 7 }),
         new CreateBoxBrushOp(Vector3.Zero, new Vector3(64, 64, 64), "textures/test/wall"),
@@ -95,6 +100,10 @@ public class VmapCoEditTests
         new HollowBrushesOp(new[] { 1 }, 8f, outward: false),
         new HollowBrushesOp(new[] { 1, 2 }, 12.5f, outward: true),
         new MergeBrushesOp(new[] { 1, 2 }),
+        new SetGroupOp("north wing", hidden: false, new[] { 1, 2 }, new[] { 3 }, new[] { 4 },
+            doc: null, forcedId: 7),
+        new SetGroupOp("hidden set", hidden: true, Array.Empty<int>(), Array.Empty<int>(),
+            Array.Empty<int>(), doc: null, forcedId: 9),
     };
 
     [Theory]
@@ -146,6 +155,7 @@ public class VmapCoEditTests
                      "mkbent", "mkbent 0", "mkbent 0 1 1", "mkbent 0 1 1 0 cls", "entdissolve",
                      "csgsub", "csgsub 1", "csgsub 1 1", "csgsub 1 2 1", "csghollow",
                      "csghollow 1 1 8", "csghollow 1 1 notanumber 0 0", "csgmerge", "csgmerge 1",
+                     "group", "group 1", "group 1 0", "group 1 0 name", "group 1 0 name 0 0",
                      "add 1 1 1 1 0 0 0", "clip 1 1 1 0 0 0 0",
                  })
         {
@@ -181,6 +191,9 @@ public class VmapCoEditTests
                      "csghollow 2147483647",                        // hollow source list
                      "csghollow 1 1 8 0 2147483647",                // hollow wall list
                      "csgmerge 2147483647",                         // merge id list
+                     "group 1 0 n 2147483647",                      // group brush list
+                     "group 1 0 n 0 2147483647",                    // group patch list
+                     "group 1 0 n 0 0 2147483647",                  // group entity list
                  })
         {
             Assert.Null(VmapOpWire.Deserialize(line));

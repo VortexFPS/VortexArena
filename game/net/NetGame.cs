@@ -7750,7 +7750,7 @@ public sealed partial class NetGame : Node3D
         bool lit = Vmap.EditorLighting.Enabled(Menu.MenuState.Cvars);
         int viewKey = HashCode.Combine(
             _editor.GeometryVersion, _editor.GametypeFilter, _editor.IncludeToolBrushes,
-            _editor.CullOccludedFaces, lit);
+            _editor.CullOccludedFaces, lit, _editor.Visibility.Version);
         if (_editorMapVersion == viewKey)
             return;
 
@@ -7825,9 +7825,11 @@ public sealed partial class NetGame : Node3D
         builtLights:
         _editorMapRoot = Vmap.VmapMapBuilder.BuildMap(_editor.Document!, _assets.Assets, new VmapSurfaceOptions
         {
-            // Same filter the picker uses, so what you can click is what you can see.
+            // Literally the same OBJECT the picker uses, so what you can click is what you can see —
+            // hide, isolate, region and group visibility all at once (backlog F8, F9).
             HiddenSubmodels = _editor.PickIndex.HiddenSubmodels,
             IncludeToolBrushes = _editor.IncludeToolBrushes,
+            Visibility = _editor.Visibility,
             // Without this the editor draws the mapper's overlapping solids instead of the level's visible
             // skin, and you end up looking at the inside of the masonry rather than at the room.
             CullOccludedFaces = _editor.CullOccludedFaces,
@@ -8062,6 +8064,9 @@ public sealed partial class NetGame : Node3D
                 RefreshEditorWorld();
         });
         interp.RegisterCommand("editor_csg", CmdEditorCsg);
+        interp.RegisterCommand("editor_hide", CmdEditorHide);
+        interp.RegisterCommand("editor_region", CmdEditorRegion);
+        interp.RegisterCommand("editor_group", CmdEditorGroup);
         interp.RegisterCommand("editor_brush_create", _ =>
         {
             if (_editor?.CreateBrushAtCrosshair() == true)
@@ -8615,6 +8620,123 @@ public sealed partial class NetGame : Node3D
                 "usage: editor_csg subtract | hollow [thickness] | room [thickness] | merge");
             return false;
         }
+    }
+
+    /// <summary>
+    /// <c>editor_hide</c> — narrow what you are looking at (backlog F9).
+    /// <code>
+    ///   editor_hide              hide the selection
+    ///   editor_hide unselected   hide everything else (isolate)
+    ///   editor_hide show         bring back everything hidden this way
+    /// </code>
+    /// Purely a VIEW change: nothing is journalled, nothing replicates, and the map on disk is untouched.
+    /// </summary>
+    private void CmdEditorHide(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null } ed)
+            return;
+
+        bool changed = (args.Count > 1 ? args[1].ToLowerInvariant() : "") switch
+        {
+            "" => ed.HideSelection(),
+            "unselected" or "isolate" or "other" => ed.IsolateSelection(),
+            "show" or "all" or "off" => ed.ShowAllHidden(),
+            _ => HideUsage(),
+        };
+
+        if (changed)
+            RefreshEditorWorld();
+
+        static bool HideUsage()
+        {
+            XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_hide [unselected | show]");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_region</c> — clip the view to a box around the selection, or <c>off</c> to clear it
+    /// (backlog F9).
+    /// </summary>
+    private void CmdEditorRegion(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null } ed)
+            return;
+
+        bool off = args.Count > 1
+            && args[1].ToLowerInvariant() is "off" or "clear" or "0";
+        if (off ? ed.ClearRegion() : ed.SetRegionToSelection())
+            RefreshEditorWorld();
+    }
+
+    /// <summary>
+    /// <c>editor_group</c> — named object sets (backlog F8).
+    /// <code>
+    ///   editor_group &lt;name&gt;         put the selection in a group, creating or extending it
+    ///   editor_group off             take the selection out of its groups (dissolving empty ones)
+    ///   editor_group hide &lt;name&gt;    hide a group as a unit
+    ///   editor_group show &lt;name&gt;    show it again
+    ///   editor_group list            what groups the map has
+    /// </code>
+    /// Unlike <c>editor_hide</c> this IS document state: groups save with the map and replicate to co-editors,
+    /// because a group is a fact about the level rather than about one mapper's view of it.
+    /// </summary>
+    private void CmdEditorGroup(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null, Document: { } doc } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "";
+        bool changed;
+        switch (verb)
+        {
+            case "":
+                XonoticGodot.Common.Diagnostics.Log.Help(
+                    "usage: editor_group <name> | off | hide <name> | show <name> | list");
+                return;
+
+            case "off" or "ungroup":
+                changed = ed.UngroupSelection();
+                break;
+
+            case "hide" or "show":
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help($"usage: editor_group {verb} <name>");
+                    return;
+                }
+                changed = ed.SetGroupHidden(
+                    string.Join(' ', args, 2, args.Count - 2), hidden: verb == "hide");
+                break;
+
+            case "list":
+                if (doc.Groups.Count == 0)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: this map has no groups");
+                    return;
+                }
+                foreach (XonoticGodot.Formats.Vmap.VmapGroup g in doc.Groups)
+                {
+                    int members = 0;
+                    foreach (XonoticGodot.Formats.Vmap.VmapBrush b in doc.Brushes)
+                        if (b.GroupId == g.Id) members++;
+                    foreach (XonoticGodot.Formats.Vmap.VmapPatch pa in doc.Patches)
+                        if (pa.GroupId == g.Id) members++;
+                    foreach (XonoticGodot.Formats.Vmap.VmapEntity e in doc.Entities)
+                        if (e.GroupId == g.Id) members++;
+                    XonoticGodot.Common.Diagnostics.Log.Info(
+                        $"  {g.Name} — {members} object(s){(g.Hidden ? ", hidden" : "")}");
+                }
+                return;
+
+            default:
+                // The whole tail, so a group name can have spaces without quoting.
+                changed = ed.GroupSelection(string.Join(' ', args, 1, args.Count - 1));
+                break;
+        }
+
+        if (changed)
+            RefreshEditorWorld();
     }
 
     /// <summary>Print the selected entity's live keys alongside what its class documents.</summary>

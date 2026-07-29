@@ -134,6 +134,22 @@ public partial class EditorPanel : HudPanel
                 lines.Add(($"{c.ActionLine}", new Color(1f, 0.9f, 0.55f)));
                 lines.Add(($"Showing: {c.GametypeFilterLabel}   (editor_gametype <name|all>)", dim));
 
+                // A narrowed view has to SAY it is narrowed. A mapper who forgets a region is set concludes
+                // that half their map got deleted, and there is nothing anywhere to tell them otherwise —
+                // which makes this the cheapest line in the panel and one of the most valuable.
+                int hidden = c.Visibility.ExplicitHiddenCount;
+                if (c.Visibility.HasRegion || hidden > 0 || c.Visibility.HiddenGroups.Count > 0)
+                {
+                    var parts = new List<string>(3);
+                    if (c.Visibility.HasRegion)
+                        parts.Add("REGION on (editor_region off)");
+                    if (hidden > 0)
+                        parts.Add($"{hidden} hidden (editor_hide show)");
+                    if (c.Visibility.HiddenGroups.Count > 0)
+                        parts.Add($"{c.Visibility.HiddenGroups.Count} group(s) hidden");
+                    lines.Add((string.Join("  ·  ", parts), new Color(1f, 0.75f, 0.3f)));
+                }
+
                 // The comparison view is a MODE, and a mode you can be in silently is a mode you will
                 // forget you are in — edits do not draw while the BSP is up, which would read as a broken
                 // editor rather than as a held toggle.

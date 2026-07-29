@@ -212,23 +212,136 @@ public struct VmapTexProjection
     }
 }
 
-/// <summary>One bounding face of a convex brush: its outward plane, its material, and its texture projection.</summary>
+/// <summary>How a face layer combines with the layers beneath it.</summary>
+public enum VmapBlend
+{
+    /// <summary>Replaces what is under it. What the base layer is, and the only thing a <c>.map</c> export keeps.</summary>
+    Opaque,
+
+    /// <summary>
+    /// Steered by a per-vertex weight (see <see cref="VmapFaceLayer.WeightChannel"/>) — the terrain-painting
+    /// case, and the one a BSP cannot express beyond a single RGBA drawvert.
+    /// </summary>
+    Vertex,
+
+    /// <summary>Added to what is under it.</summary>
+    Add,
+
+    /// <summary>Multiplied with what is under it.</summary>
+    Multiply,
+
+    /// <summary>Alpha-blended using the layer texture's own alpha.</summary>
+    Alpha,
+}
+
+/// <summary>
+/// One textured layer of a face: a material, the projection that maps it onto the plane, and how it combines
+/// with what is beneath it.
+///
+/// A face is a STACK of these rather than a single material, which is the point of departure from the Q3
+/// lineage. A BSP drawvert carries one shader per face, one RGBA, and two UV sets, so a compiled map can only
+/// fake blending by hiding stages inside one shader and steering them from that single colour. Layers here are
+/// independent — their own material, their own projection, their own blend — because <c>.vmap</c> is not
+/// constrained by a 1999 file format and should not be designed as though it were.
+/// </summary>
+public sealed class VmapFaceLayer
+{
+    /// <summary>Shader/texture name as referenced by the material system (e.g. "textures/exx/floor01").</summary>
+    public string Material { get; set; } = string.Empty;
+
+    /// <summary>How this layer's texture is mapped onto the face's plane. Independent per layer.</summary>
+    public VmapTexProjection Projection { get; set; }
+
+    /// <summary>How this layer combines with the layers under it.</summary>
+    public VmapBlend Blend { get; set; } = VmapBlend.Opaque;
+
+    /// <summary>
+    /// Which per-vertex weight steers a <see cref="VmapBlend.Vertex"/> layer: 0-3, addressing the R/G/B/A of
+    /// the mesh's blend-weight channel. -1 when the layer is not vertex-steered.
+    ///
+    /// The weights ride a CUSTOM vertex channel rather than COLOR, because COLOR already carries the baked
+    /// light on world meshes and a layer stack must not cost a map its lighting.
+    /// </summary>
+    public int WeightChannel { get; set; } = -1;
+
+    public VmapFaceLayer Clone() => new()
+    {
+        Material = Material,
+        Projection = Projection,
+        Blend = Blend,
+        WeightChannel = WeightChannel,
+    };
+}
+
+/// <summary>
+/// One bounding face of a convex brush: its outward plane, its stack of textured layers, and its Q3 flags.
+/// </summary>
 public sealed class VmapFace
 {
     /// <summary>Outward-facing plane; the brush interior is <c>Dot(Normal, p) &lt;= Dist</c>.</summary>
     public VmapPlane Plane { get; set; }
 
-    /// <summary>Shader/texture name as referenced by the material system (e.g. "textures/exx/floor01").</summary>
-    public string Material { get; set; } = string.Empty;
+    /// <summary>
+    /// The layer stack, base first. Never empty: a face always has a base layer even when it is untextured,
+    /// so <see cref="Material"/> and <see cref="Projection"/> always have somewhere to read and write.
+    /// </summary>
+    public List<VmapFaceLayer> Layers { get; } = new() { new VmapFaceLayer() };
 
-    /// <summary>Texture projection for this face.</summary>
-    public VmapTexProjection Projection { get; set; }
+    /// <summary>The base layer — what a single-textured face is, and what an export flattens a stack to.</summary>
+    public VmapFaceLayer Base
+    {
+        get
+        {
+            // Defensive rather than an invariant: a caller that emptied the list would otherwise turn every
+            // read of Material into an index-out-of-range, a long way from the code that emptied it.
+            if (Layers.Count == 0)
+                Layers.Add(new VmapFaceLayer());
+            return Layers[0];
+        }
+    }
+
+    /// <summary>True when this face carries more than its base layer.</summary>
+    public bool IsLayered => Layers.Count > 1;
+
+    /// <summary>
+    /// The base layer's material. Kept as a direct property because the overwhelming majority of faces have
+    /// exactly one layer, and every existing reader, writer and tool says <c>face.Material</c>.
+    /// </summary>
+    public string Material
+    {
+        get => Base.Material;
+        set => Base.Material = value;
+    }
+
+    /// <summary>The base layer's texture projection. Same reasoning as <see cref="Material"/>.</summary>
+    public VmapTexProjection Projection
+    {
+        get => Base.Projection;
+        set => Base.Projection = value;
+    }
 
     /// <summary>Q3 surface flags (Q3SURFACEFLAG_*) for this face — nodraw/sky/slick/nonsolid etc.</summary>
     public int SurfaceFlags { get; set; }
 
     /// <summary>Q3 NATIVE content flags of this face, as stored in a BSP/.map (converted at collision-build time).</summary>
     public int ContentFlags { get; set; }
+
+    /// <summary>Deep copy, layer stack included.</summary>
+    public VmapFace Clone()
+    {
+        var copy = new VmapFace
+        {
+            Plane = Plane,
+            SurfaceFlags = SurfaceFlags,
+            ContentFlags = ContentFlags,
+        };
+        copy.Layers.Clear();
+        foreach (VmapFaceLayer l in Layers)
+            copy.Layers.Add(l.Clone());
+        if (copy.Layers.Count == 0)
+            copy.Layers.Add(new VmapFaceLayer());
+        return copy;
+    }
 }
 
 /// <summary>
@@ -338,17 +451,11 @@ public sealed class VmapBrush
             SubmodelIndex = SubmodelIndex,
             IsToolBrush = IsToolBrush,
         };
+        // Through VmapFace.Clone so the whole LAYER STACK comes along. Copying Material/Projection by hand
+        // would silently flatten a layered face to its base every time undo snapshotted it — the same class of
+        // omission as the classification fields above, and harder to see because the face still looks right.
         foreach (VmapFace f in Faces)
-        {
-            copy.Faces.Add(new VmapFace
-            {
-                Plane = f.Plane,
-                Material = f.Material,
-                Projection = f.Projection,
-                SurfaceFlags = f.SurfaceFlags,
-                ContentFlags = f.ContentFlags,
-            });
-        }
+            copy.Faces.Add(f.Clone());
         return copy;
     }
 }

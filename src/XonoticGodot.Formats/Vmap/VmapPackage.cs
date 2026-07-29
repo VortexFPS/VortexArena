@@ -151,14 +151,28 @@ public static class VmapPackage
                 var brush = new VmapBrush { Id = b.Id, IsDetail = b.Detail, ContentFlags = b.Contents };
                 foreach (FaceDto f in b.Faces ?? Array.Empty<FaceDto>())
                 {
-                    brush.Faces.Add(new VmapFace
+                    // The flat fields ARE the base layer, so a package written before layers existed reads
+                    // back as a one-layer face with no special case.
+                    var face = new VmapFace
                     {
                         Plane = new VmapPlane(Vec3(f.Normal), f.Dist),
                         Material = f.Material ?? string.Empty,
                         Projection = new VmapTexProjection(Vec3(f.AxisU), Vec3(f.AxisV), f.OffsetU, f.OffsetV),
                         SurfaceFlags = f.Surface,
                         ContentFlags = f.Contents,
-                    });
+                    };
+                    foreach (LayerDto l in f.ExtraLayers ?? Array.Empty<LayerDto>())
+                    {
+                        face.Layers.Add(new VmapFaceLayer
+                        {
+                            Material = l.Material ?? string.Empty,
+                            Projection = new VmapTexProjection(
+                                Vec3(l.AxisU), Vec3(l.AxisV), l.OffsetU, l.OffsetV),
+                            Blend = (VmapBlend)l.Blend,
+                            WeightChannel = l.WeightChannel,
+                        });
+                    }
+                    brush.Faces.Add(face);
                 }
                 doc.Brushes.Add(brush);
             }
@@ -320,6 +334,12 @@ public static class VmapPackage
                     OffsetV = face.Projection.OffsetV,
                     Surface = face.SurfaceFlags,
                     Contents = face.ContentFlags,
+
+                    // Only the layers ABOVE the base, and omitted entirely when there are none. The base stays
+                    // in the flat fields above, so a single-layer face writes exactly the bytes it always did:
+                    // existing packages do not churn, older readers still get the map, and a diff of a
+                    // layered face shows only the layers.
+                    ExtraLayers = face.Layers.Count > 1 ? LayerDtos(face) : null,
                 };
             }
             geo.Brushes[i] = new BrushDto
@@ -447,6 +467,46 @@ public static class VmapPackage
         [JsonPropertyName("offsetV")] public float OffsetV { get; set; }
         [JsonPropertyName("surface")] public int Surface { get; set; }
         [JsonPropertyName("contents")] public int Contents { get; set; }
+
+        /// <summary>
+        /// Layers ABOVE the base one, which lives in the flat fields above. Omitted entirely on a plain face —
+        /// not written as null — so a single-layer face is byte-for-byte what it was before layers existed and
+        /// no package in the wild churns on its next save.
+        /// </summary>
+        [JsonPropertyName("extraLayers")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public LayerDto[]? ExtraLayers { get; set; }
+    }
+
+    private sealed class LayerDto
+    {
+        [JsonPropertyName("material")] public string? Material { get; set; }
+        [JsonPropertyName("axisU")] public float[]? AxisU { get; set; }
+        [JsonPropertyName("axisV")] public float[]? AxisV { get; set; }
+        [JsonPropertyName("offsetU")] public float OffsetU { get; set; }
+        [JsonPropertyName("offsetV")] public float OffsetV { get; set; }
+        [JsonPropertyName("blend")] public int Blend { get; set; }
+        [JsonPropertyName("weightChannel")] public int WeightChannel { get; set; }
+    }
+
+    private static LayerDto[] LayerDtos(VmapFace face)
+    {
+        var dtos = new LayerDto[face.Layers.Count - 1];
+        for (int i = 1; i < face.Layers.Count; i++)
+        {
+            VmapFaceLayer l = face.Layers[i];
+            dtos[i - 1] = new LayerDto
+            {
+                Material = l.Material,
+                AxisU = Arr(l.Projection.AxisU),
+                AxisV = Arr(l.Projection.AxisV),
+                OffsetU = l.Projection.OffsetU,
+                OffsetV = l.Projection.OffsetV,
+                Blend = (int)l.Blend,
+                WeightChannel = l.WeightChannel,
+            };
+        }
+        return dtos;
     }
 
     private sealed class PatchDto

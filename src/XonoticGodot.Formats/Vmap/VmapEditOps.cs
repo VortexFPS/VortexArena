@@ -1684,6 +1684,61 @@ public sealed class SetFaceProjectionOp : IVmapOp
     }
 }
 
+/// <summary>
+/// Replace a face's LAYER STACK — add a blended layer, retexture one, reorder or drop one.
+///
+/// The whole stack travels rather than a per-layer delta, because a stack is short (two or three layers is a
+/// lot) and because "set it to this" has no ordering hazards: an insert and a remove are the same op, undo is
+/// the previous stack, and nothing has to reason about indices shifting under it.
+/// </summary>
+public sealed class SetFaceLayersOp : IVmapOp
+{
+    private readonly int _brushId;
+    private readonly int _faceIndex;
+    private readonly VmapFaceLayer[] _layers;
+
+    public SetFaceLayersOp(int brushId, int faceIndex, IReadOnlyList<VmapFaceLayer> layers)
+    {
+        ArgumentNullException.ThrowIfNull(layers);
+        _brushId = brushId;
+        _faceIndex = faceIndex;
+        _layers = layers.Select(l => l.Clone()).ToArray();
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
+
+    /// <summary>Face whose stack changes. Read by the wire codec.</summary>
+    public int FaceIndex => _faceIndex;
+
+    /// <summary>The stack being written, base first. Read by the wire codec.</summary>
+    public IReadOnlyList<VmapFaceLayer> Layers => _layers;
+
+    public string Describe() => _layers.Length == 1
+        ? $"Set face {_faceIndex} to {_layers[0].Material}"
+        : $"Set {_layers.Length} layers on face {_faceIndex}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_layers.Length == 0)
+            return false;   // a face always has a base layer
+        if (doc.FindBrush(_brushId) is not { } brush)
+            return false;
+        if (_faceIndex < 0 || _faceIndex >= brush.Faces.Count)
+            return false;
+
+        foreach (VmapFaceLayer l in _layers)
+            if (!l.Projection.IsValid)
+                return false;   // a zero axis collapses that layer's texture to a line
+
+        List<VmapFaceLayer> live = brush.Faces[_faceIndex].Layers;
+        live.Clear();
+        foreach (VmapFaceLayer l in _layers)
+            live.Add(l.Clone());
+        return true;
+    }
+}
+
 /// <summary>Set a face's Q3 surface and content flags — the inspector's flag checkboxes.</summary>
 public sealed class SetFaceFlagsOp : IVmapOp
 {

@@ -405,7 +405,7 @@ public static class VmapMapBuilder
 
             var mesh = new ArrayMesh();
             group.Pack(mesh);
-            mesh.SurfaceSetMaterial(0, EditorMaterial(assets, surface.Material));
+            mesh.SurfaceSetMaterial(0, LayeredMaterial(assets, surface));
 
             (NVec3 NSum, NVec3 OSum, int N) acc = planes[key];
             NVec3 planeN = acc.NSum.LengthSquared() > 1e-9f ? NVec3.Normalize(acc.NSum) : new NVec3(0f, 0f, 1f);
@@ -613,6 +613,52 @@ public static class VmapMapBuilder
     /// same way Radiant does: draw the world fullbright. You lose the lighting, which is meaningless mid-edit
     /// anyway, and you can actually see what you are building.
     /// </summary>
+    /// <summary>
+    /// The material for a surface, including any layers blended over its base.
+    ///
+    /// Extra layers become a <c>next_pass</c> chain — the same mechanism the shader compiler already uses for
+    /// a multi-stage Q3 shader, so a blended layer costs nothing new on the GPU path and behaves like
+    /// something the renderer already understands.
+    ///
+    /// <see cref="VmapBlend.Vertex"/> layers are drawn at full strength for now: steering them needs the
+    /// per-vertex weight channel and a shader that reads it, which the mesh does not yet carry. Drawing them
+    /// unweighted is wrong in degree but right in kind — the layer is visible and the mapper can see the stack
+    /// they built, rather than authoring into a preview that shows nothing.
+    /// </summary>
+    private static Material LayeredMaterial(AssetSystem assets, VmapSurface surface)
+    {
+        Material baseMat = EditorMaterial(assets, surface.Material);
+        if (surface.ExtraLayers.Count == 0)
+            return baseMat;
+
+        // Duplicated before the chain is attached: EditorMaterial hands back a CACHED instance shared by every
+        // surface using that shader, and setting NextPass on it would blend the extra layer over all of them.
+        Material chain = (Material)baseMat.Duplicate();
+        Material tail = chain;
+        foreach (VmapFaceLayer layer in surface.ExtraLayers)
+        {
+            if (string.IsNullOrEmpty(layer.Material))
+                continue;
+            var pass = (Material)EditorMaterial(assets, layer.Material).Duplicate();
+            if (pass is BaseMaterial3D pbr)
+            {
+                pbr.Transparency = BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass;
+                pbr.BlendMode = layer.Blend switch
+                {
+                    VmapBlend.Add => BaseMaterial3D.BlendModeEnum.Add,
+                    VmapBlend.Multiply => BaseMaterial3D.BlendModeEnum.Mul,
+                    _ => BaseMaterial3D.BlendModeEnum.Mix,
+                };
+                // A pass sitting exactly on the surface under it z-fights with it; the depth draw belongs to
+                // the base, which has already laid it down.
+                pbr.DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled;
+            }
+            tail.NextPass = pass;
+            tail = pass;
+        }
+        return chain;
+    }
+
     private static Material EditorMaterial(AssetSystem assets, string shaderName)
     {
         string key = (Lit ? (EditorLightBake.Active ? "baked:" : "lit:") : "flat:") + shaderName;

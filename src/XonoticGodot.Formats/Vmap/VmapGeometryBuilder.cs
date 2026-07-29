@@ -8,8 +8,17 @@ namespace XonoticGodot.Formats.Vmap;
 /// </summary>
 public sealed class VmapSurface
 {
-    /// <summary>Shader/texture name shared by every triangle in this surface.</summary>
+    /// <summary>Shader/texture name shared by every triangle in this surface — the BASE layer's.</summary>
     public string Material { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Layers ABOVE the base, shared by every triangle here. Empty for an ordinary single-textured surface.
+    ///
+    /// Faces batch by their whole stack, not just by base material, so a wall textured <c>metal01</c> and a
+    /// wall textured <c>metal01</c> with rust blended over it are different surfaces — they have to be, since
+    /// they need different materials on the GPU.
+    /// </summary>
+    public IReadOnlyList<VmapFaceLayer> ExtraLayers { get; init; } = Array.Empty<VmapFaceLayer>();
 
     /// <summary>Q3 surface flags (union over the contributing faces).</summary>
     public int SurfaceFlags { get; init; }
@@ -187,7 +196,8 @@ public static class VmapGeometryBuilder
         if (polygon.Count < 3)
             return;
 
-        Builder b = Get(byMaterial, face.Material, face.SurfaceFlags);
+        Builder b = Get(byMaterial, face.Material, face.SurfaceFlags,
+            face.IsLayered ? face.Layers.Skip(1).ToArray() : null);
         int baseIndex = b.Positions.Count;
         Vector3 n = face.Plane.Normal;
         VmapTexProjection proj = face.Projection.IsValid
@@ -315,22 +325,60 @@ public static class VmapGeometryBuilder
     }
 
     private static Builder Get(Dictionary<string, Builder> map, string material, int surfaceFlags)
+        => Get(map, material, surfaceFlags, null);
+
+    /// <summary>
+    /// The accumulator for a material, or for a material PLUS a layer stack.
+    ///
+    /// The key carries the stack because two faces sharing a base material but differing above it cannot share
+    /// a mesh surface — they resolve to different GPU materials. Keying on the base alone would merge them and
+    /// whichever face was seen first would decide how both looked.
+    /// </summary>
+    private static Builder Get(
+        Dictionary<string, Builder> map, string material, int surfaceFlags, IReadOnlyList<VmapFaceLayer>? extra)
     {
-        if (!map.TryGetValue(material, out Builder? b))
+        string key = extra is null || extra.Count == 0 ? material : StackKey(material, extra);
+        if (!map.TryGetValue(key, out Builder? b))
         {
-            b = new Builder(material);
-            map[material] = b;
+            b = new Builder(material, extra);
+            map[key] = b;
         }
         b.SurfaceFlags |= surfaceFlags;
         return b;
     }
 
+    /// <summary>
+    /// A batching key for a layered face. Includes each layer's projection, because two faces with the same
+    /// textures but different scroll offsets are genuinely different surfaces.
+    /// </summary>
+    private static string StackKey(string material, IReadOnlyList<VmapFaceLayer> extra)
+    {
+        var sb = new System.Text.StringBuilder(material.Length + extra.Count * 48);
+        sb.Append(material);
+        foreach (VmapFaceLayer l in extra)
+        {
+            VmapTexProjection p = l.Projection;
+            sb.Append('').Append(l.Material)
+              .Append('').Append((int)l.Blend)
+              .Append('').Append(l.WeightChannel)
+              .Append('').Append(p.AxisU.X).Append(',').Append(p.AxisU.Y).Append(',').Append(p.AxisU.Z)
+              .Append('').Append(p.AxisV.X).Append(',').Append(p.AxisV.Y).Append(',').Append(p.AxisV.Z)
+              .Append('').Append(p.OffsetU).Append(',').Append(p.OffsetV);
+        }
+        return sb.ToString();
+    }
+
     /// <summary>Mutable accumulator behind the immutable <see cref="VmapSurface"/> hand-off.</summary>
     private sealed class Builder
     {
-        public Builder(string material) => Material = material;
+        public Builder(string material, IReadOnlyList<VmapFaceLayer>? extra = null)
+        {
+            Material = material;
+            ExtraLayers = extra ?? Array.Empty<VmapFaceLayer>();
+        }
 
         public string Material { get; }
+        public IReadOnlyList<VmapFaceLayer> ExtraLayers { get; }
         public int SurfaceFlags { get; set; }
         public List<Vector3> Positions { get; } = new();
         public List<Vector3> Normals { get; } = new();
@@ -339,7 +387,12 @@ public static class VmapGeometryBuilder
 
         public VmapSurface ToSurface()
         {
-            var s = new VmapSurface { Material = Material, SurfaceFlags = SurfaceFlags };
+            var s = new VmapSurface
+            {
+                Material = Material,
+                ExtraLayers = ExtraLayers,
+                SurfaceFlags = SurfaceFlags,
+            };
             s.Positions.AddRange(Positions);
             s.Normals.AddRange(Normals);
             s.Uvs.AddRange(Uvs);

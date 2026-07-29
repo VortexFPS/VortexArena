@@ -133,6 +133,18 @@ public static class VmapOpWire
                 AppendProjection(sb, sp.Projection);
                 return sb.ToString();
 
+            case SetFaceLayersOp sl:
+                sb.Append("layers ").Append(sl.TouchedBrushIds[0]).Append(' ').Append(sl.FaceIndex)
+                  .Append(' ').Append(sl.Layers.Count);
+                foreach (VmapFaceLayer l in sl.Layers)
+                {
+                    sb.Append(' ');
+                    AppendProjection(sb, l.Projection);
+                    sb.Append(' ').Append((int)l.Blend).Append(' ').Append(l.WeightChannel)
+                      .Append(' ').Append(Escape(l.Material));
+                }
+                return sb.ToString();
+
             case SetFaceFlagsOp sf:
                 return string.Create(CultureInfo.InvariantCulture,
                     $"flags {sf.TouchedBrushIds[0]} {sf.FaceIndex} {sf.SurfaceFlags} {sf.ContentFlags}");
@@ -375,6 +387,29 @@ public static class VmapOpWire
                     return new SetFaceProjectionOp(
                         int.Parse(tok[1], CultureInfo.InvariantCulture),
                         int.Parse(tok[2], CultureInfo.InvariantCulture), ReadProjection(tok, 3));
+                }
+                case "layers":
+                {
+                    if (tok.Length < 4)
+                        return null;
+                    int at = 4;
+                    int count = int.Parse(tok[3], CultureInfo.InvariantCulture);
+                    if (count <= 0 || !Fits(tok, at, count, stride: 11))
+                        return null;
+
+                    var layers = new List<VmapFaceLayer>(count);
+                    for (int i = 0; i < count; i++, at += 11)
+                        layers.Add(new VmapFaceLayer
+                        {
+                            Projection = ReadProjection(tok, at),
+                            Blend = (VmapBlend)int.Parse(tok[at + 8], CultureInfo.InvariantCulture),
+                            WeightChannel = int.Parse(tok[at + 9], CultureInfo.InvariantCulture),
+                            Material = Unescape(tok[at + 10]),
+                        });
+
+                    return new SetFaceLayersOp(
+                        int.Parse(tok[1], CultureInfo.InvariantCulture),
+                        int.Parse(tok[2], CultureInfo.InvariantCulture), layers);
                 }
                 case "flags":
                 {
@@ -672,6 +707,19 @@ public static class VmapOpWire
                 AppendProjection(sb, f.Projection);
                 sb.Append(' ').Append(f.SurfaceFlags).Append(' ').Append(f.ContentFlags)
                   .Append(' ').Append(Escape(f.Material));
+
+                // Then the layers ABOVE the base, count first. A plain face writes a single extra token, so
+                // the common case stays as cheap as it was; a layered face replicates in full rather than
+                // arriving flattened, which is what a receiver would otherwise silently render.
+                sb.Append(' ').Append(f.Layers.Count - 1);
+                for (int i = 1; i < f.Layers.Count; i++)
+                {
+                    VmapFaceLayer l = f.Layers[i];
+                    sb.Append(' ');
+                    AppendProjection(sb, l.Projection);
+                    sb.Append(' ').Append((int)l.Blend).Append(' ').Append(l.WeightChannel)
+                      .Append(' ').Append(Escape(l.Material));
+                }
             }
         }
     }
@@ -777,22 +825,41 @@ public static class VmapOpWire
         {
             if (!TryCount(tok, ref at, out int id) || !TryCount(tok, ref at, out int faceCount))
                 return false;
-            if (!Fits(tok, at, faceCount, stride: 15))
+
+            // 16, not 15: the smallest face is its fixed fields plus an extra-layer count of zero. The stack
+            // makes a face variable-length, so this bounds the COUNT and each face re-checks as it is read.
+            if (!Fits(tok, at, faceCount, stride: 16))
                 return false;
+
             var brush = new VmapBrush { Id = id };
             for (int f = 0; f < faceCount; f++)
             {
                 if (at + 15 > tok.Length)
                     return false;
-                brush.Faces.Add(new VmapFace
+                var face = new VmapFace
                 {
                     Plane = new VmapPlane(ReadVec(tok, at), ReadFloat(tok[at + 3])),
                     Projection = ReadProjection(tok, at + 4),
                     SurfaceFlags = int.Parse(tok[at + 12], CultureInfo.InvariantCulture),
                     ContentFlags = int.Parse(tok[at + 13], CultureInfo.InvariantCulture),
                     Material = Unescape(tok[at + 14]),
-                });
+                };
                 at += 15;
+
+                if (!TryCount(tok, ref at, out int extraLayers) || !Fits(tok, at, extraLayers, stride: 11))
+                    return false;
+                for (int l = 0; l < extraLayers; l++)
+                {
+                    face.Layers.Add(new VmapFaceLayer
+                    {
+                        Projection = ReadProjection(tok, at),
+                        Blend = (VmapBlend)int.Parse(tok[at + 8], CultureInfo.InvariantCulture),
+                        WeightChannel = int.Parse(tok[at + 9], CultureInfo.InvariantCulture),
+                        Material = Unescape(tok[at + 10]),
+                    });
+                    at += 11;
+                }
+                brush.Faces.Add(face);
             }
             brush.IsToolBrush = brush.ClassifyToolBrush();
             brushes.Add(brush);

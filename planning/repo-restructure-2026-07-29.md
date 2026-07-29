@@ -313,8 +313,29 @@ New repo. Holds what `xonotic-maps.pk3dir` holds today, after the TGA pass: 180 
 source textures, `.ase`/`.md3` prefab models, skybox `env/`, and the shader scripts. Roughly
 1,475 MB after conversion, down from 3,281 MB.
 
-Layout splits by role, so a map's source, its q3map2 output, and its future `vmap` output sit side
-by side rather than competing for one directory:
+> **Layout decided 2026-07-29: `sources/` is type-rooted, mirroring the `.pk3dir` shape the content was
+> authored in.** An earlier draft split it per map (`sources/<map>/` + `sources/shared/`). Measuring the
+> tree overturned that. Of 4,193 content files only **589 (14%) are map-attributable** by naming
+> convention; **86% is shared**. Only **17 of 31 maps have any dedicated texture directory**, and **no map
+> references zero shared sets** — each pulls 10–16 of the 36 shared sets. Fourteen maps would get a
+> directory holding nothing but their own `maps/` metadata (7 files: `.mapinfo`, `.waypoints*`, `.jpg`,
+> `.map`, `.map.options`).
+>
+> Maps are views over a shared library, not modular units. The per-map split would have filed 86% of the
+> tree into one bucket, made a build-time overlay **mandatory** (q3map2 resolves `textures/foo/bar`
+> relative to a single game dir, so every build would first compose `shared/` + `<map>/` into a temp
+> root), and committed a permanent classification of 4,193 files at the moment we knew least about how
+> the pipeline would be driven. Type-rooted `sources/` **is** a valid q3map2 game dir, so `build-map.py`
+> needs no overlay at all, and third-party Xonotic maps drop in unchanged because this is the shape they
+> already ship in.
+>
+> Per-map dependency data stays **derivable** rather than lost: the 10–16 figure came from parsing `.map`
+> brush faces, so a generated `sources/maps/<name>.deps` manifest can be added whenever per-map tooling
+> is wanted, and would double as the validated classification if a per-map split is ever revisited.
+> Deferring costs a `git mv` in a young repo; getting it wrong costs a history rewrite — **G1**'s logic
+> one level up.
+
+Layout splits by **role** — sources versus builds — not by map:
 
 ```
 VortexMaps/
@@ -331,11 +352,15 @@ VortexMaps/
 │   └── bake/<mapname>/          vmap bake cache, keyed by truth hash (NOT "builds/vmap" — §9.4)
 │
 ├── build/
-│   ├── q3map2.toolchain         pinned compiler version + flags
-│   ├── build-map.py             sources/<map> → builds/q3map2/<map>
+│   ├── q3map2.toolchain         pinned compiler version + flags — CLASSIC PATH ONLY (§9.2)
+│   ├── build-map.py             sources/<map>.map → builds/q3map2/<map>   (classic only)
 │   └── publish.py               builds/<backend>/ → per-map release archives + lockfile
 └── .github/workflows/           tag → build all maps → publish per-map archives as release assets
 ```
+
+> **q3map2 is only ever used to rebuild the 31 stock maps.** `.vmap` maps are pre-baked by the game's
+> own baking system and have no q3map2 step at all (§9.2). So `build/` above is the classic-map
+> pipeline, not the general one, and somebody authoring a new map never installs q3map2.
 
 **Built output is committed to the game repo, not read from the submodule.** `maps-src/` is not
 fetched by a default clone, so the game cannot depend on it at runtime. Instead, `VortexMaps` CI
@@ -463,10 +488,12 @@ rather than a `filter-repo` run.
 ### 6.1 Gotcha register
 
 Every trap this plan knows about, labelled so the stage items can point at them. G1 through G7 are
-one-shot migration hazards; G8 through G16 are standing hazards, or hazards that outlive the
+one-shot migration hazards; G8 through G17 are standing hazards, or hazards that outlive the
 migration. G13 and G14 came out of the completeness pass on 2026-07-29 and are the reason §6.2
-exists; G15 came out of the readiness pass the same day, with D8; G16 came out of executing
-stage 1 and is the only one here that was found by being bitten rather than by review.
+exists; G15 came out of the readiness pass the same day, with D8. G16 and G17 came out of
+executing stage 1 — G16 by being bitten by it, G17 by checking a question the plan had not asked
+(whether any of this affects a player installing a third-party map: it does not, but something
+else already does).
 
 ---
 
@@ -829,6 +856,29 @@ project's record of that kind of choice, so:
 
 ---
 
+**G15 — A `vortex-*.cfg` exec'd after `LockDefaults()` becomes a user value, not a default.** *(§11)*
+
+- **Breaks:** every cvar the Vortex layer sets gets written into the player's `config.cfg` and then
+  outranks anything we ship later, so a balance or physics revision silently fails to reach anyone who
+  has already launched the game once.
+- **Why:** `MenuState.Boot` runs the config chain, then `_cvars.LockDefaults()` (`MenuState.cs:208`),
+  then `LoadUserConfig()` (`:227`). `LockDefaults` is DP's `Cvar_LockDefaults` — it freezes each
+  cvar's *current* value as its default. A cvar assigned before the lock becomes the shipped default
+  and is persisted only if the player moves it; a cvar assigned after the lock is indistinguishable
+  from something the player typed. The existing video overrides at `MenuState.cs:190-200` carry a
+  comment block explaining exactly this, so the precedent is there to follow rather than rediscover.
+- **Detect:** boot once, change nothing, quit, and read the generated `config.cfg`. Any
+  `vortex-*.cfg` cvar appearing in it means the layer ran too late.
+- **Do:** exec the whole Vortex layer inside the same `ConfigLoader.Load` call as the Xonotic entries,
+  appended after them, so the ordering is structural rather than a separate call someone can later
+  move. §11.2 wires it that way for this reason.
+- **Related, same hazard one level down:** `ConfigLoader.cs:44-47` records that the shipped cfgs, not
+  the C# registration tables, are the authority on which cvars are archiveable. A `seta` in the Vortex
+  layer widens `config.cfg` beyond what upstream archives, so the layer uses plain `set` unless it is
+  deliberately introducing a new archiveable cvar.
+
+---
+
 **G16 — An absolute-path symlink in build output silently breaks the host build after a repo move.**
 
 - **Status:** **Hit and fixed 2026-07-29.** Recorded because the diagnosis was misleading, not because
@@ -858,26 +908,29 @@ project's record of that kind of choice, so:
 
 ---
 
-**G15 — A `vortex-*.cfg` exec'd after `LockDefaults()` becomes a user value, not a default.** *(§11)*
+**G17 — A user-installed map is listed in the menu but cannot load: `~/XonData` is never mounted.**
 
-- **Breaks:** every cvar the Vortex layer sets gets written into the player's `config.cfg` and then
-  outranks anything we ship later, so a balance or physics revision silently fails to reach anyone who
-  has already launched the game once.
-- **Why:** `MenuState.Boot` runs the config chain, then `_cvars.LockDefaults()` (`MenuState.cs:208`),
-  then `LoadUserConfig()` (`:227`). `LockDefaults` is DP's `Cvar_LockDefaults` — it freezes each
-  cvar's *current* value as its default. A cvar assigned before the lock becomes the shipped default
-  and is persisted only if the player moves it; a cvar assigned after the lock is indistinguishable
-  from something the player typed. The existing video overrides at `MenuState.cs:190-200` carry a
-  comment block explaining exactly this, so the precedent is there to follow rather than rediscover.
-- **Detect:** boot once, change nothing, quit, and read the generated `config.cfg`. Any
-  `vortex-*.cfg` cvar appearing in it means the layer ran too late.
-- **Do:** exec the whole Vortex layer inside the same `ConfigLoader.Load` call as the Xonotic entries,
-  appended after them, so the ordering is structural rather than a separate call someone can later
-  move. §11.2 wires it that way for this reason.
-- **Related, same hazard one level down:** `ConfigLoader.cs:44-47` records that the shipped cfgs, not
-  the C# registration tables, are the authority on which cvars are archiveable. A `seta` in the Vortex
-  layer widens `config.cfg` beyond what upstream archives, so the layer uses plain `set` unless it is
-  deliberately introducing a new archiveable cvar.
+- **Status:** **Pre-existing gap, found 2026-07-29 while confirming the restructure does not affect
+  third-party maps. It does not — but this does, and the restructure is the cheap moment to fix it.**
+- **Breaks:** a player drops a community `.pk3` into their user data directory. It appears in the map
+  list, and then fails to load with nothing more specific than a missing BSP.
+- **Why:** the two paths disagree. `MapList.Available()` scans `res://maps` **and**
+  `UserPaths.Resolve("maps")` for `.bsp` files, so a user map shows up in the menu. But loading goes
+  through the VFS, and there is exactly **one** `MountGameDir` call in shipping code —
+  `MenuState.cs:120`, on the content root. `~/XonData` is never mounted, so nothing in it is resolvable.
+  Listing and loading were wired to different sources.
+- **Why it belongs to this plan:** **G11** already adds a second mount call for `data/maps/`, and mount
+  order is the whole subtlety there. A user-content mount is the same one-line shape and wants deciding
+  at the same time, or the precedence question gets answered twice by two people.
+- **Do:** mount the user maps directory as well, and mount it **above** the content root so a user's map
+  can shadow a shipped one (which is what a player dropping in a modified map expects), while still
+  sitting below nothing else. Concretely, in mount order: `data/maps/` first, then `data/` (per G11),
+  then the user directory last so it lands on top. Skip silently when the directory does not exist.
+- **Note the layout is already right for this.** `MountGameDir` enumerates `.pk3`/`.pk3dir` directly
+  inside the directory it is handed, so `~/XonData/maps/stormkeep.pk3` works with no new convention —
+  and it is the same shape §9.3 uses for `data/maps/`, so a community map and a shipped map are the
+  same kind of thing. **No part of the `VortexMaps` layout decision touches this**, because users
+  consume built packs, never sources.
 
 ---
 
@@ -1370,8 +1423,15 @@ The same sources must produce the same maps.
 
 Pin the q3map2 version and its exact flags in `build/q3map2.toolchain`, and record the toolchain
 hash in the release manifest. Without that, a rebuild produces different lightmaps and a map change
-cannot be diffed against its baseline. This matters most for the `vmap` track: comparing
-`builds/vmap/` against `builds/q3map2/` is only meaningful if the q3map2 baseline is reproducible.
+cannot be diffed against its baseline. Upstream already carries most of this: each
+`maps/<name>.map.options` holds the flags (`-bsp -light -vis -minimap -sRGB`) and a
+`Version: 12g` line, so `build/q3map2.toolchain` is largely a matter of lifting what is there.
+
+**Scope: this covers the 31 stock maps only.** `.vmap` maps are baked by the game's own baker, not
+q3map2 (§9.2), so their reproducibility question is a different one — the bake is content-addressed by
+the hash of the truth sections, and a mismatch regenerates rather than needing a pinned external
+toolchain. The reason to keep the q3map2 baseline reproducible is **parity comparison**: judging whether
+a decorated map lights *consistently with the stock set* requires the stock set to be re-derivable.
 
 ### 8.4 Drift detection
 
@@ -1480,15 +1540,35 @@ the median map, sets the ceiling; worth re-checking if face counts grow.
 Packed binary measured *larger* than the text (2.76 vs 2.36 MB on stormkeep geometry), because most
 values are short and binary spends four bytes on each regardless. Do not reach for binary here.
 
-### 9.2 The q3map2 path is permanent, so §5.3.1 is not scaffolding
+### 9.2 The q3map2 path is permanent — but it covers the stock BSPs only
 
 The design doc lists "replacing q3map2 for classic-map compatibility" as an explicit **non-goal**:
 "decorated maps are a deliberate fork-forward feature; the Q3-stage material path stays intact for
 parity." The 31 stock BSPs keep their pipeline indefinitely, and nobody can regenerate them without
 the full q3map2 toolchain.
 
-So the lockfile-and-release-assets mechanism is permanent infrastructure, not a bridge. Both
-pipelines run side by side forever.
+So the lockfile-and-release-assets mechanism is permanent infrastructure, not a bridge.
+
+> **Decided 2026-07-29: `.vmap` maps never touch q3map2.** Their lighting is pre-baked by the game's
+> own baking system — `game/vmap/EditorLightBake.cs` and `EditorLighting.cs` — which computes
+> lightgrids, lightmaps and bounce irradiance in C#. It *mirrors* q3map2's light model deliberately
+> (`BakedLightKind` maps q3map2's `EMIT_*` kinds, and the bounce maths follow it) so decorated maps
+> light consistently with the stock set, but it does not invoke, wrap, or depend on q3map2. The bake
+> runs in 9 to 14 seconds per map.
+>
+> The two pipelines are therefore **disjoint, not parallel**:
+>
+> | | input | producer | output | distribution |
+> |---|---|---|---|---|
+> | stock / classic | `.map` | q3map2, external toolchain | `.bsp` + DDS | fetched release asset (D7) |
+> | vmap | `.vmap` | the in-game baker | bake cache, keyed by truth hash | committed truth, fetched bake |
+>
+> What this changes elsewhere in the plan: **`build/q3map2.toolchain` and `build-map.py` in §5.2 serve
+> the classic path only.** Nothing in the vmap path needs a pinned q3map2 version, and §8.3's
+> reproducibility requirement applies to the stock baseline rather than to new maps. It also means the
+> q3map2 dependency is frozen in scope — it is needed to *regenerate* 31 existing maps, never to author
+> a new one — so if it ever becomes unavailable the loss is bounded and the `--rebuild` escape hatch
+> (G12) is the only thing affected.
 
 ### 9.3 The unit is a `.pk3dir`, both eras
 
@@ -1584,11 +1664,19 @@ the `schema` integer for the same reason: §14 wants bake distribution to eventu
 hash," which is finer granularity than one archive per map.
 
 **3. `fetch-maps.py` needs `--rebuild-bake`.** `EditorLightBake` runs a full map bake in 9 to 14
-seconds on this branch, down from 95. A missing or stale bake should degrade to "regenerate locally,"
-not "fail." That is a materially better reliability posture than BSPs, which are not locally
-reproducible, and it means bake distribution is an optimization rather than a hard dependency. §14
-flags bake-cache distribution as an open risk ("tens of MB per map ... needs care on the wire"); a
-working regenerate path is what keeps that risk from being release-blocking.
+seconds, down from 95. A missing or stale bake should degrade to "regenerate locally," not "fail."
+
+This is the structural advantage of the vmap path over the classic one, and it is worth stating
+plainly: **a vmap bake needs nothing but the game.** The baker is
+`game/vmap/EditorLightBake.cs` + `EditorLighting.cs`, in-process C#, computing lightgrids, lightmaps
+and bounce irradiance. No external toolchain, no pinned compiler, no `--rebuild` that depends on
+q3map2 being installed. Compare the classic path, where regenerating a BSP needs the full q3map2
+toolchain that G12's escape hatch is built around.
+
+So bake distribution is an **optimization, not a dependency**. §14 flags bake-cache distribution as an
+open risk ("tens of MB per map ... needs care on the wire"); a working local regenerate path is what
+keeps that risk from ever being release-blocking, because the worst case is a 14-second wait rather
+than an unplayable map.
 
 **4. The editor has no publish path, and this structure would swallow its output.** `VmapService`
 writes to `user://vmaps/<name>.vmap`, which `UserPaths` redirects to `~/XonData/vmaps/`. That is

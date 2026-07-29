@@ -126,7 +126,7 @@ content arrives as git repositories.
 | `xonotic-maps.pk3dir` | map **sources**: 180 `.map`, source textures, `.ase` models | 3,281 MB | 2,941 MB (3,031 files) |
 | `xonotic-20230620-maps.pk3` | compiled maps: 31 BSPs + DDS textures | 597 MB | none (zip) |
 | `xonotic-20230620-nexcompat.pk3` | Nexuiz compatibility textures | 120 MB | none (zip) |
-| `xonotic-music.pk3dir` | 44 ogg tracks | 106 MB | none |
+| `xonotic-music.pk3dir` | **22** ogg tracks (the plan first said 44) | 106 MB | none |
 | four `font-*.pk3dir` | DejaVu, Nimbus Sans L, Unifont, Xolonium | 13 MB | none |
 | **Total** | | **6,660 MB** | **5,251 MB** |
 
@@ -282,7 +282,7 @@ VortexArena/
 │   │   ├── textures/ models/ gfx/ sound/ particles/ scripts/
 │   │   ├── *-xonotic.cfg  physicsX.cfg  …   upstream, never edited (D8, §11)
 │   │   └── vortex-*.cfg             our divergence layer, exec'd after them (D8, §11)
-│   ├── music.pk3dir/                44 ogg tracks
+│   ├── music.pk3dir/                22 ogg tracks
 │   ├── font-{dejavu,nimbussansl,unifont,xolonium}.pk3dir/
 │   ├── maps.lock.json               ← TRACKED. pins the VortexMaps release + per-map sha256
 │   └── maps/<map>.pk3dir/           ← NOT tracked. fetched per the lockfile (§5.3.1, §9.3)
@@ -939,7 +939,20 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
 >   checkout that gets updated; the archive has to be a separate frozen copy.
 
 6. Create `VortexMaps`. Seed from `../Base/data/xonotic-maps.pk3dir` with its upstream `.git`
-   discarded, so history starts clean rather than importing a 1.3 GB pack.
+   discarded, so history starts clean rather than importing a 1.4 GB pack.
+   - **Repo created 2026-07-29; empty. Seeding not started — this is where the migration stands.**
+   - **Drop that tree's `.gitattributes` too.** It is 4,655 bytes and, unlike the two in the core and
+     music packs, it governs real files: `*.map -crlf filter=mapclean` covers **150 `.map` files** and
+     names a filter driver that is not defined anywhere in this project. Carrying it over means every
+     checkout runs a missing filter over the map sources. Same reasoning as the removal in `0baec7d`:
+     git plumbing for the upstream repo's layout, not content anything reads.
+   - **The per-map reorganisation in §5.2 is the judgment-heavy part and is not mechanical.** The source
+     tree is type-rooted (`textures/ models/ maps/ env/ scripts/`), and §5.2 wants
+     `sources/<map>/`. The `map_<name>`-prefixed content maps over cleanly by convention
+     (`maps/<name>.map`, `textures/map_<name>/`, `scripts/map_<name>.shader`), but the shared texture
+     sets (`trak5x`, `exx`, `facility114x`, …) and `env/` skyboxes do not belong to any one map and have
+     to land in `sources/shared/`. Decide the split deliberately; a wrong guess scatters a map's sources
+     across two trees.
 7. Extract both compiled map packs. Route the 97 MB of `.map`, `.ase`, `.obj` and q3map2 residue to
    `VortexMaps/sources/<map>/`; the runtime remainder becomes
    `VortexMaps/builds/q3map2/<map>.pk3dir/` in the type-rooted layout of §9.3.
@@ -994,24 +1007,52 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
       weighted toward large files, which compress best. Take the real figure from the full Stage 2 run.
 12. Run it over both staged trees: 2,233 files / 2,310 MB in `data/`, 3,031 files / 2,941 MB in
     `VortexMaps`.
-13. **Now** make the first commits — **G1**, the point the ordering exists for. `VortexMaps`: commit, push, tag `v0`. `VortexArena`: remove
-    `assets/*` from `.gitignore`, add `data/maps/`, commit the staged `data/` tree as one commit.
+13. **Now** make the first commits — **G1**, the point the ordering exists for.
+    - **`VortexArena`: done 2026-07-29** (`0baec7d`). `data/` committed: 4,204 files, 900 MB.
+      `data/maps/` added to `.gitignore`. **G1 verified after the fact the way the gotcha prescribes:**
+      object store 753 MB against a 900 MB working tree — *smaller*, so no dead blobs. Committing
+      before converting would have shown roughly 2.9 GB (2.2 GB of dead TGA plus 0.7 GB of PNG).
+      `assets/*` stays in `.gitignore` for now: the runtime still reads `res://assets/data`, so the old
+      path keeps working until stage 3 item 24 flips it. Both trees coexist harmlessly because
+      `assets/data` is a junction, not a copy.
+    - **`VortexMaps`: not started.** Repo created (empty). See stage 1b note below.
+13b. **Pre-commit gates actually run** (§8.4), all clean: zero `.tga` under `data/`, zero `*.import`,
+    zero stranded `*.part.png`, and the largest single file is `unifont.ttf` at 11.7 MB — nowhere near
+    GitHub's 100 MB limit, and nothing even trips the 50 MB warning. Worth keeping as a scripted gate
+    rather than a one-off: the two map packs are the only things in the whole tree that violate it, and
+    they are the two things §5.3 already routes elsewhere.
 14. Add `.github/workflows/build-maps.yml` to `VortexMaps`: on tag, package each
     `builds/<backend>/<map>.pk3dir/` as one archive, publish the set as release assets, and emit the
     manifest that becomes `data/maps.lock.json`. Tag `maps-2026.07` as the first pinned set. In
     `VortexArena`: add `maps-src` as a submodule pinned to `v0` and commit `data/maps.lock.json`.
-15. Fix the one hard-coded path that bypasses the VFS: `game/menu/dialogs/DialogWinner.cs:22-24`
-    lists `res://assets/data/gfx/winner.png` before `…winner.tga`, so it already survives the
-    conversion, but the `res://assets/data` prefix must become `res://data`.
+15. ~~Fix the one hard-coded path that bypasses the VFS~~ — **done, and this item was wrong.**
+    `DialogWinner.cs` listed three `res://` candidates and **none of them ever resolved**: the content
+    root holds `.pk3dir` packages, never a loose `gfx/`, so `res://assets/data/gfx/winner.*` pointed at
+    nothing and the banner has silently never drawn. Repointing the prefix at `res://data` — what this
+    item said to do — would not have fixed it either, because the content tree carries a `.gdignore`
+    (**G4**), so Godot never imports it and `ResourceLoader` cannot see anything underneath it.
+    **The content is reachable only through the VFS.** Now uses `TextureCache.GetFirst("gfx/winner", …)`,
+    which routes a bare name through the VFS resolver exactly as the HUD does, and is extension-agnostic
+    so it survives the PNG conversion. Generalises to a rule worth remembering: **after G4, no `res://`
+    path into the content tree can ever work.**
 16. Leave every other `.tga` string alone. `VirtualFileSystem.ResolveImage` strips a known image
     extension before probing and searches `.tga`, `.png`, `.jpg` in that order, so the 1,666
     `.shader` lines and 46 `.qc` lines that name `.tga` explicitly resolve to the PNG unchanged.
     Same for `LaserRenderer.cs:145`. The `.tga` literals in `Q3ShaderParserDirectiveTests` and
     `AutospriteBoltTests` are synthetic parser input and touch no real file.
-17. **Gate (G7):** run `tools/perf-smoke.ps1` before and after. PNG decode costs more CPU than TGA decode
-    while reading 61% fewer bytes. If map-load time regresses, the mitigation is the existing
-    persistent asset cache (`cl_persist_asset_cache`), not reverting the format. Only after this
-    passes may the Stage 0 item 5 archive be discarded.
+17. **Gate (G7): NOT YET RUN — and it cannot run until maps exist.** `tools/perf-smoke.ps1` measures
+    map-load time, and the committed `data/` has no maps: they are fetched per D7 and `VortexMaps` has
+    published nothing. So the gate is blocked behind stage 1b, not skipped. Two consequences to hold on
+    to until it runs:
+    - **Do not discard the pre-conversion source.** `Projects/Vortex/Base/data/` is a pristine upstream
+      clone (verified: `git status --porcelain` empty, no local edits) and is the rollback source. It
+      also serves as the G7 archive, which is cheaper than the separate frozen copy stage 0 item 5
+      called for — **but only while nothing updates it.** Do not run the upstream update script until
+      this gate passes.
+    - **The expected outcome is still not a revert.** Per G7, if map-load regresses the mitigation is
+      `cl_persist_asset_cache`, not the format. The measured conversion ratio came in at 23.7% rather
+      than the projected 38.6%, so the I/O saving is larger than the plan assumed and the trade tilts
+      further toward PNG.
 
 ### Stage 3 — rewrite the build and CI scripts
 
@@ -1032,6 +1073,23 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
     which now depend on the fetch step. Run `fetch-maps.py` in the test job behind the lockfile
     cache. That is a coverage gain and a runtime cost; measure the new job duration and consider
     `sparse-checkout` for jobs that need only code.
+    - **The test-side half of this is already done** (`0baec7d`), because committing `data/` broke nine
+      tests immediately and they had to be dealt with rather than deferred. `TestPaths.HasMaps` probes
+      both layouts — per-map `.pk3dir` under `data/maps/` and the pre-restructure bundled `.pk3` — and
+      the nine now distinguish "not fetched" from "broken". Which nine, and why each failed, is worth
+      recording because it maps exactly onto what the map packs contribute: `AssetParserTests` ×2 (no
+      `.bsp`; 256 materials against a 500 floor), `VisualQaTests` and `ShaderPreviewTests` (same shader
+      shortfall — **the map packs carry about half the stock shader scripts**), `VmapTextFormatTests`
+      (nothing to import), and four perf benches (no `atelier.bsp`).
+    - **Thresholds are scaled, not dropped.** A guard that turns an assertion off is a guard that hides
+      the regression it was written for, so where the floor only clears with map shaders it moves
+      (500 → 200) instead of vanishing. `ShaderPreviewTests`' 85% resolution-rate assertion is the one
+      exception: over the handful of texture shaders core ships it measures nothing, so it is skipped
+      below a 50-shader sample with the reason printed.
+    - **Verified conditional rather than toothless**, which is the only thing that makes the above
+      trustworthy: **3,676 pass on the committed tree and 3,918 with maps present**, so all 242
+      map-dependent cases activate. Re-run both configurations after touching any of them —
+      `VA_DATA_DIR` pointed at a tree with the map packs is the second configuration.
 22. `ci/ci.sh`: drop the four `[ -d "$ROOT/assets/data" ]` guards; replace the headless host smoke's
     stormkeep guard with a `fetch-maps.py` call, so the smoke stops silently skipping.
 23. `export_presets.cfg`: the exclude filter changes from `assets/*` to `data/*`. **Do not

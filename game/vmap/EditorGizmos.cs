@@ -151,6 +151,10 @@ public sealed partial class EditorGizmos : Node3D
         if (c.Tool == EditorTool.Entity)
             anything |= DrawEntityBoxes(c);
 
+        // --- §11.5 overlays: vertices, and the collision volumes that render nothing ---
+        if (c.ShowVertices || c.ShowCollision)
+            anything |= DrawOverlays(c, doc);
+
         // --- patch control lattice: the grab targets, drawn as the grid they form (§11.9) ---
         if (c.Tool == EditorTool.Patch && c.Mode == ToolMode.ControlPoints)
             anything |= DrawControlLattice(c);
@@ -348,6 +352,62 @@ public sealed partial class EditorGizmos : Node3D
     }
 
     private static readonly Color LinkColor = new(1f, 0.55f, 0.9f, 0.9f);
+
+    private static readonly Color VertexOverlayColor = new(1f, 0.95f, 0.5f, 0.85f);
+    private static readonly Color CollisionOverlayColor = new(1f, 0.35f, 0.45f, 0.7f);
+
+    /// <summary>
+    /// The §11.5 overlays.
+    ///
+    /// VERTICES marks every brush corner, which is what turns "these two walls look joined" into a checkable
+    /// claim. COLLISION draws the volumes that render NOTHING — playerclip, trigger bounds, the caulk shell —
+    /// and that is the one that earns its place: divergence between what you can see and what you can walk
+    /// into is invisible by definition until something draws it.
+    ///
+    /// Both are RANGE-LIMITED around the viewer. A real map is thousands of brushes and marking every corner
+    /// of all of them is unreadable as well as expensive.
+    /// </summary>
+    private bool DrawOverlays(EditorController c, VmapDocument doc)
+    {
+        NVec3 centre = c.OverlayCenter;
+        float range = c.OverlayRange;
+        float rangeSq = range * range;
+        bool drew = false;
+
+        foreach (VmapBrush b in doc.Brushes)
+        {
+            if (!VmapWinding.TryGetBounds(b, out NVec3 mins, out NVec3 maxs))
+                continue;
+
+            // Cheap reject on the box centre before deriving any windings.
+            NVec3 mid = (mins + maxs) * 0.5f;
+            if ((mid - centre).LengthSquared() > rangeSq)
+                continue;
+
+            bool invisible = b.IsToolBrush;
+            if (c.ShowCollision && invisible)
+            {
+                foreach (NVec3[] w in VmapWinding.BuildBrushWindings(b))
+                {
+                    if (w.Length < 3)
+                        continue;
+                    DrawLoop(ToGodot(w, NVec3.Zero), CollisionOverlayColor);
+                    drew = true;
+                }
+            }
+
+            if (c.ShowVertices && !invisible)
+            {
+                foreach (NVec3 v in VmapWinding.BrushPoints(b))
+                {
+                    DrawCross(v, VertexMarker, VertexOverlayColor);
+                    drew = true;
+                }
+            }
+        }
+
+        return drew;
+    }
 
     private static readonly Color LatticeColor = new(0.55f, 0.75f, 0.95f, 0.8f);
     private static readonly Color ControlColor = new(1f, 0.9f, 0.4f, 1f);

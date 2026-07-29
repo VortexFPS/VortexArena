@@ -27,6 +27,15 @@ public sealed partial class EditorController : Node3D
     /// <summary>Cvar: grab radius in world units for resolving a vertex/edge instead of the face.</summary>
     public const string CvarGrabRadius = "cl_editor_grab_radius";
 
+    /// <summary>Cvar: draw a marker at every brush corner near the camera (§11.5 vertices overlay).</summary>
+    public const string CvarShowVertices = "cl_editor_show_vertices";
+
+    /// <summary>Cvar: draw the collision volumes that render nothing (§11.5 collision overlay).</summary>
+    public const string CvarShowCollision = "cl_editor_show_collision";
+
+    /// <summary>Cvar: how far the vertex/collision overlays reach, in world units.</summary>
+    public const string CvarOverlayRange = "cl_editor_overlay_range";
+
     /// <summary>Cvar: geometry-snap radius in world units (0 disables geometry snapping).</summary>
     public const string CvarSnapRadius = "cl_editor_snap_radius";
 
@@ -301,6 +310,36 @@ public sealed partial class EditorController : Node3D
             : null;
     }
 
+    // =============================================================================================
+    //  Ortho input (§11.5) — the same tools and the same ops, driven by a pointer instead of a crosshair
+    // =============================================================================================
+
+    /// <summary>
+    /// True while the orthographic view owns interaction. When it does, picking and dragging run along the
+    /// ORTHO ray rather than the camera crosshair, which is what makes an in-view edit exactly planar: the
+    /// projection axis is fixed, so a drag cannot drift in depth however the mouse moves.
+    /// </summary>
+    public bool OrthoActive { get; set; }
+
+    /// <summary>Ray origin under the pointer, in world space. Fed by the host from the ortho projection.</summary>
+    public NVec3 OrthoRayOrigin { get; set; }
+
+    /// <summary>The ortho view axis — the direction the ray travels, and the axis a drag must NOT move along.</summary>
+    public NVec3 OrthoForward { get; set; } = new(0f, 0f, -1f);
+
+    /// <summary>Screen-right in world space for the current ortho axis.</summary>
+    public NVec3 OrthoRight { get; set; } = new(1f, 0f, 0f);
+
+    /// <summary>Screen-up in world space for the current ortho axis.</summary>
+    public NVec3 OrthoUp { get; set; } = new(0f, 1f, 0f);
+
+    /// <summary>World units per screen pixel at the current zoom — what makes a drag track the pointer 1:1.</summary>
+    public float OrthoUnitsPerPixel { get; set; } = 1f;
+
+    /// <summary>The ray a pick should run along: the pointer in ortho, the crosshair otherwise.</summary>
+    private (NVec3 Origin, NVec3 Direction) ActiveRay()
+        => OrthoActive ? (OrthoRayOrigin, OrthoForward) : CameraRay();
+
     /// <summary>What the crosshair is currently over (drives the hover highlight).</summary>
     public VmapPickResult Hover { get; private set; } = VmapPickResult.Miss;
 
@@ -347,6 +386,10 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarSnapEnabled, "1", CvarFlags.Save);
         c.Register(CvarShowToolBrushes, "0", CvarFlags.Save);
         c.Register(CvarCullOccluded, "1", CvarFlags.Save);
+        c.Register(CvarShowVertices, "0", CvarFlags.Save);
+        c.Register(CvarShowCollision, "0", CvarFlags.Save);
+        c.Register(CvarOverlayRange, "1024", CvarFlags.Save);
+        c.Register("cl_editor_autosave", "300", CvarFlags.Save);
         c.Register(EditorLighting.CvarEnabled, "1", CvarFlags.Save);
         c.Register(EditorLighting.CvarShadowBudget, "6", CvarFlags.Save);
         c.Register(EditorLighting.CvarBrightness, "1", CvarFlags.Save);
@@ -447,14 +490,6 @@ public sealed partial class EditorController : Node3D
             return;
         }
 
-        // The ortho view drives its own picking through the cursor, so the crosshair path stands down while
-        // it owns interaction.
-        if (Ortho is { IsOpen: true })
-        {
-            Hover = VmapPickResult.Miss;
-            return;
-        }
-
         // The hover is frozen mid-drag: the crosshair is parked on the grabbed feature, and re-picking would
         // let the highlight wander onto whatever the ghost happens to overlap.
         if (!_dragging)
@@ -484,7 +519,7 @@ public sealed partial class EditorController : Node3D
     /// </summary>
     private void UpdateCrosshairHover()
     {
-        (NVec3 origin, NVec3 dir) = CameraRay();
+        (NVec3 origin, NVec3 dir) = ActiveRay();
 
         // ~0.02 units of movement and ~0.1 degrees of rotation are well below what could select a different
         // feature, so treating them as "unchanged" costs nothing visible.
@@ -635,15 +670,29 @@ public sealed partial class EditorController : Node3D
         if (!_dragging || _camera is null)
             return;
 
-        // World units per pixel at the grab depth, so the drag tracks the pointer 1:1 on screen.
+        // World units per pixel at the grab depth, so the drag tracks the pointer 1:1 on screen. In ortho the
+        // scale comes from the zoom instead, and the screen axes are the view’s own — which is what makes the
+        // drag exactly planar: the projection axis is simply not among the directions it can move.
         float viewportH = MathF.Max(1f, _camera.GetViewport().GetVisibleRect().Size.Y);
-        float unitsPerPixel = _camera.Projection == Camera3D.ProjectionType.Orthogonal
-            ? _camera.Size / viewportH
-            : 2f * MathF.Tan(Mathf.DegToRad(_camera.Fov) * 0.5f) * MathF.Max(1f, _dragDistance) / viewportH;
+        float unitsPerPixel;
+        NVec3 screenRight, screenUp;
 
-        Transform3D t = _camera.GlobalTransform;
-        NVec3 screenRight = Coords.ToQuake(t.Basis.X);
-        NVec3 screenUp = Coords.ToQuake(t.Basis.Y);
+        if (OrthoActive)
+        {
+            unitsPerPixel = OrthoUnitsPerPixel;
+            screenRight = OrthoRight;
+            screenUp = OrthoUp;
+        }
+        else
+        {
+            unitsPerPixel = _camera.Projection == Camera3D.ProjectionType.Orthogonal
+                ? _camera.Size / viewportH
+                : 2f * MathF.Tan(Mathf.DegToRad(_camera.Fov) * 0.5f) * MathF.Max(1f, _dragDistance) / viewportH;
+
+            Transform3D t = _camera.GlobalTransform;
+            screenRight = Coords.ToQuake(t.Basis.X);
+            screenUp = Coords.ToQuake(t.Basis.Y);
+        }
 
         // Screen Y grows downward, so an upward drag is -Y.
         // In ROTATE mode the pointer drives an ANGLE, not a displacement: horizontal travel turns the
@@ -753,6 +802,11 @@ public sealed partial class EditorController : Node3D
     {
         if (_grabbedHandle is { Kind: HandleKind.RotateRing } ring)
             return ring.Axis;
+
+        // In an elevation view there is only one axis a rotation can be about and still be visible: the one
+        // you are looking down. Radiant behaves the same way, and it is why 2D views are where angles get set.
+        if (OrthoActive)
+            return OrthoForward;
 
         if (_camera is null)
             return new NVec3(0f, 0f, 1f);
@@ -1614,7 +1668,7 @@ public sealed partial class EditorController : Node3D
         if (_camera is null)
             return false;
 
-        (NVec3 origin, NVec3 dir) = CameraRay();
+        (NVec3 origin, NVec3 dir) = ActiveRay();
 
         if (_document is not null)
         {
@@ -1923,6 +1977,24 @@ public sealed partial class EditorController : Node3D
     /// volumes instead of the wall behind them.
     /// </summary>
     public bool IncludeToolBrushes => Cvar(CvarShowToolBrushes, 0f) != 0f;
+
+    /// <summary>True when the vertices overlay is on.</summary>
+    public bool ShowVertices => Cvar(CvarShowVertices, 0f) != 0f;
+
+    /// <summary>True when the collision overlay is on.</summary>
+    public bool ShowCollision => Cvar(CvarShowCollision, 0f) != 0f;
+
+    /// <summary>
+    /// How far the overlays reach. Ranged rather than whole-map on purpose: stormkeep has 5400 brushes and
+    /// drawing a marker at every corner of every one of them is both unreadable and a per-frame line budget
+    /// nothing else in the editor comes close to.
+    /// </summary>
+    public float OverlayRange => MathF.Max(64f, Cvar(CvarOverlayRange, 1024f));
+
+    /// <summary>Where the overlays are centred: the eye, or the ortho view when it owns the screen.</summary>
+    public NVec3 OverlayCenter
+        => OrthoActive ? OrthoRayOrigin
+            : _camera is not null ? Coords.ToQuake(_camera.GlobalTransform.Origin) : NVec3.Zero;
 
     /// <summary>Whether the world build removes faces buried inside other solids.</summary>
     public bool CullOccludedFaces => Cvar(CvarCullOccluded, 1f) != 0f;

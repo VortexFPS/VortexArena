@@ -5866,6 +5866,12 @@ public sealed partial class NetGame : Node3D
             // inverted state whenever the release event went to a focused control instead of here.
             _editor.SnapInverted = editorFreeFly && Input.IsKeyPressed(Key.Ctrl);
 
+            // (O1) While the ortho view owns interaction, picking and dragging run along the POINTER ray
+            // rather than the crosshair. Fed per frame because the pointer, the zoom and the axis can all
+            // change between frames, and a stale ray would pick where the mouse used to be.
+            FeedOrthoInput();
+            TickEditorAutosave(Time.GetTicksMsec() / 1000.0);
+
             // (B2) The EDIT -> PLAYTEST edge: reconcile the live entity set with the document, so what you
             // playtest is what you just authored. Edge-triggered, not polled — a respawn every frame while
             // playtesting would reset the map continuously.
@@ -7101,6 +7107,14 @@ public sealed partial class NetGame : Node3D
                 return true;
             }
 
+            // A live grab in ortho follows the pointer. Unlike the 3D view the camera is not frozen here —
+            // there is no mouse-look to freeze — so the motion simply drives the drag.
+            if (orthoOpen && _editor is { IsDragging: true })
+            {
+                _editor.ApplyDragMouse(motion.Relative);
+                return true;
+            }
+
             // While a grab is live the pointer moves the GEOMETRY, not the view: consuming the motion here is
             // what freezes the camera, so the mapper judges the placement against a fixed frame.
             if (_editor.IsDragging)
@@ -7138,6 +7152,9 @@ public sealed partial class NetGame : Node3D
                     return true;
 
                 case Key.Escape when _editor.IsDragging:
+                    _editor.CancelDrag();
+                    return true;
+                case Key.Escape when orthoOpen && _editor.IsDragging:
                     _editor.CancelDrag();
                     return true;
                 case Key.Escape when orthoOpen:
@@ -7195,6 +7212,39 @@ public sealed partial class NetGame : Node3D
         menu.Toggle(anchor);
     }
 
+    /// <summary>
+    /// Hand the editor the orthographic view’s pointer ray and screen axes, so the same tools and the same ops
+    /// work in-view (design doc §11.5).
+    ///
+    /// The axes are what make an ortho edit exactly planar: the projection axis is fixed, so a drag expressed
+    /// in screen-right and screen-up simply has no depth component to drift along. That is the whole reason 2D
+    /// views remain unbeatable for alignment work, and it falls out of the projection rather than needing a
+    /// constraint bolted on.
+    /// </summary>
+    private void FeedOrthoInput()
+    {
+        if (_editor is null)
+            return;
+
+        if (_editorOrtho is not { IsOpen: true } ortho)
+        {
+            _editor.OrthoActive = false;
+            return;
+        }
+
+        Vector2 viewport = GetViewport().GetVisibleRect().Size;
+        Vector2 pointer = GetViewport().GetMousePosition();
+        (System.Numerics.Vector3 origin, System.Numerics.Vector3 dir) = ortho.RayAt(pointer, viewport);
+        (System.Numerics.Vector3 right, System.Numerics.Vector3 up) = ortho.ScreenAxes();
+
+        _editor.OrthoActive = true;
+        _editor.OrthoRayOrigin = origin;
+        _editor.OrthoForward = dir;
+        _editor.OrthoRight = right;
+        _editor.OrthoUp = up;
+        _editor.OrthoUnitsPerPixel = viewport.Y > 0f ? ortho.Zoom / viewport.Y : 1f;
+    }
+
     /// <summary>Mouse handling specific to the orthographic view: middle-drag pans, the wheel zooms.</summary>
     private bool HandleOrthoMouse(InputEventMouseButton mb)
     {
@@ -7202,6 +7252,18 @@ public sealed partial class NetGame : Node3D
         {
             case MouseButton.Middle:
                 _orthoPanning = mb.Pressed;
+                return true;
+
+            // (O1) The same two-phase gesture as the 3D view: click one selects and spawns the handles, click
+            // two grabs one. Nothing about the interaction changes between views, which is the point — a
+            // mapper should not have to learn the editor twice.
+            case MouseButton.Left when mb.Pressed:
+                _editor?.BeginDrag(addToSelection: Input.IsKeyPressed(Key.Shift));
+                return true;
+
+            case MouseButton.Left:
+                if (_editor?.EndDrag() == true)
+                    RefreshEditorWorld();
                 return true;
 
             // The menu works in ortho too, anchored at the pointer rather than the screen centre because this
@@ -7494,6 +7556,48 @@ public sealed partial class NetGame : Node3D
         XonoticGodot.Common.Diagnostics.Log.Info("editor_rebake: recomputing lighting (traced shadows + dirt + bounce)...");
     }
 
+    /// <summary>Seconds between autosaves. Zero disables them.</summary>
+    public const string CvarAutosave = "cl_editor_autosave";
+
+    private double _nextAutosave;
+
+    /// <summary>
+    /// Periodic autosave (design doc §11.8).
+    ///
+    /// Writes a SEPARATE file rather than over the mapper’s save, so an autosave can never destroy a
+    /// deliberate one — the whole value of the thing is that it costs nothing to have running, and a version
+    /// that could overwrite good work would not be worth its risk.
+    ///
+    /// Only fires when the session is actually dirty, so an editor left open overnight does not rewrite the
+    /// same bytes every minute.
+    /// </summary>
+    private void TickEditorAutosave(double now)
+    {
+        if (_editor is not { Session: { IsDirty: true } } ed || string.IsNullOrEmpty(_map))
+            return;
+
+        float interval = Menu.MenuState.Cvars is { } cv && cv.Has(CvarAutosave)
+            ? cv.GetFloat(CvarAutosave) : 300f;
+        if (interval <= 0f)
+            return;
+
+        if (now < _nextAutosave)
+            return;
+        _nextAutosave = now + interval;
+
+        try
+        {
+            string path = System.IO.Path.Combine(Vmap.VmapService.EditorOutputDirectory(),
+                _map + ".autosave" + XonoticGodot.Formats.Vmap.VmapPackage.Extension);
+            XonoticGodot.Formats.Vmap.VmapPackage.WriteToDirectory(ed.Session!.Document, path);
+            XonoticGodot.Common.Diagnostics.Log.Info($"editor: autosaved to {path}");
+        }
+        catch (Exception ex)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn($"editor autosave: {ex.Message}");
+        }
+    }
+
     /// <summary>True when the next world build should trace shadows (first build, or after editor_rebake).</summary>
     private bool _bakeShadowsNextBuild = true;
 
@@ -7570,6 +7674,9 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_waypoint", CmdEditorWaypoint);
         interp.RegisterCommand("editor_patch", CmdEditorPatch);
         interp.RegisterCommand("editor_save", CmdEditorSave);
+        interp.RegisterCommand("editor_camera", CmdEditorCamera);
+        interp.RegisterCommand("editor_prefab", CmdEditorPrefab);
+        interp.RegisterCommand("editor_bots", CmdEditorBots);
         interp.RegisterCommand("editor_extrude", a =>
         {
             float d = a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
@@ -9003,6 +9110,271 @@ public sealed partial class NetGame : Node3D
         {
             XonoticGodot.Common.Diagnostics.Log.Warn($"editor_save: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// <c>editor_camera</c> — camera bookmarks and jumps (design doc §11.8).
+    /// <code>
+    ///   editor_camera save &lt;slot&gt;    remember where you are
+    ///   editor_camera go &lt;slot&gt;      return to it
+    ///   editor_camera frame          frame the current selection
+    ///   editor_camera goto &lt;x y z&gt;   fly to a coordinate
+    ///   editor_camera here           in ortho: put the fly camera under the pointer
+    /// </code>
+    ///
+    /// The ortho-to-3D handoff is the same mechanism as a bookmark, which is why they live together: both are
+    /// "put the camera at a world point I picked", and §11.8 calls it out as a special case rather than a
+    /// separate feature.
+    /// </summary>
+    private void CmdEditorCamera(IReadOnlyList<string> args)
+    {
+        if (_editor is null || _camera is null)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "list";
+        switch (verb)
+        {
+            case "save":
+            {
+                string slot = args.Count > 2 ? args[2] : "1";
+                _cameraBookmarks[slot] = Coords.ToQuake(_camera.GlobalTransform.Origin);
+                XonoticGodot.Common.Diagnostics.Log.Info($"editor: camera slot {slot} saved");
+                return;
+            }
+
+            case "go":
+            {
+                string slot = args.Count > 2 ? args[2] : "1";
+                if (!_cameraBookmarks.TryGetValue(slot, out System.Numerics.Vector3 at))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info($"editor: camera slot {slot} is empty");
+                    return;
+                }
+                MoveEditorCameraTo(at);
+                return;
+            }
+
+            case "frame":
+            {
+                if (_editor.Document is not { } doc
+                    || !XonoticGodot.Formats.Vmap.VmapEdit.TryGetSelectionCenter(
+                        doc, _editor.Session?.SelectedBrushIds() ?? new List<int>(),
+                        out System.Numerics.Vector3 centre))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: select something to frame");
+                    return;
+                }
+                // Stand back along the current view direction rather than snapping to a fixed angle, so
+                // framing keeps the orientation the mapper was already working from.
+                System.Numerics.Vector3 back = Coords.ToQuake(_camera.GlobalTransform.Basis.Z);
+                MoveEditorCameraTo(centre + back * 256f);
+                return;
+            }
+
+            case "goto":
+            {
+                if (args.Count < 5
+                    || !float.TryParse(args[2], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float x)
+                    || !float.TryParse(args[3], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float y)
+                    || !float.TryParse(args[4], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float z))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_camera goto <x> <y> <z>");
+                    return;
+                }
+                MoveEditorCameraTo(new System.Numerics.Vector3(x, y, z));
+                return;
+            }
+
+            case "here":
+            {
+                if (_editorOrtho is not { IsOpen: true })
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: open the ortho view first");
+                    return;
+                }
+                // The handoff: the pointer names a world point in the view plane, and the fly camera goes
+                // there. Closing the view afterwards is the gesture completing — you picked a spot in the map
+                // and now you are standing in it.
+                if (_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                {
+                    _editorOrtho.Close();
+                    MoveEditorCameraTo(at);
+                }
+                return;
+            }
+
+            default:
+                if (_cameraBookmarks.Count == 0)
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: no camera bookmarks");
+                foreach (KeyValuePair<string, System.Numerics.Vector3> kv in _cameraBookmarks)
+                    XonoticGodot.Common.Diagnostics.Log.Info(
+                        $"  {kv.Key}: {kv.Value.X:0} {kv.Value.Y:0} {kv.Value.Z:0}");
+                XonoticGodot.Common.Diagnostics.Log.Help(
+                    "editor_camera save <slot> | go <slot> | frame | goto <x y z> | here");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_prefab save &lt;name&gt; | place &lt;name&gt; | list</c> (design doc §11.8).
+    ///
+    /// A prefab is the clipboard written to disk: the same deep copy, the same id remapping on the way back in,
+    /// just persisted so a stair or a light fitting survives the session that built it. Reusing the clipboard
+    /// rather than inventing a second container is what keeps paste and place-prefab identical in behaviour.
+    /// </summary>
+    private void CmdEditorPrefab(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "list";
+        string dir = System.IO.Path.Combine(Vmap.VmapService.EditorOutputDirectory(), "prefabs");
+
+        switch (verb)
+        {
+            case "save":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_prefab save <name>");
+                    return;
+                }
+                if (session.Selection.Count == 0)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: select something to save as a prefab");
+                    return;
+                }
+
+                var clip = new XonoticGodot.Formats.Vmap.VmapClipboard();
+                if (clip.CopyFrom(session.Document, session.Selection) == 0)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: nothing in that selection to save");
+                    return;
+                }
+
+                // A prefab IS a tiny .vmap, so it round-trips through the same reader and writer the maps use
+                // rather than needing a format of its own.
+                var doc = new XonoticGodot.Formats.Vmap.VmapDocument();
+                doc.Manifest.Name = SanitizeMapName(args[2]);
+                foreach (XonoticGodot.Formats.Vmap.VmapBrush b in clip.Brushes)
+                    doc.Brushes.Add(b.Clone());
+                foreach (XonoticGodot.Formats.Vmap.VmapPatch pt in clip.Patches)
+                    doc.Patches.Add(pt.Clone());
+                foreach (XonoticGodot.Formats.Vmap.VmapEntity e in clip.Entities)
+                    doc.Entities.Add(e.Clone());
+
+                try
+                {
+                    System.IO.Directory.CreateDirectory(dir);
+                    string path = System.IO.Path.Combine(dir,
+                        SanitizeMapName(args[2]) + XonoticGodot.Formats.Vmap.VmapPackage.Extension);
+                    XonoticGodot.Formats.Vmap.VmapPackage.WriteToDirectory(doc, path);
+                    XonoticGodot.Common.Diagnostics.Log.Info($"editor: prefab saved to {path}");
+                }
+                catch (Exception ex)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Warn($"editor_prefab: {ex.Message}");
+                }
+                return;
+            }
+
+            case "place":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_prefab place <name>");
+                    return;
+                }
+                string path = System.IO.Path.Combine(dir,
+                    SanitizeMapName(args[2]) + XonoticGodot.Formats.Vmap.VmapPackage.Extension);
+                if (!System.IO.Directory.Exists(path) && !System.IO.File.Exists(path))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Warn($"editor_prefab: no prefab named {args[2]}");
+                    return;
+                }
+
+                try
+                {
+                    XonoticGodot.Formats.Vmap.VmapDocument loaded =
+                        XonoticGodot.Formats.Vmap.VmapPackage.Read(path);
+
+                    // Load it INTO the clipboard, then paste. Placement, id remapping and undo are then the
+                    // paste path exactly, rather than a second implementation that would drift from it.
+                    var sel = new List<XonoticGodot.Formats.Vmap.VmapSelection>();
+                    foreach (XonoticGodot.Formats.Vmap.VmapBrush b in loaded.Brushes)
+                        sel.Add(XonoticGodot.Formats.Vmap.VmapSelection.OfBrush(b.Id));
+                    foreach (XonoticGodot.Formats.Vmap.VmapPatch pt in loaded.Patches)
+                        sel.Add(XonoticGodot.Formats.Vmap.VmapSelection.OfPatch(pt.Id));
+
+                    ed.Clipboard.CopyFrom(loaded, sel);
+                    if (ed.PasteAtCrosshair())
+                        RefreshEditorWorld();
+                }
+                catch (Exception ex)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Warn($"editor_prefab: {ex.Message}");
+                }
+                return;
+            }
+
+            default:
+                if (!System.IO.Directory.Exists(dir))
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Info("editor: no prefabs saved yet");
+                    return;
+                }
+                foreach (string entry in System.IO.Directory.GetFileSystemEntries(dir))
+                    XonoticGodot.Common.Diagnostics.Log.Info("  " + System.IO.Path.GetFileNameWithoutExtension(entry));
+                XonoticGodot.Common.Diagnostics.Log.Help("editor_prefab save <name> | place <name>");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_bots &lt;n&gt;</c> — spawn bots while playtesting (design doc §11.8).
+    ///
+    /// The point is flow and item timing: a room that reads fine empty can be unusable once someone else is
+    /// moving through it, and that is not a thing you can judge by flying around alone. Routed through the
+    /// server’s own bot count so it behaves exactly as it would in a match.
+    /// </summary>
+    private void CmdEditorBots(IReadOnlyList<string> args)
+    {
+        if (!IsEditorGametype)
+            return;
+
+        int count = args.Count > 1 && int.TryParse(args[1], out int n) ? Math.Clamp(n, 0, 16) : 2;
+        ExecuteHostConsoleCommand($"bot_number {count}");
+        XonoticGodot.Common.Diagnostics.Log.Info(count > 0
+            ? $"editor: {count} bot(s) — drop into PLAYTEST to run with them"
+            : "editor: bots cleared");
+    }
+
+    /// <summary>Camera slots, by name. Session-lived: a bookmark is scaffolding for the job in hand.</summary>
+    private readonly Dictionary<string, System.Numerics.Vector3> _cameraBookmarks = new();
+
+    /// <summary>
+    /// Put the free-fly camera at a world point.
+    ///
+    /// Goes through the SERVER player’s origin rather than the Godot camera, because in EDIT the camera
+    /// follows the observer entity — moving the node directly would be overwritten by the next snapshot, which
+    /// is the same trap that made the ortho view appear to do nothing until it took ownership of the camera.
+    /// </summary>
+    private void MoveEditorCameraTo(System.Numerics.Vector3 at)
+    {
+        if (LocalServerPlayer is not { } player)
+            return;
+
+        object? gate = _server?.SimGate;
+        if (gate is null)
+            player.Origin = at;
+        else
+            lock (gate)
+                player.Origin = at;
+
+        XonoticGodot.Common.Diagnostics.Log.Info($"editor: camera to {at.X:0} {at.Y:0} {at.Z:0}");
     }
 
     /// <summary>Strip path separators from a console-supplied name so a save cannot escape its directory.</summary>

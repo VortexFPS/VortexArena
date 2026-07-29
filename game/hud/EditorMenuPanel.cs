@@ -302,6 +302,16 @@ public partial class EditorMenuPanel : HudPanel
             Enabled = false,
         });
 
+        rows.Add(new Row { Label = "Prefabs", SubmenuTitle = "Prefabs", Submenu = BuildPrefabs });
+
+        rows.Add(new Row
+        {
+            Label = "Bots in playtest",
+            // Flow and item timing are not things you can judge flying around an empty room.
+            Detail = "2 bots",
+            Command = "editor_bots 2",
+        });
+
         rows.Add(new Row
         {
             Label = "Save map",
@@ -566,6 +576,17 @@ public partial class EditorMenuPanel : HudPanel
                 KeepOpen = true,
             });
 
+        if (OrthoOpen)
+            rows.Add(new Row
+            {
+                // The handoff (§11.5): pick a spot in the elevation view and stand in it.
+                Label = "Fly camera to pointer",
+                Command = "editor_camera here",
+            });
+
+        rows.Add(new Row { Label = "Overlays", SubmenuTitle = "Overlays", Submenu = BuildOverlays });
+        rows.Add(new Row { Label = "Camera", SubmenuTitle = "Camera", Submenu = BuildCamera });
+
         rows.Add(new Row
         {
             Label = "Ortho layout...",
@@ -576,6 +597,71 @@ public partial class EditorMenuPanel : HudPanel
 
         return rows;
     }
+
+    /// <summary>Save the selection as a prefab, or place one (§11.8).</summary>
+    private List<Row> BuildPrefabs()
+    {
+        bool any = Controller?.Session is { Selection.Count: > 0 };
+        return new List<Row>
+        {
+            new()
+            {
+                Label = "Save selection as prefab...",
+                Detail = any ? "" : "nothing selected",
+                Enabled = any,
+                Command = "editor_prefab save prefab1",
+            },
+            new() { Label = "Place prefab...", Command = "editor_prefab place prefab1" },
+            new() { Label = "List prefabs", Command = "editor_prefab list", KeepOpen = true },
+        };
+    }
+
+    /// <summary>§11.5’s render overlays.</summary>
+    private List<Row> BuildOverlays() => new()
+    {
+        new()
+        {
+            Label = "Vertices",
+            Detail = "brush corners",
+            Command = $"toggle {EditorController.CvarShowVertices}",
+            Checked = GlobalF(EditorController.CvarShowVertices, 0f) != 0f,
+            KeepOpen = true,
+        },
+        new()
+        {
+            Label = "Collision",
+            // The one that earns its place: a volume you can walk into but never see is invisible by
+            // definition until something draws it.
+            Detail = "volumes that render nothing",
+            Command = $"toggle {EditorController.CvarShowCollision}",
+            Checked = GlobalF(EditorController.CvarShowCollision, 0f) != 0f,
+            KeepOpen = true,
+        },
+        new()
+        {
+            Label = "Wireframe",
+            Detail = BoundKey("editor_wire"),
+            Command = "editor_wire",
+            KeepOpen = true,
+        },
+        new()
+        {
+            Label = "Overlay range",
+            Detail = $"{GlobalF(EditorController.CvarOverlayRange, 1024f):0}u",
+            Command = $"toggle {EditorController.CvarOverlayRange} 512 1024 2048 4096",
+            KeepOpen = true,
+        },
+    };
+
+    /// <summary>Camera bookmarks and jumps (§11.8).</summary>
+    private List<Row> BuildCamera() => new()
+    {
+        new() { Label = "Frame selection", Command = "editor_camera frame" },
+        new() { Label = "Save to slot 1", Command = "editor_camera save 1", KeepOpen = true },
+        new() { Label = "Save to slot 2", Command = "editor_camera save 2", KeepOpen = true },
+        new() { Label = "Go to slot 1", Command = "editor_camera go 1" },
+        new() { Label = "Go to slot 2", Command = "editor_camera go 2" },
+    };
 
     private List<Row> BuildGrid()
     {

@@ -308,8 +308,9 @@ public class VmapPatchTests
         Vector3 last = At(p, 0, 4);
 
         VmapPatch? r = VmapPatchEdit.Apply(p, PatchOperation.RedisperseRows);
+        Assert.NotNull(r);
         Assert.Equal(first, At(r!, 0, 0));
-        Assert.Equal(last, At(r, 0, 4));
+        Assert.Equal(last, At(r!, 0, 4));
     }
 
     [Fact]

@@ -68,6 +68,7 @@ public class VmapCoEditTests
         new ScaleSelectionOp(new[] { 1, 2 }, new[] { 4 }, new Vector3(8, 8, 8), new Vector3(2f, 0.5f, 1.25f)),
         new RotateSelectionOp(new[] { 1 }, new[] { 3, 4 }, Vector3.Zero, new Vector3(0, 0, 1), -90f),
         new TranslatePatchesOp(new[] { 3 }, new Vector3(0f, 0f, 12.75f)),
+        new DeletePatchesOp(new[] { 3, 5 }),
         new MovePatchControlOp(2, 4, new Vector3(0f, 0f, 33.5f)),
         new ModifyPatchOp(2, PatchOperation.InsertRows),
         new SetFaceMaterialOp(1, 2, "textures/exx/floor01"),

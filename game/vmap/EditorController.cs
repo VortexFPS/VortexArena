@@ -1950,7 +1950,8 @@ public sealed partial class EditorController : Node3D
 
         List<int> entityIds = SelectedEntityIds();
         List<int> ids = _session.SelectedBrushIds();
-        if (ids.Count == 0 && entityIds.Count == 0)
+        List<int> patchIds = SelectedPatchIds();
+        if (ids.Count == 0 && entityIds.Count == 0 && patchIds.Count == 0)
             return false;
 
         bool any = false;
@@ -1963,6 +1964,11 @@ public sealed partial class EditorController : Node3D
         // Re-read: an entity delete may have removed brushes that were also selected directly.
         List<int> remaining = ids.FindAll(id => _document?.FindBrush(id) is not null);
         if (remaining.Count > 0 && Commit(new DeleteBrushesOp(remaining)))
+            any = true;
+
+        // Patches are a separate id space and a separate list, so neither op above can reach them.
+        List<int> remainingPatches = patchIds.FindAll(id => _document?.FindPatch(id) is not null);
+        if (remainingPatches.Count > 0 && Commit(new DeletePatchesOp(remainingPatches)))
             any = true;
 
         if (!any)

@@ -620,6 +620,47 @@ public sealed class DeleteBrushesOp : IVmapOp
 }
 
 /// <summary>
+/// Delete patches, also unhooking them from any brush entity that owned them — the patch counterpart of
+/// <see cref="DeleteBrushesOp"/>.
+///
+/// Patches are their own id space and their own list, so a brush delete cannot reach them: without this a
+/// mapper can create a cylinder and then have no way to remove it.
+/// </summary>
+public sealed class DeletePatchesOp : IVmapOp
+{
+    private readonly int[] _ids;
+
+    public DeletePatchesOp(IReadOnlyList<int> patchIds)
+        => _ids = patchIds?.ToArray() ?? throw new ArgumentNullException(nameof(patchIds));
+
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    public IReadOnlyList<int> TouchedPatchIds => _ids;
+
+    public string Describe() => $"Delete {_ids.Length} patch{(_ids.Length == 1 ? "" : "es")}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        bool removed = false;
+        foreach (int id in _ids)
+        {
+            if (doc.FindPatch(id) is not { } p)
+                continue;
+            doc.Patches.Remove(p);
+
+            // An entity left holding the id of a patch that no longer exists would write a dangling reference
+            // on the next save, exactly as a brush delete would.
+            foreach (VmapEntity e in doc.Entities)
+                e.PatchIds.Remove(id);
+            removed = true;
+        }
+        return removed;
+    }
+}
+
+/// <summary>
 /// Split a brush with a plane — the clipper, the most-used tool in Radiant and the one edit that is
 /// <b>convexity-safe by construction</b>: intersecting a convex solid with a half-space always yields a
 /// convex solid, so unlike a vertex drag it can never produce invalid geometry.

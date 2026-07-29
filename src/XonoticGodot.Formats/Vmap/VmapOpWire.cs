@@ -103,6 +103,11 @@ public static class VmapOpWire
                 sb.Append(' ').Append(Fmt(rs.Degrees));
                 return sb.ToString();
 
+            case DeletePatchesOp dp:
+                sb.Append("patchdel ");
+                AppendIds(sb, dp.TouchedPatchIds);
+                return sb.ToString();
+
             case TranslatePatchesOp tp:
                 sb.Append("patchmove ");
                 AppendIds(sb, tp.PatchIds);
@@ -326,6 +331,12 @@ public static class VmapOpWire
                         return null;
                     return new RotateSelectionOp(
                         brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3), ReadFloat(tok[n2 + 6]));
+                }
+                case "patchdel":
+                {
+                    if (!TryReadIds(tok, 1, out int[] ids, out _))
+                        return null;
+                    return new DeletePatchesOp(ids);
                 }
                 case "patchmove":
                 {

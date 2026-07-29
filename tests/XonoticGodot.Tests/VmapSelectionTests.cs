@@ -81,6 +81,33 @@ public class VmapSelectionTests
     }
 
     [Fact]
+    public void DeletingAPatch_RemovesItAndUnhooksItsOwner()
+    {
+        // Patches are their own id space and their own list, so neither the brush delete nor the entity delete
+        // can reach them. Without an op of their own a mapper can create a cylinder and never remove it.
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(Vector3.Zero, new Vector3(64, 64, 64), id: 1));
+        doc.Patches.Add(FlatPatch(id: 4));
+        var owner = new VmapEntity { Id = 1, ClassName = "func_group" };
+        owner.Fields["classname"] = "func_group";
+        owner.BrushIds.Add(1);
+        owner.PatchIds.Add(4);
+        doc.Entities.Add(owner);
+
+        var session = new VmapEditSession(doc);
+        Assert.True(session.Apply(new DeletePatchesOp(new[] { 4 })));
+
+        Assert.Empty(doc.Patches);
+        Assert.Empty(doc.Entities[0].PatchIds);            // no dangling reference left to write out on save
+        Assert.Equal(new[] { 1 }, doc.Entities[0].BrushIds);
+
+        // And it is undoable, ownership link included.
+        Assert.True(session.Undo());
+        Assert.Single(doc.Patches);
+        Assert.Equal(new[] { 4 }, doc.Entities[0].PatchIds);
+    }
+
+    [Fact]
     public void ShiftClickingASecondPatch_AddsItRatherThanRemovingTheFirst()
     {
         // Two patch selections agree on Kind, BrushId (0) and FaceIndex (-1) and differ only in PatchId. A

@@ -8061,6 +8061,7 @@ public sealed partial class NetGame : Node3D
             if (_editor?.SnapSelectionToGrid() == true)
                 RefreshEditorWorld();
         });
+        interp.RegisterCommand("editor_csg", CmdEditorCsg);
         interp.RegisterCommand("editor_brush_create", _ =>
         {
             if (_editor?.CreateBrushAtCrosshair() == true)
@@ -8572,6 +8573,48 @@ public sealed partial class NetGame : Node3D
         ed.BumpGeometryVersion();
         XonoticGodot.Common.Diagnostics.Log.Info(
             $"editor: {ids.Count} light(s) now aim at {name} ({at.X:0} {at.Y:0} {at.Z:0})");
+    }
+
+    /// <summary>
+    /// <c>editor_csg</c> — constructive solid geometry on the selection (backlog F5, F6).
+    /// <code>
+    ///   editor_csg subtract              carve the first selected brush out of everything it overlaps
+    ///   editor_csg hollow [thickness]    walls INSIDE the selected brushes
+    ///   editor_csg room [thickness]      walls OUTSIDE them, so the void is what you drew
+    ///   editor_csg merge                 fuse the selection into one brush, when the union is convex
+    /// </code>
+    /// Thickness defaults to the alignment grid, the same default <c>editor_extrude</c> and
+    /// <c>editor_bevel</c> take, so a gesture lands on the grid the mapper is already building against.
+    /// </summary>
+    private void CmdEditorCsg(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null } ed)
+            return;
+
+        float Thickness() => args.Count > 2 && float.TryParse(args[2],
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float v) && v > 0f
+            ? v
+            : MathF.Max(1f, ed.GridSnapSize);
+
+        bool changed = (args.Count > 1 ? args[1].ToLowerInvariant() : "") switch
+        {
+            "subtract" or "sub" or "carve" => ed.SubtractSelection(),
+            "hollow" => ed.HollowSelection(Thickness(), outward: false),
+            "room" => ed.HollowSelection(Thickness(), outward: true),
+            "merge" => ed.MergeSelection(),
+            _ => Usage(),
+        };
+
+        if (changed)
+            RefreshEditorWorld();
+
+        static bool Usage()
+        {
+            XonoticGodot.Common.Diagnostics.Log.Help(
+                "usage: editor_csg subtract | hollow [thickness] | room [thickness] | merge");
+            return false;
+        }
     }
 
     /// <summary>Print the selected entity's live keys alongside what its class documents.</summary>

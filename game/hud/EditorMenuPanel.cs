@@ -262,6 +262,7 @@ public partial class EditorMenuPanel : HudPanel
             });
 
         rows.Add(new Row { Label = "Selection", SubmenuTitle = "Selection", Submenu = BuildSelection });
+        rows.Add(new Row { Label = "CSG", SubmenuTitle = "CSG", Submenu = BuildCsg });
 
         // The clip tool's keep-half choice is a separate axis from its placement mode, so it gets its own row
         // rather than being folded into the mode list where picking "keep front" would deselect "two-point".
@@ -516,6 +517,57 @@ public partial class EditorMenuPanel : HudPanel
             or ToolMode.RelinkAll or ToolMode.Lock or ToolMode.Symmetry => tool == EditorTool.Waypoint,
         _ => false,
     };
+
+    /// <summary>
+    /// Constructive solid geometry (backlog F5, F6): one-shot verbs on the brush selection.
+    ///
+    /// Its own submenu rather than modes under the Brush tool, because a mode is a state you sit in and these
+    /// fire once — the same reasoning that keeps copy and delete off the mode list. Every row states its
+    /// requirement in the Detail when it is disabled, so a greyed row explains itself.
+    /// </summary>
+    private List<Row> BuildCsg()
+    {
+        int brushes = Controller?.Session?.SelectedBrushIds().Count ?? 0;
+        float grid = MathF.Max(1f, Controller?.GridSnapSize ?? 16f);
+
+        return new List<Row>
+        {
+            new()
+            {
+                Label = "Subtract",
+                Detail = brushes > 0
+                    ? "carves the first selected brush out of everything it overlaps; the cutter survives"
+                    : "select the brush to cut OUT",
+                Command = "editor_csg subtract",
+                Enabled = brushes > 0,
+            },
+            new()
+            {
+                Label = "Hollow",
+                Detail = brushes > 0 ? $"walls inside, {grid:0.##}u thick" : "select a brush",
+                Command = "editor_csg hollow",
+                Enabled = brushes > 0,
+            },
+            new()
+            {
+                Label = "Make room",
+                Detail = brushes > 0
+                    ? $"walls outside, {grid:0.##}u thick — the void is the volume you drew"
+                    : "select a brush",
+                Command = "editor_csg room",
+                Enabled = brushes > 0,
+            },
+            new()
+            {
+                Label = "Merge",
+                Detail = brushes >= 2
+                    ? "fuses them into one, when the union is convex"
+                    : "select at least two brushes",
+                Command = "editor_csg merge",
+                Enabled = brushes >= 2,
+            },
+        };
+    }
 
     private List<Row> BuildSelection()
     {

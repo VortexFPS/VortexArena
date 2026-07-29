@@ -1409,6 +1409,119 @@ public sealed partial class EditorController : Node3D
         return true;
     }
 
+    // =============================================================================================
+    //  CSG (backlog F5, F6) — one-shot verbs on the selection
+    // =============================================================================================
+
+    /// <summary>
+    /// Carve the selected brush out of everything it overlaps (backlog F5) — Radiant's subtract, and the
+    /// doorway workflow the editor had no substitute for.
+    ///
+    /// The cutter is the FIRST selected brush and it survives, so the same block cuts the next doorway. The
+    /// target set is resolved here and travels on the op explicitly, because Apply has to be deterministic
+    /// from the wire line alone: a peer replaying it must carve the same brushes, not re-derive them from a
+    /// document that may already have moved on.
+    /// </summary>
+    public bool SubtractSelection()
+    {
+        if (_session is null || _document is null)
+            return false;
+
+        List<int> selected = _session.SelectedBrushIds();
+        if (selected.Count == 0)
+        {
+            Log.Info("editor: select the brush to cut OUT — everything it overlaps gets carved");
+            return false;
+        }
+
+        int cutter = selected[0];
+        List<int> targets = SubtractBrushesOp.ResolveTargets(_document, cutter, IncludeToolBrushes);
+        if (targets.Count == 0)
+        {
+            Log.Info("editor: that brush overlaps nothing to carve");
+            return false;
+        }
+
+        var op = new SubtractBrushesOp(cutter, targets);
+        if (!Commit(op))
+        {
+            Log.Info("editor: subtract refused — too many pieces, or the cut would not make valid solids");
+            return false;
+        }
+
+        if (!LastOpDeferred)
+            foreach (int id in op.CreatedBrushIds)
+                _session.Selection.Add(VmapSelection.OfBrush(id));
+
+        GeometryVersion++;
+        Log.Info($"editor: carved {targets.Count} brush(es) into {op.CreatedBrushIds.Count + targets.Count}"
+                 + " — the cutter is still there, delete it when you are done with it");
+        return true;
+    }
+
+    /// <summary>
+    /// Turn the selected brushes into shells (backlog F6). <paramref name="outward"/> false hollows them —
+    /// the walls come out of the brush; true makes a ROOM, where the void is exactly the volume you drew and
+    /// the walls grow outside it.
+    /// </summary>
+    public bool HollowSelection(float thickness, bool outward)
+    {
+        if (_session is null)
+            return false;
+
+        List<int> ids = _session.SelectedBrushIds();
+        if (ids.Count == 0)
+        {
+            Log.Info("editor: select the brushes to hollow");
+            return false;
+        }
+
+        var op = new HollowBrushesOp(ids, thickness, outward);
+        if (!Commit(op))
+        {
+            Log.Info($"editor: {(outward ? "room" : "hollow")} refused — "
+                     + $"{thickness:0.##}u leaves no space inside at least one of them");
+            return false;
+        }
+
+        if (!LastOpDeferred)
+            foreach (int id in op.CreatedBrushIds)
+                _session.Selection.Add(VmapSelection.OfBrush(id));
+
+        GeometryVersion++;
+        Log.Info($"editor: {(outward ? "room" : "hollow")} at {thickness:0.##}u — "
+                 + $"{ids.Count} brush(es) became {ids.Count + op.CreatedBrushIds.Count} walls");
+        return true;
+    }
+
+    /// <summary>Fuse the selected brushes into one, when their union is genuinely convex (backlog F6).</summary>
+    public bool MergeSelection()
+    {
+        if (_session is null)
+            return false;
+
+        List<int> ids = _session.SelectedBrushIds();
+        if (ids.Count < 2)
+        {
+            Log.Info("editor: select at least two brushes to merge");
+            return false;
+        }
+
+        if (!Commit(new MergeBrushesOp(ids)))
+        {
+            Log.Info("editor: merge refused — that union is not a convex solid, "
+                     + "or the brushes differ in detail/content/owner");
+            return false;
+        }
+
+        // The survivor keeps the first id, so re-selecting it is the whole cleanup.
+        _session.Selection.Clear();
+        _session.Selection.Add(VmapSelection.OfBrush(ids[0]));
+        GeometryVersion++;
+        Log.Info($"editor: merged {ids.Count} brushes into #{ids[0]}");
+        return true;
+    }
+
     /// <summary>Snap the selected brushes' corners onto the grid.</summary>
     public bool SnapSelectionToGrid()
     {

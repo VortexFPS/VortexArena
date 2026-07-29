@@ -244,6 +244,25 @@ public static class VmapOpWire
                 return string.Create(CultureInfo.InvariantCulture,
                     $"extrude {ex.WireId} {ex.SourceBrushId} {ex.FaceIndex} {Fmt(ex.Distance)}");
 
+            case SubtractBrushesOp sub:
+                sb.Append("csgsub ").Append(sub.CutterBrushId).Append(' ');
+                AppendIds(sb, sub.TargetBrushIds);
+                sb.Append(' ');
+                AppendIds(sb, sub.WireIds);
+                return sb.ToString();
+
+            case HollowBrushesOp hol:
+                sb.Append("csghollow ");
+                AppendIds(sb, hol.TouchedBrushIds);
+                sb.Append(' ').Append(Fmt(hol.Thickness)).Append(' ').Append(hol.Outward ? 1 : 0).Append(' ');
+                AppendIds(sb, hol.WireIds);
+                return sb.ToString();
+
+            case MergeBrushesOp mrg:
+                sb.Append("csgmerge ");
+                AppendIds(sb, mrg.TouchedBrushIds);
+                return sb.ToString();
+
             case ClipSelectionOp cl:
                 sb.Append("clip ");
                 AppendIds(sb, cl.TouchedBrushIds);
@@ -561,6 +580,33 @@ public static class VmapOpWire
                         int.Parse(tok[2], CultureInfo.InvariantCulture),
                         int.Parse(tok[3], CultureInfo.InvariantCulture), ReadFloat(tok[4]),
                         int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "csgsub":
+                {
+                    if (tok.Length < 3)
+                        return null;
+                    int cutter = int.Parse(tok[1], CultureInfo.InvariantCulture);
+                    if (!TryReadIds(tok, 2, out int[] csgTargets, out int afterTargets)
+                        || !TryReadIds(tok, afterTargets, out int[] csgCreated, out _))
+                        return null;
+                    return new SubtractBrushesOp(cutter, csgTargets, csgCreated);
+                }
+                case "csghollow":
+                {
+                    if (!TryReadIds(tok, 1, out int[] hollowIds, out int afterIds)
+                        || tok.Length < afterIds + 3)
+                        return null;
+                    float thickness = ReadFloat(tok[afterIds]);
+                    bool outward = int.Parse(tok[afterIds + 1], CultureInfo.InvariantCulture) != 0;
+                    if (!TryReadIds(tok, afterIds + 2, out int[] hollowCreated, out _))
+                        return null;
+                    return new HollowBrushesOp(hollowIds, thickness, outward, hollowCreated);
+                }
+                case "csgmerge":
+                {
+                    if (!TryReadIds(tok, 1, out int[] mergeIds, out _))
+                        return null;
+                    return new MergeBrushesOp(mergeIds);
                 }
                 case "clip":
                 {

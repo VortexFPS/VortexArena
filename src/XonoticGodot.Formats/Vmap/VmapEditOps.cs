@@ -50,6 +50,45 @@ public static class VmapEdit
     /// <summary>A point within this distance of a plane counts as lying on it.</summary>
     public const float OnPlaneEpsilon = 0.05f;
 
+    /// <summary>
+    /// A clone of <paramref name="brush"/> with one more bounding plane — the primitive every cut is built
+    /// from: a clip keeps one side of it, a CSG subtract walks the cutter's planes one at a time.
+    ///
+    /// The new face inherits from whichever existing face points most like it, so a cut surface comes back
+    /// textured rather than blank. It gets a BASE layer only: a layered face that is cut keeps its stack on
+    /// the original surfaces and the fresh one starts plain, which is clip's own behaviour.
+    /// </summary>
+    internal static VmapBrush WithExtraPlane(VmapBrush brush, VmapPlane plane)
+    {
+        ArgumentNullException.ThrowIfNull(brush);
+        VmapBrush copy = brush.Clone();
+
+        string material = string.Empty;
+        int surfaceFlags = 0, contents = 0;
+        float best = float.MinValue;
+        foreach (VmapFace f in brush.Faces)
+        {
+            float dot = Vector3.Dot(f.Plane.Normal, plane.Normal);
+            if (dot > best)
+            {
+                best = dot;
+                material = f.Material;
+                surfaceFlags = f.SurfaceFlags;
+                contents = f.ContentFlags;
+            }
+        }
+
+        copy.Faces.Add(new VmapFace
+        {
+            Plane = plane,
+            Material = material,
+            Projection = VmapTexProjection.AxialFor(plane.Normal),
+            SurfaceFlags = surfaceFlags,
+            ContentFlags = contents,
+        });
+        return copy;
+    }
+
     /// <summary>Two vertices closer than this are the same vertex.</summary>
     public const float VertexEpsilon = 0.05f;
 
@@ -908,8 +947,8 @@ public sealed class ClipBrushOp : IVmapOp
         var cut = new VmapPlane(_plane.Normal / len, _plane.Dist / len);
 
         // Both halves must be real solids, or the plane missed the brush entirely (or only grazed it).
-        VmapBrush keep = WithExtraPlane(brush, cut);
-        VmapBrush other = WithExtraPlane(brush, new VmapPlane(-cut.Normal, -cut.Dist));
+        VmapBrush keep = VmapEdit.WithExtraPlane(brush, cut);
+        VmapBrush other = VmapEdit.WithExtraPlane(brush, new VmapPlane(-cut.Normal, -cut.Dist));
         if (!VmapWinding.IsClosedConvex(keep) || !VmapWinding.IsClosedConvex(other))
             return false;
 
@@ -933,37 +972,6 @@ public sealed class ClipBrushOp : IVmapOp
     }
 
     /// <summary>A copy of the brush with one more bounding plane, textured like the face it most resembles.</summary>
-    private static VmapBrush WithExtraPlane(VmapBrush brush, VmapPlane plane)
-    {
-        VmapBrush copy = brush.Clone();
-
-        // Give the new face the material of whichever existing face points most like it, so a clipped brush
-        // does not come back with an untextured cut surface.
-        string material = string.Empty;
-        int surfaceFlags = 0, contents = 0;
-        float best = float.MinValue;
-        foreach (VmapFace f in brush.Faces)
-        {
-            float dot = Vector3.Dot(f.Plane.Normal, plane.Normal);
-            if (dot > best)
-            {
-                best = dot;
-                material = f.Material;
-                surfaceFlags = f.SurfaceFlags;
-                contents = f.ContentFlags;
-            }
-        }
-
-        copy.Faces.Add(new VmapFace
-        {
-            Plane = plane,
-            Material = material,
-            Projection = VmapTexProjection.AxialFor(plane.Normal),
-            SurfaceFlags = surfaceFlags,
-            ContentFlags = contents,
-        });
-        return copy;
-    }
 }
 
 // =================================================================================================

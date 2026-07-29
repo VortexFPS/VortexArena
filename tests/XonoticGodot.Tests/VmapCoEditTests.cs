@@ -91,6 +91,10 @@ public class VmapCoEditTests
         new DissolveBrushEntityOp(new[] { 4, 5 }),
         new ExtrudeFaceOp(1, 4, 32f),
         new ClipSelectionOp(new[] { 1, 2 }, new VmapPlane(new Vector3(1, 0, 0), 32f), ClipKeep.Both),
+        new SubtractBrushesOp(3, new[] { 1, 2 }),
+        new HollowBrushesOp(new[] { 1 }, 8f, outward: false),
+        new HollowBrushesOp(new[] { 1, 2 }, 12.5f, outward: true),
+        new MergeBrushesOp(new[] { 1, 2 }),
     };
 
     [Theory]
@@ -140,6 +144,8 @@ public class VmapCoEditTests
                      "rotate 1 1 0 0 0 0 0 1 notanangle",
                      "mkent 0 0 0 0", "mkent 0 0 0 0 cls 3 a b", "add 2 1 6",
                      "mkbent", "mkbent 0", "mkbent 0 1 1", "mkbent 0 1 1 0 cls", "entdissolve",
+                     "csgsub", "csgsub 1", "csgsub 1 1", "csgsub 1 2 1", "csghollow",
+                     "csghollow 1 1 8", "csghollow 1 1 notanumber 0 0", "csgmerge", "csgmerge 1",
                      "add 1 1 1 1 0 0 0", "clip 1 1 1 0 0 0 0",
                  })
         {
@@ -170,6 +176,11 @@ public class VmapCoEditTests
                      "mkbent 0 0 2147483647",                       // its patch list
                      "mkbent 0 0 0 cls 1073741824 k v",             // its field pairs
                      "entdissolve 2147483647",                      // dissolve id list
+                     "csgsub 1 2147483647",                         // carve target list
+                     "csgsub 1 0 2147483647",                       // carve piece list
+                     "csghollow 2147483647",                        // hollow source list
+                     "csghollow 1 1 8 0 2147483647",                // hollow wall list
+                     "csgmerge 2147483647",                         // merge id list
                  })
         {
             Assert.Null(VmapOpWire.Deserialize(line));
@@ -252,6 +263,53 @@ public class VmapCoEditTests
         var op = new ClipSelectionOp(new[] { 1, 2 }, new VmapPlane(new Vector3(1, 0, 0), 32f), ClipKeep.Both);
         Assert.True(op.Apply(server));
         Assert.Equal(2, op.CreatedBrushIds.Count);
+
+        Assert.True(VmapOpWire.Deserialize(VmapOpWire.SerializeAfterApply(op, server)!)!.Apply(peer));
+        Assert.Equal(server.Brushes.Select(b => b.Id).Order(), peer.Brushes.Select(b => b.Id).Order());
+    }
+
+    /// <summary>
+    /// A carve mints one id per extra piece, and both machines have to number them identically or a later op
+    /// naming "brush 7" means a different solid on each. Same handshake as a split; the piece count is just
+    /// larger.
+    /// </summary>
+    [Fact]
+    public void ACarve_CarriesThePieceIdsSoBothSidesNumberThemAlike()
+    {
+        static VmapDocument Fresh()
+        {
+            var d = new VmapDocument();
+            d.Brushes.Add(Box(Vector3.Zero, new Vector3(64, 64, 64), id: 1));
+            d.Brushes.Add(Box(new Vector3(16, 16, 16), new Vector3(48, 48, 48), id: 2));
+            return d;
+        }
+
+        VmapDocument server = Fresh(), peer = Fresh();
+
+        var op = new SubtractBrushesOp(2, new[] { 1 });
+        Assert.True(op.Apply(server));
+        Assert.NotEmpty(op.CreatedBrushIds);
+
+        Assert.True(VmapOpWire.Deserialize(VmapOpWire.SerializeAfterApply(op, server)!)!.Apply(peer));
+        Assert.Equal(server.Brushes.Select(b => b.Id).Order(), peer.Brushes.Select(b => b.Id).Order());
+    }
+
+    /// <summary>The same for a hollow, whose walls are minted the same way.</summary>
+    [Fact]
+    public void AHollow_CarriesTheWallIdsSoBothSidesNumberThemAlike()
+    {
+        static VmapDocument Fresh()
+        {
+            var d = new VmapDocument();
+            d.Brushes.Add(Box(Vector3.Zero, new Vector3(64, 64, 64), id: 1));
+            return d;
+        }
+
+        VmapDocument server = Fresh(), peer = Fresh();
+
+        var op = new HollowBrushesOp(new[] { 1 }, 8f);
+        Assert.True(op.Apply(server));
+        Assert.Equal(5, op.CreatedBrushIds.Count);
 
         Assert.True(VmapOpWire.Deserialize(VmapOpWire.SerializeAfterApply(op, server)!)!.Apply(peer));
         Assert.Equal(server.Brushes.Select(b => b.Id).Order(), peer.Brushes.Select(b => b.Id).Order());

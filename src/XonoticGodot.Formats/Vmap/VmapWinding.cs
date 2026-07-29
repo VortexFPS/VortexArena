@@ -271,6 +271,49 @@ public static class VmapWinding
     }
 
     /// <summary>
+    /// Volume enclosed by the plane set, in cubic world units; zero for anything that does not bound one.
+    ///
+    /// A tetrahedron fan from one vertex over every face polygon — the divergence-theorem sum, exact for a
+    /// convex solid. It exists because it is the decisive test that a CSG merge invented no volume: the union
+    /// of two convex solids is contained in the brush built from their outer planes, so the only way that
+    /// brush can be wrong is by being BIGGER — which is precisely what a non-convex union (an L, a cross, a
+    /// gap between them) looks like.
+    /// </summary>
+    public static float Volume(VmapBrush brush)
+    {
+        ArgumentNullException.ThrowIfNull(brush);
+
+        Vector3[][] windings = BuildBrushWindings(brush);
+        Vector3 apex = Vector3.Zero;
+        bool haveApex = false;
+        foreach (Vector3[] w in windings)
+        {
+            if (w.Length < 3)
+                continue;
+            apex = w[0];
+            haveApex = true;
+            break;
+        }
+        if (!haveApex)
+            return 0f;
+
+        double sum = 0.0;
+        int contributing = 0;
+        foreach (Vector3[] w in windings)
+        {
+            if (w.Length < 3)
+                continue;
+            contributing++;
+            for (int i = 1; i + 1 < w.Length; i++)
+            {
+                Vector3 a = w[0] - apex, b = w[i] - apex, c = w[i + 1] - apex;
+                sum += Vector3.Dot(a, Vector3.Cross(b, c));
+            }
+        }
+        return contributing < 4 ? 0f : (float)(Math.Abs(sum) / 6.0);
+    }
+
+    /// <summary>
     /// Largest legal absolute world coordinate. A vertex beyond this can only be a surviving remnant of the
     /// huge base quad, which means the plane set never closed on that side.
     /// </summary>

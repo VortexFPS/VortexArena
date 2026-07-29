@@ -350,6 +350,7 @@ public partial class EditorMenuPanel : HudPanel
                 Command = EntityConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? ShaderConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? WaypointConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
+                          ?? PatchConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? $"editor_mode {mode}",
                 Enabled = built,
                 Checked = built ? mode == c.Mode : null,
@@ -370,6 +371,19 @@ public partial class EditorMenuPanel : HudPanel
         {
             ToolMode.Create => "editor_entity palette",
             ToolMode.Properties => "editor_entity keys",
+            _ => null,
+        };
+    }
+
+    /// <summary>Patch create and modify open their dialogs.</summary>
+    private static string? PatchConsoleCommand(EditorTool tool, ToolMode mode)
+    {
+        if (tool != EditorTool.Patch)
+            return null;
+        return mode switch
+        {
+            ToolMode.Create => "editor_patch palette",
+            ToolMode.Modify => "editor_patch modify",
             _ => null,
         };
     }
@@ -430,7 +444,9 @@ public partial class EditorMenuPanel : HudPanel
         ToolMode.TwoPoint or ToolMode.ThreePoint or ToolMode.ViewPlane => tool == EditorTool.Clip,
         // Entity create and the key inspector run from the console for now (editor_entity); the dialogs are
         // still to come, so the rows point at what exists rather than claiming a UI that does not.
-        ToolMode.Create or ToolMode.Properties => tool == EditorTool.Entity,
+        ToolMode.Create => tool is EditorTool.Entity or EditorTool.Patch,
+        ToolMode.Properties => tool == EditorTool.Entity,
+        ToolMode.Modify => tool == EditorTool.Patch,
         ToolMode.PickShader or ToolMode.ApplyShader or ToolMode.FitProjection
             or ToolMode.NaturalProjection or ToolMode.AxialProjection or ToolMode.ShiftUv
             or ToolMode.ScaleUv or ToolMode.RotateUv or ToolMode.Browse => tool == EditorTool.Shader,

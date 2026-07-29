@@ -1371,6 +1371,43 @@ public sealed partial class EditorController : Node3D
         return ids;
     }
 
+    /// <summary>
+    /// The box a new patch is built inside: the SELECTED BRUSH's bounds when there is one, else a grid-sized
+    /// box at the crosshair.
+    ///
+    /// Building from the selection is Radiant's own gesture and the reason it feels right — you rough a shape
+    /// in with a brush, then replace it with a cylinder that occupies exactly the same space, so the curve
+    /// meets the geometry around it without any measuring.
+    /// </summary>
+    public bool TryGetPatchBox(out NVec3 mins, out NVec3 maxs)
+    {
+        mins = NVec3.Zero;
+        maxs = NVec3.Zero;
+        if (_document is null)
+            return false;
+
+        List<int> ids = _session?.SelectedBrushIds() ?? new List<int>();
+        bool any = false;
+        foreach (int id in ids)
+        {
+            if (_document.FindBrush(id) is not { } b || !VmapWinding.TryGetBounds(b, out NVec3 lo, out NVec3 hi))
+                continue;
+            mins = any ? NVec3.Min(mins, lo) : lo;
+            maxs = any ? NVec3.Max(maxs, hi) : hi;
+            any = true;
+        }
+        if (any)
+            return true;
+
+        if (!TryGetPastePoint(out NVec3 at))
+            return false;
+
+        float half = MathF.Max(16f, GridSize) * 0.5f;
+        mins = at - new NVec3(half, half, half);
+        maxs = at + new NVec3(half, half, half);
+        return true;
+    }
+
     /// <summary>Patch ids in the current selection, deduplicated — the patch counterpart of SelectedBrushIds.</summary>
     public List<int> SelectedPatchIds()
     {

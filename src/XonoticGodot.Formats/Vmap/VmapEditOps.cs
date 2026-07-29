@@ -1739,3 +1739,106 @@ public static class VmapTexAlign
         return new Vector2(lu > 1e-9f ? 1f / lu : 0f, lv > 1e-9f ? 1f / lv : 0f);
     }
 }
+
+// =================================================================================================
+//  E8 — patch creation and modification
+// =================================================================================================
+
+/// <summary>Create a patch primitive inside a box (design doc §11.9's Create dialog).</summary>
+public sealed class CreatePatchOp : IVmapOp
+{
+    private readonly PatchPrimitive _kind;
+    private readonly Vector3 _mins;
+    private readonly Vector3 _maxs;
+    private readonly string _material;
+    private readonly int _width;
+    private readonly int _height;
+    private int _assignedId;
+
+    public CreatePatchOp(
+        PatchPrimitive kind, Vector3 cornerA, Vector3 cornerB, string material,
+        int width = 3, int height = 3)
+    {
+        _kind = kind;
+        _mins = Vector3.Min(cornerA, cornerB);
+        _maxs = Vector3.Max(cornerA, cornerB);
+        _material = material ?? string.Empty;
+        _width = width;
+        _height = height;
+    }
+
+    /// <summary>Id given to the created patch; valid after a successful <see cref="Apply"/>.</summary>
+    public int CreatedPatchId => _assignedId;
+
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    // Nothing pre-exists: the session detects the addition and undo removes it.
+    public IReadOnlyList<int> TouchedPatchIds => Array.Empty<int>();
+
+    public string Describe() => $"Create {_kind} patch";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        Vector3 size = _maxs - _mins;
+        if (size.LengthSquared() < 1e-6f)
+            return false;   // a zero box has no shape to build
+
+        VmapPatch patch = VmapPatchPrimitives.Build(_kind, _mins, _maxs, _material, _width, _height);
+        if (!patch.IsValid)
+            return false;
+
+        _assignedId = doc.NextPatchId();
+        patch.Id = _assignedId;
+        doc.Patches.Add(patch);
+        return true;
+    }
+}
+
+/// <summary>
+/// Apply a Modify-dialog operation to a patch (design doc §11.9).
+///
+/// The operations RESHAPE the grid — inserting rows changes its dimensions — so this replaces the patch's
+/// contents in place rather than swapping the object. Keeping the same instance is what lets the pick index
+/// and anything else keyed on the patch object stay valid across an edit.
+/// </summary>
+public sealed class ModifyPatchOp : IVmapOp
+{
+    private readonly int _patchId;
+    private readonly PatchOperation _operation;
+
+    public ModifyPatchOp(int patchId, PatchOperation operation)
+    {
+        _patchId = patchId;
+        _operation = operation;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    public IReadOnlyList<int> TouchedPatchIds => new[] { _patchId };
+
+    /// <summary>The operation applied. Read by the wire codec.</summary>
+    public PatchOperation Operation => _operation;
+
+    public string Describe() => $"{VmapPatchEdit.Label(_operation)} on patch {_patchId}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (doc.FindPatch(_patchId) is not { } patch)
+            return false;
+
+        VmapPatch? result = VmapPatchEdit.Apply(patch, _operation);
+        if (result is null || !result.IsValid)
+            return false;   // refused (e.g. removing a row from a 3-row grid)
+
+        patch.Width = result.Width;
+        patch.Height = result.Height;
+        patch.Controls.Clear();
+        patch.Controls.AddRange(result.Controls);
+        patch.ControlUvs.Clear();
+        patch.ControlUvs.AddRange(result.ControlUvs);
+        return true;
+    }
+}

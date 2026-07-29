@@ -7561,6 +7561,7 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_entity", CmdEditorEntity);
         interp.RegisterCommand("editor_shader", CmdEditorShader);
         interp.RegisterCommand("editor_waypoint", CmdEditorWaypoint);
+        interp.RegisterCommand("editor_patch", CmdEditorPatch);
         Vmap.EditorBinds.RegisterCommands(interp);
 
         // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
@@ -8581,6 +8582,167 @@ public sealed partial class NetGame : Node3D
     {
         string[] parts = name.Split('/');
         return parts.Length >= 2 ? parts[^2] : "";
+    }
+
+    /// <summary>
+    /// <c>editor_patch</c> — create a patch primitive, or apply a Modify operation to the selected one.
+    /// <code>
+    ///   editor_patch create &lt;kind&gt; [w] [h]   place a primitive
+    ///   editor_patch &lt;operation&gt;              invert | transpose | redisperserows | insertcolumns | ...
+    ///   editor_patch list                     show the primitives
+    /// </code>
+    /// </summary>
+    private void CmdEditorPatch(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "list";
+
+        if (verb == "palette")
+        {
+            OpenPatchPalette();
+            return;
+        }
+
+        if (verb == "modify")
+        {
+            OpenPatchModify();
+            return;
+        }
+
+        if (verb == "list")
+        {
+            foreach (XonoticGodot.Formats.Vmap.PatchPrimitive k in
+                     Enum.GetValues<XonoticGodot.Formats.Vmap.PatchPrimitive>())
+                XonoticGodot.Common.Diagnostics.Log.Info(
+                    $"  {k}: {XonoticGodot.Formats.Vmap.VmapPatchPrimitives.Describe(k)}");
+            XonoticGodot.Common.Diagnostics.Log.Help("editor_patch create <kind> [width] [height]");
+            return;
+        }
+
+        if (verb == "create")
+        {
+            if (args.Count < 3
+                || !Enum.TryParse(args[2], ignoreCase: true,
+                    out XonoticGodot.Formats.Vmap.PatchPrimitive kind))
+            {
+                XonoticGodot.Common.Diagnostics.Log.Help(
+                    "usage: editor_patch create <SimpleMesh|Bevel|EndCap|Cylinder|DenseCylinder|Cone|Sphere>");
+                return;
+            }
+
+            if (!ed.TryGetPatchBox(out System.Numerics.Vector3 mins, out System.Numerics.Vector3 maxs))
+                return;
+
+            int w = args.Count > 3 && int.TryParse(args[3], out int pw) ? pw : 3;
+            int h = args.Count > 4 && int.TryParse(args[4], out int ph) ? ph : 3;
+
+            var op = new XonoticGodot.Formats.Vmap.CreatePatchOp(
+                kind, mins, maxs, ed.PickedMaterial.Length > 0 ? ed.PickedMaterial : DefaultPatchMaterial, w, h);
+
+            if (!session.Apply(op))
+            {
+                XonoticGodot.Common.Diagnostics.Log.Warn("editor: could not create that patch here");
+                return;
+            }
+
+            session.Selection.Clear();
+            session.Selection.Add(XonoticGodot.Formats.Vmap.VmapSelection.OfPatch(op.CreatedPatchId));
+            ed.BumpGeometryVersion();
+            RefreshEditorWorld();
+            XonoticGodot.Common.Diagnostics.Log.Info($"editor: created a {kind} patch");
+            return;
+        }
+
+        // Anything else is a Modify operation on the selected patch(es).
+        if (!Enum.TryParse(verb, ignoreCase: true, out XonoticGodot.Formats.Vmap.PatchOperation operation))
+        {
+            XonoticGodot.Common.Diagnostics.Log.Help(
+                "editor_patch create <kind> | invert | transpose | redisperserows | redispersecolumns"
+                + " | insertrows | insertcolumns | removerows | removecolumns | list");
+            return;
+        }
+
+        List<int> ids = ed.SelectedPatchIds();
+        if (ids.Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("editor: select a patch first");
+            return;
+        }
+
+        int changed = 0;
+        foreach (int id in ids)
+            if (session.Apply(new XonoticGodot.Formats.Vmap.ModifyPatchOp(id, operation)))
+                changed++;
+
+        if (changed > 0)
+        {
+            ed.BumpGeometryVersion();
+            RefreshEditorWorld();
+        }
+        XonoticGodot.Common.Diagnostics.Log.Info(changed > 0
+            ? $"editor: {XonoticGodot.Formats.Vmap.VmapPatchEdit.Label(operation)} on {changed} patch(es)"
+            : $"editor: {XonoticGodot.Formats.Vmap.VmapPatchEdit.Label(operation)} was refused");
+    }
+
+    /// <summary>Material a new patch gets when the shader eyedropper is empty.</summary>
+    private const string DefaultPatchMaterial = "textures/exx/base_wall01";
+
+    /// <summary>
+    /// The patch Create dialog: the primitive set with what each is for.
+    /// </summary>
+    private void OpenPatchPalette()
+    {
+        if (EditorDialog is not { } dialog)
+            return;
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        foreach (XonoticGodot.Formats.Vmap.PatchPrimitive kind in
+                 Enum.GetValues<XonoticGodot.Formats.Vmap.PatchPrimitive>())
+        {
+            (int w, int h) = XonoticGodot.Formats.Vmap.VmapPatchPrimitives.DimensionsOf(kind);
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = kind.ToString(),
+                Value = $"{w}x{h}",
+                Detail = XonoticGodot.Formats.Vmap.VmapPatchPrimitives.Describe(kind),
+                Command = $"editor_patch create {kind}",
+            });
+        }
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, "Create patch", rows,
+            "built inside the selected brush's bounds, or a grid-sized box at the crosshair");
+    }
+
+    /// <summary>The patch Modify dialog: Radiant's matrix and row/column operations.</summary>
+    private void OpenPatchModify()
+    {
+        if (EditorDialog is not { } dialog || _editor is not { } ed)
+            return;
+
+        if (ed.SelectedPatchIds().Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("editor: select a patch first");
+            return;
+        }
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        foreach (XonoticGodot.Formats.Vmap.PatchOperation op in
+                 Enum.GetValues<XonoticGodot.Formats.Vmap.PatchOperation>())
+        {
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = XonoticGodot.Formats.Vmap.VmapPatchEdit.Label(op),
+                Detail = XonoticGodot.Formats.Vmap.VmapPatchEdit.Describe(op),
+                Command = $"editor_patch {op}",
+            });
+        }
+
+        string what = ed.Document?.FindPatch(ed.SelectedPatchIds()[0]) is { } p
+            ? $"Patch #{p.Id}  ({p.Width}x{p.Height})"
+            : "Patch";
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, what, rows);
     }
 
     /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>

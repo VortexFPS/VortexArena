@@ -99,6 +99,13 @@ public partial class EditorPanel : HudPanel
     /// </summary>
     private int ShowMode() => ShowModeCvar();
 
+    /// <summary>
+    /// The work-in-progress banner's colour: a saturated warning yellow, deliberately brighter than the
+    /// amber this panel uses for a held mode. A caution about the tool itself should not read as one more
+    /// piece of editor state.
+    /// </summary>
+    private static readonly Color WipColor = new(1f, 0.85f, 0.15f);
+
     protected override void DrawPanel()
     {
         if (!IsEditorSession || ShowModeCvar() == 0)
@@ -119,6 +126,12 @@ public partial class EditorPanel : HudPanel
 
         var lines = new List<(string Text, Color Color)>
         {
+            // First line, and it stays first. The editor is reachable like any other gametype, so nothing
+            // else tells a mapper that what they are about to use is unfinished — and finding that out by
+            // losing an evening's work is the worst way to learn it. Drawn in PLAYTEST too: the state you
+            // are in changes, the maturity of the tool does not.
+            ("WORK IN PROGRESS — the map editor is under development", WipColor),
+
             IsEditing
                 ? ($"EDIT   {Key(BindPlaytest)} playtest", new Color(0.45f, 0.85f, 1f))
                 : ($"PLAYTEST   {Key(BindPlaytest)} edit", new Color(1f, 0.75f, 0.3f)),

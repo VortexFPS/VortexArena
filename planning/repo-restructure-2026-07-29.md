@@ -167,6 +167,42 @@ is close to a memcpy through the hand-written `TgaDecoder`. Map-load CPU goes up
 goes down. Which wins is not predictable from first principles, so §6 gates the conversion on a
 `tools/perf-smoke.ps1` run rather than assuming.
 
+### 4.2.1 q3map2 already reads PNG, so the map sources convert too — no fork needed
+
+Checked 2026-07-29 against the actual compiler source in `Base/netradiant`, because the whole
+`VortexMaps` build depends on the answer and a wrong guess here would mean either keeping the map
+source tree on TGA forever or forking a toolchain.
+
+**q3map2 supports PNG unconditionally.** `tools/quake3/q3map2/image.c` defines `LoadPNGBuffer()` with no
+build guard, `q3map2.h:79` includes `png.h`, and `tools/quake3/CMakeLists.txt:17` declares
+`find_package(PNG REQUIRED)` — libpng is a hard dependency of the build, not an option. Its own
+changelog records "All new image handling with PNG support" as a long-settled change.
+
+Better still, the probe order makes the conversion **invisible** to it. `image.c:438-489` tries, in
+order:
+
+```
+<name>.tga  →  <name>.png  →  <name>.jpg  →  <name>.dds  →  dds/<name>.dds
+```
+
+So a shader naming `textures/map_stormkeep/brickfloor` finds the `.png` once the `.tga` is gone, with no
+edit to any `.map`, `.shader` or compile flag. That is the same mechanism, in the same order, as this
+port's own `VirtualFileSystem.ResolveImage` — which is why §6 item 16 can leave 1,666 `.shader` lines
+naming `.tga` alone. **Both readers fall through TGA to PNG identically.**
+
+Consequences, all of them simplifications:
+
+- **Convert the map source tree too**, exactly as the core tree was. No format split between `data/` and
+  `VortexMaps`, and no "sources stay TGA" carve-out.
+- **No `vq3map2` fork.** A fork was considered on the assumption PNG was unsupported; the assumption was
+  wrong, so the fork is dead scope. Nothing else in the plan wanted one.
+- **Nothing in `.map.options` selects a texture format** — the flags are `-bsp -light -vis -minimap
+  -sRGB` — so the format is auto-probed rather than declared, and the toolchain pin in §8.3 is unaffected.
+
+If a future q3map2 change ever *did* need patching, the mechanism is already designed: §7.3's
+lockfile-plus-prebuilt-binary shape applies to a map compiler exactly as it does to the Godot export
+template.
+
 ### 4.3 Do not convert the DDS files
 
 The two compiled map packs contain 6,964 `.dds` files totalling 943 MB uncompressed. These are
@@ -334,6 +370,24 @@ source textures, `.ase`/`.md3` prefab models, skybox `env/`, and the shader scri
 > is wanted, and would double as the validated classification if a per-map split is ever revisited.
 > Deferring costs a `git mv` in a young repo; getting it wrong costs a history rewrite — **G1**'s logic
 > one level up.
+
+**How this differs from Xonotic today, precisely.** `sources/` keeps Xonotic's shape: the same
+type-rooted top level (`maps/ textures/ models/ scripts/ env/ sound/`), the same `map_<name>`-versus-shared
+naming convention, and compiled output still a type-rooted pack — so third-party maps drop in unchanged.
+Four things change, and each is a fix rather than a restructure:
+
+| | Xonotic today | here |
+|---|---|---|
+| map sources at runtime | `xonotic-maps.pk3dir` is a `.pk3dir`, so `MountGameDir` **mounts it**, and it sorts *above* `xonotic-data.pk3dir` — source textures shadow core data | `sources/` is a plain directory in another repo, **never mounted** |
+| compiled output | one bundled 597 MB `.pk3` for 31 maps | one `.pk3dir` per map → one release archive per map |
+| source/build separation | the *runtime* pack ships 97 MB of `.map`, `.ase`, `.obj` and q3map2 residue | sources stay in `sources/`, out of every player's install |
+| who fetches it | a sibling `.pk3dir` under `data/`, so everyone gets 3.3 GB | a submodule no default clone fetches |
+
+The first is the one worth dwelling on, because it is a live oddity rather than a tidiness point: the map
+**source** tree currently outranks core data in the runtime search path. §9b measured what that is worth —
+4,190 files exist only there, but extension- and `dds/`-normalised only **13** image stems are unreachable
+elsewhere, all `textures/map_*/{*_alpha,*_bump}`, and **none is referenced by any of the 135 shipped
+`.shader` files**. So unmounting it removes shadowing, not content.
 
 Layout splits by **role** — sources versus builds — not by map:
 

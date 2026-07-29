@@ -304,7 +304,7 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - `--menu-screen <id>` → open one dialog for a screenshot. ids: `settings` (or `settings:Audio` to pick a tab),
   `media` (or `media:Demos`), `multiplayer`, `singleplayer`, `create`, `credits`, `pause`, `profile`,
   `mutators`, `serverinfo`, `teamselect`, `firstrun`, `tos`, `welcome`, `hudpanels`, `hudweapons`, `cvarlist`,
-  `sandbox`. e.g.:
+  `sandbox`, `disclaimer`. e.g.:
   ```bash
   "$GODOT" --path . --menu-screen "settings:Audio" --screenshot "$PWD/screenshots/audio.png"
   ```

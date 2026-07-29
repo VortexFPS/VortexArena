@@ -254,10 +254,29 @@ public partial class Shell : Node
         else if (!string.IsNullOrWhiteSpace(DebugScreen))
             OpenDebugScreen(DebugScreen!);
         else
+        {
             // Plain menu boot (the real launch path): warm the map-independent eager asset set into the shared
             // cache in the background NOW, so the first match's precache is a cache hit and the map loads fast.
             // Skipped above for a direct --map/--host/--connect boot — that match runs its own precache.
             StartMenuAssetWarm();
+            // …and, on this path only, the development-release disclaimer over the main menu. Deliberately NOT
+            // on the boot-into-match / --menu-screen branches: automation and CI must never have a modal to
+            // dismiss (see MaybeShowStartupDisclaimer).
+            MaybeShowStartupDisclaimer();
+        }
+    }
+
+    /// <summary>
+    /// Push the development-release disclaimer (<see cref="Menu.DialogDisclaimer"/>) over the freshly-shown main
+    /// menu, unless the player has turned it off. Gated on <c>cl_startup_disclaimer</c> (default 1); the dialog's
+    /// "Don't show this again" checkbox writes 0 and its OK button persists that to config.cfg, so the next
+    /// launch goes straight to the menu. `set cl_startup_disclaimer 1` in the console brings it back.
+    /// </summary>
+    private void MaybeShowStartupDisclaimer()
+    {
+        if (MenuState.Cvars.GetFloat("cl_startup_disclaimer") == 0f)
+            return;
+        _menu.Push(new DialogDisclaimer());
     }
 
     /// <summary>
@@ -309,6 +328,7 @@ public partial class Shell : Node
             "hudpanels" => new DialogHudPanels(),
             "hudweapons" => new DialogHudPanelWeapons(),
             "cvarlist" => new DialogCvarList(),
+            "disclaimer" => new DialogDisclaimer(),
             "sandbox" => new DialogSandboxTools(),
             _ => null,
         };

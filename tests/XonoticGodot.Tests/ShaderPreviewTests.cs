@@ -21,7 +21,7 @@ public class ShaderPreviewTests
 {
     private static readonly string DataDir =
         System.Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+        ?? TestPaths.Data;
 
     private readonly ITestOutputHelper _out;
     public ShaderPreviewTests(ITestOutputHelper output) => _out = output;

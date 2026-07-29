@@ -114,8 +114,7 @@ public class ViewModelRenderBucketTests
     //  h_rl = Devastator (DPM, full-model, the reported weapon); h_arc = Arc (IQM, invisible-hand).
     // ------------------------------------------------------------------------------------------------
 
-    private const string Weapons =
-        @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir\models\weapons";
+    private static readonly string Weapons = TestPaths.CoreWeapons;
 
     [Fact]
     public void Real_HRl_Devastator_Is_FullModel_RenderHRig()

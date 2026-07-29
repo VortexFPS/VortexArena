@@ -19,7 +19,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class SkeletonTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     /// <summary>A 3-bone chain root(0) → spine(1) → head(2), each 16u up its parent, plus two frames that
     /// shift the spine (+x) / head (+y) so the upper/lower split is observable.</summary>

@@ -27,9 +27,7 @@ namespace XonoticGodot.Tests;
 [Collection("GlobalState")]
 public class IqmParsePerfBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private readonly ITestOutputHelper _out;
     public IqmParsePerfBench(ITestOutputHelper output) => _out = output;

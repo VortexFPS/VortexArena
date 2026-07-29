@@ -16,7 +16,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class BspPvsTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     /// <summary>
     /// A minimal vised BSP: one splitting plane at X=0 with two leaves/clusters, where each cluster sees ONLY

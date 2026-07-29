@@ -18,7 +18,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class MapEntityFilterTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private static readonly MapEntityFilter.GametypeContext Dm = new("dm", TeamPlay: false, HaveTeamSpawns: false);
     private static readonly MapEntityFilter.GametypeContext Ctf = new("ctf", TeamPlay: true, HaveTeamSpawns: true);

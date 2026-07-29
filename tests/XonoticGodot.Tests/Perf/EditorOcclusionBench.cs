@@ -23,9 +23,7 @@ namespace XonoticGodot.Tests.Perf;
 [Collection("GlobalState")]
 public class EditorOcclusionBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private static bool Enabled => Environment.GetEnvironmentVariable("XG_BENCH") is { Length: > 0 };
 

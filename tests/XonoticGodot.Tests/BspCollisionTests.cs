@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class BspCollisionTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
     private const int Solid = SuperContents.Solid;
 
     // ---- synthetic two-box BSP: one worldspawn brush + one inline-model brush -----------------------

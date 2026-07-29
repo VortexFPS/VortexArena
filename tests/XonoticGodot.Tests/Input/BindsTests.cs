@@ -250,7 +250,7 @@ public class BindsTests
     }
 
     // The real reference checkout (mirrors ConfigRealDataTests): CI-portable — no-op when absent.
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
     private static bool HaveData => File.Exists(Path.Combine(Pk3Dir, "binds-xonotic.cfg"));
     private static Func<string, string?> DiskReader => path =>
     {

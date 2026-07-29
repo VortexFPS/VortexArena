@@ -78,7 +78,7 @@ public class BspPatchCollisionTests
 
     // ---- real data: the exact Stormkeep spot from the bug report -------------------------------------
 
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     [Fact]
     public void Stormkeep_Grate_Over_Lava_Collides()

@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class IqmReaderTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private const int HeaderSize = 124;
     private const int Joint2Size = 48;

@@ -30,7 +30,7 @@ namespace XonoticGodot.Tests;
 [Collection("GlobalState")]
 public class BotPerfBench
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
     private const string Map = "atelier";
     private const string ReportPath = @"C:\Users\Bryan\AppData\Local\Temp\botbench.txt";
 

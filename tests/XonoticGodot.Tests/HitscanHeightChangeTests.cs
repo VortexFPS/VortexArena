@@ -34,7 +34,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class HitscanHeightChangeTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     /// <summary>Exact segment vs AABB (slab method), returning the ENTRY fraction. No sampling — a thin
     /// brush cannot slip between steps. <paramref name="entry"/> orders hits along the ray, which is what

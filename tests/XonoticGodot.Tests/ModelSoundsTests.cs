@@ -18,7 +18,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class ModelSoundsTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private const string Sample =
         "//TAG: soldier\n" +

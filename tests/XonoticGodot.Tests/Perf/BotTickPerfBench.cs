@@ -33,9 +33,7 @@ namespace XonoticGodot.Tests;
 [Collection("GlobalState")]
 public class BotTickPerfBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
     private static string Map => Environment.GetEnvironmentVariable("XG_MAP") ?? "stormkeep";
     private static int BotCount =>
         int.TryParse(Environment.GetEnvironmentVariable("XG_BOTS"), out int n) ? n : 6;

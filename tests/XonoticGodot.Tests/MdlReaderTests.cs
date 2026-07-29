@@ -17,7 +17,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class MdlReaderTests
 {
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
 
     // ── Synthetic minimal MDL (no assets needed) ───────────────────────────────────────────────────
 

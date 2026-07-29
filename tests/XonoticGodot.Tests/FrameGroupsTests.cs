@@ -17,7 +17,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class FrameGroupsTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     [Fact]
     public void FourTokenLine_ParsesAllFields()

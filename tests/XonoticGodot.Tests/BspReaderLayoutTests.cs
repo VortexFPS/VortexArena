@@ -21,7 +21,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class BspReaderLayoutTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private const int LumpCount = 17;
     private const int HeaderSize = 8 + LumpCount * 8; // 144

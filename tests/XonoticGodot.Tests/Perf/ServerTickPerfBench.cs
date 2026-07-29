@@ -40,9 +40,7 @@ namespace XonoticGodot.Tests;
 [Collection("GlobalState")]
 public class ServerTickPerfBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
     private const string Map = "atelier";
 
     private readonly ITestOutputHelper _out;

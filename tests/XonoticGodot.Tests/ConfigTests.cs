@@ -193,7 +193,7 @@ public class ConfigInterpreterTests
 /// </summary>
 public class ConfigRealDataTests
 {
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
 
     /// <summary>A file-reader that resolves a config path relative to the pk3dir root (DP gamedir search).</summary>
     private static Func<string, string?> DiskReader => path =>

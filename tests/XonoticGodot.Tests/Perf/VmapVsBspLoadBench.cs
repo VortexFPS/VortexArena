@@ -25,9 +25,7 @@ namespace XonoticGodot.Tests.Perf;
 [Collection("GlobalState")]
 public class VmapVsBspLoadBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     /// <summary>
     /// Explicit opt-in — an experiment, not an assertion, and the default content path is ABSOLUTE,

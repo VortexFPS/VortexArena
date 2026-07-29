@@ -280,7 +280,7 @@ public class WarpzoneTraceTests
     [Fact]
     public void Stormkeep_HitscanTrace_CrossesTheRealWarpzone()
     {
-        const string dataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+        string dataDir = TestPaths.Data;
         if (!System.IO.Directory.Exists(dataDir)) return;
         using var vfs = new XonoticGodot.Formats.Vfs.VirtualFileSystem();
         if (!vfs.MountGameDir(dataDir)) return;

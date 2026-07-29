@@ -280,7 +280,7 @@ public class MuzzleOffsetTests
 
     // ---- real-asset regression (guards the v_-vs-h_ wiring: the shot tag lives on the h_ HAND RIG) --
 
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
 
     /// <summary>
     /// The real shipped weapon HAND RIGS (h_*.iqm) carry the <c>shot</c>/<c>tag_shot</c> tag and yield a sensible

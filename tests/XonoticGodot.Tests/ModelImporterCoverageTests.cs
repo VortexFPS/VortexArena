@@ -27,8 +27,8 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class ModelImporterCoverageTests
 {
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
+    private static readonly string DataDir = TestPaths.Data;
 
     // The four model magics the port's AssetLoader.BuildModelFactory dispatches (extensions lie, so dispatch
     // is by leading magic — same tags AssetLoader uses as MagicIqm/MagicDpm/MagicMd3/MagicMdl).

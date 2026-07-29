@@ -184,8 +184,8 @@ public class SkinValuesTests
     {
         string[] roots =
         {
-            @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir",
-            @"C:\Users\Bryan\Projects\Xonotic\Base\data\xonotic-data.pk3dir",
+            TestPaths.CorePk3Dir,
+            TestPaths.BaseCorePk3Dir,
         };
         foreach (string r in roots)
         {

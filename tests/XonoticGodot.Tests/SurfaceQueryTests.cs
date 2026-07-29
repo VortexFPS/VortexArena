@@ -21,7 +21,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class SurfaceQueryTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     // A unit-ish quad in the YZ plane at x=0, centred on the origin, wound so cross(c-a, b-a) faces +X
     // (matching the +X vertex normals). Triangles are face-local indices, as in a real BSP.

@@ -37,9 +37,7 @@ namespace XonoticGodot.Tests.Perf;
 [Collection("GlobalState")]
 public class VisibilityValueBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     /// <summary>
     /// Explicit opt-in, because these are experiments rather than assertions and the default content path is

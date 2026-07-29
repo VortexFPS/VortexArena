@@ -45,7 +45,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class VisualQaTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     // One VFS mount for the whole class (the asset tree is large; the data tests share a single read-only mount).
     private static readonly Lazy<VirtualFileSystem?> Vfs = new(() =>

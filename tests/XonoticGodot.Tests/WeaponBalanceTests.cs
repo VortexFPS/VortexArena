@@ -107,7 +107,7 @@ public class WeaponBalanceTests
     [Fact]
     public void Real_Balance_Config_Flows_Into_Weapon_Configure()
     {
-        const string pk3 = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+        string pk3 = TestPaths.CorePk3Dir;
         if (!File.Exists(Path.Combine(pk3, "bal-wep-xonotic.cfg"))) return; // CI-portable: no checkout, no-op
 
         var facade = new EngineServices(new CollisionWorld());

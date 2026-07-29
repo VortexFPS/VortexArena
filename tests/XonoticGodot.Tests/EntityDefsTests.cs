@@ -14,7 +14,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class EntityDefsTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private const string Sample = """
         <?xml version="1.0"?>
@@ -251,7 +251,10 @@ public class EntityDefsTests
     {
         // Same self-skip convention as the other real-data tests: absent assets means no assertion, not a
         // failure, so a clean checkout still runs the suite green.
-        const string path = DataDir + @"\xonotic-maps.pk3dir\scripts\entities.ent";
+        // NOTE: this lives in the map SOURCE tree, which the repo restructure moves out of the runtime
+        // content root into the VortexMaps submodule — after that this test self-skips unless the
+        // submodule is checked out. See planning/repo-restructure-2026-07-29.md §5.2.
+        string path = Path.Combine(DataDir, "xonotic-maps.pk3dir", "scripts", "entities.ent");
         if (!File.Exists(path))
             return;
 

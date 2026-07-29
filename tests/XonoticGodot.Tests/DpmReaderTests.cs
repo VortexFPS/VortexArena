@@ -22,7 +22,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class DpmReaderTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     // ---------------------------------------------------------------- synthetic builder (big-endian!)
 

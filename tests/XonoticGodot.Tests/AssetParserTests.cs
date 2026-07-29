@@ -14,7 +14,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class AssetParserTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     [Fact]
     public void Vfs_Mounts_And_Finds_Content()

@@ -33,7 +33,7 @@ namespace XonoticGodot.Tests;
 [Collection("GlobalState")]
 public class MuzzleDumpProbe
 {
-    private const string Weapons = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir\models\weapons";
+    private static readonly string Weapons = TestPaths.CoreWeapons;
     private const string ReportPath = @"C:\Users\Bryan\AppData\Local\Temp\muzzledump.txt";
 
     // The attach socket the v_ model rides on, in QC resolution order (setattachment ... "weapon").

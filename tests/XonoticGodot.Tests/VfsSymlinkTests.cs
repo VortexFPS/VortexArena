@@ -112,7 +112,7 @@ public class VfsSymlinkTests
     [Fact]
     public void RealData_DedupSymlink_NowReadsAsRealDds()
     {
-        const string dataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+        string dataDir = TestPaths.Data;
         if (!Directory.Exists(dataDir)) return;
 
         using var vfs = new VirtualFileSystem();

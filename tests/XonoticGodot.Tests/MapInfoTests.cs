@@ -13,7 +13,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class MapInfoTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private const string Fuse = """
         title Fuse

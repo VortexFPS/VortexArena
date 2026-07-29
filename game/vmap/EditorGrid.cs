@@ -61,6 +61,26 @@ public sealed partial class EditorGrid : MeshInstance3D
     public const float MinSize = 1f;
     public const float MaxSize = 1024f;
 
+    // C2 STANDING RULE (godot#105750 / planning/PERFORMANCE_REPORT.md C2), same as PlayerSkinShader: these are
+    // `static readonly StringName`, not `const string`. SetShaderParameter takes a StringName, so a string
+    // literal there mints an allocation per call — and _Process pushes all nine every frame the grid is on.
+    // The XG0002 analyzer flags a literal reaching a StringName API from _Process/_PhysicsProcess/_Draw.
+
+    /// <summary>Uniforms: grid spacing, major-line interval, and the two fade distances.</summary>
+    private static readonly StringName GridSizeUniform = "grid_size";
+    private static readonly StringName MajorEveryUniform = "major_every";
+    private static readonly StringName FadeStartUniform = "fade_start";
+    private static readonly StringName FadeEndUniform = "fade_end";
+
+    /// <summary>Uniforms: per-line-class opacity, scaled down while the ortho view carries the wireframe.</summary>
+    private static readonly StringName MinorAlphaUniform = "minor_alpha";
+    private static readonly StringName MajorAlphaUniform = "major_alpha";
+
+    /// <summary>Uniforms: the highlighted face's plane and tint (the plane being hovered or dragged).</summary>
+    private static readonly StringName HlActiveUniform = "hl_active";
+    private static readonly StringName HlPlaneUniform = "hl_plane";
+    private static readonly StringName HlColorUniform = "hl_color";
+
     private ShaderMaterial? _material;
     private EditorController? _controller;
 
@@ -111,10 +131,10 @@ public sealed partial class EditorGrid : MeshInstance3D
             return;
 
         float size = Mathf.Clamp(Cvar(CvarSize, 64f), MinSize, MaxSize);
-        _material.SetShaderParameter("grid_size", size);
-        _material.SetShaderParameter("major_every", MathF.Max(1f, Cvar(CvarMajorEvery, 8f)));
-        _material.SetShaderParameter("fade_start", MathF.Max(0f, Cvar(CvarFadeStart, 1024f)));
-        _material.SetShaderParameter("fade_end", MathF.Max(1f, Cvar(CvarFadeEnd, 6144f)));
+        _material.SetShaderParameter(GridSizeUniform, size);
+        _material.SetShaderParameter(MajorEveryUniform, MathF.Max(1f, Cvar(CvarMajorEvery, 8f)));
+        _material.SetShaderParameter(FadeStartUniform, MathF.Max(0f, Cvar(CvarFadeStart, 1024f)));
+        _material.SetShaderParameter(FadeEndUniform, MathF.Max(1f, Cvar(CvarFadeEnd, 6144f)));
 
         // Tint the grid ON the face being worked with, so the plane you are about to move reads distinctly from
         // the rest of the world grid. Uses the DRAG selection while dragging (that is the plane actually moving)
@@ -143,12 +163,12 @@ public sealed partial class EditorGrid : MeshInstance3D
 
         // The ortho view carries the geometry as a wireframe, so a full-strength grid competes with it there.
         float alphaScale = _controller?.Ortho is { IsOpen: true } ? EditorOrthoView.GridAlphaScale : 1f;
-        _material.SetShaderParameter("minor_alpha", 0.20f * alphaScale);
-        _material.SetShaderParameter("major_alpha", 0.42f * alphaScale);
+        _material.SetShaderParameter(MinorAlphaUniform, 0.20f * alphaScale);
+        _material.SetShaderParameter(MajorAlphaUniform, 0.42f * alphaScale);
 
-        _material.SetShaderParameter("hl_active", active ? 1f : 0f);
-        _material.SetShaderParameter("hl_plane", plane);
-        _material.SetShaderParameter("hl_color", tint);
+        _material.SetShaderParameter(HlActiveUniform, active ? 1f : 0f);
+        _material.SetShaderParameter(HlPlaneUniform, plane);
+        _material.SetShaderParameter(HlColorUniform, tint);
     }
 
     private static float Cvar(string name, float fallback)

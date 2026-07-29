@@ -806,8 +806,8 @@ public sealed class WaypointNetwork
     /// </summary>
     public List<Waypoint>? FindPath(IReadOnlyList<(Waypoint Wp, float Cost)> seeds, Waypoint to)
     {
-        if (seeds.Count == 0)
-            return null;
+        if (seeds.Count == 0 || to.Index < 0)
+            return null;   // a goal the editor deleted is no longer in the graph (see the other FindPath)
 
         int n = _nodes.Count;
         if (_gScore.Length < n)
@@ -871,6 +871,12 @@ public sealed class WaypointNetwork
     {
         if (ReferenceEquals(from, to))
             return new List<Waypoint> { from };
+
+        // A node the editor deleted keeps its object identity but leaves the graph with Index = -1, and a bot
+        // can still be holding a reference to it from the route it was following. The neighbour loops below
+        // already skip those; the endpoints have to be checked too, or the first score write indexes at -1.
+        if (from.Index < 0 || to.Index < 0)
+            return null;
 
         int n = _nodes.Count;
         if (_gScore.Length < n)

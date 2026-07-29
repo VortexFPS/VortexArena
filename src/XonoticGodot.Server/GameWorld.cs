@@ -4656,6 +4656,13 @@ public sealed class GameWorld
     ///
     /// Only entities THIS spawned are removed. Players, projectiles, and anything a gametype created stay put,
     /// so dropping into playtest does not reset the session around you.
+    ///
+    /// "This spawned" means everything the map spawn PRODUCED, not just the edicts read out of the dict list.
+    /// A spawnfunc creates more entities than it is given: a door builds its trigger, a platform its trigger,
+    /// an item its replacement. Removing only the top-level edicts orphans all of those, and the next
+    /// reconciliation adds a second set on top — so a few EDIT/PLAYTEST toggles leave a map with doors that
+    /// open from triggers belonging to doors that no longer exist. The set is therefore captured by diffing
+    /// the live entity table across the respawn, which needs no cooperation from the spawnfuncs.
     /// </summary>
     public void RespawnMapEntities(IReadOnlyList<EntityDict> entities)
     {
@@ -4666,8 +4673,23 @@ public sealed class GameWorld
                 Api.Entities.Remove(e);
         _spawnedMapEntities.Clear();
 
+        // Everything alive before the spawn. Nothing else runs in between (this is one synchronous call under
+        // the sim gate), so anything present afterwards that is not in here came from the map spawn.
+        var before = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        IReadOnlyList<Entity>? all = Api.Entities.All;
+        if (all is not null)
+            foreach (Entity e in all)
+                if (e is not null && !e.IsFreed)
+                    before.Add(e);
+
         _mapEntities = entities;
         SpawnMapEntities();
+
+        if (all is null)
+            return;
+        foreach (Entity e in all)
+            if (e is not null && !e.IsFreed && !before.Contains(e) && !_spawnedMapEntities.Contains(e))
+                _spawnedMapEntities.Add(e);
     }
 
     /// <summary>

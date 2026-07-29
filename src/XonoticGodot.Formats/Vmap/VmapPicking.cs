@@ -566,7 +566,7 @@ public static class VmapPicking
         => (f.SurfaceFlags & SurfaceNoDraw) == 0 && !VmapBrush.IsToolMaterial(f.Material);
 
     /// <summary>Is a coplanar point inside a convex polygon? (Consistent sign of the edge cross products.)</summary>
-    private static bool PointInPolygon(Vector3[] w, Vector3 normal, Vector3 p)
+    internal static bool PointInPolygon(Vector3[] w, Vector3 normal, Vector3 p)
     {
         for (int i = 0; i < w.Length; i++)
         {
@@ -705,6 +705,74 @@ public static class VmapPicking
                         TargetPoints = new[] { a, b },
                     };
                 }
+            }
+        }
+
+        // Patch control points and their spans, at the same two tiers. A patch is geometry a mapper aligns to
+        // exactly as much as a brush is — a wall meeting the lip of a curved platform is the same job — and
+        // leaving them out meant the snap silently stopped working near the parts of a map most likely to
+        // need it.
+        foreach (VmapPickIndex.PatchEntry patch in index.Patches)
+        {
+            if (!VmapPickIndex.SphereHitsBox(position, radius, patch.Mins, patch.Maxs))
+                continue;
+
+            foreach (Vector3 v in patch.Patch.Controls)
+            {
+                float d = (v - position).LengthSquared();
+                if (d > radiusSq || d >= bestDist)
+                    continue;
+                bestDist = d;
+                best = new SnapResult
+                {
+                    Snapped = true,
+                    Position = v,
+                    TargetKind = VmapSelectionKind.Vertex,
+                    TargetPoints = new[] { v },
+                };
+            }
+        }
+
+        if (best.Snapped)
+            return best;
+
+        // --- face plane ---
+        //
+        // Last, and deliberately so: it is the least specific target, and it is what makes a brush land FLUSH
+        // against a wall it is nowhere near a corner of. Only inside the face's winding — an infinite plane
+        // would drag things onto surfaces they are not over, from across the map.
+        foreach (VmapPickIndex.Entry entry in index.Entries)
+        {
+            if (excludeBrushIds is not null && excludeBrushIds.Contains(entry.Brush.Id))
+                continue;
+            if (!VmapPickIndex.SphereHitsBox(position, radius, entry.Mins, entry.Maxs))
+                continue;
+
+            for (int fi = 0; fi < entry.Windings.Length && fi < entry.Brush.Faces.Count; fi++)
+            {
+                Vector3[] w = entry.Windings[fi];
+                if (w.Length < 3)
+                    continue;
+
+                VmapPlane plane = entry.Brush.Faces[fi].Plane;
+                float signed = Vector3.Dot(plane.Normal, position) - plane.Dist;
+                float d = MathF.Abs(signed);
+                if (d > radius || d * d >= bestDist)
+                    continue;
+
+                Vector3 onPlane = position - plane.Normal * signed;
+                if (!PointInPolygon(w, plane.Normal, onPlane))
+                    continue;
+
+                bestDist = d * d;
+                best = new SnapResult
+                {
+                    Snapped = true,
+                    Position = onPlane,
+                    TargetKind = VmapSelectionKind.Face,
+                    TargetBrushId = entry.Brush.Id,
+                    TargetPoints = w,
+                };
             }
         }
 

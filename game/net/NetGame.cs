@@ -8013,6 +8013,39 @@ public sealed partial class NetGame : Node3D
             if (_editor?.BevelEdge(sz) == true)
                 RefreshEditorWorld();
         });
+        // (T5) Geometry snapping: on/off, and a distance you can widen when you are placing something
+        // roughly and tighten when neighbours are close enough that a generous radius grabs the wrong one.
+        interp.RegisterCommand("editor_snap", a =>
+        {
+            if (Menu.MenuState.Cvars is not { } cv) return;
+            bool on = cv.GetFloat(Vmap.EditorController.CvarSnapEnabled) == 0f;
+            if (a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float v))
+                on = v != 0f;
+            cv.Set(Vmap.EditorController.CvarSnapEnabled, on ? "1" : "0");
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"editor: geometry snap {(on ? "ON" : "OFF")} ({cv.GetFloat(Vmap.EditorController.CvarSnapRadius):0.#}u)");
+        });
+
+        interp.RegisterCommand("editor_snap_dist", a =>
+        {
+            if (Menu.MenuState.Cvars is not { } cv) return;
+            float cur = Math.Clamp(cv.GetFloat(Vmap.EditorController.CvarSnapRadius), 1f, 256f);
+            string arg = a.Count > 1 ? a[1] : "";
+            float next = arg switch
+            {
+                "+" or "up" => XonoticGodot.Formats.Vmap.VmapEdit.StepGridSize(cur, +1, 1f, 256f),
+                "-" or "down" => XonoticGodot.Formats.Vmap.VmapEdit.StepGridSize(cur, -1, 1f, 256f),
+                _ => float.TryParse(arg, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float x)
+                    ? Math.Clamp(x, 1f, 256f)
+                    : cur,
+            };
+            cv.Set(Vmap.EditorController.CvarSnapRadius,
+                next.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+            XonoticGodot.Common.Diagnostics.Log.Info($"editor: snap distance {next:0.#}u");
+        });
+
         interp.RegisterCommand("editor_snap_grid", _ =>
         {
             if (_editor?.SnapSelectionToGrid() == true)

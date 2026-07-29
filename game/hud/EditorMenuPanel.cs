@@ -720,10 +720,26 @@ public partial class EditorMenuPanel : HudPanel
             },
             new()
             {
+                // Snapping to nearby GEOMETRY — a different thing from aligning to the grid above, which is
+                // why it keeps its own word in the menu and on the HUD.
                 Label = "Geometry snap",
-                Detail = $"{GlobalF(EditorController.CvarSnapRadius, 16f):0.#}u",
-                Command = $"toggle {EditorController.CvarSnapEnabled}",
+                Detail = $"vertices · edges · faces",
+                Command = "editor_snap",
                 Checked = GlobalF(EditorController.CvarSnapEnabled, 1f) != 0f,
+                KeepOpen = true,
+            },
+            new()
+            {
+                Label = "Snap distance up",
+                Detail = $"{GlobalF(EditorController.CvarSnapRadius, 16f):0.#}u",
+                Command = "editor_snap_dist +",
+                KeepOpen = true,
+            },
+            new()
+            {
+                Label = "Snap distance down",
+                Detail = $"{GlobalF(EditorController.CvarSnapRadius, 16f):0.#}u",
+                Command = "editor_snap_dist -",
                 KeepOpen = true,
             },
         };

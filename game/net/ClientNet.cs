@@ -592,6 +592,7 @@ public sealed class ClientNet : IDisposable
             case NetControl.RadarLinks: HandleRadarLinks(ref r); break;
             case NetControl.ClientInit: HandleClientInit(ref r); break;
             case NetControl.MapVote: HandleMapVote(ref r); break;
+            case NetControl.EditorOp: HandleEditorOp(ref r); break;
             default: break;
         }
     }
@@ -944,6 +945,21 @@ public sealed class ClientNet : IDisposable
         if (r.BadRead)
             return;
         PrintReceived?.Invoke(text);
+    }
+
+    /// <summary>
+    /// Raised with one applied map-editor op, as a <see cref="XonoticGodot.Formats.Vmap.VmapOpWire"/> line
+    /// (design doc §11.7). The host decodes and applies it to its editing session — the server has already
+    /// validated it, so a line arriving here is an edit that HAPPENED, not one being proposed.
+    /// </summary>
+    public event Action<string>? EditorOpReceived;
+
+    private void HandleEditorOp(ref BitReader r)
+    {
+        string line = r.ReadString();
+        if (r.BadRead)
+            return;
+        EditorOpReceived?.Invoke(line);
     }
 
     private void HandleAccept(ref BitReader r)

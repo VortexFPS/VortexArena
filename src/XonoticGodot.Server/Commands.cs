@@ -1662,15 +1662,11 @@ public sealed class Commands
 
         // Client id: the caller's entity identity is enough to keep two editors' locks apart.
         int clientId = ctx.Caller?.GetHashCode() ?? 0;
-        XonoticGodot.Formats.Vmap.VmapEditServer.Result result = EditorOps.Submit(clientId, ctx.ArgTail(1));
 
-        ctx.Print(result switch
-        {
-            XonoticGodot.Formats.Vmap.VmapEditServer.Result.Applied => "editor_op: applied",
-            XonoticGodot.Formats.Vmap.VmapEditServer.Result.Locked => "editor_op: brush is being edited by someone else",
-            XonoticGodot.Formats.Vmap.VmapEditServer.Result.Rejected => "editor_op: refused — that would break the brush",
-            _ => "editor_op: malformed op",
-        });
+        // Queued, not applied here. This runs on whichever thread read the packet, and the document belongs to
+        // the editor on the main thread; the host drains the queue there and broadcasts what landed. The reply
+        // is therefore an acknowledgement of receipt — the outcome arrives as the echo, or as its absence.
+        EditorOps.Enqueue(clientId, ctx.ArgTail(1));
         return true;
     }
 

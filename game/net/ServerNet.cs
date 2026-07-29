@@ -1147,6 +1147,26 @@ public sealed class ServerNet : IDisposable
                 SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
+    /// <summary>
+    /// Broadcast one applied map-editor op to every accepted client (design doc §11.7, phase E6).
+    ///
+    /// The line is the op as it was APPLIED, so a create carries the id the server assigned rather than a
+    /// request for one — that is what keeps every peer's document numbered identically. Sent to the sender too:
+    /// a remote editor does not apply optimistically, it waits for its own op to come back, which is what makes
+    /// a refused edit simply not happen rather than something to roll back.
+    /// </summary>
+    public void BroadcastEditorOp(string wireLine)
+    {
+        if (string.IsNullOrEmpty(wireLine))
+            return;
+        _scratchWriter.Reset();
+        _scratchWriter.WriteByte((byte)NetControl.EditorOp);
+        _scratchWriter.WriteString(wireLine);
+        foreach (PeerState st in _peers.Values)
+            if (st.Accepted)
+                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+    }
+
     // =============================================================================================
     // [T46] chat delivery — per-player sprint + team/private routing with ignore filtering. The chat engine
     // (Chat.Say) does the routing/ignore/flood logic over ClientManager.Players; these are the net send paths.

@@ -416,6 +416,12 @@ public sealed class SetFaceMaterialOp : IVmapOp
 
     public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
 
+    /// <summary>Face retextured. Read by the wire codec.</summary>
+    public int FaceIndex => _faceIndex;
+
+    /// <summary>Shader name written to the face. Read by the wire codec.</summary>
+    public string Material => _material;
+
     public string Describe() => $"Set material of brush {_brushId} face {_faceIndex} to {_material}";
 
     public bool Apply(VmapDocument doc)
@@ -513,17 +519,39 @@ public sealed class CreateBoxBrushOp : IVmapOp
     private readonly Vector3 _mins;
     private readonly Vector3 _maxs;
     private readonly string _material;
+    private readonly int _forcedId;
     private int _assignedId;
 
-    public CreateBoxBrushOp(Vector3 cornerA, Vector3 cornerB, string material)
+    /// <param name="forcedId">
+    /// The id to use instead of minting a fresh one — the E6 replication handshake (see <see cref="VmapOpWire"/>).
+    /// Zero means "allocate", which is what a locally-originated create passes. A peer replaying an op the server
+    /// already applied passes the id the server assigned, so the two documents agree on which brush is which.
+    /// </param>
+    public CreateBoxBrushOp(Vector3 cornerA, Vector3 cornerB, string material, int forcedId = 0)
     {
         _mins = Vector3.Min(cornerA, cornerB);
         _maxs = Vector3.Max(cornerA, cornerB);
         _material = material ?? string.Empty;
+        _forcedId = forcedId;
     }
 
     /// <summary>Id given to the created brush; valid after a successful <see cref="Apply"/>.</summary>
     public int CreatedBrushId => _assignedId;
+
+    /// <summary>
+    /// The id this op carries on the wire: what the server assigned once it has run, and the requested id (or
+    /// zero, meaning "you choose") before that.
+    /// </summary>
+    public int WireId => _assignedId != 0 ? _assignedId : _forcedId;
+
+    /// <summary>Box corners and material. Read by the wire codec.</summary>
+    public Vector3 Mins => _mins;
+
+    /// <inheritdoc cref="Mins"/>
+    public Vector3 Maxs => _maxs;
+
+    /// <inheritdoc cref="Mins"/>
+    public string Material => _material;
 
     // The id is not known until Apply allocates it, so before that this reports nothing to snapshot — which is
     // correct: there is no prior state for a brush that does not exist yet.
@@ -537,7 +565,7 @@ public sealed class CreateBoxBrushOp : IVmapOp
         if (size.X <= 0f || size.Y <= 0f || size.Z <= 0f)
             return false; // zero-thickness drag
 
-        _assignedId = doc.NextBrushId();
+        _assignedId = _forcedId != 0 ? _forcedId : doc.NextBrushId();
         var brush = new VmapBrush { Id = _assignedId, ContentFlags = 1 /* Q3 solid */ };
 
         void Face(Vector3 n, float d) => brush.Faces.Add(new VmapFace
@@ -601,16 +629,19 @@ public sealed class ClipBrushOp : IVmapOp
     private readonly int _brushId;
     private readonly VmapPlane _plane;
     private readonly bool _keepBothHalves;
+    private readonly int _forcedId;
     private int _createdId;
 
     /// <param name="brushId">Brush to split.</param>
     /// <param name="plane">Cutting plane; the brush keeps the half BEHIND the normal.</param>
     /// <param name="keepBothHalves">When true the discarded half becomes a second brush instead.</param>
-    public ClipBrushOp(int brushId, VmapPlane plane, bool keepBothHalves = false)
+    /// <param name="forcedId">Id for the off-cut, when replaying a server-applied op (see <see cref="VmapOpWire"/>).</param>
+    public ClipBrushOp(int brushId, VmapPlane plane, bool keepBothHalves = false, int forcedId = 0)
     {
         _brushId = brushId;
         _plane = plane;
         _keepBothHalves = keepBothHalves;
+        _forcedId = forcedId;
     }
 
     /// <summary>Id of the off-cut brush when <c>keepBothHalves</c> was set; 0 otherwise.</summary>
@@ -643,7 +674,7 @@ public sealed class ClipBrushOp : IVmapOp
 
         if (_keepBothHalves)
         {
-            _createdId = doc.NextBrushId();
+            _createdId = _forcedId != 0 ? _forcedId : doc.NextBrushId();
             other.Id = _createdId;
             doc.Brushes.Add(other);
 
@@ -860,6 +891,7 @@ public sealed class PasteOp : IVmapOp
     private readonly Vector3 _offset;
     private readonly List<int> _createdBrushIds = new();
     private readonly List<int> _createdPatchIds = new();
+    private readonly List<int> _createdEntityIds = new();
 
     /// <summary>
     /// Snapshot <paramref name="clipboard"/> and place its pivot at <paramref name="at"/>.
@@ -882,6 +914,9 @@ public sealed class PasteOp : IVmapOp
     /// <summary>Patch ids created by the paste; valid after a successful <see cref="Apply"/>.</summary>
     public IReadOnlyList<int> CreatedPatchIds => _createdPatchIds;
 
+    /// <summary>Entity ids created by the paste; valid after a successful <see cref="Apply"/>.</summary>
+    public IReadOnlyList<int> CreatedEntityIds => _createdEntityIds;
+
     // Nothing pre-exists to snapshot: the session detects the additions itself and undo removes them.
     public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
 
@@ -901,6 +936,7 @@ public sealed class PasteOp : IVmapOp
 
         _createdBrushIds.Clear();
         _createdPatchIds.Clear();
+        _createdEntityIds.Clear();
 
         var brushRemap = new Dictionary<int, int>();
         var patchRemap = new Dictionary<int, int>();
@@ -976,7 +1012,10 @@ public sealed class PasteOp : IVmapOp
             _createdPatchIds.Add(p.Id);
         }
         foreach (VmapEntity e in addedEntities)
+        {
             doc.Entities.Add(e);
+            _createdEntityIds.Add(e.Id);
+        }
 
         return true;
     }
@@ -1102,20 +1141,40 @@ public sealed class ClipSelectionOp : IVmapOp
     private readonly int[] _brushIds;
     private readonly VmapPlane _plane;
     private readonly ClipKeep _keep;
+    private readonly int[] _forcedIds;
     private readonly List<int> _createdIds = new();
     private int _clipped;
 
-    public ClipSelectionOp(IReadOnlyList<int> brushIds, VmapPlane plane, ClipKeep keep)
+    /// <param name="forcedIds">
+    /// Ids for the off-cuts, consumed in order, when replaying a server-applied op (see <see cref="VmapOpWire"/>).
+    /// A replaying peer holds the same document and cuts the same brushes in the same order, so position in this
+    /// list identifies an off-cut as reliably as the id would.
+    /// </param>
+    public ClipSelectionOp(
+        IReadOnlyList<int> brushIds, VmapPlane plane, ClipKeep keep, IReadOnlyList<int>? forcedIds = null)
     {
         _brushIds = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
         _plane = plane;
         _keep = keep;
+        _forcedIds = forcedIds?.ToArray() ?? Array.Empty<int>();
     }
 
     public IReadOnlyList<int> TouchedBrushIds => _brushIds;
 
     /// <summary>Off-cut brushes produced when keeping both halves; valid after a successful <see cref="Apply"/>.</summary>
     public IReadOnlyList<int> CreatedBrushIds => _createdIds;
+
+    /// <summary>The cutting plane. Read by the wire codec.</summary>
+    public VmapPlane Plane => _plane;
+
+    /// <summary>Which half survives. Read by the wire codec.</summary>
+    public ClipKeep Keep => _keep;
+
+    /// <summary>
+    /// The off-cut ids this op carries on the wire: what the cut actually produced once it has run, and the
+    /// requested ids (usually none) before that.
+    /// </summary>
+    public IReadOnlyList<int> WireIds => _createdIds.Count > 0 ? _createdIds : _forcedIds;
 
     /// <summary>How many brushes the plane actually crossed.</summary>
     public int ClippedCount => _clipped;
@@ -1147,7 +1206,8 @@ public sealed class ClipSelectionOp : IVmapOp
 
         foreach (int id in _brushIds)
         {
-            var one = new ClipBrushOp(id, cut, _keep == ClipKeep.Both);
+            int forced = _createdIds.Count < _forcedIds.Length ? _forcedIds[_createdIds.Count] : 0;
+            var one = new ClipBrushOp(id, cut, _keep == ClipKeep.Both, forced);
             if (!one.Apply(doc))
                 continue;               // the plane missed this brush — leave it alone
 
@@ -1177,12 +1237,17 @@ public sealed class CreateEntityOp : IVmapOp
     private readonly string _className;
     private readonly Vector3 _origin;
     private readonly Dictionary<string, string> _fields;
+    private readonly int _forcedId;
     private int _assignedId;
 
-    public CreateEntityOp(string className, Vector3 origin, IReadOnlyDictionary<string, string>? fields = null)
+    /// <param name="forcedId">Id to use instead of minting one, when replaying a server-applied op
+    /// (see <see cref="VmapOpWire"/>).</param>
+    public CreateEntityOp(
+        string className, Vector3 origin, IReadOnlyDictionary<string, string>? fields = null, int forcedId = 0)
     {
         _className = className ?? throw new ArgumentNullException(nameof(className));
         _origin = origin;
+        _forcedId = forcedId;
         _fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (fields is not null)
             foreach (KeyValuePair<string, string> kv in fields)
@@ -1191,6 +1256,18 @@ public sealed class CreateEntityOp : IVmapOp
 
     /// <summary>Id given to the created entity; valid after a successful <see cref="Apply"/>.</summary>
     public int CreatedEntityId => _assignedId;
+
+    /// <summary>The id this op carries on the wire — assigned once it has run, requested before that.</summary>
+    public int WireId => _assignedId != 0 ? _assignedId : _forcedId;
+
+    /// <summary>Spawn class. Read by the wire codec.</summary>
+    public string ClassName => _className;
+
+    /// <summary>Placement. Read by the wire codec.</summary>
+    public Vector3 Origin => _origin;
+
+    /// <summary>Extra spawn keys set at creation. Read by the wire codec.</summary>
+    public IReadOnlyDictionary<string, string> Fields => _fields;
 
     public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
 
@@ -1205,7 +1282,7 @@ public sealed class CreateEntityOp : IVmapOp
         if (_className.Length == 0)
             return false;
 
-        _assignedId = doc.NextEntityId();
+        _assignedId = _forcedId != 0 ? _forcedId : doc.NextEntityId();
         var e = new VmapEntity { Id = _assignedId, ClassName = _className };
         foreach (KeyValuePair<string, string> kv in _fields)
             e.Fields[kv.Key] = kv.Value;
@@ -1483,6 +1560,12 @@ public sealed class SetEntityKeyOp : IVmapOp
 
     public IReadOnlyList<int> TouchedEntityIds => new[] { _entityId };
 
+    /// <summary>Spawn key written, and its new value ("" clears it). Read by the wire codec.</summary>
+    public string Key => _key;
+
+    /// <inheritdoc cref="Key"/>
+    public string Value => _value;
+
     public string Describe() => _value.Length == 0 ? $"Clear {_key}" : $"Set {_key} to {_value}";
 
     public bool Apply(VmapDocument doc)
@@ -1577,6 +1660,15 @@ public sealed class SetFaceFlagsOp : IVmapOp
     }
 
     public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
+
+    /// <summary>Face whose flags change. Read by the wire codec.</summary>
+    public int FaceIndex => _faceIndex;
+
+    /// <summary>Q3 surface and content bits written. Read by the wire codec.</summary>
+    public int SurfaceFlags => _surfaceFlags;
+
+    /// <inheritdoc cref="SurfaceFlags"/>
+    public int ContentFlags => _contentFlags;
 
     public string Describe() => $"Set flags on face {_faceIndex} of brush {_brushId}";
 
@@ -1753,11 +1845,14 @@ public sealed class CreatePatchOp : IVmapOp
     private readonly string _material;
     private readonly int _width;
     private readonly int _height;
+    private readonly int _forcedId;
     private int _assignedId;
 
+    /// <param name="forcedId">Id to use instead of minting one, when replaying a server-applied op
+    /// (see <see cref="VmapOpWire"/>).</param>
     public CreatePatchOp(
         PatchPrimitive kind, Vector3 cornerA, Vector3 cornerB, string material,
-        int width = 3, int height = 3)
+        int width = 3, int height = 3, int forcedId = 0)
     {
         _kind = kind;
         _mins = Vector3.Min(cornerA, cornerB);
@@ -1765,10 +1860,32 @@ public sealed class CreatePatchOp : IVmapOp
         _material = material ?? string.Empty;
         _width = width;
         _height = height;
+        _forcedId = forcedId;
     }
 
     /// <summary>Id given to the created patch; valid after a successful <see cref="Apply"/>.</summary>
     public int CreatedPatchId => _assignedId;
+
+    /// <summary>The id this op carries on the wire — assigned once it has run, requested before that.</summary>
+    public int WireId => _assignedId != 0 ? _assignedId : _forcedId;
+
+    /// <summary>Primitive shape, box and material. Read by the wire codec.</summary>
+    public PatchPrimitive Kind => _kind;
+
+    /// <inheritdoc cref="Kind"/>
+    public Vector3 Mins => _mins;
+
+    /// <inheritdoc cref="Kind"/>
+    public Vector3 Maxs => _maxs;
+
+    /// <inheritdoc cref="Kind"/>
+    public string Material => _material;
+
+    /// <summary>Control-grid dimensions. Read by the wire codec.</summary>
+    public int GridWidth => _width;
+
+    /// <inheritdoc cref="GridWidth"/>
+    public int GridHeight => _height;
 
     public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
 
@@ -1789,7 +1906,7 @@ public sealed class CreatePatchOp : IVmapOp
         if (!patch.IsValid)
             return false;
 
-        _assignedId = doc.NextPatchId();
+        _assignedId = _forcedId != 0 ? _forcedId : doc.NextPatchId();
         patch.Id = _assignedId;
         doc.Patches.Add(patch);
         return true;
@@ -1857,17 +1974,27 @@ public sealed class ExtrudeFaceOp : IVmapOp
     private readonly int _brushId;
     private readonly int _faceIndex;
     private readonly float _distance;
+    private readonly int _forcedId;
     private int _assignedId;
 
-    public ExtrudeFaceOp(int brushId, int faceIndex, float distance)
+    /// <param name="forcedId">Id to use instead of minting one, when replaying a server-applied op
+    /// (see <see cref="VmapOpWire"/>).</param>
+    public ExtrudeFaceOp(int brushId, int faceIndex, float distance, int forcedId = 0)
     {
         _brushId = brushId;
         _faceIndex = faceIndex;
         _distance = distance;
+        _forcedId = forcedId;
     }
 
     /// <summary>Id of the extruded brush; valid after a successful <see cref="Apply"/>.</summary>
     public int CreatedBrushId => _assignedId;
+
+    /// <summary>The id this op carries on the wire — assigned once it has run, requested before that.</summary>
+    public int WireId => _assignedId != 0 ? _assignedId : _forcedId;
+
+    /// <summary>Brush the swept face belongs to. Read by the wire codec.</summary>
+    public int SourceBrushId => _brushId;
 
     // The source brush is READ, not written — an extrude leaves it alone and adds a solid on top of it.
     public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
@@ -1930,7 +2057,7 @@ public sealed class ExtrudeFaceOp : IVmapOp
         if (brush.Faces.Count < 4 || !VmapWinding.IsClosedConvex(brush))
             return false;
 
-        _assignedId = doc.NextBrushId();
+        _assignedId = _forcedId != 0 ? _forcedId : doc.NextBrushId();
         brush.Id = _assignedId;
         brush.IsToolBrush = brush.ClassifyToolBrush();
         doc.Brushes.Add(brush);
@@ -1979,6 +2106,15 @@ public sealed class BevelEdgeOp : IVmapOp
     }
 
     public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
+
+    /// <summary>The edge being chamfered, in world space. Read by the wire codec.</summary>
+    public Vector3 EdgeA => _a;
+
+    /// <inheritdoc cref="EdgeA"/>
+    public Vector3 EdgeB => _b;
+
+    /// <summary>Chamfer depth in world units. Read by the wire codec.</summary>
+    public float Size => _size;
 
     public string Describe() => $"Bevel edge of brush {_brushId} by {_size:0.##}u";
 
@@ -2161,4 +2297,400 @@ public sealed class MovePatchControlOp : IVmapOp
         patch.Controls[_index] += _delta;
         return true;
     }
+}
+
+// =================================================================================================
+//  E6 — the generic "add these objects" op
+// =================================================================================================
+
+/// <summary>
+/// Add fully-formed brushes, patches and entities to a document (design doc §11.7, phase E6).
+///
+/// This is the wire form of any edit whose result cannot be described by a short gesture. A paste is the
+/// motivating case: its output is an arbitrary pile of geometry, so "replay the gesture" would mean shipping
+/// the sender's whole clipboard and trusting both sides to remap ids identically. Shipping the RESULT instead
+/// — here are the solids, here are their ids — removes that class of divergence.
+///
+/// Entity ownership travels as INDICES into this op's own object arrays rather than as ids. An index means the
+/// same thing before and after id assignment, so a receiver needs to know nothing about the sender's
+/// numbering, and the op is equally valid whether the ids arrive pre-assigned or are minted on apply.
+/// </summary>
+public sealed class AddObjectsOp : IVmapOp
+{
+    private readonly VmapBrush[] _brushes;
+    private readonly VmapPatch[] _patches;
+    private readonly VmapEntity[] _entities;
+    private readonly int[][] _entityBrushes;
+    private readonly int[][] _entityPatches;
+
+    private readonly List<int> _createdBrushIds = new();
+    private readonly List<int> _createdPatchIds = new();
+    private readonly List<int> _createdEntityIds = new();
+
+    /// <param name="brushes">Brushes to add. A non-zero <c>Id</c> is honoured; zero means "assign one".</param>
+    /// <param name="patches">Patches to add, same id rule.</param>
+    /// <param name="entities">Entities to add, same id rule. Their own BrushIds/PatchIds lists are IGNORED —
+    /// ownership comes from the index arrays, which is what makes the op independent of the sender's ids.</param>
+    /// <param name="entityBrushes">Per entity, the indices into <paramref name="brushes"/> it owns.</param>
+    /// <param name="entityPatches">Per entity, the indices into <paramref name="patches"/> it owns.</param>
+    public AddObjectsOp(
+        IReadOnlyList<VmapBrush> brushes,
+        IReadOnlyList<VmapPatch> patches,
+        IReadOnlyList<VmapEntity> entities,
+        IReadOnlyList<int[]>? entityBrushes = null,
+        IReadOnlyList<int[]>? entityPatches = null)
+    {
+        ArgumentNullException.ThrowIfNull(brushes);
+        ArgumentNullException.ThrowIfNull(patches);
+        ArgumentNullException.ThrowIfNull(entities);
+
+        _brushes = brushes.Select(b => b.Clone()).ToArray();
+        _patches = patches.Select(p => p.Clone()).ToArray();
+        _entities = entities.Select(e => e.Clone()).ToArray();
+
+        _entityBrushes = new int[_entities.Length][];
+        _entityPatches = new int[_entities.Length][];
+        for (int i = 0; i < _entities.Length; i++)
+        {
+            _entityBrushes[i] = entityBrushes is not null && i < entityBrushes.Count
+                ? entityBrushes[i] : Array.Empty<int>();
+            _entityPatches[i] = entityPatches is not null && i < entityPatches.Count
+                ? entityPatches[i] : Array.Empty<int>();
+        }
+    }
+
+    /// <summary>The objects being added, in wire order. Read by the wire codec.</summary>
+    public IReadOnlyList<VmapBrush> Brushes => _brushes;
+
+    /// <inheritdoc cref="Brushes"/>
+    public IReadOnlyList<VmapPatch> Patches => _patches;
+
+    /// <inheritdoc cref="Brushes"/>
+    public IReadOnlyList<VmapEntity> Entities => _entities;
+
+    /// <summary>Per-entity ownership, as indices into <see cref="Brushes"/>. Read by the wire codec.</summary>
+    public IReadOnlyList<int[]> EntityBrushIndices => _entityBrushes;
+
+    /// <inheritdoc cref="EntityBrushIndices"/>
+    public IReadOnlyList<int[]> EntityPatchIndices => _entityPatches;
+
+    /// <summary>Ids of everything added; valid after a successful <see cref="Apply"/>.</summary>
+    public IReadOnlyList<int> CreatedBrushIds => _createdBrushIds;
+
+    /// <inheritdoc cref="CreatedBrushIds"/>
+    public IReadOnlyList<int> CreatedPatchIds => _createdPatchIds;
+
+    /// <inheritdoc cref="CreatedBrushIds"/>
+    public IReadOnlyList<int> CreatedEntityIds => _createdEntityIds;
+
+    // Nothing pre-exists: the session detects the additions itself and undo removes them.
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    public string Describe()
+    {
+        int n = _brushes.Length + _patches.Length + _entities.Length;
+        return n == 1 ? "Add 1 object" : $"Add {n} objects";
+    }
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_brushes.Length == 0 && _patches.Length == 0 && _entities.Length == 0)
+            return false;
+
+        _createdBrushIds.Clear();
+        _createdPatchIds.Clear();
+        _createdEntityIds.Clear();
+
+        // Running counters rather than re-querying per item: the document is only appended to below, so a
+        // re-query would be O(n^2) on a large paste for the same answer.
+        int nextBrush = doc.NextBrushId(), nextPatch = doc.NextPatchId(), nextEntity = doc.NextEntityId();
+
+        var addedBrushes = new List<VmapBrush>(_brushes.Length);
+        foreach (VmapBrush source in _brushes)
+        {
+            VmapBrush copy = source.Clone();
+            if (copy.Id == 0)
+                copy.Id = nextBrush++;
+            if (!VmapWinding.IsClosedConvex(copy))
+                return false;   // refuse the whole batch rather than landing a broken solid
+            addedBrushes.Add(copy);
+        }
+
+        var addedPatches = new List<VmapPatch>(_patches.Length);
+        foreach (VmapPatch source in _patches)
+        {
+            VmapPatch copy = source.Clone();
+            if (copy.Id == 0)
+                copy.Id = nextPatch++;
+            if (!copy.IsValid)
+                return false;
+            addedPatches.Add(copy);
+        }
+
+        var addedEntities = new List<VmapEntity>(_entities.Length);
+        for (int i = 0; i < _entities.Length; i++)
+        {
+            VmapEntity copy = _entities[i].Clone();
+            if (copy.Id == 0)
+                copy.Id = nextEntity++;
+
+            // Ownership is rebuilt from the indices, so whatever ids the sender's entity carried are irrelevant.
+            copy.BrushIds.Clear();
+            copy.PatchIds.Clear();
+            foreach (int bi in _entityBrushes[i])
+            {
+                if (bi < 0 || bi >= addedBrushes.Count)
+                    return false;
+                copy.BrushIds.Add(addedBrushes[bi].Id);
+            }
+            foreach (int pi in _entityPatches[i])
+            {
+                if (pi < 0 || pi >= addedPatches.Count)
+                    return false;
+                copy.PatchIds.Add(addedPatches[pi].Id);
+            }
+            addedEntities.Add(copy);
+        }
+
+        // Commit only once every piece has been validated.
+        foreach (VmapBrush b in addedBrushes)
+        {
+            doc.Brushes.Add(b);
+            _createdBrushIds.Add(b.Id);
+        }
+        foreach (VmapPatch p in addedPatches)
+        {
+            doc.Patches.Add(p);
+            _createdPatchIds.Add(p.Id);
+        }
+        foreach (VmapEntity e in addedEntities)
+        {
+            doc.Entities.Add(e);
+            _createdEntityIds.Add(e.Id);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Read objects back OUT of a document as an add op — how a locally-applied paste becomes something the
+    /// other clients can replay. The ids come along, so every peer ends up numbering the paste identically.
+    /// </summary>
+    public static AddObjectsOp Capture(
+        VmapDocument doc, IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, IReadOnlyList<int> entityIds)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        var brushes = new List<VmapBrush>();
+        var brushSlot = new Dictionary<int, int>();
+        foreach (int id in brushIds)
+            if (doc.FindBrush(id) is { } b)
+            {
+                brushSlot[id] = brushes.Count;
+                brushes.Add(b);
+            }
+
+        var patches = new List<VmapPatch>();
+        var patchSlot = new Dictionary<int, int>();
+        foreach (int id in patchIds)
+            if (doc.FindPatch(id) is { } p)
+            {
+                patchSlot[id] = patches.Count;
+                patches.Add(p);
+            }
+
+        var entities = new List<VmapEntity>();
+        var ownedBrushes = new List<int[]>();
+        var ownedPatches = new List<int[]>();
+        foreach (int id in entityIds)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+            entities.Add(e);
+
+            // An owned object outside this capture has no index to point at, so it is dropped rather than
+            // encoded as a reference the receiver could not resolve.
+            ownedBrushes.Add(e.BrushIds.Where(brushSlot.ContainsKey).Select(x => brushSlot[x]).ToArray());
+            ownedPatches.Add(e.PatchIds.Where(patchSlot.ContainsKey).Select(x => patchSlot[x]).ToArray());
+        }
+
+        return new AddObjectsOp(brushes, patches, entities, ownedBrushes, ownedPatches);
+    }
+}
+
+/// <summary>
+/// Overwrite a named set of objects with a given state, deleting the ones that should no longer exist
+/// (design doc §11.7, phase E6).
+///
+/// This is what an UNDO looks like on the wire. Undo does not replay an inverse gesture — it restores a
+/// snapshot — so there is no op to send. What travels instead is the outcome: these ids now hold this state,
+/// and these ids are gone. Redo and a history jump are the same shape, which is why one op covers all three.
+///
+/// Unlike <see cref="AddObjectsOp"/> every id here is REAL and already agreed on by both machines, so entity
+/// ownership travels as ids rather than as indices — the indirection would buy nothing when the numbering is
+/// the thing being restored.
+/// </summary>
+public sealed class SetObjectsOp : IVmapOp
+{
+    private readonly VmapBrush[] _brushes;
+    private readonly VmapPatch[] _patches;
+    private readonly VmapEntity[] _entities;
+    private readonly int[] _removedBrushes;
+    private readonly int[] _removedPatches;
+    private readonly int[] _removedEntities;
+
+    public SetObjectsOp(
+        IReadOnlyList<VmapBrush> brushes,
+        IReadOnlyList<VmapPatch> patches,
+        IReadOnlyList<VmapEntity> entities,
+        IReadOnlyList<int> removedBrushIds,
+        IReadOnlyList<int> removedPatchIds,
+        IReadOnlyList<int> removedEntityIds)
+    {
+        ArgumentNullException.ThrowIfNull(brushes);
+        ArgumentNullException.ThrowIfNull(patches);
+        ArgumentNullException.ThrowIfNull(entities);
+
+        _brushes = brushes.Select(b => b.Clone()).ToArray();
+        _patches = patches.Select(p => p.Clone()).ToArray();
+        _entities = entities.Select(e => e.Clone()).ToArray();
+        _removedBrushes = removedBrushIds?.ToArray() ?? Array.Empty<int>();
+        _removedPatches = removedPatchIds?.ToArray() ?? Array.Empty<int>();
+        _removedEntities = removedEntityIds?.ToArray() ?? Array.Empty<int>();
+    }
+
+    /// <summary>The state being written. Read by the wire codec.</summary>
+    public IReadOnlyList<VmapBrush> Brushes => _brushes;
+
+    /// <inheritdoc cref="Brushes"/>
+    public IReadOnlyList<VmapPatch> Patches => _patches;
+
+    /// <inheritdoc cref="Brushes"/>
+    public IReadOnlyList<VmapEntity> Entities => _entities;
+
+    /// <summary>Ids that must not exist afterwards. Read by the wire codec.</summary>
+    public IReadOnlyList<int> RemovedBrushIds => _removedBrushes;
+
+    /// <inheritdoc cref="RemovedBrushIds"/>
+    public IReadOnlyList<int> RemovedPatchIds => _removedPatches;
+
+    /// <inheritdoc cref="RemovedBrushIds"/>
+    public IReadOnlyList<int> RemovedEntityIds => _removedEntities;
+
+    // Every id is declared, so the journal snapshots the right objects and this op is itself undoable.
+    public IReadOnlyList<int> TouchedBrushIds =>
+        _brushes.Select(b => b.Id).Concat(_removedBrushes).ToArray();
+
+    public IReadOnlyList<int> TouchedPatchIds =>
+        _patches.Select(p => p.Id).Concat(_removedPatches).ToArray();
+
+    public IReadOnlyList<int> TouchedEntityIds =>
+        _entities.Select(e => e.Id).Concat(_removedEntities).ToArray();
+
+    public string Describe()
+    {
+        int n = _brushes.Length + _patches.Length + _entities.Length
+                + _removedBrushes.Length + _removedPatches.Length + _removedEntities.Length;
+        return n == 1 ? "Restore 1 object" : $"Restore {n} objects";
+    }
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        foreach (VmapBrush source in _brushes)
+        {
+            if (!VmapWinding.IsClosedConvex(source))
+                return false;
+            if (doc.FindBrush(source.Id) is { } live)
+                VmapEdit.CopyPlanesInto(source, live);
+            else
+                doc.Brushes.Add(source.Clone());
+        }
+
+        foreach (VmapPatch source in _patches)
+        {
+            if (!source.IsValid)
+                return false;
+            if (doc.FindPatch(source.Id) is { } live)
+            {
+                live.Width = source.Width;
+                live.Height = source.Height;
+                live.Material = source.Material;
+                live.SurfaceFlags = source.SurfaceFlags;
+                live.ContentFlags = source.ContentFlags;
+                live.Controls.Clear();
+                live.Controls.AddRange(source.Controls);
+                live.ControlUvs.Clear();
+                live.ControlUvs.AddRange(source.ControlUvs);
+            }
+            else
+            {
+                doc.Patches.Add(source.Clone());
+            }
+        }
+
+        foreach (VmapEntity source in _entities)
+        {
+            if (doc.FindEntity(source.Id) is { } live)
+            {
+                live.ClassName = source.ClassName;
+                live.Fields.Clear();
+                foreach (KeyValuePair<string, string> kv in source.Fields)
+                    live.Fields[kv.Key] = kv.Value;
+                live.BrushIds.Clear();
+                live.BrushIds.AddRange(source.BrushIds);
+                live.PatchIds.Clear();
+                live.PatchIds.AddRange(source.PatchIds);
+            }
+            else
+            {
+                doc.Entities.Add(source.Clone());
+            }
+        }
+
+        foreach (int id in _removedBrushes)
+            if (doc.FindBrush(id) is { } b)
+                doc.Brushes.Remove(b);
+        foreach (int id in _removedPatches)
+            if (doc.FindPatch(id) is { } p)
+                doc.Patches.Remove(p);
+        foreach (int id in _removedEntities)
+            if (doc.FindEntity(id) is { } e)
+                doc.Entities.Remove(e);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Read the CURRENT state of a set of ids out of a document — how an undo becomes something the other
+    /// clients can replay. An id with nothing behind it went away, so it lands in the removed list.
+    /// </summary>
+    public static SetObjectsOp Capture(
+        VmapDocument doc, IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, IReadOnlyList<int> entityIds)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        var brushes = new List<VmapBrush>();
+        var goneBrushes = new List<int>();
+        foreach (int id in brushIds ?? Array.Empty<int>())
+            if (doc.FindBrush(id) is { } b) brushes.Add(b); else goneBrushes.Add(id);
+
+        var patches = new List<VmapPatch>();
+        var gonePatches = new List<int>();
+        foreach (int id in patchIds ?? Array.Empty<int>())
+            if (doc.FindPatch(id) is { } p) patches.Add(p); else gonePatches.Add(id);
+
+        var entities = new List<VmapEntity>();
+        var goneEntities = new List<int>();
+        foreach (int id in entityIds ?? Array.Empty<int>())
+            if (doc.FindEntity(id) is { } e) entities.Add(e); else goneEntities.Add(id);
+
+        return new SetObjectsOp(brushes, patches, entities, goneBrushes, gonePatches, goneEntities);
+    }
+
+    /// <summary>True when there is nothing to say — no state to write and nothing to remove.</summary>
+    public bool IsEmpty =>
+        _brushes.Length == 0 && _patches.Length == 0 && _entities.Length == 0
+        && _removedBrushes.Length == 0 && _removedPatches.Length == 0 && _removedEntities.Length == 0;
 }

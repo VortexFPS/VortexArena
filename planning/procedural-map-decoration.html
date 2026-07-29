@@ -163,8 +163,9 @@ a { color: #e0a458; }
     <b>E3–E5 implemented</b> (60 tests): the op model with snapshot undo/redo, ray picking, the convex
     plane-refit behind vertex/edge drags, rotation, geometry snapping, box creation and the clipper — plus the
     crosshair-driven interaction layer, the line-overlay gizmos and the orthographic viewport, all on the
-    game's own HUD/bind/cursor systems. <b>E6 core</b> (op wire format, per-brush locks, authoritative apply)
-    is built and tested; routing it through ServerNet/ClientNet is the one remaining piece. Marked
+    game's own HUD/bind/cursor systems. <b>E6 op replication is built end to end</b>: the wire format covers
+    every replicable op, creates carry a server-assigned id, undo replicates as the state it restored, and the
+    whole thing rides a new <code>NetControl.EditorOp</code> channel (protocol v20). Marked
     <span class="pill rec">built</span> below where shipped.<br>
     <b>v1.4 (2026-07-28):</b> added <b>§11.9 tool selection &amp; usage</b> — the interaction model E3–E5 left
     implicit: a right-click context menu, the tool/mode/action split, two-phase handle grabbing so a transform
@@ -172,6 +173,11 @@ a { color: #e0a458; }
     outright instead of borrowing weapon binds. Adds the Select, Clip, Measure, Shader, Entity and Waypoint tools;
     roadmap rows E7 (rails) and E8 (tool build-out). Corrects §13's E5 row: <code>CreateBoxBrushOp</code> and
     <code>ClipBrushOp</code> are implemented but no tool reaches them.<br>
+    <b>v1.5 (2026-07-28):</b> <b>E6 op replication built.</b> §11.7 gains the four things the sketch did not
+    anticipate — an id-carrying handshake for ops that mint ids, a paste that replicates as its result rather
+    than as the gesture, an undo that replicates as the state it restored, and one replication choke point
+    instead of a send beside each tool. New channel <code>NetControl.EditorOp</code>, protocol v20. The open
+    piece is now the document handshake, not the op channel.<br>
     Companion screenshots: the current renderer's output of the courtyard map vs. the decorated concept of the same shot (referenced throughout as <b>CURRENT</b> and <b>CONCEPT</b>).
   </div>
 </div></div>
@@ -1167,6 +1173,44 @@ a contextual tips block for the held modifiers.</p>
       for the op channel; bake artifacts can piggyback the content-download path.</li>
 </ul>
 
+<h4>What op replication actually turned out to need <span class="pill rec">built</span></h4>
+
+<p>The op channel is built (<code>VmapOpWire</code>, <code>VmapEditServer</code>,
+<code>NetControl.EditorOp</code>, protocol v20). Four things were not obvious from the sketch above, and each is
+the difference between co-editing working and two mappers quietly editing different maps.</p>
+
+<ul>
+  <li><b>An op that mints an id has to carry it.</b> Create, clip, extrude and paste all allocate ids during apply,
+      and two machines allocating independently diverge the moment either creates anything. The id therefore travels
+      IN the line: a client sends <code>0</code> ("you choose"), the server assigns and applies, and the echo is
+      re-encoded from the applied op with the real id. Every peer replays that. One field, and the whole class of
+      id divergence disappears — including on redo, since replaying the same op object reuses the same id.</li>
+  <li><b>A paste replicates as its result, not as the gesture.</b> "Run my clipboard against your document" needs
+      both sides to hold the same clipboard AND remap ids identically. Sending the objects instead —
+      <code>AddObjectsOp</code>: these solids, these control grids, these spawn keys, these ids — needs neither.
+      Entity ownership travels as INDICES into the op's own arrays, so it means the same thing before and after id
+      assignment.</li>
+  <li><b>Undo is not an op.</b> It restores a snapshot, so there is no gesture to replay; without something the
+      session diverges the first time anyone presses Ctrl+Z, which in a map editor is within the first minute.
+      What crosses the wire is the state that was put back (<code>SetObjectsOp</code>: these ids now hold this,
+      these ids are gone). Redo and history-travel are the same shape, so one op covers all three.</li>
+  <li><b>One choke point, not twenty send calls.</b> Replication hangs off
+      <code>VmapEditSession.Applied</code>/<code>Restored</code> rather than off each tool. A tool written next
+      month replicates because it applies an op — not because someone remembered to add a send beside it.</li>
+</ul>
+
+<p><b>Threading and authority.</b> A submitted op arrives on whichever thread reads packets while the document is
+owned by the editor on the main thread, so <code>editor_op</code> QUEUES rather than applying; the host drains on
+the main thread. That is the same second-writer hazard the cross-thread transport race was. A guest does not apply
+optimistically: it submits and waits for the echo, so an op the server refuses simply never happened rather than
+being something to roll back. The listen host ignores its own echo arriving back through its loopback client.</p>
+
+<p><b>Still open:</b> a joining guest imports the map itself rather than receiving the host's document, so a host
+editing a saved <code>.vmap</code> and a guest importing the BSP would number brushes differently and every
+replicated op would land on the wrong solid. The guest says so on join rather than diverging in silence, but the
+document handshake itself — send the truth on connect — is the next piece. Async server bake and tile streaming
+are also untouched.</p>
+
 <h3 id="editor-qol"><span class="secno">11.8</span>QoL backlog — small things that make it feel professional</h3>
 <p>None of these gate a phase; each is small once the op/HUD/view rails exist. Kept here so they don't get invented
 ad-hoc later:</p>
@@ -1432,9 +1476,15 @@ inspector's targetname→target arrows use (§11.8).</p>
 but after it every tool is a menu row plus an op — and Clip is nearly free, since its op is already written. The
 alternative (ship Brush end-to-end, then Patch, then Entity) is playtestable sooner but rewrites the menu, handle and
 status code two or three times as later tools reveal what they needed.</p>
-<p><b>Ordering note:</b> everything here is client-local. <code>VmapOpWire</code> exists and nothing references it, so
-§11.7's op channel is still unbuilt and E6 co-editing will want a second look at the clipboard and the entity
-reconciliation path once ops actually travel.</p>
+<p><b>Ordering note (settled in E6):</b> the tools above are client-local, but the op channel they feed is now built,
+and wiring it answered the question this note was raised about. Replication hangs off
+<code>VmapEditSession.Applied</code> and <code>Restored</code>, not off the tools, so a tool added later replicates
+because it applies an op — no per-tool send to remember. The clipboard did need the second look: a paste's result is
+an arbitrary pile of geometry, so it replicates as <code>AddObjectsOp</code> (the objects and their ids) rather than
+as a re-run of the sender's clipboard against a document that may not match. Undo needed one too, for the same
+reason in reverse: it restores a snapshot rather than replaying a gesture, so it replicates as
+<code>SetObjectsOp</code>. Entity reconciliation is unaffected — it runs on the EDIT→PLAYTEST edge against the local
+document, whichever machine that document was edited from.</p>
 
 <!-- ══════════════════════════ 12 · GAMEPLAY LAYER ══════════════════════════ -->
 <h2 id="gameplay"><span class="secno">12</span>Gameplay-layer systems <span class="pill alt">v1.3 · lower priority</span></h2>
@@ -1538,9 +1588,22 @@ and can proceed in parallel.</p>
           referenced by nothing — they have no tool or menu reaching them, which E7/E8 supplies.</td>
       <td>Precision alignment work and greyboxing from nothing — the "perfectly straight lines" workflow.</td>
       <td>~2 wk</td></tr>
-  <tr><td><b>E6</b> <span class="pill rec">core built</span></td>
+  <tr><td><b>E6</b> <span class="pill rec">op replication built</span></td>
       <td><b>Networked co-editing</b> (§11.7): server-authoritative op protocol, multi-client editing with selection
-          locks, async server bake + tile streaming groundwork.</td>
+          locks, async server bake + tile streaming groundwork.<br>
+          <i>Built:</i> the wire format covers every replicable op; ops that mint ids (create, clip, extrude,
+          paste) carry the id in the line, so the server assigns and every peer replays the same numbering.
+          A paste replicates as its RESULT (<code>AddObjectsOp</code>) rather than as "run my clipboard
+          against your document", and undo/redo/history-travel replicate as the state they restored
+          (<code>SetObjectsOp</code>) — without that a session diverges the first time anyone presses Ctrl+Z.
+          Replication hangs off <code>VmapEditSession.Applied</code>/<code>Restored</code>, one choke point, so
+          a tool added later replicates because it applies an op. A guest submits over
+          <code>clc_stringcmd</code> and does not apply optimistically; an incoming op is queued and applied on
+          the thread that owns the document. Channel: <code>NetControl.EditorOp</code> (protocol v20).<br>
+          <i>Not built:</i> a DOCUMENT handshake — a joining guest imports the map itself rather than receiving
+          the host's document, so a host editing a saved <code>.vmap</code> and a guest importing the BSP would
+          number brushes differently. The guest logs this on join rather than diverging silently. Also open:
+          async server bake and tile streaming.</td>
       <td>Editor becomes a product feature; two people decorating one map in one session.</td>
       <td>~2–3 wk</td></tr>
   <tr><td><b>E7</b></td>

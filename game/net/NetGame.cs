@@ -3118,6 +3118,7 @@ public sealed partial class NetGame : Node3D
             _client.PrintReceived -= OnServerPrintForMinigame;
             _client.PrintReceived -= OnServerPrintForChat;
         }
+        UnwireEditorReplication();
         if (_sharedCvarBridge is not null && _sharedCvars is not null)
         {
             _sharedCvars.Changed -= _sharedCvarBridge;   // shared store outlives this match; don't leak the hook
@@ -5872,6 +5873,10 @@ public sealed partial class NetGame : Node3D
             FeedOrthoInput();
             TickEditorAutosave(Time.GetTicksMsec() / 1000.0);
 
+            // (E6) Apply what other mappers submitted. Here, on the main thread, because this is where the
+            // document is written from — the packet thread only queues.
+            DrainEditorOps();
+
             // (B2) The EDIT -> PLAYTEST edge: reconcile the live entity set with the document, so what you
             // playtest is what you just authored. Edge-triggered, not polled — a respawn every frame while
             // playtesting would reset the map continuously.
@@ -7297,6 +7302,203 @@ public sealed partial class NetGame : Node3D
         return false;
     }
 
+    // =============================================================================================
+    //  E6 — op replication (design doc §11.7)
+    // =============================================================================================
+
+    /// <summary>True once <see cref="WireEditorReplication"/> has run for the current session.</summary>
+    private bool _editorReplicationWired;
+
+    /// <summary>
+    /// True when this process owns the authoritative document — a listen host or a solo editing session.
+    ///
+    /// The distinction drives everything else in E6. A host's local apply IS the edit, so it broadcasts and
+    /// ignores anything coming back (its own echo would otherwise apply twice). A pure client's local apply is
+    /// a prediction, so it also submits the op and waits for the server's version of events.
+    /// </summary>
+    private bool IsEditorAuthority => _serverWorld is not null;
+
+    /// <summary>
+    /// Connect the editing session to the network (design doc §11.7, phase E6).
+    ///
+    /// Everything hangs off <see cref="XonoticGodot.Formats.Vmap.VmapEditSession.Applied"/> rather than off the
+    /// twenty individual tool call sites. A tool added next month replicates because it applies an op, not
+    /// because someone remembered to add a send next to it — which is the only version of this that stays true
+    /// as the editor grows.
+    /// </summary>
+    private void WireEditorReplication()
+    {
+        if (_editor is not { Session: { } session } editor || _editorReplicationWired)
+            return;
+        _editorReplicationWired = true;
+
+        if (IsEditorAuthority)
+        {
+            // The server-authoritative apply path shares the session, which on a listen host is the same object
+            // the local editor draws from. That sharing is the whole reason the editor can be in-process at all
+            // (it is what _preloadedEditorDoc already relies on for collision).
+            _serverWorld!.Commands.EditorOps = new XonoticGodot.Formats.Vmap.VmapEditServer(session);
+
+            // Every applied op goes out, whoever originated it — the host's own gesture and the drained
+            // submission from a guest take the same path out.
+            session.Applied += OnEditorOpApplied;
+
+            // Undo restores a snapshot rather than replaying an inverse gesture, so it has no op to send; what
+            // goes out is the state it put back. Without this, Ctrl+Z on the host is invisible everywhere else.
+            session.Restored += OnEditorStateRestored;
+            return;
+        }
+
+        // A guest submits and waits. Nothing is applied locally, so there is no Applied hook here: the only
+        // thing that changes this document is an op arriving from the server.
+        editor.OpSubmit = SubmitEditorOp;
+        if (_client is not null)
+            _client.EditorOpReceived += OnEditorOpReceived;
+
+        // The guest built its document by importing the same BSP, not by receiving the host's. That matches
+        // whenever the host is editing the compiled map, and does NOT when the host opened a saved .vmap — the
+        // ids would be numbered differently and every replicated op would land on the wrong brush. Said out
+        // loud because the failure is otherwise invisible until the geometry is already wrong.
+        XonoticGodot.Common.Diagnostics.Log.Info(
+            "editor: joined as a guest — edits are submitted to the server; "
+            + "the document is the locally imported map (no document handshake yet)");
+    }
+
+    /// <summary>Encode a guest's op and send it to the server, which owns the geometry.</summary>
+    private bool SubmitEditorOp(XonoticGodot.Formats.Vmap.IVmapOp op)
+    {
+        if (_editor?.Session is not { } session)
+            return false;
+
+        // Serialized pre-apply, so a create carries id 0 and lets the server choose. SerializeAfterApply is the
+        // server's job; a guest has nothing applied to describe.
+        string? line = XonoticGodot.Formats.Vmap.VmapOpWire.Serialize(op);
+        if (line is null)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"editor: '{op.Describe()}' cannot be sent to the server and was not applied");
+            return false;
+        }
+
+        SendStringCommand("editor_op " + line);
+        return true;
+    }
+
+    /// <summary>Undo the wiring so a session close (or a map change) does not leave the events hanging on a
+    /// dead session — and so re-opening does not double-subscribe.</summary>
+    private void UnwireEditorReplication()
+    {
+        if (!_editorReplicationWired)
+            return;
+        _editorReplicationWired = false;
+
+        if (_editor is { } editor)
+        {
+            editor.OpSubmit = null;
+            if (editor.Session is { } session)
+            {
+                session.Applied -= OnEditorOpApplied;
+                session.Restored -= OnEditorStateRestored;
+            }
+        }
+        if (_client is not null)
+            _client.EditorOpReceived -= OnEditorOpReceived;
+        if (_serverWorld is not null)
+            _serverWorld.Commands.EditorOps = null;
+    }
+
+    /// <summary>Send an op that just changed the authoritative document out to every connected editor.</summary>
+    private void OnEditorOpApplied(XonoticGodot.Formats.Vmap.IVmapOp op)
+    {
+        if (_server is null || _editor?.Session is not { } session)
+            return;
+
+        string? line = XonoticGodot.Formats.Vmap.VmapOpWire.SerializeAfterApply(op, session.Document);
+        if (line is null)
+        {
+            // No wire form. Say so rather than letting the documents drift apart in silence, which is the
+            // failure mode that makes a co-editing session impossible to debug from the inside. Only worth
+            // saying when someone is actually connected to hear it.
+            XonoticGodot.Common.Diagnostics.Log.Warn(
+                $"editor: '{op.Describe()}' has no wire form and was NOT replicated");
+            return;
+        }
+
+        _server.BroadcastEditorOp(line);
+    }
+
+    /// <summary>
+    /// Send the state an undo, redo or history jump put back.
+    ///
+    /// A restore is not an op, so nothing here is replayed on the far side — the objects are simply set to
+    /// what they now are, and the ones that stopped existing are named so they can be removed.
+    /// </summary>
+    private void OnEditorStateRestored(
+        IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, IReadOnlyList<int> entityIds)
+    {
+        if (_server is null || _editor?.Session is not { } session)
+            return;
+
+        var op = XonoticGodot.Formats.Vmap.SetObjectsOp.Capture(
+            session.Document, brushIds, patchIds, entityIds);
+        if (op.IsEmpty)
+            return;
+
+        if (XonoticGodot.Formats.Vmap.VmapOpWire.Serialize(op) is { } line)
+            _server.BroadcastEditorOp(line);
+    }
+
+    /// <summary>
+    /// Apply an op the server has already accepted — the only thing that changes a guest's document.
+    ///
+    /// The authority never gets here: it holds the document that produced the broadcast, so applying its own
+    /// echo would run the edit twice.
+    /// </summary>
+    private void OnEditorOpReceived(string line)
+    {
+        if (IsEditorAuthority || _editor?.Session is not { } session)
+            return;
+
+        XonoticGodot.Formats.Vmap.IVmapOp? op =
+            XonoticGodot.Formats.Vmap.VmapOpWire.Deserialize(line, session.Document);
+        if (op is null)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor: could not decode a replicated op");
+            return;
+        }
+
+        if (!session.Apply(op))
+        {
+            // The op landed on the server but not here: the two documents no longer agree, and every op after
+            // this one is suspect. Better to know than to keep editing a divergent copy.
+            XonoticGodot.Common.Diagnostics.Log.Warn(
+                "editor: a replicated op did not apply — this document has diverged from the server's");
+            return;
+        }
+
+        _editor.BumpGeometryVersion();
+        RefreshEditorWorld();
+    }
+
+    /// <summary>
+    /// Apply the ops clients have submitted, on the thread that owns the document.
+    ///
+    /// The broadcast is left to <see cref="OnEditorOpApplied"/> rather than done here: one sender for every
+    /// applied op, whoever originated it, is what stops a submitted edit going out twice.
+    /// </summary>
+    private void DrainEditorOps()
+    {
+        if (_serverWorld?.Commands.EditorOps is not { } ops || _editor is null)
+            return;
+        if (ops.Drain() == 0)
+            return;
+
+        // A guest's edit changed the geometry without going through a local tool, so nothing has bumped the
+        // version the world build and the collision rebuild are both keyed on.
+        _editor.BumpGeometryVersion();
+        RefreshEditorWorld();
+    }
+
     /// <summary>
     /// Open (or re-open) an editing session for the current map: an already-imported <c>.vmap</c> if one
     /// exists, otherwise imported live from the loaded map so a mapper can start editing any level without a
@@ -7337,6 +7539,7 @@ public sealed partial class NetGame : Node3D
                 return;
             }
             _editor.OpenSession(doc);
+            WireEditorReplication();
             LoadEntityDefs();
             // The load-time collision was built from this same document, so the live collision is already
             // current — without this seed, the first not-free-fly frame pays a pointless full rebuild.

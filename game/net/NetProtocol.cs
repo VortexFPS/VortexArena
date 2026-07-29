@@ -137,7 +137,7 @@ public static class NetProtocol
     /// advertising the same version with different entity layouts, where the handshake passes and ReadDelta
     /// corrupt-decodes. That worked as designed: weapon-item-colors merged first, so this change lands as 18.
     /// Keep using the skip trick for concurrent wire branches; never reuse 16.
-    public const uint ProtocolVersion = 19; // v19: the scoreboard block carries the per-viewer item-pickup tally (Item stats grid)
+    public const uint ProtocolVersion = 20; // v20: NetControl.EditorOp — map-editor op replication (design doc §11.7)
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;
@@ -295,4 +295,13 @@ public enum NetControl : byte
     /// Decoded into <see cref="ClientNet"/>'s <c>RadarLinks</c> list; unknown to old clients (dispatch falls
     /// through harmlessly).</summary>
     RadarLinks = 23,
+
+    // ---- map-editor co-editing (design doc §11.7, phase E6) ----
+    /// <summary>Server → client (reliable): one applied map-editor op, as a <see cref="XonoticGodot.Formats.Vmap.VmapOpWire"/>
+    /// line. The server owns the geometry: a client submits an op over <c>clc_stringcmd</c> (<c>editor_op</c>),
+    /// the server validates and applies it, and echoes the APPLIED form here — with any id the apply minted
+    /// filled in — to every client including the sender. Rare (one per drag release, not per frame), so the
+    /// readable text line costs nothing and shows up plainly in a packet log when co-editing misbehaves. Only
+    /// emitted in the editor gametype; unknown to old clients (dispatch falls through harmlessly).</summary>
+    EditorOp = 24,
 }

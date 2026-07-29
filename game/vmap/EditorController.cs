@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 using XonoticGodot.Common.Diagnostics;
 using XonoticGodot.Common.Services;
 using XonoticGodot.Engine.Simulation;
@@ -9,13 +9,13 @@ using NVec3 = System.Numerics.Vector3;
 namespace XonoticGodot.Game.Vmap;
 
 /// <summary>
-/// Drives in-game geometry editing (design doc §11.4): owns the <see cref="VmapEditSession"/>, turns the
+/// Drives in-game geometry editing (design doc Â§11.4): owns the <see cref="VmapEditSession"/>, turns the
 /// camera into picks, and turns mouse drags into ops.
 ///
 /// Interaction is CROSSHAIR-BASED in the 3D view rather than free-cursor. That is the right fit for a game
 /// whose mouse is captured for looking: you aim at geometry the same way you aim at a player, click to grab,
 /// and the grabbed feature follows your view at the distance you grabbed it. Freeing the cursor is reserved
-/// for the orthographic view (§11.5), where pan/zoom/marquee genuinely need a pointer — and there the editor
+/// for the orthographic view (Â§11.5), where pan/zoom/marquee genuinely need a pointer â€” and there the editor
 /// takes cursor ownership the same way the maximized radar does.
 ///
 /// A drag never touches the document until it is released. The preview is drawn as a ghost by
@@ -27,10 +27,10 @@ public sealed partial class EditorController : Node3D
     /// <summary>Cvar: grab radius in world units for resolving a vertex/edge instead of the face.</summary>
     public const string CvarGrabRadius = "cl_editor_grab_radius";
 
-    /// <summary>Cvar: draw a marker at every brush corner near the camera (§11.5 vertices overlay).</summary>
+    /// <summary>Cvar: draw a marker at every brush corner near the camera (Â§11.5 vertices overlay).</summary>
     public const string CvarShowVertices = "cl_editor_show_vertices";
 
-    /// <summary>Cvar: draw the collision volumes that render nothing (§11.5 collision overlay).</summary>
+    /// <summary>Cvar: draw the collision volumes that render nothing (Â§11.5 collision overlay).</summary>
     public const string CvarShowCollision = "cl_editor_show_collision";
 
     /// <summary>Cvar: how far the vertex/collision overlays reach, in world units.</summary>
@@ -46,7 +46,7 @@ public sealed partial class EditorController : Node3D
     public const string CvarShowToolBrushes = "cl_editor_show_tool_brushes";
 
     /// <summary>
-    /// Drop face area buried inside other solids when building the editor world. On by default — without it
+    /// Drop face area buried inside other solids when building the editor world. On by default â€” without it
     /// the view shows the mapper's overlapping solids rather than the level's visible skin. Off is a debugging
     /// aid: it answers "is that hole real geometry, or did the culler eat it?" without a rebuild.
     /// </summary>
@@ -70,6 +70,39 @@ public sealed partial class EditorController : Node3D
     /// <summary>The live edit session, or null until a map has been opened for editing.</summary>
     public VmapEditSession? Session => _session;
 
+    /// <summary>
+    /// Where an op goes when this editor is a GUEST in a session someone else owns (design doc Â§11.7, E6).
+    ///
+    /// Null on a host and in a solo session: the op is applied to the local document, which IS the map. Set on
+    /// a client connected to someone else's editing server, where the op is instead SUBMITTED and the geometry
+    /// changes when the server's echo comes back. A guest deliberately does not apply optimistically â€” an
+    /// op it applied and the server then refused would leave it editing a map nobody else can see, and the
+    /// round trip is imperceptible next to a gesture that only fires on mouse release.
+    /// </summary>
+    public Func<IVmapOp, bool>? OpSubmit { get; set; }
+
+    /// <summary>
+    /// True when the last <see cref="Commit"/> was submitted rather than applied. Callers that read what an
+    /// op CREATED check this: nothing exists yet on a guest, so selecting the result would select id 0.
+    /// </summary>
+    public bool LastOpDeferred { get; private set; }
+
+    /// <summary>
+    /// The single point every tool's edit passes through. Having one means a guest session, replication and
+    /// undo are decided in one place rather than at each of the twenty gestures that can change geometry.
+    /// </summary>
+    private bool Commit(IVmapOp op)
+    {
+        if (OpSubmit is null)
+        {
+            LastOpDeferred = false;
+            return _session is not null && _session.Apply(op);
+        }
+
+        LastOpDeferred = true;
+        return OpSubmit(op);
+    }
+
     /// <summary>The document being edited, or null when no session is open.</summary>
     public VmapDocument? Document => _document;
 
@@ -80,7 +113,7 @@ public sealed partial class EditorController : Node3D
     public EditorTool Tool { get; private set; } = EditorTool.None;
 
     /// <summary>
-    /// What a handle drag does with the current tool. Always a mode the tool actually offers — every path that
+    /// What a handle drag does with the current tool. Always a mode the tool actually offers â€” every path that
     /// writes it goes through <see cref="EditorTools.Supports"/> or <see cref="EditorTools.CarryMode"/>, so the
     /// pair can never drift into a combination the menu would not show.
     /// </summary>
@@ -89,7 +122,7 @@ public sealed partial class EditorController : Node3D
     /// <summary>Which manipulator handles the current mode draws. Derived, never stored.</summary>
     public HandleSet Handles => EditorTools.HandlesFor(Mode);
 
-    /// <summary>The HUD action line: <c>Tool &gt; Mode: subject</c> (design doc §11.9).</summary>
+    /// <summary>The HUD action line: <c>Tool &gt; Mode: subject</c> (design doc Â§11.9).</summary>
     public string ActionLine => EditorTools.ActionLine(Tool, Mode, ActionSubject());
 
     /// <summary>
@@ -196,9 +229,9 @@ public sealed partial class EditorController : Node3D
     /// <summary>
     /// World position the manipulator handles sit at: the centre of the current SELECTION.
     ///
-    /// Deliberately no hover fallback. Under the two-phase model (§11.9) handles are click targets, and
+    /// Deliberately no hover fallback. Under the two-phase model (Â§11.9) handles are click targets, and
     /// handles that follow whatever you happen to be aiming at would put a grabbable arrow in front of every
-    /// surface in the level — you could never click the geometry to select it in the first place.
+    /// surface in the level â€” you could never click the geometry to select it in the first place.
     /// </summary>
     public bool TryGetManipulatorOrigin(out NVec3 origin)
     {
@@ -260,7 +293,7 @@ public sealed partial class EditorController : Node3D
     }
 
     // =============================================================================================
-    //  Manipulator handles (§11.9) — the click targets that make a transform pick ONE axis
+    //  Manipulator handles (Â§11.9) â€” the click targets that make a transform pick ONE axis
     // =============================================================================================
 
     private readonly List<EditorHandle> _handles = new();
@@ -311,7 +344,7 @@ public sealed partial class EditorController : Node3D
     }
 
     // =============================================================================================
-    //  Ortho input (§11.5) — the same tools and the same ops, driven by a pointer instead of a crosshair
+    //  Ortho input (Â§11.5) â€” the same tools and the same ops, driven by a pointer instead of a crosshair
     // =============================================================================================
 
     /// <summary>
@@ -324,7 +357,7 @@ public sealed partial class EditorController : Node3D
     /// <summary>Ray origin under the pointer, in world space. Fed by the host from the ortho projection.</summary>
     public NVec3 OrthoRayOrigin { get; set; }
 
-    /// <summary>The ortho view axis — the direction the ray travels, and the axis a drag must NOT move along.</summary>
+    /// <summary>The ortho view axis â€” the direction the ray travels, and the axis a drag must NOT move along.</summary>
     public NVec3 OrthoForward { get; set; } = new(0f, 0f, -1f);
 
     /// <summary>Screen-right in world space for the current ortho axis.</summary>
@@ -333,7 +366,7 @@ public sealed partial class EditorController : Node3D
     /// <summary>Screen-up in world space for the current ortho axis.</summary>
     public NVec3 OrthoUp { get; set; } = new(0f, 1f, 0f);
 
-    /// <summary>World units per screen pixel at the current zoom — what makes a drag track the pointer 1:1.</summary>
+    /// <summary>World units per screen pixel at the current zoom â€” what makes a drag track the pointer 1:1.</summary>
     public float OrthoUnitsPerPixel { get; set; } = 1f;
 
     /// <summary>The ray a pick should run along: the pointer in ortho, the crosshair otherwise.</summary>
@@ -346,7 +379,7 @@ public sealed partial class EditorController : Node3D
     /// <summary>True while a grab is in progress.</summary>
     public bool IsDragging => _dragging;
 
-    /// <summary>The pending, un-applied drag offset — what the ghost preview is drawn at.</summary>
+    /// <summary>The pending, un-applied drag offset â€” what the ghost preview is drawn at.</summary>
     public NVec3 DragDelta => _dragDelta;
 
     /// <summary>The selection being dragged (empty when idle).</summary>
@@ -359,7 +392,7 @@ public sealed partial class EditorController : Node3D
     public int GeometryVersion { get; private set; }
 
     /// <summary>
-    /// Mark derived geometry dirty from outside the controller — the console entity commands apply their own
+    /// Mark derived geometry dirty from outside the controller â€” the console entity commands apply their own
     /// ops and still need the pick index and the world rebuild to follow.
     /// </summary>
     public void BumpGeometryVersion() => GeometryVersion++;
@@ -425,11 +458,11 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>
     /// The gametype whose geometry is currently shown ("" = show everything). Xonotic maps carry
-    /// gametype-conditional brush entities — a CTF-only wall, a Race-only barrier — and the compiled map
+    /// gametype-conditional brush entities â€” a CTF-only wall, a Race-only barrier â€” and the compiled map
     /// contains all of them at once. NetRadiant has no notion of this: it edits the .map source, where those
     /// are ordinary entities with filter keys, and it hides categories through its View > Filter toggles
     /// rather than by gametype. Since we edit the COMPILED result, we can do better and show exactly the map a
-    /// given mode would produce — while never discarding the rest.
+    /// given mode would produce â€” while never discarding the rest.
     /// </summary>
     public string GametypeFilter { get; private set; } = "";
 
@@ -512,7 +545,7 @@ public sealed partial class EditorController : Node3D
     /// <summary>
     /// Re-solve the crosshair hover, but only when the answer can have changed.
     ///
-    /// A pick evaluates brush windings across the whole document, and a real map is thousands of brushes — on
+    /// A pick evaluates brush windings across the whole document, and a real map is thousands of brushes â€” on
     /// stormkeep (5400) doing that every frame cost tens of milliseconds and showed up as a CPU-LOGIC hitch.
     /// The hover can only change when the view moves, the geometry changes, or the tool changes, so gate on
     /// exactly those. Standing still is the common case while a mapper reads the HUD or lines up a shot.
@@ -544,7 +577,7 @@ public sealed partial class EditorController : Node3D
         Hover = VmapPicking.Pick(PickIndex, origin, dir, PickMode(), GrabRadius, PickRange);
     }
 
-    /// <summary>The camera ray in Quake space — the crosshair is the view centre, so this is simply forward.</summary>
+    /// <summary>The camera ray in Quake space â€” the crosshair is the view centre, so this is simply forward.</summary>
     private (NVec3 Origin, NVec3 Direction) CameraRay()
     {
         Transform3D t = _camera!.GlobalTransform;
@@ -556,7 +589,7 @@ public sealed partial class EditorController : Node3D
     private VmapSelectionKind PickMode()
     {
         // Select resolves at object granularity by default, but its Face mode is exactly "pick the face
-        // instead" — the one place the tool alone does not determine the pick kind.
+        // instead" â€” the one place the tool alone does not determine the pick kind.
         if (Tool == EditorTool.Select && Mode == ToolMode.Face)
             return VmapSelectionKind.Face;
         return EditorTools.PickKind(Tool);
@@ -567,7 +600,7 @@ public sealed partial class EditorController : Node3D
     // =============================================================================================
 
     /// <summary>
-    /// A left-click in the 3D view. TWO-PHASE (§11.9): if the crosshair is on a manipulator handle this starts
+    /// A left-click in the 3D view. TWO-PHASE (Â§11.9): if the crosshair is on a manipulator handle this starts
     /// a transform on that handle's axis; otherwise it only SELECTS.
     ///
     /// Dragging the object body no longer transforms anything, and that is the point. The old behaviour moved
@@ -584,14 +617,14 @@ public sealed partial class EditorController : Node3D
 
         // Paste mode owns the click outright: the ghost is under the crosshair and clicking puts it down.
         // Handled before the handle test because a fresh paste has no selection yet, so there are no handles
-        // to compete with — and after a paste there ARE, which is exactly when you want them.
+        // to compete with â€” and after a paste there ARE, which is exactly when you want them.
         if (Mode == ToolMode.Paste)
         {
             PasteAtCrosshair();
             return false;
         }
 
-        // The Clip tool's click places a plane point, except with nothing selected yet — you have to be able
+        // The Clip tool's click places a plane point, except with nothing selected yet â€” you have to be able
         // to pick the brushes to cut before you can aim a cut at them.
         if (Tool == EditorTool.Clip && _session.Selection.Count > 0)
         {
@@ -671,7 +704,7 @@ public sealed partial class EditorController : Node3D
             return;
 
         // World units per pixel at the grab depth, so the drag tracks the pointer 1:1 on screen. In ortho the
-        // scale comes from the zoom instead, and the screen axes are the view’s own — which is what makes the
+        // scale comes from the zoom instead, and the screen axes are the viewâ€™s own â€” which is what makes the
         // drag exactly planar: the projection axis is simply not among the directions it can move.
         float viewportH = MathF.Max(1f, _camera.GetViewport().GetVisibleRect().Size.Y);
         float unitsPerPixel;
@@ -717,7 +750,7 @@ public sealed partial class EditorController : Node3D
 
     /// <summary>
     /// Turn the accumulated pointer travel into per-axis scale factors. The reach (pivot to handle) is the
-    /// denominator, so dragging a handle to twice its distance from the pivot doubles the selection — which is
+    /// denominator, so dragging a handle to twice its distance from the pivot doubles the selection â€” which is
     /// what makes the gesture feel proportional on a small brush and a large one alike.
     /// </summary>
     private void UpdateScaleFromRaw()
@@ -861,7 +894,7 @@ public sealed partial class EditorController : Node3D
     }
 
     /// <summary>
-    /// Quantize a distance to the grid, honouring the held-Ctrl inversion (§11.9): Ctrl flips whichever way
+    /// Quantize a distance to the grid, honouring the held-Ctrl inversion (Â§11.9): Ctrl flips whichever way
     /// the grid toggle is currently set, so you can drop off-grid for one drag without changing the setting,
     /// and equally snap for one drag while working freehand.
     /// </summary>
@@ -922,11 +955,11 @@ public sealed partial class EditorController : Node3D
                 return false;
 
             // Entities turn about the vertical axis with their facing keys, which is a different op from the
-            // geometry rotate — a spawn's direction lives in a key, not in its shape.
+            // geometry rotate â€” a spawn's direction lives in a key, not in its shape.
             List<int> rotEntities = SelectedEntityIds();
             if (rotEntities.Count > 0)
             {
-                bool turned = _session.Apply(new RotateEntitiesOp(rotEntities, pivot, angle));
+                bool turned = Commit(new RotateEntitiesOp(rotEntities, pivot, angle));
                 if (rotIds.Count == 0 && rotPatches.Count == 0)
                 {
                     if (turned)
@@ -937,9 +970,9 @@ public sealed partial class EditorController : Node3D
 
             // ONE op for the whole selection: a mixed brush+patch rotate about a shared pivot has to be a
             // single undo step, because a single drag produced it.
-            if (!_session.Apply(new RotateSelectionOp(rotIds, rotPatches, pivot, rotAxis, angle)))
+            if (!Commit(new RotateSelectionOp(rotIds, rotPatches, pivot, rotAxis, angle)))
             {
-                Log.Info("editor: rotation refused — that would break the brush");
+                Log.Info("editor: rotation refused â€” that would break the brush");
                 return false;
             }
 
@@ -957,9 +990,9 @@ public sealed partial class EditorController : Node3D
             if (scaleBrushes.Count == 0 && scalePatches.Count == 0)
                 return false;
 
-            if (!_session.Apply(new ScaleSelectionOp(scaleBrushes, scalePatches, pivot, scale)))
+            if (!Commit(new ScaleSelectionOp(scaleBrushes, scalePatches, pivot, scale)))
             {
-                Log.Info("editor: scale refused — that would break the brush");
+                Log.Info("editor: scale refused â€” that would break the brush");
                 return false;
             }
             GeometryVersion++;
@@ -974,7 +1007,7 @@ public sealed partial class EditorController : Node3D
         List<int> moveEntities = SelectedEntityIds();
         if (moveEntities.Count > 0 && _session.SelectedBrushIds().Count == 0 && SelectedPatchIds().Count == 0)
         {
-            if (!_session.Apply(new MoveEntitiesOp(moveEntities, delta, _document)))
+            if (!Commit(new MoveEntitiesOp(moveEntities, delta, _document)))
                 return false;
             GeometryVersion++;
             return true;
@@ -982,7 +1015,7 @@ public sealed partial class EditorController : Node3D
 
         IVmapOp? op = sel.Kind switch
         {
-            // A patch moves as a whole object — it has no plane set to push or corner to refit.
+            // A patch moves as a whole object â€” it has no plane set to push or corner to refit.
             VmapSelectionKind.Patch => new TranslatePatchesOp(SelectedPatchIds(), delta),
             VmapSelectionKind.Face => BuildFaceOp(sel, delta),
             VmapSelectionKind.Vertex or VmapSelectionKind.Edge => new MoveVerticesOp(sel.BrushId, sel.Vertices, delta),
@@ -992,11 +1025,11 @@ public sealed partial class EditorController : Node3D
         if (op is null)
             return false;
 
-        if (!_session.Apply(op))
+        if (!Commit(op))
         {
-            // Refused: the drag would have produced invalid geometry (§11.4). Say so rather than leaving the
+            // Refused: the drag would have produced invalid geometry (Â§11.4). Say so rather than leaving the
             // mapper wondering why the wall snapped back.
-            Log.Info("editor: edit refused — that would break the brush");
+            Log.Info("editor: edit refused â€” that would break the brush");
             return false;
         }
 
@@ -1005,7 +1038,7 @@ public sealed partial class EditorController : Node3D
     }
 
     // =============================================================================================
-    //  Measure tool (§11.8, §11.9) — distance, angle, and the reachability a desktop editor cannot answer
+    //  Measure tool (Â§11.8, Â§11.9) â€” distance, angle, and the reachability a desktop editor cannot answer
     // =============================================================================================
 
     private readonly List<NVec3> _measurePoints = new();
@@ -1050,7 +1083,7 @@ public sealed partial class EditorController : Node3D
             if (_measurePoints.Count < 3)
                 return "click a third point";
             float deg = VmapMeasure.Angle(_measurePoints[0], _measurePoints[1], _measurePoints[2]);
-            return $"{deg:0.##}° at the first point";
+            return $"{deg:0.##}Â° at the first point";
         }
 
         if (Mode == ToolMode.Reachability)
@@ -1079,15 +1112,19 @@ public sealed partial class EditorController : Node3D
         }
 
         var op = new ExtrudeFaceOp(sel.BrushId, sel.FaceIndex, distance);
-        if (!_session.Apply(op))
+        if (!Commit(op))
         {
-            Log.Info("editor: extrude refused — that would not make a valid solid");
+            Log.Info("editor: extrude refused â€” that would not make a valid solid");
             return false;
         }
 
-        // Select what was made, so it can be nudged or textured straight away.
-        _session.Selection.Clear();
-        _session.Selection.Add(VmapSelection.OfBrush(op.CreatedBrushId));
+        // Select what was made, so it can be nudged or textured straight away. Skipped on a guest: the brush
+        // does not exist until the server's echo lands, and there is no id yet to select.
+        if (!LastOpDeferred)
+        {
+            _session.Selection.Clear();
+            _session.Selection.Add(VmapSelection.OfBrush(op.CreatedBrushId));
+        }
         GeometryVersion++;
         return true;
     }
@@ -1105,9 +1142,9 @@ public sealed partial class EditorController : Node3D
             return false;
         }
 
-        if (!_session.Apply(new BevelEdgeOp(sel.BrushId, sel.Vertices[0], sel.Vertices[1], size)))
+        if (!Commit(new BevelEdgeOp(sel.BrushId, sel.Vertices[0], sel.Vertices[1], size)))
         {
-            Log.Info("editor: bevel refused — that would not make a valid solid");
+            Log.Info("editor: bevel refused â€” that would not make a valid solid");
             return false;
         }
         GeometryVersion++;
@@ -1130,11 +1167,11 @@ public sealed partial class EditorController : Node3D
         float grid = EffectiveGridSnap;
         if (grid <= 0f)
         {
-            Log.Info("editor: the grid is off — nothing to snap to");
+            Log.Info("editor: the grid is off â€” nothing to snap to");
             return false;
         }
 
-        if (!_session.Apply(new SnapBrushToGridOp(ids, grid)))
+        if (!Commit(new SnapBrushToGridOp(ids, grid)))
         {
             Log.Info("editor: nothing moved (already aligned, or the snap would collapse a brush)");
             return false;
@@ -1144,7 +1181,7 @@ public sealed partial class EditorController : Node3D
     }
 
     /// <summary>
-    /// Create a box brush at the crosshair, in the same box a patch would be built in — the selection's bounds
+    /// Create a box brush at the crosshair, in the same box a patch would be built in â€” the selection's bounds
     /// when there is one, else a grid-sized cube. Radiant drags a footprint out in an ortho view; that gesture
     /// belongs to the ortho editing work, and this is the one that makes sense from a first-person crosshair.
     /// </summary>
@@ -1155,14 +1192,17 @@ public sealed partial class EditorController : Node3D
 
         string material = PickedMaterial.Length > 0 ? PickedMaterial : "textures/exx/base_wall01";
         var op = new CreateBoxBrushOp(mins, maxs, material);
-        if (!_session.Apply(op))
+        if (!Commit(op))
         {
             Log.Info("editor: could not create a brush there");
             return false;
         }
 
-        _session.Selection.Clear();
-        _session.Selection.Add(VmapSelection.OfBrush(op.CreatedBrushId));
+        if (!LastOpDeferred)
+        {
+            _session.Selection.Clear();
+            _session.Selection.Add(VmapSelection.OfBrush(op.CreatedBrushId));
+        }
         GeometryVersion++;
         return true;
     }
@@ -1191,7 +1231,7 @@ public sealed partial class EditorController : Node3D
     }
 
     /// <summary>
-    /// Select every FACE using the same shader as the aimed or selected one — the retexturing gesture: point
+    /// Select every FACE using the same shader as the aimed or selected one â€” the retexturing gesture: point
     /// at one wall, take all of them, apply once.
     /// </summary>
     public bool SelectAllOfShader()
@@ -1228,7 +1268,7 @@ public sealed partial class EditorController : Node3D
     }
 
     // =============================================================================================
-    //  Patch control points (§11.9) — the mode patches exist for
+    //  Patch control points (Â§11.9) â€” the mode patches exist for
     // =============================================================================================
 
     private readonly List<EditorHandle> _controlHandles = new();
@@ -1327,7 +1367,7 @@ public sealed partial class EditorController : Node3D
         if (_session is null || index < 0 || delta == NVec3.Zero)
             return false;
 
-        if (!_session.Apply(new MovePatchControlOp(patchId, index, delta)))
+        if (!Commit(new MovePatchControlOp(patchId, index, delta)))
             return false;
 
         GeometryVersion++;
@@ -1335,12 +1375,12 @@ public sealed partial class EditorController : Node3D
     }
 
     // =============================================================================================
-    //  Shader tool (§11.9) — the Surface Inspector
+    //  Shader tool (Â§11.9) â€” the Surface Inspector
     // =============================================================================================
 
     /// <summary>
     /// The shader clipboard: the material and alignment lifted by the eyedropper. Separate from the geometry
-    /// clipboard because they are used together — copy a wall's shader, then paste geometry somewhere else and
+    /// clipboard because they are used together â€” copy a wall's shader, then paste geometry somewhere else and
     /// apply the shader to it, without either operation clobbering the other.
     /// </summary>
     public string PickedMaterial { get; private set; } = "";
@@ -1406,16 +1446,16 @@ public sealed partial class EditorController : Node3D
     {
         if (_session is null || !HasPickedShader)
         {
-            Log.Info("editor: nothing picked — aim at a face and pick first");
+            Log.Info("editor: nothing picked â€” aim at a face and pick first");
             return false;
         }
 
         int changed = 0;
         foreach ((int brushId, int faceIndex) in ShaderTargets())
         {
-            if (_session.Apply(new SetFaceMaterialOp(brushId, faceIndex, PickedMaterial)))
+            if (Commit(new SetFaceMaterialOp(brushId, faceIndex, PickedMaterial)))
                 changed++;
-            _session.Apply(new SetFaceFlagsOp(brushId, faceIndex, PickedSurfaceFlags, PickedContentFlags));
+            Commit(new SetFaceFlagsOp(brushId, faceIndex, PickedSurfaceFlags, PickedContentFlags));
         }
 
         if (changed == 0)
@@ -1447,7 +1487,7 @@ public sealed partial class EditorController : Node3D
             VmapFace face = brush.Faces[faceIndex];
             NVec3[] winding = VmapWinding.BuildFaceWinding(brush, faceIndex);
             VmapTexProjection next = transform(face.Projection, face, winding);
-            if (_session.Apply(new SetFaceProjectionOp(brushId, faceIndex, next)))
+            if (Commit(new SetFaceProjectionOp(brushId, faceIndex, next)))
                 changed++;
         }
 
@@ -1460,7 +1500,7 @@ public sealed partial class EditorController : Node3D
     /// Toggle one surface or content bit across the target faces. Returns how many changed.
     ///
     /// The FIRST target decides the new state and the rest follow it, rather than each face flipping its own
-    /// bit. Flipping individually on a mixed selection scatters it further — half on, half off, and the
+    /// bit. Flipping individually on a mixed selection scatters it further â€” half on, half off, and the
     /// mapper has to click again hoping to land somewhere consistent.
     /// </summary>
     public int ToggleFaceFlag(int bit, bool contentFlag)
@@ -1493,7 +1533,7 @@ public sealed partial class EditorController : Node3D
             else
                 surf = turnOn ? surf | bit : surf & ~bit;
 
-            if (_session.Apply(new SetFaceFlagsOp(brushId, faceIndex, surf, cont)))
+            if (Commit(new SetFaceFlagsOp(brushId, faceIndex, surf, cont)))
                 changed++;
         }
 
@@ -1502,7 +1542,7 @@ public sealed partial class EditorController : Node3D
         return changed;
     }
 
-    /// <summary>Centre of a face's winding — the anchor a scale or rotate turns about.</summary>
+    /// <summary>Centre of a face's winding â€” the anchor a scale or rotate turns about.</summary>
     public static NVec3 FaceCenter(IReadOnlyList<NVec3> winding)
     {
         if (winding is null || winding.Count == 0)
@@ -1514,7 +1554,7 @@ public sealed partial class EditorController : Node3D
     }
 
     // =============================================================================================
-    //  Clip tool (§11.9) — click points to place a cutting plane, Enter to cut
+    //  Clip tool (Â§11.9) â€” click points to place a cutting plane, Enter to cut
     // =============================================================================================
 
     private readonly List<NVec3> _clipPoints = new();
@@ -1525,7 +1565,7 @@ public sealed partial class EditorController : Node3D
     /// <summary>Which half a clip keeps. Cycled from the menu; Back is Radiant's default sense.</summary>
     public ClipKeep ClipKeep { get; private set; } = ClipKeep.Back;
 
-    /// <summary>Cycle keep-back → keep-front → keep-both.</summary>
+    /// <summary>Cycle keep-back â†’ keep-front â†’ keep-both.</summary>
     public void CycleClipKeep()
     {
         ClipKeep = ClipKeep switch
@@ -1542,7 +1582,7 @@ public sealed partial class EditorController : Node3D
     {
         ToolMode.ThreePoint => 3,
         ToolMode.TwoPoint => 2,
-        _ => 0,                     // ViewPlane needs none — the camera IS the plane
+        _ => 0,                     // ViewPlane needs none â€” the camera IS the plane
     };
 
     /// <summary>Add a clip point at the crosshair. Returns true when the point was taken.</summary>
@@ -1568,7 +1608,7 @@ public sealed partial class EditorController : Node3D
     /// The cutting plane the current mode and points define.
     ///
     /// Two-point is the interesting one: two clicked points fix a LINE, not a plane, so the third constraint
-    /// has to come from somewhere. It comes from the view direction — the cut runs along the line you drew and
+    /// has to come from somewhere. It comes from the view direction â€” the cut runs along the line you drew and
     /// extends away from you, which is the gesture a mapper means by "slice it here" in a first-person view.
     /// </summary>
     public bool TryGetClipPlane(out VmapPlane plane)
@@ -1629,12 +1669,12 @@ public sealed partial class EditorController : Node3D
         List<int> ids = _session.SelectedBrushIds();
         if (ids.Count == 0)
         {
-            Log.Info("editor: clip needs a selection — click the brushes to cut first");
+            Log.Info("editor: clip needs a selection â€” click the brushes to cut first");
             return false;
         }
 
         var op = new ClipSelectionOp(ids, plane, ClipKeep);
-        if (!_session.Apply(op))
+        if (!Commit(op))
         {
             Log.Info("editor: the cutting plane missed every selected brush");
             return false;
@@ -1642,8 +1682,9 @@ public sealed partial class EditorController : Node3D
 
         // The off-cuts join the selection when both halves are kept, so a split can be immediately dragged
         // apart without re-picking the piece that did not exist a moment ago.
-        foreach (int id in op.CreatedBrushIds)
-            _session.Selection.Add(VmapSelection.OfBrush(id));
+        if (!LastOpDeferred)
+            foreach (int id in op.CreatedBrushIds)
+                _session.Selection.Add(VmapSelection.OfBrush(id));
 
         _clipPoints.Clear();
         GeometryVersion++;
@@ -1652,14 +1693,14 @@ public sealed partial class EditorController : Node3D
     }
 
     // =============================================================================================
-    //  Paste placement (§11.9) — the ghost follows the crosshair, a click puts it down
+    //  Paste placement (Â§11.9) â€” the ghost follows the crosshair, a click puts it down
     // =============================================================================================
 
     /// <summary>
     /// Where the clipboard would land right now: the crosshair's surface hit, snapped to the grid, or a point
     /// out in front of the camera when the crosshair is aimed at nothing.
     ///
-    /// Aiming at a surface rather than free-floating is what makes paste useful for the common case — dropping
+    /// Aiming at a surface rather than free-floating is what makes paste useful for the common case â€” dropping
     /// a copied light fixture onto a wall lands it ON the wall instead of somewhere near it.
     /// </summary>
     public bool TryGetPastePoint(out NVec3 point)
@@ -1700,7 +1741,7 @@ public sealed partial class EditorController : Node3D
     /// <summary>
     /// Put the clipboard down at the crosshair. Returns true when something was placed.
     ///
-    /// The paste becomes the new SELECTION, which is what lets you immediately grab a handle and nudge it —
+    /// The paste becomes the new SELECTION, which is what lets you immediately grab a handle and nudge it â€”
     /// the alternative leaves you having to find and click the thing you just created.
     /// </summary>
     public bool PasteAtCrosshair()
@@ -1709,10 +1750,17 @@ public sealed partial class EditorController : Node3D
             return false;
 
         var op = new PasteOp(Clipboard, at);
-        if (!_session.Apply(op))
+        if (!Commit(op))
         {
-            Log.Info("editor: paste refused — the pasted geometry would be invalid here");
+            Log.Info("editor: paste refused â€” the pasted geometry would be invalid here");
             return false;
+        }
+
+        GeometryVersion++;
+        if (LastOpDeferred)
+        {
+            Log.Info($"editor: paste submitted ({Clipboard.Count} objects)");
+            return true;
         }
 
         _session.Selection.Clear();
@@ -1721,7 +1769,6 @@ public sealed partial class EditorController : Node3D
         foreach (int id in op.CreatedPatchIds)
             _session.Selection.Add(VmapSelection.OfPatch(id));
 
-        GeometryVersion++;
         Log.Info($"editor: pasted {op.CreatedBrushIds.Count} brushes, {op.CreatedPatchIds.Count} patches");
         return true;
     }
@@ -1756,7 +1803,7 @@ public sealed partial class EditorController : Node3D
     /// The box a new patch is built inside: the SELECTED BRUSH's bounds when there is one, else a grid-sized
     /// box at the crosshair.
     ///
-    /// Building from the selection is Radiant's own gesture and the reason it feels right — you rough a shape
+    /// Building from the selection is Radiant's own gesture and the reason it feels right â€” you rough a shape
     /// in with a brush, then replace it with a cylinder that occupies exactly the same space, so the curve
     /// meets the geometry around it without any measuring.
     /// </summary>
@@ -1789,7 +1836,7 @@ public sealed partial class EditorController : Node3D
         return true;
     }
 
-    /// <summary>Patch ids in the current selection, deduplicated — the patch counterpart of SelectedBrushIds.</summary>
+    /// <summary>Patch ids in the current selection, deduplicated â€” the patch counterpart of SelectedBrushIds.</summary>
     public List<int> SelectedPatchIds()
     {
         var ids = new List<int>();
@@ -1864,7 +1911,7 @@ public sealed partial class EditorController : Node3D
     }
 
     /// <summary>
-    /// Set the tool directly, carrying the current mode across when the new tool also offers it (Brush→Patch
+    /// Set the tool directly, carrying the current mode across when the new tool also offers it (Brushâ†’Patch
     /// while rotating stays in Rotate) and falling back to the new tool's default when it does not.
     /// </summary>
     public void SetTool(EditorTool tool)
@@ -1910,12 +1957,12 @@ public sealed partial class EditorController : Node3D
 
         // Entities first. Deleting a brush entity takes its geometry with it, so doing brushes first would
         // leave the entity op with nothing to find and the ownership links already half-unhooked.
-        if (entityIds.Count > 0 && _session.Apply(new DeleteEntitiesOp(entityIds, _document)))
+        if (entityIds.Count > 0 && Commit(new DeleteEntitiesOp(entityIds, _document)))
             any = true;
 
         // Re-read: an entity delete may have removed brushes that were also selected directly.
         List<int> remaining = ids.FindAll(id => _document?.FindBrush(id) is not null);
-        if (remaining.Count > 0 && _session.Apply(new DeleteBrushesOp(remaining)))
+        if (remaining.Count > 0 && Commit(new DeleteBrushesOp(remaining)))
             any = true;
 
         if (!any)
@@ -1937,7 +1984,7 @@ public sealed partial class EditorController : Node3D
         List<int> ids = _session.SelectedBrushIds();
         if (ids.Count == 0 || !VmapEdit.TryGetSelectionCenter(_document!, ids, out NVec3 center))
             return false;
-        if (!_session.Apply(new RotateBrushesOp(ids, center, new NVec3(0f, 0f, 1f), degrees)))
+        if (!Commit(new RotateBrushesOp(ids, center, new NVec3(0f, 0f, 1f), degrees)))
             return false;
         GeometryVersion++;
         return true;
@@ -1973,7 +2020,7 @@ public sealed partial class EditorController : Node3D
     /// <summary>
     /// Whether q3map2 TOOL brushes take part in picking. Off by default: hint/skip/clip/trigger/caulk brushes
     /// are compiler and gameplay scaffolding, not level architecture, and on a real map they vastly outnumber
-    /// the visible geometry and sit in front of it — so with them pickable, the crosshair mostly grabs invisible
+    /// the visible geometry and sit in front of it â€” so with them pickable, the crosshair mostly grabs invisible
     /// volumes instead of the wall behind them.
     /// </summary>
     public bool IncludeToolBrushes => Cvar(CvarShowToolBrushes, 0f) != 0f;

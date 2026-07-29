@@ -16,7 +16,13 @@ namespace XonoticGodot.Formats.Vmap;
 /// machines reconstructs bit-identically.
 ///
 /// Unknown verbs decode to null rather than throwing: a newer client editing against an older server should
-/// have its unsupported op rejected, not drop the connection.
+/// have its unsupported op rejected, not drop the connection. The same goes for a truncated or garbled
+/// payload — every list is length-prefixed so a short line fails its length check rather than decoding into
+/// something plausible.
+///
+/// Ops that MINT ids (create, clip, extrude, paste) carry the id in the line. A client sends zero, meaning
+/// "you choose"; the server assigns during Apply and re-encodes with <see cref="SerializeAfterApply"/> before
+/// broadcasting, so every peer replays the op with the id the server actually used.
 /// </summary>
 public static class VmapOpWire
 {
@@ -67,16 +73,184 @@ public static class VmapOpWire
                 AppendIds(sb, d.TouchedBrushIds);
                 return sb.ToString();
 
+            case ScaleSelectionOp sc:
+                sb.Append("scale ");
+                AppendIds(sb, sc.TouchedBrushIds);
+                sb.Append(' ');
+                AppendIds(sb, sc.TouchedPatchIds);
+                sb.Append(' ');
+                AppendVec(sb, sc.Pivot);
+                sb.Append(' ');
+                AppendVec(sb, sc.Scale);
+                return sb.ToString();
+
+            case RotateSelectionOp rs:
+                sb.Append("rotsel ");
+                AppendIds(sb, rs.TouchedBrushIds);
+                sb.Append(' ');
+                AppendIds(sb, rs.TouchedPatchIds);
+                sb.Append(' ');
+                AppendVec(sb, rs.Pivot);
+                sb.Append(' ');
+                AppendVec(sb, rs.Axis);
+                sb.Append(' ').Append(Fmt(rs.Degrees));
+                return sb.ToString();
+
+            case TranslatePatchesOp tp:
+                sb.Append("patchmove ");
+                AppendIds(sb, tp.PatchIds);
+                sb.Append(' ');
+                AppendVec(sb, tp.Delta);
+                return sb.ToString();
+
+            case MovePatchControlOp mc:
+                sb.Append("patchctrl ").Append(mc.TouchedPatchIds[0]).Append(' ')
+                    .Append(mc.ControlIndex).Append(' ');
+                AppendVec(sb, mc.Delta);
+                return sb.ToString();
+
+            case ModifyPatchOp mp:
+                return string.Create(CultureInfo.InvariantCulture,
+                    $"patchop {mp.TouchedPatchIds[0]} {(int)mp.Operation}");
+
+            case SetFaceMaterialOp sm:
+                return $"mat {sm.TouchedBrushIds[0]} {sm.FaceIndex} {Escape(sm.Material)}";
+
+            case SetFaceProjectionOp sp:
+                sb.Append("proj ").Append(sp.TouchedBrushIds[0]).Append(' ').Append(sp.FaceIndex).Append(' ');
+                AppendProjection(sb, sp.Projection);
+                return sb.ToString();
+
+            case SetFaceFlagsOp sf:
+                return string.Create(CultureInfo.InvariantCulture,
+                    $"flags {sf.TouchedBrushIds[0]} {sf.FaceIndex} {sf.SurfaceFlags} {sf.ContentFlags}");
+
+            case BevelEdgeOp bv:
+                sb.Append("bevel ").Append(bv.TouchedBrushIds[0]).Append(' ');
+                AppendVec(sb, bv.EdgeA);
+                sb.Append(' ');
+                AppendVec(sb, bv.EdgeB);
+                sb.Append(' ').Append(Fmt(bv.Size));
+                return sb.ToString();
+
+            case SnapBrushToGridOp sg:
+                sb.Append("snap ");
+                AppendIds(sb, sg.TouchedBrushIds);
+                sb.Append(' ').Append(Fmt(sg.Grid));
+                return sb.ToString();
+
+            case SetEntityKeyOp sk:
+                return $"entkey {sk.TouchedEntityIds[0]} {Escape(sk.Key)} {Escape(sk.Value)}";
+
+            case MoveEntitiesOp me:
+                sb.Append("entmove ");
+                AppendIds(sb, me.TouchedEntityIds);
+                sb.Append(' ');
+                AppendVec(sb, me.Delta);
+                return sb.ToString();
+
+            case RotateEntitiesOp rot:
+                sb.Append("entrot ");
+                AppendIds(sb, rot.TouchedEntityIds);
+                sb.Append(' ');
+                AppendVec(sb, rot.Pivot);
+                sb.Append(' ').Append(Fmt(rot.Degrees));
+                return sb.ToString();
+
+            case DeleteEntitiesOp de:
+                sb.Append("entdel ");
+                AppendIds(sb, de.TouchedEntityIds);
+                return sb.ToString();
+
+            // ---- creates: the id field IS the handshake ----
+            //
+            // A create mints an id during Apply, and two machines minting independently would diverge the
+            // moment either of them created anything. So the id travels in the op: a client sends 0 ("you
+            // choose"), the server assigns and applies, and the echo carries the assigned id, which every peer
+            // then replays verbatim. One field, and the whole class of id divergence goes away.
+
+            case CreateBoxBrushOp cb:
+                sb.Append("mkbrush ").Append(cb.WireId).Append(' ');
+                AppendVec(sb, cb.Mins);
+                sb.Append(' ');
+                AppendVec(sb, cb.Maxs);
+                sb.Append(' ').Append(Escape(cb.Material));
+                return sb.ToString();
+
+            case CreatePatchOp cp:
+                sb.Append("mkpatch ").Append(cp.WireId).Append(' ').Append((int)cp.Kind).Append(' ');
+                AppendVec(sb, cp.Mins);
+                sb.Append(' ');
+                AppendVec(sb, cp.Maxs);
+                sb.Append(' ').Append(cp.GridWidth).Append(' ').Append(cp.GridHeight)
+                  .Append(' ').Append(Escape(cp.Material));
+                return sb.ToString();
+
+            case CreateEntityOp ce:
+                sb.Append("mkent ").Append(ce.WireId).Append(' ');
+                AppendVec(sb, ce.Origin);
+                sb.Append(' ').Append(Escape(ce.ClassName)).Append(' ').Append(ce.Fields.Count);
+                foreach (KeyValuePair<string, string> kv in ce.Fields)
+                    sb.Append(' ').Append(Escape(kv.Key)).Append(' ').Append(Escape(kv.Value));
+                return sb.ToString();
+
+            case ExtrudeFaceOp ex:
+                return string.Create(CultureInfo.InvariantCulture,
+                    $"extrude {ex.WireId} {ex.SourceBrushId} {ex.FaceIndex} {Fmt(ex.Distance)}");
+
+            case ClipSelectionOp cl:
+                sb.Append("clip ");
+                AppendIds(sb, cl.TouchedBrushIds);
+                sb.Append(' ');
+                AppendVec(sb, cl.Plane.Normal);
+                sb.Append(' ').Append(Fmt(cl.Plane.Dist)).Append(' ').Append((int)cl.Keep).Append(' ');
+                AppendIds(sb, cl.WireIds);
+                return sb.ToString();
+
+            case AddObjectsOp add:
+                AppendAddObjects(sb, add);
+                return sb.ToString();
+
+            case SetObjectsOp set:
+                AppendSetObjects(sb, set);
+                return sb.ToString();
+
             default:
-                // CreateBoxBrushOp / ClipBrushOp allocate ids during Apply, so replicating them needs the
-                // server to assign the id and echo it back. Deliberately not wired until that handshake exists
-                // (see the E6 note in the design doc) rather than shipping an op that desynchronizes ids.
+                // PasteOp is the one op with no verb of its own: its RESULT is what replicates, encoded as an
+                // AddObjectsOp by SerializeAfterApply once the ids exist.
                 return null;
         }
     }
 
-    /// <summary>Decode a line produced by <see cref="Serialize"/>. Returns null for a malformed/unknown line.</summary>
-    public static IVmapOp? Deserialize(string line)
+    /// <summary>
+    /// Encode an op that has already been applied to <paramref name="doc"/>, so a create carries the id the
+    /// apply assigned rather than a request for one. This is the form the server broadcasts.
+    ///
+    /// A paste has no gesture worth replaying — its result is an arbitrary pile of geometry — so it is
+    /// captured out of the document as an <see cref="AddObjectsOp"/> instead.
+    /// </summary>
+    public static string? SerializeAfterApply(IVmapOp op, VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(op);
+        ArgumentNullException.ThrowIfNull(doc);
+
+        if (op is PasteOp paste)
+            return Serialize(AddObjectsOp.Capture(
+                doc, paste.CreatedBrushIds, paste.CreatedPatchIds, paste.CreatedEntityIds));
+
+        return Serialize(op);
+    }
+
+    /// <summary>
+    /// Decode a line produced by <see cref="Serialize"/>. Returns null for a malformed or unknown line.
+    /// </summary>
+    /// <param name="doc">
+    /// The document the op is about to be applied to, where one is available. Two entity ops need it at
+    /// CONSTRUCTION to work out which brushes an entity owns — that set has to be known before Apply so the
+    /// journal can snapshot it, and only the document knows it. Without it a replicated brush-entity move is
+    /// applied but not undoable, so pass it whenever you have it.
+    /// </param>
+    public static IVmapOp? Deserialize(string line, VmapDocument? doc = null)
     {
         if (string.IsNullOrWhiteSpace(line))
             return null;
@@ -129,6 +303,168 @@ public static class VmapOpWire
                         return null;
                     return new DeleteBrushesOp(ids);
                 }
+                case "scale":
+                {
+                    if (!TryReadIds(tok, 1, out int[] brushIds, out int n1)
+                        || !TryReadIds(tok, n1, out int[] patchIds, out int n2)
+                        || tok.Length < n2 + 6)
+                        return null;
+                    return new ScaleSelectionOp(brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3));
+                }
+                case "rotsel":
+                {
+                    if (!TryReadIds(tok, 1, out int[] brushIds, out int n1)
+                        || !TryReadIds(tok, n1, out int[] patchIds, out int n2)
+                        || tok.Length < n2 + 7)
+                        return null;
+                    return new RotateSelectionOp(
+                        brushIds, patchIds, ReadVec(tok, n2), ReadVec(tok, n2 + 3), ReadFloat(tok[n2 + 6]));
+                }
+                case "patchmove":
+                {
+                    if (!TryReadIds(tok, 1, out int[] ids, out int next) || tok.Length < next + 3)
+                        return null;
+                    return new TranslatePatchesOp(ids, ReadVec(tok, next));
+                }
+                case "patchctrl":
+                {
+                    if (tok.Length < 6)
+                        return null;
+                    return new MovePatchControlOp(
+                        int.Parse(tok[1], CultureInfo.InvariantCulture),
+                        int.Parse(tok[2], CultureInfo.InvariantCulture), ReadVec(tok, 3));
+                }
+                case "patchop":
+                {
+                    if (tok.Length < 3)
+                        return null;
+                    return new ModifyPatchOp(
+                        int.Parse(tok[1], CultureInfo.InvariantCulture),
+                        (PatchOperation)int.Parse(tok[2], CultureInfo.InvariantCulture));
+                }
+                case "mat":
+                {
+                    if (tok.Length < 4)
+                        return null;
+                    return new SetFaceMaterialOp(
+                        int.Parse(tok[1], CultureInfo.InvariantCulture),
+                        int.Parse(tok[2], CultureInfo.InvariantCulture), Unescape(tok[3]));
+                }
+                case "proj":
+                {
+                    if (tok.Length < 11)
+                        return null;
+                    return new SetFaceProjectionOp(
+                        int.Parse(tok[1], CultureInfo.InvariantCulture),
+                        int.Parse(tok[2], CultureInfo.InvariantCulture), ReadProjection(tok, 3));
+                }
+                case "flags":
+                {
+                    if (tok.Length < 5)
+                        return null;
+                    return new SetFaceFlagsOp(
+                        int.Parse(tok[1], CultureInfo.InvariantCulture),
+                        int.Parse(tok[2], CultureInfo.InvariantCulture),
+                        int.Parse(tok[3], CultureInfo.InvariantCulture),
+                        int.Parse(tok[4], CultureInfo.InvariantCulture));
+                }
+                case "bevel":
+                {
+                    if (tok.Length < 9)
+                        return null;
+                    return new BevelEdgeOp(
+                        int.Parse(tok[1], CultureInfo.InvariantCulture),
+                        ReadVec(tok, 2), ReadVec(tok, 5), ReadFloat(tok[8]));
+                }
+                case "snap":
+                {
+                    if (!TryReadIds(tok, 1, out int[] ids, out int next) || tok.Length < next + 1)
+                        return null;
+                    return new SnapBrushToGridOp(ids, ReadFloat(tok[next]));
+                }
+                case "entkey":
+                {
+                    if (tok.Length < 4)
+                        return null;
+                    return new SetEntityKeyOp(
+                        int.Parse(tok[1], CultureInfo.InvariantCulture), Unescape(tok[2]), Unescape(tok[3]));
+                }
+                case "entmove":
+                {
+                    if (!TryReadIds(tok, 1, out int[] ids, out int next) || tok.Length < next + 3)
+                        return null;
+                    return new MoveEntitiesOp(ids, ReadVec(tok, next), doc);
+                }
+                case "entrot":
+                {
+                    if (!TryReadIds(tok, 1, out int[] ids, out int next) || tok.Length < next + 4)
+                        return null;
+                    return new RotateEntitiesOp(ids, ReadVec(tok, next), ReadFloat(tok[next + 3]));
+                }
+                case "entdel":
+                {
+                    if (!TryReadIds(tok, 1, out int[] ids, out _))
+                        return null;
+                    return new DeleteEntitiesOp(ids, doc);
+                }
+                case "mkbrush":
+                {
+                    if (tok.Length < 9)
+                        return null;
+                    return new CreateBoxBrushOp(
+                        ReadVec(tok, 2), ReadVec(tok, 5), Unescape(tok[8]),
+                        int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "mkpatch":
+                {
+                    if (tok.Length < 12)
+                        return null;
+                    return new CreatePatchOp(
+                        (PatchPrimitive)int.Parse(tok[2], CultureInfo.InvariantCulture),
+                        ReadVec(tok, 3), ReadVec(tok, 6), Unescape(tok[11]),
+                        int.Parse(tok[9], CultureInfo.InvariantCulture),
+                        int.Parse(tok[10], CultureInfo.InvariantCulture),
+                        int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "mkent":
+                {
+                    if (tok.Length < 7)
+                        return null;
+                    int fieldCount = int.Parse(tok[6], CultureInfo.InvariantCulture);
+                    if (fieldCount < 0 || tok.Length < 7 + fieldCount * 2)
+                        return null;
+                    var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < fieldCount; i++)
+                        fields[Unescape(tok[7 + i * 2])] = Unescape(tok[8 + i * 2]);
+                    return new CreateEntityOp(
+                        Unescape(tok[5]), ReadVec(tok, 2), fields,
+                        int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "extrude":
+                {
+                    if (tok.Length < 5)
+                        return null;
+                    return new ExtrudeFaceOp(
+                        int.Parse(tok[2], CultureInfo.InvariantCulture),
+                        int.Parse(tok[3], CultureInfo.InvariantCulture), ReadFloat(tok[4]),
+                        int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "clip":
+                {
+                    if (!TryReadIds(tok, 1, out int[] ids, out int next) || tok.Length < next + 5)
+                        return null;
+                    var plane = new VmapPlane(ReadVec(tok, next), ReadFloat(tok[next + 3]));
+                    var keep = (ClipKeep)int.Parse(tok[next + 4], CultureInfo.InvariantCulture);
+                    if (!TryReadIds(tok, next + 5, out int[] created, out _))
+                        return null;
+                    return new ClipSelectionOp(ids, plane, keep, created);
+                }
+                case "add":
+                    return ReadAddObjects(tok);
+
+                case "set":
+                    return ReadSetObjects(tok);
+
                 default:
                     return null;
             }
@@ -175,6 +511,304 @@ public static class VmapOpWire
     /// <summary>Round-trip ("R") formatting so a decoded float is bit-identical to the encoded one.</summary>
     private static string Fmt(float f) => f.ToString("R", CultureInfo.InvariantCulture);
 
+    // ---- strings: shader names and spawn values are user text, so they can hold spaces ----
+
+    /// <summary>
+    /// Make a string safe to carry as one space-separated token. Empty becomes a sentinel rather than nothing,
+    /// because a zero-length token vanishes under the split and would silently shift every field after it —
+    /// which is exactly what clearing a spawn key with <c>entkey</c> would otherwise do.
+    /// </summary>
+    private static string Escape(string? s)
+    {
+        if (string.IsNullOrEmpty(s))
+            return "\\e";
+
+        var sb = new StringBuilder(s.Length + 4);
+        foreach (char c in s)
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case ' ': sb.Append("\\s"); break;
+                default: sb.Append(c); break;
+            }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="Escape"/>. A single left-to-right pass, not two Replace calls: replacing "\s"
+    /// first would corrupt an escaped backslash that happened to be followed by an 's'.
+    /// </summary>
+    private static string Unescape(string s)
+    {
+        if (s == "\\e")
+            return string.Empty;
+        if (s.IndexOf('\\') < 0)
+            return s;
+
+        var sb = new StringBuilder(s.Length);
+        for (int i = 0; i < s.Length; i++)
+        {
+            if (s[i] != '\\' || i + 1 >= s.Length)
+            {
+                sb.Append(s[i]);
+                continue;
+            }
+            sb.Append(s[++i] switch { 's' => ' ', '\\' => '\\', char other => other });
+        }
+        return sb.ToString();
+    }
+
+    // ---- texture projection: "<axisU> <axisV> <offU> <offV>", 8 tokens ----
+
+    private static void AppendProjection(StringBuilder sb, VmapTexProjection p)
+    {
+        AppendVec(sb, p.AxisU);
+        sb.Append(' ');
+        AppendVec(sb, p.AxisV);
+        sb.Append(' ').Append(Fmt(p.OffsetU)).Append(' ').Append(Fmt(p.OffsetV));
+    }
+
+    private static VmapTexProjection ReadProjection(string[] tok, int i)
+        => new(ReadVec(tok, i), ReadVec(tok, i + 3), ReadFloat(tok[i + 6]), ReadFloat(tok[i + 7]));
+
+    // ---- the add payload: whole objects rather than a gesture ----
+    //
+    // Long by the standards of the other verbs, and that is the point: an AddObjectsOp is what a paste becomes,
+    // so the line has to carry every plane, control point and spawn key rather than an instruction to rebuild
+    // them. Counts precede every list so a truncated line fails the length check instead of decoding as
+    // something plausible.
+
+    private static void AppendAddObjects(StringBuilder sb, AddObjectsOp add)
+    {
+        sb.Append("add ");
+        AppendBrushes(sb, add.Brushes);
+        sb.Append(' ');
+        AppendPatches(sb, add.Patches);
+
+        sb.Append(' ').Append(add.Entities.Count);
+        for (int i = 0; i < add.Entities.Count; i++)
+        {
+            AppendEntity(sb, add.Entities[i]);
+            sb.Append(' ');
+            AppendIds(sb, add.EntityBrushIndices[i]);
+            sb.Append(' ');
+            AppendIds(sb, add.EntityPatchIndices[i]);
+        }
+    }
+
+    private static void AppendSetObjects(StringBuilder sb, SetObjectsOp set)
+    {
+        sb.Append("set ");
+        AppendBrushes(sb, set.Brushes);
+        sb.Append(' ');
+        AppendPatches(sb, set.Patches);
+
+        // Ownership by real id here, not by index: every object in a restore already exists on both sides.
+        sb.Append(' ').Append(set.Entities.Count);
+        foreach (VmapEntity e in set.Entities)
+        {
+            AppendEntity(sb, e);
+            sb.Append(' ');
+            AppendIds(sb, e.BrushIds);
+            sb.Append(' ');
+            AppendIds(sb, e.PatchIds);
+        }
+
+        sb.Append(' ');
+        AppendIds(sb, set.RemovedBrushIds);
+        sb.Append(' ');
+        AppendIds(sb, set.RemovedPatchIds);
+        sb.Append(' ');
+        AppendIds(sb, set.RemovedEntityIds);
+    }
+
+    private static void AppendBrushes(StringBuilder sb, IReadOnlyList<VmapBrush> brushes)
+    {
+        sb.Append(brushes.Count);
+        foreach (VmapBrush b in brushes)
+        {
+            sb.Append(' ').Append(b.Id).Append(' ').Append(b.Faces.Count);
+            foreach (VmapFace f in b.Faces)
+            {
+                sb.Append(' ');
+                AppendVec(sb, f.Plane.Normal);
+                sb.Append(' ').Append(Fmt(f.Plane.Dist)).Append(' ');
+                AppendProjection(sb, f.Projection);
+                sb.Append(' ').Append(f.SurfaceFlags).Append(' ').Append(f.ContentFlags)
+                  .Append(' ').Append(Escape(f.Material));
+            }
+        }
+    }
+
+    private static void AppendPatches(StringBuilder sb, IReadOnlyList<VmapPatch> patches)
+    {
+        sb.Append(patches.Count);
+        foreach (VmapPatch p in patches)
+        {
+            sb.Append(' ').Append(p.Id).Append(' ').Append(p.Width).Append(' ').Append(p.Height)
+              .Append(' ').Append(p.SurfaceFlags).Append(' ').Append(p.ContentFlags)
+              .Append(' ').Append(Escape(p.Material));
+            foreach (Vector3 c in p.Controls)
+            {
+                sb.Append(' ');
+                AppendVec(sb, c);
+            }
+            foreach (Vector2 uv in p.ControlUvs)
+                sb.Append(' ').Append(Fmt(uv.X)).Append(' ').Append(Fmt(uv.Y));
+        }
+    }
+
+    private static void AppendEntity(StringBuilder sb, VmapEntity e)
+    {
+        sb.Append(' ').Append(e.Id).Append(' ').Append(e.Fields.Count);
+        foreach (KeyValuePair<string, string> kv in e.Fields)
+            sb.Append(' ').Append(Escape(kv.Key)).Append(' ').Append(Escape(kv.Value));
+    }
+
+    private static AddObjectsOp? ReadAddObjects(string[] tok)
+    {
+        int at = 1;
+        if (!TryReadBrushes(tok, ref at, out List<VmapBrush> brushes)
+            || !TryReadPatches(tok, ref at, out List<VmapPatch> patches)
+            || !TryCount(tok, ref at, out int entityCount))
+            return null;
+
+        var entities = new List<VmapEntity>(entityCount);
+        var ownedBrushes = new List<int[]>(entityCount);
+        var ownedPatches = new List<int[]>(entityCount);
+        for (int i = 0; i < entityCount; i++)
+        {
+            if (!TryReadEntity(tok, ref at, out VmapEntity e)
+                || !TryReadIds(tok, at, out int[] bi, out at)
+                || !TryReadIds(tok, at, out int[] pi, out at))
+                return null;
+            entities.Add(e);
+            ownedBrushes.Add(bi);
+            ownedPatches.Add(pi);
+        }
+
+        return new AddObjectsOp(brushes, patches, entities, ownedBrushes, ownedPatches);
+    }
+
+    private static SetObjectsOp? ReadSetObjects(string[] tok)
+    {
+        int at = 1;
+        if (!TryReadBrushes(tok, ref at, out List<VmapBrush> brushes)
+            || !TryReadPatches(tok, ref at, out List<VmapPatch> patches)
+            || !TryCount(tok, ref at, out int entityCount))
+            return null;
+
+        var entities = new List<VmapEntity>(entityCount);
+        for (int i = 0; i < entityCount; i++)
+        {
+            if (!TryReadEntity(tok, ref at, out VmapEntity e)
+                || !TryReadIds(tok, at, out int[] bi, out at)
+                || !TryReadIds(tok, at, out int[] pi, out at))
+                return null;
+            e.BrushIds.AddRange(bi);
+            e.PatchIds.AddRange(pi);
+            entities.Add(e);
+        }
+
+        if (!TryReadIds(tok, at, out int[] goneBrushes, out at)
+            || !TryReadIds(tok, at, out int[] gonePatches, out at)
+            || !TryReadIds(tok, at, out int[] goneEntities, out _))
+            return null;
+
+        return new SetObjectsOp(brushes, patches, entities, goneBrushes, gonePatches, goneEntities);
+    }
+
+    private static bool TryReadBrushes(string[] tok, ref int at, out List<VmapBrush> brushes)
+    {
+        brushes = new List<VmapBrush>();
+        if (!TryCount(tok, ref at, out int brushCount))
+            return false;
+        for (int i = 0; i < brushCount; i++)
+        {
+            if (!TryCount(tok, ref at, out int id) || !TryCount(tok, ref at, out int faceCount))
+                return false;
+            var brush = new VmapBrush { Id = id };
+            for (int f = 0; f < faceCount; f++)
+            {
+                if (at + 15 > tok.Length)
+                    return false;
+                brush.Faces.Add(new VmapFace
+                {
+                    Plane = new VmapPlane(ReadVec(tok, at), ReadFloat(tok[at + 3])),
+                    Projection = ReadProjection(tok, at + 4),
+                    SurfaceFlags = int.Parse(tok[at + 12], CultureInfo.InvariantCulture),
+                    ContentFlags = int.Parse(tok[at + 13], CultureInfo.InvariantCulture),
+                    Material = Unescape(tok[at + 14]),
+                });
+                at += 15;
+            }
+            brush.IsToolBrush = brush.ClassifyToolBrush();
+            brushes.Add(brush);
+        }
+        return true;
+    }
+
+    private static bool TryReadPatches(string[] tok, ref int at, out List<VmapPatch> patches)
+    {
+        patches = new List<VmapPatch>();
+        if (!TryCount(tok, ref at, out int patchCount))
+            return false;
+
+        for (int i = 0; i < patchCount; i++)
+        {
+            if (at + 6 > tok.Length)
+                return false;
+            var patch = new VmapPatch
+            {
+                Id = int.Parse(tok[at], CultureInfo.InvariantCulture),
+                Width = int.Parse(tok[at + 1], CultureInfo.InvariantCulture),
+                Height = int.Parse(tok[at + 2], CultureInfo.InvariantCulture),
+                SurfaceFlags = int.Parse(tok[at + 3], CultureInfo.InvariantCulture),
+                ContentFlags = int.Parse(tok[at + 4], CultureInfo.InvariantCulture),
+                Material = Unescape(tok[at + 5]),
+            };
+            at += 6;
+
+            // A hostile line could claim a grid far larger than the tokens behind it, so the cell count is
+            // bounded before it is used to size anything.
+            int cells = patch.Width * patch.Height;
+            if (patch.Width < 0 || patch.Height < 0 || cells > 1 << 16 || at + cells * 5 > tok.Length)
+                return false;
+            for (int c = 0; c < cells; c++, at += 3)
+                patch.Controls.Add(ReadVec(tok, at));
+            for (int c = 0; c < cells; c++, at += 2)
+                patch.ControlUvs.Add(new Vector2(ReadFloat(tok[at]), ReadFloat(tok[at + 1])));
+            patches.Add(patch);
+        }
+        return true;
+    }
+
+    private static bool TryReadEntity(string[] tok, ref int at, out VmapEntity entity)
+    {
+        entity = new VmapEntity();
+        if (!TryCount(tok, ref at, out int id) || !TryCount(tok, ref at, out int fieldCount))
+            return false;
+        if (at + fieldCount * 2 > tok.Length)
+            return false;
+
+        entity.Id = id;
+        for (int k = 0; k < fieldCount; k++, at += 2)
+            entity.Fields[Unescape(tok[at])] = Unescape(tok[at + 1]);
+
+        // The hoisted property and the key have to stay in step — that is the whole contract of VmapEntity.
+        entity.ClassName = entity.Fields.TryGetValue("classname", out string? cn) ? cn : string.Empty;
+        return true;
+    }
+
+    /// <summary>Read one non-negative count/id and step past it, refusing a line that ended early.</summary>
+    private static bool TryCount(string[] tok, ref int at, out int value)
+    {
+        value = 0;
+        if (at >= tok.Length)
+            return false;
+        value = int.Parse(tok[at++], CultureInfo.InvariantCulture);
+        return value >= 0;
+    }
 }
 
 /// <summary>
@@ -273,18 +907,26 @@ public sealed class VmapEditServer
     }
 
     /// <summary>Apply a wire-encoded op submitted by a client.</summary>
-    public Result Submit(int clientId, string wireLine)
+    /// <param name="echo">
+    /// On <see cref="Result.Applied"/>, the line to broadcast: the same op re-encoded AFTER the apply, so any
+    /// id the apply minted is in it. Broadcasting the submitted line instead would send "you choose an id" to
+    /// every peer and let each of them choose differently.
+    /// </param>
+    public Result Submit(int clientId, string wireLine, out string? echo)
     {
-        IVmapOp? op = VmapOpWire.Deserialize(wireLine);
+        echo = null;
+        IVmapOp? op = VmapOpWire.Deserialize(wireLine, _session.Document);
         if (op is null)
             return Result.Malformed;
-        return Submit(clientId, op);
+        return Submit(clientId, op, out echo);
     }
 
     /// <summary>Apply an already-decoded op on behalf of a client.</summary>
-    public Result Submit(int clientId, IVmapOp op)
+    /// <inheritdoc cref="Submit(int, string, out string?)" path="/param[@name='echo']"/>
+    public Result Submit(int clientId, IVmapOp op, out string? echo)
     {
         ArgumentNullException.ThrowIfNull(op);
+        echo = null;
 
         if (!Locks.TryAcquire(clientId, op.TouchedBrushIds))
             return Result.Locked;
@@ -295,6 +937,44 @@ public sealed class VmapEditServer
         // client silently own a brush forever if it never sent an explicit release.
         Locks.Release(clientId, op.TouchedBrushIds);
 
-        return ok ? Result.Applied : Result.Rejected;
+        if (!ok)
+            return Result.Rejected;
+
+        echo = VmapOpWire.SerializeAfterApply(op, _session.Document);
+        return Result.Applied;
+    }
+
+    // ---- deferred submission ----
+    //
+    // A client's op arrives on whichever thread reads packets, and the document is owned by the editor on the
+    // main thread. Applying it where it lands would be a second writer on shared geometry, which is the same
+    // class of bug as the cross-thread transport race — so an incoming op is queued here and applied by the
+    // owner when it drains.
+
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(int ClientId, string Line)> _pending = new();
+
+    /// <summary>Queue a client's op for the owning thread to apply. Safe from any thread.</summary>
+    public void Enqueue(int clientId, string wireLine)
+    {
+        if (!string.IsNullOrWhiteSpace(wireLine))
+            _pending.Enqueue((clientId, wireLine));
+    }
+
+    /// <summary>
+    /// Apply every queued op, calling <paramref name="echo"/> with the line to broadcast for each one that
+    /// lands. Call from the thread that owns the document. Returns how many were applied.
+    /// </summary>
+    public int Drain(Action<string>? echo = null)
+    {
+        int applied = 0;
+        while (_pending.TryDequeue(out (int ClientId, string Line) item))
+        {
+            if (Submit(item.ClientId, item.Line, out string? line) != Result.Applied)
+                continue;
+            applied++;
+            if (line is not null)
+                echo?.Invoke(line);
+        }
+        return applied;
     }
 }

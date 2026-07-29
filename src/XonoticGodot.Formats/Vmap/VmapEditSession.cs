@@ -193,8 +193,18 @@ public sealed class VmapEditSession
         }
 
         IsDirty = true;
+        Applied?.Invoke(op);
         return true;
     }
+
+    /// <summary>
+    /// Raised after an op has successfully changed the document (phase E6).
+    ///
+    /// One choke point for replication. Every tool in the editor goes through <see cref="Apply"/>, so a host
+    /// that broadcasts from here cannot forget to replicate a gesture the way it could if each of the twenty
+    /// call sites had to remember. Fires AFTER the apply, so a create's assigned id is already in the op.
+    /// </summary>
+    public event Action<IVmapOp>? Applied;
 
     // =============================================================================================
     //  History (design doc §11.9) — the journal as something you can look at and travel through
@@ -284,6 +294,17 @@ public sealed class VmapEditSession
         return true;
     }
 
+    /// <summary>
+    /// Raised after an undo, redo or history jump, with the brush, patch and entity ids whose state was put
+    /// back (phase E6).
+    ///
+    /// Undo does not replay an op — it restores a snapshot — so it has nothing an op wire could carry. What
+    /// replicates instead is the RESULT: these objects now look like this. Without this hook an undo on one
+    /// machine is invisible on every other one, and a co-editing session diverges the first time anyone
+    /// presses Ctrl+Z, which in a map editor is immediately.
+    /// </summary>
+    public event Action<IReadOnlyList<int>, IReadOnlyList<int>, IReadOnlyList<int>>? Restored;
+
     /// <summary>Roll back the most recent op.</summary>
     public bool Undo()
     {
@@ -296,6 +317,7 @@ public sealed class VmapEditSession
         RestoreEntities(e.EntitiesBefore);
         _redo.Add(e);
         IsDirty = true;
+        RaiseRestored(e);
         return true;
     }
 
@@ -311,7 +333,16 @@ public sealed class VmapEditSession
         RestoreEntities(e.EntitiesAfter);
         _undo.Add(e);
         IsDirty = true;
+        RaiseRestored(e);
         return true;
+    }
+
+    /// <summary>The journal entry names every id it snapshotted, which is exactly the set a restore rewrote.</summary>
+    private void RaiseRestored(Entry e)
+    {
+        if (Restored is null)
+            return;
+        Restored(e.Before.Keys.ToList(), e.PatchesBefore.Keys.ToList(), e.EntitiesBefore.Keys.ToList());
     }
 
     /// <summary>Write the document out and clear the dirty flag.</summary>

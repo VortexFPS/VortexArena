@@ -40,7 +40,7 @@ is a cache, not a format.
 | **P6** | **Build cache, keyed on a document hash.** `.vmap` stays the single truth; a sidecar holds whatever was derived from it. A hash mismatch makes staleness impossible rather than merely unlikely, and deleting the cache costs speed, never correctness. **Do this first** — it is the delivery mechanism P3 and P4 need, not merely a speedup. Two tiers, and the distinction is the whole design (see below). | open |
 | **P5** | **Boot a `.vmap` outside the editor gametype.** Collision already builds from a document (`VmapCollisionBuilder`); the map-load path only looks for a `.bsp`. Closes the loop with no compile step, and needs only P6's cheap tier to be worth playing. | open |
 | **P3** | **Lightmap output from the existing bake.** `EditorLightBake` is already q3map2's light model (`EMIT_*`, `photons/d²`, area cosine, 8-bounce) running against the document. What it lacks is atlas output rather than per-vertex — a packing problem, not a physics one. Ships in P6's baked tier. | open |
-| **P4** | **Visibility for `.vmap`.** Two separate problems that were conflated while a BSP supplied both, and the split is what makes this tractable — see below. Ships in P6's baked tier. | open |
+| **P4** | **Visibility for `.vmap`.** **Settled** (see below): bake Godot occluders for rendering, no PVS; a coarse cell bitset for gameplay *only if* a bigger match profiles it as needed; no portal-flood vis compiler. Ships in P6's baked tier. | open, **decided** |
 | **P1** | **`.map` writer.** Brushes are already plane sets and patches already control grids, so both are near-direct writes into a format q3map2 and NetRadiant already read. This is the **interop** route — not the engine's route — so it ranks after the engine can stand on its own. | open |
 | **P2** | **Layer flattening on export.** `.map` has one shader per face, so a P1 export flattens a layer stack to its base and says what it dropped. Lossy on purpose; silence is the thing to avoid. | open |
 
@@ -65,20 +65,48 @@ as a conservative pre-filter before an exact trace — without PVS you do more t
 And the editor already renders *fuse* with no PVS at all. So a baked-tier miss means slower and unlit, never
 wrong, which is what makes shipping the cache separately from the source safe.
 
-### P4 — rendering visibility and gameplay visibility are different problems
+### P4 — settled 2026-07-29: bake occluders, bake a coarse bitset, write no vis compiler
 
-A BSP supplied both from one structure, which is why they read as one problem. They are not:
+A BSP supplied rendering and gameplay visibility from one structure, which is why they read as one problem.
+They are two, and measuring them separately (`VisibilityValueBench`) decided both.
 
-- **Rendering.** Godot's occlusion culling is already enabled (`occlusion_culling/use_occlusion_culling=true`,
-  gated per viewport by `r_occlusion_cull`). It needs occluder geometry baked from the map — a P6 baked
-  artifact — and no PVS at all. Note the scale: PVS here would be culling the 43–105 per-cell
-  `MeshInstance3D` nodes that Godot already frustum-culls, so the win is small either way.
-- **Gameplay** (`CheckPvs`). Wants cheap conservative point-to-point visibility, which does not need
-  BSP-quality leaves — a coarse cell grid with a flooded visibility bitset would do, and the existing culler
-  already thinks in adaptive cells.
+**Rendering — no PVS, bake Godot occluders.** The world is one `MeshInstance3D` per (1024-unit cell,
+material), and that is a small number:
 
-Worth resolving before building either: the cheap answer may be "bake Godot occluders for rendering, bake a
-coarse cell-visibility bitset for gameplay, and never write a portal-flood vis compiler at all."
+| map | instances | cells | materials | tris | tris/instance |
+|---|---|---|---|---|---|
+| stormkeep | 366 | 32 | 43 | 104,223 | 284 |
+| fuse | 735 | 20 | 93 | 216,667 | 294 |
+| catharsis | 1,030 | 63 | 70 | 111,916 | 108 |
+
+Godot frustum-culls those every frame already, and occlusion culling is enabled
+(`occlusion_culling/use_occlusion_culling=true`, gated per viewport by `r_occlusion_cull`). PVS would be a
+third filter over a list of ~1000 items. Bake `OccluderInstance3D` geometry into P6's baked tier and stop.
+
+**Gameplay — a coarse cell bitset, not a portal flood.** PVS rejects a real share of the queries gameplay
+asks, sampled over the map's own spawn/item/weapon positions:
+
+| map | points | pairs | rejected | rate |
+|---|---|---|---|---|
+| stormkeep | 112 | 6,216 | 3,625 | **58.3%** |
+| fuse | 46 | 1,035 | 591 | **57.1%** |
+| catharsis | 146 | 10,585 | 8,258 | **78.0%** |
+| afterslime | 64 | 2,016 | 1,020 | **50.6%** |
+| solarium | 72 | 2,556 | 698 | **27.3%** |
+
+So it earns its keep as a filter — over half of `CheckPvs` queries never become traces. But **rejections at
+that rate are gross separation** (different rooms, opposite ends of a map), which is exactly what a coarse
+cell grid captures. Portal-flood precision buys only the marginal cases: the sliver-of-a-doorway pairs.
+
+**And it is not urgent.** Running the same 8-bot stormkeep tick with the PVS wired and unwired put the
+difference inside run-to-run variance — the sign of the delta flipped across three repeats (−2.6%, +4.8%,
+−22.1% median). On a 0.6 ms tick against a 13.9 ms budget, the traces PVS saves are too cheap to measure at
+this scale. It would matter more with more entities (16-player CTF, monsters, turrets), which is the case to
+re-measure before spending anything on it.
+
+**Decision.** Ship P5 with no visibility at all — already correct, since `CheckPvs` returns true unvised and
+the editor renders *fuse* that way today. Then bake occluders for rendering. Only build the coarse gameplay
+bitset if a bigger match shows it on a profile. No portal-flood vis compiler, at any point.
 
 > **Ordering note.** P1 before F1 would be a mistake: once an exporter exists it quietly becomes the spec and
 > argues against every feature that does not survive the round trip. Extend the format first, export second.

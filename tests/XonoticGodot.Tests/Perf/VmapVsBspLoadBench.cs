@@ -29,6 +29,13 @@ public class VmapVsBspLoadBench
         Environment.GetEnvironmentVariable("XG_DATA_DIR")
         ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
 
+    /// <summary>
+    /// Explicit opt-in — an experiment, not an assertion, and the default content path is ABSOLUTE,
+    /// so on a machine with the assets checked out this would otherwise run in full on every
+    /// <c>ci.sh</c>. Run with <c>XG_BENCH=1</c>.
+    /// </summary>
+    private static bool Enabled => Environment.GetEnvironmentVariable("XG_BENCH") is { Length: > 0 };
+
     private static string[] Maps =>
         (Environment.GetEnvironmentVariable("XG_MAPS") ?? "stormkeep,fuse,catharsis")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -53,6 +60,7 @@ public class VmapVsBspLoadBench
     [Fact]
     public void Benchmark_VmapBuildVsBspLoad()
     {
+        if (!Enabled) { _out.WriteLine("bench — set XG_BENCH=1 to run"); return; }
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
 
         using var vfs = new VirtualFileSystem();

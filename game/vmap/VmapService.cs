@@ -18,7 +18,7 @@ namespace XonoticGodot.Game.Vmap;
 /// into a <c>.vmap</c> package, and reports on an existing one.
 ///
 /// <code>
-///   vmap_import &lt;name&gt; [--zip]   maps/&lt;name&gt;.bsp (or .map) -> user://vmaps/&lt;name&gt;.vmap
+///   vmap_import &lt;name&gt;   maps/&lt;name&gt;.bsp (or .map) -> user://vmaps/&lt;name&gt;.vmap
 ///   vmap_info   &lt;name&gt;           summarize an imported package
 ///   vmap_list                     list imported packages
 /// </code>
@@ -63,7 +63,7 @@ public sealed class VmapService
     {
         if (argv.Count < 2)
         {
-            Log.Help("usage: vmap_import <mapname> [--zip]   (imports maps/<mapname>.bsp or .map)");
+            Log.Help("usage: vmap_import <mapname>   (imports maps/<mapname>.bsp or .map)");
             return;
         }
 
@@ -74,10 +74,9 @@ public sealed class VmapService
             return;
         }
 
-        bool zip = false;
-        for (int i = 2; i < argv.Count; i++)
-            if (string.Equals(argv[i], "--zip", StringComparison.OrdinalIgnoreCase))
-                zip = true;
+        // No layout flag any more: a .vmap is one text file, and the pk3 it ships inside is the container.
+        if (argv.Count > 2)
+            Log.Info("vmap_import: extra arguments ignored — a .vmap has one form now");
 
         try
         {
@@ -85,11 +84,8 @@ public sealed class VmapService
             VmapDocument doc = ImportByName(name, out string sourceVpath);
             sw.Stop();
 
-            string outPath = OutputPath(name, zip);
-            if (zip)
-                VmapPackage.WriteToZip(doc, outPath);
-            else
-                VmapPackage.WriteToDirectory(doc, outPath);
+            string outPath = OutputPath(name);
+            VmapPackage.Write(doc, outPath);
 
             Log.Info($"vmap_import: {sourceVpath} -> {outPath}");
             Log.Info($"  {doc.Brushes.Count} brushes, {doc.Patches.Count} patches, {doc.Entities.Count} entities " +
@@ -251,14 +247,14 @@ public sealed class VmapService
             Log.Info("no imported vmap packages (use vmap_import <mapname>)");
     }
 
-    /// <summary>Path of an imported package, preferring the editable directory layout over a packed zip.</summary>
+    /// <summary>
+    /// Path of an imported map, or null. One name, and it can be either a file (the current form) or a
+    /// directory (a save from before the format became one file) — the reader tells them apart by content.
+    /// </summary>
     public static string? FindPackage(string name)
     {
-        string dir = ProjectSettings.GlobalizePath(VmapUserDir);
-        string asDirectory = Path.Combine(dir, name + VmapPackage.Extension);
-        if (Directory.Exists(asDirectory))
-            return asDirectory;
-        return File.Exists(asDirectory) ? asDirectory : null;
+        string path = Path.Combine(ProjectSettings.GlobalizePath(VmapUserDir), name + VmapPackage.Extension);
+        return File.Exists(path) || Directory.Exists(path) ? path : null;
     }
 
     /// <summary>
@@ -273,11 +269,10 @@ public sealed class VmapService
         return dir;
     }
 
-    private static string OutputPath(string name, bool zip)
+    private static string OutputPath(string name)
     {
         string dir = ProjectSettings.GlobalizePath(VmapUserDir);
         Directory.CreateDirectory(dir);
-        _ = zip; // both layouts use the same name; the writer decides file vs directory
         return Path.Combine(dir, name + VmapPackage.Extension);
     }
 

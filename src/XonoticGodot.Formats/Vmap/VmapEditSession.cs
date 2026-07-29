@@ -356,12 +356,9 @@ public sealed class VmapEditSession
     }
 
     /// <summary>Write the document out and clear the dirty flag.</summary>
-    public void Save(string path, bool zip = false)
+    public void Save(string path)
     {
-        if (zip)
-            VmapPackage.WriteToZip(Document, path);
-        else
-            VmapPackage.WriteToDirectory(Document, path);
+        VmapPackage.Write(Document, path);
         IsDirty = false;
     }
 

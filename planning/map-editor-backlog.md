@@ -3,7 +3,13 @@
 Everything between the editor as it stands (E0–E8 built, reviewed 2026-07-29) and an editor a mapper can make
 a Vortex Arena map with. IDs are stable — cite them in commits and branches.
 
-Design doc: `planning/procedural-map-decoration.html` (§11 the editor, §13.1 the completeness audit).
+Design doc: `planning/procedural-map-decoration.html` (§11 the editor, §11.2 the file format, §13.1 the
+completeness audit).
+
+> **Format note, 2026-07-29.** A `.vmap` is now ONE text file, not a directory-or-zip of JSON sections. The
+> container was duplicating the `.pk3dir`/`.pk3` pair, and the JSON was 22 MB for stormkeep and 476 MB for
+> catharsis — the latter past GitHub's single-file limit, so "deterministic bytes so `.vmap`s merge in git" was
+> unreachable. Same data compactly: 2.66 MB and ~56 MB. §11.2 has the measurements and the grammar.
 
 | Prefix | Area |
 |---|---|

@@ -321,30 +321,12 @@ public class VmapVisibilityTests
 
     // ---------------------------------------------------------------- persistence
 
-    /// <summary>
-    /// A map with no groups must round-trip byte-identically: no groups section, and no <c>group</c> key on a
-    /// single object. That is the rule the layer format already follows, for the same reason — every existing
-    /// package would otherwise churn on its next save.
-    /// </summary>
+    /// <summary>A map with no groups writes no group records at all.</summary>
     [Fact]
     public void AMapWithNoGroupsWritesNothingExtra()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "vmapgroups_" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            VmapDocument doc = DocWithBoxes(2);
-            VmapPackage.WriteToDirectory(doc, dir);
-
-            Assert.False(File.Exists(Path.Combine(dir, VmapPackage.GroupsSection)));
-            Assert.DoesNotContain(
-                "\"group\"", File.ReadAllText(Path.Combine(dir, VmapPackage.GeometrySection)),
-                StringComparison.Ordinal);
-        }
-        finally
-        {
-            if (Directory.Exists(dir))
-                Directory.Delete(dir, recursive: true);
-        }
+        string text = VmapText.Write(DocWithBoxes(2));
+        Assert.DoesNotContain("\ngrp ", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -360,8 +342,9 @@ public class VmapVisibilityTests
             var op = new SetGroupOp("north wing", hidden: true, new[] { 1 }, new[] { 1 }, new[] { 1 });
             Assert.True(op.Apply(doc));
 
-            VmapPackage.WriteToDirectory(doc, dir);
-            VmapDocument back = VmapPackage.ReadFromDirectory(dir);
+            string path = Path.Combine(dir, "groups.vmap");
+            VmapPackage.Write(doc, path);
+            VmapDocument back = VmapPackage.Read(path);
 
             VmapGroup g = Assert.Single(back.Groups);
             Assert.Equal("north wing", g.Name);
@@ -379,33 +362,23 @@ public class VmapVisibilityTests
     }
 
     /// <summary>
-    /// The stale-section case: dissolving the last group must REMOVE groups.json, or the next load reads back
-    /// sets that nothing belongs to.
+    /// Dissolving the last group leaves nothing behind naming it. With sections in separate files this needed
+    /// an explicit delete; one file cannot go stale in pieces, which is one of the reasons it is one file.
     /// </summary>
     [Fact]
-    public void DissolvingTheLastGroupRemovesTheSection()
+    public void DissolvingTheLastGroupLeavesNoTrace()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "vmapgroups_" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            VmapDocument doc = DocWithBoxes(2);
-            var make = new SetGroupOp("wing", hidden: false, new[] { 1 },
-                Array.Empty<int>(), Array.Empty<int>());
-            Assert.True(make.Apply(doc));
-            VmapPackage.WriteToDirectory(doc, dir);
-            Assert.True(File.Exists(Path.Combine(dir, VmapPackage.GroupsSection)));
+        VmapDocument doc = DocWithBoxes(2);
+        var make = new SetGroupOp("wing", hidden: false, new[] { 1 },
+            Array.Empty<int>(), Array.Empty<int>());
+        Assert.True(make.Apply(doc));
+        Assert.Contains("\ngrp ", VmapText.Write(doc), StringComparison.Ordinal);
 
-            Assert.True(new SetGroupOp("wing", hidden: false, Array.Empty<int>(), Array.Empty<int>(),
-                Array.Empty<int>(), doc, make.GroupId).Apply(doc));
-            VmapPackage.WriteToDirectory(doc, dir);
+        Assert.True(new SetGroupOp("wing", hidden: false, Array.Empty<int>(), Array.Empty<int>(),
+            Array.Empty<int>(), doc, make.GroupId).Apply(doc));
 
-            Assert.False(File.Exists(Path.Combine(dir, VmapPackage.GroupsSection)));
-            Assert.Empty(VmapPackage.ReadFromDirectory(dir).Groups);
-        }
-        finally
-        {
-            if (Directory.Exists(dir))
-                Directory.Delete(dir, recursive: true);
-        }
+        string text = VmapText.Write(doc);
+        Assert.DoesNotContain("\ngrp ", text, StringComparison.Ordinal);
+        Assert.Empty(VmapText.Read(text).Groups);
     }
 }

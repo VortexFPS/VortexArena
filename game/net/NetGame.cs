@@ -7932,7 +7932,7 @@ public sealed partial class NetGame : Node3D
         {
             string path = System.IO.Path.Combine(Vmap.VmapService.EditorOutputDirectory(),
                 _map + ".autosave" + XonoticGodot.Formats.Vmap.VmapPackage.Extension);
-            XonoticGodot.Formats.Vmap.VmapPackage.WriteToDirectory(ed.Session!.Document, path);
+            XonoticGodot.Formats.Vmap.VmapPackage.Write(ed.Session!.Document, path);
             XonoticGodot.Common.Diagnostics.Log.Info($"editor: autosaved to {path}");
         }
         catch (Exception ex)
@@ -10272,7 +10272,7 @@ public sealed partial class NetGame : Node3D
                     System.IO.Directory.CreateDirectory(dir);
                     string path = System.IO.Path.Combine(dir,
                         SanitizeMapName(args[2]) + XonoticGodot.Formats.Vmap.VmapPackage.Extension);
-                    XonoticGodot.Formats.Vmap.VmapPackage.WriteToDirectory(doc, path);
+                    XonoticGodot.Formats.Vmap.VmapPackage.Write(doc, path);
                     XonoticGodot.Common.Diagnostics.Log.Info($"editor: prefab saved to {path}");
                 }
                 catch (Exception ex)
@@ -10291,7 +10291,8 @@ public sealed partial class NetGame : Node3D
                 }
                 string path = System.IO.Path.Combine(dir,
                     SanitizeMapName(args[2]) + XonoticGodot.Formats.Vmap.VmapPackage.Extension);
-                if (!System.IO.Directory.Exists(path) && !System.IO.File.Exists(path))
+                // Directory too: a prefab saved before the format became one file is still a directory.
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
                 {
                     XonoticGodot.Common.Diagnostics.Log.Warn($"editor_prefab: no prefab named {args[2]}");
                     return;

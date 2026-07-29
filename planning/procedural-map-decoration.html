@@ -210,7 +210,7 @@ a { color: #e0a458; }
   <a class="t2" href="#weather">10.3 Dynamic weather</a>
   <a class="t1" href="#format">11 · Map format &amp; the in-game editor (priority track)</a>
   <a class="t2" href="#format-import">11.1 Import: .bsp / .map → base geometry</a>
-  <a class="t2" href="#format-vmap">11.2 The <code>.vmap</code> package</a>
+  <a class="t2" href="#format-vmap">11.2 The <code>.vmap</code> file</a>
   <a class="t2" href="#editor-mode">11.3 Editor game mode &amp; player states</a>
   <a class="t2" href="#editor-tools">11.4 First-person geometry tools</a>
   <a class="t2" href="#editor-ortho">11.5 Ortho views &amp; render modes</a>
@@ -948,35 +948,80 @@ source, edited live in-game like everything else — its parameters live in the 
 maps a cleaner base. Both converge on the same in-memory base-geometry model: <b>brushes + patches as truth, derived
 welded render surfaces + adjacency</b> — which is exactly what the anatomizer wants.</p>
 
-<h3 id="format-vmap"><span class="secno">11.2</span>The <code>.vmap</code> package — editable format = shipping format</h3>
-<p>One container (directory during development, zip for distribution — same layout, like Godot's pack model), with a
-strict split between <b>truth</b> (edited, versioned, small) and <b>bake</b> (derived, regenerable, big):</p>
+<h3 id="format-vmap"><span class="secno">11.2</span>The <code>.vmap</code> file — editable format = shipping format</h3>
+<p><b>Revised 2026-07-29 after measuring the first design.</b> A <code>.vmap</code> is <b>one UTF-8 text file</b>,
+sitting in <code>maps/</code> where the <code>.bsp</code> sits today. It is still both the edited and the shipped
+form; what changed is that it stopped being a container of its own.</p>
 
-<pre><code>mymap.vmap/
-  map.json          <span class="cm">— manifest, format version, zones, environment/sun settings, gameplay metadata (§12.2)</span>
-  geometry.json     <span class="cm">— brushes (planes + materials + projections) and patches  [truth]</span>
-  entities.json     <span class="cm">— classnames, key/values, brush-entity ownership          [truth]</span>
-  materials.json    <span class="cm">— base-material grammar, layer stacks, per-zone palettes  [truth]</span>
-  decor.json        <span class="cm">— generator rules + params + seeds, prop rules, amplification decisions [truth]</span>
-  paint/            <span class="cm">— sparse delta tiles (§7): mask strokes, freezes         [truth]</span>
-  overrides.json    <span class="cm">— per-instance prop deltas, per-surface material overrides [truth]</span>
-  bake/             <span class="cm">— DERIVED, content-addressed by hash of the truth sections:</span>
-    fields/         <span class="cm">—   anatomizer field tiles (§4)</span>
-    masks/          <span class="cm">—   resolved weather-atlas tiles (procedural ⊕ paint)</span>
-    meshes/         <span class="cm">—   welded render meshes, amplified decor meshes, prop multimesh tables</span>
-    light/          <span class="cm">—   lightmap atlas / probes (§10)</span>
-    vis+collision   <span class="cm">—   PVS + collision (from original brushes — unchanged by decoration)</span>
+<p>The first design made it a container — a directory of JSON sections while editing, a zip of the same when
+shipping. Two things were wrong with that, and both only became visible with real maps in it:</p>
+
+<ul>
+  <li><b>The container duplicated one the game already has.</b> A <code>.pk3dir</code> IS the loose-files layout
+      and a <code>.pk3</code> IS the packed one — that is what <code>FS_AddGameDirectory</code> parity buys. So a map
+      ended up at <code>stormkeep.pk3dir/maps/stormkeep.vmap/geometry.json</code>: one container inside another,
+      doing the same job.</li>
+  <li><b>JSON did not fit the data.</b> Measured on the shipped maps, <code>geometry.json</code> was 22 MB for
+      stormkeep and <b>476 MB for catharsis</b> — past what GitHub accepts in a single file, so the format's own
+      stated goal (deterministic bytes "so <code>.vmap</code>s merge in git") was unreachable for the section that
+      dominated it. The overhead was SCAFFOLDING, not precision: every float on its own indented line, 454 bytes
+      per face for about 70 bytes of digits.</li>
+</ul>
+
+<table>
+  <tr><th>map</th><th>faces</th><th>JSON sections</th><th>one text file</th><th>bytes/face</th></tr>
+  <tr><td>fuse</td><td>19,348</td><td>9.76 MB</td><td><b>1.41 MB</b></td><td>76</td></tr>
+  <tr><td>stormkeep</td><td>48,762</td><td>22.13 MB</td><td><b>2.66 MB</b></td><td>57</td></tr>
+  <tr><td>afterslime</td><td>30,326</td><td>17.36 MB</td><td><b>3.01 MB</b></td><td>104</td></tr>
+  <tr><td>catharsis</td><td>1,085,397</td><td>476.07 MB</td><td><b>~56 MB</b></td><td>—</td></tr>
+</table>
+
+<p>Packed binary was measured too and was <i>larger</i> than the text — 2.76 MB against 2.36 MB on stormkeep's
+geometry — because most values are short (<code>0</code>, <code>-1</code>, small integers) while binary spends four
+bytes on each regardless. It would have cost readability and bought nothing.</p>
+
+<p>The grammar is line-oriented and prefix-coded, and sub-records follow their parent exactly as a
+<code>.map</code> brush is followed by its faces:</p>
+
+<pre><code>// vmap 3
+// demo
+
+map "name" "demo"
+map "title" "A Demo Room"
+
+mat 0 "textures/exx/base_wall01"          <span class="cm">— material table, referenced by index</span>
+mat 1 "textures/exx/moss"
+
+grp 1 0 "north wing"                      <span class="cm">— group: id, hidden, name</span>
+
+b 1 0 1 0 0 0                             <span class="cm">— brush: id, detail, contents, submodel, tool, group</span>
+f 0 0 1 478.76584 0 0 0 0  0.015625 0 0  0 -0.015625 0  0 0
+l 1 1 0  0.015625 0 0  0 -0.015625 0  0 0    <span class="cm">— a layer above the face below it</span>
+
+e 1 0 "info_player_deathmatch"
+k "origin" "32 32 24"
+
+e 2 0 "func_door"
+k "speed" "100"
+eb 1                                      <span class="cm">— the brushes this entity owns</span>
+
+x 1 128 128 4  …                          <span class="cm">— blend map: id, size, units/texel, projection</span>
+d eJztwTEBAAAAwqD1T20ND6AAAAAA…           <span class="cm">— its texels, deflated then base64, split per line</span>
 </code></pre>
 
 <ul>
-  <li><b>The engine loads <code>bake/</code></b> — as fast as loading a BSP today (arguably faster: pre-welded, pre-atlased).
-      If bake is missing/stale (hash mismatch), the loader falls back to live generation — slower load, same result,
-      because generators are deterministic (§6).</li>
-  <li><b>Editing writes only truth sections</b> and dirties bake tiles by hash; a background baker refills them. There is
-      no "decompile" step ever — the brief's ideal ("editable format is the same as the permanent format") holds: you
-      ship the same package you edit, bake cache included.</li>
-  <li><b>Classic maps stay classic</b> — <code>.vmap</code> is only for decorated/edited maps; the stock BSP path is
-      untouched. A <code>.vmap</code> can reference its source BSP by hash for provenance.</li>
+  <li><b>Paint is in the file.</b> Deflated then base64'd, which keeps a painted face around a kilobyte rather than
+      the eighty-five raw base64 would cost. It is SOURCE data — the mapper painted it — so it belongs with the
+      geometry, not in a cache that can be deleted.</li>
+  <li><b>Deterministic.</b> Invariant culture, round-trip floats, fixed field order, entity keys sorted ordinal, and
+      the material table in first-encounter order — appending rather than re-sorting, so adding a material does not
+      renumber every face that referenced the ones before it. Two saves of unchanged data are byte-identical, and
+      now at a size a diff viewer will actually open.</li>
+  <li><b>Older saves still load.</b> The reader sniffs by CONTENT, not extension — all three forms are called
+      <code>.vmap</code> — so a JSON directory or zip written before this change opens unchanged. Nothing writes
+      them any more.</li>
+  <li><b>The bake cache is still separate</b> and still derived (backlog P6): content-addressed by a hash of the
+      file, regenerable, and never shipped as the only artifact.</li>
 </ul>
 
 <h3 id="editor-mode"><span class="secno">11.3</span>The editor game mode &amp; player states</h3>

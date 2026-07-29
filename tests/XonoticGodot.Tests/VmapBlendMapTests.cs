@@ -435,62 +435,48 @@ public class VmapBlendMapTests
     // ---------------------------------------------------------------- persistence
 
     [Fact]
-    public void AnUnpaintedMapWritesNoBlendSectionAndStaysAtVersionOne()
+    public void AnUnpaintedMapWritesNoBlendRecords()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "vmapblend_" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            VmapPackage.WriteToDirectory(DocWithFace(), dir);
-
-            Assert.False(File.Exists(Path.Combine(dir, VmapPackage.BlendSection)));
-            Assert.False(Directory.Exists(Path.Combine(dir, VmapPackage.BlendDirectory)));
-            Assert.Contains(
-                "\"formatVersion\": 1", File.ReadAllText(Path.Combine(dir, VmapPackage.ManifestSection)),
-                StringComparison.Ordinal);
-            Assert.DoesNotContain(
-                "\"blendMap\"", File.ReadAllText(Path.Combine(dir, VmapPackage.GeometrySection)),
-                StringComparison.Ordinal);
-        }
-        finally
-        {
-            if (Directory.Exists(dir))
-                Directory.Delete(dir, recursive: true);
-        }
+        string text = VmapText.Write(DocWithFace());
+        Assert.DoesNotContain("\nx ", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\nd ", text, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void APaintedMapRoundTripsThroughADirectory()
-    {
-        string dir = Path.Combine(Path.GetTempPath(), "vmapblend_" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            VmapDocument doc = Painted();
-            VmapPackage.WriteToDirectory(doc, dir);
-            AssertSamePaint(doc, VmapPackage.ReadFromDirectory(dir));
-        }
-        finally
-        {
-            if (Directory.Exists(dir))
-                Directory.Delete(dir, recursive: true);
-        }
-    }
-
-    [Fact]
-    public void APaintedMapRoundTripsThroughAZip()
+    public void APaintedMapRoundTripsThroughTheFile()
     {
         string path = Path.Combine(Path.GetTempPath(), "vmapblend_" + Guid.NewGuid().ToString("N") + ".vmap");
         try
         {
             VmapDocument doc = Painted();
-            VmapPackage.WriteToZip(doc, path);
-            using FileStream fs = File.OpenRead(path);
-            AssertSamePaint(doc, VmapPackage.ReadFromZip(fs));
+            VmapPackage.Write(doc, path);
+            AssertSamePaint(doc, VmapPackage.Read(path));
         }
         finally
         {
             if (File.Exists(path))
                 File.Delete(path);
         }
+    }
+
+    /// <summary>
+    /// Texels are deflated before they are base64'd, and the reason is legibility as much as size: a painted
+    /// face has to stay a kilobyte of the file, not eighty-five.
+    /// </summary>
+    [Fact]
+    public void PaintIsCompressedBeforeItIsEncoded()
+    {
+        VmapDocument doc = Painted();
+        VmapBlendMap m = doc.BlendMaps[0];
+        int rawBase64 = (m.Texels.Length + 2) / 3 * 4;
+
+        int encoded = 0;
+        foreach (string line in VmapText.Write(doc).Split('\n'))
+            if (line.StartsWith("d ", StringComparison.Ordinal))
+                encoded += line.Length - 2;
+
+        Assert.True(encoded < rawBase64 / 8,
+            $"{encoded} encoded chars against {rawBase64} raw — the deflate is not doing its job");
     }
 
     private static VmapDocument Painted()
@@ -505,7 +491,7 @@ public class VmapBlendMapTests
 
     private static void AssertSamePaint(VmapDocument a, VmapDocument b)
     {
-        Assert.Equal(VmapPackage.BlendFormatVersion, b.FormatVersion);
+        Assert.Equal(VmapText.Version, b.FormatVersion);
         Assert.Equal(a.BlendMaps.Count, b.BlendMaps.Count);
 
         VmapBlendMap wrote = a.BlendMaps[0], read = b.BlendMaps[0];

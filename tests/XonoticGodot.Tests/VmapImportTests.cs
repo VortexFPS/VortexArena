@@ -235,20 +235,17 @@ public class VmapImportTests
     }
 
     [Fact]
-    public void Package_RoundTripsThroughDirectoryAndZip()
+    public void Package_RoundTripsThroughTheFile()
     {
         VmapDocument original = MapSourceReader.Read(SimpleMap, "testmap", sourcePath: "maps/testmap.map");
         string root = Path.Combine(Path.GetTempPath(), "vmap-test-" + Guid.NewGuid().ToString("N"));
 
         try
         {
-            string dir = Path.Combine(root, "testmap.vmap");
-            VmapPackage.WriteToDirectory(original, dir);
-            AssertSameDocument(original, VmapPackage.Read(dir));
-
-            string zip = Path.Combine(root, "packed.vmap");
-            VmapPackage.WriteToZip(original, zip);
-            AssertSameDocument(original, VmapPackage.Read(zip));
+            string path = Path.Combine(root, "testmap.vmap");
+            VmapPackage.Write(original, path);
+            Assert.True(File.Exists(path), "a .vmap is a file");
+            AssertSameDocument(original, VmapPackage.Read(path));
         }
         finally
         {
@@ -268,11 +265,10 @@ public class VmapImportTests
         {
             string a = Path.Combine(root, "a.vmap");
             string b = Path.Combine(root, "b.vmap");
-            VmapPackage.WriteToDirectory(doc, a);
-            VmapPackage.WriteToDirectory(VmapPackage.Read(a), b);
+            VmapPackage.Write(doc, a);
+            VmapPackage.Write(VmapPackage.Read(a), b);
 
-            foreach (string section in new[] { "map.json", "geometry.json", "entities.json" })
-                Assert.Equal(File.ReadAllText(Path.Combine(a, section)), File.ReadAllText(Path.Combine(b, section)));
+            Assert.Equal(File.ReadAllText(a), File.ReadAllText(b));
         }
         finally
         {
@@ -284,15 +280,15 @@ public class VmapImportTests
     [Fact]
     public void Package_RejectsAFutureFormatVersion()
     {
-        // A newer editor's package must fail loudly rather than silently importing partial geometry.
+        // A newer editor's map must fail loudly rather than silently importing partial geometry.
         string root = Path.Combine(Path.GetTempPath(), "vmap-ver-" + Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(root);
-            File.WriteAllText(Path.Combine(root, "map.json"),
-                $$"""{"formatVersion": {{VmapDocument.CurrentFormatVersion + 1}}, "name": "future"}""");
+            string path = Path.Combine(root, "future.vmap");
+            File.WriteAllText(path, $"// vmap {VmapText.Version + 1}\nmap \"name\" \"future\"\n");
 
-            var ex = Assert.Throws<XonoticGodot.Formats.AssetParseException>(() => VmapPackage.Read(root));
+            var ex = Assert.Throws<XonoticGodot.Formats.AssetParseException>(() => VmapPackage.Read(path));
             Assert.Contains("newer than this build", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally

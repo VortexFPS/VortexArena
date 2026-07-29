@@ -117,8 +117,9 @@ public class VmapFaceLayerTests
         string dir = Path.Combine(Path.GetTempPath(), "vmap-layers-" + Guid.NewGuid().ToString("N"));
         try
         {
-            VmapPackage.WriteToDirectory(doc, dir);
-            VmapDocument back = VmapPackage.ReadFromDirectory(dir);
+            string path = Path.Combine(dir, "layers.vmap");
+            VmapPackage.Write(doc, path);
+            VmapDocument back = VmapPackage.Read(path);
 
             VmapFace face = back.Brushes[0].Faces[0];
             Assert.Equal(2, face.Layers.Count);
@@ -138,26 +139,18 @@ public class VmapFaceLayerTests
     }
 
     [Fact]
-    public void APlainMap_WritesTheSameBytesItDidBeforeLayersExisted()
+    public void APlainFace_CostsNothingExtraInTheFile()
     {
-        // The compatibility property that makes this change safe to land on a format already in use: a face
-        // with one layer must not gain a single byte, so existing packages do not churn and an older reader
-        // still gets the map.
+        // A face with one layer writes one line. The stack is an addition to the format, not a tax on every
+        // map that does not use it.
         var doc = new VmapDocument { Manifest = { Name = "plain" } };
         doc.Brushes.Add(Box(Vector3.Zero, new Vector3(64, 64, 64)));
 
-        string dir = Path.Combine(Path.GetTempPath(), "vmap-plain-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            VmapPackage.WriteToDirectory(doc, dir);
-            string geometry = File.ReadAllText(Path.Combine(dir, VmapPackage.GeometrySection));
-            Assert.DoesNotContain("extraLayers", geometry);
-        }
-        finally
-        {
-            if (Directory.Exists(dir))
-                Directory.Delete(dir, recursive: true);
-        }
+        string text = VmapText.Write(doc);
+        Assert.DoesNotContain("\nl ", text, StringComparison.Ordinal);
+
+        doc.Brushes[0].Faces[0].Layers.Add(Rust(VmapBlend.Add, channel: 2));
+        Assert.Contains("\nl ", VmapText.Write(doc), StringComparison.Ordinal);
     }
 
     [Fact]

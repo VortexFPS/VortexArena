@@ -18,14 +18,13 @@ namespace XonoticGodot.Formats.Vmap;
 public sealed class VmapDocument
 {
     /// <summary>
-    /// Highest on-disk format version this build can READ. Version 2 added painted blend maps (backlog F2).
+    /// Highest on-disk format version this build can read. 1 was the JSON sections, 2 added painted blend
+    /// maps to them, 3 is the single text file (<see cref="VmapText"/>) and is what gets written.
     ///
-    /// What gets WRITTEN is a separate question and is decided per document: a map with no paint is still
-    /// stamped 1, so it keeps loading in a build without blend maps — including a co-editing peer's. Stamping
-    /// the ceiling unconditionally would lock every save out of every older build over a section the map does
-    /// not have.
+    /// The older two are still READ — see <c>VmapPackage.ReadFromDirectory</c> — because a mapper with saves
+    /// on disk should not lose them to a format change.
     /// </summary>
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 3;
 
     /// <summary>Format version this document was loaded from (or <see cref="CurrentFormatVersion"/> when built in memory).</summary>
     public int FormatVersion { get; set; } = CurrentFormatVersion;
@@ -327,7 +326,7 @@ public sealed class VmapGroup
     public VmapGroup Clone() => new() { Id = Id, Name = Name, Hidden = Hidden };
 }
 
-/// <summary>Map-level identity, provenance and environment settings (the <c>map.json</c> manifest).</summary>
+/// <summary>Map-level identity, provenance and environment settings — the <c>map</c> records of the file.</summary>
 public sealed class VmapManifest
 {
     /// <summary>Short map name (e.g. "catharsis") — the name used to load it.</summary>

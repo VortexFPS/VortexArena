@@ -1730,6 +1730,18 @@ inside the editor gametype, on the machine holding the package.</p>
       the payoff is a format that does not need a compile step at all.</li>
 </ul>
 
+<p><b>Measured 2026-07-29</b> (<code>VmapVsBspLoadBench</code>): staying uncompiled costs LOAD time and not
+frame time. Godot owns culling and draw submission, both paths build per-cell <code>MeshInstance3D</code> nodes
+on the same 1024-unit grid, and the document path produces <i>fewer</i> draw batches than the BSP path (43 vs
+50 on stormkeep, 93 vs 103 on fuse, 70 vs 105 on catharsis) because a BSP splits batches by lightmap page
+while the document batches purely by material. The delta is roughly +0.4–0.7 s of build at load on a normal
+map. So what a compile buys is not recomputing deterministic derivations of the document — which is a
+<b>cache</b>, not a format, and the backlog's P6 is that cache. It carries two tiers: cheap derivations
+(surfaces, collision) that rebuild silently on a miss, and expensive baked artifacts (lightmaps, visibility)
+that ship with the map and degrade rather than rebuild. Degrading is already the behaviour —
+<code>CheckPvs</code> returns true on an unvised map, so every gameplay caller treats it as a conservative
+pre-filter, and the editor already renders <i>fuse</i> with no PVS at all.</p>
+
 <h4>Editing operations a mapper would expect and will not find</h4>
 
 <ul>

@@ -24,13 +24,61 @@ The gap that makes the rest secondary. The importers run one way — `.bsp` and 
 and `MapSourceReader`, and nothing comes out — so nothing authored in the editor can leave the editor
 gametype on the machine holding the package.
 
+The question this section had to answer first was whether `.vmap` should stay uncompiled. It should:
+measurement says the cost of not compiling is load time only, and the fix for load time is a cache, not a
+format. See P6.
+
+**Order: P6 → P5 → P3/P4 → P1/P2.** The measurement (`VmapVsBspLoadBench`, commit `30f3a73`) says a compiled
+format buys nothing at frame time in this engine — Godot owns culling and draw submission, and the document
+path already produces *fewer* draw batches than the BSP path (43 vs 50 on stormkeep, 93 vs 103 on fuse, 70 vs
+105 on catharsis), because a BSP splits batches by lightmap page while the document batches purely by
+material. What a compile actually buys is **not recomputing deterministic derivations of the document**. That
+is a cache, not a format.
+
 | ID | Item | Status |
 |---|---|---|
-| **P1** | **`.map` writer.** Brushes are already plane sets and patches already control grids, so both are near-direct writes into a format q3map2 and NetRadiant already read. Buys vis, lightmaps, lightgrid, bot navigation and interoperability with every Xonotic mapper, for far less than a compiler costs. Do it *after* F1 so the exporter is not the de-facto spec — see the note below. | open |
+| **P6** | **Build cache, keyed on a document hash.** `.vmap` stays the single truth; a sidecar holds whatever was derived from it. A hash mismatch makes staleness impossible rather than merely unlikely, and deleting the cache costs speed, never correctness. **Do this first** — it is the delivery mechanism P3 and P4 need, not merely a speedup. Two tiers, and the distinction is the whole design (see below). | open |
+| **P5** | **Boot a `.vmap` outside the editor gametype.** Collision already builds from a document (`VmapCollisionBuilder`); the map-load path only looks for a `.bsp`. Closes the loop with no compile step, and needs only P6's cheap tier to be worth playing. | open |
+| **P3** | **Lightmap output from the existing bake.** `EditorLightBake` is already q3map2's light model (`EMIT_*`, `photons/d²`, area cosine, 8-bounce) running against the document. What it lacks is atlas output rather than per-vertex — a packing problem, not a physics one. Ships in P6's baked tier. | open |
+| **P4** | **Visibility for `.vmap`.** Two separate problems that were conflated while a BSP supplied both, and the split is what makes this tractable — see below. Ships in P6's baked tier. | open |
+| **P1** | **`.map` writer.** Brushes are already plane sets and patches already control grids, so both are near-direct writes into a format q3map2 and NetRadiant already read. This is the **interop** route — not the engine's route — so it ranks after the engine can stand on its own. | open |
 | **P2** | **Layer flattening on export.** `.map` has one shader per face, so a P1 export flattens a layer stack to its base and says what it dropped. Lossy on purpose; silence is the thing to avoid. | open |
-| **P3** | **Lightmap output from the existing bake.** `EditorLightBake` is already q3map2's light model (`EMIT_*`, `photons/d²`, area cosine, 8-bounce) running against the document. What it lacks is atlas output rather than per-vertex — a packing problem, not a physics one. | open |
-| **P4** | **A visibility story for `.vmap`.** `BspPvs` is the only PVS source and a document has none. Not a correctness gate — `VmapMapBuilder` renders the 2666-brush *fuse* import today on Godot's frustum culling alone — so this is scaling, not blocking. | open |
-| **P5** | **Boot a `.vmap` outside the editor gametype.** Collision already builds from a document (`VmapCollisionBuilder`); the map-load path only looks for a `.bsp`. With P3 + P4 this closes the loop without a compile step. | open |
+
+### P6 — the two tiers
+
+The tiers differ by what a cache MISS costs, and that is what decides how each behaves:
+
+| | **Derived** (cheap) | **Baked** (expensive) |
+|---|---|---|
+| What | Triangulated surfaces, collision brushes | PVS, lightmaps |
+| Cost to compute | 0.1–0.7 s on a normal map (measured) | seconds to minutes |
+| On a miss | Rebuild silently. Always correct. | **Cannot** rebuild at load — run degraded and say so |
+| Scope | Local, disposable | Ships with the map, versioned |
+
+The baked tier is the interesting half: it is not an optimization but the only practical way to deliver
+something you cannot afford to compute at load. Which makes it exactly what a `.bsp` is — the difference being
+that here it is a sidecar next to a source you can still edit, rather than the only artifact that survives.
+
+**Degrading well is already the behaviour, not a new thing to build.** `CheckPvs` returns *true* on an unvised
+map, so every gameplay caller (`SpawnSystem`, `MonsterAI`, `TurretAI`, `SpawnNearTeammateMutator`) treats it
+as a conservative pre-filter before an exact trace — without PVS you do more traces and get the same answers.
+And the editor already renders *fuse* with no PVS at all. So a baked-tier miss means slower and unlit, never
+wrong, which is what makes shipping the cache separately from the source safe.
+
+### P4 — rendering visibility and gameplay visibility are different problems
+
+A BSP supplied both from one structure, which is why they read as one problem. They are not:
+
+- **Rendering.** Godot's occlusion culling is already enabled (`occlusion_culling/use_occlusion_culling=true`,
+  gated per viewport by `r_occlusion_cull`). It needs occluder geometry baked from the map — a P6 baked
+  artifact — and no PVS at all. Note the scale: PVS here would be culling the 43–105 per-cell
+  `MeshInstance3D` nodes that Godot already frustum-culls, so the win is small either way.
+- **Gameplay** (`CheckPvs`). Wants cheap conservative point-to-point visibility, which does not need
+  BSP-quality leaves — a coarse cell grid with a flooded visibility bitset would do, and the existing culler
+  already thinks in adaptive cells.
+
+Worth resolving before building either: the cheap answer may be "bake Godot occluders for rendering, bake a
+coarse cell-visibility bitset for gameplay, and never write a portal-flood vis compiler at all."
 
 > **Ordering note.** P1 before F1 would be a mistake: once an exporter exists it quietly becomes the spec and
 > argues against every feature that does not survive the round trip. Extend the format first, export second.

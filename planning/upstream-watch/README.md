@@ -9,7 +9,7 @@ that pin and turns each new upstream contribution into an explicit *port / rejec
 It exists so that "is upstream doing anything we want?" is a **repeatable weekly routine** with a
 durable paper trail, not an occasional manual scan that silently misses things.
 
-> 📊 **Live ledger:** <https://bryankruman.github.io/VortexArena/> (GitHub Pages, auto-rebuilt from
+> 📊 **Live ledger:** <https://vortexfps.github.io/VortexArena/> (GitHub Pages, auto-rebuilt from
 > `LEDGER.yaml` on every push to `main`).
 
 ---

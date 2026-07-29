@@ -1,7 +1,7 @@
 # Vortex Arena
 
-[![Tests](https://github.com/bryankruman/VortexArena/actions/workflows/ci.yml/badge.svg)](https://github.com/bryankruman/VortexArena/actions/workflows/ci.yml)
-[![Release](https://github.com/bryankruman/VortexArena/actions/workflows/release.yml/badge.svg)](https://github.com/bryankruman/VortexArena/actions/workflows/release.yml)
+[![Tests](https://github.com/VortexFPS/VortexArena/actions/workflows/ci.yml/badge.svg)](https://github.com/VortexFPS/VortexArena/actions/workflows/ci.yml)
+[![Release](https://github.com/VortexFPS/VortexArena/actions/workflows/release.yml/badge.svg)](https://github.com/VortexFPS/VortexArena/actions/workflows/release.yml)
 
 **Vortex Arena** is a fast, free, open-source arena shooter — a **fork of [Xonotic](https://xonotic.org)**
 rebuilt on **C# and Godot 4 (.NET)**. It began as a faithful reimplementation of Xonotic's game logic,

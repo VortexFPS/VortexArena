@@ -12,7 +12,7 @@ git push origin v0.1.0
 
 Pushing a `v*` tag runs [`.github/workflows/release.yml`](../.github/workflows/release.yml), which builds every
 target on its native runner, bundles the Xonotic data, and **publishes a GitHub Release** with the zips
-attached. They appear at `https://github.com/bryankruman/VortexArena/releases` — that's the download page.
+attached. They appear at `https://github.com/VortexFPS/VortexArena/releases` — that's the download page.
 
 To shake out the build **without** publishing a release, run the workflow manually
 (Actions → Release → *Run workflow*). That builds everything and uploads the zips as Actions artifacts, but

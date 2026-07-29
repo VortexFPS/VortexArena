@@ -190,6 +190,13 @@ that name for the repo). `VortexArena` transfers in from `bryankruman/`; `Vortex
 same org. Do the transfer **before stage 0**, so every URL this migration touches gets written once
 instead of twice.
 
+> **The transfer has happened — done 2026-07-29.** `gh repo view` reports `VortexFPS/VortexArena` as
+> the canonical name. It surfaced the way §5.0 predicted it would: a `git push` against the stale
+> remote succeeded and printed *"This repository moved. Please use the new location"*, which is the
+> silent-redirect trap this section warns about — the push worked, so nothing forced the issue. The org
+> currently holds `VortexArena` and the superseded `VortexData`; **`VortexMaps` and `VortexLauncher`
+> do not exist yet** and stage 1 is blocked on `VortexMaps`.
+
 What the move actually changes:
 
 - **Six tracked files carry the old owner** and need rewriting: `README.md` (two CI badges),
@@ -776,7 +783,9 @@ project's record of that kind of choice, so:
 - **This is G10 again in a different file type.** An absolute path to one workstation, load-bearing,
   invisible until someone else runs the thing. The `Perf/*Bench` files already do it correctly with
   `?? @"C:\..."` behind an env-var lookup; the rest do not.
-- **Detect:** `git ls-files | xargs grep -l "Users.Bryan.Projects"` — expect zero when this is done.
+- **Detect:** `git ls-files "tests/**" | xargs grep -l "Users.Bryan.Projects"` — expect zero. Scoped to
+  `tests/` deliberately: `export_presets.cfg` holds a legitimate absolute path until stage 4, and the
+  `tools/*-ref/` and `planning/` prose are stage-3 work.
 - **Do:** one shared `TestPaths` helper resolving `VA_DATA_DIR`, else a repo-relative walk up from
   `AppContext.BaseDirectory`, else skip. Replace all 42. Keep the `Base/data` lookups separate and
   env-driven too, since that tree stays outside the repo by design — note `XG_BASE_DIR` **already
@@ -847,25 +856,60 @@ project's record of that kind of choice, so:
 These three are independently correct, already-broken-today fixes. None depends on any decision in
 this plan, and each one shrinks the migration's surface or makes its proof gate meaningful.
 
--3. **Replace the 42 hardcoded test paths with a shared `TestPaths` helper** — **G13**. Resolves
-   `VA_DATA_DIR`, else a repo-relative walk from `AppContext.BaseDirectory`, else skip; `VA_BASE_DIR`
-   (renamed from the existing `XG_BASE_DIR`) for the upstream parity tree. Gate:
-   `git ls-files | xargs grep -l "Users.Bryan.Projects"` returns nothing, and the asset-dependent
-   suite actually runs. **This is the gate Stage 5 item 37 depends on**, so it cannot come later.
--2. **Prune the stale git state** — **G8**, **G14**. `git worktree prune` (all nine entries are
-   already prunable), delete the eight merged branch refs, and clear the loose `*.log` files out of
-   `.claude/worktrees/`.
--1. **Repoint `custom_template/release` at the engine build that exists** — **G10**, §7.2. It names
-   `C:/Users/Bryan/Projects/Xonotic/godot-4.6.3-inputfix/…`; the binary is at
-   `C:/Users/Bryan/Projects/Vortex/godot-4.6.3-inputfix/bin/`. A one-line fix that restores Windows
-   export on the dev box immediately, and it does not wait for the Stage 4 lockfile work.
+**Status: all three done 2026-07-29** (`b7e1700`). Notes below record what the execution taught.
+
+-3. ~~**Replace the 42 hardcoded test paths with a shared `TestPaths` helper**~~ — **G13. Done.**
+   `tests/XonoticGodot.Tests/TestPaths.cs` resolves `VA_DATA_DIR`, else walks up from
+   `AppContext.BaseDirectory` to the repo root and probes `data/` **then** `assets/data/` — both, so
+   the stage-3 path move needs no test edits. `VA_BASE_DIR` (renamed from `XG_BASE_DIR`, which nothing
+   set externally) covers the parity tree, falling back to the `<parent>/Base/data` sibling convention.
+   `CorePk3Dir` probes `core.pk3dir` before `xonotic-data.pk3dir` for the same reason.
+   - **The gate needed rewording.** "`grep -l Users.Bryan.Projects` returns nothing" is wrong
+     repo-wide: `export_presets.cfg` legitimately holds an absolute path until stage 4, and the
+     `tools/*-ref/` and `planning/` docs are stage-3 prose. The real gate is **zero under `tests/`**,
+     which now holds.
+   - **A green suite was never proof and still isn't, on its own.** These tests self-skip via
+     `if (!Directory.Exists(DataDir)) return;`, so a resolution bug reads as "no checkout here". Added
+     `TestPathsTests`, which asserts the *conditional*: if a tree is discoverable from the repo root,
+     `TestPaths` must have found it, naming the path it expected when it hasn't. Trivially true on an
+     assetless checkout, so CI stays portable. Confirmed it has teeth — a bogus `VA_DATA_DIR` fails it.
+   - **The dev box had no content tree at all.** `assets/data` was a symlink to the pre-move
+     `Projects/Xonotic/Base/data`; re-pointed it as a junction to `Projects/Vortex/Base/data` so the
+     gate measures something. Untracked and gitignored, and stage 1 replaces it.
+   - Two declarations needed hand fixing: `ViewModelRenderBucketTests` (declaration split across two
+     lines, so the `const` modifier survived the rewrite) and `EntityDefsTests` (a `const` built by
+     concatenating `DataDir`, which stops being a compile-time constant). The latter reads
+     `xonotic-maps.pk3dir/scripts/entities.ent` — **map-source content, so it starts self-skipping
+     after stage 1** unless the submodule is checked out. Commented in place.
+   - Result: **3,916 tests pass, 0 skipped, 0 failed.**
+-2. ~~**Prune the stale git state**~~ — **G8**, **G14. Done.** `git worktree prune` removed all nine
+   (each "gitdir file points to non-existent location"), and the eight merged branch refs are deleted
+   with `-d`, leaving exactly G8's seven open branches plus `main`. **The 1.3 GB of orphaned worktree
+   directories and 65 loose `*.log` files are still on disk** — unregistered from git now, so they are
+   inert, but reclaiming the space is a separate call. Checked before pruning: none held a content tree,
+   `dedicated-slim` sat on its branch tip exactly (no unpushed commits), and `zz-merge-trial`'s
+   `2ab490d` is unreachable from any ref.
+-1. ~~**Repoint `custom_template/release` at the engine build that exists**~~ — **G10**, §7.2. **Done.**
+   Now `C:/Users/Bryan/Projects/Vortex/godot-4.6.3-inputfix/bin/…`; verified the 67 MB template
+   resolves. Stage 4 still replaces this absolute path with the lockfile mechanism.
 
 ### Stage 0 — prepare, before anything is committed
 
 0. **Transfer `bryankruman/VortexArena` → `VortexFPS/VortexArena`** and create `VortexFPS/VortexMaps`
-   + `VortexFPS/VortexLauncher` (§5.0). First, so every URL below is written once. Then
-   `git remote set-url origin`, sweep the six tracked files that name the old owner, regenerate
-   `LEDGER.html`, and check the org's default Actions permissions before relying on `release.yml`.
+   + `VortexFPS/VortexLauncher` (§5.0). First, so every URL below is written once. Status:
+   - ~~transfer~~ — **done** (§5.0). Discovered via the push redirect, not deliberately.
+   - ~~sweep the tracked files naming the old owner~~ — **done 2026-07-29.** Five files, not six:
+     `README.md` (2 CI badges), `docs/RELEASING.md`, `tools/package.sh`,
+     `tools/upstream-ledger-html.py` (`GITHUB_BLOB`), and `planning/upstream-watch/README.md` (the
+     Pages host, `bryankruman.github.io` → `vortexfps.github.io`). `LEDGER.html` regenerated from the
+     tool — 60 links repointed, 0 stale. `.github/workflows/pages.yml` needed nothing: it uses
+     `steps.deployment.outputs.page_url`. Deliberately left: the old name in `docs/BRANCH-MIGRATION.md`
+     and here (both *describe* the rename) and `planning/wave-a3/briefs/T33.json` (frozen).
+   - **`git remote set-url origin git@github.com:VortexFPS/VortexArena.git`** — still to do; the local
+     remote is stale and working only through GitHub's redirect.
+   - **Create `VortexFPS/VortexMaps` and `VortexFPS/VortexLauncher`** — still to do. **Stage 1 is
+     blocked on `VortexMaps`.**
+   - **Check the org's default Actions permissions** — still to do, before relying on `release.yml`.
 1. ~~**Land `feature/map-editor`**~~ — **G8. Done 2026-07-29** (46 commits, merged; the vmap code and
    the `989cd59` single-text-file `.vmap` format are on `main`). The seven surviving branches migrate
    afterwards via `docs/BRANCH-MIGRATION.md`.
@@ -1058,7 +1102,7 @@ Land after Stage 3 so the mechanical sweep sits alone in history and stays bisec
       identity changes with their own continuity questions, they share nothing mechanically with the
       path move or the namespace sweep, and Stage 5 is already the largest mechanical change in the
       repo's history. Track them in `docs/REBRANDING.md`, not here.
-37. **Proof:** clean `dotnet build` plus the full ~2,950-test suite green, then `ci/ci.sh`. This gate
+37. **Proof:** clean `dotnet build` plus the full ~3,920-test suite green, then `ci/ci.sh`. This gate
     is only meaningful because **Stage −1 item −3** made the asset-dependent tests runnable; before
     that fix, "green" meant "green with those tests silently skipped."
 

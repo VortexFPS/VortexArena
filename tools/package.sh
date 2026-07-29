@@ -114,7 +114,7 @@ write_readme() {  # write_readme <dir> <target>
     local dir="$1" t="$2"
     cat > "$dir/README.txt" <<EOF
 Vortex Arena — $t ($version)
-A fork of Xonotic, reborn on Godot + C#.  https://github.com/bryankruman/VortexArena
+A fork of Xonotic, reborn on Godot + C#.  https://github.com/VortexFPS/VortexArena
 
 This is a "fat" build: the game binary, the Godot runtime, and all Xonotic game data are
 bundled together. Keep the files together — the game loads assets/ from beside the binary.

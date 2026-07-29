@@ -784,7 +784,37 @@ public sealed partial class EditorController : Node3D
         }
 
         PickIndex.EnsureBuilt(_document!, GeometryVersion, IncludeToolBrushes);
-        Hover = VmapPicking.Pick(PickIndex, origin, dir, PickMode(), GrabRadius, PickRange, EntityPickFilter);
+        Hover = ResolveBrushEntity(
+            VmapPicking.Pick(PickIndex, origin, dir, PickMode(), GrabRadius, PickRange, EntityPickFilter));
+    }
+
+    /// <summary>
+    /// With an entity tool up, a hit on geometry OWNED by a brush entity selects that entity (backlog F4).
+    ///
+    /// A brush entity has no origin, so the pick index deliberately gives it no box — clicking a door returns
+    /// one of the door's brushes. Every entity-driven path then silently missed it: the key inspector had
+    /// nothing to inspect, delete removed the geometry without the entity, and dissolve had no way in. Which
+    /// meant that before this, a mapper could create a <c>func_door</c> and then never configure it.
+    ///
+    /// Only under the entity tools. With the brush tool up, clicking a door has to keep giving you the brush —
+    /// that is how you edit the door's shape.
+    /// </summary>
+    private VmapPickResult ResolveBrushEntity(VmapPickResult hit)
+    {
+        if (_document is null || !hit.Hit || Tool is not (EditorTool.Entity or EditorTool.Light))
+            return hit;
+
+        VmapEntity? owner = hit.Selection.Kind switch
+        {
+            VmapSelectionKind.Brush or VmapSelectionKind.Face or VmapSelectionKind.Edge
+                or VmapSelectionKind.Vertex => _document.OwnerOfBrush(hit.Selection.BrushId),
+            VmapSelectionKind.Patch => _document.OwnerOfPatch(hit.Selection.PatchId),
+            _ => null,
+        };
+        if (owner is null)
+            return hit;
+
+        return hit with { Selection = VmapSelection.OfEntity(owner.Id) };
     }
 
     /// <summary>The camera ray in Quake space â€” the crosshair is the view centre, so this is simply forward.</summary>
@@ -2204,6 +2234,89 @@ public sealed partial class EditorController : Node3D
 
         _session.Selection.Clear();
         GeometryVersion++;
+        return true;
+    }
+
+    /// <summary>
+    /// Turn the selected geometry into a brush entity of <paramref name="className"/> (backlog F4).
+    ///
+    /// The gesture every dynamic element of a Xonotic map needs and the editor had no way to perform: a door,
+    /// a platform, a trigger volume and a team-only wall are all brushes assigned to an entity, and until now
+    /// the editor could author only static geometry and point entities.
+    /// </summary>
+    public bool AssignSelectionToEntity(string className)
+    {
+        if (_session is null || _document is null || string.IsNullOrWhiteSpace(className))
+            return false;
+
+        List<int> brushIds = _session.SelectedBrushIds();
+        List<int> patchIds = SelectedPatchIds();
+        if (brushIds.Count == 0 && patchIds.Count == 0)
+        {
+            Log.Info("editor: select the geometry to assign first");
+            return false;
+        }
+
+        var op = new CreateBrushEntityOp(className, brushIds, patchIds);
+        if (!Commit(op))
+        {
+            Log.Info($"editor: could not make a {className} out of that selection");
+            return false;
+        }
+
+        // Select the entity itself, so its keys are immediately editable. Skipped on a guest, where nothing
+        // exists until the server's echo lands and there is no id yet.
+        if (!LastOpDeferred)
+        {
+            _session.Selection.Clear();
+            _session.Selection.Add(VmapSelection.OfEntity(op.CreatedEntityId));
+        }
+
+        GeometryVersion++;
+        Log.Info($"editor: {brushIds.Count + patchIds.Count} object(s) are now a {className}"
+                 + " — it still RENDERS statically; its collision moves in playtest");
+        return true;
+    }
+
+    /// <summary>
+    /// Return the selected brush entities' geometry to worldspawn and delete the entities (backlog F4).
+    ///
+    /// Resolves owner-from-geometry as well as reading the entity selection, because a brush entity is not
+    /// pickable directly — the mapper may well have a door's brush selected rather than the door.
+    /// </summary>
+    public bool DissolveSelectedBrushEntities()
+    {
+        if (_session is null || _document is null)
+            return false;
+
+        List<int> ids = SelectedEntityIds();
+        void Owner(VmapEntity? e)
+        {
+            if (e is not null && e.IsBrushEntity && !ids.Contains(e.Id))
+                ids.Add(e.Id);
+        }
+
+        foreach (int b in _session.SelectedBrushIds())
+            Owner(_document.OwnerOfBrush(b));
+        foreach (int p in SelectedPatchIds())
+            Owner(_document.OwnerOfPatch(p));
+
+        if (ids.Count == 0)
+        {
+            Log.Info("editor: select a brush entity (or its geometry) to dissolve");
+            return false;
+        }
+
+        if (!Commit(new DissolveBrushEntityOp(ids, _document)))
+        {
+            Log.Info("editor: nothing in the selection is a brush entity");
+            return false;
+        }
+
+        _session.Selection.Clear();
+        GeometryVersion++;
+        Log.Info($"editor: dissolved {ids.Count} brush entit{(ids.Count == 1 ? "y" : "ies")}"
+                 + " — the geometry stays, as worldspawn");
         return true;
     }
 

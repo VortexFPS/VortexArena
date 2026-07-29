@@ -164,7 +164,7 @@ Consequences worth writing down before building it:
 | **T3** | **Split visual grid from alignment grid.** One grid size currently drives both what you see and what you snap to. Two sizes, two controls; the drawn grid is a reference, the snap grid is a constraint, and they are not the same decision. | open |
 | **T4** | **Scroll wheel drives camera speed.** Free-fly speed is what you adjust constantly; grid size is not. Move grid size behind a held **G** — tap G to toggle the grid, hold G and scroll to change the alignment grid (T3's, not the visual one). | open |
 | **T5** | **Snap to adjacent brush / plane.** Toggleable, with a snap distance you can raise and lower. Snap candidates: nearby face planes, edges and vertices of neighbouring brushes, so things line up without hand-typing coordinates. The measure tool's picking already finds nearby geometry and is the obvious starting point. | open |
-| **T6** | **Texture browser thumbnails.** It is a name list grouped by path segment. Nobody picks a wall texture from strings. | open |
+| **T6** | **Texture browser thumbnails.** It is a name list grouped by path segment. Nobody picks a wall texture from strings. | **done** (`144fca2`) |
 | **T7** | **Entity scaling.** *(done — `348c16d`)*  `ScaleSelectionOp` takes brush and patch ids only. A brush entity should scale the geometry it owns (like `MoveEntitiesOp` resolves its brushes); a point entity should write a `scale`/`modelscale` key. See B4. | open |
 
 ---

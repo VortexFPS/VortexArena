@@ -104,6 +104,30 @@ public sealed class VmapDocument
                 return Entities[i];
         return null;
     }
+
+    /// <summary>
+    /// The brush entity that owns a brush, or null when it belongs to worldspawn.
+    ///
+    /// Needed because a brush entity is deliberately NOT pickable — it has no origin, so clicking a door
+    /// returns the door's BRUSH. Every path that wants the door itself (its keys, its delete, its dissolve)
+    /// has to go geometry → owner, and doing that in one place is what keeps them agreeing.
+    /// </summary>
+    public VmapEntity? OwnerOfBrush(int brushId)
+    {
+        for (int i = 0; i < Entities.Count; i++)
+            if (Entities[i].BrushIds.Contains(brushId))
+                return Entities[i];
+        return null;
+    }
+
+    /// <summary>The brush entity that owns a patch, or null when it belongs to worldspawn.</summary>
+    public VmapEntity? OwnerOfPatch(int patchId)
+    {
+        for (int i = 0; i < Entities.Count; i++)
+            if (Entities[i].PatchIds.Contains(patchId))
+                return Entities[i];
+        return null;
+    }
 }
 
 /// <summary>Map-level identity, provenance and environment settings (the <c>map.json</c> manifest).</summary>

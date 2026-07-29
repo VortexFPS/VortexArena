@@ -217,6 +217,21 @@ public static class VmapOpWire
                   .Append(' ').Append(Escape(cp.Material));
                 return sb.ToString();
 
+            case CreateBrushEntityOp cbe:
+                sb.Append("mkbent ").Append(cbe.WireId).Append(' ');
+                AppendIds(sb, cbe.BrushIds);
+                sb.Append(' ');
+                AppendIds(sb, cbe.PatchIds);
+                sb.Append(' ').Append(Escape(cbe.ClassName)).Append(' ').Append(cbe.Fields.Count);
+                foreach (KeyValuePair<string, string> kv in cbe.Fields)
+                    sb.Append(' ').Append(Escape(kv.Key)).Append(' ').Append(Escape(kv.Value));
+                return sb.ToString();
+
+            case DissolveBrushEntityOp dbe:
+                sb.Append("entdissolve ");
+                AppendIds(sb, dbe.TouchedEntityIds);
+                return sb.ToString();
+
             case CreateEntityOp ce:
                 sb.Append("mkent ").Append(ce.WireId).Append(' ');
                 AppendVec(sb, ce.Origin);
@@ -492,6 +507,37 @@ public static class VmapOpWire
                         int.Parse(tok[9], CultureInfo.InvariantCulture),
                         int.Parse(tok[10], CultureInfo.InvariantCulture),
                         int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "mkbent":
+                {
+                    // Three untrusted counts on one line — two id lists and a field bag — so three Fits
+                    // guards. A count multiplied by a stride overflows and wraps negative, and the wrapped
+                    // value then sizes an array.
+                    if (tok.Length < 2)
+                        return null;
+                    int forced = int.Parse(tok[1], CultureInfo.InvariantCulture);
+                    if (!TryReadIds(tok, 2, out int[] brushIds, out int afterBrushes)
+                        || !TryReadIds(tok, afterBrushes, out int[] patchIds, out int afterPatches)
+                        || tok.Length < afterPatches + 2)
+                        return null;
+
+                    string cls = Unescape(tok[afterPatches]);
+                    int keyCount = int.Parse(tok[afterPatches + 1], CultureInfo.InvariantCulture);
+                    if (!Fits(tok, afterPatches + 2, keyCount, stride: 2))
+                        return null;
+
+                    var keys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < keyCount; i++)
+                        keys[Unescape(tok[afterPatches + 2 + i * 2])] = Unescape(tok[afterPatches + 3 + i * 2]);
+                    return new CreateBrushEntityOp(cls, brushIds, patchIds, keys, forced);
+                }
+                case "entdissolve":
+                {
+                    // doc, like entdel/entmove: the op resolves the geometry it frees at construction, and on
+                    // the receiving side that is the only chance to know what the entity owned.
+                    if (!TryReadIds(tok, 1, out int[] dissolveIds, out _))
+                        return null;
+                    return new DissolveBrushEntityOp(dissolveIds, doc);
                 }
                 case "mkent":
                 {

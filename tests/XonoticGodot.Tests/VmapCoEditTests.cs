@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Numerics;
 using XonoticGodot.Formats.Vmap;
 using Xunit;
@@ -85,6 +86,9 @@ public class VmapCoEditTests
         new CreateBoxBrushOp(Vector3.Zero, new Vector3(64, 64, 64), "textures/test/wall"),
         new CreatePatchOp(PatchPrimitive.Cylinder, Vector3.Zero, new Vector3(64, 64, 128), "textures/test/curve", 9, 3),
         new CreateEntityOp("info_player_deathmatch", new Vector3(0, 0, 24)),
+        new CreateBrushEntityOp("func_door", new[] { 1, 2 }, new[] { 3 },
+            new Dictionary<string, string> { ["speed"] = "100", ["targetname"] = "big door" }),
+        new DissolveBrushEntityOp(new[] { 4, 5 }),
         new ExtrudeFaceOp(1, 4, 32f),
         new ClipSelectionOp(new[] { 1, 2 }, new VmapPlane(new Vector3(1, 0, 0), 32f), ClipKeep.Both),
     };
@@ -135,6 +139,7 @@ public class VmapCoEditTests
                      "move 2 1", "move notanumber 1 2 3", "verts 1 -5 0 0 0",
                      "rotate 1 1 0 0 0 0 0 1 notanangle",
                      "mkent 0 0 0 0", "mkent 0 0 0 0 cls 3 a b", "add 2 1 6",
+                     "mkbent", "mkbent 0", "mkbent 0 1 1", "mkbent 0 1 1 0 cls", "entdissolve",
                      "add 1 1 1 1 0 0 0", "clip 1 1 1 0 0 0 0",
                  })
         {
@@ -161,6 +166,10 @@ public class VmapCoEditTests
                      "set 0 0 2147483647",                          // entity list
                      "add 0 1 1 2147483647 2147483647 0 0 t",       // patch cell count (Width*Height overflow)
                      "clip 2147483647 1 0 0 0 0",                   // touched-id list
+                     "mkbent 0 2147483647",                         // brush list of a brush entity
+                     "mkbent 0 0 2147483647",                       // its patch list
+                     "mkbent 0 0 0 cls 1073741824 k v",             // its field pairs
+                     "entdissolve 2147483647",                      // dissolve id list
                  })
         {
             Assert.Null(VmapOpWire.Deserialize(line));

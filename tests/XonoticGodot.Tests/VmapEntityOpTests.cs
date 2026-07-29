@@ -378,4 +378,253 @@ public class VmapEntityOpTests
 
         Assert.Equal(want, e.Origin());
     }
+
+    // ---------------------------------------------------------------- assign / dissolve (backlog F4)
+
+    private static VmapDocument DocWithBoxes(int count)
+    {
+        var doc = new VmapDocument();
+        for (int i = 0; i < count; i++)
+            doc.Brushes.Add(Box(new Vector3(i * 128f, 0, 0), new Vector3(i * 128f + 64f, 64, 64), i + 1));
+        return doc;
+    }
+
+    [Fact]
+    public void AssignMintsABrushEntityOwningTheSelection()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        var session = new VmapEditSession(doc);
+
+        var op = new CreateBrushEntityOp("func_door", new[] { 1 }, System.Array.Empty<int>());
+        Assert.True(session.Apply(op));
+
+        VmapEntity e = Assert.Single(doc.Entities);
+        Assert.Equal("func_door", e.ClassName);
+        Assert.Equal("func_door", e.Fields["classname"]);
+        Assert.True(e.IsBrushEntity);
+        Assert.Equal(new[] { 1 }, e.BrushIds);
+        Assert.Equal(e.Id, op.CreatedEntityId);
+
+        // The geometry itself is untouched — this is a change of ownership, not of shape.
+        Assert.Single(doc.Brushes);
+        // A brush entity has no origin key. Writing one would put a door at 0 0 0 in playtest.
+        Assert.False(e.Fields.ContainsKey("origin"));
+    }
+
+    /// <summary>
+    /// Assigning TO worldspawn would give it explicit lists, which makes <c>IsBrushEntity</c> true — and the
+    /// collision build would then claim the entire world into one inline submodel, leaving the static
+    /// collision world empty.
+    /// </summary>
+    [Fact]
+    public void AssigningToWorldspawnIsRefused()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        Assert.False(
+            new CreateBrushEntityOp("worldspawn", new[] { 1 }, System.Array.Empty<int>()).Apply(doc));
+        Assert.Empty(doc.Entities);
+    }
+
+    [Fact]
+    public void AssigningNothingIsRefused()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        Assert.False(new CreateBrushEntityOp(
+            "func_door", System.Array.Empty<int>(), System.Array.Empty<int>()).Apply(doc));
+        Assert.Empty(doc.Entities);
+    }
+
+    [Fact]
+    public void AssigningAMissingBrushIsRefusedAndChangesNothing()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        Assert.False(
+            new CreateBrushEntityOp("func_door", new[] { 1, 99 }, System.Array.Empty<int>()).Apply(doc));
+
+        Assert.Empty(doc.Entities);
+        Assert.Single(doc.Brushes);
+    }
+
+    /// <summary>A brush belongs to exactly one entity, so assigning takes it from whoever had it.</summary>
+    [Fact]
+    public void AssigningABrushOwnedByAnotherEntityStealsIt()
+    {
+        VmapDocument doc = DocWithBoxes(2);
+        var session = new VmapEditSession(doc);
+        Assert.True(session.Apply(
+            new CreateBrushEntityOp("func_wall", new[] { 1, 2 }, System.Array.Empty<int>())));
+
+        Assert.True(session.Apply(
+            new CreateBrushEntityOp("func_door", new[] { 1 }, System.Array.Empty<int>())));
+
+        VmapEntity wall = Assert.Single(doc.Entities, e => e.ClassName == "func_wall");
+        VmapEntity door = Assert.Single(doc.Entities, e => e.ClassName == "func_door");
+        Assert.Equal(new[] { 2 }, wall.BrushIds);
+        Assert.Equal(new[] { 1 }, door.BrushIds);
+    }
+
+    /// <summary>
+    /// An owner stripped of its last brush is no longer a brush entity, and has no origin key either — so
+    /// leaving it behind would spawn it at the world origin in playtest.
+    /// </summary>
+    [Fact]
+    public void StealingTheLastBrushRemovesTheEmptiedOwner()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        var session = new VmapEditSession(doc);
+        Assert.True(session.Apply(
+            new CreateBrushEntityOp("func_wall", new[] { 1 }, System.Array.Empty<int>())));
+
+        Assert.True(session.Apply(
+            new CreateBrushEntityOp("func_door", new[] { 1 }, System.Array.Empty<int>())));
+
+        VmapEntity only = Assert.Single(doc.Entities);
+        Assert.Equal("func_door", only.ClassName);
+    }
+
+    /// <summary>
+    /// The one that pins the session's derived-owner snapshot: this op never names the previous owner, so undo
+    /// can only restore it because the session works out who owned the touched geometry.
+    /// </summary>
+    [Fact]
+    public void UndoPutsTheEmptiedOwnerAndItsOwnershipBack()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        var session = new VmapEditSession(doc);
+        Assert.True(session.Apply(
+            new CreateBrushEntityOp("func_wall", new[] { 1 }, System.Array.Empty<int>())));
+
+        Assert.True(session.Apply(
+            new CreateBrushEntityOp("func_door", new[] { 1 }, System.Array.Empty<int>())));
+        Assert.True(session.Undo());
+
+        VmapEntity wall = Assert.Single(doc.Entities);
+        Assert.Equal("func_wall", wall.ClassName);
+        Assert.Equal(new[] { 1 }, wall.BrushIds);
+    }
+
+    /// <summary>
+    /// A stolen brush keeps its old inline-model index unless it is cleared, and that index is what the
+    /// gametype filter hides on — so a brush taken out of a CTF-only wall would make the new door vanish in
+    /// deathmatch, in render, picking and collision at once.
+    /// </summary>
+    [Fact]
+    public void AssignClearsTheSubmodelIndex()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        doc.Brushes[0].SubmodelIndex = 3;
+        var session = new VmapEditSession(doc);
+
+        Assert.True(session.Apply(
+            new CreateBrushEntityOp("func_door", new[] { 1 }, System.Array.Empty<int>())));
+        Assert.Equal(0, doc.Brushes[0].SubmodelIndex);
+
+        Assert.True(session.Undo());
+        Assert.Equal(3, doc.Brushes[0].SubmodelIndex);
+    }
+
+    [Fact]
+    public void UndoingAnAssignRemovesTheEntityAndRedoBringsItBack()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        var session = new VmapEditSession(doc);
+        Assert.True(session.Apply(
+            new CreateBrushEntityOp("func_door", new[] { 1 }, System.Array.Empty<int>())));
+
+        Assert.True(session.Undo());
+        Assert.Empty(doc.Entities);
+        Assert.Single(doc.Brushes);          // the geometry never went anywhere
+
+        Assert.True(session.Redo());
+        Assert.Single(doc.Entities);
+        Assert.Equal(new[] { 1 }, doc.Entities[0].BrushIds);
+    }
+
+    /// <summary>
+    /// The contrast with deleting a brush entity: dissolve demotes a door back to a wall, it does not remove
+    /// the wall.
+    /// </summary>
+    [Fact]
+    public void DissolveDeletesTheEntityButKeepsTheGeometry()
+    {
+        VmapDocument doc = DocWithBoxes(1);
+        var session = new VmapEditSession(doc);
+        var make = new CreateBrushEntityOp("func_door", new[] { 1 }, System.Array.Empty<int>());
+        Assert.True(session.Apply(make));
+
+        Assert.True(session.Apply(new DissolveBrushEntityOp(new[] { make.CreatedEntityId }, doc)));
+
+        Assert.Empty(doc.Entities);
+        Assert.Single(doc.Brushes);
+    }
+
+    [Fact]
+    public void UndoingADissolveRestoresTheEntityWithItsOwnership()
+    {
+        VmapDocument doc = DocWithBoxes(2);
+        var session = new VmapEditSession(doc);
+        var make = new CreateBrushEntityOp("func_door", new[] { 1, 2 }, System.Array.Empty<int>());
+        Assert.True(session.Apply(make));
+        Assert.True(session.Apply(new DissolveBrushEntityOp(new[] { make.CreatedEntityId }, doc)));
+
+        Assert.True(session.Undo());
+
+        VmapEntity door = Assert.Single(doc.Entities);
+        Assert.Equal("func_door", door.ClassName);
+        Assert.Equal(new[] { 1, 2 }, door.BrushIds);
+    }
+
+    /// <summary>Dissolving a point entity would be a silent delete, so it is skipped rather than obeyed.</summary>
+    [Fact]
+    public void DissolvingAPointEntityDoesNothing()
+    {
+        var doc = new VmapDocument();
+        doc.Entities.Add(Point(1, "info_player_deathmatch", new Vector3(0, 0, 24)));
+
+        Assert.False(new DissolveBrushEntityOp(new[] { 1 }, doc).Apply(doc));
+        Assert.Single(doc.Entities);
+    }
+
+    [Fact]
+    public void DissolvingWorldspawnDoesNothing()
+    {
+        var doc = new VmapDocument();
+        var world = new VmapEntity { Id = 1, ClassName = "worldspawn" };
+        world.Fields["classname"] = "worldspawn";
+        world.BrushIds.Add(1);           // pathological, but a peer could send it
+        doc.Entities.Add(world);
+
+        Assert.False(new DissolveBrushEntityOp(new[] { 1 }, doc).Apply(doc));
+        Assert.Single(doc.Entities);
+    }
+
+    [Fact]
+    public void AssignThenDissolveReturnsToTheStartingDocument()
+    {
+        VmapDocument doc = DocWithBoxes(2);
+        var session = new VmapEditSession(doc);
+
+        var make = new CreateBrushEntityOp("func_plat", new[] { 1, 2 }, System.Array.Empty<int>());
+        Assert.True(session.Apply(make));
+        Assert.True(session.Apply(new DissolveBrushEntityOp(new[] { make.CreatedEntityId }, doc)));
+
+        Assert.Empty(doc.Entities);
+        Assert.Equal(2, doc.Brushes.Count);
+    }
+
+    /// <summary>
+    /// The lookup every UI path needs, because a brush entity is deliberately unpickable: clicking a door
+    /// yields one of its brushes, and the door has to be found from that.
+    /// </summary>
+    [Fact]
+    public void OwnerOfBrushFindsTheEntityThatClaimedIt()
+    {
+        VmapDocument doc = DocWithBoxes(2);
+        var make = new CreateBrushEntityOp("func_door", new[] { 2 }, System.Array.Empty<int>());
+        Assert.True(make.Apply(doc));
+
+        Assert.Equal(make.CreatedEntityId, doc.OwnerOfBrush(2)?.Id);
+        Assert.Null(doc.OwnerOfBrush(1));     // unclaimed geometry is worldspawn's, implicitly
+        Assert.Null(doc.OwnerOfBrush(99));
+    }
 }

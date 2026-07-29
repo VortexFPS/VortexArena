@@ -70,6 +70,15 @@ public static class VmapCollisionBuilder
 
         world.BuildGrid();
 
+        // Names already spoken for by imported entities. Minting positionally is not enough on a document a
+        // mapper has edited: dissolve an entity that held "*2" and assign a new one, and the counter hands the
+        // new one "*3" while the imported entity holding "*3" is still there. Two submodels then arrive at the
+        // registry under one name and one of them silently wins.
+        var takenModelNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (VmapEntity e in doc.Entities)
+            if (e.IsBrushEntity && e.Fields.TryGetValue("model", out string? held) && held.StartsWith('*'))
+                takenModelNames.Add(held);
+
         int nextModelIndex = 1;
         foreach (VmapEntity e in doc.Entities)
         {
@@ -110,8 +119,9 @@ public static class VmapCollisionBuilder
                 mins = maxs = Vector3.Zero;
             }
 
-            // Preserve the imported "*N" name when there is one; otherwise mint the next free index and record
-            // it, so a natively-authored brush entity gets a model the engine can resolve.
+            // Preserve the imported "*N" name when there is one; otherwise mint the next FREE index and record
+            // it, so a natively-authored brush entity gets a model the engine can resolve — and cannot be
+            // handed a name another entity already answers to.
             string name;
             if (e.Fields.TryGetValue("model", out string? existing) && existing.StartsWith('*'))
             {
@@ -119,10 +129,13 @@ public static class VmapCollisionBuilder
             }
             else
             {
+                while (takenModelNames.Contains($"*{nextModelIndex}"))
+                    nextModelIndex++;
                 name = $"*{nextModelIndex}";
+                takenModelNames.Add(name);
                 e.Fields["model"] = name;
+                nextModelIndex++;
             }
-            nextModelIndex++;
 
             submodels.Add(new BspCollisionBuilder.Submodel(name, mins, maxs, brushes.ToArray()));
         }

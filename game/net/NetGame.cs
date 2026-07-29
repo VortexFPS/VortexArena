@@ -5909,13 +5909,6 @@ public sealed partial class NetGame : Node3D
             // document is written from — the packet thread only queues.
             DrainEditorOps();
 
-            // (B2) The EDIT -> PLAYTEST edge: reconcile the live entity set with the document, so what you
-            // playtest is what you just authored. Edge-triggered, not polled — a respawn every frame while
-            // playtesting would reset the map continuously.
-            if (IsEditorGametype && _wasEditing && !editorFreeFly)
-                ReconcileEntitiesForPlaytest();
-            _wasEditing = editorFreeFly;
-
             // Session opens with the GAMETYPE, not with the first free-fly frame: the world swap to the
             // document happens before the player ever sees the compiled BSP, and playtest is in the
             // document from the first spawn.
@@ -5926,6 +5919,11 @@ public sealed partial class NetGame : Node3D
 
             // Entering PLAYTEST with edits pending: rebuild collision from the document so the physics match
             // what is on screen. Keyed on GeometryVersion, so an untouched map never pays the rebuild.
+            //
+            // BEFORE the reconcile below, and that ordering is load-bearing: this build is what mints a
+            // brush entity's "*N" model key, and the reconcile is what spawns it. The other way round, a
+            // func_door you had just authored spawned with no model for setmodel to resolve — invisible
+            // and non-solid — until some later edit happened to run the build first.
             if (!editorFreeFly && IsEditorGametype && _editor.Document is not null
                 && _editorCollisionVersion != _editor.GeometryVersion && _serverWorld is not null)
             {
@@ -5938,6 +5936,13 @@ public sealed partial class NetGame : Node3D
                 XonoticGodot.Common.Diagnostics.Log.Info(
                     $"editor: collision rebuilt from the document (v{_editor.GeometryVersion})");
             }
+
+            // (B2) The EDIT -> PLAYTEST edge: reconcile the live entity set with the document, so what you
+            // playtest is what you just authored. Edge-triggered, not polled — a respawn every frame while
+            // playtesting would reset the map continuously.
+            if (IsEditorGametype && _wasEditing && !editorFreeFly)
+                ReconcileEntitiesForPlaytest();
+            _wasEditing = editorFreeFly;
         }
 
         // The editor aims along the crosshair, but an observer has no local player so the skinned crosshair is
@@ -8209,6 +8214,9 @@ public sealed partial class NetGame : Node3D
     /// <code>
     ///   editor_entity create &lt;classname&gt;   place one at the crosshair
     ///   editor_entity set &lt;key&gt; &lt;value&gt;    set a key on the selection (empty value clears)
+    ///   editor_entity flag &lt;NAME&gt;           toggle one spawnflag on the selection
+    ///   editor_entity assign &lt;classname&gt;    turn the selected geometry into a brush entity
+    ///   editor_entity dissolve              give a brush entity's geometry back to worldspawn
     ///   editor_entity keys                  list the selected entity's keys and what its class allows
     ///   editor_entity list [category]       list placeable classes
     /// </code>
@@ -8295,6 +8303,23 @@ public sealed partial class NetGame : Node3D
                 return;
             }
 
+            case "assign":
+            {
+                if (args.Count < 3)
+                {
+                    XonoticGodot.Common.Diagnostics.Log.Help("usage: editor_entity assign <classname>");
+                    return;
+                }
+                if (_editor.AssignSelectionToEntity(args[2]))
+                    RefreshEditorWorld();
+                return;
+            }
+
+            case "dissolve":
+                if (_editor.DissolveSelectedBrushEntities())
+                    RefreshEditorWorld();
+                return;
+
             case "keys":
                 // Bare opens the inspector; "keys log" keeps the console listing, which is still the better
                 // form when you want to read or copy the whole set at once.
@@ -8314,8 +8339,8 @@ public sealed partial class NetGame : Node3D
 
             default:
                 XonoticGodot.Common.Diagnostics.Log.Help(
-                    "usage: editor_entity create <classname> | set <key> [value] | flag <NAME> | keys "
-                    + "| list [category]");
+                    "usage: editor_entity create <classname> | set <key> [value] | flag <NAME> "
+                    + "| assign <classname> | dissolve | keys | list [category]");
                 return;
         }
     }
@@ -9338,12 +9363,14 @@ public sealed partial class NetGame : Node3D
                 {
                     Label = d.Name,
                     Group = category,
-                    Value = d.IsBrushEntity ? "brush entity" : "",
+                    Value = d.IsBrushEntity ? "needs a selection" : "",
                     Detail = d.Description.Length > 0 ? d.Description : "(no description in entities.ent)",
-                    // A brush entity cannot be placed at a point, so its row reports that rather than
-                    // creating something the compiler would discard.
+                    // A brush entity cannot be placed at a point — it IS the geometry it owns — so its row
+                    // ASSIGNS the selection instead of creating something at the crosshair. That row used to
+                    // echo an explanation of a gesture the editor did not have; it is the gesture now
+                    // (backlog F4).
                     Command = d.IsBrushEntity
-                        ? $"echo {d.Name} is a brush entity - select geometry and assign it instead"
+                        ? $"editor_entity assign {d.Name}"
                         : $"editor_entity create {d.Name}",
                 });
             }

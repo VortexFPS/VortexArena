@@ -1559,7 +1559,8 @@ public sealed class ClipSelectionOp : IVmapOp
 /// Create a point entity of a given class at a position (design doc §11.9).
 ///
 /// Point only. A BRUSH entity has no origin — it is defined by the geometry it owns — so creating one means
-/// assigning existing brushes to a new entity, which is a different gesture and a different op.
+/// assigning existing brushes to a new entity, which is a different gesture and a different op:
+/// <see cref="CreateBrushEntityOp"/>.
 /// </summary>
 public sealed class CreateEntityOp : IVmapOp
 {
@@ -1623,6 +1624,232 @@ public sealed class CreateEntityOp : IVmapOp
 
         doc.Entities.Add(e);
         return true;
+    }
+}
+
+/// <summary>
+/// Turn a selection into a BRUSH ENTITY: mint an entity of the given class and hand it the selected brushes
+/// and patches (backlog F4).
+///
+/// The counterpart of <see cref="CreateEntityOp"/>, and the gesture the editor was missing entirely — every
+/// dynamic element of a Xonotic map is a brush entity (a door, a platform, a trigger volume, a team-only
+/// wall), so without this the editor authored static geometry and point entities and nothing else.
+///
+/// A brush belongs to exactly ONE entity, so assigning STEALS: the geometry is unhooked from whatever owned
+/// it first. Two consequences worth stating rather than discovering:
+/// <list type="bullet">
+///   <item>The previous owner is snapshotted automatically, because it owns a brush this op declares as
+///   touched — so undo restores the theft exactly, without the op having to name it.</item>
+///   <item>An owner left with nothing is REMOVED. It would otherwise be an entity with no geometry and no
+///   origin key, which playtest spawns at the world origin.</item>
+/// </list>
+/// </summary>
+public sealed class CreateBrushEntityOp : IVmapOp
+{
+    private readonly string _className;
+    private readonly int[] _brushIds;
+    private readonly int[] _patchIds;
+    private readonly Dictionary<string, string> _fields;
+    private readonly int _forcedId;
+    private int _assignedId;
+
+    /// <param name="forcedId">Id to use instead of minting one, when replaying a server-applied op.</param>
+    public CreateBrushEntityOp(
+        string className,
+        IReadOnlyList<int> brushIds,
+        IReadOnlyList<int> patchIds,
+        IReadOnlyDictionary<string, string>? fields = null,
+        int forcedId = 0)
+    {
+        _className = className ?? throw new ArgumentNullException(nameof(className));
+        _brushIds = Distinct(brushIds ?? throw new ArgumentNullException(nameof(brushIds)));
+        _patchIds = Distinct(patchIds ?? throw new ArgumentNullException(nameof(patchIds)));
+        _forcedId = forcedId;
+        _fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (fields is not null)
+            foreach (KeyValuePair<string, string> kv in fields)
+                _fields[kv.Key] = kv.Value;
+    }
+
+    private static int[] Distinct(IReadOnlyList<int> ids)
+    {
+        var seen = new List<int>(ids.Count);
+        foreach (int id in ids)
+            if (!seen.Contains(id))
+                seen.Add(id);
+        return seen.ToArray();
+    }
+
+    /// <summary>Id given to the created entity; valid after a successful <see cref="Apply"/>.</summary>
+    public int CreatedEntityId => _assignedId;
+
+    /// <summary>The id this op carries on the wire — assigned once it has run, requested before that.</summary>
+    public int WireId => _assignedId != 0 ? _assignedId : _forcedId;
+
+    /// <summary>Spawn class. Read by the wire codec.</summary>
+    public string ClassName => _className;
+
+    /// <summary>Brushes handed to the new entity. Read by the wire codec.</summary>
+    public IReadOnlyList<int> BrushIds => _brushIds;
+
+    /// <summary>Patches handed to the new entity. Read by the wire codec.</summary>
+    public IReadOnlyList<int> PatchIds => _patchIds;
+
+    /// <summary>Extra spawn keys set at creation. Read by the wire codec.</summary>
+    public IReadOnlyDictionary<string, string> Fields => _fields;
+
+    public IReadOnlyList<int> TouchedBrushIds => _brushIds;
+
+    public IReadOnlyList<int> TouchedPatchIds => _patchIds;
+
+    // Nothing pre-exists for the NEW entity — the session detects the addition. The PREVIOUS owners are
+    // derived by the session from the touched geometry, which is what makes a steal undoable without this op
+    // having to know, before it runs, who it is stealing from.
+    public IReadOnlyList<int> TouchedEntityIds => Array.Empty<int>();
+
+    // Derivable from the constructor arguments alone: the wire round-trip compares an encoded op's label
+    // against a decoded one's, and neither has run.
+    public string Describe()
+    {
+        int n = _brushIds.Length + _patchIds.Length;
+        return $"Create {_className} from {n} object{(n == 1 ? "" : "s")}";
+    }
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_className.Length == 0)
+            return false;
+
+        // Assigning geometry TO worldspawn is the dissolve gesture, and worldspawn deliberately keeps no
+        // explicit lists — unclaimed geometry is worldspawn's by definition. Writing lists onto it would make
+        // it read as a brush entity and pull the entire world into one inline submodel.
+        if (_className.Equals("worldspawn", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // No geometry means this is a point entity, i.e. a different op.
+        if (_brushIds.Length == 0 && _patchIds.Length == 0)
+            return false;
+
+        // Resolve everything before mutating anything: an op that half-applies leaves a document no undo step
+        // describes.
+        var brushes = new List<VmapBrush>(_brushIds.Length);
+        foreach (int id in _brushIds)
+        {
+            if (doc.FindBrush(id) is not { } b)
+                return false;
+            brushes.Add(b);
+        }
+        foreach (int id in _patchIds)
+            if (doc.FindPatch(id) is null)
+                return false;
+
+        _assignedId = _forcedId != 0 ? _forcedId : doc.NextEntityId();
+
+        // Unhook from previous owners. A brush belongs to exactly one entity.
+        var emptied = new List<VmapEntity>();
+        foreach (VmapEntity owner in doc.Entities)
+        {
+            bool had = owner.BrushIds.RemoveAll(_brushIds.Contains) > 0;
+            had |= owner.PatchIds.RemoveAll(_patchIds.Contains) > 0;
+            if (had && owner.BrushIds.Count == 0 && owner.PatchIds.Count == 0
+                && !owner.ClassName.Equals("worldspawn", StringComparison.OrdinalIgnoreCase))
+                emptied.Add(owner);
+        }
+        foreach (VmapEntity husk in emptied)
+            doc.Entities.Remove(husk);
+
+        // A stolen brush carries the inline-model index of whoever owned it. Left alone, a brush taken out of
+        // a CTF-only func_wall would keep vanishing under the deathmatch gametype filter — in render, picking
+        // AND collision — even though it now belongs to a door that has nothing to do with CTF.
+        foreach (VmapBrush b in brushes)
+            b.SubmodelIndex = 0;
+
+        var e = new VmapEntity { Id = _assignedId, ClassName = _className };
+        foreach (KeyValuePair<string, string> kv in _fields)
+            e.Fields[kv.Key] = kv.Value;
+        e.Fields["classname"] = _className;
+        e.BrushIds.AddRange(_brushIds);
+        e.PatchIds.AddRange(_patchIds);
+
+        // No origin key (a brush entity has none) and no model key — the collision build mints "*N".
+        doc.Entities.Add(e);
+        return true;
+    }
+}
+
+/// <summary>
+/// Return a brush entity's geometry to worldspawn and delete the entity — the inverse of
+/// <see cref="CreateBrushEntityOp"/>.
+///
+/// Unlike <see cref="DeleteEntitiesOp"/> the GEOMETRY SURVIVES. The point is to demote a door back to a wall,
+/// not to remove the wall. Nothing is added to worldspawn's own lists: it deliberately keeps none, and
+/// unclaimed geometry is already its.
+/// </summary>
+public sealed class DissolveBrushEntityOp : IVmapOp
+{
+    private readonly int[] _entityIds;
+    private int[] _freedBrushes = Array.Empty<int>();
+    private int[] _freedPatches = Array.Empty<int>();
+
+    /// <param name="doc">
+    /// Needed at CONSTRUCTION to resolve the owned geometry, exactly as <see cref="MoveEntitiesOp"/> and
+    /// <see cref="DeleteEntitiesOp"/> need it: the journal reads the touched sets before Apply runs, and only
+    /// the document knows what an entity owns.
+    /// </param>
+    public DissolveBrushEntityOp(IReadOnlyList<int> entityIds, VmapDocument? doc = null)
+    {
+        _entityIds = entityIds?.ToArray() ?? throw new ArgumentNullException(nameof(entityIds));
+        if (doc is null)
+            return;
+
+        var brushes = new List<int>();
+        var patches = new List<int>();
+        foreach (int id in _entityIds)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+            brushes.AddRange(e.BrushIds);
+            patches.AddRange(e.PatchIds);
+        }
+        _freedBrushes = brushes.ToArray();
+        _freedPatches = patches.ToArray();
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => _freedBrushes;
+
+    public IReadOnlyList<int> TouchedPatchIds => _freedPatches;
+
+    public IReadOnlyList<int> TouchedEntityIds => _entityIds;
+
+    public string Describe()
+        => $"Dissolve {_entityIds.Length} brush entit{(_entityIds.Length == 1 ? "y" : "ies")}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_entityIds.Length == 0)
+            return false;
+
+        bool dissolved = false;
+        foreach (int id in _entityIds)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+            if (e.ClassName.Equals("worldspawn", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Skipped rather than failed: dissolving a point entity would be a silent DELETE, and a mapper who
+            // multi-selected a door and a spawn should get the door demoted, not the spawn destroyed.
+            if (!e.IsBrushEntity)
+                continue;
+
+            e.BrushIds.Clear();
+            e.PatchIds.Clear();
+            doc.Entities.Remove(e);
+            dissolved = true;
+        }
+        return dissolved;
     }
 }
 

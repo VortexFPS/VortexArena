@@ -266,6 +266,11 @@ public static class ClientSettings
         // budget) so the menu never hitches (Shell.StartMenuAssetWarm → MenuAssetWarmer). No effect when
         // persistence is off (a per-match loader wouldn't see the warmed cache). `set cl_warm_at_boot 0` disables.
         c.Register("cl_warm_at_boot", "1");
+        // Show the development-release disclaimer over the main menu on a plain launch (default ON). PORT-ONLY:
+        // Base ships releases and has no such notice. CvarFlags.Save because it's a genuine user preference —
+        // the dialog's "Don't show this again" checkbox writes 0 and OK persists it — not a debug knob. Read
+        // once by Shell on the plain-menu boot path; a --map/--host/--connect/--menu-screen boot never shows it.
+        c.Register("cl_startup_disclaimer", "1", save);
         // Paint weapon PICKUPS with their weapon's registry color (a two-tone base/icon duotone) and dropped
         // loot with the DROPPER's player colors (default ON). Port-only cosmetic: `set cl_weapon_item_colors 0`
         // restores the stock untinted item look. Read per frame by the ClientWorld item pass.

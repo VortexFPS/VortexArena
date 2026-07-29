@@ -133,6 +133,74 @@ public sealed class VmapClipboard
     }
 
     /// <summary>
+    /// The clipboard as an op a peer can send (phase E6) — the contents offset to land at
+    /// <paramref name="at"/>, with every id left at zero for the receiving server to assign.
+    ///
+    /// A host does not need this: it applies its <see cref="PasteOp"/> locally and captures the RESULT out of
+    /// the document, ids and all. A guest has applied nothing to capture, so it describes the objects itself.
+    /// Ownership travels as INDICES into these lists, so an entity ends up owning the geometry that arrived
+    /// with it whatever ids the server hands out.
+    /// </summary>
+    public AddObjectsOp ToAddObjects(Vector3 at)
+    {
+        Vector3 offset = at - Pivot;
+
+        var brushIndex = new Dictionary<int, int>();
+        var brushes = new List<VmapBrush>(_brushes.Count);
+        foreach (VmapBrush source in _brushes)
+        {
+            VmapBrush copy = source.Clone();
+            brushIndex[source.Id] = brushes.Count;
+            copy.Id = 0;                                  // the server names it
+            foreach (VmapFace f in copy.Faces)
+            {
+                // Translating a plane moves its distance along its own normal; the normal is unchanged. The
+                // texture projection is a world-space map, so it has to travel with the geometry or the pasted
+                // copy comes out with its texture sliding across the surface.
+                VmapPlane p = f.Plane;
+                f.Plane = new VmapPlane(p.Normal, p.Dist + Vector3.Dot(offset, p.Normal));
+                VmapTexProjection t = f.Projection;
+                f.Projection = new VmapTexProjection(
+                    t.AxisU, t.AxisV,
+                    t.OffsetU - Vector3.Dot(offset, t.AxisU),
+                    t.OffsetV - Vector3.Dot(offset, t.AxisV));
+            }
+            brushes.Add(copy);
+        }
+
+        var patchIndex = new Dictionary<int, int>();
+        var patches = new List<VmapPatch>(_patches.Count);
+        foreach (VmapPatch source in _patches)
+        {
+            VmapPatch copy = source.Clone();
+            patchIndex[source.Id] = patches.Count;
+            copy.Id = 0;
+            for (int i = 0; i < copy.Controls.Count; i++)
+                copy.Controls[i] += offset;
+            patches.Add(copy);
+        }
+
+        var entities = new List<VmapEntity>(_entities.Count);
+        var ownedBrushes = new List<int[]>(_entities.Count);
+        var ownedPatches = new List<int[]>(_entities.Count);
+        foreach (VmapEntity source in _entities)
+        {
+            VmapEntity copy = source.Clone();
+            copy.Id = 0;
+            if (!copy.IsBrushEntity)
+                copy.SetOrigin(copy.Origin() + offset);   // a point entity carries its position in a key
+
+            // An owned object that was not copied has no index to point at, so it is dropped rather than
+            // encoded as a reference the receiver could not resolve.
+            ownedBrushes.Add(copy.BrushIds.Where(brushIndex.ContainsKey).Select(x => brushIndex[x]).ToArray());
+            ownedPatches.Add(copy.PatchIds.Where(patchIndex.ContainsKey).Select(x => patchIndex[x]).ToArray());
+            entities.Add(copy);
+        }
+
+        return new AddObjectsOp(brushes, patches, entities, ownedBrushes, ownedPatches);
+    }
+
+    /// <summary>
     /// What the HUD action line says the clipboard holds, e.g. <c>Brush #412, weapon_devastator, +3 more</c>.
     /// Names the first few rather than only counting them: "3 items" does not tell you whether you are about to
     /// paste the thing you meant to.

@@ -26,6 +26,13 @@ namespace XonoticGodot.Formats.Vmap;
 /// </summary>
 public static class VmapOpWire
 {
+    /// <summary>
+    /// Largest control-grid side a decoded patch may claim. Not a format limit — it is the point past which a
+    /// declared dimension is certainly hostile rather than a patch someone built, and it keeps the two sides
+    /// small enough that their product cannot overflow.
+    /// </summary>
+    private const int MaxGridSide = 1024;
+
     /// <summary>Encode an op as a single line. Returns null for an op type that has no wire form yet.</summary>
     public static string? Serialize(IVmapOp op)
     {
@@ -282,7 +289,7 @@ public static class VmapOpWire
                         return null;
                     int brushId = int.Parse(tok[1], CultureInfo.InvariantCulture);
                     int count = int.Parse(tok[2], CultureInfo.InvariantCulture);
-                    if (count < 0 || tok.Length < 3 + count * 3 + 3)
+                    if (!Fits(tok, 3, count, stride: 3, trailing: 3))
                         return null;
                     var targets = new Vector3[count];
                     for (int i = 0; i < count; i++)
@@ -431,7 +438,7 @@ public static class VmapOpWire
                     if (tok.Length < 7)
                         return null;
                     int fieldCount = int.Parse(tok[6], CultureInfo.InvariantCulture);
-                    if (fieldCount < 0 || tok.Length < 7 + fieldCount * 2)
+                    if (!Fits(tok, 7, fieldCount, stride: 2))
                         return null;
                     var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     for (int i = 0; i < fieldCount; i++)
@@ -484,6 +491,24 @@ public static class VmapOpWire
             sb.Append(' ').Append(id);
     }
 
+    /// <summary>
+    /// True when <paramref name="count"/> items of <paramref name="stride"/> tokens each, starting at
+    /// <paramref name="at"/> and followed by <paramref name="trailing"/> more tokens, actually fit in the line.
+    ///
+    /// A division rather than the obvious <c>at + count * stride + trailing &lt;= tok.Length</c>, because that
+    /// product OVERFLOWS for a large count, wraps negative, and sails through the comparison — after which the
+    /// count is used to size an array. A peer that picks the number gets an out-of-memory abort out of it, and
+    /// <see cref="Deserialize"/>'s catch does not cover OOM, so it takes the editing session with it. Every
+    /// count that reaches an allocation goes through here.
+    /// </summary>
+    private static bool Fits(string[] tok, int at, int count, int stride, int trailing = 0)
+    {
+        if (count < 0 || stride <= 0 || at < 0 || at > tok.Length)
+            return false;
+        int room = tok.Length - at - trailing;
+        return room >= 0 && count <= room / stride;
+    }
+
     private static bool TryReadIds(string[] tok, int start, out int[] ids, out int next)
     {
         ids = Array.Empty<int>();
@@ -491,7 +516,7 @@ public static class VmapOpWire
         if (start >= tok.Length)
             return false;
         int count = int.Parse(tok[start], CultureInfo.InvariantCulture);
-        if (count < 0 || start + 1 + count > tok.Length)
+        if (!Fits(tok, start + 1, count, 1))
             return false;
         ids = new int[count];
         for (int i = 0; i < count; i++)
@@ -673,9 +698,15 @@ public static class VmapOpWire
             || !TryCount(tok, ref at, out int entityCount))
             return null;
 
-        var entities = new List<VmapEntity>(entityCount);
-        var ownedBrushes = new List<int[]>(entityCount);
-        var ownedPatches = new List<int[]>(entityCount);
+        // Sized as it goes, never from the declared count: the smallest possible entity is 4 tokens (id, field
+        // count, and the two ownership lists), so a count larger than the line can hold is refused up front
+        // rather than pre-allocating for a number a peer chose.
+        if (!Fits(tok, at, entityCount, stride: 4))
+            return null;
+
+        var entities = new List<VmapEntity>();
+        var ownedBrushes = new List<int[]>();
+        var ownedPatches = new List<int[]>();
         for (int i = 0; i < entityCount; i++)
         {
             if (!TryReadEntity(tok, ref at, out VmapEntity e)
@@ -698,7 +729,10 @@ public static class VmapOpWire
             || !TryCount(tok, ref at, out int entityCount))
             return null;
 
-        var entities = new List<VmapEntity>(entityCount);
+        if (!Fits(tok, at, entityCount, stride: 4))
+            return null;
+
+        var entities = new List<VmapEntity>();
         for (int i = 0; i < entityCount; i++)
         {
             if (!TryReadEntity(tok, ref at, out VmapEntity e)
@@ -723,9 +757,16 @@ public static class VmapOpWire
         brushes = new List<VmapBrush>();
         if (!TryCount(tok, ref at, out int brushCount))
             return false;
+
+        // The smallest possible brush is 2 tokens (its id and a face count of zero).
+        if (!Fits(tok, at, brushCount, stride: 2))
+            return false;
+
         for (int i = 0; i < brushCount; i++)
         {
             if (!TryCount(tok, ref at, out int id) || !TryCount(tok, ref at, out int faceCount))
+                return false;
+            if (!Fits(tok, at, faceCount, stride: 15))
                 return false;
             var brush = new VmapBrush { Id = id };
             for (int f = 0; f < faceCount; f++)
@@ -754,6 +795,10 @@ public static class VmapOpWire
         if (!TryCount(tok, ref at, out int patchCount))
             return false;
 
+        // The smallest possible patch is its 6 header tokens with a degenerate grid behind them.
+        if (!Fits(tok, at, patchCount, stride: 6))
+            return false;
+
         for (int i = 0; i < patchCount; i++)
         {
             if (at + 6 > tok.Length)
@@ -769,10 +814,15 @@ public static class VmapOpWire
             };
             at += 6;
 
-            // A hostile line could claim a grid far larger than the tokens behind it, so the cell count is
-            // bounded before it is used to size anything.
+            // Each dimension is bounded BEFORE they are multiplied: the product of two large ints overflows
+            // and can come back small (or negative), which would let a claimed grid past a check on the
+            // product alone. MaxGridSide is far above any patch a mapper would build.
+            if (patch.Width < 0 || patch.Height < 0
+                || patch.Width > MaxGridSide || patch.Height > MaxGridSide)
+                return false;
+
             int cells = patch.Width * patch.Height;
-            if (patch.Width < 0 || patch.Height < 0 || cells > 1 << 16 || at + cells * 5 > tok.Length)
+            if (!Fits(tok, at, cells, stride: 5))
                 return false;
             for (int c = 0; c < cells; c++, at += 3)
                 patch.Controls.Add(ReadVec(tok, at));
@@ -788,7 +838,7 @@ public static class VmapOpWire
         entity = new VmapEntity();
         if (!TryCount(tok, ref at, out int id) || !TryCount(tok, ref at, out int fieldCount))
             return false;
-        if (at + fieldCount * 2 > tok.Length)
+        if (!Fits(tok, at, fieldCount, stride: 2))
             return false;
 
         entity.Id = id;

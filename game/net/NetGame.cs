@@ -7364,11 +7364,31 @@ public sealed partial class NetGame : Node3D
             + "the document is the locally imported map (no document handshake yet)");
     }
 
+    /// <summary>
+    /// Longest op line a guest may submit.
+    ///
+    /// The submit channel is <c>clc_stringcmd</c>, whose length field is 16 bits and whose writer CASTS rather
+    /// than checks — a longer line would be received as a truncated, misaligned one. The server-&gt;client echo
+    /// is chunked and has no such limit; this direction is capped instead, because chunking a console command
+    /// would mean reassembling half-commands on the server. Refused loudly rather than sent corrupt.
+    /// </summary>
+    private const int MaxSubmittedEditorOpChars = 16000;
+
     /// <summary>Encode a guest's op and send it to the server, which owns the geometry.</summary>
     private bool SubmitEditorOp(XonoticGodot.Formats.Vmap.IVmapOp op)
     {
-        if (_editor?.Session is not { } session)
+        if (_editor is not { Session: not null } editor)
             return false;
+
+        // A paste has no verb of its own — its result is what replicates. On the host that result is captured
+        // from the document AFTER applying; a guest has applied nothing, so it sends the clipboard contents
+        // directly with ids left at zero for the server to assign. Without this a guest simply cannot paste.
+        if (op is XonoticGodot.Formats.Vmap.PasteOp && !editor.Clipboard.IsEmpty)
+        {
+            if (!editor.TryGetPastePoint(out NVec3 at))
+                return false;
+            op = editor.Clipboard.ToAddObjects(at);
+        }
 
         // Serialized pre-apply, so a create carries id 0 and lets the server choose. SerializeAfterApply is the
         // server's job; a guest has nothing applied to describe.
@@ -7377,6 +7397,14 @@ public sealed partial class NetGame : Node3D
         {
             XonoticGodot.Common.Diagnostics.Log.Info(
                 $"editor: '{op.Describe()}' cannot be sent to the server and was not applied");
+            return false;
+        }
+
+        if (line.Length > MaxSubmittedEditorOpChars)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn(
+                $"editor: '{op.Describe()}' is too large to submit ({line.Length} chars) — "
+                + "split it into smaller pieces, or make the edit on the host");
             return false;
         }
 

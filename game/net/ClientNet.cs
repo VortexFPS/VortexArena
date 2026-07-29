@@ -954,11 +954,40 @@ public sealed class ClientNet : IDisposable
     /// </summary>
     public event Action<string>? EditorOpReceived;
 
+    /// <summary>
+    /// Longest op line we will reassemble. An op that large is not something a mapper produced, and without a
+    /// ceiling a hostile server could grow this buffer for as long as it liked by never clearing the
+    /// more-to-come flag.
+    /// </summary>
+    private const int MaxEditorOpChars = 8 * 1024 * 1024;
+
+    private readonly System.Text.StringBuilder _editorOp = new();
+
     private void HandleEditorOp(ref BitReader r)
     {
-        string line = r.ReadString();
+        // Arrives in pieces (see ServerNet.BroadcastEditorOp) because the string length field is 16-bit and an
+        // op line is not bounded. Reliable + ordered, so concatenating in arrival order rebuilds the line.
+        bool more = r.ReadByte() != 0;
+        string chunk = r.ReadString();
         if (r.BadRead)
+        {
+            _editorOp.Clear();
             return;
+        }
+
+        if (_editorOp.Length + chunk.Length > MaxEditorOpChars)
+        {
+            _editorOp.Clear();
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor: dropped an oversized replicated op");
+            return;
+        }
+
+        _editorOp.Append(chunk);
+        if (more)
+            return;
+
+        string line = _editorOp.ToString();
+        _editorOp.Clear();
         EditorOpReceived?.Invoke(line);
     }
 

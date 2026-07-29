@@ -1159,13 +1159,31 @@ public sealed class ServerNet : IDisposable
     {
         if (string.IsNullOrEmpty(wireLine))
             return;
-        _scratchWriter.Reset();
-        _scratchWriter.WriteByte((byte)NetControl.EditorOp);
-        _scratchWriter.WriteString(wireLine);
-        foreach (PeerState st in _peers.Values)
-            if (st.Accepted)
-                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+
+        // Sent in pieces, because an op line has no useful upper bound and WriteString's length field does:
+        // it is a ushort, and WriteUShort CASTS rather than checks, so a longer string writes a truncated
+        // length and every byte after it in the packet is read as something else. A paste of ~65 brushes is
+        // already past that, which is an ordinary thing to do in a map editor. The channel is reliable and
+        // ordered, so the pieces arrive in the order they were sent and the receiver just concatenates.
+        for (int at = 0; at < wireLine.Length; at += EditorOpChunkChars)
+        {
+            int len = Math.Min(EditorOpChunkChars, wireLine.Length - at);
+            _scratchWriter.Reset();
+            _scratchWriter.WriteByte((byte)NetControl.EditorOp);
+            _scratchWriter.WriteByte(at + len < wireLine.Length ? (byte)1 : (byte)0);   // more to come
+            _scratchWriter.WriteString(wireLine.Substring(at, len));
+            foreach (PeerState st in _peers.Values)
+                if (st.Accepted)
+                    SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+        }
     }
+
+    /// <summary>
+    /// Characters per <see cref="NetControl.EditorOp"/> piece. Counted in CHARS against a byte-sized limit on
+    /// purpose: a char can encode to four UTF-8 bytes, so 8k chars can never exceed 32k bytes and stays well
+    /// inside the 65535 the length field can express.
+    /// </summary>
+    private const int EditorOpChunkChars = 8192;
 
     // =============================================================================================
     // [T46] chat delivery — per-player sprint + team/private routing with ignore filtering. The chat engine

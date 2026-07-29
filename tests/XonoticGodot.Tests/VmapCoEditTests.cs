@@ -141,6 +141,31 @@ public class VmapCoEditTests
     }
 
     [Fact]
+    public void AHugeDeclaredCount_IsRejectedRatherThanAllocated()
+    {
+        // Every one of these declares a list far longer than the line that carries it. The obvious bounds
+        // check — `at + count * stride > tok.Length` — OVERFLOWS for a large count, wraps negative, and sails
+        // through the comparison, after which the count is used to size an array. A peer that picks the number
+        // gets an out-of-memory abort out of it, which is a remote kill on the editing session.
+        foreach (string line in new[]
+                 {
+                     "move 2147483647 1 2 3",                       // TryReadIds
+                     "delete 2147483647",                           // TryReadIds
+                     "verts 1 715827883 0 0 0 0 0 0",               // vertex array
+                     "mkent 0 0 0 0 cls 1073741824 k v",            // entity field pairs
+                     "add 2147483647",                              // brush list
+                     "add 0 2147483647",                            // patch list
+                     "add 0 0 2147483647",                          // entity list
+                     "set 0 0 2147483647",                          // entity list
+                     "add 0 1 1 2147483647 2147483647 0 0 t",       // patch cell count (Width*Height overflow)
+                     "clip 2147483647 1 0 0 0 0",                   // touched-id list
+                 })
+        {
+            Assert.Null(VmapOpWire.Deserialize(line));
+        }
+    }
+
+    [Fact]
     public void StringsWithSpacesAndEmptyValues_SurviveTheWire()
     {
         // Shader names and spawn values are user text. A space would split into two tokens and shift every
@@ -270,6 +295,57 @@ public class VmapCoEditTests
         Assert.True(VmapWinding.TryGetBounds(peer.Brushes[^1], out Vector3 bMins, out _));
         Assert.True((aMins - bMins).Length() < 1e-3f);
         Assert.Equal(server.Patches[^1].Controls, peer.Patches[^1].Controls);
+    }
+
+    [Fact]
+    public void AGuestPaste_TravelsAsItsClipboardWithIdsLeftForTheServer()
+    {
+        // A guest has applied nothing, so it cannot capture a result out of its document the way the host does.
+        // It describes the clipboard instead, ids at zero. Without this a guest simply cannot paste — PasteOp
+        // has no wire verb of its own.
+        var source = new VmapDocument();
+        source.Brushes.Add(Box(Vector3.Zero, new Vector3(64, 64, 64), id: 1));
+        source.Patches.Add(FlatPatch(id: 1));
+        var door = new VmapEntity { Id = 1, ClassName = "func_door" };
+        door.Fields["classname"] = "func_door";
+        door.BrushIds.Add(1);
+        door.PatchIds.Add(1);
+        source.Entities.Add(door);
+
+        var clip = new VmapClipboard();
+        clip.CopyFrom(source, new[]
+        {
+            VmapSelection.OfBrush(1), VmapSelection.OfPatch(1), VmapSelection.OfEntity(1),
+        });
+
+        AddObjectsOp submitted = clip.ToAddObjects(new Vector3(512, 0, 0));
+        Assert.All(submitted.Brushes, b => Assert.Equal(0, b.Id));
+        Assert.All(submitted.Patches, p => Assert.Equal(0, p.Id));
+        Assert.All(submitted.Entities, e => Assert.Equal(0, e.Id));
+
+        // It survives the wire, and the SERVER's apply is what names everything.
+        var decoded = (AddObjectsOp)VmapOpWire.Deserialize(VmapOpWire.Serialize(submitted)!)!;
+        VmapDocument server = DocWithBox(Vector3.Zero, new Vector3(64, 64, 64), id: 9);
+        Assert.True(decoded.Apply(server));
+
+        Assert.Equal(2, server.Brushes.Count);
+        Assert.NotEqual(0, server.Brushes[^1].Id);
+        Assert.Single(server.Entities);
+
+        // Ownership survived as indices.
+        Assert.Equal(new[] { server.Brushes[^1].Id }, server.Entities[0].BrushIds);
+        Assert.Equal(new[] { server.Patches[^1].Id }, server.Entities[0].PatchIds);
+
+        // And it landed exactly where a host-side paste of the same clipboard would have put it — the property
+        // that matters, and the one a hand-computed coordinate gets wrong (the pivot averages the box AND the
+        // patch, not just the box).
+        VmapDocument host = DocWithBox(Vector3.Zero, new Vector3(64, 64, 64), id: 9);
+        Assert.True(new PasteOp(clip, new Vector3(512, 0, 0)).Apply(host));
+
+        Assert.True(VmapWinding.TryGetBounds(server.Brushes[^1], out Vector3 guestMins, out _));
+        Assert.True(VmapWinding.TryGetBounds(host.Brushes[^1], out Vector3 hostMins, out _));
+        Assert.True((guestMins - hostMins).Length() < 1e-3f, $"{guestMins} vs {hostMins}");
+        Assert.Equal(host.Patches[^1].Controls, server.Patches[^1].Controls);
     }
 
     [Fact]

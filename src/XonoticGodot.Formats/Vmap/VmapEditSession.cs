@@ -355,13 +355,27 @@ public sealed class VmapEditSession
         IsDirty = false;
     }
 
-    /// <summary>Brush ids in the current selection, deduplicated.</summary>
+    /// <summary>
+    /// Brush ids in the current selection, deduplicated.
+    ///
+    /// Only the kinds that actually reference a brush are read. A patch or entity selection leaves
+    /// <see cref="VmapSelection.BrushId"/> at zero — they carry their own id fields, because the three are
+    /// independent sequences — and taking it anyway puts a brush id of 0 into a list that every caller treats
+    /// as real geometry. Ops respond to that differently and all of them badly: a snap refuses outright
+    /// because one of "its" brushes cannot be found, while a translate quietly works on fewer objects than
+    /// were selected.
+    /// </summary>
     public List<int> SelectedBrushIds()
     {
         var ids = new List<int>();
         foreach (VmapSelection s in Selection)
-            if (!s.IsEmpty && !ids.Contains(s.BrushId))
+        {
+            if (s.Kind is not (VmapSelectionKind.Brush or VmapSelectionKind.Face
+                               or VmapSelectionKind.Vertex or VmapSelectionKind.Edge))
+                continue;
+            if (s.BrushId != 0 && !ids.Contains(s.BrushId))
                 ids.Add(s.BrushId);
+        }
         return ids;
     }
 
@@ -378,12 +392,49 @@ public sealed class VmapEditSession
     {
         if (selection.IsEmpty)
             return;
-        int existing = Selection.FindIndex(s =>
-            s.Kind == selection.Kind && s.BrushId == selection.BrushId && s.FaceIndex == selection.FaceIndex);
+        int existing = Selection.FindIndex(s => SameTarget(s, selection));
         if (existing >= 0)
             Selection.RemoveAt(existing);
         else
             Selection.Add(selection);
+    }
+
+    /// <summary>
+    /// Whether two selections point at the same thing — what shift-click uses to decide add versus remove.
+    ///
+    /// Every distinguishing field has to be compared, and which ones those are depends on the kind. Comparing
+    /// only kind/brush/face reads two patches as identical (both leave BrushId at zero and FaceIndex at -1),
+    /// so shift-clicking a second patch DESELECTS the first instead of adding it. The same goes for two
+    /// entities, and for two vertices of one brush, which differ only in the position they carry.
+    /// </summary>
+    private static bool SameTarget(VmapSelection a, VmapSelection b)
+    {
+        if (a.Kind != b.Kind)
+            return false;
+
+        return a.Kind switch
+        {
+            VmapSelectionKind.Patch => a.PatchId == b.PatchId,
+            VmapSelectionKind.Entity => a.EntityId == b.EntityId,
+            VmapSelectionKind.Vertex or VmapSelectionKind.Edge =>
+                a.BrushId == b.BrushId && SameVertices(a.Vertices, b.Vertices),
+            _ => a.BrushId == b.BrushId && a.FaceIndex == b.FaceIndex,
+        };
+    }
+
+    /// <summary>
+    /// Positional identity for vertex and edge selections. Compared with a tolerance rather than exactly: a
+    /// vertex position is re-derived from plane intersections each time it is picked, so the same corner can
+    /// come back a few ulps apart between one click and the next.
+    /// </summary>
+    private static bool SameVertices(IReadOnlyList<Vector3> a, IReadOnlyList<Vector3> b)
+    {
+        if (a is null || b is null || a.Count != b.Count)
+            return false;
+        for (int i = 0; i < a.Count; i++)
+            if ((a[i] - b[i]).LengthSquared() > 1e-6f)
+                return false;
+        return true;
     }
 
     // ---- snapshot plumbing -------------------------------------------------------------------

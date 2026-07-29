@@ -676,16 +676,45 @@ public sealed partial class NetGame : Node3D
             _droppedSubmodels = GameMapView.ComputeDroppedSubmodels(bsp, _gametype);
             if (IsEditorGametype)
             {
-                // The editor plays the DOCUMENT, not the compiled map. Import once, here, and this instance
-                // becomes the single truth for the whole session: the client edits it, the render regenerates
-                // from it, and — the part that makes PLAYTEST honest — collision is built from it too, so the
-                // level you run and jump through is the level you edited, not the .bsp it started from.
-                _preloadedEditorDoc = XonoticGodot.Formats.Vmap.BspToVmap.Import(
+                // The editor plays the DOCUMENT, not the compiled map. Resolve it once, here, and this
+                // instance becomes the single truth for the whole session: the client edits it, the render
+                // regenerates from it, and — the part that makes PLAYTEST honest — collision is built from it
+                // too, so the level you run and jump through is the level you edited, not the .bsp it started
+                // from.
+                //
+                // A SAVED package wins over the compiled map. Importing the .bsp unconditionally would mean a
+                // mapper's own work is unreachable the moment they restart: it is on disk, and the editor
+                // reopens the original every time. The .bsp is the starting point for a map nobody has edited
+                // yet, not the thing to prefer over what they authored.
+                if (Vmap.VmapService.FindPackage(_map) is { } saved)
+                {
+                    try
+                    {
+                        _preloadedEditorDoc = XonoticGodot.Formats.Vmap.VmapPackage.Read(saved);
+                        XonoticGodot.Common.Diagnostics.Log.Info($"editor: reopened {saved}");
+                    }
+                    catch (Exception ex)
+                    {
+                        // A corrupt or half-written save must not cost the mapper the session — say so and
+                        // fall back to the compiled map rather than refusing to open anything.
+                        XonoticGodot.Common.Diagnostics.Log.Warn(
+                            $"editor: could not read {saved} ({ex.Message}) — starting from the compiled map");
+                        _preloadedEditorDoc = null;
+                    }
+                }
+
+                // Which source this ends up being is decided by whether the read produced a document, not by
+                // whether a file was there to try: a save that failed to parse leaves the import, and saying
+                // "saved" over it would be reporting the thing we just told the mapper did not happen.
+                bool fromSave = _preloadedEditorDoc is not null;
+                _preloadedEditorDoc ??= XonoticGodot.Formats.Vmap.BspToVmap.Import(
                     bsp, _map, $"maps/{_map}.bsp", sourceHash: "", droppedSubmodels: _droppedSubmodels);
+
                 built = Vmap.EditorWorldCollision.Build(_preloadedEditorDoc, _droppedSubmodels);
                 collision = built.World;
                 XonoticGodot.Common.Diagnostics.Log.Info(
-                    $"editor: map is the imported document ({_preloadedEditorDoc.Brushes.Count} brushes, "
+                    $"editor: map is the {(fromSave ? "saved" : "imported")} document "
+                    + $"({_preloadedEditorDoc.Brushes.Count} brushes, "
                     + $"{_preloadedEditorDoc.Patches.Count} patches; collision from the document)");
             }
             else

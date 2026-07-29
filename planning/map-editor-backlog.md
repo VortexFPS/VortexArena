@@ -118,40 +118,70 @@ bitset if a bigger match shows it on a profile. No portal-flood vis compiler, at
 | ID | Item | Status |
 |---|---|---|
 | **F1** | **Face layer stacks.** A face is a stack of layers, each with its own material, projection and blend, instead of one material. Persisted, replicated, rendered as a `next_pass` chain, undo-safe. Single-layer faces write the bytes they always did. | **done** (`82c8b27`) |
-| **F2** | **Blend maps — paintable layer weights.** *Redesigned 2026-07-29, see below.* A weight TEXTURE with its own planar projection, sampled per-texel, not a per-vertex weight. | open |
-| **F3** | **The paint tool.** What makes F2 usable: a brush that paints into the blend map, sized and softened, one stroke = one op. | open |
+| **F2** | **Blend maps — paintable layer weights.** A weight TEXTURE with its own planar projection, sampled per-texel, not a per-vertex weight. Format, atlas packer, ops, undo, wire and persistence landed; the SHADER that samples it is the one piece left — see below. | **partial** (`__F2SHA__`) |
+| **F3** | **The paint tool.** What makes F2 usable: a brush that paints into the blend map, sized and softened, one stroke = one op. | **done** (`__F2SHA__`) |
 | **F4** | **Brush entities can be created.** Nothing turns a selection into a `func_door` — they import and their keys edit, but the editor authors only static geometry and point entities, and every dynamic element in a Xonotic map is a brush entity. An op assigning selected brush/patch ids to a new entity; the ownership plumbing exists everywhere else already. | **done** (`f722a13`) |
 | **F5** | **CSG: subtract.** Radiant's carving workflow. No workaround today. | **done** (`c8d3d77`) |
 | **F6** | **CSG: merge and hollow/room.** Lower value than F5; hollow is a convenience over six clipped brushes. | **done** (`c8d3d77`) |
-| **F7** | **Texture lock.** *(done — `f50c2a9`)*  `TranslateBrushesOp` moves planes and leaves the projection alone, so a moved brush slides its texture and alignment work is lost on every move. `PasteOp` already offsets the projection with the geometry, so the behaviour is inconsistent as well as wrong. Wants a cvar; default ON. | open |
-| **F8** | **Grouping and layers.** Named sets of objects, hidden/shown and selected together. | open |
+| **F7** | **Texture lock.** `TranslateBrushesOp` moved planes and left the projection alone, so a moved brush slid its texture. Three follow-on gaps closed in `8a61e6b`: `MoveEntitiesOp` did not carry the flag, paste locked the base layer only, and `SetObjectsOp` restored planes only — the last of which was a live co-editing divergence on every undo. | **done** (`f50c2a9`, `8a61e6b`) |
+| **F8** | **Grouping and layers.** Named sets of objects, hidden/shown and selected together. | **done** (`8a61e6b`) |
 | **F10** | **`.map` export must flatten a layer stack** — tracked as P2. | see P2 |
-| **F9** | **Region / hide / isolate.** Narrow what you are working on — and what gets rebuilt — on a 2666-brush map. The one of F8/F9 that matters more. | open |
+| **F9** | **Region / hide / isolate.** Narrow what you are working on — and what gets rebuilt — on a 2666-brush map. The one of F8/F9 that matters more. | **done** (`8a61e6b`) |
 
-### F2 — why blend weights are a texture, not a vertex attribute
+### F2 — what landed, and the one piece that has not
 
 The first design put the weight on the mesh VERTEX, with `VmapFaceLayer.WeightChannel` indexing R/G/B/A of a
 custom vertex channel. That is how terrain systems do it, and it is wrong here for a reason that only shows up
 when you try to use it: **a brush face is a convex polygon with as few as three vertices.** A flat wall would
 offer four control points to "paint" with. Terrain meshes get away with it because they are already a dense
-grid; brush faces are not, and subdividing them to gain paint resolution would mean inventing a second,
-denser geometry representation purely so the painting had somewhere to live.
+grid; brushes are not, and subdividing them to gain paint resolution would mean inventing a second, denser
+geometry representation purely so the painting had somewhere to live.
 
 So the weights live in a **blend map**: an RGBA texture (up to four layer weights) with its own planar
 projection over the face — the same trick `VmapTexProjection` already uses for diffuse, so brushes need no UV
-unwrap. Painted at texel resolution, sampled in the shader, resolution set by an author-controlled
-texels-per-unit the way a lightmap sample size is.
+unwrap. Painted at texel resolution, resolution set by an author-controlled units-per-texel that is FROZEN
+into each map at creation, so changing the cvar later cannot rescale paint that already exists.
 
-Consequences worth writing down before building it:
+**Built and under test:**
+
+- `VmapBlendMap` on the document, `VmapFace.BlendMapId` per face, carried by every `Clone` and every restore.
+- `VmapBlendAtlas` — a deterministic shelf packer with a 2-texel gutter, so many painted faces sharing a
+  material stack batch into ONE draw surface. Per-face textures would have made a 200-face terrain wall 200
+  draw calls, which is the difference between a feature and an unusable one.
+- `VmapBlendPaint` — the rasterizer, with a smoothstep POLYNOMIAL falloff and no `Pow`/`Exp`, because a peer
+  replays a stroke rather than receiving its pixels and the two machines have to land on the same bytes.
+- `CreateBlendMapOp` / `PaintBlendOp` / `SetBlendRegionOp`, wire verbs `blendnew` / `paint` / `blendset`, and
+  dirty-RECTANGLE undo snapshots. Whole-map snapshots would have been 128 MB for one painted wall.
+- The package: `blend.json` plus deflated `blend/<id>.bin`, both omitted entirely when nothing is painted, and
+  `formatVersion` stamped 2 only for a document that has some — so an unpainted map still loads in a build
+  without any of this, including a co-editing peer's.
+- The tool: `EditorTool.Paint`, paint/erase/smooth, one drag = one op, `editor_paint` for the knobs.
+
+**Not built: the shader that samples it.** A stroke lands in the document, replicates, undoes and saves, but
+the editor world does not yet DRAW the weighted blend, so a mapper paints without seeing it. Three pieces, in
+order:
+
+1. `VmapMapBuilder` buckets triangles by `surface.Material` alone and resolves each cell with the BASE
+   material, so F1's layer stacks do not render anywhere except portal surfaces. **This is a live F1 bug and
+   it has to be fixed first** — a blend shader built on top of it would be a shader nothing ever reaches.
+2. `VmapSurface` carries the atlas page and per-vertex atlas UVs; `CellSurface` writes them as UV2, outside
+   the baked-colour branch, and the bake path's triangle clipper interpolates them alongside the diffuse UVs.
+3. `EditorBlendShader`, in the flat and baked variants, with the channel selected by a `vec4` mask
+   (`dot(w, mask)`) rather than a dynamic index, which Godot's shading language does not have.
+
+Painting must NEVER bump `GeometryVersion`: a stroke changes texels only, and that version drives an ~880 ms
+world rebuild. `EditorController.BlendVersion` exists for the atlas re-upload and is deliberately separate.
+
+Consequences worth keeping written down:
 
 - **It is SOURCE data, not derived.** The mapper painted it, so it belongs in the `.vmap` package, not the P6
-  build cache. That means the package gains binary image data for the first time.
-- **Undo cannot snapshot it the way it snapshots a brush.** A journal entry holding a full texture per stroke
-  would be enormous. Strokes want to be the undo unit, replayed or inverted, rather than the bitmap.
-- **Replication travels strokes, not bitmaps.** Same reasoning: an op carrying a whole blend map would not fit
-  the wire (and the wire already caps a line).
+  build cache. That is why the package gained binary payload.
+- **Undo travels rectangles, replication travels strokes.** A journal entry holding a full texture per stroke
+  would be enormous, and an op carrying a whole blend map would not fit the wire.
 - **`WeightChannel` survives the redesign** — it still selects which of the four channels a layer reads. Only
-  where the weight comes FROM changes.
+  where the weight comes FROM changed.
+- **Patches get no blend map.** They have one material and no layer stack; the tool says so rather than
+  silently doing nothing when you aim at one.
 
 ---
 
@@ -165,7 +195,7 @@ Consequences worth writing down before building it:
 | **T4** | **Scroll wheel drives camera speed.** Free-fly speed is what you adjust constantly; grid size is not. Move grid size behind a held **G** — tap G to toggle the grid, hold G and scroll to change the alignment grid (T3's, not the visual one). | open |
 | **T5** | **Snap to adjacent brush / plane.** Toggleable, with a snap distance you can raise and lower. Snap candidates: nearby face planes, edges and vertices of neighbouring brushes, so things line up without hand-typing coordinates. The measure tool's picking already finds nearby geometry and is the obvious starting point. | open |
 | **T6** | **Texture browser thumbnails.** It is a name list grouped by path segment. Nobody picks a wall texture from strings. | **done** (`144fca2`) |
-| **T7** | **Entity scaling.** *(done — `348c16d`)*  `ScaleSelectionOp` takes brush and patch ids only. A brush entity should scale the geometry it owns (like `MoveEntitiesOp` resolves its brushes); a point entity should write a `scale`/`modelscale` key. See B4. | open |
+| **T7** | **Entity scaling.** `ScaleSelectionOp` took brush and patch ids only. A brush entity now scales the geometry it owns; a point entity's ORIGIN scales about the pivot, spreading a rack of spawns apart with the walls. See B4. | **done** (`348c16d`) |
 
 ---
 
@@ -175,9 +205,9 @@ Consequences worth writing down before building it:
 |---|---|---|
 | **B1** | **Entities would not move.** `SelectedBrushIds()` returned a phantom brush id 0 for entity and patch selections, so the entity-move gate (`SelectedBrushIds().Count == 0`) never opened; the drag fell through to a switch with no `Entity` case and returned false silently. | **fixed** (`d48a6c8`) |
 | **B2** | **Scale said "that would break the brush" for an entity.** Same phantom 0 — `ScaleSelectionOp` got brush id 0, `FindBrush(0)` failed, and the op reported invalid geometry for a brush that was never selected. The nonsense message is gone. | **fixed** (`d48a6c8`) |
-| **B3** | **Items sit wrong on patches (Stormkeep mega health).** Root-caused: patch **collision** tessellates at 3 subdivisions (`BspCollisionBuilder.PatchCollisionSubdivisions`) while **render** uses 8 (`BezierPatch.Subdivisions`). On a curve the coarse hull deviates from the drawn surface, so a dropped item rests at the wrong height. Measured on the 15 curved patches under the mega health at (1696, −256, −32) in `stormkeep.map`: **worst deviation 6.49 units**. DP builds collision from the same subdivision it renders, which is why Base looks right. Fix wants to be curvature-adaptive and walkable-biased rather than a flat bump to 8 — flat patches are exact at any level, and uniform 8 is ~7× the slab count (~12k → ~85k on stormkeep). | open, diagnosed |
-| **B4** | **Scaling an entity still does nothing.** *(fixed — `348c16d`)*  B2 removed the wrong message; the capability was never there. Tracked as T7. | open |
-| **B5** | **No texture lock** — see F7. *(fixed — `f50c2a9`)* Filed as a feature, but a mapper will report it as a bug. | open |
+| **B3** | *(fixed — `b27ca43`)* **Items sit wrong on patches (Stormkeep mega health).** Root-caused: patch **collision** tessellates at 3 subdivisions (`BspCollisionBuilder.PatchCollisionSubdivisions`) while **render** uses 8 (`BezierPatch.Subdivisions`). On a curve the coarse hull deviates from the drawn surface, so a dropped item rests at the wrong height. Measured on the 15 curved patches under the mega health at (1696, −256, −32) in `stormkeep.map`: **worst deviation 6.49 units**. DP builds collision from the same subdivision it renders, which is why Base looks right. Fix wants to be curvature-adaptive and walkable-biased rather than a flat bump to 8 — flat patches are exact at any level, and uniform 8 is ~7× the slab count (~12k → ~85k on stormkeep). | open, diagnosed |
+| **B4** | **Scaling an entity still does nothing.** B2 removed the wrong message; the capability was never there. Also fixed the scale-reach regression it left behind (`8a61e6b`). | **fixed** (`348c16d`, `8a61e6b`) |
+| **B5** | **No texture lock** — see F7. Filed as a feature, but a mapper will report it as a bug. | **fixed** (`f50c2a9`) |
 
 *Fixed during the 2026-07-29 review and listed for the record: a remote OOM in the op codec, packets corrupted
 by any sizeable paste, a guest that could not paste, shift-multiselect deselecting instead of adding, every

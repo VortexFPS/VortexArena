@@ -130,6 +130,7 @@ public sealed class VmapEditSession
         var before = Snapshot(op.TouchedBrushIds);
         var patchBefore = SnapshotPatches(op.TouchedPatchIds);
         var entityBefore = SnapshotEntities(op.TouchedEntityIds);
+        var blendBefore = SnapshotBlend(op.TouchedBlendRegions);
 
         // An entity that OWNS a touched brush or patch is itself touched, whether or not the op said so. Geometry
         // ops mutate ownership links as a side effect — a clip hands the off-cut to the same brush entity, a
@@ -176,7 +177,8 @@ public sealed class VmapEditSession
 
         _undo.Add(new Entry(op.Describe(), before, Snapshot(before.Keys.ToList()),
             patchBefore, SnapshotPatches(patchBefore.Keys.ToList()),
-            entityBefore, SnapshotEntities(entityBefore.Keys.ToList())));
+            entityBefore, SnapshotEntities(entityBefore.Keys.ToList()),
+            blendBefore, SnapshotBlend(op.TouchedBlendRegions)));
         if (_undo.Count > UndoLimit)
             _undo.RemoveAt(0);
 
@@ -303,7 +305,8 @@ public sealed class VmapEditSession
     /// machine is invisible on every other one, and a co-editing session diverges the first time anyone
     /// presses Ctrl+Z, which in a map editor is immediately.
     /// </summary>
-    public event Action<IReadOnlyList<int>, IReadOnlyList<int>, IReadOnlyList<int>>? Restored;
+    public event Action<IReadOnlyList<int>, IReadOnlyList<int>, IReadOnlyList<int>,
+        IReadOnlyList<VmapBlendRegion>>? Restored;
 
     /// <summary>Roll back the most recent op.</summary>
     public bool Undo()
@@ -315,6 +318,7 @@ public sealed class VmapEditSession
         Restore(e.Before);
         RestorePatches(e.PatchesBefore);
         RestoreEntities(e.EntitiesBefore);
+        RestoreBlend(e.BlendBefore);
         _redo.Add(e);
         IsDirty = true;
         RaiseRestored(e);
@@ -331,6 +335,7 @@ public sealed class VmapEditSession
         Restore(e.After);
         RestorePatches(e.PatchesAfter);
         RestoreEntities(e.EntitiesAfter);
+        RestoreBlend(e.BlendAfter);
         _undo.Add(e);
         IsDirty = true;
         RaiseRestored(e);
@@ -342,7 +347,12 @@ public sealed class VmapEditSession
     {
         if (Restored is null)
             return;
-        Restored(e.Before.Keys.ToList(), e.PatchesBefore.Keys.ToList(), e.EntitiesBefore.Keys.ToList());
+        var blend = new List<VmapBlendRegion>(e.BlendBefore.Count);
+        foreach (BlendPatch b in e.BlendBefore)
+            if (b.W > 0 && b.H > 0)
+                blend.Add(new VmapBlendRegion(b.MapId, b.X, b.Y, b.W, b.H));
+
+        Restored(e.Before.Keys.ToList(), e.PatchesBefore.Keys.ToList(), e.EntitiesBefore.Keys.ToList(), blend);
     }
 
     /// <summary>Write the document out and clear the dirty flag.</summary>
@@ -444,7 +454,47 @@ public sealed class VmapEditSession
         string Label,
         Dictionary<int, VmapBrush?> Before, Dictionary<int, VmapBrush?> After,
         Dictionary<int, VmapPatch?> PatchesBefore, Dictionary<int, VmapPatch?> PatchesAfter,
-        Dictionary<int, VmapEntity?> EntitiesBefore, Dictionary<int, VmapEntity?> EntitiesAfter);
+        Dictionary<int, VmapEntity?> EntitiesBefore, Dictionary<int, VmapEntity?> EntitiesAfter,
+        List<BlendPatch> BlendBefore, List<BlendPatch> BlendAfter);
+
+    /// <summary>
+    /// A rectangle of one blend map's texels, before or after an op (backlog F2).
+    ///
+    /// A RECTANGLE rather than the whole map, and that is not a nicety: the journal keeps 256 entries with a
+    /// before and an after, so whole-map snapshots of one painted wall would cost 128 MB.
+    /// </summary>
+    private readonly record struct BlendPatch(int MapId, int X, int Y, int W, int H, byte[]? Texels);
+
+    /// <summary>Copy the declared rectangles out of the live maps; a null block records "did not exist".</summary>
+    private List<BlendPatch> SnapshotBlend(IReadOnlyList<VmapBlendRegion> regions)
+    {
+        var patches = new List<BlendPatch>(regions.Count);
+        foreach (VmapBlendRegion r in regions)
+        {
+            if (Document.FindBlendMap(r.BlendMapId) is not { } map || !map.IsValid)
+            {
+                patches.Add(new BlendPatch(r.BlendMapId, 0, 0, 0, 0, null));
+                continue;
+            }
+            VmapBlendRegion c = SetBlendRegionOp.Clamp(map, r);
+            patches.Add(c.Width <= 0 || c.Height <= 0
+                ? new BlendPatch(r.BlendMapId, 0, 0, 0, 0, null)
+                : new BlendPatch(r.BlendMapId, c.X, c.Y, c.Width, c.Height,
+                    map.CopyRegion(c.X, c.Y, c.Width, c.Height)));
+        }
+        return patches;
+    }
+
+    /// <summary>Put snapshotted rectangles back.</summary>
+    private void RestoreBlend(List<BlendPatch> patches)
+    {
+        foreach (BlendPatch b in patches)
+        {
+            if (b.Texels is null || b.W <= 0 || b.H <= 0)
+                continue;
+            Document.FindBlendMap(b.MapId)?.PasteRegion(b.X, b.Y, b.W, b.H, b.Texels);
+        }
+    }
 
     /// <summary>Clone the given brushes; a null value records "did not exist".</summary>
     private Dictionary<int, VmapBrush?> Snapshot(IReadOnlyList<int> ids)

@@ -59,6 +59,15 @@ public enum EditorTool
     /// </summary>
     Light,
 
+    /// <summary>
+    /// Paint layer weights into a face's blend map (backlog F3) — the tool that makes F2's blend maps worth
+    /// having.
+    ///
+    /// Faces only. A patch has one material and no layer stack, so there is nothing on it to steer; the tool
+    /// says so rather than doing nothing when you aim at one.
+    /// </summary>
+    Paint,
+
     /// <summary>Bot navigation nodes and their links.</summary>
     Waypoint,
 
@@ -173,6 +182,17 @@ public enum ToolMode
     /// <summary>Open the entity key/value inspector.</summary>
     Properties,
 
+    // ---- Paint ----
+
+    /// <summary>Raise the active layer's weight where you drag.</summary>
+    PaintWeight,
+
+    /// <summary>Lower it — the eraser.</summary>
+    EraseWeight,
+
+    /// <summary>Pull the weight towards its neighbours, softening an edge you painted too hard.</summary>
+    SmoothWeight,
+
     // ---- Waypoint ----
 
     /// <summary>Place an ordinary waypoint where the crosshair meets the floor.</summary>
@@ -261,7 +281,7 @@ public static class EditorTools
     {
         EditorTool.None, EditorTool.Select, EditorTool.Brush, EditorTool.Face, EditorTool.Edge,
         EditorTool.Vertex, EditorTool.Patch, EditorTool.Shader, EditorTool.Entity, EditorTool.Light,
-        EditorTool.Waypoint, EditorTool.Clip, EditorTool.Measure,
+        EditorTool.Paint, EditorTool.Waypoint, EditorTool.Clip, EditorTool.Measure,
     };
 
     private static readonly ToolMode[] NoModes = Array.Empty<ToolMode>();
@@ -322,6 +342,13 @@ public static class EditorTools
             ToolMode.Move, ToolMode.Create, ToolMode.Properties, ToolMode.Paste,
         },
 
+        // Browse is here so the layer a stroke paints can be chosen from the same texture grid the shader
+        // tool uses — picking a material is picking a material, whichever tool asked.
+        EditorTool.Paint => new[]
+        {
+            ToolMode.PaintWeight, ToolMode.EraseWeight, ToolMode.SmoothWeight, ToolMode.Browse,
+        },
+
         EditorTool.Waypoint => new[]
         {
             ToolMode.Place, ToolMode.PlaceJump, ToolMode.PlaceCrouch, ToolMode.PlaceSupport,
@@ -371,7 +398,7 @@ public static class EditorTools
         EditorTool.Vertex => VmapSelectionKind.Vertex,
         EditorTool.Patch => VmapSelectionKind.Patch,
         EditorTool.Entity or EditorTool.Light => VmapSelectionKind.Entity,
-        EditorTool.Shader => VmapSelectionKind.Face,
+        EditorTool.Shader or EditorTool.Paint => VmapSelectionKind.Face,
         _ => VmapSelectionKind.Face,
     };
 
@@ -394,7 +421,7 @@ public static class EditorTools
         EditorTool.None or EditorTool.Select or EditorTool.Brush or EditorTool.Face
             or EditorTool.Edge or EditorTool.Vertex or EditorTool.Patch or EditorTool.Clip
             or EditorTool.Entity or EditorTool.Light or EditorTool.Shader or EditorTool.Measure
-            or EditorTool.Waypoint => true,
+            or EditorTool.Paint or EditorTool.Waypoint => true,
         _ => false,
     };
 
@@ -411,6 +438,7 @@ public static class EditorTools
         EditorTool.Shader => "Shader",
         EditorTool.Entity => "Entity",
         EditorTool.Light => "Light",
+        EditorTool.Paint => "Paint",
         EditorTool.Waypoint => "Waypoint",
         EditorTool.Clip => "Clip",
         EditorTool.Measure => "Measure",
@@ -447,6 +475,9 @@ public static class EditorTools
         ToolMode.RotateUv => "Rotate texture",
         ToolMode.Flags => "Surface flags...",
         ToolMode.Properties => "Properties...",
+        ToolMode.PaintWeight => "Paint weight",
+        ToolMode.EraseWeight => "Erase weight",
+        ToolMode.SmoothWeight => "Smooth weight",
         ToolMode.Place => "Place waypoint",
         ToolMode.PlaceJump => "Place jump",
         ToolMode.PlaceCrouch => "Place crouch",

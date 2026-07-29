@@ -37,6 +37,17 @@ public interface IVmapOp
     /// </summary>
     IReadOnlyList<int> TouchedEntityIds => Array.Empty<int>();
 
+    /// <summary>
+    /// Rectangles of blend map this op reads or writes (backlog F2), on the same contract as
+    /// <see cref="TouchedBrushIds"/> — but RECTANGLES rather than ids, and that is the point of it.
+    ///
+    /// The journal keeps a before and an after for 256 entries. Snapshotting whole blend maps would cost
+    /// 128 MB for one painted wall; snapshotting the few hundred texels a stroke actually crossed is a
+    /// kilobyte. A region that is too LARGE costs spare bytes; one that is too SMALL makes undo restore half a
+    /// stroke, and the paint left behind has no step that describes it.
+    /// </summary>
+    IReadOnlyList<VmapBlendRegion> TouchedBlendRegions => Array.Empty<VmapBlendRegion>();
+
     /// <summary>Mutate the document. Returns false (having changed nothing) when the edit is invalid.</summary>
     bool Apply(VmapDocument doc);
 }

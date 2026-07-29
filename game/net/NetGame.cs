@@ -7562,18 +7562,23 @@ public sealed partial class NetGame : Node3D
     /// what they now are, and the ones that stopped existing are named so they can be removed.
     /// </summary>
     private void OnEditorStateRestored(
-        IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, IReadOnlyList<int> entityIds)
+        IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, IReadOnlyList<int> entityIds,
+        IReadOnlyList<XonoticGodot.Formats.Vmap.VmapBlendRegion> blendRegions)
     {
         if (_server is null || _editor?.Session is not { } session)
             return;
 
         var op = XonoticGodot.Formats.Vmap.SetObjectsOp.Capture(
             session.Document, brushIds, patchIds, entityIds);
-        if (op.IsEmpty)
-            return;
-
-        if (XonoticGodot.Formats.Vmap.VmapOpWire.Serialize(op) is { } line)
+        if (!op.IsEmpty && XonoticGodot.Formats.Vmap.VmapOpWire.Serialize(op) is { } line)
             BroadcastEditorOpGated(line);
+
+        // Undone PAINT replicates as the resulting texels of exactly the rectangles the step touched — the
+        // same reasoning as the geometry capture above, and small for the same reason the journal snapshots
+        // rectangles rather than whole maps.
+        var blend = XonoticGodot.Formats.Vmap.SetBlendRegionOp.Capture(session.Document, blendRegions);
+        if (!blend.IsEmpty && XonoticGodot.Formats.Vmap.VmapOpWire.Serialize(blend) is { } blendLine)
+            BroadcastEditorOpGated(blendLine);
     }
 
     /// <summary>
@@ -7594,6 +7599,11 @@ public sealed partial class NetGame : Node3D
             XonoticGodot.Common.Diagnostics.Log.Warn("editor: could not decode a replicated op");
             return;
         }
+
+        // Painted texels changed but no geometry did, so the atlas needs a re-upload and the world does NOT
+        // need a rebuild — which is the whole reason a blend map beats a per-vertex weight.
+        if (op is XonoticGodot.Formats.Vmap.PaintBlendOp or XonoticGodot.Formats.Vmap.SetBlendRegionOp)
+            _editor?.BumpBlendVersion();
 
         if (!session.Apply(op))
         {
@@ -8064,6 +8074,7 @@ public sealed partial class NetGame : Node3D
                 RefreshEditorWorld();
         });
         interp.RegisterCommand("editor_csg", CmdEditorCsg);
+        interp.RegisterCommand("editor_paint", CmdEditorPaint);
         interp.RegisterCommand("editor_hide", CmdEditorHide);
         interp.RegisterCommand("editor_region", CmdEditorRegion);
         interp.RegisterCommand("editor_group", CmdEditorGroup);
@@ -8737,6 +8748,51 @@ public sealed partial class NetGame : Node3D
 
         if (changed)
             RefreshEditorWorld();
+    }
+
+    /// <summary>
+    /// <c>editor_paint</c> — the paint tool's console surface (backlog F3).
+    /// <code>
+    ///   editor_paint channel &lt;0-3&gt;    which weight channel a stroke paints
+    ///   editor_paint radius &lt;f&gt;       brush size, as a fraction of the face
+    ///   editor_paint strength &lt;f&gt;     how hard one stroke pushes, 0-1
+    ///   editor_paint hardness &lt;f&gt;     where the falloff starts, 0-1
+    ///   editor_paint texel &lt;f&gt;        world units per texel for the NEXT face painted
+    /// </code>
+    /// The stroke itself is a drag, not a command — there is no useful way to type one.
+    /// </summary>
+    private void CmdEditorPaint(IReadOnlyList<string> args)
+    {
+        if (Menu.MenuState.Cvars is not { } cv || _editor is not { Session: not null } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "";
+        string? name = verb switch
+        {
+            "channel" => Vmap.EditorController.CvarPaintChannel,
+            "radius" => Vmap.EditorController.CvarPaintRadius,
+            "strength" => Vmap.EditorController.CvarPaintStrength,
+            "hardness" => Vmap.EditorController.CvarPaintHardness,
+            "texel" => Vmap.EditorController.CvarBlendTexel,
+            _ => null,
+        };
+
+        if (name is null)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Help(
+                "usage: editor_paint channel <0-3> | radius <f> | strength <f> | hardness <f> | texel <f>");
+            XonoticGodot.Common.Diagnostics.Log.Info(
+                $"editor: channel {ed.PaintChannel}, radius {ed.PaintRadius:0.###}, "
+                + $"strength {ed.PaintStrength:0.##}, hardness {ed.PaintHardness:0.##}, "
+                + $"{ed.BlendTexelSize:0.##}u per texel");
+            return;
+        }
+
+        if (args.Count > 2 && float.TryParse(args[2], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v))
+            cv.Set(name, v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+
+        XonoticGodot.Common.Diagnostics.Log.Info($"editor: {verb} {cv.GetFloat(name):0.###}");
     }
 
     /// <summary>Print the selected entity's live keys alongside what its class documents.</summary>

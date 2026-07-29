@@ -104,6 +104,11 @@ public class VmapCoEditTests
             doc: null, forcedId: 7),
         new SetGroupOp("hidden set", hidden: true, Array.Empty<int>(), Array.Empty<int>(),
             Array.Empty<int>(), doc: null, forcedId: 9),
+        new CreateBlendMapOp(1, 4, 4f, forcedId: 3),
+        new PaintBlendOp(3, 2, VmapPaintMode.Add,
+            new[] { new Vector2(0.25f, 0.5f), new Vector2(0.375f, 0.625f) }, 0.125f, 0.75f, 0.5f),
+        new SetBlendRegionOp(
+            new[] { new VmapBlendRegion(3, 1, 2, 2, 2) }, new[] { new byte[2 * 2 * 4] }),
     };
 
     [Theory]
@@ -156,6 +161,8 @@ public class VmapCoEditTests
                      "csgsub", "csgsub 1", "csgsub 1 1", "csgsub 1 2 1", "csghollow",
                      "csghollow 1 1 8", "csghollow 1 1 notanumber 0 0", "csgmerge", "csgmerge 1",
                      "group", "group 1", "group 1 0", "group 1 0 name", "group 1 0 name 0 0",
+                     "blendnew", "blendnew 1 1", "paint", "paint 1 0 0 1 1 1", "paint 1 9 0 1 1 1 0",
+                     "paint 1 0 0 1 1 1 2 0.5", "blendset", "blendset 1", "blendset 1 3 0 0 2 2",
                      "add 1 1 1 1 0 0 0", "clip 1 1 1 0 0 0 0",
                  })
         {
@@ -194,6 +201,9 @@ public class VmapCoEditTests
                      "group 1 0 n 2147483647",                      // group brush list
                      "group 1 0 n 0 2147483647",                    // group patch list
                      "group 1 0 n 0 0 2147483647",                  // group entity list
+                     "paint 1 0 0 1 1 1 1073741824 0.5 0.5",        // paint sample pairs
+                     "blendset 1073741824 3 0 0 1 1 AAAAAA==",      // blend region blocks
+                     "blendset 1 3 0 0 65536 65536 AAAAAA==",
                  })
         {
             Assert.Null(VmapOpWire.Deserialize(line));
@@ -465,7 +475,7 @@ public class VmapCoEditTests
 
         var session = new VmapEditSession(server);
         SetObjectsOp? captured = null;
-        session.Restored += (b, p, e) => captured = SetObjectsOp.Capture(server, b, p, e);
+        session.Restored += (b, p, e, _) => captured = SetObjectsOp.Capture(server, b, p, e);
 
         var move = new TranslateBrushesOp(new[] { 1 }, new Vector3(0, 0, 128f));
         Assert.True(session.Apply(move));
@@ -490,7 +500,7 @@ public class VmapCoEditTests
 
         var session = new VmapEditSession(server);
         SetObjectsOp? captured = null;
-        session.Restored += (b, p, e) => captured = SetObjectsOp.Capture(server, b, p, e);
+        session.Restored += (b, p, e, _) => captured = SetObjectsOp.Capture(server, b, p, e);
 
         var create = new CreateBoxBrushOp(new Vector3(128, 0, 0), new Vector3(192, 64, 64), "t");
         Assert.True(session.Apply(create));

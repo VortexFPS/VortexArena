@@ -370,6 +370,7 @@ public partial class EditorMenuPanel : HudPanel
                 Detail = built ? (mode == c.Mode ? "current" : "") : Pending("E8"),
                 Command = EntityConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? LightConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
+                          ?? PaintConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? ShaderConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? WaypointConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? PatchConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
@@ -397,6 +398,13 @@ public partial class EditorMenuPanel : HudPanel
             _ => null,
         };
     }
+
+    /// <summary>
+    /// The paint tool's Browse row opens the same texture grid the shader tool uses — picking a material is
+    /// picking a material, whichever tool asked for it (backlog F3).
+    /// </summary>
+    private static string? PaintConsoleCommand(EditorTool tool, ToolMode mode)
+        => tool == EditorTool.Paint && mode == ToolMode.Browse ? "editor_shader browse" : null;
 
     /// <summary>
     /// The light tool's rows (backlog T2). Create places one straight away rather than opening a palette —
@@ -502,6 +510,7 @@ public partial class EditorMenuPanel : HudPanel
         // still to come, so the rows point at what exists rather than claiming a UI that does not.
         ToolMode.Create => tool is EditorTool.Entity or EditorTool.Light or EditorTool.Patch
             or EditorTool.Brush or EditorTool.Face,
+        ToolMode.PaintWeight or ToolMode.EraseWeight or ToolMode.SmoothWeight => tool == EditorTool.Paint,
         ToolMode.Extrude => tool == EditorTool.Face,
         ToolMode.Bevel => tool == EditorTool.Edge,
         ToolMode.SnapToGrid => tool == EditorTool.Vertex,
@@ -511,7 +520,8 @@ public partial class EditorMenuPanel : HudPanel
         ToolMode.ControlPoints => tool == EditorTool.Patch,
         ToolMode.PickShader or ToolMode.ApplyShader or ToolMode.FitProjection
             or ToolMode.NaturalProjection or ToolMode.AxialProjection or ToolMode.ShiftUv
-            or ToolMode.ScaleUv or ToolMode.RotateUv or ToolMode.Browse => tool == EditorTool.Shader,
+            or ToolMode.ScaleUv or ToolMode.RotateUv => tool == EditorTool.Shader,
+        ToolMode.Browse => tool is EditorTool.Shader or EditorTool.Paint,
         ToolMode.Distance or ToolMode.Angle or ToolMode.Reachability => tool == EditorTool.Measure,
         ToolMode.Place or ToolMode.PlaceJump or ToolMode.PlaceCrouch or ToolMode.PlaceSupport
             or ToolMode.Remove or ToolMode.Hardwire or ToolMode.Unreachable

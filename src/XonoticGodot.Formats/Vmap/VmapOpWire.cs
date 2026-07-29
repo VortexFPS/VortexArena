@@ -33,6 +33,13 @@ public static class VmapOpWire
     /// </summary>
     private const int MaxGridSide = 1024;
 
+    /// <summary>
+    /// Ceiling on one declared blend rectangle, in bytes. Not a format limit — it is the point past which a
+    /// declared size is certainly hostile rather than a rectangle someone painted, and it keeps the width and
+    /// height small enough that their product cannot overflow.
+    /// </summary>
+    private const long MaxBlendBlockBytes = 4L * 1024 * 1024;
+
     /// <summary>Encode an op as a single line. Returns null for an op type that has no wire form yet.</summary>
     public static string? Serialize(IVmapOp op)
     {
@@ -244,6 +251,33 @@ public static class VmapOpWire
             case ExtrudeFaceOp ex:
                 return string.Create(CultureInfo.InvariantCulture,
                     $"extrude {ex.WireId} {ex.SourceBrushId} {ex.FaceIndex} {Fmt(ex.Distance)}");
+
+            case CreateBlendMapOp cbm:
+                sb.Append("blendnew ").Append(cbm.WireId).Append(' ').Append(cbm.BrushId).Append(' ')
+                    .Append(cbm.FaceIndex).Append(' ').Append(Fmt(cbm.UnitsPerTexel));
+                return sb.ToString();
+
+            case PaintBlendOp pb:
+                sb.Append("paint ").Append(pb.BlendMapId).Append(' ').Append(pb.Channel).Append(' ')
+                    .Append((int)pb.Mode).Append(' ').Append(Fmt(pb.RadiusUv)).Append(' ')
+                    .Append(Fmt(pb.Strength)).Append(' ').Append(Fmt(pb.Hardness)).Append(' ')
+                    .Append(pb.Samples.Count);
+                foreach (Vector2 s in pb.Samples)
+                    sb.Append(' ').Append(Fmt(s.X)).Append(' ').Append(Fmt(s.Y));
+                return sb.ToString();
+
+            case SetBlendRegionOp sbr:
+                // Base64 is one token by construction: its alphabet holds neither a backslash nor a space, so
+                // it passes through the escaper untouched, and nothing can split it across tokens.
+                sb.Append("blendset ").Append(sbr.Regions.Count);
+                for (int i = 0; i < sbr.Regions.Count; i++)
+                {
+                    VmapBlendRegion r = sbr.Regions[i];
+                    sb.Append(' ').Append(r.BlendMapId).Append(' ').Append(r.X).Append(' ').Append(r.Y)
+                        .Append(' ').Append(r.Width).Append(' ').Append(r.Height)
+                        .Append(' ').Append(Convert.ToBase64String(sbr.Texels[i]));
+                }
+                return sb.ToString();
 
             case SetGroupOp grp:
                 sb.Append("group ").Append(grp.WireId).Append(' ').Append(grp.Hidden ? 1 : 0)
@@ -593,6 +627,79 @@ public static class VmapOpWire
                         int.Parse(tok[2], CultureInfo.InvariantCulture),
                         int.Parse(tok[3], CultureInfo.InvariantCulture), ReadFloat(tok[4]),
                         int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "blendnew":
+                {
+                    if (tok.Length < 5)
+                        return null;
+                    return new CreateBlendMapOp(
+                        int.Parse(tok[2], CultureInfo.InvariantCulture),
+                        int.Parse(tok[3], CultureInfo.InvariantCulture),
+                        ReadFloat(tok[4]),
+                        int.Parse(tok[1], CultureInfo.InvariantCulture));
+                }
+                case "paint":
+                {
+                    if (tok.Length < 8)
+                        return null;
+                    int paintMap = int.Parse(tok[1], CultureInfo.InvariantCulture);
+                    int paintChannel = int.Parse(tok[2], CultureInfo.InvariantCulture);
+                    int paintMode = int.Parse(tok[3], CultureInfo.InvariantCulture);
+                    if (paintChannel is < 0 or > 3 || paintMode is < 0 or > 3)
+                        return null;
+
+                    int count = int.Parse(tok[7], CultureInfo.InvariantCulture);
+                    // The overflow guard, not `8 + count * 2 <= tok.Length`: that product wraps negative for a
+                    // large count and sails through, after which the count sizes an array.
+                    if (!Fits(tok, 8, count, stride: 2))
+                        return null;
+
+                    var samples = new Vector2[count];
+                    for (int i = 0; i < count; i++)
+                        samples[i] = new Vector2(ReadFloat(tok[8 + i * 2]), ReadFloat(tok[9 + i * 2]));
+
+                    return new PaintBlendOp(paintMap, paintChannel, (VmapPaintMode)paintMode, samples,
+                        ReadFloat(tok[4]), ReadFloat(tok[5]), ReadFloat(tok[6]), doc);
+                }
+                case "blendset":
+                {
+                    if (tok.Length < 2)
+                        return null;
+                    int blocks = int.Parse(tok[1], CultureInfo.InvariantCulture);
+                    if (!Fits(tok, 2, blocks, stride: 6))
+                        return null;
+
+                    var regions = new List<VmapBlendRegion>(blocks);
+                    var texels = new List<byte[]>(blocks);
+                    for (int i = 0; i < blocks; i++)
+                    {
+                        int at = 2 + i * 6;
+                        int w = int.Parse(tok[at + 3], CultureInfo.InvariantCulture);
+                        int h = int.Parse(tok[at + 4], CultureInfo.InvariantCulture);
+                        if (w < 0 || h < 0 || (long)w * h * 4 > MaxBlendBlockBytes)
+                            return null;
+
+                        byte[] block;
+                        try
+                        {
+                            block = Convert.FromBase64String(tok[at + 5]);
+                        }
+                        catch (FormatException)
+                        {
+                            return null;
+                        }
+                        // A block that disagrees with the rectangle it claims is a corrupt line, and pasting it
+                        // would read past the end of one row into the next.
+                        if (block.Length != w * h * 4)
+                            return null;
+
+                        regions.Add(new VmapBlendRegion(
+                            int.Parse(tok[at], CultureInfo.InvariantCulture),
+                            int.Parse(tok[at + 1], CultureInfo.InvariantCulture),
+                            int.Parse(tok[at + 2], CultureInfo.InvariantCulture), w, h));
+                        texels.Add(block);
+                    }
+                    return new SetBlendRegionOp(regions, texels);
                 }
                 case "group":
                 {

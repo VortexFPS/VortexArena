@@ -17,8 +17,15 @@ namespace XonoticGodot.Formats.Vmap;
 /// </summary>
 public sealed class VmapDocument
 {
-    /// <summary>Current on-disk format version written by <see cref="VmapWriter"/>.</summary>
-    public const int CurrentFormatVersion = 1;
+    /// <summary>
+    /// Highest on-disk format version this build can READ. Version 2 added painted blend maps (backlog F2).
+    ///
+    /// What gets WRITTEN is a separate question and is decided per document: a map with no paint is still
+    /// stamped 1, so it keeps loading in a build without blend maps — including a co-editing peer's. Stamping
+    /// the ceiling unconditionally would lock every save out of every older build over a section the map does
+    /// not have.
+    /// </summary>
+    public const int CurrentFormatVersion = 2;
 
     /// <summary>Format version this document was loaded from (or <see cref="CurrentFormatVersion"/> when built in memory).</summary>
     public int FormatVersion { get; set; } = CurrentFormatVersion;
@@ -38,6 +45,34 @@ public sealed class VmapDocument
     /// brushes not claimed by any entity belong to worldspawn.
     /// </summary>
     public List<VmapEntity> Entities { get; } = new();
+
+    /// <summary>
+    /// Painted layer-weight textures (backlog F2), addressed by <see cref="VmapFace.BlendMapId"/>.
+    ///
+    /// SOURCE data, not derived: the mapper painted it, so it belongs in the package next to the geometry
+    /// rather than in a build cache that can be deleted without losing anything. That makes this the first
+    /// binary payload the format carries.
+    /// </summary>
+    public List<VmapBlendMap> BlendMaps { get; } = new();
+
+    /// <summary>Look up a blend map by its stable <see cref="VmapBlendMap.Id"/>.</summary>
+    public VmapBlendMap? FindBlendMap(int id)
+    {
+        for (int i = 0; i < BlendMaps.Count; i++)
+            if (BlendMaps[i].Id == id)
+                return BlendMaps[i];
+        return null;
+    }
+
+    /// <summary>The next unused blend-map id. Its own sequence, like patches and entities.</summary>
+    public int NextBlendMapId()
+    {
+        int max = 0;
+        for (int i = 0; i < BlendMaps.Count; i++)
+            if (BlendMaps[i].Id > max)
+                max = BlendMaps[i].Id;
+        return max + 1;
+    }
 
     /// <summary>
     /// Named object sets (backlog F8). Empty on every map that has none, and written to the package only when
@@ -162,6 +197,113 @@ public sealed class VmapDocument
                 return Entities[i];
         return null;
     }
+}
+
+/// <summary>
+/// A painted RGBA weight texture for one face's layer stack (backlog F2).
+///
+/// The weights are a TEXTURE rather than a vertex attribute because a brush face is a convex polygon with as
+/// few as three corners: a flat wall would offer four control points to paint with, and subdividing it to
+/// gain resolution would mean inventing a second, denser geometry representation purely so the painting had
+/// somewhere to live.
+///
+/// The projection is planar and world-anchored, exactly like <see cref="VmapFace.Projection"/>, so a brush
+/// face needs no UV unwrap — the same trick the diffuse already uses. It also means paint has to be carried
+/// by texture lock when the geometry moves, or a nudged wall slides its moss off.
+///
+/// Patches have one material and no layer stack, so they get no blend map. When their turn comes the natural
+/// store is a map keyed on the patch id with a UV-space projection; nothing here forecloses that.
+/// </summary>
+public sealed class VmapBlendMap
+{
+    /// <summary>Stable identifier, unique within the document. Never 0 — that value means "no blend map".</summary>
+    public int Id { get; set; }
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    /// <summary>
+    /// World units per texel, FROZEN at creation. Deliberately not re-read from its cvar: changing the
+    /// setting later would silently rescale every map painted before it.
+    /// </summary>
+    public float UnitsPerTexel { get; set; } = 4f;
+
+    /// <summary>Planar world to [0,1] map over the owning face.</summary>
+    public VmapTexProjection Projection { get; set; }
+
+    /// <summary>RGBA8, row-major, Width x Height x 4 bytes. One layer weight per channel.</summary>
+    public byte[] Texels { get; set; } = Array.Empty<byte>();
+
+    public bool IsValid => Width > 0 && Height > 0 && Texels.Length == Width * Height * 4;
+
+    /// <summary>Deep copy — the TEXELS too, or an undo snapshot would alias the live buffer.</summary>
+    public VmapBlendMap Clone()
+    {
+        var copy = new VmapBlendMap
+        {
+            Id = Id,
+            Width = Width,
+            Height = Height,
+            UnitsPerTexel = UnitsPerTexel,
+            Projection = Projection,
+            Texels = new byte[Texels.Length],
+        };
+        Buffer.BlockCopy(Texels, 0, copy.Texels, 0, Texels.Length);
+        return copy;
+    }
+
+    /// <summary>
+    /// Copy a rectangle of texels out, clamped to the map. The undo journal snapshots RECTANGLES rather than
+    /// whole maps: 256 entries of before-and-after on a 256-square map would be 128 MB for one painted wall.
+    /// </summary>
+    public byte[] CopyRegion(int x, int y, int w, int h)
+    {
+        Clamp(ref x, ref y, ref w, ref h);
+        var region = new byte[w * h * 4];
+        for (int row = 0; row < h; row++)
+            Buffer.BlockCopy(Texels, ((y + row) * Width + x) * 4, region, row * w * 4, w * 4);
+        return region;
+    }
+
+    /// <summary>Put a rectangle of texels back. The counterpart of <see cref="CopyRegion"/>.</summary>
+    public bool PasteRegion(int x, int y, int w, int h, byte[] src)
+    {
+        ArgumentNullException.ThrowIfNull(src);
+        Clamp(ref x, ref y, ref w, ref h);
+        if (w == 0 || h == 0)
+            return true;
+        if (src.Length < w * h * 4)
+            return false;
+        for (int row = 0; row < h; row++)
+            Buffer.BlockCopy(src, row * w * 4, Texels, ((y + row) * Width + x) * 4, w * 4);
+        return true;
+    }
+
+    private void Clamp(ref int x, ref int y, ref int w, ref int h)
+    {
+        int x0 = Math.Clamp(x, 0, Math.Max(0, Width));
+        int y0 = Math.Clamp(y, 0, Math.Max(0, Height));
+        int x1 = Math.Clamp((int)Math.Min((long)x + w, Width), 0, Math.Max(0, Width));
+        int y1 = Math.Clamp((int)Math.Min((long)y + h, Height), 0, Math.Max(0, Height));
+        x = x0;
+        y = y0;
+        w = Math.Max(0, x1 - x0);
+        h = Math.Max(0, y1 - y0);
+    }
+}
+
+/// <summary>
+/// A rectangle of one blend map — the unit an op declares it will touch, and the unit the journal snapshots.
+///
+/// The rectangle is in the interface rather than just the id because the alternative does not fit in memory:
+/// the journal keeps 256 entries with a before AND an after, and whole-map snapshots of a 256-square map
+/// would cost 128 MB for one wall.
+/// </summary>
+public readonly record struct VmapBlendRegion(int BlendMapId, int X, int Y, int Width, int Height)
+{
+    /// <summary>The whole map, whatever size it turns out to be — clamped when it is snapshotted.</summary>
+    public static VmapBlendRegion Whole(int id) => new(id, 0, 0, int.MaxValue, int.MaxValue);
 }
 
 /// <summary>
@@ -298,8 +440,15 @@ public enum VmapBlend
     Opaque,
 
     /// <summary>
-    /// Steered by a per-vertex weight (see <see cref="VmapFaceLayer.WeightChannel"/>) — the terrain-painting
-    /// case, and the one a BSP cannot express beyond a single RGBA drawvert.
+    /// Steered by a painted WEIGHT MAP (see <see cref="VmapFace.BlendMapId"/> and
+    /// <see cref="VmapFaceLayer.WeightChannel"/>) — the terrain-painting case, and the one a BSP cannot
+    /// express beyond a single RGBA drawvert.
+    ///
+    /// The name is historical. The first design put the weight on the mesh VERTEX, which is wrong here for a
+    /// reason that only shows up when you try to use it: a brush face is a convex polygon with as few as three
+    /// corners, so a flat wall would offer four control points to paint with. Terrain meshes get away with it
+    /// because they are already a dense grid. The enum VALUE is in package bytes and on the wire, so the name
+    /// stays; only where the weight comes FROM changed.
     /// </summary>
     Vertex,
 
@@ -335,11 +484,11 @@ public sealed class VmapFaceLayer
     public VmapBlend Blend { get; set; } = VmapBlend.Opaque;
 
     /// <summary>
-    /// Which per-vertex weight steers a <see cref="VmapBlend.Vertex"/> layer: 0-3, addressing the R/G/B/A of
-    /// the mesh's blend-weight channel. -1 when the layer is not vertex-steered.
+    /// Which channel of the FACE's blend map steers a <see cref="VmapBlend.Vertex"/> layer: 0-3, addressing
+    /// R/G/B/A. -1 when the layer is not weight-steered.
     ///
-    /// The weights ride a CUSTOM vertex channel rather than COLOR, because COLOR already carries the baked
-    /// light on world meshes and a layer stack must not cost a map its lighting.
+    /// One RGBA map therefore drives up to four layers on one face, which is why the channel is an index into
+    /// a texture rather than a texture of its own.
     /// </summary>
     public int WeightChannel { get; set; } = -1;
 
@@ -402,6 +551,15 @@ public sealed class VmapFace
     /// <summary>Q3 surface flags (Q3SURFACEFLAG_*) for this face — nodraw/sky/slick/nonsolid etc.</summary>
     public int SurfaceFlags { get; set; }
 
+    /// <summary>
+    /// The <see cref="VmapBlendMap"/> whose channels steer this face's weight layers, or 0 for none
+    /// (backlog F2).
+    ///
+    /// Per FACE, not per brush: a brush's six sides are six disjoint planes with no shared parameterisation,
+    /// so a per-brush map would need six sub-rectangles anyway — the same atlas, with a worse packer.
+    /// </summary>
+    public int BlendMapId { get; set; }
+
     /// <summary>Q3 NATIVE content flags of this face, as stored in a BSP/.map (converted at collision-build time).</summary>
     public int ContentFlags { get; set; }
 
@@ -413,6 +571,7 @@ public sealed class VmapFace
             Plane = Plane,
             SurfaceFlags = SurfaceFlags,
             ContentFlags = ContentFlags,
+            BlendMapId = BlendMapId,
         };
         copy.Layers.Clear();
         foreach (VmapFaceLayer l in Layers)

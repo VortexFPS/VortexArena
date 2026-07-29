@@ -43,6 +43,28 @@ public static class VmapPackage
     /// </summary>
     public const string GroupsSection = "groups.json";
 
+    /// <summary>
+    /// Painted layer weights (backlog F2): the INDEX — id, size, resolution, projection. The texels live
+    /// beside it, one deflated blob per map, because a hundred kilobytes of base64 in a JSON section would
+    /// make the diffable part of the package unreadable.
+    ///
+    /// OPTIONAL, like the groups section: a map nobody has painted writes neither this nor a blend directory,
+    /// and its bytes do not move.
+    /// </summary>
+    public const string BlendSection = "blend.json";
+
+    /// <summary>Directory the per-map texel blobs live in, as <c>blend/&lt;id&gt;.bin</c>.</summary>
+    public const string BlendDirectory = "blend";
+
+    /// <summary>
+    /// Format version a package needs to be READ correctly once it carries blend maps.
+    ///
+    /// Stamped CONDITIONALLY: an unpainted map still writes version 1 and still loads in a build without this
+    /// change. Stamping it unconditionally would lock every save out of every older build — including a
+    /// co-editing peer's — for a section that map does not have.
+    /// </summary>
+    public const int BlendFormatVersion = 2;
+
     /// <summary>Canonical container extension.</summary>
     public const string Extension = ".vmap";
 
@@ -82,7 +104,8 @@ public static class VmapPackage
             ReadTextFile(Path.Combine(dir, ManifestSection), required: true)!,
             ReadTextFile(Path.Combine(dir, GeometrySection), required: false),
             ReadTextFile(Path.Combine(dir, EntitiesSection), required: false),
-            ReadTextFile(Path.Combine(dir, GroupsSection), required: false));
+            ReadTextFile(Path.Combine(dir, GroupsSection), required: false),
+            name => ReadBinaryFile(Path.Combine(dir, name)));
     }
 
     /// <summary>Read a package from a zip stream (the shipping layout).</summary>
@@ -94,7 +117,8 @@ public static class VmapPackage
             ReadZipEntry(archive, ManifestSection, required: true)!,
             ReadZipEntry(archive, GeometrySection, required: false),
             ReadZipEntry(archive, EntitiesSection, required: false),
-            ReadZipEntry(archive, GroupsSection, required: false));
+            ReadZipEntry(archive, GroupsSection, required: false),
+            name => ReadZipBytes(archive, name));
     }
 
     /// <summary>
@@ -134,7 +158,8 @@ public static class VmapPackage
     }
 
     private static VmapDocument Assemble(
-        string manifestJson, string? geometryJson, string? entitiesJson, string? groupsJson = null)
+        string manifestJson, string? geometryJson, string? entitiesJson, string? groupsJson = null,
+        Func<string, byte[]?>? readBinary = null)
     {
         var doc = new VmapDocument();
 
@@ -151,6 +176,35 @@ public static class VmapPackage
             SourcePath = manifest.SourcePath ?? string.Empty,
             SourceHash = manifest.SourceHash ?? string.Empty,
         };
+
+        if (readBinary is not null && readBinary(BlendSection) is { } blendIndexBytes)
+        {
+            BlendIndexDto index = Deserialize<BlendIndexDto>(
+                Encoding.UTF8.GetString(blendIndexBytes), BlendSection);
+            foreach (BlendMapDto b in index.Maps ?? Array.Empty<BlendMapDto>())
+            {
+                if (b.Width <= 0 || b.Height <= 0)
+                    continue;
+                byte[]? packed = readBinary($"{BlendDirectory}/{b.Id}.bin");
+                if (packed is null)
+                    continue;
+
+                byte[] texels = Inflate(packed, b.Width * b.Height * 4);
+                if (texels.Length != b.Width * b.Height * 4)
+                    continue;   // a blob that disagrees with its index entry is not a blend map
+
+                doc.BlendMaps.Add(new VmapBlendMap
+                {
+                    Id = b.Id,
+                    Width = b.Width,
+                    Height = b.Height,
+                    UnitsPerTexel = b.UnitsPerTexel <= 0f ? 4f : b.UnitsPerTexel,
+                    Projection = new VmapTexProjection(
+                        Vec3(b.AxisU), Vec3(b.AxisV), b.OffsetU, b.OffsetV),
+                    Texels = texels,
+                });
+            }
+        }
 
         if (groupsJson is not null)
         {
@@ -175,6 +229,7 @@ public static class VmapPackage
                     // back as a one-layer face with no special case.
                     var face = new VmapFace
                     {
+                        BlendMapId = f.BlendMap,
                         Plane = new VmapPlane(Vec3(f.Normal), f.Dist),
                         Material = f.Material ?? string.Empty,
                         Projection = new VmapTexProjection(Vec3(f.AxisU), Vec3(f.AxisV), f.OffsetU, f.OffsetV),
@@ -272,6 +327,7 @@ public static class VmapPackage
         // and the geometry writer walks every brush, so it can — would otherwise have already replaced the
         // manifest, leaving a package whose sections describe different maps.
         string manifest = SerializeManifest(doc);
+        string? blendIndex = SerializeBlendIndex(doc);
         string geometry = SerializeGeometry(doc);
         string entities = SerializeEntities(doc);
         string? groups = SerializeGroups(doc);
@@ -291,6 +347,26 @@ public static class VmapPackage
             WriteAtomic(groupsPath, groups);
         else if (File.Exists(groupsPath))
             File.Delete(groupsPath);
+
+        // Same rule for the paint: written only when there is some, and cleared out when there is not, so a
+        // stale index cannot name maps no face refers to any more.
+        string blendPath = Path.Combine(dir, BlendSection);
+        string blendDir = Path.Combine(dir, BlendDirectory);
+        if (blendIndex is not null)
+        {
+            WriteAtomic(blendPath, blendIndex);
+            Directory.CreateDirectory(blendDir);
+            foreach (VmapBlendMap m in doc.BlendMaps)
+                if (m.IsValid)
+                    WriteAtomicBytes(Path.Combine(blendDir, $"{m.Id}.bin"), Deflate(m.Texels));
+        }
+        else
+        {
+            if (File.Exists(blendPath))
+                File.Delete(blendPath);
+            if (Directory.Exists(blendDir))
+                Directory.Delete(blendDir, recursive: true);
+        }
     }
 
     /// <summary>
@@ -320,6 +396,81 @@ public static class VmapPackage
         WriteZipEntry(archive, EntitiesSection, SerializeEntities(doc));
         if (SerializeGroups(doc) is { } groups)
             WriteZipEntry(archive, GroupsSection, groups);
+        if (SerializeBlendIndex(doc) is { } blendIndex)
+        {
+            WriteZipEntry(archive, BlendSection, blendIndex);
+            foreach (VmapBlendMap m in doc.BlendMaps)
+                if (m.IsValid)
+                    WriteZipBytes(archive, $"{BlendDirectory}/{m.Id}.bin", Deflate(m.Texels));
+        }
+    }
+
+    private static byte[]? ReadBinaryFile(string path)
+        => File.Exists(path) ? File.ReadAllBytes(path) : null;
+
+    private static byte[]? ReadZipBytes(ZipArchive archive, string name)
+    {
+        ZipArchiveEntry? entry = archive.GetEntry(name);
+        if (entry is null)
+            return null;
+        using Stream s = entry.Open();
+        using var ms = new MemoryStream();
+        s.CopyTo(ms);
+        return ms.ToArray();
+    }
+
+    private static void WriteZipBytes(ZipArchive archive, string name, byte[] bytes)
+    {
+        using Stream s = archive.CreateEntry(name, CompressionLevel.Optimal).Open();
+        s.Write(bytes, 0, bytes.Length);
+    }
+
+    private static void WriteAtomicBytes(string path, byte[] bytes)
+    {
+        string tmp = path + ".tmp";
+        File.WriteAllBytes(tmp, bytes);
+        File.Move(tmp, path, overwrite: true);
+    }
+
+    /// <summary>
+    /// Deflate a texel buffer. A blend map is mostly zeroes until it is painted and mostly flat where it is,
+    /// so this runs 50-100x — which is what keeps a painted face around a kilobyte on disk.
+    /// </summary>
+    private static byte[] Deflate(byte[] raw)
+    {
+        using var ms = new MemoryStream();
+        using (var gz = new DeflateStream(ms, CompressionLevel.Optimal, leaveOpen: true))
+            gz.Write(raw, 0, raw.Length);
+        return ms.ToArray();
+    }
+
+    /// <param name="expected">
+    /// Bytes the index says this map has. A ceiling as much as a hint: without it a hostile blob could inflate
+    /// without bound into memory.
+    /// </param>
+    private static byte[] Inflate(byte[] packed, int expected)
+    {
+        if (expected <= 0 || expected > 64 * 1024 * 1024)
+            return Array.Empty<byte>();
+        try
+        {
+            var result = new byte[expected];
+            using var ms = new MemoryStream(packed, writable: false);
+            using var gz = new DeflateStream(ms, CompressionMode.Decompress);
+            int read = 0;
+            while (read < expected)
+            {
+                int n = gz.Read(result, read, expected - read);
+                if (n <= 0)
+                    break;
+                read += n;
+            }
+            return read == expected ? result : Array.Empty<byte>();
+        }
+        catch (InvalidDataException)
+        {
+            return Array.Empty<byte>();
+        }
     }
 
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
@@ -335,7 +486,9 @@ public static class VmapPackage
     private static string SerializeManifest(VmapDocument doc)
         => JsonSerializer.Serialize(new ManifestDto
         {
-            FormatVersion = VmapDocument.CurrentFormatVersion,
+            // CONDITIONAL: a map with no paint keeps writing version 1, so it still loads in a build
+            // without blend maps — including a co-editing peer's.
+            FormatVersion = doc.BlendMaps.Count > 0 ? BlendFormatVersion : 1,
             Name = doc.Manifest.Name,
             Title = doc.Manifest.Title,
             SourceKind = doc.Manifest.SourceKind,
@@ -369,6 +522,7 @@ public static class VmapPackage
                     OffsetV = face.Projection.OffsetV,
                     Surface = face.SurfaceFlags,
                     Contents = face.ContentFlags,
+                    BlendMap = face.BlendMapId,
 
                     // Only the layers ABOVE the base, and omitted entirely when there are none. The base stays
                     // in the flat fields above, so a single-layer face writes exactly the bytes it always did:
@@ -443,6 +597,34 @@ public static class VmapPackage
             };
         }
         return JsonSerializer.Serialize(dto, JsonOptions);
+    }
+
+    /// <summary>
+    /// The blend INDEX, or null when nothing is painted — in which case neither it nor the texel blobs are
+    /// written.
+    /// </summary>
+    private static string? SerializeBlendIndex(VmapDocument doc)
+    {
+        var maps = new List<BlendMapDto>(doc.BlendMaps.Count);
+        foreach (VmapBlendMap m in doc.BlendMaps)
+        {
+            if (!m.IsValid)
+                continue;
+            maps.Add(new BlendMapDto
+            {
+                Id = m.Id,
+                Width = m.Width,
+                Height = m.Height,
+                UnitsPerTexel = m.UnitsPerTexel,
+                AxisU = Arr(m.Projection.AxisU),
+                AxisV = Arr(m.Projection.AxisV),
+                OffsetU = m.Projection.OffsetU,
+                OffsetV = m.Projection.OffsetV,
+            });
+        }
+        return maps.Count == 0
+            ? null
+            : JsonSerializer.Serialize(new BlendIndexDto { Maps = maps.ToArray() }, JsonOptions);
     }
 
     /// <summary>
@@ -532,6 +714,14 @@ public static class VmapPackage
         [JsonPropertyName("contents")] public int Contents { get; set; }
 
         /// <summary>
+        /// The face's painted weight map (backlog F2). Omitted when 0, so an unpainted face writes what it
+        /// always did.
+        /// </summary>
+        [JsonPropertyName("blendMap")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public int BlendMap { get; set; }
+
+        /// <summary>
         /// Layers ABOVE the base one, which lives in the flat fields above. Omitted entirely on a plain face —
         /// not written as null — so a single-layer face is byte-for-byte what it was before layers existed and
         /// no package in the wild churns on its next save.
@@ -612,6 +802,23 @@ public static class VmapPackage
         [JsonPropertyName("group")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public int Group { get; set; }
+    }
+
+    private sealed class BlendIndexDto
+    {
+        [JsonPropertyName("maps")] public BlendMapDto[]? Maps { get; set; }
+    }
+
+    private sealed class BlendMapDto
+    {
+        [JsonPropertyName("id")] public int Id { get; set; }
+        [JsonPropertyName("width")] public int Width { get; set; }
+        [JsonPropertyName("height")] public int Height { get; set; }
+        [JsonPropertyName("unitsPerTexel")] public float UnitsPerTexel { get; set; }
+        [JsonPropertyName("axisU")] public float[]? AxisU { get; set; }
+        [JsonPropertyName("axisV")] public float[]? AxisV { get; set; }
+        [JsonPropertyName("offsetU")] public float OffsetU { get; set; }
+        [JsonPropertyName("offsetV")] public float OffsetV { get; set; }
     }
 
     private sealed class GroupsDto

@@ -82,6 +82,24 @@ public sealed partial class EditorController : Node3D
     public const string CvarGroupSelect = "cl_editor_group_select";
 
     /// <summary>
+    /// Blend-map resolution for newly painted faces, in world units per texel (backlog F2). Frozen into each
+    /// map at creation, so changing it later affects the next face rather than rescaling the last one.
+    /// </summary>
+    public const string CvarBlendTexel = "cl_editor_blend_texel";
+
+    /// <summary>Paint brush radius, as a fraction of the face — a face-relative brush stays usable at any scale.</summary>
+    public const string CvarPaintRadius = "cl_editor_paint_radius";
+
+    /// <summary>How hard one stroke pushes the weight, 0-1.</summary>
+    public const string CvarPaintStrength = "cl_editor_paint_strength";
+
+    /// <summary>Where the brush's plateau ends and its falloff begins, 0-1. 1 is a hard edge.</summary>
+    public const string CvarPaintHardness = "cl_editor_paint_hardness";
+
+    /// <summary>Which of the four weight channels a stroke paints, 0-3.</summary>
+    public const string CvarPaintChannel = "cl_editor_paint_channel";
+
+    /// <summary>
     /// Thumbnail SOURCE resolution in pixels. Draw size follows the viewport; this is what is decoded and
     /// held, so it is the memory knob — 96² RGBA8 is 36 KB apiece.
     /// </summary>
@@ -483,6 +501,11 @@ public sealed partial class EditorController : Node3D
         c.Register(CvarEntityOcclusion, "1", CvarFlags.Save);
         c.Register(CvarThumbnails, "1", CvarFlags.Save);
         c.Register(CvarGroupSelect, "1", CvarFlags.Save);
+        c.Register(CvarBlendTexel, "4", CvarFlags.Save);
+        c.Register(CvarPaintRadius, "0.15", CvarFlags.Save);
+        c.Register(CvarPaintStrength, "0.6", CvarFlags.Save);
+        c.Register(CvarPaintHardness, "0.35", CvarFlags.Save);
+        c.Register(CvarPaintChannel, "0", CvarFlags.Save);
         c.Register(CvarThumbSize, "96", CvarFlags.Save);
         c.Register(CvarThumbCache, "512", CvarFlags.Save);
         c.Register(CvarShowVertices, "0", CvarFlags.Save);
@@ -609,6 +632,10 @@ public sealed partial class EditorController : Node3D
 
         UpdateHandles();
         UpdateControlHandles();
+
+        // A live stroke follows the crosshair, so its samples are gathered per frame and committed on release.
+        if (_strokeMapId != 0)
+            AddPaintSample();
     }
 
     // =============================================================================================
@@ -903,6 +930,11 @@ public sealed partial class EditorController : Node3D
             AddMeasurePoint();
             return false;
         }
+
+        // Paint owns the click outright, like Paste does: the gesture IS the drag, and there is no handle to
+        // compete with.
+        if (Tool == EditorTool.Paint && Mode != ToolMode.Browse)
+            return BeginPaintStroke();
 
         // Control points are their own grab targets and there is no manipulator in that mode, so they get
         // the click before the handle test rather than competing with it.
@@ -1217,6 +1249,9 @@ public sealed partial class EditorController : Node3D
         bool havePivot = TryGetManipulatorOrigin(out NVec3 pivot);
         CancelDrag();
 
+        if (_strokeMapId != 0)
+            return EndPaintStroke();
+
         if (_grabbedControl >= 0)
             return EndControlPointDrag(delta);
 
@@ -1430,6 +1465,137 @@ public sealed partial class EditorController : Node3D
         GeometryVersion++;
         return true;
     }
+
+    // =============================================================================================
+    //  Paint (backlog F3) — strokes into a face's blend map
+    // =============================================================================================
+
+    /// <summary>Samples accumulated during the live stroke, in the target map's own UV space.</summary>
+    private readonly List<System.Numerics.Vector2> _strokeSamples = new();
+
+    private int _strokeMapId;
+
+    /// <summary>True while a paint stroke is being dragged.</summary>
+    public bool IsPainting => _strokeMapId != 0;
+
+    /// <summary>The map being painted, for the host to know which atlas page to re-upload.</summary>
+    public int PaintingMapId => _strokeMapId;
+
+    /// <summary>
+    /// Begin a stroke on the aimed face, creating its blend map if it has none.
+    ///
+    /// The blend map is created as its own op, so it is its own undo step: a mapper who paints a face and
+    /// undoes twice gets the unpainted face back and then the un-mapped one, rather than a single step that
+    /// does both.
+    /// </summary>
+    public bool BeginPaintStroke()
+    {
+        if (_session is null || _document is null || Tool != EditorTool.Paint)
+            return false;
+
+        if (Hover.Hit && Hover.Selection.Kind == VmapSelectionKind.Patch)
+        {
+            Log.Info("editor: patches have one material and no layers — there is nothing to paint on one");
+            return false;
+        }
+        if (HoveredFace() is not { } hit)
+        {
+            Log.Info("editor: aim at a face to paint");
+            return false;
+        }
+
+        VmapFace face = hit.Brush.Faces[hit.FaceIndex];
+        if (face.BlendMapId == 0 || _document.FindBlendMap(face.BlendMapId) is null)
+        {
+            var make = new CreateBlendMapOp(hit.Brush.Id, hit.FaceIndex, BlendTexelSize);
+            if (!Commit(make))
+            {
+                Log.Info("editor: could not make a blend map for that face");
+                return false;
+            }
+            if (LastOpDeferred)
+            {
+                // On a guest the map does not exist until the server's echo lands, so there is nothing to
+                // paint into yet. Say so rather than silently swallowing the drag.
+                Log.Info("editor: blend map submitted — paint again once it lands");
+                return false;
+            }
+            GeometryVersion++;      // a NEW map changes the atlas, so the world does have to rebuild
+            face = hit.Brush.Faces[hit.FaceIndex];
+        }
+
+        _strokeMapId = face.BlendMapId;
+        _strokeSamples.Clear();
+        AddPaintSample();
+        return true;
+    }
+
+    /// <summary>
+    /// Add the crosshair's current position to the live stroke.
+    ///
+    /// Called per frame while the button is held. Nothing is committed here: one drag is one op, exactly as
+    /// every other gesture in the editor works, and a per-frame op would be a per-frame undo step.
+    /// </summary>
+    public bool AddPaintSample()
+    {
+        if (_strokeMapId == 0 || _document is null)
+            return false;
+        if (_document.FindBlendMap(_strokeMapId) is not { } map)
+            return false;
+        if (!Hover.Hit)
+            return false;
+
+        System.Numerics.Vector2 uv = map.Projection.Evaluate(Hover.Point);
+        if (uv.X is < -0.5f or > 1.5f || uv.Y is < -0.5f or > 1.5f)
+            return false;    // the crosshair wandered off this face
+
+        // Skip a sample that lands on top of the last one: a held brush would otherwise stack dozens of
+        // identical stamps and drive the weight to full in a frame.
+        if (_strokeSamples.Count > 0
+            && (uv - _strokeSamples[^1]).LengthSquared() < 1e-6f)
+            return false;
+
+        _strokeSamples.Add(uv);
+        return true;
+    }
+
+    /// <summary>Commit the stroke as one op. Returns true when anything was painted.</summary>
+    public bool EndPaintStroke()
+    {
+        int mapId = _strokeMapId;
+        _strokeMapId = 0;
+        if (mapId == 0 || _session is null || _document is null || _strokeSamples.Count == 0)
+            return false;
+
+        VmapPaintMode mode = Mode switch
+        {
+            ToolMode.EraseWeight => VmapPaintMode.Subtract,
+            ToolMode.SmoothWeight => VmapPaintMode.Smooth,
+            _ => VmapPaintMode.Add,
+        };
+
+        var op = new PaintBlendOp(
+            mapId, PaintChannel, mode, _strokeSamples, PaintRadius, PaintStrength, PaintHardness, _document);
+        _strokeSamples.Clear();
+
+        if (!Commit(op))
+            return false;
+
+        // Deliberately NOT a GeometryVersion bump: a stroke changes texels and nothing else, and the world
+        // rebuild it would trigger costs the better part of a second. What changed is the atlas image, which
+        // the host re-uploads in place.
+        BlendVersion++;
+        return true;
+    }
+
+    /// <summary>
+    /// Bumped whenever painted texels change, so the host knows to re-upload the atlas — WITHOUT the world
+    /// rebuild a geometry-version bump would force.
+    /// </summary>
+    public int BlendVersion { get; private set; }
+
+    /// <summary>Called by the replication path when a peer's paint lands.</summary>
+    public void BumpBlendVersion() => BlendVersion++;
 
     // =============================================================================================
     //  CSG (backlog F5, F6) — one-shot verbs on the selection
@@ -2244,6 +2410,8 @@ public sealed partial class EditorController : Node3D
     /// <summary>Abandon an in-flight drag without applying anything.</summary>
     public void CancelDrag()
     {
+        _strokeMapId = 0;
+        _strokeSamples.Clear();
         _dragging = false;
         _grabbedHandle = null;
         _grabbedControl = -1;
@@ -2821,6 +2989,21 @@ public sealed partial class EditorController : Node3D
     private float GrabRadius => Cvar(CvarGrabRadius, 12f);
 
     private float SnapRadius => Cvar(CvarSnapEnabled, 1f) != 0f ? Cvar(CvarSnapRadius, 16f) : 0f;
+
+    /// <summary>Blend-map resolution for the next painted face, in world units per texel.</summary>
+    public float BlendTexelSize => Math.Clamp(Cvar(CvarBlendTexel, 4f), 0.5f, 64f);
+
+    /// <summary>Paint brush radius as a fraction of the face.</summary>
+    public float PaintRadius => Math.Clamp(Cvar(CvarPaintRadius, 0.15f), 0.01f, 2f);
+
+    /// <summary>Paint strength, 0-1.</summary>
+    public float PaintStrength => Math.Clamp(Cvar(CvarPaintStrength, 0.6f), 0.01f, 1f);
+
+    /// <summary>Paint hardness, 0-1.</summary>
+    public float PaintHardness => Math.Clamp(Cvar(CvarPaintHardness, 0.35f), 0f, 1f);
+
+    /// <summary>Which weight channel a stroke paints, 0-3.</summary>
+    public int PaintChannel => (int)Math.Clamp(Cvar(CvarPaintChannel, 0f), 0f, 3f);
 
     /// <summary>Whether clicking one member of a group takes the whole group.</summary>
     public bool GroupSelectEnabled => Cvar(CvarGroupSelect, 1f) != 0f;

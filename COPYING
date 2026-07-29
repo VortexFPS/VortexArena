@@ -70,6 +70,34 @@ arrangement the license texts stayed behind in the upstream checkout; now that
 this project redistributes the content, the license travels with it.
 
 
+Where to get the source
+-----------------------
+
+GPLv3 section 6(d) is how this project satisfies its source obligation: binaries are
+offered from a network location, and the corresponding source is offered from the same
+place at no further charge. Recipients are not required to download source alongside a
+binary, and the source may live on a different server provided there are clear directions
+next to the binary saying where to find it. Those directions ship in the README.txt inside
+every release archive.
+
+    game code and content   https://github.com/VortexFPS/VortexArena
+    map sources             https://github.com/VortexFPS/VortexMaps
+    launcher                https://github.com/VortexFPS/VortexLauncher
+
+Map sources are a separate repository because a compiled map is build output and its .map
+source is its corresponding source. Both are public, so a recipient of a release can obtain
+everything needed to modify and rebuild it.
+
+
+Third-party works with their own terms
+--------------------------------------
+
+The blanket grant above does not cover works Team Xonotic redistributes without owning.
+Known cases, and their current state, are recorded in data/licenses/FONTS — the four bundled
+font families are third-party (Bitstream Vera / Arev, URW++, GNU Unifont, Xolonium), and two
+of them currently ship with no licence notice. That is an open item, not a settled position.
+
+
 Contributions
 -------------
 

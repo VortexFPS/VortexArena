@@ -118,6 +118,17 @@ A fork of Xonotic, reborn on Godot + C#.  https://github.com/VortexFPS/VortexAre
 
 This is a "fat" build: the game binary, the Godot runtime, and all Xonotic game data are
 bundled together. Keep the files together — the game loads assets/ from beside the binary.
+
+Source code and licensing
+-------------------------
+Vortex Arena is free software under the GNU General Public License version 3 or later.
+The complete corresponding source for this build, and the licence texts, are available at:
+
+    game code + content   https://github.com/VortexFPS/VortexArena
+    map sources           https://github.com/VortexFPS/VortexMaps
+
+Licence texts for the bundled game content are in data/licenses/ beside this file.
+No charge, no registration, same place as the download — see GPLv3 section 6(d).
 EOF
     case "$t" in
         windows-client)

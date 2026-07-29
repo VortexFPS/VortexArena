@@ -360,6 +360,7 @@ public partial class EditorMenuPanel : HudPanel
                           ?? ShaderConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? WaypointConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? PatchConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
+                          ?? GeometryConsoleCommand(Controller?.Tool ?? EditorTool.None, mode)
                           ?? $"editor_mode {mode}",
                 Enabled = built,
                 Checked = built ? mode == c.Mode : null,
@@ -383,6 +384,21 @@ public partial class EditorMenuPanel : HudPanel
             _ => null,
         };
     }
+
+    /// <summary>
+    /// Modes whose gesture is a one-shot verb rather than a state: extrude, bevel, snap and brush-create all
+    /// act immediately on what you are aiming at.
+    /// </summary>
+    private static string? GeometryConsoleCommand(EditorTool tool, ToolMode mode) => (tool, mode) switch
+    {
+        (EditorTool.Face, ToolMode.Extrude) => "editor_extrude",
+        (EditorTool.Edge, ToolMode.Bevel) => "editor_bevel",
+        (EditorTool.Vertex, ToolMode.SnapToGrid) => "editor_snap_grid",
+        (EditorTool.Brush, ToolMode.Create) => "editor_brush_create",
+        (EditorTool.Face, ToolMode.Create) => "editor_brush_create",
+        (EditorTool.Shader, ToolMode.Flags) => "editor_shader flags",
+        _ => null,
+    };
 
     /// <summary>Patch create and modify open their dialogs.</summary>
     private static string? PatchConsoleCommand(EditorTool tool, ToolMode mode)
@@ -415,6 +431,8 @@ public partial class EditorMenuPanel : HudPanel
             ToolMode.Hardwire => "editor_waypoint hardwire",
             ToolMode.Unreachable => "editor_waypoint unreachable",
             ToolMode.RelinkAll => "editor_waypoint relinkall",
+            ToolMode.Lock => "editor_waypoint lock",
+            ToolMode.Symmetry => "editor_waypoint symmetry",
             _ => null,
         };
     }
@@ -453,16 +471,21 @@ public partial class EditorMenuPanel : HudPanel
         ToolMode.TwoPoint or ToolMode.ThreePoint or ToolMode.ViewPlane => tool == EditorTool.Clip,
         // Entity create and the key inspector run from the console for now (editor_entity); the dialogs are
         // still to come, so the rows point at what exists rather than claiming a UI that does not.
-        ToolMode.Create => tool is EditorTool.Entity or EditorTool.Patch,
+        ToolMode.Create => tool is EditorTool.Entity or EditorTool.Patch or EditorTool.Brush or EditorTool.Face,
+        ToolMode.Extrude => tool == EditorTool.Face,
+        ToolMode.Bevel => tool == EditorTool.Edge,
+        ToolMode.SnapToGrid => tool == EditorTool.Vertex,
+        ToolMode.Flags => tool == EditorTool.Shader,
         ToolMode.Properties => tool == EditorTool.Entity,
         ToolMode.Modify => tool == EditorTool.Patch,
+        ToolMode.ControlPoints => tool == EditorTool.Patch,
         ToolMode.PickShader or ToolMode.ApplyShader or ToolMode.FitProjection
             or ToolMode.NaturalProjection or ToolMode.AxialProjection or ToolMode.ShiftUv
             or ToolMode.ScaleUv or ToolMode.RotateUv or ToolMode.Browse => tool == EditorTool.Shader,
         ToolMode.Distance or ToolMode.Angle or ToolMode.Reachability => tool == EditorTool.Measure,
         ToolMode.Place or ToolMode.PlaceJump or ToolMode.PlaceCrouch or ToolMode.PlaceSupport
             or ToolMode.Remove or ToolMode.Hardwire or ToolMode.Unreachable
-            or ToolMode.RelinkAll => tool == EditorTool.Waypoint,
+            or ToolMode.RelinkAll or ToolMode.Lock or ToolMode.Symmetry => tool == EditorTool.Waypoint,
         _ => false,
     };
 

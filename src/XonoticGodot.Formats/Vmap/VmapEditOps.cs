@@ -1842,3 +1842,323 @@ public sealed class ModifyPatchOp : IVmapOp
         return true;
     }
 }
+
+/// <summary>
+/// Sweep a face out into a NEW brush (design doc §11.9's Face &gt; Extrude) — the fastest way to grow
+/// architecture from what is already there.
+///
+/// The new solid is bounded by the source face's plane pushed out by <c>distance</c>, the source plane
+/// reversed to cap the back, and one side plane per edge of the winding. Deriving the sides from the winding
+/// rather than from the source brush's other faces is what lets an extrude work off ANY face, including one
+/// that was itself produced by a clip and shares no plane with the original box.
+/// </summary>
+public sealed class ExtrudeFaceOp : IVmapOp
+{
+    private readonly int _brushId;
+    private readonly int _faceIndex;
+    private readonly float _distance;
+    private int _assignedId;
+
+    public ExtrudeFaceOp(int brushId, int faceIndex, float distance)
+    {
+        _brushId = brushId;
+        _faceIndex = faceIndex;
+        _distance = distance;
+    }
+
+    /// <summary>Id of the extruded brush; valid after a successful <see cref="Apply"/>.</summary>
+    public int CreatedBrushId => _assignedId;
+
+    // The source brush is READ, not written — an extrude leaves it alone and adds a solid on top of it.
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    /// <summary>Face swept. Read by the wire codec.</summary>
+    public int FaceIndex => _faceIndex;
+
+    /// <summary>Sweep distance along the face normal. Read by the wire codec.</summary>
+    public float Distance => _distance;
+
+    public string Describe() => $"Extrude face {_faceIndex} of brush {_brushId} by {_distance:0.##}u";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (MathF.Abs(_distance) < 1e-3f)
+            return false;
+        if (doc.FindBrush(_brushId) is not { } source)
+            return false;
+        if (_faceIndex < 0 || _faceIndex >= source.Faces.Count)
+            return false;
+
+        Vector3[] winding = VmapWinding.BuildFaceWinding(source, _faceIndex);
+        if (winding.Length < 3)
+            return false;
+
+        VmapFace src = source.Faces[_faceIndex];
+        VmapPlane plane = src.Plane;
+
+        // A negative distance would sweep INTO the source solid and produce a brush occupying space that is
+        // already filled. Extruding inward is a different operation (a hollow), not this one.
+        float dist = MathF.Abs(_distance);
+
+        var brush = new VmapBrush { IsDetail = source.IsDetail, ContentFlags = source.ContentFlags };
+
+        // Front: the source plane pushed out along its own normal.
+        brush.Faces.Add(FaceLike(src, new VmapPlane(plane.Normal, plane.Dist + dist)));
+
+        // Back: the source plane reversed, so the new solid is closed against the face it grew from.
+        brush.Faces.Add(FaceLike(src, new VmapPlane(-plane.Normal, -plane.Dist)));
+
+        // Sides: one per winding edge, its normal pointing away from the polygon's interior.
+        for (int i = 0; i < winding.Length; i++)
+        {
+            Vector3 a = winding[i];
+            Vector3 b = winding[(i + 1) % winding.Length];
+            Vector3 edge = b - a;
+            if (edge.LengthSquared() < 1e-8f)
+                continue;
+
+            Vector3 n = Vector3.Cross(edge, plane.Normal);
+            float len = n.Length();
+            if (len < 1e-6f)
+                continue;
+            n /= len;
+
+            brush.Faces.Add(FaceLike(src, new VmapPlane(n, Vector3.Dot(a, n))));
+        }
+
+        if (brush.Faces.Count < 4 || !VmapWinding.IsClosedConvex(brush))
+            return false;
+
+        _assignedId = doc.NextBrushId();
+        brush.Id = _assignedId;
+        brush.IsToolBrush = brush.ClassifyToolBrush();
+        doc.Brushes.Add(brush);
+        return true;
+    }
+
+    /// <summary>
+    /// A face carrying the source's material and alignment on a new plane. Inheriting the projection is what
+    /// makes an extruded wall continue the texture of the wall it grew from instead of arriving untextured.
+    /// </summary>
+    private static VmapFace FaceLike(VmapFace src, VmapPlane plane) => new()
+    {
+        Plane = plane,
+        Material = src.Material,
+        Projection = src.Projection,
+        SurfaceFlags = src.SurfaceFlags,
+        ContentFlags = src.ContentFlags,
+    };
+}
+
+/// <summary>
+/// Cut a bevel across an edge (design doc §11.9's Edge &gt; Bevel) — the chamfer that turns a hard corner into
+/// a facet.
+///
+/// Expressed as a clip, because that is what it is: a plane through the two points either side of the edge,
+/// keeping the larger half. Building it on <see cref="ClipBrushOp"/> rather than as its own geometry means it
+/// inherits the convexity guarantee and the material inheritance for free.
+/// </summary>
+public sealed class BevelEdgeOp : IVmapOp
+{
+    private readonly int _brushId;
+    private readonly Vector3 _a;
+    private readonly Vector3 _b;
+    private readonly float _size;
+
+    /// <param name="brushId">Brush to chamfer.</param>
+    /// <param name="edgeA">One end of the edge, in world space.</param>
+    /// <param name="edgeB">The other end.</param>
+    /// <param name="size">How far back from the edge the chamfer cuts, in world units.</param>
+    public BevelEdgeOp(int brushId, Vector3 edgeA, Vector3 edgeB, float size)
+    {
+        _brushId = brushId;
+        _a = edgeA;
+        _b = edgeB;
+        _size = size;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => new[] { _brushId };
+
+    public string Describe() => $"Bevel edge of brush {_brushId} by {_size:0.##}u";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_size <= 0f || doc.FindBrush(_brushId) is not { } brush)
+            return false;
+
+        Vector3 edge = _b - _a;
+        if (edge.LengthSquared() < 1e-8f)
+            return false;
+
+        // The chamfer plane's normal is the average of the two faces that meet at this edge — the direction
+        // "outward from the corner". Averaging the faces rather than guessing gives a symmetric chamfer
+        // whatever angle the corner happens to be.
+        Vector3 outward = Vector3.Zero;
+        int met = 0;
+        for (int f = 0; f < brush.Faces.Count; f++)
+        {
+            Vector3[] w = VmapWinding.BuildFaceWinding(brush, f);
+            if (w.Length < 3)
+                continue;
+            if (TouchesBoth(w, _a, _b))
+            {
+                outward += brush.Faces[f].Plane.Normal;
+                met++;
+            }
+        }
+        if (met < 2)
+            return false;   // not an edge between two faces of this brush
+
+        float len = outward.Length();
+        if (len < 1e-6f)
+            return false;
+        outward /= len;
+
+        // Place the plane `size` back from the edge, along the outward direction.
+        Vector3 mid = (_a + _b) * 0.5f;
+        var cut = new VmapPlane(outward, Vector3.Dot(mid, outward) - _size);
+
+        return new ClipBrushOp(_brushId, cut, keepBothHalves: false).Apply(doc);
+    }
+
+    private static bool TouchesBoth(Vector3[] winding, Vector3 a, Vector3 b)
+    {
+        bool hasA = false, hasB = false;
+        foreach (Vector3 v in winding)
+        {
+            if ((v - a).LengthSquared() < VmapEdit.VertexEpsilon * VmapEdit.VertexEpsilon) hasA = true;
+            if ((v - b).LengthSquared() < VmapEdit.VertexEpsilon * VmapEdit.VertexEpsilon) hasB = true;
+        }
+        return hasA && hasB;
+    }
+}
+
+/// <summary>
+/// Snap a brush's corners to the grid (design doc §11.9's Vertex &gt; Snap to grid) — the cleanup pass after a
+/// freehand drag, and what makes two hand-placed solids actually meet.
+///
+/// Every corner moves at once rather than one at a time, because snapping them individually would refit the
+/// shared planes repeatedly and let earlier snaps drift as later ones re-derived the same faces.
+/// </summary>
+public sealed class SnapBrushToGridOp : IVmapOp
+{
+    private readonly int[] _brushIds;
+    private readonly float _grid;
+
+    public SnapBrushToGridOp(IReadOnlyList<int> brushIds, float grid)
+    {
+        _brushIds = brushIds?.ToArray() ?? throw new ArgumentNullException(nameof(brushIds));
+        _grid = grid;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => _brushIds;
+
+    /// <summary>Grid step snapped to. Read by the wire codec.</summary>
+    public float Grid => _grid;
+
+    public string Describe() => $"Snap {_brushIds.Length} brush{(_brushIds.Length == 1 ? "" : "es")} to grid";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_grid <= 0f || _brushIds.Length == 0)
+            return false;
+
+        var candidates = new List<(VmapBrush Live, VmapBrush Snapped)>(_brushIds.Length);
+        foreach (int id in _brushIds)
+        {
+            if (doc.FindBrush(id) is not { } b)
+                return false;
+
+            VmapBrush copy = b.Clone();
+            bool moved = false;
+
+            // Re-fit each face through its own snapped winding. A plane whose corners all land on the grid is
+            // itself grid-aligned, which is the property that makes solids meet.
+            for (int f = 0; f < copy.Faces.Count; f++)
+            {
+                Vector3[] w = VmapWinding.BuildFaceWinding(b, f);
+                if (w.Length < 3)
+                    continue;
+
+                var snapped = new List<Vector3>(w.Length);
+                foreach (Vector3 v in w)
+                {
+                    Vector3 s = VmapEdit.SnapToGrid(v, _grid);
+                    moved |= s != v;
+                    snapped.Add(s);
+                }
+
+                if (!VmapEdit.TryFitPlane(snapped, out VmapPlane fitted))
+                    return false;   // the face collapsed onto the grid — refuse rather than degenerate
+
+                if (Vector3.Dot(fitted.Normal, copy.Faces[f].Plane.Normal) < 0f)
+                    fitted = new VmapPlane(-fitted.Normal, -fitted.Dist);
+                copy.Faces[f].Plane = fitted;
+            }
+
+            if (!moved)
+                continue;           // already on the grid: nothing to journal for this one
+            if (!VmapWinding.IsClosedConvex(copy))
+                return false;
+
+            candidates.Add((b, copy));
+        }
+
+        if (candidates.Count == 0)
+            return false;
+
+        foreach ((VmapBrush live, VmapBrush snapped) in candidates)
+            VmapEdit.CopyPlanesInto(snapped, live);
+        return true;
+    }
+}
+
+/// <summary>
+/// Move one control point of a patch (design doc §11.9's Patch &gt; Control points) — the mode patches exist
+/// for, and the one that has no equivalent anywhere else in the editor.
+///
+/// Simpler than every brush edit precisely because a patch has no convexity constraint: a control point is
+/// just a point, so it goes where it is put and nothing can be made invalid by moving it.
+/// </summary>
+public sealed class MovePatchControlOp : IVmapOp
+{
+    private readonly int _patchId;
+    private readonly int _index;
+    private readonly Vector3 _delta;
+
+    public MovePatchControlOp(int patchId, int controlIndex, Vector3 delta)
+    {
+        _patchId = patchId;
+        _index = controlIndex;
+        _delta = delta;
+    }
+
+    public IReadOnlyList<int> TouchedBrushIds => Array.Empty<int>();
+
+    public IReadOnlyList<int> TouchedPatchIds => new[] { _patchId };
+
+    /// <summary>Control-point index within the grid. Read by the wire codec.</summary>
+    public int ControlIndex => _index;
+
+    /// <summary>Translation applied. Read by the wire codec.</summary>
+    public Vector3 Delta => _delta;
+
+    public string Describe() => $"Move control point {_index} of patch {_patchId}";
+
+    public bool Apply(VmapDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (_delta == Vector3.Zero)
+            return false;
+        if (doc.FindPatch(_patchId) is not { } patch)
+            return false;
+        if (_index < 0 || _index >= patch.Controls.Count)
+            return false;
+
+        patch.Controls[_index] += _delta;
+        return true;
+    }
+}

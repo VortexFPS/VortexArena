@@ -7570,6 +7570,30 @@ public sealed partial class NetGame : Node3D
         interp.RegisterCommand("editor_waypoint", CmdEditorWaypoint);
         interp.RegisterCommand("editor_patch", CmdEditorPatch);
         interp.RegisterCommand("editor_save", CmdEditorSave);
+        interp.RegisterCommand("editor_extrude", a =>
+        {
+            float d = a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : (_editor?.GridSize ?? 64f);
+            if (_editor?.ExtrudeFace(d) == true)
+                RefreshEditorWorld();
+        });
+        interp.RegisterCommand("editor_bevel", a =>
+        {
+            float sz = a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : (_editor?.GridSize ?? 16f);
+            if (_editor?.BevelEdge(sz) == true)
+                RefreshEditorWorld();
+        });
+        interp.RegisterCommand("editor_snap_grid", _ =>
+        {
+            if (_editor?.SnapSelectionToGrid() == true)
+                RefreshEditorWorld();
+        });
+        interp.RegisterCommand("editor_brush_create", _ =>
+        {
+            if (_editor?.CreateBrushAtCrosshair() == true)
+                RefreshEditorWorld();
+        });
         Vmap.EditorBinds.RegisterCommands(interp);
 
         // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
@@ -7672,8 +7696,11 @@ public sealed partial class NetGame : Node3D
                 return;
 
             case "invert":
+                _editor.InvertSelection();
+                return;
+
             case "all_shader":
-                XonoticGodot.Common.Diagnostics.Log.Info($"editor_select {verb}: not built yet (roadmap E8)");
+                _editor.SelectAllOfShader();
                 return;
 
             default:
@@ -8106,6 +8133,22 @@ public sealed partial class NetGame : Node3D
                 OpenShaderBrowser();
                 return;
 
+            case "flags":
+                OpenShaderFlags(ed);
+                return;
+
+            case "toggleflag":
+            {
+                if (args.Count < 4 || !int.TryParse(args[3], out int bit))
+                    return;
+                bool content = args[2].Equals("content", StringComparison.OrdinalIgnoreCase);
+                int toggled = ed.ToggleFaceFlag(bit, content);
+                if (toggled > 0)
+                    RefreshEditorWorld();
+                XonoticGodot.Common.Diagnostics.Log.Info($"editor: flag toggled on {toggled} face(s)");
+                return;
+            }
+
             case "pick":
                 ed.PickShaderAtCrosshair();
                 return;
@@ -8319,6 +8362,40 @@ public sealed partial class NetGame : Node3D
                     return;
                 }
 
+                case "lock":
+                {
+                    if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 lockAt))
+                        return;
+                    // Aiming at nothing UNLOCKS, which is Base\u2019s own semantics: one verb both pins a
+                    // waypoint\u2019s links on screen and lets go of them.
+                    _lockedWaypoint = XonoticGodot.Server.Bot.WaypointEditor.Pick(net, lockAt);
+                    XonoticGodot.Common.Diagnostics.Log.Info(_lockedWaypoint is null
+                        ? "waypoint: link display unlocked"
+                        : $"waypoint: locked on {XonoticGodot.Server.Bot.WaypointEditor.Describe(_lockedWaypoint)}");
+                    return;
+                }
+
+                case "symmetry":
+                {
+                    // Base exposes symorigin/symaxis get|set for maps whose flags are not perfectly
+                    // symmetrical. Reading a candidate origin off the selection is the half that helps here:
+                    // it is what a mapper checks a symmetric layout against.
+                    if (_editor.Document is { } symDoc
+                        && XonoticGodot.Formats.Vmap.VmapEdit.TryGetSelectionCenter(
+                            symDoc, _editor.Session?.SelectedBrushIds() ?? new List<int>(), out System.Numerics.Vector3 symCentre))
+                    {
+                        XonoticGodot.Common.Diagnostics.Log.Info(
+                            $"waypoint: selection centre {symCentre.X:0.#} {symCentre.Y:0.#} {symCentre.Z:0.#}"
+                            + "  \u2014 use it as the symmetry origin");
+                    }
+                    else
+                    {
+                        XonoticGodot.Common.Diagnostics.Log.Info(
+                            "waypoint: select geometry to read a symmetry origin from");
+                    }
+                    return;
+                }
+
                 case "relinkall":
                     // Relink re-derives every link through a tracewalk, so there is no inverse to apply — only
                     // the previous graph to restore, which is exactly what the snapshot journal is for.
@@ -8408,6 +8485,9 @@ public sealed partial class NetGame : Node3D
                 XonoticGodot.Common.Diagnostics.Log.Info("waypoint: redone");
         });
     }
+
+    /// <summary>Waypoint whose links are pinned on screen, or null. Aiming at nothing releases it.</summary>
+    private XonoticGodot.Server.Bot.Waypoint? _lockedWaypoint;
 
     /// <summary>The half-made link: a jump/support source, or the first end of a hardwire.</summary>
     private XonoticGodot.Server.Bot.Waypoint? _pendingWaypoint;
@@ -8656,6 +8736,62 @@ public sealed partial class NetGame : Node3D
 
         dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, "Shaders", rows,
             "arrows move · Enter applies to the selection or the aimed face · type to filter · Esc closes");
+    }
+
+    /// <summary>
+    /// The surface/content flag editor: the Q3 bits a mapper actually sets, as toggles over the aimed or
+    /// selected faces. Named rather than numeric, because 0x4000 is not something anyone should have to know
+    /// by heart to make a wall non-solid.
+    /// </summary>
+    private void OpenShaderFlags(Vmap.EditorController ed)
+    {
+        if (EditorDialog is not { } dialog)
+            return;
+
+        List<(int BrushId, int FaceIndex)> targets = ed.ShaderTargets();
+        if (targets.Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("editor: aim at a face, or select some");
+            return;
+        }
+
+        int surf = 0, cont = 0;
+        if (ed.Document?.FindBrush(targets[0].BrushId) is { } b && targets[0].FaceIndex < b.Faces.Count)
+        {
+            surf = b.Faces[targets[0].FaceIndex].SurfaceFlags;
+            cont = b.Faces[targets[0].FaceIndex].ContentFlags;
+        }
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+
+        void Flag(string name, string group, int bit, bool content, string help)
+        {
+            bool on = ((content ? cont : surf) & bit) != 0;
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = name,
+                Group = group,
+                Value = on ? "on" : "off",
+                Detail = help,
+                Command = $"editor_shader toggleflag {(content ? "content" : "surface")} {bit}",
+            });
+        }
+
+        Flag("nodraw", "surface", 0x0080, false,
+            "Draws nothing. The compiler still uses the face for collision and vis.");
+        Flag("sky", "surface", 0x0004, false, "Treated as sky: the skybox shows through it.");
+        Flag("slick", "surface", 0x0002, false, "Low friction, so players slide across it.");
+        Flag("ladder", "surface", 0x0008, false, "Climbable.");
+        Flag("nonsolid", "surface", 0x4000, false, "Players and shots pass straight through.");
+        Flag("nomarks", "surface", 0x0040, false, "Decals and impact marks do not stick.");
+        Flag("detail", "content", 0x08000000, true, "Does not seal the world or take part in vis.");
+        Flag("playerclip", "content", 0x00010000, true, "Blocks players but not shots.");
+        Flag("trigger", "content", 0x40000000, true, "A trigger volume rather than a solid.");
+        Flag("water", "content", 0x00000020, true, "Swimmable volume.");
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Properties,
+            $"Surface flags \u2014 {targets.Count} face(s)", rows,
+            "Enter toggles the flag on every target face \u00b7 Esc closes");
     }
 
     /// <summary>Texture-set name from a shader path: <c>textures/exx/floor01</c> → <c>exx</c>.</summary>

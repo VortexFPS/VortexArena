@@ -151,6 +151,10 @@ public sealed partial class EditorGizmos : Node3D
         if (c.Tool == EditorTool.Entity)
             anything |= DrawEntityBoxes(c);
 
+        // --- patch control lattice: the grab targets, drawn as the grid they form (§11.9) ---
+        if (c.Tool == EditorTool.Patch && c.Mode == ToolMode.ControlPoints)
+            anything |= DrawControlLattice(c);
+
         // --- clip preview: the clicked points and where the plane crosses the selection (§11.9) ---
         if (c.Tool == EditorTool.Clip)
             anything |= DrawClipPreview(c, doc);
@@ -344,6 +348,46 @@ public sealed partial class EditorGizmos : Node3D
     }
 
     private static readonly Color LinkColor = new(1f, 0.55f, 0.9f, 0.9f);
+
+    private static readonly Color LatticeColor = new(0.55f, 0.75f, 0.95f, 0.8f);
+    private static readonly Color ControlColor = new(1f, 0.9f, 0.4f, 1f);
+
+    /// <summary>
+    /// Draw the control grid of the selected patches: the lattice lines plus a marker at each control point.
+    ///
+    /// The lattice matters as much as the points. A patch’s control points sit OFF the surface — that is what
+    /// makes it curve — so a bare scatter of markers gives no clue which point bends which part of it. The grid
+    /// lines are what turn them back into a shape you can reason about.
+    /// </summary>
+    private bool DrawControlLattice(EditorController c)
+    {
+        if (c.Document is not { } doc)
+            return false;
+
+        bool drew = false;
+        foreach (int patchId in c.SelectedPatchIds())
+        {
+            if (doc.FindPatch(patchId) is not { } p || !p.IsValid)
+                continue;
+
+            for (int row = 0; row < p.Height; row++)
+                for (int col = 0; col < p.Width; col++)
+                {
+                    int i = row * p.Width + col;
+                    if (col + 1 < p.Width)
+                        Line(p.Controls[i], p.Controls[i + 1], LatticeColor);
+                    if (row + 1 < p.Height)
+                        Line(p.Controls[i], p.Controls[i + p.Width], LatticeColor);
+                }
+            drew = true;
+        }
+
+        // The grab targets themselves, sized exactly as the ray test sees them.
+        foreach (EditorHandle h in c.ControlHandles)
+            DrawBox(h.Tip, h.Radius, ControlColor);
+
+        return drew;
+    }
 
     private static readonly Color ClipPointColor = new(1f, 0.45f, 0.35f, 1f);
     private static readonly Color ClipPlaneColor = new(1f, 0.6f, 0.25f, 0.95f);

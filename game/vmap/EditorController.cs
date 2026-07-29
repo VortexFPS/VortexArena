@@ -461,6 +461,7 @@ public sealed partial class EditorController : Node3D
             UpdateCrosshairHover();
 
         UpdateHandles();
+        UpdateControlHandles();
     }
 
     // =============================================================================================
@@ -569,6 +570,11 @@ public sealed partial class EditorController : Node3D
             AddMeasurePoint();
             return false;
         }
+
+        // Control points are their own grab targets and there is no manipulator in that mode, so they get
+        // the click before the handle test rather than competing with it.
+        if (Tool == EditorTool.Patch && Mode == ToolMode.ControlPoints && TryGrabControlPoint())
+            return true;
 
         // --- phase two: a handle is under the crosshair, so transform along it ---
         if (_hoverHandle is { } handle && _session.Selection.Count > 0)
@@ -850,6 +856,9 @@ public sealed partial class EditorController : Node3D
         bool havePivot = TryGetManipulatorOrigin(out NVec3 pivot);
         CancelDrag();
 
+        if (_grabbedControl >= 0)
+            return EndControlPointDrag(delta);
+
         if (mode == ToolMode.Rotate)
         {
             // Rotate the whole selection about its own centre, on the axis of the ring that was grabbed.
@@ -999,6 +1008,278 @@ public sealed partial class EditorController : Node3D
             + $"rise {VmapMeasure.Rise(a, b):+0.#;-0.#;0}";
     }
 
+    /// <summary>
+    /// Extrude the hovered or selected face into a new brush. Distance defaults to the grid step, so the
+    /// result lands aligned with whatever the mapper is already building against.
+    /// </summary>
+    public bool ExtrudeFace(float distance)
+    {
+        if (_session is null)
+            return false;
+
+        VmapSelection sel = _session.Selection.Count > 0 ? _session.Selection[0] : Hover.Selection;
+        if (sel.Kind != VmapSelectionKind.Face || sel.FaceIndex < 0)
+        {
+            Log.Info("editor: aim at or select a face to extrude");
+            return false;
+        }
+
+        var op = new ExtrudeFaceOp(sel.BrushId, sel.FaceIndex, distance);
+        if (!_session.Apply(op))
+        {
+            Log.Info("editor: extrude refused — that would not make a valid solid");
+            return false;
+        }
+
+        // Select what was made, so it can be nudged or textured straight away.
+        _session.Selection.Clear();
+        _session.Selection.Add(VmapSelection.OfBrush(op.CreatedBrushId));
+        GeometryVersion++;
+        return true;
+    }
+
+    /// <summary>Chamfer the hovered or selected edge.</summary>
+    public bool BevelEdge(float size)
+    {
+        if (_session is null)
+            return false;
+
+        VmapSelection sel = _session.Selection.Count > 0 ? _session.Selection[0] : Hover.Selection;
+        if (sel.Kind != VmapSelectionKind.Edge || sel.Vertices.Count < 2)
+        {
+            Log.Info("editor: aim at or select an edge to bevel");
+            return false;
+        }
+
+        if (!_session.Apply(new BevelEdgeOp(sel.BrushId, sel.Vertices[0], sel.Vertices[1], size)))
+        {
+            Log.Info("editor: bevel refused — that would not make a valid solid");
+            return false;
+        }
+        GeometryVersion++;
+        return true;
+    }
+
+    /// <summary>Snap the selected brushes' corners onto the grid.</summary>
+    public bool SnapSelectionToGrid()
+    {
+        if (_session is null)
+            return false;
+
+        List<int> ids = _session.SelectedBrushIds();
+        if (ids.Count == 0)
+        {
+            Log.Info("editor: select something to snap");
+            return false;
+        }
+
+        float grid = EffectiveGridSnap;
+        if (grid <= 0f)
+        {
+            Log.Info("editor: the grid is off — nothing to snap to");
+            return false;
+        }
+
+        if (!_session.Apply(new SnapBrushToGridOp(ids, grid)))
+        {
+            Log.Info("editor: nothing moved (already aligned, or the snap would collapse a brush)");
+            return false;
+        }
+        GeometryVersion++;
+        return true;
+    }
+
+    /// <summary>
+    /// Create a box brush at the crosshair, in the same box a patch would be built in — the selection's bounds
+    /// when there is one, else a grid-sized cube. Radiant drags a footprint out in an ortho view; that gesture
+    /// belongs to the ortho editing work, and this is the one that makes sense from a first-person crosshair.
+    /// </summary>
+    public bool CreateBrushAtCrosshair()
+    {
+        if (_session is null || !TryGetPatchBox(out NVec3 mins, out NVec3 maxs))
+            return false;
+
+        string material = PickedMaterial.Length > 0 ? PickedMaterial : "textures/exx/base_wall01";
+        var op = new CreateBoxBrushOp(mins, maxs, material);
+        if (!_session.Apply(op))
+        {
+            Log.Info("editor: could not create a brush there");
+            return false;
+        }
+
+        _session.Selection.Clear();
+        _session.Selection.Add(VmapSelection.OfBrush(op.CreatedBrushId));
+        GeometryVersion++;
+        return true;
+    }
+
+    /// <summary>
+    /// Invert the selection within whatever the current tool picks: every brush NOT selected becomes selected.
+    /// The fast way to isolate one thing and act on everything else.
+    /// </summary>
+    public bool InvertSelection()
+    {
+        if (_session is null || _document is null)
+            return false;
+
+        var selected = new HashSet<int>(_session.SelectedBrushIds());
+        _session.Selection.Clear();
+        foreach (VmapBrush b in _document.Brushes)
+        {
+            if (selected.Contains(b.Id))
+                continue;
+            if (b.IsToolBrush && !IncludeToolBrushes)
+                continue;   // invisible scaffolding the mapper cannot see is not something to select
+            _session.Selection.Add(VmapSelection.OfBrush(b.Id));
+        }
+        Log.Info($"editor: {_session.Selection.Count} selected");
+        return true;
+    }
+
+    /// <summary>
+    /// Select every FACE using the same shader as the aimed or selected one — the retexturing gesture: point
+    /// at one wall, take all of them, apply once.
+    /// </summary>
+    public bool SelectAllOfShader()
+    {
+        if (_session is null || _document is null)
+            return false;
+
+        string want = "";
+        if (HoveredFace() is { } hit)
+            want = hit.Brush.Faces[hit.FaceIndex].Material;
+        else if (_session.Selection.Count > 0 && _session.Selection[0].Kind == VmapSelectionKind.Face
+                 && _document.FindBrush(_session.Selection[0].BrushId) is { } b
+                 && _session.Selection[0].FaceIndex < b.Faces.Count)
+            want = b.Faces[_session.Selection[0].FaceIndex].Material;
+
+        if (want.Length == 0)
+        {
+            Log.Info("editor: aim at a face first");
+            return false;
+        }
+
+        _session.Selection.Clear();
+        foreach (VmapBrush brush in _document.Brushes)
+        {
+            if (brush.IsToolBrush && !IncludeToolBrushes)
+                continue;
+            for (int f = 0; f < brush.Faces.Count; f++)
+                if (string.Equals(brush.Faces[f].Material, want, StringComparison.OrdinalIgnoreCase))
+                    _session.Selection.Add(VmapSelection.OfFace(brush.Id, f));
+        }
+
+        Log.Info($"editor: {_session.Selection.Count} faces using {want}");
+        return true;
+    }
+
+    // =============================================================================================
+    //  Patch control points (§11.9) — the mode patches exist for
+    // =============================================================================================
+
+    private readonly List<EditorHandle> _controlHandles = new();
+    private int _grabbedControl = -1;
+    private int _grabbedControlPatch;
+
+    /// <summary>The control-point grab targets, for the gizmo to draw and the pick to test.</summary>
+    public IReadOnlyList<EditorHandle> ControlHandles => _controlHandles;
+
+    /// <summary>Index of the control point being dragged, or -1.</summary>
+    public int GrabbedControl => _grabbedControl;
+
+    /// <summary>
+    /// Rebuild the grab target for every control point of the selected patches.
+    ///
+    /// Screen-scaled like the manipulator handles and for the same reason: a control point is a position with
+    /// no size, so a fixed world radius is unclickable across a hall and swallows the patch up close.
+    /// </summary>
+    private void UpdateControlHandles()
+    {
+        _controlHandles.Clear();
+        if (Tool != EditorTool.Patch || Mode != ToolMode.ControlPoints
+            || _document is null || _camera is null || _session is null)
+            return;
+
+        NVec3 eye = Coords.ToQuake(_camera.GlobalTransform.Origin);
+        float tanHalfFov = MathF.Tan(Mathf.DegToRad(_camera.Fov) * 0.5f);
+
+        foreach (int patchId in SelectedPatchIds())
+        {
+            if (_document.FindPatch(patchId) is not { } patch)
+                continue;
+
+            for (int i = 0; i < patch.Controls.Count; i++)
+            {
+                NVec3 p = patch.Controls[i];
+                float size = VmapHandles.ScreenScale((p - eye).Length(), tanHalfFov, viewportFraction: 0.012f);
+                _controlHandles.Add(new EditorHandle(
+                    HandleKind.ScaleUniform, NVec3.One, p, p, MathF.Max(2f, size))
+                { Sign = 1f });
+            }
+        }
+    }
+
+    /// <summary>Begin dragging the control point under the crosshair. Returns false when none is.</summary>
+    private bool TryGrabControlPoint()
+    {
+        if (_controlHandles.Count == 0 || _camera is null)
+            return false;
+
+        (NVec3 origin, NVec3 dir) = CameraRay();
+        if (!VmapHandles.TryPick(_controlHandles, origin, dir, out EditorHandle hit, out float distance))
+            return false;
+
+        // The handle list is built patch-by-patch in control order, so its index maps straight back.
+        int flat = _controlHandles.FindIndex(h => h.Tip == hit.Tip);
+        if (flat < 0)
+            return false;
+
+        int running = flat;
+        foreach (int patchId in SelectedPatchIds())
+        {
+            if (_document?.FindPatch(patchId) is not { } patch)
+                continue;
+            if (running < patch.Controls.Count)
+            {
+                _grabbedControlPatch = patchId;
+                _grabbedControl = running;
+                break;
+            }
+            running -= patch.Controls.Count;
+        }
+        if (_grabbedControl < 0)
+            return false;
+
+        _dragSelection = VmapSelection.OfPatch(_grabbedControlPatch);
+        _dragStartPoint = hit.Tip;
+        _dragDistance = MathF.Max(1f, distance);
+        _dragDelta = NVec3.Zero;
+        _dragRaw = NVec3.Zero;
+        _dragAngle = 0f;
+        _dragScale = NVec3.One;
+        _dragAxis = NVec3.Zero;      // free 3D: a control point has no axis of its own
+        _dragSnap = default;
+        _dragging = true;
+        return true;
+    }
+
+    /// <summary>Commit a control-point drag.</summary>
+    private bool EndControlPointDrag(NVec3 delta)
+    {
+        int patchId = _grabbedControlPatch;
+        int index = _grabbedControl;
+        _grabbedControl = -1;
+
+        if (_session is null || index < 0 || delta == NVec3.Zero)
+            return false;
+
+        if (!_session.Apply(new MovePatchControlOp(patchId, index, delta)))
+            return false;
+
+        GeometryVersion++;
+        return true;
+    }
+
     // =============================================================================================
     //  Shader tool (§11.9) — the Surface Inspector
     // =============================================================================================
@@ -1113,6 +1394,52 @@ public sealed partial class EditorController : Node3D
             NVec3[] winding = VmapWinding.BuildFaceWinding(brush, faceIndex);
             VmapTexProjection next = transform(face.Projection, face, winding);
             if (_session.Apply(new SetFaceProjectionOp(brushId, faceIndex, next)))
+                changed++;
+        }
+
+        if (changed > 0)
+            GeometryVersion++;
+        return changed;
+    }
+
+    /// <summary>
+    /// Toggle one surface or content bit across the target faces. Returns how many changed.
+    ///
+    /// The FIRST target decides the new state and the rest follow it, rather than each face flipping its own
+    /// bit. Flipping individually on a mixed selection scatters it further — half on, half off, and the
+    /// mapper has to click again hoping to land somewhere consistent.
+    /// </summary>
+    public int ToggleFaceFlag(int bit, bool contentFlag)
+    {
+        if (_session is null || _document is null || bit == 0)
+            return 0;
+
+        List<(int BrushId, int FaceIndex)> targets = ShaderTargets();
+        if (targets.Count == 0)
+            return 0;
+
+        if (_document.FindBrush(targets[0].BrushId) is not { } first
+            || targets[0].FaceIndex >= first.Faces.Count)
+            return 0;
+
+        VmapFace lead = first.Faces[targets[0].FaceIndex];
+        bool turnOn = ((contentFlag ? lead.ContentFlags : lead.SurfaceFlags) & bit) == 0;
+
+        int changed = 0;
+        foreach ((int brushId, int faceIndex) in targets)
+        {
+            if (_document.FindBrush(brushId) is not { } b || faceIndex >= b.Faces.Count)
+                continue;
+
+            VmapFace f = b.Faces[faceIndex];
+            int surf = f.SurfaceFlags;
+            int cont = f.ContentFlags;
+            if (contentFlag)
+                cont = turnOn ? cont | bit : cont & ~bit;
+            else
+                surf = turnOn ? surf | bit : surf & ~bit;
+
+            if (_session.Apply(new SetFaceFlagsOp(brushId, faceIndex, surf, cont)))
                 changed++;
         }
 
@@ -1425,6 +1752,7 @@ public sealed partial class EditorController : Node3D
     {
         _dragging = false;
         _grabbedHandle = null;
+        _grabbedControl = -1;
         _dragScale = NVec3.One;
         _dragSelection = VmapSelection.None;
         _dragDelta = NVec3.Zero;

@@ -81,6 +81,29 @@ public class VmapSelectionTests
     }
 
     [Fact]
+    public void AnEntityOnlySelection_TakesTheEntityMovePath()
+    {
+        // The reported "entities won't move" bug, from the other end. EditorController routes an entity-only
+        // selection to MoveEntitiesOp, gated on `SelectedBrushIds().Count == 0`. While that returned a phantom
+        // 0 for an entity selection the gate never opened, the drag fell through to a switch with no Entity
+        // case, and the entity sat still with nothing logged.
+        var doc = new VmapDocument();
+        doc.Brushes.Add(Box(Vector3.Zero, new Vector3(64, 64, 64), id: 1));
+        var spawn = new VmapEntity { Id = 5, ClassName = "info_player_deathmatch" };
+        spawn.Fields["classname"] = "info_player_deathmatch";
+        spawn.SetOrigin(new Vector3(100, 0, 24));
+        doc.Entities.Add(spawn);
+
+        var session = new VmapEditSession(doc);
+        session.Select(VmapSelection.OfEntity(5));
+
+        Assert.Empty(session.SelectedBrushIds());   // the gate the controller reads
+
+        Assert.True(session.Apply(new MoveEntitiesOp(new[] { 5 }, new Vector3(0, 0, 64f), doc)));
+        Assert.Equal(new Vector3(100, 0, 88), doc.Entities[0].Origin());
+    }
+
+    [Fact]
     public void DeletingAPatch_RemovesItAndUnhooksItsOwner()
     {
         // Patches are their own id space and their own list, so neither the brush delete nor the entity delete

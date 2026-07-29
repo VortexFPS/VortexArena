@@ -29,7 +29,8 @@ public static class HudRegistry
         // The editor readouts sit above the world-state panels but below the true modal overlays: the action
         // line rides just over the crosshair, and the context menu must draw over everything it covers or its
         // rows would be unreadable against a lit wall.
-        "editoraction", "editor", "minigamehelp", "quickmenu", "editormenu", "chat", "mapvote", "scoreboard",
+        "editoraction", "editor", "minigamehelp", "quickmenu", "editormenu", "editordialog",
+        "chat", "mapvote", "scoreboard",
     };
 
     private static List<Type>? _types;

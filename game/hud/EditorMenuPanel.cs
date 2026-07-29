@@ -368,7 +368,7 @@ public partial class EditorMenuPanel : HudPanel
             return null;
         return mode switch
         {
-            ToolMode.Create => "editor_entity list",
+            ToolMode.Create => "editor_entity palette",
             ToolMode.Properties => "editor_entity keys",
             _ => null,
         };
@@ -406,6 +406,7 @@ public partial class EditorMenuPanel : HudPanel
             return null;
         return mode switch
         {
+            ToolMode.Browse => "editor_shader browse",
             ToolMode.PickShader => "editor_shader pick",
             ToolMode.ApplyShader => "editor_shader apply",
             ToolMode.FitProjection => "editor_shader fit",
@@ -432,7 +433,7 @@ public partial class EditorMenuPanel : HudPanel
         ToolMode.Create or ToolMode.Properties => tool == EditorTool.Entity,
         ToolMode.PickShader or ToolMode.ApplyShader or ToolMode.FitProjection
             or ToolMode.NaturalProjection or ToolMode.AxialProjection or ToolMode.ShiftUv
-            or ToolMode.ScaleUv or ToolMode.RotateUv => tool == EditorTool.Shader,
+            or ToolMode.ScaleUv or ToolMode.RotateUv or ToolMode.Browse => tool == EditorTool.Shader,
         ToolMode.Distance or ToolMode.Angle or ToolMode.Reachability => tool == EditorTool.Measure,
         ToolMode.Place or ToolMode.PlaceJump or ToolMode.PlaceCrouch or ToolMode.PlaceSupport
             or ToolMode.Remove or ToolMode.Hardwire or ToolMode.Unreachable

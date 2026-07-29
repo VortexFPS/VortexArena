@@ -5989,6 +5989,16 @@ public sealed partial class NetGame : Node3D
                 editorMenu.Close();
         }
 
+        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorDialogPanel>() is { } editorDialog)
+        {
+            editorDialog.IsEditorSession = IsEditorGametype;
+            editorDialog.CommandSink ??= line => Menu.MenuState.Interp?.ExecuteLine(line);
+
+            // Leaving EDIT must not strand a modal dialog holding the cursor, same as the context menu.
+            if (editorDialog.IsOpen && !(IsEditorGametype && (_client?.IsObserving ?? false)))
+                editorDialog.Close();
+        }
+
         if (_fullHud.GetPanel<XonoticGodot.Game.Hud.EditorActionPanel>() is { } editorAction)
         {
             editorAction.IsEditorSession = IsEditorGametype;
@@ -7760,7 +7770,16 @@ public sealed partial class NetGame : Node3D
             }
 
             case "keys":
-                LogEntityKeys();
+                // Bare opens the inspector; "keys log" keeps the console listing, which is still the better
+                // form when you want to read or copy the whole set at once.
+                if (args.Count > 2 && args[2].Equals("log", StringComparison.OrdinalIgnoreCase))
+                    LogEntityKeys();
+                else
+                    OpenEntityInspector();
+                return;
+
+            case "palette":
+                OpenEntityPalette();
                 return;
 
             case "list":
@@ -8074,6 +8093,10 @@ public sealed partial class NetGame : Node3D
 
         switch (verb)
         {
+            case "browse":
+                OpenShaderBrowser();
+                return;
+
             case "pick":
                 ed.PickShaderAtCrosshair();
                 return;
@@ -8384,6 +8407,180 @@ public sealed partial class NetGame : Node3D
         {
             XonoticGodot.Common.Diagnostics.Log.Warn($"waypoint: could not save: {ex.Message}");
         }
+    }
+
+    // =============================================================================================
+    //  (E8) Editor dialogs — the entity palette, the key inspector, the shader browser
+    // =============================================================================================
+
+    private Hud.EditorDialogPanel? EditorDialog
+        => _fullHud?.GetPanel<Hud.EditorDialogPanel>();
+
+    /// <summary>
+    /// The entity CREATE palette: every placeable class from the game's own <c>entities.ent</c>, grouped by
+    /// category, with the file's description under each.
+    ///
+    /// Brush entities are listed but marked, because they are placed differently — a <c>func_door</c> has no
+    /// origin, it is made by assigning existing geometry to it — so offering them identically would promise
+    /// something the Create verb cannot do.
+    /// </summary>
+    private void OpenEntityPalette()
+    {
+        if (EditorDialog is not { } dialog || _editor?.Defs is not { } defs)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Warn("editor: no entity definitions loaded");
+            return;
+        }
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        foreach (string category in defs.Categories())
+        {
+            foreach (XonoticGodot.Formats.Vmap.EntityClassDef d in defs.InCategory(category))
+            {
+                rows.Add(new Hud.EditorDialogPanel.DialogRow
+                {
+                    Label = d.Name,
+                    Group = category,
+                    Value = d.IsBrushEntity ? "brush entity" : "",
+                    Detail = d.Description.Length > 0 ? d.Description : "(no description in entities.ent)",
+                    // A brush entity cannot be placed at a point, so its row reports that rather than
+                    // creating something the compiler would discard.
+                    Command = d.IsBrushEntity
+                        ? $"echo {d.Name} is a brush entity - select geometry and assign it instead"
+                        : $"editor_entity create {d.Name}",
+                });
+            }
+        }
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, "Place entity", rows,
+            "arrows move · Enter places at the crosshair · type to filter · Esc closes");
+    }
+
+    /// <summary>
+    /// The entity key INSPECTOR: the selected entity's live keys, plus every key its class documents but that
+    /// the entity has not set, each with the help text from <c>entities.ent</c>.
+    ///
+    /// Showing the UNSET keys is most of the value. A mapper who does not already know that
+    /// <c>weapon_devastator</c> takes a <c>respawntime</c> has no way to discover it from an entity that never
+    /// set one, and hunting through the definition file by hand is exactly the job the editor should be doing.
+    /// </summary>
+    private void OpenEntityInspector()
+    {
+        if (EditorDialog is not { } dialog || _editor is not { Document: { } doc } ed)
+            return;
+
+        List<int> ids = ed.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            XonoticGodot.Common.Diagnostics.Log.Info("editor: select an entity first");
+            return;
+        }
+        if (doc.FindEntity(ids[0]) is not { } ent)
+            return;
+
+        XonoticGodot.Formats.Vmap.EntityClassDef def = ed.Defs?.GetOrPlaceholder(ent.ClassName)
+            ?? new XonoticGodot.Formats.Vmap.EntityClassDef { Name = ent.ClassName };
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+
+        foreach (KeyValuePair<string, string> kv in ent.Fields)
+        {
+            // classname is shown but not editable here: retyping it turns the entity into something else, and
+            // that is a decision for the palette rather than a slip of the keyboard in a key list.
+            bool locked = kv.Key.Equals("classname", StringComparison.OrdinalIgnoreCase);
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = kv.Key,
+                Value = kv.Value,
+                Group = "set",
+                Detail = HelpFor(def, kv.Key),
+                Editable = !locked,
+                Command = locked ? "" : $"editor_entity set {kv.Key} %v",
+            });
+        }
+
+        foreach (XonoticGodot.Formats.Vmap.EntityKeyDef k in def.Keys)
+        {
+            if (ent.Fields.ContainsKey(k.Key))
+                continue;
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = k.Key,
+                Value = "",
+                Group = "available",
+                Detail = $"({k.Kind}) {k.Help}",
+                Editable = true,
+                Command = $"editor_entity set {k.Key} %v",
+            });
+        }
+
+        foreach (XonoticGodot.Formats.Vmap.EntityFlagDef flag in def.Flags)
+        {
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = flag.Name,
+                Value = $"bit {flag.Bit}",
+                Group = "spawnflags",
+                Detail = flag.Help,
+                Editable = true,
+                Command = $"editor_entity set spawnflags %v",
+            });
+        }
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Properties,
+            $"{ent.ClassName} #{ent.Id}", rows,
+            "Enter edits · type the value · empty clears the key · Esc closes");
+    }
+
+    private static string HelpFor(XonoticGodot.Formats.Vmap.EntityClassDef def, string key)
+    {
+        foreach (XonoticGodot.Formats.Vmap.EntityKeyDef k in def.Keys)
+            if (string.Equals(k.Key, key, StringComparison.OrdinalIgnoreCase))
+                return $"({k.Kind}) {k.Help}";
+        return "";
+    }
+
+    /// <summary>
+    /// The shader BROWSER: every material the asset system parsed, so a mapper can retexture without knowing
+    /// the path by heart. Grouped by the first path segment, which is how Xonotic's texture sets are
+    /// organised (<c>textures/exx/…</c>, <c>textures/facility114x/…</c>).
+    /// </summary>
+    private void OpenShaderBrowser()
+    {
+        if (EditorDialog is not { } dialog || _assets is null)
+            return;
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        foreach (string name in _assets.Assets.ShaderNames())
+        {
+            // Tool shaders are compiler scaffolding rather than surfaces a mapper picks, and they would
+            // otherwise dominate a list this long.
+            if (XonoticGodot.Formats.Vmap.VmapBrush.IsToolMaterial(name))
+                continue;
+
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = name,
+                Group = GroupOfShader(name),
+                Command = $"editor_shader set {name}",
+            });
+        }
+
+        rows.Sort((a, b) =>
+        {
+            int g = string.CompareOrdinal(a.Group, b.Group);
+            return g != 0 ? g : string.CompareOrdinal(a.Label, b.Label);
+        });
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, "Shaders", rows,
+            "arrows move · Enter applies to the selection or the aimed face · type to filter · Esc closes");
+    }
+
+    /// <summary>Texture-set name from a shader path: <c>textures/exx/floor01</c> → <c>exx</c>.</summary>
+    private static string GroupOfShader(string name)
+    {
+        string[] parts = name.Split('/');
+        return parts.Length >= 2 ? parts[^2] : "";
     }
 
     /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>
@@ -8715,11 +8912,15 @@ public sealed partial class NetGame : Node3D
     /// quick-chat menu, or the maximized radar). The bind channel stays live so the toggling bind can still close the
     /// panel — the maximized radar's `m` toggle + Esc/right-click close all route through it.</summary>
     private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || (_radar?.Maximized ?? false)
-                                 || (_editorOrtho?.IsOpen ?? false) || EditorMenuOpen;
+                                 || (_editorOrtho?.IsOpen ?? false) || EditorMenuOpen || EditorDialogOpen;
 
     /// <summary>True while the editor's context menu is up, so it takes the cursor like any other modal HUD UI.</summary>
     private bool EditorMenuOpen
         => _fullHud?.GetPanel<XonoticGodot.Game.Hud.EditorMenuPanel>() is { IsOpen: true };
+
+    /// <summary>True while an editor dialog is up. Modal for the same reason: it owns the keyboard.</summary>
+    private bool EditorDialogOpen
+        => _fullHud?.GetPanel<XonoticGodot.Game.Hud.EditorDialogPanel>() is { IsOpen: true };
 
     /// <summary>Whether gameplay owns keyboard/mouse input this frame — false whenever a UI owner has it (the DP
     /// key_dest states): the pause/auto-pause, the console, the messagemode chat prompt (key_dest = message:

@@ -65,6 +65,12 @@ public sealed class AssetSystem
     /// <summary>Number of shaders parsed at construction (diagnostics).</summary>
     public int ShaderCount => _shaders.Count;
 
+    /// <summary>
+    /// Every parsed shader name, for the editor's shader browser. The keys are the shader paths as the
+    /// <c>.shader</c> files declare them, which is exactly what a face's <c>Material</c> holds.
+    /// </summary>
+    public IEnumerable<string> ShaderNames() => _shaders.Keys;
+
     // -------------------------------------------------------------------------------------------------
     //  Shader dictionary
     // -------------------------------------------------------------------------------------------------

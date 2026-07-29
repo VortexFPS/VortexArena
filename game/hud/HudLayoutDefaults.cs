@@ -101,6 +101,9 @@ public static class HudLayoutDefaults
         // frame, like the other port extras above.
         ["editormenu"]   = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
         ["editoraction"] = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
+        // The editor's dialogs (entity palette, key inspector, shader browser). Centres itself in the
+        // viewport, so like the other editor panels it takes the full rect and draws its own frame.
+        ["editordialog"] = E(0.00f, 0.00f, 1.00f, 1.00f, "0", "", "1", All, CfgNo),
     };
 
     /// <summary>All ids in the table (for cvar registration).</summary>

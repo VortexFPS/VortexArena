@@ -229,9 +229,33 @@ public static class VmapPackage
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentException.ThrowIfNullOrEmpty(dir);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, ManifestSection), SerializeManifest(doc), Utf8NoBom);
-        File.WriteAllText(Path.Combine(dir, GeometrySection), SerializeGeometry(doc), Utf8NoBom);
-        File.WriteAllText(Path.Combine(dir, EntitiesSection), SerializeEntities(doc), Utf8NoBom);
+
+        // Serialize everything BEFORE touching the existing save. A document that throws part-way through —
+        // and the geometry writer walks every brush, so it can — would otherwise have already replaced the
+        // manifest, leaving a package whose sections describe different maps.
+        string manifest = SerializeManifest(doc);
+        string geometry = SerializeGeometry(doc);
+        string entities = SerializeEntities(doc);
+
+        // Written beside the real files and moved into place, rather than written over them. The three
+        // sections are one document: a process that dies between the second and third write would leave new
+        // geometry against old entities, and the mapper would not find out until the next load. Autosave makes
+        // that likelier, not less — it runs unattended, on a timer, while the editor is doing other things.
+        WriteAtomic(Path.Combine(dir, ManifestSection), manifest);
+        WriteAtomic(Path.Combine(dir, GeometrySection), geometry);
+        WriteAtomic(Path.Combine(dir, EntitiesSection), entities);
+    }
+
+    /// <summary>
+    /// Write a file by way of a sibling temporary, so an interrupted write cannot leave a half-written section
+    /// where a readable one used to be. The move is same-directory, which is where a filesystem rename is
+    /// cheapest and closest to atomic.
+    /// </summary>
+    private static void WriteAtomic(string path, string content)
+    {
+        string tmp = path + ".tmp";
+        File.WriteAllText(tmp, content, Utf8NoBom);
+        File.Move(tmp, path, overwrite: true);
     }
 
     /// <summary>Write the package as a single zip file (the shipping layout).</summary>

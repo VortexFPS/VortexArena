@@ -861,6 +861,12 @@ public static class EditorLightBake
         dirSum = NVec3.Zero;
         float r = 0f, g = 0f, b = 0f;
 
+        // The area-light sample targets, allocated ONCE for the whole light loop below. A stackalloc inside
+        // that loop is not released per iteration — the frame keeps growing until the method returns — so it
+        // scales with the number of lights in the cell rather than staying constant. Hoisted out, it is four
+        // vectors regardless, and the loop stops paying for the allocation per light as well.
+        Span<NVec3> areaTargets = stackalloc NVec3[4];
+
         grid.Buckets.TryGetValue(Grid.Cell(position), out List<int>? local);
         int localCount = local?.Count ?? 0;
         int total = localCount + grid.Suns.Length;
@@ -951,14 +957,11 @@ public static class EditorLightBake
                     float spread = l.Radius;
 
                     int unoccluded = 0;
-                    Span<NVec3> targets = stackalloc NVec3[4]
-                    {
-                        l.Position + side * spread,
-                        l.Position - side * spread,
-                        l.Position + up * spread,
-                        l.Position - up * spread,
-                    };
-                    foreach (NVec3 t in targets)
+                    areaTargets[0] = l.Position + side * spread;
+                    areaTargets[1] = l.Position - side * spread;
+                    areaTargets[2] = l.Position + up * spread;
+                    areaTargets[3] = l.Position - up * spread;
+                    foreach (NVec3 t in areaTargets)
                     {
                         System.Threading.Interlocked.Increment(ref RaysTraced);
                         if (!shadows.IsOccluded(from, t))

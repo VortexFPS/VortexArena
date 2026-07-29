@@ -7452,7 +7452,30 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
-        _server.BroadcastEditorOp(line);
+        BroadcastEditorOpGated(line);
+    }
+
+    /// <summary>
+    /// Broadcast an op line under the sim gate.
+    ///
+    /// This runs on the MAIN thread — a mapper's drag, or the per-frame drain — while the sim worker owns the
+    /// world with sv_threaded on. <see cref="ServerNet.BroadcastEditorOp"/> fills ServerNet's shared scratch
+    /// writer and walks its peer dictionary, both of which the worker also touches on its own send paths, so
+    /// going in ungated is the same shape of bug as the cross-thread transport race: two threads in one
+    /// non-thread-safe object, intermittently, under load. Every other main-thread route into ServerNet
+    /// (the host console, the waypoint editor) takes this gate for the same reason.
+    /// </summary>
+    private void BroadcastEditorOpGated(string line)
+    {
+        if (_server is not { } server)
+            return;
+
+        object? gate = server.SimGate;
+        if (gate is null)
+            server.BroadcastEditorOp(line);
+        else
+            lock (gate)
+                server.BroadcastEditorOp(line);
     }
 
     /// <summary>
@@ -7473,7 +7496,7 @@ public sealed partial class NetGame : Node3D
             return;
 
         if (XonoticGodot.Formats.Vmap.VmapOpWire.Serialize(op) is { } line)
-            _server.BroadcastEditorOp(line);
+            BroadcastEditorOpGated(line);
     }
 
     /// <summary>

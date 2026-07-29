@@ -178,6 +178,13 @@ a { color: #e0a458; }
     than as the gesture, an undo that replicates as the state it restored, and one replication choke point
     instead of a send beside each tool. New channel <code>NetControl.EditorOp</code>, protocol v20. The open
     piece is now the document handshake, not the op channel.<br>
+    <b>v1.6 (2026-07-29):</b> branch review. Ten defects fixed (a remote out-of-memory in the op codec, packets
+    corrupted by any sizeable paste, a guest that could not paste at all, a phantom brush id 0 from patch and
+    entity selections, shift-multiselect deselecting instead of adding, every playtest toggle orphaning the
+    entities spawnfuncs derive, an ungated main-thread broadcast into ServerNet, a non-atomic save, A* indexing
+    at -1 on a deleted waypoint, and the editor never reopening a saved <code>.vmap</code>); patches gained a
+    delete. New <b>§13.1</b> audits what is left to be feature-complete — the pipeline is the gap that makes the
+    others secondary.<br>
     Companion screenshots: the current renderer's output of the courtyard map vs. the decorated concept of the same shot (referenced throughout as <b>CURRENT</b> and <b>CONCEPT</b>).
   </div>
 </div></div>
@@ -216,6 +223,7 @@ a { color: #e0a458; }
   <a class="t2" href="#mapselect">12.2 Player-count-aware selection</a>
   <a class="t2" href="#heatmaps">12.3 Demo heatmaps</a>
   <a class="t1" href="#roadmap">13 · Roadmap (editor-first)</a>
+  <a class="t2" href="#editor-gap">13.1 What is left to be feature-complete</a>
   <a class="t1" href="#risks">14 · Risks &amp; open questions</a>
   <a class="t1" href="#appendix">A · DP/NetRadiant capability comparison</a>
 </div>
@@ -1690,6 +1698,68 @@ and can proceed in parallel.</p>
 <p><b>Gates:</b> E0–E2 is the first gate (a <code>.vmap</code> loads, you fly it, you toggle playtest — cheap to reach,
 independently useful). E3 is the editor-thesis gate (convexity risk retired or the tools approach gets rethought).
 D1–D2 is the decoration-thesis gate, unchanged from v0.</p>
+
+<h3 id="editor-gap">13.1 What is left to be feature-complete for map editing <span class="pill alt">audit 2026-07-29</span></h3>
+
+<p>E0–E8 built the editor as a thing you can <i>use</i>. This is what stands between that and a mapper being able
+to make a Vortex Arena map with it and nothing else. Ordered by what blocks what, not by size.</p>
+
+<h4>The pipeline — nothing authored here can leave the editor</h4>
+
+<p>This is the gap that makes every other one secondary. The importers run one way: <code>.bsp</code> and
+<code>.map</code> go IN (<code>BspToVmap</code>, <code>MapSourceReader</code>) and nothing comes out. There is no
+<code>.vmap</code> to <code>.bsp</code> compiler and no <code>.map</code> writer, so an edited map is playable only
+inside the editor gametype, on the machine holding the package.</p>
+
+<p>Two routes, and they are not alternatives so much as different amounts of ambition:</p>
+
+<ul>
+  <li><b>Write <code>.map</code> and let q3map2 compile it.</b> Cheapest by a wide margin and the obvious first
+      move: a brush is already a plane set and a patch is already a control grid, so both are near-direct writes
+      into a format q3map2 and NetRadiant already read. It buys the whole existing toolchain — vis, lightmaps,
+      lightgrid, bot navigation — plus interoperability with every Xonotic mapper alive. The editor stops being a
+      closed loop the moment this exists.</li>
+  <li><b>Make <code>.vmap</code> playable in this engine directly.</b> Collision already builds from a document
+      (<code>VmapCollisionBuilder</code>), so the missing pieces are visibility and light: <code>BspPvs</code> is
+      the only PVS source and <code>BspData.LightGrid</code> the only lightgrid, and a document has neither. The
+      editor's own vertex bake (<code>EditorLightBake</code>) is a preview, not a shippable lightmap. Bigger, and
+      the payoff is a format that does not need a compile step at all.</li>
+</ul>
+
+<h4>Editing operations a mapper would expect and will not find</h4>
+
+<ul>
+  <li><b>Brush entities cannot be CREATED.</b> They import and their keys edit, but nothing turns a selection into
+      a <code>func_door</code>. Every dynamic element in a Xonotic map — doors, platforms, movers, triggers — is a
+      brush entity, so the editor can currently author only static geometry and point entities. This is the
+      largest single hole after the pipeline, and it is small: an op that assigns selected brush and patch ids to
+      a new entity, which the ownership plumbing already supports everywhere else.</li>
+  <li><b>No CSG.</b> Subtract, merge and hollow/room are Radiant's carving workflow and none of the three exist.
+      The clipper covers some of the same ground by hand; subtract in particular does not have a workaround.</li>
+  <li><b>No texture lock.</b> <code>TranslateBrushesOp</code> moves the planes and leaves the texture projection
+      alone, so a moved brush slides its texture across itself and alignment work is lost on every move. Paste
+      already does the right thing (it offsets the projection with the geometry), so the behaviour is currently
+      inconsistent as well as wrong for the common case. Wants a cvar, because Radiant treats it as a preference
+      — but the default should be ON, which is the modern NetRadiant default and what preserves work.</li>
+  <li><b>No grouping, layers, region or hide/isolate.</b> On the 2666-brush import of <i>fuse</i> there is no way
+      to narrow what you are working on. Region is the one that matters most: it also bounds what gets rebuilt.</li>
+</ul>
+
+<h4>Workflow and finish</h4>
+
+<ul>
+  <li><b>The texture browser is a name list.</b> Grouped by path segment and searchable, but no thumbnails — and
+      picking a wall texture from a list of strings is not how anyone works.</li>
+  <li><b>No document handshake for a co-editing guest</b> (§11.7): a guest imports the map itself rather than
+      receiving the host's document, so a host editing a saved <code>.vmap</code> and a guest importing the
+      <code>.bsp</code> would number brushes differently. It says so on join instead of diverging in silence.</li>
+  <li><b>A guest has no undo of its own.</b> Undo is the host's journal; a guest submits and watches. Fine for
+      one authoritative mapper plus helpers, wrong for two peers.</li>
+  <li><b>Nothing here has been driven by hand.</b> Every op and both replication directions are under test, and
+      the interaction layer — menus, handle grabbing, drag feel, the readouts — has been built and never once
+      operated by a human. That is the cheapest remaining source of surprises, and no amount of unit testing
+      substitutes for it.</li>
+</ul>
 
 <!-- ══════════════════════════ 13 · RISKS ══════════════════════════ -->
 <h2 id="risks"><span class="secno">14</span>Risks &amp; open questions</h2>

@@ -18,10 +18,10 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:nb_Initialize"
       - "common/gametypes/gametype/nexball/sv_nexball.qc:nb_delayedinit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:Activate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:MeterPeriod"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:SeedTeamsFromGoals + PresentTeams"
-      - "src/XonoticGodot.Server/GameWorld.cs:3034 (GameStartTime sync), 3035 (SeedTeamsFromGoals)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:MeterPeriod"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:SeedTeamsFromGoals + PresentTeams"
+      - "src/VortexArena.Server/GameWorld.cs:3034 (GameStartTime sync), 3035 (SeedTeamsFromGoals)"
     constants:
       - { name: "g_nexball_meter_period", base: "1 (rint(period*32)/32, min 2 if <=0)", port: "MathF.Round(meter*32)/32, min 2 if <=0", match: true }
       - { name: "g_nexball_radar_showallplayers", base: "1 (radar_showenemies)", port: "Api.Cvars.Set(radar_showenemies, cvar!=0) in Activate", match: true }
@@ -48,7 +48,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:nb_ScoreRules"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:Activate"
     constants: []
     status:
       logic: faithful
@@ -71,9 +71,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:GoalTouch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:GoalTouch"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:GoalTouchEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:ScoreGoal"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:GoalTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:GoalTouchEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:ScoreGoal"
     constants:
       - { name: "delay_goal", base: "3 s (0 for OUT)", port: "3 s (DelayGoal; *0 for OUT)", match: true }
       - { name: "goal noise (score)", base: "ctf/respawn.wav", port: "NB_GOAL (ctf/respawn)", match: true }
@@ -103,10 +103,10 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:nb_Initialize (GameRules_limit_score / GameRules_limit_lead)"
       - "common/gametypes/gametype/nexball/nexball.qh:gametype_init pointlimit=5"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:GoalLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:GoalLeadLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:CheckGoalLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:3037 (CheckGoalLimit per-frame)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:GoalLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:GoalLeadLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:CheckGoalLimit"
+      - "src/VortexArena.Server/GameWorld.cs:3037 (CheckGoalLimit per-frame)"
     constants:
       - { name: "g_nexball_goallimit / pointlimit", base: "5 (mapinfo default)", port: "5 (DefaultGoalLimit)", match: true }
       - { name: "timelimit", base: "20", port: "engine timelimit (not nexball-specific)", match: true }
@@ -132,7 +132,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:nb_ScoreRules (ST_NEXBALL_GOALS ranking primary)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:ReportsTie"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:ReportsTie"
     constants: []
     status:
       logic: faithful
@@ -156,11 +156,11 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:SpawnBall"
       - "common/gametypes/gametype/nexball/sv_nexball.qc:spawnfunc(nexball_basketball/football)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:SpawnBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:RelocateNexball"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:SpawnForGametype + BallConfig.WithKindDefaults"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:NexballBasketball/Football + Ball* aliases"
-      - "src/XonoticGodot.Server/GameWorld.cs:2885-2896 (WireObjectiveSpawns Nexball arm)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:SpawnBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:RelocateNexball"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:SpawnForGametype + BallConfig.WithKindDefaults"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:NexballBasketball/Football + Ball* aliases"
+      - "src/VortexArena.Server/GameWorld.cs:2885-2896 (WireObjectiveSpawns Nexball arm)"
     constants:
       - { name: "BALL_MINS/MAXS", base: "+/-16", port: "+/-16", match: true }
       - { name: "ball model", base: "models/nexball/ball.md3 scale 1.3", port: "models/nexball/ball.md3 set (scale 1.3 not applied)", match: false }
@@ -191,11 +191,11 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:InitBall"
       - "common/gametypes/gametype/nexball/sv_nexball.qc:ResetBall"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:BallThink"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:InitBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:ResetBall"
-      - "src/XonoticGodot.Server/GameWorld.cs:3034 (nb.GameStartTime = GameStartTime)"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:RunThink + MoveTypePhysics.RunEntity (drives the think each tick)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:BallThink"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:InitBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:ResetBall"
+      - "src/VortexArena.Server/GameWorld.cs:3034 (nb.GameStartTime = GameStartTime)"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:RunThink + MoveTypePhysics.RunEntity (drives the think each tick)"
     constants:
       - { name: "g_nexball_delay_start", base: "3 s", port: "3 s (DelayStart)", match: true }
       - { name: "g_nexball_delay_idle", base: "10 s", port: "10 s (DelayIdle)", match: true }
@@ -224,7 +224,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:football_touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:FootballTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:FootballTouch"
     constants:
       - { name: "g_nexball_football_physics", base: "2 (view-independent, default)", port: "2 (FootballPhysics; modes -1/1/2/0 all branched)", match: true }
       - { name: "g_nexball_football_boost_forward", base: "100", port: "100 (FootballBoostForward)", match: true }
@@ -253,7 +253,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:basketball_touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:BasketballTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:BasketballTouch"
     constants:
       - { name: "g_nexball_delay_collect", base: "0.5 s", port: "0.5 s (DelayCollect)", match: true }
     status:
@@ -277,8 +277,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:GiveBall"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:GiveBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:SaveAndApplyNexballWeapons"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:GiveBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:SaveAndApplyNexballWeapons"
     constants:
       - { name: "g_nexball_basketball_delay_hold_forteam", base: "60 s", port: "60 s (DelayHoldForTeam)", match: true }
       - { name: "g_nexball_basketball_delay_hold", base: "20 s", port: "20 s (DelayHold; arms DropOwnerThink)", match: true }
@@ -308,12 +308,12 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:DropOwner"
       - "common/gametypes/gametype/nexball/sv_nexball.qc:MUTATOR_HOOKFUNCTION(nb,PlayerDies/ClientDisconnect/MakePlayerObserver/DropSpecialItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:DropBall(org,vel)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:DropBall(carrier)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:DropOwner / DropOwnerThink"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:OnPlayerRemoved"
-      - "src/XonoticGodot.Server/ClientManager.cs:517 (PutObserverInServer), 770 (ClientDisconnect)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:DropBall(org,vel)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:DropBall(carrier)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:DropOwner / DropOwnerThink"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:OnPlayerRemoved"
+      - "src/VortexArena.Server/ClientManager.cs:517 (PutObserverInServer), 770 (ClientDisconnect)"
     constants:
       - { name: "g_nexball_basketball_delay_hold", base: "20 s (DropOwner think)", port: "20 s (DelayHold)", match: true }
       - { name: "DropOwner shove", base: "('0 0 0.75' - v_forward) * 1000", port: "(0,0,0.75 - fwd) * 1000", match: true }
@@ -341,11 +341,11 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:nexball_setstatus"
       - "common/gametypes/gametype/nexball/sv_nexball.qc:MUTATOR_HOOKFUNCTION(nb,PlayerPhysics_UpdateStats)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:CarryFrame"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:UpdateSafePassLock"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:OnPlayerPhysics + CarrierHighspeed"
-      - "src/XonoticGodot.Server/GameWorld.cs:3403 (CarryFrame)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs (MutatorHooks.PlayerPhysics.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:CarryFrame"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:UpdateSafePassLock"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:OnPlayerPhysics + CarrierHighspeed"
+      - "src/VortexArena.Server/GameWorld.cs:3403 (CarryFrame)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs (MutatorHooks.PlayerPhysics.Call)"
     constants:
       - { name: "g_nexball_basketball_carrier_highspeed", base: "0.8", port: "0.8 (DefaultCarrierHighspeed; cvar-read via CarrierHighspeed)", match: true }
       - { name: "g_nexball_viewmodel_offset", base: "8 8 0", port: "8 8 0 (ViewModelOffset)", match: true }
@@ -377,8 +377,8 @@ features:
       - "common/gametypes/gametype/nexball/sv_weapon.qc:W_Nexball_Attack/Attack2/Touch/Think"
       - "common/gametypes/gametype/nexball/weapon.qh:BallStealer (REGISTER_WEAPON NEXBALL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/BallStealer.cs:WrThink/DoLaunch/DoSecondary/TackleTouch"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:LaunchBall/StealBall/HomingThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/BallStealer.cs:WrThink/DoLaunch/DoSecondary/TackleTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:LaunchBall/StealBall/HomingThink"
     constants:
       - { name: "g_balance_nexball_primary_speed", base: "1000", port: "1000 (DefaultPrimarySpeed; cvar-read)", match: true }
       - { name: "g_balance_nexball_primary_refire", base: "0.7 s", port: "0.7 (DefaultPrimaryRefire)", match: true }
@@ -413,8 +413,8 @@ features:
       - "common/gametypes/gametype/nexball/sv_weapon.qc:wr_think (NB_METERSTART)"
       - "common/gametypes/gametype/nexball/sv_weapon.qc:W_Nexball_Attack (mul triangle wave)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/BallStealer.cs:WrThink (NbMeterStart) + DoLaunch (triangle wave)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:MeterPeriod / MeterEnabled"
+      - "src/VortexArena.Common/Gameplay/Weapons/BallStealer.cs:WrThink (NbMeterStart) + DoLaunch (triangle wave)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:MeterPeriod / MeterEnabled"
     constants:
       - { name: "g_nexball_basketball_meter", base: "1", port: "cvar-read (Nexball.MeterEnabled; default 1)", match: true }
       - { name: "g_nexball_meter_period", base: "1 s (rounded 1/32)", port: "MeterPeriod computed (rounded 1/32)", match: true }
@@ -443,9 +443,9 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:football_touch/basketball_touch/InitBall/GoalTouch (_sound)"
       - "common/gametypes/gametype/nexball/sv_weapon.qc:W_Nexball_Attack/Touch (SND_NB_SHOOT1/SHOOT2/STEAL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:BasketballTouch/FootballTouch (NB_BOUNCE), InitBall (NB_DROP), GoalTouch (NB_GOAL/TYPEHIT)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/BallStealer.cs:DoLaunch/DoSecondary (NB_SHOOT1/SHOOT2), TackleTouch (NB_STEAL)"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs:109-116 (NB_BOUNCE/DROP/GOAL/SHOOT1/SHOOT2/STEAL)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:BasketballTouch/FootballTouch (NB_BOUNCE), InitBall (NB_DROP), GoalTouch (NB_GOAL/TYPEHIT)"
+      - "src/VortexArena.Common/Gameplay/Weapons/BallStealer.cs:DoLaunch/DoSecondary (NB_SHOOT1/SHOOT2), TackleTouch (NB_STEAL)"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs:109-116 (NB_BOUNCE/DROP/GOAL/SHOOT1/SHOOT2/STEAL)"
     constants:
       - { name: "g_nexball_sound_bounce", base: "1 (gate on the bounce noise)", port: "honored: _bounceSoundEnabled gates NB_BOUNCE per SpawnBall (default 1)", match: true }
       - { name: "bounce sound (noise)", base: "SND(NB_BOUNCE)", port: "NB_BOUNCE", match: true }
@@ -475,7 +475,7 @@ features:
       - "common/gametypes/gametype/nexball/cl_nexball.qc:WantEventchase / DrawScoreboardAccuracy / DrawScoreboardItemStats"
     port_refs:
       - "game/hud/ModIconsPanel.cs:DrawNexBall + NexBallCarrying (the blinking nexball_carrying carry icon + expand transition)"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:Kind.NexBall (Capture writes the carrier net id; Deserialize reads it)"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:Kind.NexBall (Capture writes the carrier net id; Deserialize reads it)"
       - "game/net/ServerNet.cs:1939 (GametypeStatusBlock.Capture per snapshot)"
       - "game/net/NetGame.cs:4473 (decode Kind.NexBall -> panel.NexBallCarrying vs LocalNetId)"
     constants:
@@ -506,8 +506,8 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:spawnfunc(nexball_fault/out) + ball_redgoal/bluegoal compat"
       - "common/gametypes/gametype/nexball/sv_nexball.qh:GOAL_FAULT=-1, GOAL_OUT=-2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:GoalFault(-2)/GoalOut(-3)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:NexballFault/Out + BallRedGoal/BallBlueGoal swap"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:GoalFault(-2)/GoalOut(-3)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:NexballFault/Out + BallRedGoal/BallBlueGoal swap"
     constants:
       - { name: "GOAL_FAULT", base: "-1", port: "-2", match: false }
       - { name: "GOAL_OUT", base: "-2", port: "-3", match: false }
@@ -535,9 +535,9 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:MUTATOR_HOOKFUNCTION(nb,WantWeapon)"
       - "common/gametypes/gametype/nexball/sv_nexball.qc:MUTATOR_HOOKFUNCTION(nb,SpectateCopy) (NB_METERSTART)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:OnPlayerPreThink + RestoreWeapons"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:SaveAndApplyNexballWeapons"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:OnPlayerPreThink + RestoreWeapons"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:SaveAndApplyNexballWeapons"
     constants: []
     status:
       logic: partial
@@ -566,9 +566,9 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:MUTATOR_HOOKFUNCTION(nb,ForbidThrowCurrentWeapon)"
       - "common/gametypes/gametype/nexball/sv_nexball.qc:MUTATOR_HOOKFUNCTION(nb,ForbidDropCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:OnFilterItem"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:OnItemTouch"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:OnForbidThrowCurrentWeapon"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:OnFilterItem"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:OnItemTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:OnForbidThrowCurrentWeapon"
     constants: []
     status:
       logic: partial
@@ -592,7 +592,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:spawnfunc(nexball_basketball/football) (bouncefactor/bouncestop/pushable)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:BallConfig.WithKindDefaults (BounceFactor/BounceStop/Pushable)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:BallConfig.WithKindDefaults (BounceFactor/BounceStop/Pushable)"
     constants:
       - { name: "g_nexball_basketball_bouncefactor / g_nexball_football_bouncefactor", base: "0.6 (both)", port: "0.6 (WithKindDefaults default; NOT cvar-read)", match: true }
       - { name: "g_nexball_basketball_bouncestop / g_nexball_football_bouncestop", base: "0.075 (both)", port: "0.075 (WithKindDefaults default; NOT cvar-read)", match: true }
@@ -621,7 +621,7 @@ features:
       - "common/gametypes/gametype/nexball/sv_nexball.qc:DropBall / SpawnBall (WaypointSprite_Spawn WP_NbBall '0 0 64')"
       - "common/gametypes/gametype/nexball/sv_nexball.qc:SpawnGoal (WaypointSprite_SpawnFixed WP_NbGoal) + nb_Goal_Customize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:CollectWaypoints"
       - "game/net/ServerNet.cs:1103 (SendWaypoints -> GameType.CollectWaypoints), :492 (per-frame send)"
     constants:
       - { name: "WP_NbBall carrier offset / radaricon", base: "AttachCarrier, RADARICON_FLAGCARRIER", port: "Owner=carrier, RadarIcon=1 (FLAGCARRIER)", match: true }

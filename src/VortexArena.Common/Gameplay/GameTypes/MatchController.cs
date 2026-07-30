@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// A callback the active gametype fires when a kill is scored, so a host/controller can react without the
@@ -18,7 +18,7 @@ public interface IMatchEvents
 /// the player roster, wires spawning to <see cref="SpawnSystem"/>, and on each <see cref="Tick"/> respawns
 /// players whose <see cref="Player.RespawnTime"/> has elapsed.
 ///
-/// This is deliberately host-agnostic: it touches only <see cref="XonoticGodot.Common"/> APIs (Api.Clock for
+/// This is deliberately host-agnostic: it touches only <see cref="VortexArena.Common"/> APIs (Api.Clock for
 /// time, the gametype's scoring, SpawnSystem for placement), so it runs headless in the deterministic sim
 /// and under the Godot host alike.
 /// </summary>

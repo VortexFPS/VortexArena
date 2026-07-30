@@ -1,16 +1,16 @@
 using System.Numerics;
 using System.Text.Json;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// MOVEMENT-PARITY / GOLDEN-TRACE tests (REMAINING-WORK §6: "Golden-trace corpus from Darkplaces" +
-/// "Movement-parity tests"). Each fixture in <c>tests/XonoticGodot.Tests/golden/*.json</c> was produced by
+/// "Movement-parity tests"). Each fixture in <c>tests/VortexArena.Tests/golden/*.json</c> was produced by
 /// <c>tools/movement-ref/movement_ref.c</c> — an INDEPENDENT C reference transcribed line-for-line from the
 /// preprocessed Xonotic QuakeC the Darkplaces engine runs (<c>.tmp/server.txt</c>). We replay each fixture's
 /// exact per-tick input sequence through the ported <see cref="PlayerPhysics"/> and assert the trajectory
@@ -55,9 +55,9 @@ public class MovementParityTests
         // The C reference runs the bare physics with no mutators. Other tests in the suite may have left
         // mutator handlers (multijump/bloodloss/…) on these global chains, which the jump/crouch paths call;
         // clear them so the parity sim is hermetic regardless of test order.
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         var world = AnalyticWorld.FromPlanes(g.World);
         var clock = new MutableClock();

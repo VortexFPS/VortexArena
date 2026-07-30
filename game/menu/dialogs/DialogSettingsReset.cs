@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// "Factory reset" confirm popup — a faithful C# port of <c>XonoticResetDialog</c>

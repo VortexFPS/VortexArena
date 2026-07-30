@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Threading;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>The canonical float-vector string parser (VecParse) — the shared replacement for the ~9 private
 /// per-file copies. Pins the semantics new call sites rely on: invariant culture, WHITESPACE separators,

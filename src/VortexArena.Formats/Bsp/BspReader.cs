@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Bsp;
+namespace VortexArena.Formats.Bsp;
 
 /// <summary>
 /// Parses an IBSP v46/47/48 (Quake 3 / Darkplaces) map from a raw byte buffer into <see cref="BspData"/>.

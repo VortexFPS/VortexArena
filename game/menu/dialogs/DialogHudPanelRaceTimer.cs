@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Race-timer HUD panel config — a faithful C# port of <c>XonoticHUDRaceTimerDialog_fill</c>
@@ -13,7 +13,7 @@ namespace XonoticGodot.Game.Menu;
 /// then the universal Back. Every control binds the same <c>hud_panel_racetimer</c>/<c>_bg*</c> cvar the QC
 /// binds.
 ///
-/// FAITHFUL UI NOW: the <c>hud_panel_racetimer*</c> cvars drive the in-game HUD renderer/editor XonoticGodot has not
+/// FAITHFUL UI NOW: the <c>hud_panel_racetimer*</c> cvars drive the in-game HUD renderer/editor VortexArena has not
 /// wired yet, but the bindings are REAL (they write the shared <see cref="MenuState.Cvars"/> store). No
 /// apply/command button exists (just Back). The Color row is a string color picker (no toolkit factory → a
 /// Godot <see cref="ColorPickerButton"/> bound to the same cvar, noted).

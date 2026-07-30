@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 
-namespace XonoticGodot.Common.Diagnostics;
+namespace VortexArena.Common.Diagnostics;
 
 /// <summary>
 /// A tiny, allocation-free subsystem timing primitive shared by every layer (Common/Engine/Server AND the Godot

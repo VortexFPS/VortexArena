@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Survival gametype — port of <c>CLASS(Survival, Gametype)</c>
@@ -235,7 +235,7 @@ public sealed class Survival : GameType
     /// the count comes from <c>g_survival_hunter_count</c> (≥1 = absolute, &lt;1 = a fraction of the live total)
     /// bounded to at least 1 and at most (live − 1). The hunter subset is a RANDOM selection over the live
     /// players (QC FOREACH_CLIENT_RANDOM — an inside-out Fisher–Yates shuffle via the seeded
-    /// <see cref="XonoticGodot.Common.Math.Prandom"/> facade), NOT the first roster slots. Everyone starts as
+    /// <see cref="VortexArena.Common.Math.Prandom"/> facade), NOT the first roster slots. Everyone starts as
     /// prey and alive; the chosen subset becomes hunters. Also clears any prior round result.
     /// </summary>
     public void AssignRoles(IReadOnlyList<Player> roster)
@@ -271,7 +271,7 @@ public sealed class Survival : GameType
         var shuffled = new Player[playercount];
         for (int cnt = 0; cnt < playercount; cnt++)
         {
-            int j = (int)System.MathF.Floor(XonoticGodot.Common.Math.Prandom.Float() * (cnt + 1));
+            int j = (int)System.MathF.Floor(VortexArena.Common.Math.Prandom.Float() * (cnt + 1));
             if (j > cnt) j = cnt; // guard: random() can theoretically reach the open bound after float rounding
             if (j != cnt)
                 shuffled[cnt] = shuffled[j];

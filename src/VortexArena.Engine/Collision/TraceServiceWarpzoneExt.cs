@@ -1,7 +1,7 @@
 // Port of Base/data/xonotic-data.pk3dir/qcsrc/lib/warpzone/common.qc + server.qc — the HOST-SIDE bridge half.
 //
 // The warpzone-aware trace RECURSION itself (WarpZone_TraceBox/_TraceLine/_FindRadius, the 16-zone guard, the
-// transform accumulator) lives in XonoticGodot.Common.Gameplay (WarpzoneTrace / WarpzoneRadiusQuery), because
+// transform accumulator) lives in VortexArena.Common.Gameplay (WarpzoneTrace / WarpzoneRadiusQuery), because
 // the gameplay code that fires the traces (WeaponFiring / WeaponSplash) is in Common and Common must NOT depend
 // on Engine (the project reference points Engine → Common, never the reverse). This Engine-side file is the thin
 // bridge that lets the concrete TraceService publish THIS world's warpzone manager (QC global g_warpzones) to
@@ -10,9 +10,9 @@
 //
 // SCOPE (T45, combat-traversal half): hitscan/projectile traces + radius-damage cross seamless portals. The
 // CLIENT portal SubViewport RENDER is OUT OF SCOPE this pass (headless-unverifiable, NetGame.cs owned elsewhere).
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Engine.Collision;
+namespace VortexArena.Engine.Collision;
 
 /// <summary>
 /// Host-side warpzone bridge for <see cref="TraceService"/>. The trace service holds the concrete map collision,

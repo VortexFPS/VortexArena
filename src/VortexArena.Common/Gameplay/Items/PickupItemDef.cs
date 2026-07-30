@@ -10,9 +10,9 @@
 // here means no existing file is modified.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The world-item bounding boxes — port of the <c>const vector ITEM_*</c> in common/items/item.qh.
@@ -49,6 +49,15 @@ public abstract partial class Pickup
 
     /// <summary>The pickup sound name played on the toucher (QC item_pickupsound). Convenience over ItemDef.</summary>
     public string PickupSoundName => ItemDef.PickupSound;
+
+    /// <summary>
+    /// QC <c>m_icon</c> — the item's bare HUD skin icon name (<c>gfx/hud/&lt;skin&gt;/&lt;icon&gt;</c>), e.g.
+    /// "health_mega", "armor_big", "ammo_rockets", "strength". Used by the scoreboard's Item stats grid
+    /// (Scoreboard_ItemStats_Draw) and as the key of the per-player pickup tally. Most defs' <see cref="NetName"/>
+    /// already IS the icon name (Base derives both from the same item name); the ammo defs and a couple of
+    /// powerups differ, so they override this.
+    /// </summary>
+    public virtual string Icon => NetName;
 
     // --- world-item bbox (QC m_mins / m_maxs ATTRIBs) -------------------------------------------------
     /// <summary>QC <c>m_mins</c> — the world-item bbox minimum (StartItem setsize). Defaults to the small box.</summary>

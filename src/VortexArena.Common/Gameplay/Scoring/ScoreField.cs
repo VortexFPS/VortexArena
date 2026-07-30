@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay.Scoring;
+namespace VortexArena.Common.Gameplay.Scoring;
 
 /// <summary>
 /// The per-field sort/display flags — the C# successor to the QuakeC <c>SFL_*</c> bitset

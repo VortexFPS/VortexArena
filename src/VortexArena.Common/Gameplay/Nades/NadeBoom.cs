@@ -21,11 +21,11 @@
 
 using System.Numerics;
 using System.Reflection;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades;
+namespace VortexArena.Common.Gameplay.Nades;
 
 /// <summary>
 /// A per-type nade detonation handler — the C# successor to QuakeC's <c>nade_&lt;type&gt;_boom(entity)</c>.

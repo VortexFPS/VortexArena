@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay.Waypoints;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Game.Hud;   // HudSkin, TextureCache, HudPanel.HudFont
+using VortexArena.Common.Gameplay.Waypoints;
+using VortexArena.Common.Services;
+using VortexArena.Game.Hud;   // HudSkin, TextureCache, HudPanel.HudFont
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The 3D in-world waypoint sprites (client draw) — the C# port of QuakeC's <c>Draw_WaypointSprite</c>
@@ -39,10 +39,10 @@ public partial class WaypointSpriteLayer : Control
     private const int DefFontSize = 13;       // g_waypointsprite_fontsize fallback (QC default is 12)
 
     // ---- live g_waypointsprite_* / cl_hidewaypoints reads (QC WaypointSprite_Load + Draw_WaypointSprite) ----
-    private static bool HasCvars => XonoticGodot.Common.Services.Api.Services is not null;
+    private static bool HasCvars => VortexArena.Common.Services.Api.Services is not null;
     private static float CvarF(string name, float fallback)
-        => HasCvars ? XonoticGodot.Common.Services.Api.Cvars.GetFloat(name) : fallback;
-    private static bool CvarOn(string name) => HasCvars && XonoticGodot.Common.Services.Api.Cvars.GetFloat(name) != 0f;
+        => HasCvars ? VortexArena.Common.Services.Api.Cvars.GetFloat(name) : fallback;
+    private static bool CvarOn(string name) => HasCvars && VortexArena.Common.Services.Api.Cvars.GetFloat(name) != 0f;
 
     public override void _Ready() => MouseFilter = MouseFilterEnum.Ignore; // QC hud_cursormode off
 

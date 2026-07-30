@@ -17,9 +17,9 @@ features:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:REGISTER_MUTATOR"
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:MUTATOR_ONADD"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:Hook"
-      - "src/XonoticGodot.Server/GameWorld.cs:614 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:Hook"
+      - "src/VortexArena.Server/GameWorld.cs:614 (MutatorActivation.Apply)"
       - "game/net/NetGame.cs:902/938 (WireSandbox → Store)"
     constants:
       - { name: "g_sandbox", base: "0", port: "0", match: true }
@@ -51,9 +51,9 @@ features:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectSpawn"
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:SV_ParseClientCommand(object_spawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_spawn)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdSandbox"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_spawn)"
+      - "src/VortexArena.Server/Commands.cs:CmdSandbox"
       - "game/net/NetGame.cs:SandboxTraceProvider"
     constants:
       - { name: "g_sandbox_editor_distance_spawn", base: "200", port: "200", match: true }
@@ -90,8 +90,8 @@ features:
     base_refs:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectFunction_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectThink"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:OnStartFrame"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:OnStartFrame"
       - "game/net/NetGame.cs:WireSandbox (CryptoIdfpProvider/RealClientsProvider)"
     constants:
       - { name: "g_sandbox_editor_free", base: "1", port: "1", match: true }
@@ -123,10 +123,10 @@ features:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectFunction_Touch"
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:180 (settouch wiring)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectTouch"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:204 (e.Edict.Touch = ObjectTouch wiring in ObjectSpawn)"
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:107 (Impact dual-dispatch e1.Touch)"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:243 (RunEntity over all edicts)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:204 (e.Edict.Touch = ObjectTouch wiring in ObjectSpawn)"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:107 (Impact dual-dispatch e1.Touch)"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:243 (RunEntity over all edicts)"
     constants:
       - { name: "g_sandbox_object_material_velocity_min", base: "100", port: "100", match: true }
       - { name: "g_sandbox_object_material_velocity_factor", base: "0.002", port: "0.002", match: true }
@@ -160,7 +160,7 @@ features:
     base_refs:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectEdit_Get"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectEditGet"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectEditGet"
       - "game/net/NetGame.cs:SandboxTraceProvider"
     constants:
       - { name: "g_sandbox_editor_distance_edit", base: "300", port: "300", match: true }
@@ -187,7 +187,7 @@ features:
     base_refs:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:SV_ParseClientCommand(object_edit)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_edit)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_edit)"
     constants:
       - { name: "solidity_map", base: "0->SOLID_TRIGGER / 1->SOLID_BBOX", port: "0->Trigger / 1->BBox", match: true }
       - { name: "physics_map", base: "0->MOVETYPE_NONE(0) / 1->MOVETYPE_TOSS(6) / 2->MOVETYPE_PHYSICS(32)", port: "0->None(0) / 1->Toss(6) / 2->Physics(32)", match: true }
@@ -217,7 +217,7 @@ features:
     base_refs:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectEdit_Scale"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectEditScale"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectEditScale"
     constants:
       - { name: "g_sandbox_object_scale_min", base: "0.1", port: "0.1", match: true }
       - { name: "g_sandbox_object_scale_max", base: "2", port: "2", match: true }
@@ -247,9 +247,9 @@ features:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectAttach_Remove"
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:SV_ParseClientCommand(object_attach)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectAttachSet"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectAttachRemove"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_attach)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectAttachSet"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectAttachRemove"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_attach)"
     constants:
       - { name: "attach_movetype", base: "MOVETYPE_FOLLOW(12)", port: "MoveType.Follow(12)", match: true }
       - { name: "attach_solid", base: "SOLID_NOT", port: "Solid.Not", match: true }
@@ -279,8 +279,8 @@ features:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectRemove"
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:SV_ParseClientCommand(object_remove)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectRemove"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_remove)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectRemove"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_remove)"
     constants: []
     status:
       logic: faithful
@@ -307,9 +307,9 @@ features:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectPort_Save"
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_ObjectPort_Load"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_duplicate)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectPortSave"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectPortLoad"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_duplicate)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectPortSave"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:ObjectPortLoad"
     constants:
       - { name: "clipboard_cvar", base: "cl_sandbox_clipboard", port: "cl_sandbox_clipboard", match: true }
     status:
@@ -338,8 +338,8 @@ features:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:SV_ParseClientCommand(object_claim)"
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:SV_ParseClientCommand(object_info)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_claim)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_info)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_claim)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand(object_info)"
     constants: []
     status:
       logic: faithful
@@ -367,9 +367,9 @@ features:
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:sandbox_Database_Load"
       - "common/mutators/mutator/sandbox/sv_sandbox.qc:MUTATOR_HOOKFUNCTION(sandbox, SV_StartFrame)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:DatabaseSave"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:DatabaseLoad"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:OnStartFrame"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:DatabaseSave"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:DatabaseLoad"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:OnStartFrame"
       - "game/net/NetGame.cs:SandboxObjectStore"
     constants:
       - { name: "g_sandbox_storage_name", base: "default", port: "default", match: true }
@@ -430,8 +430,8 @@ features:
       - "server/mutators/events.qh:Sandbox_SaveAllowed"
       - "server/mutators/events.qh:Sandbox_EditAllowed"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand (ReadOnly + FireSandboxEditAllowed gate)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:1121/1142/1165 (SandboxDragAllowed/SaveAllowed/EditAllowed hook chains + Fire* dispatchers :1128/1148/1172)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:HandleCommand (ReadOnly + FireSandboxEditAllowed gate)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:1121/1142/1165 (SandboxDragAllowed/SaveAllowed/EditAllowed hook chains + Fire* dispatchers :1128/1148/1172)"
     constants:
       - { name: "g_sandbox_readonly", base: "0", port: "0", match: true }
       - { name: "g_sandbox_info", base: "1", port: "1", match: true }

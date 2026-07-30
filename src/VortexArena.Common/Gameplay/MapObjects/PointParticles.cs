@@ -14,10 +14,10 @@
 //  * .noise (a per-emission positional sound) and bgmscript ADSR are out of scope (documented residual).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary><c>func_pointparticles</c> / <c>func_sparks</c>. Registered by <see cref="MapObjectsRegistry"/>.</summary>
 public static class PointParticles

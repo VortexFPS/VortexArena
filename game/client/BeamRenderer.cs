@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Draws lightning arcs and steady energy beams between two world points — the Godot successor to CSQC's

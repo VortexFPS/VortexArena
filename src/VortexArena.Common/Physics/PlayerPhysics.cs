@@ -1,11 +1,11 @@
 using System.Numerics;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Physics;
+namespace VortexArena.Common.Physics;
 
 /// <summary>
 /// The shared, deterministic player-movement simulation — the C# port of Xonotic's per-tick player
@@ -55,7 +55,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
     private const int WaterLevelSubmerged = 3;
 
     // --- engine content/surface bitmasks (Base/darkplaces/bspfile.h SUPERCONTENTS_*, Q3SURFACEFLAG_*).
-    //     Mirrored here as literals: XonoticGodot.Common must not reference XonoticGodot.Engine, and the trace
+    //     Mirrored here as literals: VortexArena.Common must not reference VortexArena.Engine, and the trace
     //     reports these as raw ints on TraceResult.DpHitContents / DpHitQ3SurfaceFlags. ---
     private const int SuperContentsWater = 0x00000010;
     private const int SuperContentsSlime = 0x00000020;
@@ -100,7 +100,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
     /// canonical value the spawn path must seed onto a (re)spawned player's <see cref="Entity.ViewOfs"/> (QC
     /// PutPlayerInServer sets <c>view_ofs = PL_VIEW_OFS</c>). Without it the server player's eye sits at the origin
     /// (ViewOfs 0) until the first crouch-leave edge — firing the shot ~35u too LOW (the "shot low until I crouch
-    /// once" bug). Public so <see cref="XonoticGodot.Common.Gameplay.Player.SpawnSystem"/> seeds the same value.</summary>
+    /// once" bug). Public so <see cref="VortexArena.Common.Gameplay.Player.SpawnSystem"/> seeds the same value.</summary>
     public static readonly Vector3 StandViewOfs = new(0f, 0f, 35f);
     private static readonly Vector3 CrouchViewOfs = new(0f, 0f, 20f);
 
@@ -120,7 +120,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
     /// <summary>
     /// QC <c>SpecialCommand</c> (common/physics/player.qc:582): runs <c>CheatImpulse(CHIMPULSE_GIVE_ALL)</c> when
     /// cheats are allowed (the cvar/maycheat gate lives inside the server impl). The cheat system is server-side
-    /// (<c>XonoticGodot.Server.Cheats</c>), which the shared physics code can't reference, so the server installs
+    /// (<c>VortexArena.Server.Cheats</c>), which the shared physics code can't reference, so the server installs
     /// this seam at boot (GameWorld). Null on the client-prediction path (and in headless unit tests), where the
     /// sequence still decodes/advances but the give-all is a no-op — exactly like Base, whose SpecialCommand body
     /// is <c>#ifdef SVQC</c>.
@@ -134,7 +134,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
     /// it, zeroing the player's movement input and blocking jump while the round has not yet started.
     /// The active round handler lives in the server <c>GameWorld</c>, out of reach of this headless Common
     /// driver, so the host wires it via this static seam (matching the
-    /// <see cref="XonoticGodot.Common.Gameplay.WeaponFireDriver.RoundFireForbidden"/> pattern).
+    /// <see cref="VortexArena.Common.Gameplay.WeaponFireDriver.RoundFireForbidden"/> pattern).
     /// Null when no mode has player_blocked semantics (default). Wire:
     /// <c>GameWorld.ActivateGameType</c> Domination-roundbased arm sets it; the ActivateGameType preamble
     /// clears it before any arm runs.
@@ -200,7 +200,14 @@ public sealed class PlayerPhysics : IPlayerPhysics
         // ("server stopped caring", then a reconcile snap). Nudge to the nearest free spot first. Deterministic
         // and run in the shared client+server sim, so it can't desync. Gated by sv_gameplayfix_nudgeoutofsolid
         // (default ON like DP; set it to 0 to disable).
-        if (Api.Cvars.GetString("sv_gameplayfix_nudgeoutofsolid") != "0")
+        //
+        // NEVER for MOVETYPE_NOCLIP. Being inside solid is the normal, intended state of a noclip mover, not a
+        // fault to recover from — DP routes noclip through SV_Physics_Noclip, a plain linear move that never
+        // nudges. Running the nudge anyway shoves the mover back out of any wall it enters, which is
+        // indistinguishable from collision: it is what made the editor's free-fly camera still feel solid even
+        // though its movetype was right and Integrate was correctly skipping the trace.
+        if (player.MoveType != MoveType.Noclip
+            && Api.Cvars.GetString("sv_gameplayfix_nudgeoutofsolid") != "0")
             NudgeOutOfSolid(player);
 
         // ----- per-frame water detection (QC _Movetype_CheckWater) -----

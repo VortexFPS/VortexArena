@@ -3,11 +3,11 @@
        management, scores, teamplay, round/match flow, voting, and the bot AI. Godot-free so the
        dedicated server runs headless (ADR-0008/0012). References Common (gameplay) + Engine (sim). -->
   <PropertyGroup>
-    <TargetFramework>$(XonoticGodotTfm)</TargetFramework>
-    <RootNamespace>XonoticGodot.Server</RootNamespace>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Server</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\XonoticGodot.Common\XonoticGodot.Common.csproj" />
-    <ProjectReference Include="..\XonoticGodot.Engine\XonoticGodot.Engine.csproj" />
+    <ProjectReference Include="..\VortexArena.Common\VortexArena.Common.csproj" />
+    <ProjectReference Include="..\VortexArena.Engine\VortexArena.Engine.csproj" />
   </ItemGroup>
 </Project>

@@ -18,11 +18,11 @@
 
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Onslaught control-point + generator combat layer (QC sv_onslaught.qc icon/generator funcs). Owned by
@@ -380,11 +380,11 @@ public sealed class OnslaughtControlPoint
             // gib impact at chance damage/220, else ONS_HIT1/2 (random).
             if (Api.Services is not null)
             {
-                if (XonoticGodot.Common.Math.Prandom.Float() < damage / 220f)
+                if (VortexArena.Common.Math.Prandom.Float() < damage / 220f)
                     SoundSystem.PlayOn(self, Sounds.ByName("ONS_GENERATOR_EXPLODE")); // QC SND_ROCKET_IMPACT (port maps ONS explode→grenade_impact)
                 else
                     SoundSystem.PlayOn(self, Sounds.ByName(
-                        XonoticGodot.Common.Math.Prandom.Float() < 0.5f ? "ONS_HIT1" : "ONS_HIT2"));
+                        VortexArena.Common.Math.Prandom.Float() < 0.5f ? "ONS_HIT1" : "ONS_HIT2"));
             }
         }
     }
@@ -676,12 +676,12 @@ public sealed class OnslaughtControlPoint
         if (Api.Services is not null && self.GtObjMaxHealth > 0f)
         {
             float frac = self.GtObjHealth / self.GtObjMaxHealth;
-            if (XonoticGodot.Common.Math.Prandom.Float() < 0.6f - frac)
+            if (VortexArena.Common.Math.Prandom.Float() < 0.6f - frac)
             {
                 // QC re-rolls random() twice here; reproduce the exact branch structure (NOT else-if on one roll).
-                if (XonoticGodot.Common.Math.Prandom.Float() > 0.8f)
+                if (VortexArena.Common.Math.Prandom.Float() > 0.8f)
                     SoundSystem.PlayOn(self, Sounds.ByName("ONS_SPARK1"));
-                else if (XonoticGodot.Common.Math.Prandom.Float() > 0.5f)
+                else if (VortexArena.Common.Math.Prandom.Float() > 0.5f)
                     SoundSystem.PlayOn(self, Sounds.ByName("ONS_SPARK2"));
             }
         }
@@ -743,7 +743,7 @@ public sealed class OnslaughtControlPoint
         // QC ons_ControlPoint_Icon_Damage (sv_onslaught.qc:399-402): a hit sound on every hit (random 1/2).
         if (Api.Services is not null)
             SoundSystem.PlayOn(self, Sounds.ByName(
-                    XonoticGodot.Common.Math.Prandom.Float() < 0.5f ? "ONS_HIT1" : "ONS_HIT2"),
+                    VortexArena.Common.Math.Prandom.Float() < 0.5f ? "ONS_HIT1" : "ONS_HIT2"),
                 SoundLevels.VolBase + 0.3f, SoundLevels.AttenNorm);
 
         if (self.GtObjHealth <= 0f)

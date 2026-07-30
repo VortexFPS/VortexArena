@@ -1,7 +1,7 @@
 # Physics movetypes — parity spec
 
 **Base refs:** `common/physics/movetypes/{movetypes,follow,push,step,toss,walk}.qc` (+ `.qh`)  ·
-**Port refs:** `src/XonoticGodot.Engine/Simulation/{MoveTypePhysics,FlyMove,ClipVelocity}.cs`, `src/XonoticGodot.Engine/Simulation/SimulationLoop.cs`
+**Port refs:** `src/VortexArena.Engine/Simulation/{MoveTypePhysics,FlyMove,ClipVelocity}.cs`, `src/VortexArena.Engine/Simulation/SimulationLoop.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -148,9 +148,9 @@ also drives gibs/casings/projectiles/items/trains via `Movetype_Physics_MatchTic
 | `_Movetype_NudgeOutOfSolid` | `PhysicsContext.TryNudgeOutOfSolid` |
 | `_Movetype_LinkEdict_TouchAreaGrid` | `PhysicsContext.TouchAreaGrid` |
 
-**Layer split:** the integrators live in `XonoticGodot.Engine` (shared/authority); the live driver is the
+**Layer split:** the integrators live in `VortexArena.Engine` (shared/authority); the live driver is the
 server `SimulationLoop`. Player movement is *deliberately excluded* — clients are skipped in step 3 and run
-their own `XonoticGodot.Common.Physics.PlayerPhysics.WalkMove`.
+their own `VortexArena.Common.Physics.PlayerPhysics.WalkMove`.
 
 ## Parity assessment
 

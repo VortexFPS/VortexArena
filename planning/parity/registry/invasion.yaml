@@ -19,8 +19,8 @@ features:
       - "common/gametypes/gametype/invasion/sv_invasion.qh:REGISTER_MUTATOR(inv)"
       - "common/gametypes/gametype/invasion/sv_invasion.qc:invasion_DelayedInit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:Invasion"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:Invasion"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType"
     constants:
       - { name: "pointlimit_default", base: "50 (mapinfo; cvar default -1)", port: "50", match: true }
       - { name: "g_monsters_forced", base: "1 (cvar_settemp)", port: "not forced (monsters spawned directly)", match: false }
@@ -47,7 +47,7 @@ features:
       - "common/gametypes/gametype/invasion/sv_invasion.qh:INV_TYPE_ROUND/HUNT/STAGE"
       - "common/gametypes/gametype/invasion/invasion.qh:m_parse_mapinfo"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:Type"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:Type"
     constants:
       - { name: "INV_TYPE_ROUND", base: "0", port: "0", match: true }
       - { name: "INV_TYPE_HUNT", base: "1", port: "1", match: true }
@@ -74,8 +74,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:invasion_ScoreRules"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:Activate"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ScoreRulesBasics"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ScoreRulesBasics"
     constants:
       - { name: "SP_KILLS sort prio", base: "SFL_SORT_PRIO_PRIMARY", port: "primary sort key", match: true }
       - { name: "score_enabled", base: "false", port: "false", match: true }
@@ -100,7 +100,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, MonsterDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:OnDeath"
     constants:
       - { name: "kills_on_monster_frag", base: "+1", port: "+1", match: true }
       - { name: "kills_on_same_team_frag", base: "-1", port: "n/a (FFA, no teams)", match: true }
@@ -125,7 +125,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:Invasion_RoundStart"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:ComputeWaveSize"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:ComputeWaveSize"
     constants:
       - { name: "g_invasion_monster_count", base: "10", port: "10", match: true }
       - { name: "scale_per_round", base: "round*0.5", port: "round*0.5", match: true }
@@ -151,8 +151,8 @@ features:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:Invasion_RoundStart (inv_monsterskill)"
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, MonsterSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:ComputeMonsterSkill"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:SpawnMonsterDef"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:ComputeMonsterSkill"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:SpawnMonsterDef"
     constants:
       - { name: "player_skill_factor", base: "max(1, numplayers*0.3)", port: "max(1, PlayerCount*0.3)", match: true }
     status:
@@ -177,8 +177,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:spawnfunc(invasion_spawnpoint/invasion_wave/target_invasion_roundend)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (Invasion arm)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:AddSpawnPoint/AddWave/AddRoundEnd"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (Invasion arm)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:AddSpawnPoint/AddWave/AddRoundEnd"
     constants:
       - { name: "wave_key_field", base: ".cnt", port: "e.Cnt", match: true }
       - { name: "wave_monster_list", base: ".spawnmob", port: "e.Spawnmob", match: true }
@@ -204,7 +204,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:invasion_GetWaveEntity"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:GetWaveMonsters"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:GetWaveMonsters"
     constants: []
     status:
       logic: faithful
@@ -228,7 +228,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:invasion_PickMonster"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:PickMonster"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:PickMonster"
     constants:
       - { name: "g_invasion_zombies_only", base: "0", port: "honored (ZombiesOnly→UNDEAD-only pool)", match: true }
       - { name: "type_exclusions", base: "HIDDEN|PASSIVE|FLY|SWIM|QUAKE_SIZE; SUPER once one alive", port: "FLY (wyvern) excluded + supermonster(golem) once alive", match: true }
@@ -254,7 +254,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:invasion_PickSpawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:PickSpawnOrigin"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:PickSpawnOrigin"
     constants:
       - { name: "recent_use_weight", base: "0.2 vs 1.0", port: "0.2 vs 1.0", match: true }
       - { name: "g_invasion_spawnpoint_spawn_delay", base: "0.5", port: "0.5", match: true }
@@ -280,8 +280,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:invasion_SpawnChosenMonster"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:SpawnMonsterDef"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnMonster"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:SpawnMonsterDef"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnMonster"
     constants:
       - { name: "respawn", base: "false (NORESPAWN)", port: "false (NORESPAWN)", match: true }
       - { name: "moveflag", base: "2 (WANDER)", port: "MonsterMove_Wander (=2)", match: true }
@@ -311,9 +311,9 @@ features:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:Invasion_CheckWinner"
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, SV_StartFrame)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:Tick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:CheckWinner / FillWave / RoundStart"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame (case Invasion)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:CheckWinner / FillWave / RoundStart"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame (case Invasion)"
     constants:
       - { name: "g_invasion_spawn_delay", base: "0.25", port: "0.25", match: true }
       - { name: "inv_maxrounds", base: "15", port: "15 (g_invasion_rounds || 15)", match: true }
@@ -340,9 +340,9 @@ features:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:Invasion_RoundStart/Invasion_CheckPlayers/Invasion_CheckWinner"
       - "server/round_handler.qc:round_handler_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:Activate (Handler = new RoundHandler{...}.Init)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:Tick (Handler.Tick)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:Activate (Handler = new RoundHandler{...}.Init)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:Tick (Handler.Tick)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs:Tick"
     constants:
       - { name: "round_delay", base: "5", port: "5 (RoundEndDelay)", match: true }
       - { name: "g_invasion_warmup", base: "10", port: "10 (Warmup)", match: true }
@@ -369,9 +369,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:Invasion_CheckWinner (round_endtime check)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:CheckWinner (RoundEndTime branch)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:WipeMonsters"
-      - "src/XonoticGodot.Server/GameWorld.cs:InvasionNotifyHost.RoundOver"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:CheckWinner (RoundEndTime branch)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:WipeMonsters"
+      - "src/VortexArena.Server/GameWorld.cs:InvasionNotifyHost.RoundOver"
     constants:
       - { name: "g_invasion_round_timelimit", base: "120", port: "120", match: true }
     status:
@@ -395,8 +395,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:WinningCondition_Invasion (INV_TYPE_HUNT)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:Tick (Hunt branch)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:LiveNonRespawnedMonsterCount"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:Tick (Hunt branch)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:LiveNonRespawnedMonsterCount"
     constants: []
     status:
       logic: faithful
@@ -420,8 +420,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:target_invasion_roundend_use / WinningCondition_Invasion (INV_TYPE_STAGE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:TriggerRoundEnd / Tick (Stage branch)"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (roundend touch volume)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:TriggerRoundEnd / Tick (Stage branch)"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (roundend touch volume)"
     constants:
       - { name: "roundend_player_fraction", base: "0.7 (ceil of real players, count field default)", port: "ceil(realplayers * min(1,fraction)), default 0.7", match: true }
     status:
@@ -446,8 +446,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qh:GameRules_limit_score(autocvar_g_invasion_point_limit)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:PointLimit / CheckPointLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame (inv.CheckPointLimit)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:PointLimit / CheckPointLimit"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame (inv.CheckPointLimit)"
     constants:
       - { name: "pointlimit", base: "50 (mapinfo) / g_invasion_point_limit (cvar default -1 = use mapinfo)", port: "g_invasion_point_limit>0 else fraglimit>0 else 50", match: true }
     status:
@@ -472,8 +472,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:254 (MutatorHooks.DamageCalculate.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:254 (MutatorHooks.DamageCalculate.Call)"
     constants:
       - { name: "pvp_damage", base: "0 (force 0 too)", port: "0 (Damage=0, Force=Zero)", match: true }
     status:
@@ -497,8 +497,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, PlayerRegen)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:OnPlayerRegen"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:45 (MutatorHooks.PlayerRegen.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:OnPlayerRegen"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:45 (MutatorHooks.PlayerRegen.Call)"
     constants: []
     status:
       logic: faithful
@@ -521,8 +521,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:OnSetStartItems"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:710 (MutatorHooks.SetStartItems.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:710 (MutatorHooks.SetStartItems.Call)"
     constants:
       - { name: "start_health", base: "200 (ROUND)", port: "200 (ROUND)", match: true }
       - { name: "start_armorvalue", base: "200 (ROUND)", port: "200 (ROUND)", match: true }
@@ -548,9 +548,9 @@ features:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, PlayerSpawn)"
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, Bot_ForbidAttack)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:ValidTarget"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:760"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:ValidTarget"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:760"
     constants:
       - { name: "player.bot_attack", base: "false", port: "EntFlags.NoTarget (stand-in)", match: true }
     status:
@@ -574,8 +574,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, MonsterSpawn) (supermonster branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:SpawnMonsterDef (Notifications?.Supermonster)"
-      - "src/XonoticGodot.Server/GameWorld.cs:InvasionNotifyHost.Supermonster"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:SpawnMonsterDef (Notifications?.Supermonster)"
+      - "src/VortexArena.Server/GameWorld.cs:InvasionNotifyHost.Supermonster"
     constants: []
     status:
       logic: faithful
@@ -598,8 +598,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:Invasion_CheckWinner (CENTER_ROUND_OVER / CENTER_ROUND_PLAYER_WIN)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:CheckWinner (Notifications?.RoundOver / RoundPlayerWin)"
-      - "src/XonoticGodot.Server/GameWorld.cs:InvasionNotifyHost.RoundOver/RoundPlayerWin"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:CheckWinner (Notifications?.RoundOver / RoundPlayerWin)"
+      - "src/VortexArena.Server/GameWorld.cs:InvasionNotifyHost.RoundOver/RoundPlayerWin"
     constants: []
     status:
       logic: faithful
@@ -623,7 +623,7 @@ features:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, SV_StartFrame)"
     port_refs:
       - "game/net/NetGame.cs:FeedScoreboardHeader (Invasion ROUND branch)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:WaveState"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:WaveState"
     constants:
       - { name: "monsters_total (ROUND)", base: "inv_maxspawned", port: "inv.Wave.MaxSpawned", match: true }
       - { name: "monsters_killed (ROUND)", base: "inv_numkilled", port: "inv.Wave.Killed", match: true }
@@ -672,8 +672,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, AccuracyTargetValid)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:AccuracyTargetValid"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:IsGoodDamage (TargetValidProvider)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:AccuracyTargetValid"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:IsGoodDamage (TargetValidProvider)"
     constants:
       - { name: "monster_acc_result", base: "MUT_ACCADD_INVALID (always count)", port: "AccuracyTarget.Invalid (always count)", match: true }
       - { name: "non_monster_acc_result", base: "MUT_ACCADD_INDIFFERENT", port: "AccuracyTarget.Indifferent", match: true }
@@ -699,8 +699,8 @@ features:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, AllowMobSpawning)"
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, AllowMobButcher)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdEditMob (spawn case)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdEditMob (butcher case)"
+      - "src/VortexArena.Server/Commands.cs:CmdEditMob (spawn case)"
+      - "src/VortexArena.Server/Commands.cs:CmdEditMob (butcher case)"
     constants:
       - { name: "spawn_block_msg", base: "You cannot spawn monsters during an invasion!", port: "You cannot spawn monsters during an invasion!", match: true }
       - { name: "butcher_block_msg", base: "This command does not work during an invasion!", port: "This command does not work during an invasion!", match: true }
@@ -725,7 +725,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/invasion/sv_invasion.qc:MUTATOR_HOOKFUNCTION(inv, MonsterSpawn) (mon.dphitcontentsmask = ...)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs:SpawnMonsterDef (m.DpHitContentsMask)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs:SpawnMonsterDef (m.DpHitContentsMask)"
     constants:
       - { name: "dphitcontentsmask", base: "DPCONTENTS_SOLID | DPCONTENTS_BODY | DPCONTENTS_BOTCLIP | DPCONTENTS_MONSTERCLIP", port: "SuperContentsSolid|Body|BotClip|MonsterClip (0x1|0x2000000|0x800|0x200)", match: true }
     status:

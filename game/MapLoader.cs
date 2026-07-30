@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Materials;
+using VortexArena.Engine.Collision;
+using VortexArena.Game.Loaders;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// Turns a parsed <see cref="BspData"/> (the Godot-free IBSP loader output) into Godot scene geometry
@@ -73,7 +73,7 @@ public static class MapLoader
     /// </summary>
     private static float ResolveCellSize(BspData bsp)
     {
-        var cv = XonoticGodot.Game.Menu.MenuState.Cvars;
+        var cv = VortexArena.Game.Menu.MenuState.Cvars;
         if (cv is null)
             return WorldCellSizeDefault;
         float fixedSize = cv.GetFloat("r_world_cell_size");
@@ -135,7 +135,7 @@ public static class MapLoader
     /// fallback (<c>lm_NNNN</c>) when the BSP carries no internal lightmap pages; pass empty to disable it.
     ///
     /// <paramref name="droppedSubmodels"/> (optional) names inline-model indices the active gametype filters
-    /// out (see <see cref="XonoticGodot.Engine.Collision.MapEntityFilter.DroppedSubmodels"/>): the faces owned by
+    /// out (see <see cref="VortexArena.Engine.Collision.MapEntityFilter.DroppedSubmodels"/>): the faces owned by
     /// those <c>"*N"</c> brush entities are skipped so a gametype-conditional barrier doesn't render in a
     /// gametype it doesn't belong to. Null/empty → render every face (prior behavior).
     /// </summary>
@@ -250,7 +250,7 @@ public static class MapLoader
         // cells the map compiler PROVED can't be seen from the camera's cluster (occlusion the frustum can't).
         // Cluster labels are DP's EXACT per-surface vis — the union of clusters of every leaf that references a
         // face (lump-5 leaffaces) — not a sampled point, so no face is mislabeled into solid (the old bug).
-        var pvs = new XonoticGodot.Formats.Bsp.BspPvs(bsp);
+        var pvs = new VortexArena.Formats.Bsp.BspPvs(bsp);
         int[][]? faceClusters = pvs.HasVis ? pvs.BuildFaceClusterSets() : null;
         float cellSize = ResolveCellSize(bsp);
         var cells = RegroupIntoCells(surfaces, atlas, faceClusters, cellSize,
@@ -379,7 +379,7 @@ public static class MapLoader
     /// <summary>True for warpzone pocket DECOR — an <c>effects_warpzone/</c> shader WITHOUT <c>dpcamera</c> (the
     /// backdrop + blueedge/rededge rims). Rendered normally for the player, but pulled into its own node so the
     /// portal cameras (which sit inside the pocket, behind the exit plane) can cull it — the backdrop otherwise
-    /// fills the portal view (see <see cref="XonoticGodot.Game.Client.PortalRenderer"/>).</summary>
+    /// fills the portal view (see <see cref="VortexArena.Game.Client.PortalRenderer"/>).</summary>
     private static bool IsWarpzoneDecorShader(BspData bsp, AssetSystem assets, int textureIndex)
     {
         if (textureIndex < 0 || textureIndex >= bsp.Textures.Length)
@@ -393,7 +393,7 @@ public static class MapLoader
     /// <summary>
     /// Rebuild the warpzone/portal faces as their own <see cref="MeshInstance3D"/> nodes under a "Portals" child
     /// (one per coplanar group = one warpzone surface), each tagged via node metadata with its plane (QUAKE origin
-    /// + normal) so <see cref="XonoticGodot.Game.Client.PortalRenderer"/> can match it to a warpzone and swap in a
+    /// + normal) so <see cref="VortexArena.Game.Client.PortalRenderer"/> can match it to a warpzone and swap in a
     /// live see-through render. They carry the existing dark-mirror placeholder material, so a map with no
     /// PortalRenderer (or an unmatched surface) renders EXACTLY as before — this only adds addressable meshes.
     /// </summary>
@@ -1171,7 +1171,7 @@ public static class MapLoader
 
     /// <summary>
     /// The effective "is this map deluxemapped" decision, refined for external-lightmap maps that
-    /// <see cref="XonoticGodot.Formats.Bsp.BspReader"/> could not resolve at parse time (no VFS there, so it can't
+    /// <see cref="VortexArena.Formats.Bsp.BspReader"/> could not resolve at parse time (no VFS there, so it can't
     /// probe the external pages). DP detects deluxemapping on the external set the same way as the internal
     /// lump: an even page count whose faces only reference even lightmap indices, minus the q3map2 "blank
     /// padding" special case. For a single-lightmap external map (faces index only slot 0) the count-1-vs-2

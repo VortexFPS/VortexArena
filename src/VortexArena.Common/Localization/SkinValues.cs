@@ -13,9 +13,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Diagnostics;
 
-namespace XonoticGodot.Common.Localization;
+namespace VortexArena.Common.Localization;
 
 /// <summary>A Godot-free 3-component skin value (an <c>SKINVECTOR</c> — usually an RGB colour or a 2-D size).
 /// Kept here so the schema has no Godot dependency; <c>MenuSkin</c> converts it to a Godot Color/Vector2.</summary>

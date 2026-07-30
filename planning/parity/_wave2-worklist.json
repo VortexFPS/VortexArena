@@ -1,6 +1,6 @@
 [
 {
-"file": "src/XonoticGodot.Server/Bot/BotBrain.cs",
+"file": "src/VortexArena.Server/Bot/BotBrain.cs",
 "cat": "bot",
 "impact": "H",
 "shards": [
@@ -9,7 +9,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Bot/BotRoles.cs",
+"file": "src/VortexArena.Server/Bot/BotRoles.cs",
 "cat": "bot",
 "impact": "H",
 "shards": [
@@ -18,7 +18,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs",
 "cat": "damage",
 "impact": "H",
 "shards": [
@@ -27,7 +27,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -40,7 +40,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -53,7 +53,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -69,7 +69,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -83,7 +83,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -96,7 +96,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -108,7 +108,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -123,7 +123,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -138,7 +138,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -149,7 +149,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -163,7 +163,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -177,7 +177,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Race.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -188,7 +188,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -200,7 +200,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs",
 "cat": "gametype",
 "impact": "H",
 "shards": [
@@ -215,7 +215,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs",
+"file": "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs",
 "cat": "item",
 "impact": "H",
 "shards": [
@@ -227,7 +227,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs",
 "cat": "mapobject",
 "impact": "H",
 "shards": [
@@ -236,7 +236,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs",
+"file": "src/VortexArena.Common/Gameplay/Monsters/Mage.cs",
 "cat": "monster",
 "impact": "H",
 "shards": [
@@ -247,7 +247,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs",
+"file": "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs",
 "cat": "monster",
 "impact": "H",
 "shards": [
@@ -259,7 +259,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs",
+"file": "src/VortexArena.Common/Gameplay/Monsters/Spider.cs",
 "cat": "monster",
 "impact": "H",
 "shards": [
@@ -271,7 +271,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -286,7 +286,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -298,7 +298,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -310,7 +310,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -321,7 +321,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/PowerupsMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/PowerupsMutator.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -335,7 +335,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -344,7 +344,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -359,7 +359,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/StatusEffects.cs",
+"file": "src/VortexArena.Common/Gameplay/StatusEffects.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -372,7 +372,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs",
+"file": "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs",
 "cat": "mutator",
 "impact": "H",
 "shards": [
@@ -397,7 +397,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/ClientManager.cs",
+"file": "src/VortexArena.Server/ClientManager.cs",
 "cat": "server",
 "impact": "H",
 "shards": [
@@ -410,7 +410,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/Commands.cs",
+"file": "src/VortexArena.Server/Commands.cs",
 "cat": "server",
 "impact": "H",
 "shards": [
@@ -428,7 +428,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/MapVoting.cs",
+"file": "src/VortexArena.Server/MapVoting.cs",
 "cat": "server",
 "impact": "H",
 "shards": [
@@ -440,7 +440,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs",
 "cat": "turret",
 "impact": "H",
 "shards": [
@@ -449,7 +449,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs",
 "cat": "turret",
 "impact": "H",
 "shards": [
@@ -458,7 +458,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs",
+"file": "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs",
 "cat": "vehicle",
 "impact": "H",
 "shards": [
@@ -467,7 +467,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs",
+"file": "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs",
 "cat": "vehicle",
 "impact": "H",
 "shards": [
@@ -478,7 +478,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs",
+"file": "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs",
 "cat": "vehicle",
 "impact": "H",
 "shards": [
@@ -489,7 +489,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Arc.cs",
 "cat": "weapon",
 "impact": "H",
 "shards": [
@@ -502,7 +502,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Electro.cs",
 "cat": "weapon",
 "impact": "H",
 "shards": [
@@ -514,7 +514,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs",
 "cat": "weapon",
 "impact": "H",
 "shards": [
@@ -527,7 +527,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Hook.cs",
 "cat": "weapon",
 "impact": "H",
 "shards": [
@@ -540,7 +540,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs",
 "cat": "weapon",
 "impact": "H",
 "shards": [
@@ -553,7 +553,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs",
 "cat": "weapon",
 "impact": "H",
 "shards": [
@@ -565,7 +565,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs",
 "cat": "weapon",
 "impact": "H",
 "shards": [
@@ -580,7 +580,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/Bot/BotAim.cs",
+"file": "src/VortexArena.Server/Bot/BotAim.cs",
 "cat": "bot",
 "impact": "M",
 "shards": [
@@ -589,7 +589,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Bot/BotNavigation.cs",
+"file": "src/VortexArena.Server/Bot/BotNavigation.cs",
 "cat": "bot",
 "impact": "M",
 "shards": [
@@ -599,7 +599,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Bot/Waypoint.cs",
+"file": "src/VortexArena.Server/Bot/Waypoint.cs",
 "cat": "bot",
 "impact": "M",
 "shards": [
@@ -608,7 +608,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs",
 "cat": "gametype",
 "impact": "M",
 "shards": [
@@ -619,7 +619,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs",
 "cat": "gametype",
 "impact": "M",
 "shards": [
@@ -628,7 +628,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Mayhem.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs",
 "cat": "gametype",
 "impact": "M",
 "shards": [
@@ -637,7 +637,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs",
 "cat": "gametype",
 "impact": "M",
 "shards": [
@@ -648,7 +648,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs",
 "cat": "gametype",
 "impact": "M",
 "shards": [
@@ -666,7 +666,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs",
+"file": "src/VortexArena.Common/Gameplay/Items/StartItem.cs",
 "cat": "item",
 "impact": "M",
 "shards": [
@@ -675,7 +675,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/PlayerFrameLogic.cs",
+"file": "src/VortexArena.Server/PlayerFrameLogic.cs",
 "cat": "item",
 "impact": "M",
 "shards": [
@@ -688,7 +688,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Breakable.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Breakable.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -697,7 +697,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Buttons.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Buttons.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -706,7 +706,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Doors.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Doors.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -715,7 +715,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -724,7 +724,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -733,7 +733,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -743,7 +743,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/MovingBrushes.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/MovingBrushes.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -753,7 +753,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -763,7 +763,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/TargetSpeaker.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/TargetSpeaker.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -772,7 +772,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -783,7 +783,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -794,7 +794,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -803,7 +803,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/ViewLocation.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -812,7 +812,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -825,7 +825,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Engine/Simulation/TriggerTouch.cs",
+"file": "src/VortexArena.Engine/Simulation/TriggerTouch.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -834,7 +834,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs",
+"file": "src/VortexArena.Common/Gameplay/Monsters/Golem.cs",
 "cat": "monster",
 "impact": "M",
 "shards": [
@@ -845,7 +845,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs",
+"file": "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs",
 "cat": "monster",
 "impact": "M",
 "shards": [
@@ -856,7 +856,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs",
+"file": "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs",
 "cat": "monster",
 "impact": "M",
 "shards": [
@@ -867,7 +867,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -878,7 +878,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -889,7 +889,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/CloakedMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/CloakedMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -901,7 +901,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/DamagetextMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/DamagetextMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -910,7 +910,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -921,7 +921,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -932,7 +932,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -944,7 +944,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -955,7 +955,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -966,7 +966,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -977,7 +977,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -988,7 +988,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -999,7 +999,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1011,7 +1011,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1023,7 +1023,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1032,7 +1032,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1043,7 +1043,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/RunningGunsMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/RunningGunsMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1054,7 +1054,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1064,7 +1064,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/TouchExplodeMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/TouchExplodeMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1076,7 +1076,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/VampireMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/VampireMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1087,7 +1087,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -1108,7 +1108,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs",
+"file": "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs",
 "cat": "physics",
 "impact": "M",
 "shards": [
@@ -1117,7 +1117,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs",
+"file": "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs",
 "cat": "scoring",
 "impact": "M",
 "shards": [
@@ -1126,7 +1126,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs",
 "cat": "server",
 "impact": "M",
 "shards": [
@@ -1135,7 +1135,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Intermission.cs",
+"file": "src/VortexArena.Server/Intermission.cs",
 "cat": "server",
 "impact": "M",
 "shards": [
@@ -1146,7 +1146,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/OverTimeManager.cs",
+"file": "src/VortexArena.Server/OverTimeManager.cs",
 "cat": "server",
 "impact": "M",
 "shards": [
@@ -1155,7 +1155,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Teamplay.cs",
+"file": "src/VortexArena.Server/Teamplay.cs",
 "cat": "server",
 "impact": "M",
 "shards": [
@@ -1166,7 +1166,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/TimeoutController.cs",
+"file": "src/VortexArena.Server/TimeoutController.cs",
 "cat": "server",
 "impact": "M",
 "shards": [
@@ -1177,7 +1177,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/VoteController.cs",
+"file": "src/VortexArena.Server/VoteController.cs",
 "cat": "server",
 "impact": "M",
 "shards": [
@@ -1186,7 +1186,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/WarmupController.cs",
+"file": "src/VortexArena.Server/WarmupController.cs",
 "cat": "server",
 "impact": "M",
 "shards": [
@@ -1198,7 +1198,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1207,7 +1207,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1216,7 +1216,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1225,7 +1225,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1234,7 +1234,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/MachinegunTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/MachinegunTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1245,7 +1245,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1254,7 +1254,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1263,7 +1263,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1272,7 +1272,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Turrets/TeslaTurret.cs",
+"file": "src/VortexArena.Common/Gameplay/Turrets/TeslaTurret.cs",
 "cat": "turret",
 "impact": "M",
 "shards": [
@@ -1281,7 +1281,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs",
+"file": "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs",
 "cat": "vehicle",
 "impact": "M",
 "shards": [
@@ -1292,7 +1292,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs",
+"file": "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs",
 "cat": "vehicle",
 "impact": "M",
 "shards": [
@@ -1303,7 +1303,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1315,7 +1315,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1327,7 +1327,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1341,7 +1341,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1350,7 +1350,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1362,7 +1362,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1375,7 +1375,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Porto.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1387,7 +1387,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1399,7 +1399,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1412,7 +1412,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1425,7 +1425,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs",
 "cat": "weapon",
 "impact": "M",
 "shards": [
@@ -1437,7 +1437,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/Bot/BotDanger.cs",
+"file": "src/VortexArena.Server/Bot/BotDanger.cs",
 "cat": "bot",
 "impact": "L",
 "shards": [
@@ -1446,7 +1446,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Bot/BotPopulation.cs",
+"file": "src/VortexArena.Server/Bot/BotPopulation.cs",
 "cat": "bot",
 "impact": "L",
 "shards": [
@@ -1456,7 +1456,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs",
 "cat": "gametype",
 "impact": "L",
 "shards": [
@@ -1467,7 +1467,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Items/Resources.cs",
+"file": "src/VortexArena.Common/Gameplay/Items/Resources.cs",
 "cat": "item",
 "impact": "L",
 "shards": [
@@ -1485,7 +1485,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Follow.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Follow.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -1494,7 +1494,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Jumppads.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Jumppads.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -1503,7 +1503,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -1512,7 +1512,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -1521,7 +1521,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/MapVolumes.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/MapVolumes.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -1530,7 +1530,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -1540,7 +1540,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs",
+"file": "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -1549,7 +1549,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Cvars.cs",
+"file": "src/VortexArena.Server/Cvars.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -1559,7 +1559,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1570,7 +1570,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1579,7 +1579,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/DoublejumpMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/DoublejumpMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1588,7 +1588,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1599,7 +1599,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1611,7 +1611,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1620,7 +1620,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1631,7 +1631,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1643,7 +1643,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1652,7 +1652,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1663,7 +1663,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -1674,7 +1674,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs",
+"file": "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs",
 "cat": "net",
 "impact": "L",
 "shards": [
@@ -1683,7 +1683,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Physics/PMAccelerate.cs",
+"file": "src/VortexArena.Common/Physics/PMAccelerate.cs",
 "cat": "physics",
 "impact": "L",
 "shards": [
@@ -1692,7 +1692,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Physics/PlayerPhysics.cs",
+"file": "src/VortexArena.Common/Physics/PlayerPhysics.cs",
 "cat": "physics",
 "impact": "L",
 "shards": [
@@ -1701,7 +1701,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Engine/Simulation/FlyMove.cs",
+"file": "src/VortexArena.Engine/Simulation/FlyMove.cs",
 "cat": "physics",
 "impact": "L",
 "shards": [
@@ -1719,7 +1719,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Inventory.cs",
+"file": "src/VortexArena.Common/Gameplay/Inventory.cs",
 "cat": "server",
 "impact": "L",
 "shards": [
@@ -1728,7 +1728,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Bans.cs",
+"file": "src/VortexArena.Server/Bans.cs",
 "cat": "server",
 "impact": "L",
 "shards": [
@@ -1737,7 +1737,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Server/Campaign.cs",
+"file": "src/VortexArena.Server/Campaign.cs",
 "cat": "server",
 "impact": "L",
 "shards": [
@@ -1748,7 +1748,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/Cheats.cs",
+"file": "src/VortexArena.Server/Cheats.cs",
 "cat": "server",
 "impact": "L",
 "shards": [
@@ -1760,7 +1760,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs",
 "cat": "weapon",
 "impact": "L",
 "shards": [
@@ -1772,7 +1772,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Weapons/OkMachinegun.cs",
+"file": "src/VortexArena.Common/Gameplay/Weapons/OkMachinegun.cs",
 "cat": "weapon",
 "impact": "L",
 "shards": [

@@ -1,3 +1,0 @@
-# This directory is consumed by the game's own VFS (raw byte reads), not Godot's
-# resource importer. Tell the editor to skip it so it does't try to import the
-# thousands of pk3dir .tga/.ogg/.ttf files (and choke on Xonotic's tiny 1x1 TGAs).

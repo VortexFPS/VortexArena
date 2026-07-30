@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Localization;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Localization;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Xonotic menu skin, ported to a Godot <see cref="Theme"/>. Xonotic's menu has no widget look of its
@@ -701,7 +701,7 @@ public static class MenuSkin
 
     // ---------------------------------------------------------------------------------------------------------
     //  The SKIN* table: the full skin-customizables.inc schema (typed defaults) + the skinvalues.txt overlay,
-    //  loaded via the menu.qc fallback chain. Backed by the Godot-free XonoticGodot.Common.Localization.SkinValues so
+    //  loaded via the menu.qc fallback chain. Backed by the Godot-free VortexArena.Common.Localization.SkinValues so
     //  the schema + parse semantics (bare-key Skin_ApplySetting, value-substring, stof/stov) are unit-testable.
     // ---------------------------------------------------------------------------------------------------------
 

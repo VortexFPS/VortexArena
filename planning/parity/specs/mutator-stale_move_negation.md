@@ -1,6 +1,6 @@
 # Stale-move negation (`g_smneg`) — parity spec
 
-**Base refs:** `common/mutators/mutator/stale_move_negation/sv_stale_move_negation.qc` (+ `.qh`, `_mod.inc`, `_mod.qh`)  ·  **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs`
+**Base refs:** `common/mutators/mutator/stale_move_negation/sv_stale_move_negation.qc` (+ `.qh`, `_mod.inc`, `_mod.qh`)  ·  **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -77,7 +77,7 @@ return f;
 `StaleMoveNegationMutator.cs` (`[Mutator]`, `MutatorBase`):
 - **Registration / enable:** discovered by reflection into `Registry<MutatorBase>` (Registries.cs
   `Bootstrap`); `IsEnabled => Api.Cvars.GetFloat("g_smneg") != 0f`. Activated by
-  `MutatorActivation.Apply()` (called live at `src/XonoticGodot.Server/GameWorld.cs:511`), which calls
+  `MutatorActivation.Apply()` (called live at `src/VortexArena.Server/GameWorld.cs:511`), which calls
   `Hook()` → subscribes `OnDamageCalculate` to `MutatorHooks.DamageCalculate`. **LIVE.**
 - **Tunables:** `Bonus`/`BonusAsymptote`/`CooldownFactor` read in `Hook()` from `g_smneg_bonus` (default
   true), `g_smneg_bonus_asymptote` (default 4), `g_smneg_cooldown_factor` (default 0.25). `StartHealth()`
@@ -137,7 +137,7 @@ drives `Combat.Damage` through the actual pipeline.
   lines 542-545 and `balance-xonotic.cfg:23`; port `mutators.cfg` and `Cvars.cs:161` confirmed to seed
   the same values, and `ConfigLoader` is confirmed to load `mutators.cfg` (so asymptote/cooldown reach
   the store).
-- **Unit tests:** `tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs` has TWO smneg tests:
+- **Unit tests:** `tests/VortexArena.Tests/MutatorBatchT19Tests.cs` has TWO smneg tests:
   `StaleMoveNegation_MultiplierDecreasesWithWeight` (asserts `f(0) > f(50) > f(200)` — the curve) and
   `StaleMoveNegation_RepeatedSameWeapon_ScalesDamageDown` (fires `Combat.Damage` 7× with the same weapon
   through the real damage pipeline and asserts the last hit deals less than the first — the accumulation +

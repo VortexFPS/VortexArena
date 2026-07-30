@@ -20,7 +20,7 @@ features:
     base_refs:
       - "ecs/systems/physics.qc:sys_phys_update"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:Move"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:Move"
     constants: []
     status:
       logic: faithful
@@ -44,7 +44,7 @@ features:
     base_refs:
       - "ecs/systems/physics.qc:sys_phys_simulate"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:GroundMove"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:GroundMove"
     constants:
       - { name: "sv_friction", base: "6", port: "6", match: true }
       - { name: "sv_friction_slick", base: "0.5", port: "0.5", match: true }
@@ -72,8 +72,8 @@ features:
     base_refs:
       - "ecs/systems/physics.qc:sys_phys_simulate"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:GroundMove"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:GroundBranch"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:GroundMove"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:GroundBranch"
     constants:
       - { name: "sv_accelerate", base: "15", port: "15", match: true }
       - { name: "sv_slickaccelerate", base: "15", port: "15", match: true }
@@ -100,7 +100,7 @@ features:
     base_refs:
       - "common/physics/player.qc:PM_Accelerate"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PMAccelerate.cs:Accelerate"
+      - "src/VortexArena.Common/Physics/PMAccelerate.cs:Accelerate"
     constants:
       - { name: "sv_airaccelerate", base: "2", port: "2", match: true }
       - { name: "sv_airaccel_qw", base: "-0.8", port: "-0.8", match: true }
@@ -130,8 +130,8 @@ features:
     base_refs:
       - "ecs/systems/physics.qc:sys_phys_simulate"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:AirBranch"
-      - "src/XonoticGodot.Common/Physics/PMAccelerate.cs:GeomLerp"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:AirBranch"
+      - "src/VortexArena.Common/Physics/PMAccelerate.cs:GeomLerp"
     constants:
       - { name: "sv_airstopaccelerate", base: "3", port: "3", match: true }
       - { name: "sv_airstopaccelerate_full", base: "0", port: "false", match: true }
@@ -160,7 +160,7 @@ features:
     base_refs:
       - "common/physics/player.qc:CPM_PM_Aircontrol"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PMAccelerate.cs:Aircontrol"
+      - "src/VortexArena.Common/Physics/PMAccelerate.cs:Aircontrol"
     constants:
       - { name: "sv_aircontrol", base: "100", port: "100", match: true }
       - { name: "sv_aircontrol_power", base: "2", port: "2", match: true }
@@ -187,7 +187,7 @@ features:
     base_refs:
       - "common/physics/player.qc:PM_AirAccelerate"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PMAccelerate.cs:AirAccelerate"
+      - "src/VortexArena.Common/Physics/PMAccelerate.cs:AirAccelerate"
     constants:
       - { name: "sv_warsowbunny_turnaccel", base: "0 (path disabled)", port: "0", match: true }
       - { name: "sv_warsowbunny_accel", base: "0.1593", port: "0.1593", match: true }
@@ -220,8 +220,8 @@ features:
       - "common/physics/player.qc:PlayerJump"
       - "common/physics/player.qc:CheckPlayerJump"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:PlayerJump"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:CheckPlayerJump"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:PlayerJump"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:CheckPlayerJump"
     constants:
       - { name: "sv_jumpvelocity", base: "260", port: "260", match: true }
       - { name: "sv_jumpvelocity_crouch", base: "0 (use jumpvelocity)", port: "0", match: true }
@@ -257,8 +257,8 @@ features:
     base_refs:
       - "ecs/systems/physics.qc:sys_phys_simulate"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:SwimMove"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:CheckWater"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:SwimMove"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:CheckWater"
     constants:
       - { name: "water wishspeed scale", base: "0.7", port: "0.7", match: true }
       - { name: "submerged hold-jump rise", base: "maxspeed*0.7", port: "maxspeed*0.7", match: true }
@@ -290,7 +290,7 @@ features:
     base_refs:
       - "ecs/systems/physics.qc:sys_phys_simulate"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:LadderMove"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:LadderMove"
     constants: []
     status:
       logic: faithful
@@ -316,7 +316,7 @@ features:
     base_refs:
       - "common/physics/player.qc:PM_jetpack"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:PMJetpack"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:PMJetpack"
     constants:
       - { name: "g_jetpack_acceleration_side", base: "1200", port: "1200", match: true }
       - { name: "g_jetpack_acceleration_up", base: "600", port: "600", match: true }
@@ -350,7 +350,7 @@ features:
     base_refs:
       - "common/physics/player.qc:PM_ClientMovement_UpdateStatus"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:UpdateCrouch"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:UpdateCrouch"
     constants:
       - { name: "PL_MIN/PL_MAX (stand)", base: "-16 -16 -24 / 16 16 45 (autocvar_sv_player_*)", port: "-16 -16 -24 / 16 16 45", match: true }
       - { name: "PL_VIEW_OFS (stand)", base: "0 0 35 (autocvar_sv_player_viewoffset)", port: "0 0 35 (StandViewOfs)", match: true }
@@ -381,10 +381,10 @@ features:
       - "common/physics/movetypes/walk.qc:_Movetype_Physics_Walk"
       - "common/physics/movetypes/movetypes.qc:_Movetype_FlyMove"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:WalkMove"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:FlyMove"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:PushEntity"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:ClipVelocity"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:WalkMove"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:FlyMove"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:PushEntity"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:ClipVelocity"
     constants:
       - { name: "sv_stepheight", base: "31", port: "31", match: true }
       - { name: "sv_gameplayfix_stepdown", base: "2", port: "2", match: true }
@@ -418,9 +418,9 @@ features:
       - "common/physics/player.qc:PM_Footsteps"
       - "common/physics/player.qc:PM_check_hitground"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:Footsteps"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:CheckHitground"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:UpdateMovementSounds"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:Footsteps"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:CheckHitground"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:UpdateMovementSounds"
     constants:
       - { name: "autocvar_g_footsteps master gate", base: "1 (xonotic-server.cfg:306)", port: "GetString(\"g_footsteps\")==\"0\" => return; unset treated as on", match: true }
       - { name: "footstep speed threshold", base: "sv_maxspeed*0.6 (vdist 3D)", port: "MaxSpeed*0.6 (Vec2LenSq XY-only)", match: true }
@@ -460,7 +460,7 @@ features:
       - "ecs/systems/sv_physics.qc:sys_phys_spectator_control"
       - "ecs/systems/sv_physics.qc:sys_phys_fixspeed"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:SpectatorControl"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:SpectatorControl"
     constants:
       - { name: "sv_spectator_speed_multiplier", base: "no inline QC default (autocvar float -> 0 unset; cfg 1.5)", port: "read raw (no fallback)", match: true }
       - { name: "sv_spectator_speed_multiplier_min", base: "1", port: "1", match: true }
@@ -489,9 +489,9 @@ features:
       - "common/physics/player.qc:PM_check_specialcommand"
       - "common/physics/player.qc:SpecialCommand"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:CheckSpecialCommand"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:SpecialCommand"
-      - "src/XonoticGodot.Server/GameWorld.cs:1003 (SpecialCommandGiveAll = p => Cheats.GiveAll(p))"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:CheckSpecialCommand"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:SpecialCommand"
+      - "src/VortexArena.Server/GameWorld.cs:1003 (SpecialCommandGiveAll = p => Cheats.GiveAll(p))"
     constants:
       - { name: "sequence", base: "\"xwxwxsxsxaxdxaxdx1x \"", port: "\"xwxwxsxsxaxdxaxdx1x \" (SpecialCommandSequence)", match: true }
     status:
@@ -518,7 +518,7 @@ features:
     base_refs:
       - "common/physics/player.qc:PM_check_punch"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:CheckPunch"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:CheckPunch"
     constants:
       - { name: "punchangle decay rate", base: "10 (deg/s)", port: "10f", match: true }
       - { name: "punchvector decay rate", base: "30 (u/s)", port: "30f", match: true }
@@ -544,7 +544,7 @@ features:
     base_refs:
       - "ecs/systems/sv_physics.qc:sys_phys_pregame_hold"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:OnClientMove"
+      - "src/VortexArena.Server/GameWorld.cs:OnClientMove"
     constants: []
     status:
       logic: faithful
@@ -568,7 +568,7 @@ features:
     base_refs:
       - "ecs/systems/sv_physics.qc:sys_phys_land"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:PlayerJump"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:PlayerJump"
     constants: []
     status:
       logic: faithful

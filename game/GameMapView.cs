@@ -1,14 +1,14 @@
 using System.Collections.Generic;
 using System.Globalization;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Formats.Bsp;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Collision;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// Shared helpers for turning a parsed map (<see cref="BspData"/>) into the per-gametype view both the
-/// walkable <see cref="GameDemo"/> and the networked <see cref="XonoticGodot.Game.Net.NetGame"/> listen server
+/// walkable <see cref="GameDemo"/> and the networked <see cref="VortexArena.Game.Net.NetGame"/> listen server
 /// need. Today this is the gametype-conditional inline-brush filter (QC <c>SV_OnEntityPreSpawnFunction</c>),
 /// single-sourced here so a map's render geometry and its collision agree on which <c>"*N"</c> brush entities
 /// a given gametype drops — they MUST match, or a filtered barrier would render without colliding (or vice

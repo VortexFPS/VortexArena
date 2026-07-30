@@ -1,9 +1,9 @@
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Server;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Collision;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// F2 regression guard for the round-handler double-wiring fix (GameWorld.ActivateGameType). A bare

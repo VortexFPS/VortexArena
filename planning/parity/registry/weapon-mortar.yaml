@@ -13,7 +13,7 @@ features:
     base_refs:
       - "common/weapons/weapon/mortar.qh:CLASS(Mortar)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs"
     constants:
       - { name: "impulse", base: "4", port: "4", match: true }
       - { name: "ammo_type", base: "RES_ROCKETS", port: "Rockets", match: true }
@@ -46,9 +46,9 @@ features:
       - "common/weapons/weapon/mortar.qc:wr_think"
       - "server/weapons/tracing.qc:W_SetupProjVelocity_Explicit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
     constants:
       - { name: "primary_ammo", base: "2", port: "2", match: true }
       - { name: "primary_animtime", base: "0.3", port: "0.3", match: true }
@@ -84,8 +84,8 @@ features:
       - "common/weapons/weapon/mortar.qc:W_Mortar_Attack2"
       - "common/weapons/weapon/mortar.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:WrThink"
     constants:
       - { name: "secondary_ammo", base: "2", port: "2", match: true }
       - { name: "secondary_animtime", base: "0.3", port: "0.3", match: true }
@@ -119,8 +119,8 @@ features:
       - "common/weapons/weapon/mortar.qc:W_Mortar_Grenade_Touch1"
       - "common/weapons/weapon/mortar.qc:W_Mortar_Grenade_Touch2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:OnTouch"
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:RunEntity"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:OnTouch"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:RunEntity"
     constants:
       - { name: "bouncefactor", base: "0.5", port: "0.5 (g_balance_mortar_bouncefactor, READ by MoveTypePhysics from ent.BounceFactor)", match: true }
       - { name: "bouncestop", base: "0.075", port: "0.075 (g_balance_mortar_bouncestop, READ from ent.BounceStop)", match: true }
@@ -146,7 +146,7 @@ features:
     base_refs:
       - "common/weapons/weapon/mortar.qc:W_Mortar_Grenade_Think1"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:OnThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:OnThink"
     constants:
       - { name: "primary_lifetime", base: "20", port: "20", match: true }
       - { name: "secondary_lifetime", base: "20", port: "20", match: true }
@@ -172,9 +172,9 @@ features:
     base_refs:
       - "common/weapons/weapon/mortar.qc:W_Mortar_Grenade_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
     constants:
       - { name: "primary_health", base: "15", port: "15", match: true }
       - { name: "secondary_health", base: "30", port: "30", match: true }
@@ -206,8 +206,8 @@ features:
       - "common/weapons/weapon/mortar.qc:W_Mortar_Grenade_Explode"
       - "common/weapons/weapon/mortar.qc:W_Mortar_Grenade_Explode2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "primary_damage", base: "55", port: "55", match: true }
       - { name: "primary_edgedamage", base: "25", port: "25", match: true }
@@ -240,8 +240,8 @@ features:
     base_refs:
       - "common/weapons/weapon/mortar.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:Configure"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:Configure"
     constants:
       - { name: "secondary_remote_detonateprimary", base: "0 (cvar g_balance_mortar_secondary_remote_detonateprimary, bal-wep-xonotic.cfg:164)", port: "RemoteDetonatePrimary = Bal(g_balance_mortar_secondary_remote_detonateprimary,0) (Mortar.cs:104)", match: true }
       - { name: "primary_remote_minbouncecnt", base: "0 (cvar g_balance_mortar_primary_remote_minbouncecnt, bal-wep-xonotic.cfg:144)", port: "RemoteMinBounceCount = BalInt(g_balance_mortar_primary_remote_minbouncecnt,0) (Mortar.cs:105)", match: true }
@@ -267,8 +267,8 @@ features:
     base_refs:
       - "common/weapons/weapon/mortar.qc:W_Mortar_Attack (CSQCProjectile PROJECTILE_GRENADE / _BOUNCING)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:Attack"
-      - "src/XonoticGodot.Common/Framework/EntityProjectileGate.cs:CsqcProjectileBouncing"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:Attack"
+      - "src/VortexArena.Common/Framework/EntityProjectileGate.cs:CsqcProjectileBouncing"
       - "game/net/ServerNet.cs:Classify"
       - "game/net/ClientEntityView.cs"
       - "game/client/ClientWorld.cs:IsProjectile"
@@ -300,8 +300,8 @@ features:
     base_refs:
       - "common/weapons/weapon/mortar.qc:W_Mortar_Grenade_Explode (ANNCE_ACHIEVEMENT_AIRSHOT)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:IsFlying"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:IsFlying"
     constants: []
     status:
       logic: faithful
@@ -326,9 +326,9 @@ features:
       - "common/weapons/weapon/mortar.qc:wr_killmessage"
       - "common/weapons/weapon/mortar.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:79"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:156"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:315"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:79"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:156"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:315"
     status:
       logic: faithful
       values: na

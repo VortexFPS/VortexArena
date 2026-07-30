@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Exercises <see cref="WeaponAccuracyEvents.AccuracyByte"/> — the C# port of QC's <c>accuracy_byte(n, d)</c>

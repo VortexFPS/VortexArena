@@ -1,6 +1,6 @@
 # Blood loss mutator — parity spec
 
-**Base refs:** `common/mutators/mutator/bloodloss/bloodloss.qc`, `bloodloss.qh`  ·  **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs`
+**Base refs:** `common/mutators/mutator/bloodloss/bloodloss.qc`, `bloodloss.qh`  ·  **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

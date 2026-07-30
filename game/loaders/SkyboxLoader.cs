@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Materials;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Materials;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// Builds a Godot <see cref="Sky"/> from a Quake/Xonotic 6-face skybox, faithfully reproducing how the

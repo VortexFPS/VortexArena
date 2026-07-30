@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Arc — port of common/weapons/weapon/arc.{qh,qc}. A hitscan weapon whose primary is a continuous
@@ -92,6 +92,7 @@ public sealed class Arc : Weapon
     public Arc()
     {
         NetName = "arc";
+        BotPickupBaseValue = 8000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Arc";
         Impulse = 3;
@@ -525,7 +526,7 @@ public sealed class Arc : Weapon
                     // route it through Combat.Heal (→ event_heal) instead of writing the wrong field. Players +
                     // ordinary creatures still use the direct resource give (their event_heal isn't modeled here).
                     if (!isPlayer && hit.GtEventHeal is not null)
-                        XonoticGodot.Common.Gameplay.Damage.Combat.Heal(hit, actor, hps * coefficient, hpLimit);
+                        VortexArena.Common.Gameplay.Damage.Combat.Heal(hit, actor, hps * coefficient, hpLimit);
                     else
                         hit.GiveResourceWithLimit(ResourceType.Health, hps * coefficient, hpLimit);
                 }

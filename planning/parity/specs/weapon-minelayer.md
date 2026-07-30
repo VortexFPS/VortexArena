@@ -1,7 +1,7 @@
 # Mine Layer — parity spec
 
 **Base refs:** `common/weapons/weapon/minelayer.qc` · `common/weapons/weapon/minelayer.qh` · balance in `bal-wep-xonotic.cfg` (`g_balance_minelayer_*`); shared fire/projectile math in `common/weapons/calculations.qc` + `server/weapons/tracing.qc` + `server/weapons/common.qh`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs` · shared: `WeaponFiring.cs`, `WeaponSplash.cs`, `Projectiles.cs`, `WeaponFireDriver.cs`; physics: `src/XonoticGodot.Engine/Simulation/{SimulationLoop,MoveTypePhysics,FlyMove}.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs` · shared: `WeaponFiring.cs`, `WeaponSplash.cs`, `Projectiles.cs`, `WeaponFireDriver.cs`; physics: `src/VortexArena.Engine/Simulation/{SimulationLoop,MoveTypePhysics,FlyMove}.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -191,7 +191,7 @@ Base uses CH_SHOTS/CH_WEAPON_B; functionally similar). The over-limit `SND(UNAVA
   (both fire modes) and the mine think/touch by `SimulationLoop.RunThink` + `MoveTypePhysics`/`FlyMove`.
 - Shoot-down dead: traced `Entity.ProjectileDamage` consumers — only `BreakablehookMutator.cs:79`;
   `DamageSystem.EventDamage` routes non-players via `GtEventDamage`, never `ProjectileDamage`.
-- RocketFlying gate: `tests/XonoticGodot.Tests/RocketFlyingGateTests.cs` covers the mine detonate-delay clear.
+- RocketFlying gate: `tests/VortexArena.Tests/RocketFlyingGateTests.cs` covers the mine detonate-delay clear.
 - No dedicated Minelayer behavioral test exists (only WeaponById/order/remap coverage). Detonation timing,
   team-safety, and remote gate are unverified by test → marked accordingly.
 

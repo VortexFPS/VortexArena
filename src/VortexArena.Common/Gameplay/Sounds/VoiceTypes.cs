@@ -5,7 +5,7 @@
 // (sv_taunt / sv_autotaunt / sv_gentle / per-client cl_autotaunt) applies. The numeric values match QC
 // exactly (globalsound.qh:64-69) so a registered VoiceMessage's m_playersoundvt round-trips unchanged.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The voice-routing categories — the C# successor to the QC <c>VOICETYPE_*</c> constants

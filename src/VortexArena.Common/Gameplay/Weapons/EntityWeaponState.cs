@@ -1,7 +1,7 @@
 using System.Numerics;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// Per-weapon-slot weapon state — the C# successor to the pile of <c>.float</c>/<c>.entity</c> fields
@@ -106,7 +106,7 @@ public partial class Entity
 /// <summary>
 /// The per-slot weapon-fire driver state (QC the <c>.state</c> on <c>actor.(weaponentity)</c>,
 /// common/weapons/all.qh WS_*). Drives the raise/ready/fire/drop lifecycle the weapon-system tick
-/// (<see cref="XonoticGodot.Common.Gameplay.WeaponFireDriver"/>) advances each frame. (Named <c>WeaponFireState</c>
+/// (<see cref="VortexArena.Common.Gameplay.WeaponFireDriver"/>) advances each frame. (Named <c>WeaponFireState</c>
 /// rather than <c>WeaponState</c> to stay clear of the <see cref="Entity.WeaponState"/> accessor method.)
 /// </summary>
 public enum WeaponFireState
@@ -301,7 +301,7 @@ public sealed class WeaponSlotState
     /// <summary>QC <c>.jump_interval2</c> — rapid-laser refire gate (Vaporizer rocket-minsta).</summary>
     public float JumpInterval2;
     // --- Porto (porto.qc) per-slot portal state ---
-    public XonoticGodot.Common.Framework.Entity? PortoCurrent;
+    public VortexArena.Common.Framework.Entity? PortoCurrent;
     public int PortoForbidden;
 
     // --- Vortex (vortex.qc) ---

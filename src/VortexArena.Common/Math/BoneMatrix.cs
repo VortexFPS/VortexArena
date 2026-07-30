@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Common.Math;
+namespace VortexArena.Common.Math;
 
 /// <summary>
 /// A bone transform — the C# stand-in for DarkPlaces <c>matrix4x4_t</c> as used by the skeletal builtins

@@ -4,11 +4,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services; // Api
-using XonoticGodot.Engine.Simulation; // CvarService
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services; // Api
+using VortexArena.Engine.Simulation; // CvarService
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The precomputed reply strings for the common commands — the C# successor to <c>getreplies.qc</c> + the
@@ -138,7 +138,7 @@ public sealed class CommandReplies
 
     /// <summary>
     /// QC <c>getrankings()</c> (server/command/getreplies.qc:46): the race/CTS top-N times for the current map,
-    /// read from the persistent <see cref="XonoticGodot.Common.Gameplay.RaceRecords"/> table (the C# successor to
+    /// read from the persistent <see cref="VortexArena.Common.Gameplay.RaceRecords"/> table (the C# successor to
     /// the QC <c>ServerProgsDB</c> ranking store). In a non-race mode the table is empty, so this falls through to
     /// QC's verbatim empty case "No records are available for the map: &lt;map&gt;". The record-type segment keys
     /// off the live gametype (CTS_RECORD for cts, RACE_RECORD for rc), exactly as QC's <c>record_type</c> global.
@@ -152,23 +152,23 @@ public sealed class CommandReplies
         string gt = _world.GameType?.NetName ?? "";
         string? recordType = gt switch
         {
-            "cts" => XonoticGodot.Common.Gameplay.RaceRecords.CtsRecord,
-            "rc"  => XonoticGodot.Common.Gameplay.RaceRecords.RaceRecord,
+            "cts" => VortexArena.Common.Gameplay.RaceRecords.CtsRecord,
+            "rc"  => VortexArena.Common.Gameplay.RaceRecords.RaceRecord,
             _     => null,
         };
 
         if (recordType is not null)
         {
             var sb = new System.Text.StringBuilder();
-            for (int i = 1; i <= XonoticGodot.Common.Gameplay.RaceRecords.RankingsCnt; i++)
+            for (int i = 1; i <= VortexArena.Common.Gameplay.RaceRecords.RankingsCnt; i++)
             {
-                float t = XonoticGodot.Common.Gameplay.RaceRecords.ReadTime(map, recordType, i);
+                float t = VortexArena.Common.Gameplay.RaceRecords.ReadTime(map, recordType, i);
                 if (t == 0f)
                     continue; // QC: if (t == 0) continue;
-                string name = XonoticGodot.Common.Gameplay.RaceRecords.ReadName(map, recordType, i);
-                string pos = XonoticGodot.Common.Gameplay.Scoring.GameScores.CountOrdinal(i);
-                string time = XonoticGodot.Common.Gameplay.Scoring.GameScores.TimeEncodedToString(
-                    XonoticGodot.Common.Gameplay.Scoring.GameScores.TimeEncode(t), compact: false);
+                string name = VortexArena.Common.Gameplay.RaceRecords.ReadName(map, recordType, i);
+                string pos = VortexArena.Common.Gameplay.Scoring.GameScores.CountOrdinal(i);
+                string time = VortexArena.Common.Gameplay.Scoring.GameScores.TimeEncodedToString(
+                    VortexArena.Common.Gameplay.Scoring.GameScores.TimeEncode(t), compact: false);
                 // QC: strcat(strpad(8, p), " ", strpad(-8, TIME_ENCODED_TOSTRING(t, false)), " ", n, "\n")
                 sb.Append(pos.PadLeft(8)).Append(' ').Append(time.PadRight(8)).Append(' ').Append(name).Append('\n');
             }

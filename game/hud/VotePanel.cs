@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Vote panel — port of Base/.../qcsrc/client/hud/panel/vote.qc (HUD panel #9). While a callvote is active

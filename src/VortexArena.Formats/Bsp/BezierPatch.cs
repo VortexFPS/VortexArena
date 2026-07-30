@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using SVec2 = System.Numerics.Vector2;
 using SVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Formats.Bsp;
+namespace VortexArena.Formats.Bsp;
 
 /// <summary>
 /// Tessellates Quake-3 bezier <see cref="BspFaceType.Patch"/> faces into triangle meshes.
@@ -29,6 +29,131 @@ public static class BezierPatch
 {
     /// <summary>Subdivision steps per 3x3 control group (≈ <c>r_subdivisions</c> 8). Higher = smoother.</summary>
     public const int Subdivisions = 8;
+
+    /// <summary>
+    /// The subdivision level a patch needs for its tessellation to sit within <paramref name="tolerance"/>
+    /// world units of the true surface (backlog B3).
+    ///
+    /// A quadratic Bezier's maximum deviation from the chord joining its endpoints is <c>|c1 - (c0+c2)/2| / 2</c>
+    /// — the "sag" at the midpoint. Subdividing into <c>n</c> segments cuts that by <c>n²</c>, so the level
+    /// needed for a given tolerance follows directly: <c>n >= sqrt(sag / tolerance)</c>. Taken over every
+    /// control triple in the grid and rounded up to the next power of two, because a level that divides the
+    /// grid evenly keeps the seams between adjacent groups aligned.
+    ///
+    /// This exists because collision and render disagreeing about where a curve IS puts items and players at
+    /// a visibly wrong height on it. Measuring the patch rather than picking a constant is what keeps the
+    /// flat ones — most floors and grates, and exact at any level — from paying for the curved ones.
+    /// </summary>
+    public static int SubdivisionsFor(in BspFace face, BspVertex[] vertices, float tolerance, int max = Subdivisions)
+    {
+        ArgumentNullException.ThrowIfNull(vertices);
+
+        int w = face.PatchWidth, h = face.PatchHeight;
+        if (w < 3 || h < 3 || (w & 1) == 0 || (h & 1) == 0)
+            return 1;
+
+        // Copied out of the `in` parameter so the shared implementation can index it from a local function;
+        // an `in` parameter cannot be captured.
+        int first = face.FirstVertex;
+        if (first < 0 || first + w * h > vertices.Length)
+            return 1;
+
+        var controls = new SVec3[w * h];
+        for (int i = 0; i < controls.Length; i++)
+            controls[i] = vertices[first + i].Position;
+
+        return SubdivisionsFor(controls, w, h, tolerance, max);
+    }
+
+    /// <summary>
+    /// <see cref="SubdivisionsFor(in BspFace, BspVertex[], float, int)"/> over a raw control grid, for callers
+    /// holding a <c>.vmap</c> patch rather than a BSP face. Same metric, same reasoning.
+    /// </summary>
+    public static int SubdivisionsFor(
+        IReadOnlyList<SVec3> controls, int width, int height, float tolerance, int max = Subdivisions)
+    {
+        ArgumentNullException.ThrowIfNull(controls);
+
+        if (width < 3 || height < 3 || (width & 1) == 0 || (height & 1) == 0)
+            return 1;
+        if (controls.Count < width * height)
+            return 1;
+        if (tolerance <= 0f)
+            return max;
+
+        SVec3 At(int col, int row) => controls[row * width + col];
+
+        float worstSag = 0f;
+        for (int row = 0; row < height; row++)
+            for (int col = 0; col + 2 < width; col += 2)
+                worstSag = MathF.Max(worstSag, Sag(At(col, row), At(col + 1, row), At(col + 2, row)));
+        for (int col = 0; col < width; col++)
+            for (int row = 0; row + 2 < height; row += 2)
+                worstSag = MathF.Max(worstSag, Sag(At(col, row), At(col, row + 1), At(col, row + 2)));
+
+        if (worstSag <= tolerance)
+            return 1;
+
+        int needed = (int)MathF.Ceiling(MathF.Sqrt(worstSag / tolerance));
+        int level = 1;
+        while (level < needed && level < max)
+            level *= 2;
+        return Math.Clamp(level, 1, max);
+    }
+
+    /// <summary>
+    /// Roughly how horizontal a patch is, 0 (a wall) to 1 (a floor), from the average of its control-grid
+    /// normals.
+    ///
+    /// Collision accuracy is worth far more on a surface things REST on than one they slide along: a floor a
+    /// few units out leaves items floating or sunk, while a wall a few units out just stops you slightly
+    /// early. Letting the caller spend its subdivisions accordingly is what keeps a curved wall from costing
+    /// the same as a curved floor.
+    /// </summary>
+    public static float Horizontality(IReadOnlyList<SVec3> controls, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(controls);
+        if (width < 2 || height < 2 || controls.Count < width * height)
+            return 1f;   // unknown shape: assume it matters
+
+        SVec3 At(int col, int row) => controls[row * width + col];
+
+        float sum = 0f;
+        int n = 0;
+        for (int row = 0; row + 1 < height; row++)
+            for (int col = 0; col + 1 < width; col++)
+            {
+                SVec3 cross = SVec3.Cross(At(col + 1, row) - At(col, row), At(col, row + 1) - At(col, row));
+                float len = cross.Length();
+                if (len < 1e-6f)
+                    continue;
+                sum += MathF.Abs(cross.Z / len);
+                n++;
+            }
+
+        return n == 0 ? 1f : sum / n;
+    }
+
+    /// <inheritdoc cref="Horizontality(IReadOnlyList{SVec3}, int, int)"/>
+    public static float Horizontality(in BspFace face, BspVertex[] vertices)
+    {
+        ArgumentNullException.ThrowIfNull(vertices);
+        int w = face.PatchWidth, h = face.PatchHeight, first = face.FirstVertex;
+        if (w < 2 || h < 2 || first < 0 || first + w * h > vertices.Length)
+            return 1f;
+
+        var controls = new SVec3[w * h];
+        for (int i = 0; i < controls.Length; i++)
+            controls[i] = vertices[first + i].Position;
+        return Horizontality(controls, w, h);
+    }
+
+    /// <summary>
+    /// How far a quadratic Bezier bows away from the straight line between its endpoints, at the midpoint —
+    /// zero for three collinear, evenly-spaced control points, which is what a flat patch is made of.
+    /// </summary>
+    private static float Sag(SVec3 c0, SVec3 c1, SVec3 c2)
+        => (c1 - (c0 + c2) * 0.5f).Length() * 0.5f;
 
     /// <summary>
     /// One fully-interpolated patch vertex in Quake space, mirroring <see cref="BspVertex"/>'s render

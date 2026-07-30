@@ -9,7 +9,7 @@
 
 using System.Collections.Generic;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// One voice message — the C# successor to a QC <c>REGISTER_VOICEMSG(id, vt, listed)</c> entry

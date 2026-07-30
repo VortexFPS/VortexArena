@@ -1,7 +1,7 @@
 # fx-effectinfo — parity spec
 
 **Base refs:** `common/effects/effectinfo.qc` · `common/effects/effect.qh` · `common/effects/all.qc` · `common/effects/all.qh` · `common/effects/effectinfo.inc` (+ `effectinfo_*.inc`) · the shipped `data/xonotic-data.pk3dir/effectinfo.txt` · DarkPlaces engine `darkplaces/cl_particles.c` (`baselineparticleeffectinfo`, `CL_Particles_ParseEffectInfo`)
-**Port refs:** `game/client/EffectInfo.cs` · `game/client/EffectInfoParticle.cs` · `src/XonoticGodot.Common/Gameplay/Effects/{Effect.cs,EffectsList.cs,EffectEmitter.cs}` · `game/client/EffectSystem.cs` · `game/client/particles/FaithfulParticleBackend.cs`
+**Port refs:** `game/client/EffectInfo.cs` · `game/client/EffectInfoParticle.cs` · `src/VortexArena.Common/Gameplay/Effects/{Effect.cs,EffectsList.cs,EffectEmitter.cs}` · `game/client/EffectSystem.cs` · `game/client/particles/FaithfulParticleBackend.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -105,7 +105,7 @@ which effect name to play, gentle-mode selection) which belong to their own unit
 | `Net_Write_Effect` wire body | `EffectNetProtocol.Encode` + `ExtraFlags`/`QuantizeColor` | Byte-exact: same EFF_NET_* bits, `rint(bound(0,16c,255))` quantise, count byte for point effects. |
 | `Send_Effect_` (by name) | `EffectEmitter.EmitByEffectInfoName` | Same registry scan then engine-fallback (records request with null Effect). |
 | `te_*` builtins | `EffectEmitter.Te*` helpers | Convenience wrappers mapping to registry names. |
-| `effectinfo.txt` file | `assets/data/xonotic-data.pk3dir/effectinfo.txt` (9043 lines, 800 blocks) | Same shipped (violence/non-gentle) build. |
+| `effectinfo.txt` file | `Base/data/xonotic-data.pk3dir/effectinfo.txt` (9043 lines, 800 blocks) | Same shipped (violence/non-gentle) build. |
 | `CL_Particles_ParseEffectInfo` | `EffectInfo.Parse` / `EffectInfo.Load` (`game/client/EffectInfo.cs`) | Faithful tokeniser; layers same-named blocks; case-insensitive lookup. |
 | `particleeffectinfo_t` + baseline | `EffectInfoEmitter` (`game/client/EffectInfoParticle.cs`) | Field-for-field model; DP baseline defaults reproduced (see gaps for 2 stain-default mismatches). |
 | keyword parse | `EffectInfo.ApplyKeyword` | All gameplay keywords handled; engine-only keywords (stainless/lightshadow/lightcubemapnum/lightcorona/forcenearest) accepted-but-ignored; unknown keywords silently ignored (DP warns). |
@@ -113,7 +113,7 @@ which effect name to play, gentle-mode selection) which belong to their own unit
 | catalog consumption | `EffectSystem.Spawn` → `LookupInfo` → `FaithfulParticleBackend` (mode 0 default) / `ModernParticleBackend` (mode 2) / heuristic `BuildFromInfo` fallback | The faithful backend consumes the full parsed field set. |
 
 **Layer split:** the `Effect`/`EffectsList`/`EffectEmitter`/`EffectNetProtocol` half lives in
-`XonoticGodot.Common` (shared/authority — server emits, wire protocol). The `EffectInfo`
+`VortexArena.Common` (shared/authority — server emits, wire protocol). The `EffectInfo`
 parser + `EffectInfoEmitter` model + `EffectSystem` live in `game/client/` (presentation).
 
 ## Parity assessment
@@ -178,7 +178,7 @@ parser + `EffectInfoEmitter` model + `EffectSystem` live in `game/client/` (pres
   `Except` exclusion in `FlushEffects`), and `ClientNet.DecodeEffect` is the exact inverse
   (the `net_effect` NET_HANDLE) → `EffectReceived` → `NetGame.OnEffectReceived` → `_render.OnEffect`.
   Only a dedicated encode/decode round-trip *test* is missing.
-- **File present:** `assets/data/xonotic-data.pk3dir/effectinfo.txt` = 9043 lines / 800 `effect`
+- **File present:** `Base/data/xonotic-data.pk3dir/effectinfo.txt` = 9043 lines / 800 `effect`
   blocks; types histogram (smoke 242, spark 181, static 133, alphastatic 77, bubble 52, decal 51,
   blood 24, beam 22, snow 12) confirms it is the standard violence build. All key weapon/item/CTF
   effect names present.

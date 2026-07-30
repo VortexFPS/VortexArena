@@ -17,9 +17,9 @@
 
 using System.Globalization;
 using System.Text;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>Who a notification goes to — the C# successor to QC's <c>ENUMCLASS(NOTIF)</c> (notifications/all.qh).</summary>
 public enum NotifBroadcast

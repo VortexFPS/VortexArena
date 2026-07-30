@@ -1,14 +1,14 @@
 using System.Collections.Generic;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Anti-abuse spawn-scoring guards (planning/spawn-system-analysis-2026-07-06.md, R0–R5). Each test drives the
@@ -119,7 +119,7 @@ public sealed class SpawnSystemAntiAbuseTests : System.IDisposable
         Cvar("g_spawn_avoid_los", "0");
         Entity active = Spot(new NVec3(0, 0, 0));
         Entity inactive = Spot(new NVec3(500, 0, 0));
-        inactive.SpawnActive = XonoticGodot.Common.Gameplay.MapMover.ActiveNot; // deactivated (Onslaught/Assault)
+        inactive.SpawnActive = VortexArena.Common.Gameplay.MapMover.ActiveNot; // deactivated (Onslaught/Assault)
 
         // With targetCheck (the bot/match path after R0c) the inactive spot is filtered out — only the active one.
         for (int seed = 0; seed < 20; seed++)

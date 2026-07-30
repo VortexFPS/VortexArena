@@ -1,8 +1,8 @@
 using System;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Diagnostics;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// Dev/CI free-camera capture (the "--observe" flag): keep the local listen-host client an OBSERVER (the
@@ -35,7 +35,7 @@ public static class ObserverCamera
     /// </summary>
     public static bool Configure(string pos, string? lookAt)
     {
-        if (!XonoticGodot.Common.Framework.VecParse.TryParseFloats(pos, min: 3, out float[] p))
+        if (!VortexArena.Common.Framework.VecParse.TryParseFloats(pos, min: 3, out float[] p))
         {
             Log.Severe($"[observe] bad --observe value '{pos}' — expected \"x y z [yaw pitch]\"");
             return false;
@@ -46,7 +46,7 @@ public static class ObserverCamera
 
         if (!string.IsNullOrWhiteSpace(lookAt))
         {
-            if (!XonoticGodot.Common.Framework.VecParse.TryParseFloats(lookAt, min: 3, out float[] t))
+            if (!VortexArena.Common.Framework.VecParse.TryParseFloats(lookAt, min: 3, out float[] t))
             {
                 Log.Severe($"[observe] bad --look-at value '{lookAt}' — expected \"x y z\"");
                 return false;

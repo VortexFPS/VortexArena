@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Bsp;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Engine.Collision;
+namespace VortexArena.Engine.Collision;
 
 /// <summary>
 /// Builds the per-surface render geometry the <c>getsurface*</c> builtins query (<see cref="SurfaceService"/>),

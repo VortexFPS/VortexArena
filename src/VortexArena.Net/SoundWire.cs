@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The wire form of one positional sound record (DP <c>SV_StartSound</c>) inside a <c>SoundBundle</c>: the

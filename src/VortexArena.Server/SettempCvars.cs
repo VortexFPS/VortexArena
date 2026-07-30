@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// Temporary-cvar bookkeeping — the C# successor to <c>cvar_settemp</c> / <c>cvar_settemp_restore</c>

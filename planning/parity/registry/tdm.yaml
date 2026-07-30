@@ -15,11 +15,11 @@ features:
       - "common/gametypes/gametype/tdm/tdm.qh:INIT(TeamDeathmatch)"
       - "common/gametypes/gametype/tdm/tdm.qh:REGISTER_GAMETYPE(TEAM_DEATHMATCH)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:Tdm"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:OnInit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:SeedTimeLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:ResolveGameType"
-      - "src/XonoticGodot.Server/GameWorld.cs:539"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:Tdm"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:OnInit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:SeedTimeLimit"
+      - "src/VortexArena.Server/GameWorld.cs:ResolveGameType"
+      - "src/VortexArena.Server/GameWorld.cs:539"
     constants:
       - { name: "netname", base: "tdm", port: "tdm", match: true }
       - { name: "flags", base: "TEAMPLAY|USEPOINTS|PRIORITY", port: "TeamGame=true (USEPOINTS/PRIORITY implicit)", match: true }
@@ -53,10 +53,10 @@ features:
       - "common/gametypes/sv_rules.qc:GameRules_limit_score"
       - "common/gametypes/sv_rules.qc:GameRules_limit_lead"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:564"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:Activate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:OnInit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:SeedLimit"
+      - "src/VortexArena.Server/GameWorld.cs:564"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:OnInit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:SeedLimit"
     constants:
       - { name: "teamplay_enabled", base: "GameRules_teams(true)", port: "TeamGame=true -> Teamplay(isTeamGame:true)", match: true }
     status:
@@ -81,8 +81,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tdm/sv_tdm.qc:tdm_DelayedInit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:TeamCount"
-      - "src/XonoticGodot.Server/GameWorld.cs:TeamCountFor"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:TeamCount"
+      - "src/VortexArena.Server/GameWorld.cs:TeamCountFor"
     constants:
       - { name: "g_tdm_teams", base: "2", port: "2 (read)", match: true }
       - { name: "g_tdm_teams_override", base: "0 (use g_tdm_teams unless >=2)", port: "0 (read; >=2 wins)", match: true }
@@ -109,8 +109,8 @@ features:
       - "common/gametypes/gametype/tdm/sv_tdm.qc:tdm_Initialize"
       - "common/gametypes/sv_rules.qc:GameRules_spawning_teams"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:RequestsTeamSpawns"
-      - "src/XonoticGodot.Server/ClientManager.cs:683"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:RequestsTeamSpawns"
+      - "src/VortexArena.Server/ClientManager.cs:683"
     constants:
       - { name: "g_tdm_team_spawns", base: "0", port: "0 (default false)", match: true }
     status:
@@ -136,10 +136,10 @@ features:
       - "common/gametypes/sv_rules.qh:GameRules_scoring_add_team"
       - "server/scores.qc:PlayerTeamScore_Add"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:AddTeamScore"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:GetTeamScore"
-      - "src/XonoticGodot.Server/GameWorld.cs:2699"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:AddTeamScore"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:GetTeamScore"
+      - "src/VortexArena.Server/GameWorld.cs:2699"
     constants:
       - { name: "enemy_frag", base: "+1", port: "+1", match: true }
       - { name: "suicide", base: "-1", port: "-1", match: true }
@@ -168,8 +168,8 @@ features:
       - "common/gametypes/sv_rules.qh:GameRules_scoring_add_team"
       - "server/scores.qc:PlayerTeamScore_Add"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/Player/Player.cs:ScoreFrags"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/Player/Player.cs:ScoreFrags"
     constants:
       - { name: "enemy_frag_to_player", base: "+1 SP_SCORE", port: "+1 (attacker.ScoreFrags += 1)", match: true }
       - { name: "suicide_to_player", base: "-1 SP_SCORE", port: "-1 (victim.ScoreFrags -= 1)", match: true }
@@ -198,11 +198,11 @@ features:
       - "common/gametypes/sv_rules.qc:GameRules_limit_score"
       - "server/world.qc:WinningCondition_Scores"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:OnInit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:SeedLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:PointLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:UpdateLeaderAndCheckLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:3278"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:OnInit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:SeedLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:PointLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Server/GameWorld.cs:3278"
     constants:
       - { name: "g_tdm_point_limit (cfg default)", base: "-1 (=> mapinfo pointlimit 50)", port: "-1 resolved to 50 via SeedLimit + PointLimit", match: true }
       - { name: "effective_pointlimit", base: "50", port: "50 (fraglimit seeded at boot; match ends at 50)", match: true }
@@ -229,8 +229,8 @@ features:
       - "common/gametypes/sv_rules.qc:GameRules_limit_lead"
       - "server/world.qc:WinningCondition_Scores"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:LeadLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:LeadLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:UpdateLeaderAndCheckLimit"
     constants:
       - { name: "g_tdm_point_leadlimit (cfg default)", base: "-1 (=> mapinfo leadlimit 0)", port: "-1 resolved to 0 (off) via SeedLimit + LeadLimit", match: true }
       - { name: "effective_leadlimit", base: "0 (off)", port: "0 (off, via >0 guard)", match: true }
@@ -256,8 +256,8 @@ features:
       - "server/world.qc:WinningCondition_Scores"
       - "server/scores.qc:WinningConditionHelper"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:ReportsTie"
-      - "src/XonoticGodot.Server/GameWorld.cs:4088"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:ReportsTie"
+      - "src/VortexArena.Server/GameWorld.cs:4088"
     constants: []
     status:
       logic: faithful
@@ -281,8 +281,8 @@ features:
       - "server/teamplay.qc:TeamBalance_JoinBestTeam"
       - "server/teamplay.qc:TeamBalance_FindBestTeam"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:AssignBestTeam"
-      - "src/XonoticGodot.Server/ClientManager.cs:224"
+      - "src/VortexArena.Server/Teamplay.cs:AssignBestTeam"
+      - "src/VortexArena.Server/ClientManager.cs:224"
     constants:
       - { name: "uneven_threshold", base: ">=2 player gap (autobalance)", port: ">=2 (TeamsAreUneven)", match: true }
     status:
@@ -308,10 +308,10 @@ features:
       - "common/gametypes/gametype/tdm/sv_tdm.qc:MUTATOR_HOOKFUNCTION(tdm, Scores_CountFragsRemaining)"
       - "server/world.qc:WinningCondition_Scores"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ResetFragsRemaining"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:UpdateLeaderAndCheckLimit"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:122"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ResetFragsRemaining"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:122"
     constants:
       - { name: "announce_thresholds", base: "1,2,3 frags left", port: "1,2,3 (REMAINING_FRAG_1/2/3)", match: true }
       - { name: "leadlimit_and_fraglimit", base: "max(fragsleft,leadingfragsleft) when both+cvar, else min", port: "same (reads leadlimit_and_fraglimit)", match: true }
@@ -337,7 +337,7 @@ features:
       - "common/gametypes/gametype/tdm/tdm.qh:METHOD(TeamDeathmatch, m_isAlwaysSupported)"
       - "common/gametypes/gametype/tdm/tdm.qh:METHOD(TeamDeathmatch, m_isForcedSupported)"
     port_refs:
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:ApplyForcedGametypes"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:ApplyForcedGametypes"
     constants:
       - { name: "always_supported", base: "spawnpoints>=8 && diameter>3250", port: "none", match: false }
       - { name: "g_tdm_on_dm_maps", base: "0 (DM maps also offer TDM when set)", port: "ApplyForcedGametypes promotes DM->TDM when ForceTdmOnDmMaps, BUT that flag is never wired from the cvar and MapInfoBackend has no live constructor (dead)", match: false }

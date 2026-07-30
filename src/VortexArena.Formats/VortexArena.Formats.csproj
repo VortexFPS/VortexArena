@@ -3,11 +3,11 @@
        Godot-free so parsing is unit-testable; the Godot host turns the data into ArrayMesh/Skeleton3D.
        (Refinement of ADR-0006 for buildability/testability.) -->
   <PropertyGroup>
-    <TargetFramework>$(XonoticGodotTfm)</TargetFramework>
-    <RootNamespace>XonoticGodot.Formats</RootNamespace>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Formats</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\XonoticGodot.Common\XonoticGodot.Common.csproj" />
+    <ProjectReference Include="..\VortexArena.Common\VortexArena.Common.csproj" />
   </ItemGroup>
 </Project>

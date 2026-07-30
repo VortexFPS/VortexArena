@@ -15,7 +15,7 @@ features:
     base_refs:
       - "common/mapobjects/triggers.qc:SUB_UseTargets_Ex"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:UseTargetsEx"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:UseTargetsEx"
     constants:
       - { name: "talk_sound", base: "SND(TALK)=misc/talk.wav", port: "misc/talk.wav", match: true }
       - { name: "target slots", base: "target..target4", port: "Target..Target4", match: true }
@@ -42,10 +42,10 @@ features:
       - "common/mapobjects/trigger/multi.qc:multi_touch"
       - "common/mapobjects/trigger/multi.qc:multi_eventdamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:MultipleSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:MultiTrigger"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:MultiTouch"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:MultipleSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:MultiTrigger"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:MultiTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:OnDeath"
     constants:
       - { name: "wait default", base: "0.2 (xon) / 0.5 (q3compat)", port: "0.2 (xon) / 0.5 (q3compat) — now applied", match: true }
       - { name: "once wait", base: "-1", port: "-1", match: true }
@@ -78,8 +78,8 @@ features:
       - "common/mapobjects/trigger/hurt.qc:trigger_hurt_touch"
       - "common/mapobjects/trigger/hurt.qc:spawnfunc(trigger_hurt)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:HurtSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:HurtTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:HurtSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:HurtTouch"
     constants:
       - { name: "dmg default", base: "10000 (q3compat 5)", port: "IsQ3Compat ? 5 : 10000 (HurtSetup:306)", match: true }
       - { name: "creature cooldown", base: "1s (q3compat non-HURT_SLOW 0.05s)", port: "(IsQ3Compat && !HurtSlow) ? 0.05 : 1 (HurtTouch:340)", match: true }
@@ -110,9 +110,9 @@ features:
       - "common/mapobjects/trigger/heal.qc:trigger_heal_init"
       - "common/mapobjects/trigger/heal.qc:spawnfunc(target_heal)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:HealSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:TargetHealSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:HealTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:HealSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:TargetHealSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:HealTouch"
     constants:
       - { name: "delay default", base: "1", port: "1", match: true }
       - { name: "health (per-tick)", base: "10", port: "10", match: true }
@@ -143,10 +143,10 @@ features:
       - "common/mapobjects/trigger/gravity.qc:trigger_gravity_check_think"
       - "common/mapobjects/trigger/gravity.qc:trigger_gravity_remove"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:GravitySetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:GravityTouch"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:GravityCheckThink"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:GravityRemove"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:GravitySetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:GravityTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:GravityCheckThink"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:GravityRemove"
     constants:
       - { name: "GRAVITY_STICKY", base: "BIT(0)", port: "1<<0", match: true }
       - { name: "GRAVITY_START_DISABLED", base: "BIT(1)", port: "1<<1", match: true }
@@ -175,10 +175,10 @@ features:
       - "common/mapobjects/trigger/impulse.qc:trigger_impulse_touch_directional"
       - "common/mapobjects/trigger/impulse.qc:trigger_impulse_touch_accel"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:ImpulseSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:ImpulseTouchRadial"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:ImpulseTouchDirectional"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:ImpulseTouchAccel"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:ImpulseSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:ImpulseTouchRadial"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:ImpulseTouchDirectional"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:ImpulseTouchAccel"
     constants:
       - { name: "DEFAULT_RADIAL_STRENGTH", base: "2000", port: "2000", match: true }
       - { name: "DEFAULT_DIRECTIONAL_STRENGTH", base: "950", port: "950", match: true }
@@ -209,10 +209,10 @@ features:
       - "common/mapobjects/trigger/jumppads.qc:jumppad_push"
       - "common/mapobjects/trigger/jumppads.qc:trigger_push_velocity_calculatevelocity"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Jumppads.cs:CalculateVelocity"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Jumppads.cs:JumppadPush"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Jumppads.cs:CalculateVelocityPad"
-      - "src/XonoticGodot.Engine/Simulation/TriggerTouch.cs:PredictJumppadsAmbient"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Jumppads.cs:CalculateVelocity"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Jumppads.cs:JumppadPush"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Jumppads.cs:CalculateVelocityPad"
+      - "src/VortexArena.Engine/Simulation/TriggerTouch.cs:PredictJumppadsAmbient"
     constants:
       - { name: "speed default", base: "1000", port: "1000", match: true }
       - { name: "movedir scale", base: "speed*10 (trigger_push) / speed (target_push)", port: "same", match: true }
@@ -244,8 +244,8 @@ features:
       - "common/mapobjects/trigger/swamp.qc:swamp_think"
       - "common/physics/player.qc:50"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:SwampSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:SwampThink"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:SwampSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:SwampThink"
     constants:
       - { name: "dmg default", base: "5", port: "5", match: true }
       - { name: "swamp_interval default", base: "1", port: "1", match: true }
@@ -273,8 +273,8 @@ features:
       - "common/mapobjects/trigger/secret.qc:trigger_secret_touch"
       - "common/mapobjects/trigger/secret.qc:spawnfunc(trigger_secret)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:SecretSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:SecretTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:SecretSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:SecretTouch"
     constants:
       - { name: "default message", base: "\"You found a secret!\"", port: "same", match: true }
       - { name: "default sound", base: "1 = misc/secret.wav", port: "same", match: true }
@@ -302,9 +302,9 @@ features:
       - "common/mapobjects/trigger/counter.qc:counter_use"
       - "common/mapobjects/trigger/counter.qc:counter_reset"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:CounterSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:CounterUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:CounterReset"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:CounterSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:CounterUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:CounterReset"
     constants:
       - { name: "count default", base: "2", port: "2", match: true }
       - { name: "COUNTER_FIRE_AT_COUNT", base: "BIT(2)", port: "1<<2", match: true }
@@ -334,9 +334,9 @@ features:
       - "common/mapobjects/trigger/delay.qc:delay_use"
       - "common/mapobjects/trigger/relay.qc:spawnfunc(target_delay)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:RelaySetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:TargetDelaySetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:DelaySetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:RelaySetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:TargetDelaySetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:DelaySetup"
     constants:
       - { name: "target_delay wait default", base: "1", port: "1", match: true }
       - { name: "trigger_delay wait default", base: "1", port: "1", match: true }
@@ -364,10 +364,10 @@ features:
       - "common/mapobjects/trigger/monoflop.qc:monoflop_fixed_use"
       - "common/mapobjects/trigger/monoflop.qc:monoflop_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MonoflopSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MonoflopUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MonoflopFixedUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MonoflopThink"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MonoflopSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MonoflopUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MonoflopFixedUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MonoflopThink"
     constants:
       - { name: "wait default", base: "1", port: "1", match: true }
       - { name: "MONOFLOP_FIXED", base: "BIT(0)", port: "1<<0", match: true }
@@ -393,8 +393,8 @@ features:
       - "common/mapobjects/trigger/flipflop.qc:flipflop_use"
       - "common/mapobjects/trigger/flipflop.qc:spawnfunc(trigger_flipflop)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:FlipflopSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:FlipflopUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:FlipflopSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:FlipflopUse"
     constants:
       - { name: "START_ENABLED", base: "spawnflag (initial latch)", port: "SpawnStartEnabled", match: true }
     status:
@@ -420,9 +420,9 @@ features:
       - "common/mapobjects/trigger/multivibrator.qc:multivibrator_toggle"
       - "common/mapobjects/trigger/multivibrator.qc:spawnfunc(trigger_multivibrator)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MultivibratorSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MultivibratorSend"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MultivibratorToggle"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MultivibratorSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MultivibratorSend"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MultivibratorToggle"
     constants:
       - { name: "wait default (on cycle)", base: "1", port: "1", match: true }
       - { name: "respawntime default (off cycle)", base: "= wait", port: "= wait", match: true }
@@ -449,8 +449,8 @@ features:
     base_refs:
       - "common/mapobjects/trigger/disablerelay.qc:trigger_disablerelay_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:DisableRelaySetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:DisableRelayUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:DisableRelaySetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:DisableRelayUse"
     constants: []
     status:
       logic: faithful
@@ -473,8 +473,8 @@ features:
     base_refs:
       - "common/mapobjects/trigger/relay_if.qc:trigger_relay_if_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayIfSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayIfUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayIfSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayIfUse"
     constants:
       - { name: "RELAYIF_NEGATE", base: "BIT(0)", port: "1<<0", match: true }
     status:
@@ -498,9 +498,9 @@ features:
     base_refs:
       - "common/mapobjects/trigger/relay_teamcheck.qc:trigger_relay_teamcheck_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayTeamCheckSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayTeamCheckUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayTeamCheckReset"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayTeamCheckSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayTeamCheckUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayTeamCheckReset"
     constants:
       - { name: "RELAYTEAMCHECK_NOTEAM", base: "BIT(0)", port: "1<<0", match: true }
       - { name: "RELAYTEAMCHECK_INVERT", base: "BIT(1)", port: "1<<1", match: true }
@@ -526,10 +526,10 @@ features:
       - "common/mapobjects/trigger/relay_activators.qc:relay_activators_use"
       - "common/mapobjects/trigger/relay_activators.qc:spawnfunc(relay_activate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayActivateSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayDeactivateSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayActivateToggleSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:RelayActivatorsUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayActivateSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayDeactivateSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayActivateToggleSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:RelayActivatorsUse"
     constants:
       - { name: ".cnt = ACTIVE_*", base: "ACTIVE_ACTIVE / ACTIVE_NOT / ACTIVE_TOGGLE", port: "same", match: true }
     status:
@@ -554,9 +554,9 @@ features:
       - "common/mapobjects/trigger/gamestart.qc:gamestart_use"
       - "common/mapobjects/trigger/gamestart.qc:spawnfunc(trigger_gamestart)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:GamestartSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:GamestartUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:AdaptorThink2Use"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:GamestartSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:GamestartUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:AdaptorThink2Use"
     constants:
       - { name: "fire time", base: "game_starttime + wait", port: "GameStartTime + wait (provider now wired)", match: true }
     status:
@@ -582,10 +582,10 @@ features:
       - "common/mapobjects/trigger/magicear.qc:trigger_magicear_processmessage_forallears"
       - "common/mapobjects/trigger/magicear.qc:spawnfunc(trigger_magicear)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MagicEarSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MagicEarProcessMessage"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MagicEarProcessAllEars"
-      - "src/XonoticGodot.Server/Chat.cs:Say"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MagicEarSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MagicEarProcessMessage"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MagicEarProcessAllEars"
+      - "src/VortexArena.Server/Chat.cs:Say"
     constants:
       - { name: "MAGICEAR_* spawnflags", base: "BIT(0..9)", port: "1<<0..1<<9", match: true }
     status:
@@ -611,9 +611,9 @@ features:
       - "common/mapobjects/trigger/keylock.qc:trigger_keylock_touch"
       - "common/mapobjects/trigger/keylock.qc:spawnfunc(trigger_keylock)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:KeylockSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:KeylockTouch"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:KeylockTrigger"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:KeylockSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:KeylockTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:KeylockTrigger"
     constants:
       - { name: "default message", base: "\"Unlocked!\"", port: "\"Unlocked!\"", match: true }
       - { name: "wait default", base: "5", port: "5", match: true }
@@ -645,10 +645,10 @@ features:
       - "common/mapobjects/trigger/teleport.qc:Teleport_Active"
       - "common/mapobjects/teleporters.qc:Simple_TeleportPlayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:SimpleTeleportPlayer"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
-      - "src/XonoticGodot.Engine/Simulation/TriggerTouch.cs:PredictTeleportsAmbient"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:SimpleTeleportPlayer"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
+      - "src/VortexArena.Engine/Simulation/TriggerTouch.cs:PredictTeleportsAmbient"
     constants:
       - { name: "TELEPORT_OBSERVERS_ONLY", base: "BIT(0)", port: "1<<0", match: true }
       - { name: "TELEPORT_KEEP_SPEED", base: "BIT(1) (skips MIN/MAXSPEED clamp)", port: "1<<1 (no-op: clamps unported)", match: true }
@@ -681,9 +681,9 @@ features:
       - "common/mapobjects/target/music.qc:Ent_TriggerMusic_Think"
       - "common/mapobjects/target/music.qc:TargetMusic_Advance"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs:TriggerMusicSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs:TriggerMusicSetup"
       - "game/client/MusicPlayer.cs:UpdateSources"
     constants:
       - { name: "volume default", base: "1", port: "1", match: true }
@@ -715,9 +715,9 @@ features:
       - "common/mapobjects/trigger/viewloc.qc:viewloc_init"
       - "common/mapobjects/trigger/viewloc.qc:spawnfunc(target_viewlocation_start)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/ViewLocation.cs:TriggerViewLocationSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/ViewLocation.cs:ViewLocThink"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/ViewLocation.cs:StartSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs:TriggerViewLocationSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs:ViewLocThink"
+      - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs:StartSetup"
     constants:
       - { name: "start cnt", base: "1", port: "1", match: true }
       - { name: "end cnt", base: "2", port: "2", match: true }

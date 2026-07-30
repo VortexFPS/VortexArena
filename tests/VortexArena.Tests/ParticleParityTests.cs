@@ -1,16 +1,16 @@
 using System.Numerics;
 using System.Text.Json;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Particles;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Particles;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// PARTICLE-PARITY / GOLDEN-TRACE tests (planning/particles-dual-system.md §C.5). Each fixture in
-/// <c>tests/XonoticGodot.Tests/golden/particles/*.json</c> was produced by <c>tools/particles-ref/particles_ref.c</c>
+/// <c>tests/VortexArena.Tests/golden/particles/*.json</c> was produced by <c>tools/particles-ref/particles_ref.c</c>
 /// — an INDEPENDENT C reference transcribed line-for-line from Darkplaces' <c>cl_particles.c</c>
 /// (CL_NewParticle / CL_NewParticlesFromEffectinfo spawn + R_DrawParticles update). The fixture records the
 /// emitter block, the spawn inputs, the analytic collision world, the EXACT libc rand() draw sequence, and a

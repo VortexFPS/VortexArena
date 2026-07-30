@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Common.Math;
+namespace VortexArena.Common.Math;
 
 /// <summary>
 /// A deterministic pseudo-random generator INSTANCE (QC prandom/psrandom, lib/random.qc) — the per-context RNG

@@ -14,9 +14,9 @@
 // `overtimes` value tracked here is the source. The one-shot overtime/sudden-death CENTER notifications are
 // sent separately (OnOvertimeStarted / OnSuddenDeathStarted → NotificationSystem).
 
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// QC <c>WINNING_*</c> (server/world.qh:132-135) — the win-condition return codes the score check produces.
@@ -189,7 +189,7 @@ public sealed class OverTimeManager
     /// The score-check slice of QC <c>WinningCondition_Scores</c> (world.qc:1560-1639), reduced to the inputs
     /// the headless port already computes per gametype: whether the win limit is reached (the gametype's
     /// <c>MatchEnded</c> latch) and whether the top two contenders are tied (the gametype's
-    /// <see cref="XonoticGodot.Common.Gameplay.GameType.ReportsTie"/>). While sudden death is running, the QC
+    /// <see cref="VortexArena.Common.Gameplay.GameType.ReportsTie"/>). While sudden death is running, the QC
     /// fragsleft=1 case means any winning condition closes the match — so a non-tie ends it, exactly as
     /// <see cref="GetWinningCode"/> already yields. Returns the same <see cref="WinningCode"/> QC's
     /// <c>GetWinningCode(topscore &amp;&amp; limit_reached, equality)</c> would.

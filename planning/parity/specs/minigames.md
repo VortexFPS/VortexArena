@@ -1,7 +1,7 @@
 # Minigames — parity spec
 
 **Base refs:** `common/minigames/{minigames,sv_minigames,cl_minigames,cl_minigames_hud}.qc/.qh` + `common/minigames/minigame/{bd,c4,nmm,pong,pp,ps,ttt}.qc/.qh` + `minigame/all.qh`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Minigames/*` (rules) · `src/XonoticGodot.Server/Commands.cs`, `GameWorld.cs` (host) · `game/net/{MinigameClient,MinigameNetState,ServerNet,ClientNet,NetGame}.cs` (wire) · `game/hud/{MinigameRenderer,MinigameMenu,MinigameHelpPanel,HudManager}.cs` (view)
+**Port refs:** `src/VortexArena.Common/Gameplay/Minigames/*` (rules) · `src/VortexArena.Server/Commands.cs`, `GameWorld.cs` (host) · `game/net/{MinigameClient,MinigameNetState,ServerNet,ClientNet,NetGame}.cs` (wire) · `game/hud/{MinigameRenderer,MinigameMenu,MinigameHelpPanel,HudManager}.cs` (view)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-07-02
 
 ## Overview
@@ -129,8 +129,8 @@ per-feature verdicts; this doc records the Base algorithms and the port's archit
 | game views | `MinigameRenderer` generic grid draw + bespoke `DrawPong`/`DrawSnake`; **no nmm/bd draw path** |
 | turn prompt, allspecs, invite notification | NOT IMPLEMENTED |
 
-Layer split: rules in `XonoticGodot.Common` (server-authoritative, host = GameWorld/Commands),
-wire in `game/net`, view in `game/hud`. Tests: `tests/XonoticGodot.Tests/MinigameSessionTests.cs`
+Layer split: rules in `VortexArena.Common` (server-authoritative, host = GameWorld/Commands),
+wire in `game/net`, view in `game/hud`. Tests: `tests/VortexArena.Tests/MinigameSessionTests.cs`
 (lifecycle, commands, ttt/c4 end-to-end, pong sim, invite contract).
 
 ## Parity assessment
@@ -147,7 +147,7 @@ Full per-row verdicts live in `registry/minigames.yaml`. The headline picture:
   has no nmm/bd branch ⇒ **NMM and Bulldozer are invisible to every client** (rules run
   server-side into the void).
 - **Bulldozer is additionally unplayable**: no level is ever loaded (`LoadLevel` has zero live
-  callers; the shipped `storage_level*.txt` files under `assets/data/xonotic-data.pk3dir` are
+  callers; the shipped `storage_level*.txt` files under `Base/data/xonotic-data.pk3dir` are
   never parsed; `sv_minigames_bulldozer_startlevel` doesn't exist), and `Bulldozer.Move`
   parses every token as a direction, so the menu's next/restart/edit/save verbs step the
   (nonexistent) dozer instead.

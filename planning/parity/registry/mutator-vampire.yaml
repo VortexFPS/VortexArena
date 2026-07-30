@@ -15,9 +15,9 @@ features:
       - "common/mutators/mutator/vampire/sv_vampire.qc:7 (REGISTER_MUTATOR vampire = expr_evaluate(g_vampire) && !MUTATOR_IS_ENABLED(mutator_instagib))"
       - "common/mutators/mutator/instagib/sv_instagib.qh:35 (REGISTER_MUTATOR mutator_instagib = autocvar_g_instagib && !MapInfo_LoadedGametype.m_weaponarena)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireMutator.cs:24 (IsEnabled: g_vampire!=0 && g_instagib==0)"
-      - "src/XonoticGodot.Server/GameWorld.cs:602 (MutatorActivation.Apply)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:80 (Apply -> mut.IsEnabled -> Add/Remove)"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireMutator.cs:24 (IsEnabled: g_vampire!=0 && g_instagib==0)"
+      - "src/VortexArena.Server/GameWorld.cs:602 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:80 (Apply -> mut.IsEnabled -> Add/Remove)"
     constants:
       - { name: "g_vampire", base: "0 (mutators.cfg:78)", port: "0 (mutators.cfg:78)", match: true }
       - { name: "instagib exclusion term", base: "!MUTATOR_IS_ENABLED(mutator_instagib)", port: "g_instagib == 0", match: true }
@@ -46,8 +46,8 @@ features:
       - "common/mutators/mutator/vampire/sv_vampire.qc:9 (MUTATOR_HOOKFUNCTION vampire, PlayerDamage_SplitHealthArmor)"
       - "server/player.qc:322 (MUTATOR_CALLHOOK fired unconditionally per damage event)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireMutator.cs:45 (OnPlayerDamage)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:438 (PlayerDamageSplitHealthArmor.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireMutator.cs:45 (OnPlayerDamage)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:438 (PlayerDamageSplitHealthArmor.Call)"
     constants:
       - { name: "g_vampire_factor (default)", base: "1.0", port: "1.0", match: true }
       - { name: "g_vampire_factor == 0 honored", base: "yes (heals 0)", port: "yes (read live, no if(f!=0) swallow)", match: true }
@@ -84,8 +84,8 @@ features:
       - "common/resources/sv_resources.qc:12 (GetResourceLimit RES_HEALTH = autocvar_g_balance_health_limit)"
       - "common/mutators/mutator/vampire/vampire.qc:11 (MENUQC describe: 'health can go way above 200' — STALE text)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:105 (GiveResource -> SetResource clamps to GetResourceLimit)"
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:84 (GetResourceLimit RES_HEALTH default 200)"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:105 (GiveResource -> SetResource clamps to GetResourceLimit)"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:84 (GetResourceLimit RES_HEALTH default 200)"
     constants:
       - { name: "g_balance_health_limit (balance-xonotic)", base: "200", port: "200", match: true }
     status:
@@ -110,7 +110,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:259 (buff_Available: BUFF_VAMPIRE && g_vampire -> false)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:206 (BuffAvailable)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:206 (BuffAvailable)"
     constants: []
     status:
       logic: faithful
@@ -135,11 +135,11 @@ features:
       - "common/mutators/mutator/vampire/sv_vampire.qc:30 (BuildMutatorsPrettyString -> ', Vampire'; aggregated at server/client.qc:1107 for the server-info 'modifications' string)"
       - "common/mutators/mutator/vampire/vampire.qc:6 (MENUQC METHOD describe — 2-paragraph info page)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireMutator.cs:82 (BuildMutatorsString -> ':Vampire')"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireMutator.cs:85 (BuildMutatorsPrettyString -> ', Vampire')"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108 (BuildMutatorsString aggregator — LIVE) / :121 (BuildMutatorsPrettyString aggregator — now LIVE)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1068 (MutatorActivation.BuildMutatorsString live under sv_eventlog -> GameLog.Init)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1079 (MutatorActivation.BuildMutatorsPrettyString live -> 'modifications' serverinfo cvar)"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireMutator.cs:82 (BuildMutatorsString -> ':Vampire')"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireMutator.cs:85 (BuildMutatorsPrettyString -> ', Vampire')"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108 (BuildMutatorsString aggregator — LIVE) / :121 (BuildMutatorsPrettyString aggregator — now LIVE)"
+      - "src/VortexArena.Server/GameWorld.cs:1068 (MutatorActivation.BuildMutatorsString live under sv_eventlog -> GameLog.Init)"
+      - "src/VortexArena.Server/GameWorld.cs:1079 (MutatorActivation.BuildMutatorsPrettyString live -> 'modifications' serverinfo cvar)"
       - "game/net/ServerNet.cs:607 (MutatorActivation.BuildMutatorsPrettyString live -> server-browser infostring 'modifications' key)"
       - "game/menu/dialogs/DialogMutators.cs:148 (g_vampire checkbox; tooltip now carries the full 2-paragraph describe text)"
     constants: []

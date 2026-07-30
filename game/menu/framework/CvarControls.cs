@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Menu;   // CheckBoxValue (the QC value-pair checkbox math)
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Menu;   // CheckBoxValue (the QC value-pair checkbox math)
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The cvar-bound widget toolkit — the C# successors to Xonotic's <c>makeXonotic*</c> widget factories
@@ -29,7 +29,7 @@ public static class Widgets
     /// <summary>
     /// QC <c>makeXonoticCheckBoxEx(yesValue, noValue, cvar, label)</c> — a checkbox that stores one of two
     /// VALUES in the cvar (checkbox.qc:33-42; e.g. cl_bobfall 0.05/0, v_idlescale 1/0, cl_eventchase_death
-    /// 2/0), with the QC midpoint load rule (<see cref="XonoticGodot.Common.Menu.CheckBoxValue"/>).
+    /// 2/0), with the QC midpoint load rule (<see cref="VortexArena.Common.Menu.CheckBoxValue"/>).
     /// <paramref name="multiCvars"/> = QC <c>makeMulti</c> (util.qc:92): extra cvars written with the same
     /// stored value on toggle (the View tab's cl_bob checkbox also drives cl_bob2).
     /// </summary>

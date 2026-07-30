@@ -7,11 +7,11 @@
 // below then clamps to what the thrower actually had (the QC anti-duplication order).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Weapon tossing — the C# successor to <c>server/weapons/throwing.qc</c>: impulse-17 drops

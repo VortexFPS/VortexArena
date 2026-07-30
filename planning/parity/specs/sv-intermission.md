@@ -1,7 +1,7 @@
 # sv-intermission — parity spec
 
 **Base refs:** `server/world.qc` (`NextLevel`, `CheckRules_World`, overtime cascade) · `server/intermission.qc` (`IntermissionThink`, `FixIntermissionClient`, `GotoNextMap`, `DoNextMapOverride`, the maplist machinery) · `server/mapvoting.qc` (`MapVote_Start` + the vote) · `client/hud/panel/scoreboard.qc` (`Scoreboard_WouldDraw` intermission auto-show)
-**Port refs:** `src/XonoticGodot.Server/Intermission.cs` · `src/XonoticGodot.Server/MapRotation.cs` · `src/XonoticGodot.Server/MapVoting.cs` · `src/XonoticGodot.Server/OverTimeManager.cs` · `src/XonoticGodot.Server/GameWorld.cs` (`CheckRulesAndIntermission`, `NextLevel`, `DriveEndOfMatchMapFlow`, `ApplyMapChange`) · `game/hud/MapVotePanel.cs` · `game/net/ServerNet.cs`/`ClientNet.cs` (`MatchState`)
+**Port refs:** `src/VortexArena.Server/Intermission.cs` · `src/VortexArena.Server/MapRotation.cs` · `src/VortexArena.Server/MapVoting.cs` · `src/VortexArena.Server/OverTimeManager.cs` · `src/VortexArena.Server/GameWorld.cs` (`CheckRulesAndIntermission`, `NextLevel`, `DriveEndOfMatchMapFlow`, `ApplyMapChange`) · `game/hud/MapVotePanel.cs` · `game/net/ServerNet.cs`/`ClientNet.cs` (`MatchState`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -186,7 +186,7 @@ host that subscribes to `Running`/`ReadyToChangeLevel` — but in the actual hos
 client pieces are not yet implemented, so they read as gaps rather than intended divergences.
 
 ## Verification
-- Server cascade + rotation: unit tests in `tests/XonoticGodot.Tests/ServerInfraTests.cs`
+- Server cascade + rotation: unit tests in `tests/VortexArena.Tests/ServerInfraTests.cs`
   (`GameWorld_EndOfMatch_RotatesToNextMap`, `MapRotation_*`, `Restart_FromIntermission_ResetsTheServerCleanly`)
   and `OverTimeManagerTests.cs` — pass (code-read; build-green per project memory).
 - Map-vote networking: confirmed absent — `NetProtocol.cs` `NetControl` enum has no `MapVote` member;

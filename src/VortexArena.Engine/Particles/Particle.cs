@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Engine.Particles;
+namespace VortexArena.Engine.Particles;
 
 // =====================================================================================================
 //  The faithful particle pool element — the C# mirror of Darkplaces' particle_t (Base/darkplaces/

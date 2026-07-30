@@ -16,9 +16,9 @@ features:
       - "server/clientkill.qc:226 ClientKill"
       - "server/command/cmd.qc:552"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:1696 CmdKill"
-      - "src/XonoticGodot.Server/Commands.cs:814 (Register \"kill\")"
-      - "src/XonoticGodot.Server/KillCountdown.cs:77 Begin (CmdKill → KillCountdown.Begin(p,0) at Commands.cs:1705)"
+      - "src/VortexArena.Server/Commands.cs:1696 CmdKill"
+      - "src/VortexArena.Server/Commands.cs:814 (Register \"kill\")"
+      - "src/VortexArena.Server/KillCountdown.cs:77 Begin (CmdKill → KillCountdown.Begin(p,0) at Commands.cs:1705)"
     constants: []
     status:
       logic: faithful
@@ -42,9 +42,9 @@ features:
       - "server/clientkill.qc:94 ClientKill_TeamChange"
       - "server/clientkill.qc:61 KillIndicator_Think"
     port_refs:
-      - "src/XonoticGodot.Server/Cvars.cs:170 (register g_balance_kill_delay \"2\")"
-      - "src/XonoticGodot.Server/KillCountdown.cs Begin/Tick (ceil(killtime) countdown, per-second decrement, kill at 0)"
-      - "src/XonoticGodot.Server/GameWorld.cs:936 (KillDelay = Cvars.FloatOr g_balance_kill_delay 2); :1848-1850 Tick drive"
+      - "src/VortexArena.Server/Cvars.cs:170 (register g_balance_kill_delay \"2\")"
+      - "src/VortexArena.Server/KillCountdown.cs Begin/Tick (ceil(killtime) countdown, per-second decrement, kill at 0)"
+      - "src/VortexArena.Server/GameWorld.cs:936 (KillDelay = Cvars.FloatOr g_balance_kill_delay 2); :1848-1850 Tick drive"
     constants:
       - { name: "g_balance_kill_delay", base: "2 (s)", port: "2 (Cvars.cs:170, read via Cvars.FloatOr GameWorld.cs:936)", match: true }
       - { name: "round_unstarted_clamp", base: "min(killtime,1)", port: "min(killtime,1) when RoundActiveNotStarted (KillCountdown.cs:92-93)", match: true }
@@ -69,9 +69,9 @@ features:
     base_refs:
       - "server/clientkill.qc:146 ClientKill_TeamChange"
     port_refs:
-      - "src/XonoticGodot.Server/Cvars.cs:173 (register g_balance_kill_antispam \"5\")"
-      - "src/XonoticGodot.Server/GameWorld.cs:938 (KillAntispam = Cvars.FloatOr g_balance_kill_antispam 5)"
-      - "src/XonoticGodot.Server/KillCountdown.cs:116-123 Begin (carry-forward: killtime=max(killtime, nexttime-now); nexttime=now+killtime+antispam, antispam clamped to min(.,2) while round unstarted)"
+      - "src/VortexArena.Server/Cvars.cs:173 (register g_balance_kill_antispam \"5\")"
+      - "src/VortexArena.Server/GameWorld.cs:938 (KillAntispam = Cvars.FloatOr g_balance_kill_antispam 5)"
+      - "src/VortexArena.Server/KillCountdown.cs:116-123 Begin (carry-forward: killtime=max(killtime, nexttime-now); nexttime=now+killtime+antispam, antispam clamped to min(.,2) while round unstarted)"
     constants:
       - { name: "g_balance_kill_antispam", base: "5 (s); XPM/XDF set 0", port: "5 (Cvars.cs:173, read via Cvars.FloatOr GameWorld.cs:938)", match: true }
       - { name: "round_unstarted_antispam_clamp", base: "min(antispam,2)", port: "min(antispam,2) when RoundActiveNotStarted (KillCountdown.cs:120-121)", match: true }
@@ -125,9 +125,9 @@ features:
       - "server/clientkill.qc:84 KillIndicator_Think (Send_Notification MSG_ANNCE)"
       - "common/util.qc Announcer_PickNumber (CNT_KILL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:177 (NUM_KILL_n generated enabled:false in the 1..10 loop)"
-      - "src/XonoticGodot.Server/KillCountdown.cs:221-222 Tick (AnnceIfEnabled NUM_KILL_n)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1848-1850 (KillCountdown.Tick drive over Clients.Players)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:177 (NUM_KILL_n generated enabled:false in the 1..10 loop)"
+      - "src/VortexArena.Server/KillCountdown.cs:221-222 Tick (AnnceIfEnabled NUM_KILL_n)"
+      - "src/VortexArena.Server/GameWorld.cs:1848-1850 (KillCountdown.Tick drive over Clients.Players)"
     constants:
       - { name: "NUM_KILL announcer set", base: "ANNCE_NUM_KILL_1..10 (CNT_KILL)", port: "NUM_KILL_n enabled:false (Base N___NEVER); sent per-second from KillCountdown.Tick gated on Enabled", match: true }
     status:
@@ -151,9 +151,9 @@ features:
     base_refs:
       - "server/clientkill.qc:188 ClientKill_TeamChange (Send_Notification MSG_CENTER)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:1054-1060 (CENTER_TEAMCHANGE_*)"
-      - "src/XonoticGodot.Server/KillCountdown.cs:141-148 Begin (CENTER_TEAMCHANGE_* send with ^COUNT) + :241-250 TeamChangeCenterName"
-      - "src/XonoticGodot.Server/Commands.cs:1638 CmdSelectTeam (TEAMCHANGE_ALREADYBEST)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:1054-1060 (CENTER_TEAMCHANGE_*)"
+      - "src/VortexArena.Server/KillCountdown.cs:141-148 Begin (CENTER_TEAMCHANGE_* send with ^COUNT) + :241-250 TeamChangeCenterName"
+      - "src/VortexArena.Server/Commands.cs:1638 CmdSelectTeam (TEAMCHANGE_ALREADYBEST)"
     constants:
       - { name: "notif set", base: "CENTER_TEAMCHANGE_{SUICIDE,SPECTATE,RED,BLUE,YELLOW,PINK,ALREADYBEST}", port: "SUICIDE/SPECTATE/RED/BLUE/YELLOW/PINK emitted with ^COUNT by KillCountdown.Begin (reachable on suicide AND team-change/spectate); ALREADYBEST emitted by CmdSelectTeam auto-path (Commands.cs:1638)", match: true }
       - { name: "colormod", base: "black '0 0 0' / grey '0.5 0.5 0.5' / Team_ColorRGB", port: "none (digit-entity detail, not networked)", match: false }
@@ -181,9 +181,9 @@ features:
       - "server/command/cmd.qc:764 (selectteam → ClientKill_TeamChange)"
       - "server/command/cmd.qc:288,889 (spectate → ClientKill_TeamChange -2)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:1599 CmdSelectTeam (auto/explicit → KillCountdown.Begin :1643/:1667)"
-      - "src/XonoticGodot.Server/Commands.cs CmdSpectate (→ KillCountdown.Begin(p,-2) :1594)"
-      - "src/XonoticGodot.Server/KillCountdown.cs:174-184 PerformKillNow / GameWorld.cs:979 PerformTeamChange"
+      - "src/VortexArena.Server/Commands.cs:1599 CmdSelectTeam (auto/explicit → KillCountdown.Begin :1643/:1667)"
+      - "src/VortexArena.Server/Commands.cs CmdSpectate (→ KillCountdown.Begin(p,-2) :1594)"
+      - "src/VortexArena.Server/KillCountdown.cs:174-184 PerformKillNow / GameWorld.cs:979 PerformTeamChange"
     constants: []
     status:
       logic: faithful
@@ -209,8 +209,8 @@ features:
       - "common/gametypes/gametype/cts/sv_cts.qc:337 (killtime=0)"
       - "common/gametypes/gametype/race/sv_race.qc:114 (killtime=0 while qualifying)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:968-977 (KillCountdown.ClientKillHook)"
-      - "src/XonoticGodot.Server/KillCountdown.cs:88-89 Begin (ClientKillHook gate)"
+      - "src/VortexArena.Server/GameWorld.cs:968-977 (KillCountdown.ClientKillHook)"
+      - "src/VortexArena.Server/KillCountdown.cs:88-89 Begin (ClientKillHook gate)"
     constants: []
     status:
       logic: faithful
@@ -234,9 +234,9 @@ features:
       - "server/clientkill.qc:212 ClientKill_Silent"
       - "common/gametypes/gametype/cts/sv_cts.qc:347 Race_FinalCheckpoint → ClientKill_Silent"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:416 ScheduleRetract"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:430 RetractRunner"
-      - "src/XonoticGodot.Server/GameWorld.cs:3139 (cts.OnFinishRetract = silent Combat.Damage DEATH_KILL)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:416 ScheduleRetract"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:430 RetractRunner"
+      - "src/VortexArena.Server/GameWorld.cs:3139 (cts.OnFinishRetract = silent Combat.Damage DEATH_KILL)"
     constants:
       - { name: "g_cts_finish_kill_delay", base: "2 (s); -1 instant, 0 never", port: "2 default; 0 = no retract (gated, Cts.cs:423-424); -1 = instant (Max(0,delay)=now); positive duration honored", match: true }
     status:
@@ -261,7 +261,7 @@ features:
       - "server/impulse.qc:505 (waypoint clear → ClientKill)"
       - "server/impulse.qc:518 (waypoint_clear → ClientKill)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:1868 CmdWaypointClear (→ KillCountdown.Begin :1895)"
+      - "src/VortexArena.Server/Commands.cs:1868 CmdWaypointClear (→ KillCountdown.Begin :1895)"
     constants:
       - { name: "g_allow_checkpoints", base: "0", port: "0 (Cvars.cs:408)", match: true }
     status:
@@ -285,9 +285,9 @@ features:
       - "server/clientkill.qc:38 ClientKill_Now (this.vehicle → vehicles_exit(VHEF_RELEASE))"
       - "server/clientkill.qc:41-45 (vehicle_health=-1; Damage(this,this,this,1,DEATH_KILL) when not a team-change)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:948-961 (KillCountdown.PerformKill vehicle branch)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:261 Exit (VHEF_RELEASE eject)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:480 DamageVehicle (kill the empty vehicle)"
+      - "src/VortexArena.Server/GameWorld.cs:948-961 (KillCountdown.PerformKill vehicle branch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:261 Exit (VHEF_RELEASE eject)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:480 DamageVehicle (kill the empty vehicle)"
     constants:
       - { name: "exit_flag", base: "VHEF_RELEASE", port: "VehicleBoarding.Exit (release eject)", match: true }
       - { name: "vehicle_dmg", base: "1 (DEATH_KILL) + vehicle_health=-1", port: "DamageVehicle(health+1, DEATH_KILL) — sentinel modeled as overkill since the QC vehicle_health float has no port field (GameWorld.cs:955-958)", match: true }
@@ -312,8 +312,8 @@ features:
     base_refs:
       - "server/clientkill.qc:31-33 ClientKill_Now_TeamChange (if !QueuedPlayersTagIn && g_balance_teams_remove → TeamBalance_RemoveExcessPlayers)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:1008 (PerformTeamChange tail → Teamplay.RemoveExcessPlayers)"
-      - "src/XonoticGodot.Server/Teamplay.cs:1230 RemoveExcessPlayers (gated on RemoveExcessEnabled = g_balance_teams_remove != 0, :1215-1216 + :1233)"
+      - "src/VortexArena.Server/GameWorld.cs:1008 (PerformTeamChange tail → Teamplay.RemoveExcessPlayers)"
+      - "src/VortexArena.Server/Teamplay.cs:1230 RemoveExcessPlayers (gated on RemoveExcessEnabled = g_balance_teams_remove != 0, :1215-1216 + :1233)"
     constants:
       - { name: "g_balance_teams_remove", base: "0 (default off)", port: "0 (Cvars.cs:151); consulted on the team-change-resolve path via RemoveExcessPlayers' internal RemoveExcessEnabled gate (Teamplay.cs:1215-1216)", match: true }
     status:

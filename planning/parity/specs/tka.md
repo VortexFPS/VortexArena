@@ -1,7 +1,7 @@
 # Team Keepaway (tka) — parity spec
 
 **Base refs:** `common/gametypes/gametype/tka/{tka.qc,tka.qh,sv_tka.qc,sv_tka.qh,cl_tka.qc,cl_tka.qh}` (the ball mechanics are a near-verbatim fork of `common/gametypes/gametype/keepaway/sv_keepaway.qc`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs` · `src/XonoticGodot.Server/GameWorld.cs` (BootGametype / DriveGametypeFrame) · `src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs` (RoleKeepaway) · `game/hud/ScoreboardPanel.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs` · `src/VortexArena.Server/GameWorld.cs` (BootGametype / DriveGametypeFrame) · `src/VortexArena.Server/Bot/BotObjectiveRoles.cs` (RoleKeepaway) · `game/hud/ScoreboardPanel.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

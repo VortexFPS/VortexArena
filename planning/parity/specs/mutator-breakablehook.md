@@ -1,7 +1,7 @@
 # Breakable Hook mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/breakablehook/sv_breakablehook.qc` (+ `.qh`, `_mod.inc`) · supporting: `server/hook.qc` (the grapplinghook entity it acts on), `common/teams.qh` (`DIFF_TEAM`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs` · `src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs` · `src/XonoticGodot.Common/Gameplay/Teams.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs` · `src/VortexArena.Common/Gameplay/Weapons/Hook.cs` · `src/VortexArena.Common/Gameplay/Teams.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -127,7 +127,7 @@ None claimed. The team-test defect is an unintended gap, not a deliberate change
 - **Port read:** `BreakablehookMutator.cs` (full), `DamageSystem.cs:204-222` (call site + write-back),
   `MutatorHooks.cs:223-247` (args struct), `Hook.cs:199-279` (grapplinghook entity, ProjectileDamage→RemoveHook),
   `Teams.cs:35` (`SameTeam`), `DamageEntityState.cs:135` (`RealOwner => Owner`), `MutatorActivation.cs`.
-- **Tests:** `tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:102` (registration) and `:518`
+- **Tests:** `tests/VortexArena.Tests/MutatorBatchT51Tests.cs:102` (registration) and `:518`
   `Breakablehook_ZeroesDamage_OnOwnHook_WhenOwnerBreakOff` (own-hook damage-zeroing). The existing test does
   **not** assert the absence of the spurious FFA self-splash, so the team-test bug is unguarded.
 - **Self-break bug:** established by static reasoning over `SameTeam` vs `DIFF_TEAM` truth tables; not yet

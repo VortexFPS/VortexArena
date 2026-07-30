@@ -11,7 +11,7 @@
 // `have_team_spawns` global). Lives in a partial of GameType (declared `partial` in GameplayBases.cs) so the
 // team-spawn hook ships alongside the other GameTypes/* wiring without editing the base-class file.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 public abstract partial class GameType
 {

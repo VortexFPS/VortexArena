@@ -1,7 +1,7 @@
 # Key Hunt — parity spec
 
 **Base refs:** `common/gametypes/gametype/keyhunt/{sv_keyhunt.qc, sv_keyhunt.qh, cl_keyhunt.qc, cl_keyhunt.qh, keyhunt.qc, keyhunt.qh}`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs` · `src/XonoticGodot.Net/GametypeStatusBlock.cs` · `game/hud/ModIconsPanel.cs` (DrawKeyhunt) · `src/XonoticGodot.Server/GameWorld.cs` (wiring) · `src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs` (RoleKeyHunt)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs` · `src/VortexArena.Net/GametypeStatusBlock.cs` · `game/hud/ModIconsPanel.cs` (DrawKeyhunt) · `src/VortexArena.Server/GameWorld.cs` (wiring) · `src/VortexArena.Server/Bot/BotObjectiveRoles.cs` (RoleKeyHunt)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

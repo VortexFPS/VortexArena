@@ -1,9 +1,9 @@
 using Godot;
-using XonoticGodot.Common.Services;          // CvarFlags
-using XonoticGodot.Engine.Console;            // BindTable — the live +/- held-button state (PRESSED_KEYS source)
-using XonoticGodot.Engine.Simulation;         // CvarService (RegisterDefaults)
+using VortexArena.Common.Services;          // CvarFlags
+using VortexArena.Engine.Console;            // BindTable — the live +/- held-button state (PRESSED_KEYS source)
+using VortexArena.Engine.Simulation;         // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Pressed-keys panel — port of Base/.../qcsrc/client/hud/panel/pressedkeys.qc (HUD panel #11). The QC version

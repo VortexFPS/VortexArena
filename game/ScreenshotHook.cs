@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// Dev/CI visual-capture helper. When the host is launched with <c>--screenshot &lt;path&gt;</c>,
@@ -51,6 +51,32 @@ public partial class ScreenshotHook : Node
             if (readyAt < 0)
                 readyAt = i;
             if (i - readyAt >= settleAfterReady)
+                break;
+        }
+
+        // A running editor bake would otherwise be captured mid-flight — the frame would show whatever
+        // lighting existed BEFORE it, which silently invalidates every A/B comparison made from screenshots.
+        // The APPLY counts too: the finished bake streams onto the world a few milliseconds a frame, so a
+        // capture between "bake done" and "apply done" shows a world lit PARTLY by the old bake and partly
+        // by the new one — the worst possible reference image, and one that looks plausible.
+        // Re-checked AFTER settling, because these stages hand off across frames: a finished bake is not
+        // applied until the host's next tick starts the recolour, so for one frame "not baking" and "not
+        // applying" are both true while the work is very much unfinished. A single pass through the wait
+        // photographed a world 31% recoloured — half old lighting, half new, and plausible enough to publish.
+        for (int guard = 0; guard < 4; guard++)
+        {
+            while (VortexArena.Game.Vmap.EditorLightBake.BakeRunning
+                   || VortexArena.Game.Vmap.EditorLightBake.BakeFinished
+                   || VortexArena.Game.Vmap.VmapMapBuilder.RecolorRemaining > 0)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+            // Settle, then look again: if the handoff started something, the loop above catches it.
+            for (int i = 0; i < 8; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+            if (!VortexArena.Game.Vmap.EditorLightBake.BakeRunning
+                && !VortexArena.Game.Vmap.EditorLightBake.BakeFinished
+                && VortexArena.Game.Vmap.VmapMapBuilder.RecolorRemaining == 0)
                 break;
         }
 

@@ -1,7 +1,7 @@
 # Movement golden-trace reference
 
 `movement_ref.c` is an **independent** C reference for the Xonotic player-movement physics, used to generate
-the golden-trace corpus that `tests/XonoticGodot.Tests/MovementParityTests.cs` checks the C# port against
+the golden-trace corpus that `tests/VortexArena.Tests/MovementParityTests.cs` checks the C# port against
 (REMAINING-WORK §6 — *Golden-trace corpus from Darkplaces* + *Movement-parity tests*).
 
 ## Why a separate C reference?
@@ -36,12 +36,12 @@ Requires a WSL C toolchain (any recent gcc — the 2026-07-05 regen used the dis
 root (adjust the /mnt/c path when regenerating from a worktree):
 
 ```bash
-wsl -e bash -lc 'cd /mnt/c/Users/Bryan/Projects/Xonotic/XonoticGodot/tools/movement-ref \
+wsl -e bash -lc 'cd /mnt/c/Users/Bryan/Projects/Xonotic/VortexArena/tools/movement-ref \
   && gcc -O2 -std=c11 -o /tmp/movement_ref movement_ref.c -lm \
-  && /tmp/movement_ref /mnt/c/Users/Bryan/Projects/Xonotic/XonoticGodot/tests/XonoticGodot.Tests/golden'
+  && /tmp/movement_ref /mnt/c/Users/Bryan/Projects/Xonotic/VortexArena/tests/VortexArena.Tests/golden'
 ```
 
-Then run `dotnet test --filter MovementParityTests`. The JSON fixtures in `tests/XonoticGodot.Tests/golden/` are
+Then run `dotnet test --filter MovementParityTests`. The JSON fixtures in `tests/VortexArena.Tests/golden/` are
 committed, so the tests run without the C toolchain; regenerate only when the reference or scenarios change.
 
 ## Scenarios

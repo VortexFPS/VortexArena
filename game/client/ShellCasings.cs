@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Game;
+using VortexArena.Game;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Ejected shell casings — the small brass/shell meshes a weapon throws on each shot. The C# successor to
@@ -248,7 +248,7 @@ public sealed partial class ShellCasings : Node3D
         {
             // #30 slowmo/pause: the casing ballistic sim is Base CSQC (cl.time-driven) — scale by the client
             // render-time factor so casings freeze mid-air at slowmo 0 and tumble slow at fractional slowmo.
-            float dt = XonoticGodot.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
+            float dt = VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
             if (dt <= 0f)
                 return; // paused — hold age, position and sound state exactly where they are
             _age += dt;

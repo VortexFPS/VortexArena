@@ -18,9 +18,9 @@ features:
       - "common/stats.qh:330-332 (autocvar_g_bloodloss + REGISTER_STAT(BLOODLOSS, FLOAT, autocvar_g_bloodloss))"
       - "xonotic-server.cfg:304 (set g_bloodloss 0)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:30-31 (IsEnabled => Cvars.GetFloat(\"g_bloodloss\") != 0f)"
-      - "src/XonoticGodot.Server/GameWorld.cs:631 (MutatorActivation.Apply)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs (Apply → Add → Hook)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:30-31 (IsEnabled => Cvars.GetFloat(\"g_bloodloss\") != 0f)"
+      - "src/VortexArena.Server/GameWorld.cs:631 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs (Apply → Add → Hook)"
     constants:
       - { name: "g_bloodloss default", base: "0 (disabled)", port: "0 via cvar; no static 25f field fallback any more (Threshold is now a live cvar read)", match: true }
       - { name: "enable predicate", base: "autocvar_g_bloodloss truthy (non-zero)", port: "GetFloat(\"g_bloodloss\") != 0f", match: true }
@@ -48,10 +48,10 @@ features:
       - "common/deathtypes/all.inc:29 REGISTER_DEATHTYPE(ROT, DEATH_SELF_ROT, ...)"
       - "server/damage.qc:483 Damage() + :614-615 (targ==attacker → damage *= g_balance_selfdamagepercent)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:58-85 (OnPlayerPreThink)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2261 (PlayerPreThink.Call on the live per-client move)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs (BloodlossTimer)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:270-271 (self-damage *= g_balance_selfdamagepercent 0.65 when attacker==targ, ReferenceEquals(attacker,targ))"
+      - "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:58-85 (OnPlayerPreThink)"
+      - "src/VortexArena.Server/GameWorld.cs:2261 (PlayerPreThink.Call on the live per-client move)"
+      - "src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs (BloodlossTimer)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:270-271 (self-damage *= g_balance_selfdamagepercent 0.65 when attacker==targ, ReferenceEquals(attacker,targ))"
     constants:
       - { name: "damage per tick (requested)", base: "1 hp", port: "1f", match: true }
       - { name: "damage per tick (effective)", base: "1 * g_balance_selfdamagepercent = 0.65 hp (self-damage)", port: "1 * 0.65 = 0.65 hp (DamageSystem.cs:263 applies the same self-damage cut when attacker==targ)", match: true }
@@ -78,8 +78,8 @@ features:
     base_refs:
       - "common/mutators/mutator/bloodloss/bloodloss.qc:23-24 (vehicles_exit(player.vehicle, VHEF_RELEASE))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:74-75 (ExitVehicle Release)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:230 (ExitVehicle)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:74-75 (ExitVehicle Release)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:230 (ExitVehicle)"
     constants:
       - { name: "exit flag", base: "VHEF_RELEASE", port: "VehicleExitFlag.Release", match: true }
     status:
@@ -103,8 +103,8 @@ features:
       - "common/mutators/mutator/bloodloss/bloodloss.qc:31-36 SVQC MUTATOR_HOOKFUNCTION(PlayerCanCrouch)"
       - "common/physics/player.qc:~198-203 (do_crouch pre-clamped false for vehicle/frozen/dead, THEN MUTATOR_CALLHOOK(PlayerCanCrouch))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:88-93 (OnPlayerCanCrouch)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:1312 (UpdateCrouch: pre-clamp hook/dead/frozen/vehicle at :1300-1308 → PlayerCanCrouch.Call → read cc.DoCrouch back at :1313)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:88-93 (OnPlayerCanCrouch)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:1312 (UpdateCrouch: pre-clamp hook/dead/frozen/vehicle at :1300-1308 → PlayerCanCrouch.Call → read cc.DoCrouch back at :1313)"
     constants:
       - { name: "trigger", base: "RES_HEALTH <= autocvar_g_bloodloss → do_crouch=true (no HEALTH>0 guard in SVQC)", port: "Health <= Threshold → DoCrouch=true (no Health>0 guard)", match: true }
     status:
@@ -128,9 +128,9 @@ features:
       - "common/mutators/mutator/bloodloss/bloodloss.qc:38-44 SVQC MUTATOR_HOOKFUNCTION(PlayerJump)"
       - "common/physics/player.qc:~403 (if (MUTATOR_CALLHOOK(PlayerJump,...)) return true; aborts the jump)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:96-101 (OnPlayerJump → return true)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:1093 (if (PlayerJump.Call(ref pj)) → abort the jump via return (true, ...))"
-      - "src/XonoticGodot.Common/Framework/Hooks.cs:39-47 (HookChain.Call ORs handler returns)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:96-101 (OnPlayerJump → return true)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:1093 (if (PlayerJump.Call(ref pj)) → abort the jump via return (true, ...))"
+      - "src/VortexArena.Common/Framework/Hooks.cs:39-47 (HookChain.Call ORs handler returns)"
     constants:
       - { name: "trigger", base: "RES_HEALTH <= autocvar_g_bloodloss → return true (forbid, no HEALTH>0 guard SVQC)", port: "Health <= Threshold → return true", match: true }
     status:
@@ -153,7 +153,7 @@ features:
     base_refs:
       - "common/mutators/mutator/bloodloss/bloodloss.qc:21,34,42 (autocvar_g_bloodloss read live on every hook call)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:25 (private float Threshold => Api.Cvars.GetFloat(\"g_bloodloss\") — live cvar read property)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:25 (private float Threshold => Api.Cvars.GetFloat(\"g_bloodloss\") — live cvar read property)"
     constants:
       - { name: "read cadence", base: "live cvar read every hook call", port: "live cvar read every hook call (Threshold is now an expression-bodied property: Api.Cvars.GetFloat(\"g_bloodloss\"))", match: true }
     status:
@@ -180,13 +180,13 @@ features:
       - "common/util.qc:309 X(\"Blood loss\", _(\"Blood loss\"), MUT_BLOODLOSS, cvar(\"g_bloodloss\") > 0)"
       - "client.qc mut_set_active(MUT_BLOODLOSS) when g_bloodloss > 0 (CSQC active-mutator HUD icon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:104 (BuildMutatorsString override → s + \":bloodloss\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:107 (BuildMutatorsPrettyString override → s + \", Blood loss\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108 (BuildMutatorsString aggregator over Added mutators)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:121 (BuildMutatorsPrettyString aggregator — has live callers)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1161 (MutatorActivation.BuildMutatorsString live call in GameLogInit, gated on sv_eventlog)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1172 (MutatorActivation.BuildMutatorsPrettyString live call → 'modifications' serverinfo cvar at match init)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1339,1453,1459 (SendMutatorsWelcome — BuildMutatorsPrettyString live call → per-join Welcome chat line 'Active modifications: ^3...' to the connecting client)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:104 (BuildMutatorsString override → s + \":bloodloss\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:107 (BuildMutatorsPrettyString override → s + \", Blood loss\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108 (BuildMutatorsString aggregator over Added mutators)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:121 (BuildMutatorsPrettyString aggregator — has live callers)"
+      - "src/VortexArena.Server/GameWorld.cs:1161 (MutatorActivation.BuildMutatorsString live call in GameLogInit, gated on sv_eventlog)"
+      - "src/VortexArena.Server/GameWorld.cs:1172 (MutatorActivation.BuildMutatorsPrettyString live call → 'modifications' serverinfo cvar at match init)"
+      - "src/VortexArena.Server/GameWorld.cs:1339,1453,1459 (SendMutatorsWelcome — BuildMutatorsPrettyString live call → per-join Welcome chat line 'Active modifications: ^3...' to the connecting client)"
       - "game/net/ServerNet.cs:613 (MutatorActivation.BuildMutatorsPrettyString live call in BuildServerInfo → 'modifications' key of the DP server-browser infostring)"
     constants:
       - { name: "serverinfo code tag", base: "\":bloodloss\"", port: "\":bloodloss\" (BloodlossMutator.cs:104)", match: true }

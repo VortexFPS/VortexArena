@@ -14,7 +14,7 @@ to be complete. This is an analysis/checklist — it does not itself change anyt
 
 > **This supersedes the earlier split.** The original rule kept a hard line: brand → *Vortex
 > Arena*, but all internal identifiers (namespaces, `.sln`/`.csproj`, assemblies, artifacts,
-> campaign id) stay `XonoticGodot`. **Per Decision 3, internal IDs are now being renamed too.**
+> campaign id) stay `VortexArena`. **Per Decision 3, internal IDs are now being renamed too.**
 
 Where things land now:
 
@@ -22,7 +22,7 @@ Where things land now:
   window title, app metadata, logo/wordmark, hostnames, first-run copy.
 - **Internal IDs → `VortexArena`, all of them, this pass.** Per Decision 3 the rename is a
   clean-break big-bang covering both Tier 0 (campaign id, gamename, env var, config filenames,
-  bundle id) **and** Tier 1 (namespaces `XonoticGodot.* → VortexArena.*`, `.sln`/`.csproj`,
+  bundle id) **and** Tier 1 (namespaces `VortexArena.* → VortexArena.*`, `.sln`/`.csproj`,
   assemblies, artifact filenames). See [Decision 3](#decision-3--internal-id-rename-scope).
 - **Genuinely frozen** — only upstream-lineage comments, `.po` msgid keys, Xonotic
   attribution, and the `"DarkPlaces"` wire protocol. See [What stays](#what-stays-unchanged-even-after-decision-3).
@@ -56,28 +56,28 @@ Small, mechanical, self-contained. These are literals a player sees on screen.
 | # | File | Line | Current | Proposed | Where it shows |
 |---|------|------|---------|----------|----------------|
 | A1 | `game/menu/MainMenu.cs` | 93 | `"XONOTIC"` | `"VORTEX ARENA"` | Main-menu wordmark — **fallback only**, used when the logo texture (D1) is absent |
-| A2 | `game/menu/MainMenu.cs` | 99 | `"XonoticGodot"` | `"Vortex Arena"` | Main-menu subtitle, always visible under the logo |
+| A2 | `game/menu/MainMenu.cs` | 99 | `"VortexArena"` | `"Vortex Arena"` | Main-menu subtitle, always visible under the logo |
 | A3 | `game/menu/dialogs/DialogFirstRun.cs` | 64–65 | `"Welcome to Xonotic, please select…"` | `"Welcome to Vortex Arena…"` | First-run setup dialog |
 | A4 | `game/menu/dialogs/DialogTermsOfService.cs` | 40 | `"Welcome to Xonotic! Please read the…"` | `"Welcome to Vortex Arena!…"` | Terms-of-service header |
-| A5 | `game/console/ConsoleOverlay.cs` | 304 | `"XonoticGodot console. …"` | `"Vortex Arena console. …"` | In-game console (backtick) header |
+| A5 | `game/console/ConsoleOverlay.cs` | 304 | `"VortexArena console. …"` | `"Vortex Arena console. …"` | In-game console (backtick) header |
 | A6 | `game/menu/dialogs/DialogBindingsReset.cs` | 49 | `"Reset every key binding to the Xonotic defaults"` | `"…to the default bindings"` | Button tooltip (hover) |
 
 ## B. Project & export identity (app metadata / window title)
 
 These set the OS-level app name, window title bar, and installer/bundle identity.
-The window title bar currently reads **"XonoticGodot"** (Godot derives it from `config/name`
+The window title bar currently reads **"VortexArena"** (Godot derives it from `config/name`
 — no explicit title is set in code).
 
 | # | File | Line | Current | Proposed | Notes |
 |---|------|------|---------|----------|-------|
-| B1 | `project.godot` | 13 | `config/name="XonoticGodot"` | `"Vortex Arena"` | **This is the OS window-title bar text.** ⚠ Godot's `user://` path is derived from this — see G-note |
+| B1 | `project.godot` | 13 | `config/name="VortexArena"` | `"Vortex Arena"` | **This is the OS window-title bar text.** ⚠ Godot's `user://` path is derived from this — see G-note |
 | B2 | `project.godot` | 14 | `config/description="Xonotic, reborn on Godot + C#…"` | Vortex Arena description | Metadata only |
-| B3 | `export_presets.cfg` | 64 | `application/product_name="XonoticGodot"` | `"Vortex Arena"` | Windows .exe product name (file properties) |
-| B4 | `export_presets.cfg` | 65 | `application/file_description="XonoticGodot client"` | `"Vortex Arena client"` | Windows .exe description |
-| B5 | `export_presets.cfg` | 175 | `application/bundle_identifier="org.xonoticgodot.client"` | e.g. `"org.vortexarena.client"` | macOS bundle id — **changing it after first release re-identifies the app** to the OS |
+| B3 | `export_presets.cfg` | 64 | `application/product_name="VortexArena"` | `"Vortex Arena"` | Windows .exe product name (file properties) |
+| B4 | `export_presets.cfg` | 65 | `application/file_description="VortexArena client"` | `"Vortex Arena client"` | Windows .exe description |
+| B5 | `export_presets.cfg` | 175 | `application/bundle_identifier="org.vortexarena.client"` | e.g. `"org.vortexarena.client"` | macOS bundle id — **changing it after first release re-identifies the app** to the OS |
 
-> **Kept as-is (artifact filenames):** `export_path=".../XonoticGodot.exe"`,
-> `xonoticgodot-dedicated.x86_64`, preset *names* (`windows-client`, etc.), and
+> **Kept as-is (artifact filenames):** `export_path=".../VortexArena.exe"`,
+> `vortexarena-dedicated.x86_64`, preset *names* (`windows-client`, etc.), and
 > `project/assembly_name`. These are release-artifact / codename surfaces per the naming
 > rule, not player-facing brand.
 
@@ -144,15 +144,15 @@ These ship as *defaults* and end up baked into servers' listings and users' save
 
 | # | File | Line | Current | Proposed | Note |
 |---|------|------|---------|----------|------|
-| G1 | `src/XonoticGodot.Server/Cvars.cs` | 378 | `hostname` default `"Xonotic XonoticGodot Server"` | `"Vortex Arena Server"` | Shown in the server browser & server-info dialog |
-| G2 | `game/net/NetGame.cs` | 74, 386, 399 | `"XonoticGodot Listen Server"` (×3) | `"Vortex Arena Listen Server"` | Scoreboard/server-info default |
-| G3 | `game/Shell.cs` | 614 | `"XonoticGodot Listen Server"` | `"Vortex Arena Listen Server"` | Fallback when `hostname` is empty |
+| G1 | `src/VortexArena.Server/Cvars.cs` | 378 | `hostname` default `"Xonotic VortexArena Server"` | `"Vortex Arena Server"` | Shown in the server browser & server-info dialog |
+| G2 | `game/net/NetGame.cs` | 74, 386, 399 | `"VortexArena Listen Server"` (×3) | `"Vortex Arena Listen Server"` | Scoreboard/server-info default |
+| G3 | `game/Shell.cs` | 614 | `"VortexArena Listen Server"` | `"Vortex Arena Listen Server"` | Fallback when `hostname` is empty |
 | G4 | `campaign.cfg` | 1 | `set g_campaignxonoticbeta_index 1` | **rename** → e.g. `g_campaignvortexbeta_index` | Campaign id `xonoticbeta` is baked into the cvar **name**; progress persists as `g_campaignxonoticbeta_index` in `config.cfg`. **Decision 3 — renaming.** Pre-release, resetting progress is acceptable; otherwise add a one-time cvar-copy migration. Rename the campaign data file/dir it points at too. See [Decision 3](#decision-3--internal-id-rename-scope) |
-| G5 | `game/UserPaths.cs` | 29 | user data dir `~/XonData` | keep `XonData`; rename env var | Folder `XonData` is already de-Xonoticized — fine. The **env-var override `XONOTIC_USERDIR`** → `VORTEX_USERDIR` (Tier 0, dev/CI only; update CI scripts + tests that set it) |
+| G5 | `game/UserPaths.cs` | 29 | user data dir `~/XonData` | keep `XonData`; rename env var | Folder `XonData` is already de-Xonoticized — fine. The **env-var override `VORTEX_USERDIR`** → `VORTEX_USERDIR` (Tier 0, dev/CI only; update CI scripts + tests that set it) |
 
 > **G-note (config path coupling):** Godot's `user://` location is derived from
 > `project.godot`'s `config/name`. `UserPaths.cs` already redirects real user data to
-> `~/XonData` and migrates the legacy `%APPDATA%\Godot\app_userdata\XonoticGodot` path — so
+> `~/XonData` and migrates the legacy `%APPDATA%\Godot\app_userdata\VortexArena` path — so
 > changing B1 won't strand saves, but re-verify the migration path after B1 lands.
 
 ## H. Network identity / master server — ✅ DECIDED: own masters
@@ -167,7 +167,7 @@ so client filter, server heartbeat, and server reply all agree:
 | H2 | `game/menu/ServerBrowser.cs` | 108–112 | `Masters` = `dpm{4,6}.xonotic.xyz`, `master3.xonotic.org` | your own hosts, e.g. `master1.vortexarena.<tld>:27950` (2+ for redundancy) |
 | H3 | `game/net/ServerNet.cs` | 641 | `["gamename"] = "Xonotic"` | `"VortexArena"` — the infostring servers reply with; must match H1 or the client filters them out |
 | H4 | server heartbeat defaults (`sv_masterextra*`, ServerNet.cs:556 area + server cfg) | — | Xonotic masters | your masters, or servers never register |
-| H5 | `tests/XonoticGodot.Tests/MasterServerProtocolTests.cs` | 39, 49, 51, 53 | pins `"Xonotic"` in the wire bytes | update to `"VortexArena"` (byte-format assertions otherwise stay) |
+| H5 | `tests/VortexArena.Tests/MasterServerProtocolTests.cs` | 39, 49, 51, 53 | pins `"Xonotic"` in the wire bytes | update to `"VortexArena"` (byte-format assertions otherwise stay) |
 
 See [Decision 1](#decision-1--master-servers--network-identity-decided) for what standing up
 your own masters entails and why the wire protocol itself does **not** change.
@@ -176,7 +176,7 @@ your own masters entails and why the wire protocol itself does **not** change.
 
 | # | File | Note |
 |---|------|------|
-| I1 | `COPYING` | Header still reads *"XonoticGodot Licensing … a port of the Xonotic game code."* Prose brand — update to Vortex Arena while **keeping** the upstream-attribution paragraphs (GPLv3 derivation requires them). |
+| I1 | `COPYING` | Header still reads *"VortexArena Licensing … a port of the Xonotic game code."* Prose brand — update to Vortex Arena while **keeping** the upstream-attribution paragraphs (GPLv3 derivation requires them). |
 | I2 | `README.md`, `CLAUDE.md`, `planning/README.md`, `docs/*` | Already rebranded to Vortex Arena (2026-07-09). Cross-check for stragglers before release. |
 | I3 | trademark | Decide how the fork refers to Xonotic: attribution ("a fork of Xonotic") is fine and required by the GPL lineage; using the Xonotic *name/logo as your own brand* is not. Ties into F and H1. |
 
@@ -273,7 +273,7 @@ content and drop/keep the mark? *(ii) product* — how visually independent shou
 
 ### Decision 3 — Internal-ID rename scope (✅ renaming; choose *how far*)
 
-The earlier naming rule froze all internal identifiers as `XonoticGodot`. **That is now
+The earlier naming rule froze all internal identifiers as `VortexArena`. **That is now
 reversed: internal IDs are being renamed too, including the campaign.** "Internal IDs" spans a
 wide cost range, so the real decision is *how far to go now*. Two tiers:
 
@@ -284,20 +284,20 @@ wide cost range, so the real decision is *how far to go now*. Two tiers:
   otherwise add a one-time cvar-copy on first run. (G4)
 - **`gamename`** → `"VortexArena"` (this *is* part of Decision 1). (H1/H3)
 - **hostname / listen-server defaults** (G1–G3, A2).
-- **macOS bundle id** `org.xonoticgodot.client` → `org.vortexarena.client` (B5).
-- **env var** `XONOTIC_USERDIR` → `VORTEX_USERDIR` (dev/CI; update CI + tests). (G5)
+- **macOS bundle id** `org.vortexarena.client` → `org.vortexarena.client` (B5).
+- **env var** `VORTEX_USERDIR` → `VORTEX_USERDIR` (dev/CI; update CI + tests). (G5)
 - **your own config filenames** (`xonotic-client.cfg`, `xonotic-server.cfg`,
   `binds-xonotic.cfg`) → `va-*` / `vortex-*`, updating the code that loads them by name.
   *Caveat:* keep it clear which cfgs mirror upstream defaults, so the parity-diff tooling that
   compares against `Base/data/.../*.cfg` still lines up.
 
 **Tier 1 — Solution / assembly / namespace (large, high blast radius — separate refactor)**
-- **C# namespaces `XonoticGodot.*`** across ~250 files, all `using` lines, `XonoticGodot.sln`,
+- **C# namespaces `VortexArena.*`** across ~250 files, all `using` lines, `VortexArena.sln`,
   every `.csproj`, `assembly_name` / `RootNamespace`. Mechanical but sweeping. **Traps:** the
   Roslyn **source generators** (`RegistryGenerator` etc.) emit code referencing these names, and
   any **reflection-/attribute-by-name** lookups — both must be renamed in lockstep or the build
   breaks subtly. Verifiable in isolation: build + the full 2 900-test suite must stay green.
-- **Release-artifact filenames** (`XonoticGodot.exe`, `xonoticgodot-dedicated.x86_64`),
+- **Release-artifact filenames** (`VortexArena.exe`, `vortexarena-dedicated.x86_64`),
   `export_path`s, `tools/package.sh`, `.github/workflows/release.yml`, **and the
   launcher/updater `latest.json` manifest** — renaming artifacts **breaks updater continuity**
   across the rename boundary, so coordinate the cutover with the launcher's expected filenames
@@ -305,15 +305,15 @@ wide cost range, so the real decision is *how far to go now*. Two tiers:
 - **Local checkout directory** and this project's **naming rule / memory** are superseded.
 
 **Scope decision: Tier 0 + Tier 1 together (✅ chosen).** This pass is a clean-break big-bang
-rebrand — brand strings, all player-adjacent IDs *and* the `XonoticGodot.* → VortexArena.*`
+rebrand — brand strings, all player-adjacent IDs *and* the `VortexArena.* → VortexArena.*`
 namespace sweep, `.sln`/`.csproj`/assembly names, and artifact filenames all move at once.
 
 Execution notes for the big-bang (to keep it green):
-- **Namespaces + source generators must move in lockstep.** Rename `XonoticGodot.*` →
+- **Namespaces + source generators must move in lockstep.** Rename `VortexArena.*` →
   `VortexArena.*` everywhere, *including* the strings the Roslyn generators
   (`RegistryGenerator` and friends) emit and any reflection/attribute-by-name lookups. Rebuild
   from clean — stale generated code is the classic post-rename break.
-- **Solution/project cutover:** `XonoticGodot.sln` → `VortexArena.sln`, every `*.csproj`
+- **Solution/project cutover:** `VortexArena.sln` → `VortexArena.sln`, every `*.csproj`
   filename + `RootNamespace`/`AssemblyName`, `project/assembly_name` in `project.godot`.
 - **Artifacts + updater in one motion:** `export_path`s, `tools/package.sh`,
   `.github/workflows/release.yml`, and the launcher/updater `latest.json` **must all adopt the
@@ -336,7 +336,7 @@ Execution notes for the big-bang (to keep it green):
   then backdrops. Needs art (Decision 2, Option B first step).
 - **Phase 3 — Infrastructure:** stand up the dpmaster instances (Decision 1) and seed official
   servers so the browser isn't empty at launch.
-- **Phase 4 — Tier-1 rename (this pass, final commits):** the `XonoticGodot.* → VortexArena.*`
+- **Phase 4 — Tier-1 rename (this pass, final commits):** the `VortexArena.* → VortexArena.*`
   namespace/solution/assembly/artifact sweep, coordinated with the launcher's artifact filenames
   (the first VortexArena-named release is the updater cutover). Big-bang per Decision 3.
 - **Phase 5 — Content divergence (long-term):** replace signature Xonotic maps/models/sounds

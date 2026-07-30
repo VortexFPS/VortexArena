@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Info-messages HUD panel config — a faithful C# port of <c>XonoticHUDInfoMessagesDialog_fill</c>
@@ -14,7 +14,7 @@ namespace XonoticGodot.Game.Menu;
 /// 2-way text alignment radio (Left=0 / Right=1). The panel-specific rows depend on
 /// <c>hud_panel_infomessages_group_time != 0</c> (QC <c>setDependentNOT</c>).
 ///
-/// FAITHFUL UI NOW: the <c>hud_panel_infomessages_*</c> cvars drive the in-game HUD renderer/editor XonoticGodot has
+/// FAITHFUL UI NOW: the <c>hud_panel_infomessages_*</c> cvars drive the in-game HUD renderer/editor VortexArena has
 /// not wired yet, but the bindings are REAL (they write the shared <see cref="MenuState.Cvars"/> store). No
 /// apply/command button exists (just Back). The QC "Fade time" widget is a <c>makeXonoticMixedSlider</c>
 /// ("Instant"=0 + numeric range), reproduced with a <see cref="Widgets.TextSlider"/> over the same values.

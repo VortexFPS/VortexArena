@@ -1,7 +1,7 @@
 # Grappling Hook (weapon-hook) — parity spec
 
 **Base refs:** `common/weapons/weapon/hook.qc` + `hook.qh` · `server/hook.qc` (grapple pull physics) · `common/mutators/mutator/hook/sv_hook.qc` (offhand mutator) · `common/mutators/mutator/hook/cl_hook.qc` · balance in `bal-wep-xonotic.cfg` (`g_balance_hook_*`) + `balance-xonotic.cfg` (`g_balance_grapplehook_*`, `g_grappling_hook_tarzan`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs` · `src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs` · `.../Mutators/VampireHookMutator.cs` · `.../Mutators/BreakablehookMutator.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Hook.cs` · `src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs` · `.../Mutators/VampireHookMutator.cs` · `.../Mutators/BreakablehookMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

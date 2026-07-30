@@ -1,4 +1,4 @@
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The owner-only weapon-HUD ring scalars (QC the networked <c>wepent.*</c> fields: <c>vortex_charge</c> /

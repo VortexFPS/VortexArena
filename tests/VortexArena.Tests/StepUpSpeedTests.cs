@@ -1,12 +1,12 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the PORT-EXTENSION step-up vertical-velocity limiter (<c>sv_step_upspeed_scale</c> /
@@ -172,7 +172,7 @@ public class StepUpSpeedTests
 
             // wire round-trip: server Capture -> client FromValues agrees with the live FromCvars read.
             MovementParameters wire = MovementParameters.FromValues(
-                XonoticGodot.Net.MoveVarsBlock.Capture(services.Cvars));
+                VortexArena.Net.MoveVarsBlock.Capture(services.Cvars));
             Assert.Equal(set.StepUpSpeedScale, wire.StepUpSpeedScale);
             Assert.Equal(set.StepUpSpeedMax, wire.StepUpSpeedMax);
         }

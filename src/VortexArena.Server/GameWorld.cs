@@ -70,7 +70,7 @@ public sealed class GameWorld
     /// <summary>The default gametype NetName when none is requested (QC fallback to deathmatch).</summary>
     public const string DefaultGameType = "dm";
 
-    private readonly IReadOnlyList<EntityDict> _mapEntities;
+    private IReadOnlyList<EntityDict> _mapEntities;
 
     /// <summary>The static map geometry this world traces against (QC the BSP collision hull).</summary>
     public CollisionWorld Collision { get; }
@@ -660,6 +660,11 @@ public sealed class GameWorld
         // (CanPickupItems is tagged on each (re)spawn in ClientManager.Spawn; buff pickups self-spawn via the
         //  BuffsMutator hook in MutatorActivation.Apply above — no extra wiring needed here.)
         VortexArena.Common.Gameplay.StartItem.GameStartTimeProvider = () => GameStartTime;
+        // SV_CheckVelocity's universal speed limit (DP sv_maxvelocity). The DP ENGINE default is 2000, but
+        // xonotic-server.cfg:325 sets 1000000000 — so the shipped game has no clamp. Seed the sim from the live
+        // cvar here (before any entity moves) or every projectile faster than 2000 qu/s runs slow: the Blaster
+        // bolt is balanced at 6000 and was flying at a third of that.
+        VortexArena.Engine.Simulation.MoveTypePhysics.ApplyServerCvars(Api.Services?.Cvars);
         // LogicGates.GameStartTimeProvider feeds trigger_gamestart's deferred fire (QC game_starttime + wait) so a
         // wait>0 gamestart trigger fires relative to the real countdown end, not 0. Same live source as StartItem.
         VortexArena.Common.Gameplay.LogicGates.GameStartTimeProvider = () => GameStartTime;
@@ -1333,7 +1338,12 @@ public sealed class GameWorld
         // the default here; same with other round-based gametypes that implement join gating. The default here is
         // the LMS gate for backward compatibility.
         Clients.GametypeJoinGate = p =>
-            (GameType is not LastManStanding lms || lms.CanJoin(p, LmsPreStart))
+            // The editor's EDIT state IS the observer state, so the delayed auto-join would yank a mapper out
+            // of free-fly a second after connecting and drop them at a spawn point. Entering PLAYTEST is only
+            // ever the explicit `editor_playtest` toggle. Gated HERE rather than in ActivateGameType because
+            // this assignment runs after it and would otherwise clobber a per-gametype gate.
+            GameType is not EditorMode
+            && (GameType is not LastManStanding lms || lms.CanJoin(p, LmsPreStart))
             && GametypeHasFreeSlot(p);
         Clients.GametypeOnJoin = p => { if (GameType is LastManStanding lms) lms.AddPlayer(p, !LmsPreStart); };
     }
@@ -2754,6 +2764,25 @@ public sealed class GameWorld
         // own it), so feeding it here would perpetually re-arm the window; passing no fixAngleClients is correct.
         AntiCheat.EndFrame(Simulation.FrameTime, Time);
 
+        // 4.5) QC EndFrame's hit-feedback stat flush (world.qc:2507-2528): per player, advance exactly ONE of
+        // HIT_TIME / TYPEHIT_TIME / KILL_TIME (priority typehit > kill > hit — the killing blow gives ONLY the
+        // kill sound) + the ceil'd cumulative damage total, then clear the per-frame accumulators the damage
+        // pipeline / Obituary banked this tick. Runs after the gametype/round steps so same-frame gametype
+        // kills (round-end executions etc.) flush this frame, not next. Bots' stats are set too but the
+        // owner-only Feedback privacy gate keeps them off the wire (ServerNet.RelevantEntitiesFor).
+        //
+        // TWO passes, exactly like QC. Pass 1 stamps each viewer from `IS_SPEC(it) ? it.enemy : it`, so a
+        // follow-spectator inherits the feedback of the player they are watching. Pass 2 clears every client's
+        // accumulators. Fusing them would let whichever player is iterated first consume the banked damage —
+        // a spectator would silently steal their spectatee's own hit sound.
+        foreach (Player p in Clients.Players)
+        {
+            Player source = p.Spectatee ?? p;
+            VortexArena.Common.Gameplay.Damage.DamageSystem.StampHitSoundStats(p, source, Time);
+        }
+        foreach (Player p in Clients.Players)
+            VortexArena.Common.Gameplay.Damage.DamageSystem.ClearHitSoundAccumulators(p);
+
         // 5) the post-resolution server hook (QC the tail of the server frame).
         ServerHooks.FireEndFrame(Time);
 
@@ -2933,6 +2962,9 @@ public sealed class GameWorld
         VortexArena.Common.Gameplay.RoundHandler.RoundNotStartedProvider = null;
         // Clear any prior gametype's bot attack-veto (only the incoming gametype's arm below re-installs it).
         Bot.BotBrain.ForbidAttackHook = null;
+        // Cleared here and re-set by the editor arm below, so switching away from the editor restores the
+        // normal cl_clippedspectating behaviour for ordinary spectators.
+        ClientManager.EditorFreeFlyNoclip = null;
         // Reset the join gate + onJoin hooks: gametypes that override these (Survival, LMS) re-install them in their
         // arm below (in Boot's WireCommandsGameType → ActivateGameType). For non-round gametypes, these stay as the
         // Boot defaults (LMS-based gate + noop, which gracefully no-op for DM/TDM/etc). Survival installs its own
@@ -2964,6 +2996,20 @@ public sealed class GameWorld
                 // activates standalone like Duel. Its damage+frag scoring handler subscribes here; the per-frame
                 // respawn + leader recompute run via DriveGametypeFrame.
                 m.Activate();
+                break;
+            case EditorMode:
+                // No scoring, no rounds, no team source. The join gate that keeps a mapper in free-fly lives on
+                // the DEFAULT gate in WireServerInfrastructure, because that assignment runs after this switch
+                // and would overwrite anything set here.
+                //
+                // PLAYTEST is deliberately a real deathmatch — damage, items and weapons all behave normally,
+                // because a map tested under special rules has not been tested. The one concession is the
+                // starting arsenal: a mapper checking flow should not have to go and find a weapon first, so
+                // seed the arena to the full set. Seeded only when unset, so a session can still override it.
+                if (string.IsNullOrEmpty(Api.Cvars.GetString("g_weaponarena")))
+                    Api.Cvars.Set("g_weaponarena", EditorMode.DefaultWeaponArena);
+                ClientManager.EditorFreeFlyNoclip = true;   // fly through geometry while editing
+
                 break;
             case TeamMayhem tm:
                 tm.Activate();
@@ -3263,6 +3309,11 @@ public sealed class GameWorld
                 // broadcast NotificationSystem (the MSG_CENTER/MSG_INFO routing). Without this the decisions
                 // (CheckWinner / SpawnMonsterDef) reached a null sink and the prints never went out.
                 inv.Notifications = new InvasionNotifyHost();
+                // QC MUTATOR_HOOKFUNCTION(inv, Bot_ForbidAttack) (sv_invasion.qc:426-431): Invasion is co-op —
+                // a bot may only attack MONSTERS, never players (Base also strips players from g_bot_targets on
+                // spawn; the veto here covers both).
+                Bot.BotBrain.ForbidAttackHook = (self, targ) =>
+                    (targ.Flags & VortexArena.Common.Framework.EntFlags.Monster) == 0;
                 break;
             case Race race:
                 race.Activate();
@@ -3956,6 +4007,8 @@ public sealed class GameWorld
 
         if (Warmup.WarmupStage || Time <= GameStartTime)   // QC: <= to avoid a glitch on the very start tic
             timelimit = 0f;                                // timelimit is not made for warmup / the pre-game window
+        if (GameType is { HasTimeLimit: false })
+            timelimit = 0f;                                // a session, not a match (see GameType.HasTimeLimit)
 
         // QC: endmatch / negative timelimit ends the match immediately (handled by EndMatch elsewhere); a
         // positive timelimit is offset by game_starttime so it counts from the real match start.
@@ -4531,10 +4584,17 @@ public sealed class GameWorld
     /// <see cref="SpawnSystem.SelectSpawnPoint"/> finds them via <c>FindByClass</c> precisely because we keep
     /// them here. "worldspawn" is handled specially via <see cref="ApplyWorldspawn"/> (it configures globals).
     /// </summary>
+    /// <summary>
+    /// Entities produced by the last <see cref="SpawnMapEntities"/> run, so the editor's rebuild can remove
+    /// exactly what the map put there and leave players, projectiles and anything else alone.
+    /// </summary>
+    private readonly List<Entity> _spawnedMapEntities = new();
+
     private void SpawnMapEntities()
     {
         SpawnedEntityCount = 0;
         _unhandledClasses.Clear();
+        _spawnedMapEntities.Clear();
 
         // QC SV_OnEntityPreSpawnFunction gate: an entity whose gametypefilter (or Q3/QL compat keys) excludes
         // it for the active gametype is deleted before its spawnfunc runs. The context (gametype short name,
@@ -4572,6 +4632,8 @@ public sealed class GameWorld
                 continue;
             }
 
+            _spawnedMapEntities.Add(e);
+
             if (SpawnFuncs.TrySpawn(cls, e))
             {
                 SpawnedEntityCount++;
@@ -4590,6 +4652,54 @@ public sealed class GameWorld
                     _unhandledClasses.Add(cls);
             }
         }
+    }
+
+    /// <summary>
+    /// Replace the map's entity set and respawn it — the editor's EDIT to PLAYTEST reconciliation
+    /// (design doc §11.9).
+    ///
+    /// The document is entity truth while editing and the server's live set is what PLAYTEST must show, so the
+    /// two are brought together at the transition rather than kept in step edit by edit. Respawning wholesale
+    /// rather than diffing is correct by construction: every filter, mutator veto and spawnfunc side effect
+    /// runs exactly as it does on a fresh map load, which a hand-written delta would have to reproduce and
+    /// would eventually get wrong.
+    ///
+    /// Only entities THIS spawned are removed. Players, projectiles, and anything a gametype created stay put,
+    /// so dropping into playtest does not reset the session around you.
+    ///
+    /// "This spawned" means everything the map spawn PRODUCED, not just the edicts read out of the dict list.
+    /// A spawnfunc creates more entities than it is given: a door builds its trigger, a platform its trigger,
+    /// an item its replacement. Removing only the top-level edicts orphans all of those, and the next
+    /// reconciliation adds a second set on top — so a few EDIT/PLAYTEST toggles leave a map with doors that
+    /// open from triggers belonging to doors that no longer exist. The set is therefore captured by diffing
+    /// the live entity table across the respawn, which needs no cooperation from the spawnfuncs.
+    /// </summary>
+    public void RespawnMapEntities(IReadOnlyList<EntityDict> entities)
+    {
+        ArgumentNullException.ThrowIfNull(entities);
+
+        foreach (Entity e in _spawnedMapEntities)
+            if (e is not null && !e.IsFreed)
+                Api.Entities.Remove(e);
+        _spawnedMapEntities.Clear();
+
+        // Everything alive before the spawn. Nothing else runs in between (this is one synchronous call under
+        // the sim gate), so anything present afterwards that is not in here came from the map spawn.
+        var before = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        IReadOnlyList<Entity>? all = Api.Entities.All;
+        if (all is not null)
+            foreach (Entity e in all)
+                if (e is not null && !e.IsFreed)
+                    before.Add(e);
+
+        _mapEntities = entities;
+        SpawnMapEntities();
+
+        if (all is null)
+            return;
+        foreach (Entity e in all)
+            if (e is not null && !e.IsFreed && !before.Contains(e) && !_spawnedMapEntities.Contains(e))
+                _spawnedMapEntities.Add(e);
     }
 
     /// <summary>
@@ -4886,6 +4996,10 @@ public sealed class GameWorld
             // the per-player ammo/weapon store is subsumed by the Clients.Spawn → PutClientInServer re-give below.)
             if (!p.IsObserver)
                 PlayerFrameLogic.PlayerPowerupsRemoveAll(p, true);
+            // QC reset_map (vote.qc:383): Inventory_clear(store.inventory) — wipe the per-player item PICKUP
+            // TALLY (the scoreboard's Item stats grid) so a `restart` doesn't carry the previous match's counts
+            // into the new one. Distinct from the ammo/weapon store the respawn re-gives below.
+            p.ItemPickupCounts?.Clear();
             // QC status_effects reset_map_global hook (sv_status_effects.qc:114-123): removeall(NORMAL) "just to
             // get rid of the pickup sound" then clearall, so no effect timer survives a map/round reset. (The
             // following Clients.Spawn -> PutClientInServer also clearall's, but Base plays the removal sounds here.)

@@ -40,8 +40,8 @@ features:
     base_refs:
       - "server/client.qc:ClientConnect"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:ClientConnect"
-      - "src/XonoticGodot.Server/GameWorld.cs:InfraClientConnect"
+      - "src/VortexArena.Server/ClientManager.cs:ClientConnect"
+      - "src/VortexArena.Server/GameWorld.cs:InfraClientConnect"
       - "game/net/ServerNet.cs:DriveConnect (admit ~1054)"
     constants:
       - { name: "MIN_SPEC_TIME", base: "1 s", port: "1 s (ClientManager.MinSpecTime)", match: true }
@@ -72,8 +72,8 @@ features:
       - "server/client.qc:ClientInit_misc"
       - "common/mutators/mutator/buffs/cl_buffs.qc / cl_hook.qc:BuildGameplayTipsString"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:InfraClientConnect (~1192)"
-      - "src/XonoticGodot.Server/GameWorld.cs:SendCampaignWelcome (~1288, campaign branch of SendWelcomeMessage)"
+      - "src/VortexArena.Server/GameWorld.cs:InfraClientConnect (~1192)"
+      - "src/VortexArena.Server/GameWorld.cs:SendCampaignWelcome (~1288, campaign branch of SendWelcomeMessage)"
     constants: []
     status:
       logic: partial
@@ -98,7 +98,7 @@ features:
     base_refs:
       - "server/client.qc:Join"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:Join"
+      - "src/VortexArena.Server/ClientManager.cs:Join"
     constants: []
     status:
       logic: partial
@@ -126,7 +126,7 @@ features:
       - "server/client.qc:nJoinAllowed"
       - "server/client.qc:GetPlayerLimit"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:JoinAllowed"
+      - "src/VortexArena.Server/ClientManager.cs:JoinAllowed"
     constants:
       - { name: "MIN_SPEC_TIME", base: "1 s", port: "1 s", match: true }
       - { name: "g_maxping", base: "0 (off)", port: "none", match: false }
@@ -155,8 +155,8 @@ features:
       - "server/client.qc:PutPlayerInServer"
       - "server/client.qc:PutClientInServer"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:PutPlayerInServer"
+      - "src/VortexArena.Server/ClientManager.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:PutPlayerInServer"
     constants:
       - { name: "player_scale", base: "0.8125", port: "0.8125 (Q3-format branch deferred)", match: true }
       - { name: "g_player_damageforcescale", base: "2", port: "2 (Cvar fallback)", match: true }
@@ -185,7 +185,7 @@ features:
     base_refs:
       - "server/client.qc:PutPlayerInServer (g_spawnshieldtime / pause_*_spawn / countdown extension)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:PutPlayerInServer"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:PutPlayerInServer"
     constants:
       - { name: "g_spawnshieldtime", base: "1 s", port: "1 s (CvarOr)", match: true }
       - { name: "g_balance_pause_health_rot_spawn", base: "5 s", port: "5 s", match: true }
@@ -213,7 +213,7 @@ features:
     base_refs:
       - "server/client.qc:PutObserverInServer"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:PutObserverInServer"
+      - "src/VortexArena.Server/ClientManager.cs:PutObserverInServer"
     constants:
       - { name: "g_balance_armor_start", base: "RES_ARMOR set to this for observer", port: "Cvars.FloatOr(g_balance_armor_start, 0) (Wave-2)", match: true }
       - { name: "g_maxplayers_spectator_blocktime", base: "10 (used for SPECTATE_WARNING; the one-shot warning value)", port: "10 (live enforcement is the frame.spectator_kick row; W16 fixed its default to 10)", match: true }
@@ -239,7 +239,7 @@ features:
     base_refs:
       - "server/client.qc:ObserverOrSpectatorThink"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:ObserverOrSpectatorThink"
+      - "src/VortexArena.Server/ClientManager.cs:ObserverOrSpectatorThink"
       - "game/net/ServerNet.cs:DriveObserverJoins (~497)"
     constants:
       - { name: "MIN_SPEC_TIME grace", base: "1 s", port: "1 s", match: true }
@@ -265,7 +265,7 @@ features:
     base_refs:
       - "server/client.qc:PlayerPreThink (autojoin_checked block ~2708)"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:ObserverOrSpectatorThink (autojoin tail ~343)"
+      - "src/VortexArena.Server/ClientManager.cs:ObserverOrSpectatorThink (autojoin tail ~343)"
     constants:
       - { name: "MIN_SPEC_TIME", base: "1 s", port: "1 s", match: true }
     status:
@@ -290,7 +290,7 @@ features:
     base_refs:
       - "server/client.qc:PlayerThink (dead branch ~2359)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink"
     constants:
       - { name: "respawn retry interval", base: "1 s", port: "1 s", match: true }
     status:
@@ -315,7 +315,7 @@ features:
     base_refs:
       - "server/client.qc:calculate_player_respawn_time"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/RespawnTiming.cs:Calculate"
+      - "src/VortexArena.Common/Gameplay/Player/RespawnTiming.cs:Calculate"
     constants:
       - { name: "g_respawn_delay_small", base: "2 s", port: "2 s", match: true }
       - { name: "g_respawn_delay_large", base: "2 s", port: "2 s", match: true }
@@ -345,9 +345,9 @@ features:
     base_refs:
       - "server/client.qc:ShowRespawnCountdown"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:ShowRespawnCountdown"
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink (calls it ~2733)"
-      - "src/XonoticGodot.Common/Gameplay/Player/RespawnTiming.cs:Calculate (seeds RespawnCountdown)"
+      - "src/VortexArena.Server/GameWorld.cs:ShowRespawnCountdown"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink (calls it ~2733)"
+      - "src/VortexArena.Common/Gameplay/Player/RespawnTiming.cs:Calculate (seeds RespawnCountdown)"
     constants:
       - { name: "respawn_countdown start", base: "10 (sdelay+waves>=5 && wait>1.75s)", port: "10 (RespawnTiming.cs:70, same condition)", match: true }
     status:
@@ -374,8 +374,8 @@ features:
       - "server/client.qc:CalcRegen"
       - "server/client.qc:CalcRot"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:Regen"
-      - "src/XonoticGodot.Server/GameWorld.cs:OnPlayerPostThink (~1134)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:Regen"
+      - "src/VortexArena.Server/GameWorld.cs:OnPlayerPostThink (~1134)"
     constants:
       - { name: "g_balance_health_regen", base: "0.1", port: "cvar", match: true }
       - { name: "g_balance_health_regenstable", base: "100", port: "cvar", match: true }
@@ -404,7 +404,7 @@ features:
     base_refs:
       - "server/client.qc:DrownPlayer"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:DrownPlayer"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:DrownPlayer"
     constants:
       - { name: "g_balance_contents_drowndelay", base: "10 s", port: "10 s (FloatOr)", match: true }
       - { name: "g_balance_contents_playerdamage_drowning", base: "10", port: "cvar", match: true }
@@ -433,9 +433,9 @@ features:
       - "server/main.qc:CreatureFrame_hotliquids"
       - "server/main.qc:CreatureFrame_FallDamage"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:ContentsDamage"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:FallDamage"
-      - "src/XonoticGodot.Server/GameWorld.cs:CreatureFrameAll (~970)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:ContentsDamage"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:FallDamage"
+      - "src/VortexArena.Server/GameWorld.cs:CreatureFrameAll (~970)"
     constants:
       - { name: "g_balance_contents_damagerate", base: "0.2", port: "0.2 (FloatOr)", match: true }
       - { name: "g_balance_falldamage_*", base: "minspeed/factor/maxdamage cvars", port: "cvar", match: true }
@@ -461,8 +461,8 @@ features:
       - "server/client.qc:player_powerups"
       - "server/client.qc:player_powerups_remove_all"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:PlayerPowerups"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:SuperweaponTimeout"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:PlayerPowerups"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:SuperweaponTimeout"
     constants:
       - { name: "g_balance_superweapons_time", base: "applied at spawn/pickup", port: "status-effect time", match: true }
     status:
@@ -487,10 +487,10 @@ features:
     base_refs:
       - "server/client.qc:GetPressedKeys"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:GetPressedKeys"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:ClearPressedKeys (observer-clear)"
-      - "src/XonoticGodot.Server/GameWorld.cs:OnPlayerPostThink (~1884/1894 live caller)"
-      - "src/XonoticGodot.Server/ClientManager.cs:SpectateCopy (~631 spectatee inherit)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:GetPressedKeys"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:ClearPressedKeys (observer-clear)"
+      - "src/VortexArena.Server/GameWorld.cs:OnPlayerPostThink (~1884/1894 live caller)"
+      - "src/VortexArena.Server/ClientManager.cs:SpectateCopy (~631 spectatee inherit)"
       - "game/hud/PressedKeysPanel.cs:LocalPressedKeys (client-side stand-in for the local player)"
     constants:
       - { name: "KEY_* bit order", base: "FORWARD/BACK/RIGHT/LEFT/JUMP/CROUCH/ATCK/ATCK2", port: "matched in PlayerFrameLogic + PressedKeysPanel KEY_* consts", match: true }
@@ -519,10 +519,10 @@ features:
       - "server/client.qc:PlayerFrame (alivetime parm_idlesince ~2858)"
       - "ecs/systems/sv_physics.qc:sys_phys_monitor (parm_idlesince activity update)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:PlayerFrameIdleAll (~1701)"
-      - "src/XonoticGodot.Server/GameWorld.cs:OnClientMove (idlesince activity tracker ~1971)"
-      - "src/XonoticGodot.Server/PlayerStats.cs:AdvanceAliveStart (~221)"
-      - "src/XonoticGodot.Server/ServerPlayerState.cs:IdleSince/IdleKickLastTimeLeft (~36)"
+      - "src/VortexArena.Server/GameWorld.cs:PlayerFrameIdleAll (~1701)"
+      - "src/VortexArena.Server/GameWorld.cs:OnClientMove (idlesince activity tracker ~1971)"
+      - "src/VortexArena.Server/PlayerStats.cs:AdvanceAliveStart (~221)"
+      - "src/VortexArena.Server/ServerPlayerState.cs:IdleSince/IdleKickLastTimeLeft (~36)"
     constants:
       - { name: "sv_maxidle", base: "0 (off)", port: "0 (Cvars.cs:354)", match: true }
       - { name: "sv_maxidle_playertospectator", base: "60 (server/client.qh:39; cfg also 60)", port: "60 (Cvars.cs:357; W16 fixed 0->60)", match: true }
@@ -553,7 +553,7 @@ features:
     base_refs:
       - "server/client.qc:PlayerFrame (sv_spectate check ~2884)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:PlayerFrameIdleAll (sv_spectate=0 block ~1749-1778)"
+      - "src/VortexArena.Server/GameWorld.cs:PlayerFrameIdleAll (sv_spectate=0 block ~1749-1778)"
     constants:
       - { name: "g_maxplayers_spectator_blocktime", base: "10 s grace (xonotic-server.cfg:33; source autocvar = 0)", port: "10 s (Cvars.cs:365; W16 fixed 5->10)", match: true }
       - { name: "sv_spectate", base: "1 (on)", port: "1; ==0 now drives the kick (GameWorld.cs:1916)", match: true }
@@ -580,10 +580,10 @@ features:
       - "server/client.qc:PlayerFrame (version nag ~2924; name check ~2900; godmode ~2950)"
       - "server/client.qc:ClientConnect (version_nagtime arm ~1151)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:PlayerFrameNameAndGodMode (~1985, called from PlayerFrameIdleAll ~1877)"
-      - "src/XonoticGodot.Server/Commands.cs:CheckClientVersion (~427, called from PlayerPreThink GameWorld.cs:2159)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdClientVersion (~3248, the internal `clientversion` request handler)"
-      - "src/XonoticGodot.Server/ClientManager.cs:ClientConnect (VersionNagTime arm ~229)"
+      - "src/VortexArena.Server/GameWorld.cs:PlayerFrameNameAndGodMode (~1985, called from PlayerFrameIdleAll ~1877)"
+      - "src/VortexArena.Server/Commands.cs:CheckClientVersion (~427, called from PlayerPreThink GameWorld.cs:2159)"
+      - "src/VortexArena.Server/Commands.cs:CmdClientVersion (~3248, the internal `clientversion` request handler)"
+      - "src/VortexArena.Server/ClientManager.cs:ClientConnect (VersionNagTime arm ~229)"
     constants:
       - { name: "sv_name_maxlength", base: "64", port: "64 (Cvars.cs:364)", match: true }
       - { name: "version_nagtime", base: "time + 10 + random()*10", port: "Now + 10 + random()*10 (ClientManager.cs:229)", match: true }
@@ -611,7 +611,7 @@ features:
       - "server/client.qc:UpdateChatBubble"
       - "server/client.qc:SetZoomState"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Buttons.cs (+use consumers)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Buttons.cs (+use consumers)"
     constants: []
     status:
       logic: partial
@@ -637,8 +637,8 @@ features:
     base_refs:
       - "server/client.qc:ClientDisconnect"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:ClientDisconnect"
-      - "src/XonoticGodot.Server/GameWorld.cs:InfraClientDisconnect"
+      - "src/VortexArena.Server/ClientManager.cs:ClientDisconnect"
+      - "src/VortexArena.Server/GameWorld.cs:InfraClientDisconnect"
       - "game/net/ServerNet.cs:DriveDisconnect (~638)"
     constants: []
     status:

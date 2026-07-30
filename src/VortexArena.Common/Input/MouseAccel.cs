@@ -1,6 +1,6 @@
 using System;
 
-namespace XonoticGodot.Common.Input;
+namespace VortexArena.Common.Input;
 
 /// <summary>
 /// The DP mouse-acceleration + filter cvar family (cl_input.c:401-412), read by <see cref="MouseAccel"/>.

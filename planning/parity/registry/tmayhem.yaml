@@ -32,8 +32,8 @@ features:
       - "common/gametypes/gametype/tmayhem/tmayhem.qh:CLASS(tmayhem)"
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:tmayhem_Initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem (ctor/OnInit/SeedTimeLimit)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (case TeamMayhem, line 1743); OnInit at GameWorld.cs:503"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem (ctor/OnInit/SeedTimeLimit)"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (case TeamMayhem, line 1743); OnInit at GameWorld.cs:503"
     constants:
       - { name: "netname", base: "tmayhem", port: "tmayhem", match: true }
       - { name: "teamgame", base: "true (TEAMPLAY)", port: "true", match: true }
@@ -61,8 +61,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:tmayhem_DelayedInit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.TeamCount"
-      - "src/XonoticGodot.Server/GameWorld.cs:2708 (case TeamMayhem → tm.TeamCount)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.TeamCount"
+      - "src/VortexArena.Server/GameWorld.cs:2708 (case TeamMayhem → tm.TeamCount)"
     constants:
       - { name: "g_tmayhem_teams", base: "2", port: "2", match: true }
       - { name: "g_tmayhem_teams_override", base: "0 (>=2 wins)", port: "0 (>=2 wins)", match: true }
@@ -89,8 +89,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:tmayhem_Initialize (GameRules_spawning_teams)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.RequestsTeamSpawns"
-      - "src/XonoticGodot.Server/ClientManager.cs (SpawnSystem.RequestTeamSpawns)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.RequestsTeamSpawns"
+      - "src/VortexArena.Server/ClientManager.cs (SpawnSystem.RequestTeamSpawns)"
     constants:
       - { name: "g_tmayhem_team_spawns", base: "0 (no team spawnpoints)", port: "0", match: true }
     status:
@@ -114,9 +114,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/mayhem/sv_mayhem.qc:MayhemCalculatePlayerScore"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Mayhem.cs:MayhemScoring.Calculate (teamGame:true)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Mayhem.cs:MayhemScoring.ScoringAddTeam"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Mayhem.cs:MayhemScoring.Rint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs:MayhemScoring.Calculate (teamGame:true)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs:MayhemScoring.ScoringAddTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs:MayhemScoring.Rint"
     constants:
       - { name: "scoring_upscaler", base: "20", port: "20 (cvar/default)", match: true }
       - { name: "scoring_kill_weight", base: "0.25", port: "0.25", match: true }
@@ -147,9 +147,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, PlayerDamage_SplitHealthArmor)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Mayhem.cs:MayhemScoring.AccrueSplitHealthArmor (teamGame:true)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnSplitHealthArmor"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs (PlayerDamageSplitHealthArmor.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs:MayhemScoring.AccrueSplitHealthArmor (teamGame:true)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnSplitHealthArmor"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs (PlayerDamageSplitHealthArmor.Call)"
     constants:
       - { name: "damage_weight_zero_earlyout", base: "if !damage_weight return", port: "if DamageWeight==0 return", match: true }
       - { name: "useful_damage", base: "frag_damage - max(0, dmg - take - save)", port: "fragDamage - excess", match: true }
@@ -179,8 +179,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, GiveFragsForKill)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnDeath"
-      - "src/XonoticGodot.Server/Scores.cs:Obituary (OwnsScore gating)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnDeath"
+      - "src/VortexArena.Server/Scores.cs:Obituary (OwnsScore gating)"
     constants:
       - { name: "direct_frag_suppressed", base: "M_ARGV(2)=0 (no +1)", port: "OwnsScore=false → Obituary never writes SP_SCORE", match: true }
     status:
@@ -204,8 +204,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs (DamageCalculate.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs (DamageCalculate.Call)"
     constants:
       - { name: "g_tmayhem_selfdamage", base: "0 (self-damage off)", port: "0", match: true }
       - { name: "live_target_only", base: "IS_PLAYER && !IS_DEAD (corpses gib)", port: "Client flag && !dead && !corpse", match: true }
@@ -233,8 +233,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, PlayerRegen)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnPlayerRegen"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs (PlayerRegen.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnPlayerRegen"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs (PlayerRegen.Call)"
     constants:
       - { name: "g_tmayhem_regenerate", base: "0", port: "0", match: true }
       - { name: "g_tmayhem_rot", base: "0", port: "0", match: true }
@@ -260,8 +260,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnSetStartItems"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:783 (SetStartItems.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:783 (SetStartItems.Call)"
     constants:
       - { name: "start_health", base: "200", port: "200", match: true }
       - { name: "start_armor", base: "200", port: "200", match: true }
@@ -294,10 +294,10 @@ features:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, SetWeaponArena)"
       - "server/world.qc:2004 (MUTATOR_CALLHOOK(SetWeaponArena, s)) + world.qc:2085 (arena expansion)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnSetWeaponArena (handler, subscribed in Activate:159)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:751 (SetWeaponArena.Call — live spawn path)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:967 (SetWeaponArena.Call — warmup path)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ExpandWeaponArena (most_available → weapons_most)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnSetWeaponArena (handler, subscribed in Activate:159)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:751 (SetWeaponArena.Call — live spawn path)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:967 (SetWeaponArena.Call — warmup path)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ExpandWeaponArena (most_available → weapons_most)"
     constants:
       - { name: "g_tmayhem_weaponarena", base: "most_available (all weapons)", port: "most_available (filled by OnSetWeaponArena when g_weaponarena empty)", match: true }
       - { name: "most_available_resolution", base: "weapons_most ∩ map weapons (no-map fallback = weapons_most)", port: "weapons_most (no map-weapon set; uses QC's no-map fallback)", match: true }
@@ -324,8 +324,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, FilterItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnFilterItemDefinition"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:103 (FilterItemDefinition.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:103 (FilterItemDefinition.Call)"
     constants:
       - { name: "g_tmayhem_powerups", base: "1", port: "1", match: true }
       - { name: "g_tmayhem_pickup_items", base: "0", port: "0", match: true }
@@ -352,8 +352,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, ForbidThrowCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnForbidThrowCurrentWeapon"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponThrowing.cs:149,185 (ForbidThrowCurrentWeapon.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.OnForbidThrowCurrentWeapon"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponThrowing.cs:149,185 (ForbidThrowCurrentWeapon.Call)"
     constants: []
     status:
       logic: faithful
@@ -377,9 +377,9 @@ features:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:tmayhem_Initialize (GameRules_limit_score/lead)"
       - "common/gametypes/gametype/tmayhem/tmayhem.qh:gametype_init (pointlimit=1500 leadlimit=0)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:UpdateLeaderAndCheckLimit/PointLimit/LeadLimit/LeaderTeam/ReportsTie"
-      - "src/XonoticGodot.Server/GameWorld.cs:1795 (DriveGametypeFrame case TeamMayhem)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2265 (winner team), 292 (MatchEnded)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:UpdateLeaderAndCheckLimit/PointLimit/LeadLimit/LeaderTeam/ReportsTie"
+      - "src/VortexArena.Server/GameWorld.cs:1795 (DriveGametypeFrame case TeamMayhem)"
+      - "src/VortexArena.Server/GameWorld.cs:2265 (winner team), 292 (MatchEnded)"
     constants:
       - { name: "pointlimit", base: "1500", port: "1500", match: true }
       - { name: "leadlimit", base: "0 (no lead limit)", port: "0", match: true }
@@ -407,8 +407,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:MUTATOR_HOOKFUNCTION(tmayhem, reset_map_players)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.ResetMapPlayers"
-      - "src/XonoticGodot.Server/GameWorld.cs:2604 (ResetMap → ResetMapPlayers)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.ResetMapPlayers"
+      - "src/VortexArena.Server/GameWorld.cs:2604 (ResetMap → ResetMapPlayers)"
     constants: []
     status:
       logic: faithful

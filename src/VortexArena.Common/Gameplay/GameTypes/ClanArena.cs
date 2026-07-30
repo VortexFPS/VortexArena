@@ -1,8 +1,8 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Clan Arena — port of <c>CLASS(ClanArena, Gametype)</c>
@@ -37,7 +37,7 @@ namespace XonoticGodot.Common.Gameplay;
 ///  - the no-friendly-fire damage filter (QC ca Damage_Calculate): a live player takes ZERO damage from a
 ///    teammate, from themselves, or from a fall (<see cref="OnDamageCalculate"/> on the shared DamageCalculate
 ///    hook); mirror damage is always zeroed. (The spectate-enemies rule is the server-side
-///    <see cref="XonoticGodot.Server"/> SpectatorRules system, fed by g_ca_spectate_enemies.)
+///    <see cref="VortexArena.Server"/> SpectatorRules system, fed by g_ca_spectate_enemies.)
 /// </summary>
 [GameType]
 public sealed class ClanArena : GameType

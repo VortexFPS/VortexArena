@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Text;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;     // CvarFlags
-using XonoticGodot.Engine.Simulation;   // CvarService (RegisterDefaults)
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;     // CvarFlags
+using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Status / info messages — port of Base/.../qcsrc/client/hud/panel/infomessages.qc (HUD panel #14). The
@@ -69,6 +69,13 @@ public partial class InfoMessagesPanel : HudPanel
     /// generic "Press Fire to join/respawn".
     /// </summary>
     public string JoinHint { get; set; } = "";
+
+    /// <summary>
+    /// Suppresses the "Press jump to join" line. Set in the editor gametype, where jump means FLY UP and
+    /// joining is a deliberate PLAYTEST toggle — so the stock hint tells the mapper to press a key that does
+    /// something else entirely, and they reasonably conclude the editor is broken.
+    /// </summary>
+    public bool SuppressJoinHint { get; set; }
 
     /// <summary>
     /// The current sim/match time, used to compute the respawn countdown against
@@ -267,6 +274,10 @@ public partial class InfoMessagesPanel : HudPanel
 
     protected override void DrawPanel()
     {
+        // "Press primary fire to spectate" is advice for a match. A mapper flying their own level is not
+        // waiting to join anything, and the prompt sits exactly where the editor readout belongs.
+        if (EditorSession) return;
+
         // QC __hud_configure branch: in the HUD editor show the static help text so the panel is visible.
         if (Configuring)
         {
@@ -302,7 +313,7 @@ public partial class InfoMessagesPanel : HudPanel
             }
 
             // QC: if not already queued, "^1Press ^3jump^1 to join".
-            if (WantsJoinTeam == 0)
+            if (WantsJoinTeam == 0 && !SuppressJoinHint)
                 lines.Add(Line.Of(BuildJoinHint()));
         }
 

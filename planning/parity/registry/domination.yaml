@@ -17,9 +17,9 @@ features:
       - "common/gametypes/gametype/domination/sv_domination.qc:dom_DelayedInit"
       - "common/gametypes/gametype/domination/domination.qh:Domination"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:PointLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:LeadLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:PointLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:LeadLimit"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType"
     constants:
       - { name: "pointlimit_default", base: "200 (mapinfo; cvar -1)", port: "200", match: true }
       - { name: "teams_default", base: "2", port: "2", match: true }
@@ -50,11 +50,11 @@ features:
       - "common/gametypes/gametype/domination/sv_domination.qc:spawnfunc(dom_controlpoint)"
       - "common/gametypes/gametype/domination/sv_domination.qc:AnimateDomPoint"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:SpawnControlPoint"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:DropPointToFloor"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:DomPointModel"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:AnimateDomPoint"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns Domination arm (objective sink @2527 -> SpawnControlPoint @2531)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:SpawnControlPoint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:DropPointToFloor"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:DomPointModel"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:AnimateDomPoint"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns Domination arm (objective sink @2527 -> SpawnControlPoint @2531)"
     constants:
       - { name: "bbox", base: "(-48,-48,-32)..(48,48,32)", port: "(-48,-48,-32)..(48,48,32)", match: true }
       - { name: "per_point_frags(amt)", base: "1", port: "1", match: true }
@@ -86,8 +86,8 @@ features:
       - "common/gametypes/gametype/domination/sv_domination.qc:dompointtouch"
       - "common/gametypes/gametype/domination/sv_domination.qc:dompoint_captured"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:CapturePoint"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:PointTouchEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:CapturePoint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:PointTouchEntity"
     constants:
       - { name: "recapture_guard_s", base: "0.3 (time < captime+0.3)", port: "0.3 (armed once Captime>0)", match: true }
     status:
@@ -113,9 +113,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/domination/sv_domination.qc:dompointthink"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:PointThink"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:Tick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:AddTeamScore"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:PointThink"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:AddTeamScore"
     constants:
       - { name: "point_amt", base: "g_domination_point_amt(0)=>.frags(1)", port: "PointAmountFor: cvar else .frags(1)", match: true }
       - { name: "point_rate_s", base: "g_domination_point_rate(0)=>.wait(5)", port: "PointRateFor: cvar else .wait(5)", match: true }
@@ -140,7 +140,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/domination/sv_domination.qc:ScoreRules_dom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:DeclareScoreRules"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:DeclareScoreRules"
     constants:
       - { name: "disable_frags_primary_swap", base: "disable_frags => ticks PRIMARY else SCORE", port: "same", match: true }
     status:
@@ -164,9 +164,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/domination/sv_domination.qh:REGISTER_MUTATOR(dom) GameRules_limit_score/lead"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:UpdateLeaderAndCheckLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:LeadLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:MatchHasEnded (case Domination)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:LeadLimit"
+      - "src/VortexArena.Server/GameWorld.cs:MatchHasEnded (case Domination)"
     constants:
       - { name: "pointlimit", base: "200", port: "200", match: true }
       - { name: "leadlimit_cvar_source", base: "g_domination_point_leadlimit (->GameRules_limit_lead)", port: "g_domination_point_leadlimit", match: true }
@@ -193,10 +193,10 @@ features:
       - "common/gametypes/gametype/domination/sv_domination.qc:Domination_count_controlpoints"
       - "common/gametypes/gametype/domination/sv_domination.qc:Domination_RoundStart"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:CheckRoundWinner"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:CountAndFindRoundWinner"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:RoundStart"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (EnableRounds + RoundEndTimeSource @2744-2751)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:CheckRoundWinner"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:CountAndFindRoundWinner"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:RoundStart"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (EnableRounds + RoundEndTimeSource @2744-2751)"
     constants:
       - { name: "round_timelimit_s", base: "120 (autocvar_g_domination_round_timelimit; round_handler_Init arg)", port: "120 (EnableRounds @2750 passes roundTimeLimit: Cvars.FloatOr(\"g_domination_round_timelimit\", 120))", match: true }
       - { name: "warmup_s", base: "5 (autocvar_g_domination_warmup)", port: "5 (EnableRounds @2749 passes countdown: Cvars.FloatOr(\"g_domination_warmup\", 5))", match: true }
@@ -224,8 +224,8 @@ features:
       - "common/gametypes/gametype/domination/sv_domination.qc:dompoint_captured (_sound head.noise / play2all head.noise1)"
       - "common/gametypes/gametype/domination/sv_domination.qc:dom_spawnteams (SND_DOM_CLAIM default capsound, noise1 \"\")"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:AnnounceCapture"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs:DOM_CLAIM"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:AnnounceCapture"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs:DOM_CLAIM"
     constants:
       - { name: "cap_sound", base: "domination/claim (SND_DOM_CLAIM)", port: "DOM_CLAIM -> domination/claim", match: true }
       - { name: "narration_noise1_default", base: "\"\" (no play2all by default)", port: "none played", match: true }
@@ -250,8 +250,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/domination/sv_domination.qc:dompoint_captured (Send_Notification INFO_DOMINATION_CAPTURE_TIME)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:AnnounceCapture"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:DOMINATION_CAPTURE_TIME"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:AnnounceCapture"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:DOMINATION_CAPTURE_TIME"
     constants:
       - { name: "notif_args", base: "s1=netname s2=message f1=points f2=wait", port: "(NetName, message, points, seconds)", match: true }
       - { name: "notif_arg_counts", base: "2 strings 2 floats", port: "2 strings 2 floats (NotificationsList.cs:711)", match: true }
@@ -279,7 +279,7 @@ features:
       - "common/gametypes/gametype/domination/cl_domination.qc:HUD_Mod_Dom"
       - "common/gametypes/gametype/domination/cl_domination.qc:DrawDomItem"
     port_refs:
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:WriteDominationPps + Kind.Domination"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:WriteDominationPps + Kind.Domination"
       - "game/net/NetGame.cs:UpdateModIcons (case Domination -> SetDominationPps)"
       - "game/hud/ModIconsPanel.cs:DrawDomination / DrawDomItem / SetDominationPps"
     constants:
@@ -307,8 +307,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/domination/sv_domination.qc:WaypointSprite_SpawnFixed(WP_DomNeut) / WaypointSprite_UpdateSprites(WP_Dom<team>) / WaypointSprite_UpdateTeamRadar(RADARICON_DOMPOINT)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:CollectWaypoints"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs (DomNeut/DomRed/DomBlue/DomYellow/DomPink registered)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs (DomNeut/DomRed/DomBlue/DomYellow/DomPink registered)"
       - "game/net/ServerNet.cs:SendWaypoints (GameType.CollectWaypoints @938)"
     constants:
       - { name: "sprite_origin_offset", base: "origin + '0 0 32'", port: "origin + (0,0,32)", match: true }
@@ -338,9 +338,9 @@ features:
       - "common/gametypes/gametype/domination/sv_domination.qc:havocbot_role_dom"
       - "common/gametypes/gametype/domination/sv_domination.qc:havocbot_goalrating_controlpoints"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleDomination"
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:GoalrateControlPoints"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs (dispatch 'dom')"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleDomination"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:GoalrateControlPoints"
+      - "src/VortexArena.Server/Bot/BotRoles.cs (dispatch 'dom')"
     constants:
       - { name: "cp_rating", base: "5000", port: "5000", match: true }
       - { name: "cp_radius", base: "15000", port: "15000", match: true }
@@ -367,8 +367,8 @@ features:
       - "common/gametypes/gametype/domination/sv_domination.qc:dom_EventLog"
       - "common/gametypes/gametype/domination/sv_domination.qc:dompoint_captured (dom_EventLog(\"taken\", ...))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:EventLogEcho (field) + CapturePoint (invoke @487)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (dom.EventLogEcho wire @2735)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:EventLogEcho (field) + CapturePoint (invoke @487)"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (dom.EventLogEcho wire @2735)"
     constants:
       - { name: "eventlog_tag", base: ":dom:taken:<team_before>[:<playerid>]", port: ":dom:taken:<teamBefore>[:<playerId>] (CapturePoint @487)", match: true }
       - { name: "sv_eventlog_gate", base: "autocvar_sv_eventlog", port: "Cvars.Bool(\"sv_eventlog\") at wire site (GameWorld @2735)", match: true }
@@ -397,9 +397,9 @@ features:
       - "common/physics/player.qc:395 (PlayerJump: if(this.player_blocked) return true)"
       - "common/physics/player.qc:728-732 (sys_phys_update: player_blocked => movement = '0 0 0')"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:RoundStart"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:RoundMoveForbidden (decl @142; consumed in Move @237 + PlayerJump @1064)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (PlayerPhysics.RoundMoveForbidden wire @2881; preamble clear @2773)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:RoundStart"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:RoundMoveForbidden (decl @142; consumed in Move @237 + PlayerJump @1064)"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (PlayerPhysics.RoundMoveForbidden wire @2881; preamble clear @2773)"
     constants: []
     status:
       logic: faithful

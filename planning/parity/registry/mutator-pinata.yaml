@@ -15,12 +15,12 @@ features:
       - "common/mutators/mutator/pinata/sv_pinata.qc:5 REGISTER_MUTATOR(pinata, expr_evaluate(autocvar_g_pinata) && !MUTATOR_IS_ENABLED(mutator_instagib) && !MUTATOR_IS_ENABLED(ok))"
       - "lib/cvar.qh:48 bool expr_evaluate(string s)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:ExprEvaluate"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:ExprToken"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:Hook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
-      - "src/XonoticGodot.Server/GameWorld.cs"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:ExprEvaluate"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:ExprToken"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:Hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Server/GameWorld.cs"
     constants:
       - { name: "g_pinata", base: "0 (string, expr_evaluate; mutators.cfg:557)", port: "0 (read as string via Api.Cvars.GetString, evaluated by faithful ExprEvaluate)", match: true }
       - { name: "suppressed if instagib enabled", base: "!MUTATOR_IS_ENABLED(mutator_instagib)", port: "!OtherEnabled(\"instagib\") (reads instagib.IsEnabled)", match: true }
@@ -48,8 +48,8 @@ features:
     base_refs:
       - "common/mutators/mutator/pinata/sv_pinata.qc:7-30 MUTATOR_HOOKFUNCTION(pinata, PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:OnPlayerDies"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:658"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:OnPlayerDies"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:658"
     constants:
       - { name: "weapon set scanned", base: "FOREACH(Weapons, it != WEP_Null) & STAT(WEAPONS,frag_target)", port: "foreach(target.OwnedWeaponSet.Weapons())", match: true }
       - { name: "exclude currently-held weapon", base: "frag_target.(weaponentity).m_weapon != it", port: "skip if ReferenceEquals(it, held) where held=Inventory.CurrentWeapon (=ActiveWeaponId = slot0 m_weapon)", match: true }
@@ -79,7 +79,7 @@ features:
       - "common/mutators/mutator/pinata/sv_pinata.qc:25 CENTER_OR_VIEWOFS(frag_target)"
       - "server/utils.qh:31 #define CENTER_OR_VIEWOFS"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:OnPlayerDies"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:OnPlayerDies"
     constants:
       - { name: "spawn origin", base: "origin + (IS_PLAYER ? view_ofs : (mins+maxs)*0.5)", port: "target.Origin + target.ViewOfs", match: true }
     status:
@@ -106,8 +106,8 @@ features:
       - "lib/random.qc:120-131 prandomvec rejection sampling"
       - "dpdefs/upstream/csprogsdefs.qc:411 vector() randomvec = #91 (engine builtin)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:OnPlayerDies"
-      - "src/XonoticGodot.Common/Math/Prandom.cs:Vec"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:OnPlayerDies"
+      - "src/VortexArena.Common/Math/Prandom.cs:Vec"
     constants:
       - { name: "horizontal scale", base: "175 (* randomvec())", port: "175f (* Prandom.Vec())", match: true }
       - { name: "vertical offset", base: "'0 0 325'", port: "(0,0,325)", match: true }
@@ -133,7 +133,7 @@ features:
     base_refs:
       - "common/mutators/mutator/pinata/sv_pinata.qc:11-19 (per-slot loop + `if(slot > 0 && !autocvar_g_pinata_offhand) break`)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:Offhand"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:Offhand"
     constants:
       - { name: "g_pinata_offhand", base: "0 (mutators.cfg:558)", port: "0 (read into Offhand in Hook(), inert)", match: true }
       - { name: "slots scanned", base: "0..MAX_WEAPONSLOTS-1 (=2), break after slot 0 unless offhand", port: "single WeaponSlot(0) only", match: false }
@@ -159,9 +159,9 @@ features:
     base_refs:
       - "common/mutators/mutator/pinata/sv_pinata.qc:32-35 MUTATOR_HOOKFUNCTION(pinata, BuildMutatorsString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Server/GameWorld.cs:1141"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsString"
+      - "src/VortexArena.Server/GameWorld.cs:1141"
     constants:
       - { name: "BuildMutatorsString token", base: "strcat(s, \":Pinata\")", port: "s + \":Pinata\" (PinataMutator.BuildMutatorsString override)", match: true }
     status:
@@ -185,10 +185,10 @@ features:
     base_refs:
       - "common/mutators/mutator/pinata/sv_pinata.qc:37-40 MUTATOR_HOOKFUNCTION(pinata, BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs:BuildMutatorsPrettyString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsPrettyString"
-      - "src/XonoticGodot.Server/GameWorld.cs:SendMutatorsWelcome"
-      - "src/XonoticGodot.Server/GameWorld.cs:1152"
+      - "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Server/GameWorld.cs:SendMutatorsWelcome"
+      - "src/VortexArena.Server/GameWorld.cs:1152"
     constants:
       - { name: "BuildMutatorsPrettyString token", base: "strcat(s, \", Piñata\")", port: "s + \", Piñata\" (PinataMutator.BuildMutatorsPrettyString override)", match: true }
     status:

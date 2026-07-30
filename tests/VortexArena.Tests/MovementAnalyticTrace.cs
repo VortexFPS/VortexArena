@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// The analytic collision world + brush-vs-box trace used by <see cref="MovementParityTests"/>.
@@ -10,7 +10,7 @@ namespace XonoticGodot.Tests;
 /// This is a LINE-FOR-LINE C# twin of the trace in <c>tools/movement-ref/movement_ref.c</c>
 /// (<c>clip_box_to_brush</c> / <c>world_trace</c> / <c>world_pointcontents</c>). The golden-trace
 /// generator and the parity test therefore share <i>identical</i> collision by construction, so any
-/// trajectory divergence between the C reference and the ported <see cref="XonoticGodot.Common.Physics.PlayerPhysics"/>
+/// trajectory divergence between the C reference and the ported <see cref="VortexArena.Common.Physics.PlayerPhysics"/>
 /// is a pure physics-math difference — never a trace-implementation artefact. (The production BSP
 /// <c>TraceService</c> is exercised separately by the collision/PVS tests; here we deliberately swap it
 /// out to isolate the movement maths.)

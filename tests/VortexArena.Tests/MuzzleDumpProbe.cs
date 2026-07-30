@@ -3,14 +3,14 @@ using System.Globalization;
 using System.IO;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Dpm;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Md3;
+using VortexArena.Formats;
+using VortexArena.Formats.Dpm;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Md3;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// DUMP / DIAGNOSTIC PROBE (task B): quantifies the "first-person shot fires LOW" hypothesis by loading the REAL
@@ -28,12 +28,12 @@ namespace XonoticGodot.Tests;
 /// composition to add, because the v_ models have no shot tag. (ii) cannot even be computed (v_shotLocal == none).
 /// Hence port-current (i) == QC movedir for every weapon; the shot-origin code is already faithful here.
 ///
-/// Run: dotnet test tests/XonoticGodot.Tests --filter MuzzleDumpProbe -l "console;verbosity=detailed"
+/// Run: dotnet test tests/VortexArena.Tests --filter MuzzleDumpProbe -l "console;verbosity=detailed"
 /// </summary>
 [Collection("GlobalState")]
 public class MuzzleDumpProbe
 {
-    private const string Weapons = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir\models\weapons";
+    private static readonly string Weapons = TestPaths.CoreWeapons;
     private const string ReportPath = @"C:\Users\Bryan\AppData\Local\Temp\muzzledump.txt";
 
     // The attach socket the v_ model rides on, in QC resolution order (setattachment ... "weapon").

@@ -1,6 +1,6 @@
 # Kick Teamkiller mutator — parity spec
 
-**Base refs:** `common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc` (+ `.qh`, `_mod.inc`)  ·  **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs`
+**Base refs:** `common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc` (+ `.qh`, `_mod.inc`)  ·  **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -117,7 +117,7 @@ mutator is correctly **disabled by default** in both.
 - **No punishment is ever enforced:** all three severity branches only set `LastAction` and send one
   notification. No client is kicked, IP-banned, force-spectated, or added to `g_playban_list`. The
   griefer keeps playing. The mutator's own doc-comment claims the substrate "doesn't exist here," but
-  that is **stale**: `XonoticGodot.Server/Bans.cs` implements `DropClient`, `KickBanClient`, and the
+  that is **stale**: `VortexArena.Server/Bans.cs` implements `DropClient`, `KickBanClient`, and the
   playban-list add/remove, and `Commands.cs` wires `playban`/`unplayban`. The actions are *unwired*,
   not *un-buildable*. *(observable: a teamkiller is announced but never actually removed)*
 - **Notification mismatch:** the port always sends `QUIT_KICK_TEAMKILL`. Base sends

@@ -11,7 +11,7 @@
 // exactly as QC leaves them out. The richer effectinfo.txt particle *parameters* (color/size/type) are a
 // client-side rendering concern resolved by name; they are not part of this server-side registry.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Installs the named particle effects into <see cref="Effects"/>. Idempotent (registration is by name);

@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Bloodloss mutator — port of common/mutators/mutator/bloodloss/bloodloss.qc. While a player's health
@@ -79,7 +79,7 @@ public sealed class BloodlossMutator : MutatorBase
             Combat.Damage(player, player, player, 1f, "rot", player.Origin, Vector3.Zero);
 
             // QC: bloodloss_timer = time + 0.5 + random() * 0.5;
-            player.BloodlossTimer = now + 0.5f + XonoticGodot.Common.Math.Prandom.Float() * 0.5f;
+            player.BloodlossTimer = now + 0.5f + VortexArena.Common.Math.Prandom.Float() * 0.5f;
         }
         return false;
     }

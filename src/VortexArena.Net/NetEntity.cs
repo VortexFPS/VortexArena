@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// What kind of networked entity a <see cref="NetEntityState"/> describes — the successor to the QC
@@ -76,7 +76,7 @@ public enum EntityField : uint
     // [T41] client-feedback stats networked on the owning player's entity (QC owner-only STATs). These ride the
     // same delta as the rest of the owner's state; they are 0 on every non-owner entity (so they cost nothing on
     // the wire for remote players / projectiles, where the mask bit stays clear).
-    Feedback = 1 << 14, // the HitsoundDamageDealtTotal + objective-ring fractions (NadeTimer/Capture/Revive)
+    Feedback = 1 << 14, // the HitsoundDamageDealtTotal + hit/typehit/kill feedback times + objective-ring fractions
 
     // [T68] the QC entcs ARMOR slice (ent_cs.qc ENTCS_PROP_RESOURCE(ARMOR, …)). Networked alongside Health for the
     // shownames teammate status bar (Draw_ShowNames reads RES_ARMOR off the entcs entity for same-team players).
@@ -236,6 +236,17 @@ public struct NetEntityState
     /// <summary>QC STAT(NADE_BONUS_SCORE): 0..1 fraction toward the next nade bonus — the bonus progress bar.</summary>
     public float NadeBonusScore;
 
+    // [hitsound] QC's three hit-feedback time stats, carried in the SAME EntityField.Feedback block (appended
+    // after the nade stats). The server's EndFrame flush advances exactly ONE per frame (typehit > kill > hit);
+    // the client HitSound plays the matching feedback sound (misc/hit pitched by the damage-total diff,
+    // misc/typehit, misc/kill) on each advance. Owner-only like the rest of the block.
+    /// <summary>QC STAT(HIT_TIME): server time of the owner's last enemy-damage frame (gates the damage-total diff).</summary>
+    public float HitTime;
+    /// <summary>QC STAT(TYPEHIT_TIME): server time of the owner's last team-hit / chat-protected-hit frame.</summary>
+    public float TypeHitTime;
+    /// <summary>QC STAT(KILL_TIME): server time of the owner's last enemy-frag frame — the kill-confirm sound.</summary>
+    public float KillTime;
+
     /// <summary>
     /// [A5 #3/#7] QC <c>ENT_CLIENT_STATUSEFFECTS</c> blob — the entity's full status-effect bitmap as produced by
     /// <c>StatusEffectsCatalog.Write</c> (the grouped major/minor mask + per-effect time+flags). <c>null</c> (or an
@@ -351,7 +362,10 @@ public struct NetEntityState
             || baseline.NadeDarknessTime != current.NadeDarknessTime
             || baseline.NadeBonus != current.NadeBonus
             || baseline.NadeBonusType != current.NadeBonusType
-            || baseline.NadeBonusScore != current.NadeBonusScore) m |= EntityField.Feedback;
+            || baseline.NadeBonusScore != current.NadeBonusScore
+            || baseline.HitTime != current.HitTime
+            || baseline.TypeHitTime != current.TypeHitTime
+            || baseline.KillTime != current.KillTime) m |= EntityField.Feedback;
         // The status-effect blob is a byte[]; compare by CONTENT (not reference) so the full bitmap is re-sent only
         // when it actually changes. null and empty both mean "no effects" and compare equal.
         if (!StatusBlobEqual(baseline.StatusEffects, current.StatusEffects)) m |= EntityField.StatusEffects;
@@ -463,6 +477,10 @@ public static class EntityStateCodec
             w.WriteUShort(current.NadeBonus);
             w.WriteByte((byte)current.NadeBonusType);
             w.WriteFloat(current.NadeBonusScore);
+            // [hitsound] the hit/typehit/kill feedback times appended after the nade stats (protocol v18).
+            w.WriteFloat(current.HitTime);
+            w.WriteFloat(current.TypeHitTime);
+            w.WriteFloat(current.KillTime);
         }
         if ((mask & EntityField.StatusEffects) != 0)
         {
@@ -553,6 +571,10 @@ public static class EntityStateCodec
             s.NadeBonus = r.ReadUShort();
             s.NadeBonusType = r.ReadByte();
             s.NadeBonusScore = r.ReadFloat();
+            // [hitsound] the hit/typehit/kill feedback times — SAME order as WriteDelta (protocol v18).
+            s.HitTime = r.ReadFloat();
+            s.TypeHitTime = r.ReadFloat();
+            s.KillTime = r.ReadFloat();
         }
         if ((mask & EntityField.StatusEffects) != 0)
         {

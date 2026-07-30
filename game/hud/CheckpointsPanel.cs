@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;     // CvarFlags
-using XonoticGodot.Engine.Simulation;   // CvarService (RegisterDefaults)
+using VortexArena.Common.Services;     // CvarFlags
+using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Checkpoints panel — port of Base/.../qcsrc/client/hud/panel/checkpoints.qc (HUD panel #27). The QC version
@@ -92,7 +92,7 @@ public partial class CheckpointsPanel : HudPanel
     // store CvarStr/CvarF read) so a property set and a console `set` are interchangeable and stay live.
     private void MenuState_SetFloat(string suffix, float v)
     {
-        XonoticGodot.Game.Menu.MenuState.Cvars.Set($"hud_panel_{PanelId}_{suffix}",
+        VortexArena.Game.Menu.MenuState.Cvars.Set($"hud_panel_{PanelId}_{suffix}",
             v.ToString(System.Globalization.CultureInfo.InvariantCulture));
         _wrapDirty = true;
         QueueRedraw();

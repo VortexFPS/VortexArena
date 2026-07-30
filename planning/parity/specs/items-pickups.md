@@ -3,8 +3,8 @@
 **Base refs:** `common/items/item/{pickup,ammo,armor,health}.{qc,qh}` · `common/items/{item,all}.qh` ·
 `server/items/{items,spawning}.{qc,qh}` · `common/mutators/mutator/itemstime/itemstime.qc` ·
 `client/items/items.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Items/*` · `src/.../Mutators/ItemstimeMutator.cs` ·
-`src/.../MapObjects/{MapObjectsRegistry,CompatRemaps}.cs` · `src/XonoticGodot.Server/GameWorld.cs` ·
+**Port refs:** `src/VortexArena.Common/Gameplay/Items/*` · `src/.../Mutators/ItemstimeMutator.cs` ·
+`src/.../MapObjects/{MapObjectsRegistry,CompatRemaps}.cs` · `src/VortexArena.Server/GameWorld.cs` ·
 `game/EntityNode.cs` · `game/client/ClientWorld.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
@@ -197,7 +197,7 @@ inline `cl_autoswitch`/CTS weapon re-selection (and the FuelRegen/Jetpack center
   CH_TRIGGER distinction is presentation-side) so two quick pickups stack instead of cutting off.
 
 ## Verification
-- **Spawn/touch/give/respawn:** `tests/XonoticGodot.Tests/ItemSpawnTouchTests.cs` — classname registration,
+- **Spawn/touch/give/respawn:** `tests/VortexArena.Tests/ItemSpawnTouchTests.cs` — classname registration,
   model dir prefixes, HealthSmall give, HealthMega large-box/no-glow/at-cap, weapon dual-rep, weapon-stay
   no-ammo/no-respawn, loot toss lifecycle + despawn, powerup no-spawn-at-start, blocked-when-disabled,
   status-effect/jetpack gives, GiveItems grammar, touch gate, pickup/respawn effect emission, ItemThink

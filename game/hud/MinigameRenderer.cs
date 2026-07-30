@@ -1,8 +1,8 @@
 using System;
 using Godot;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Draws an active minigame board and routes board clicks back as moves — the Godot successor to CSQC's

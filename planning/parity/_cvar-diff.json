@@ -1,5 +1,5 @@
 {
- "generated": "2026-07-05",
+ "generated": "2026-07-30",
  "value_diffs": [],
  "base_only": [],
  "port_only": [],
@@ -36,14 +36,14 @@
    "name": "cl_deathglow",
    "base": "2",
    "code": "0",
-   "where": "game/client/ModelTint.cs:193",
+   "where": "game/client/ModelTint.cs:218",
    "kind": "fallback"
   },
   {
    "name": "r_hdr_glowintensity",
    "base": "1",
    "code": "0",
-   "where": "game/client/ModelTint.cs:209",
+   "where": "game/client/ModelTint.cs:234",
    "kind": "fallback"
   },
   {
@@ -75,6 +75,13 @@
    "kind": "Register"
   },
   {
+   "name": "scoreboard_columns",
+   "base": "default",
+   "code": "",
+   "where": "game/hud/ScoreboardPanel.cs:2711",
+   "kind": "Register"
+  },
+  {
    "name": "hud_panel_weapons_ammo_full_nails",
    "base": "320",
    "code": "200",
@@ -92,301 +99,301 @@
    "name": "cl_netfps",
    "base": "64",
    "code": "72",
-   "where": "game/menu/framework/ClientSettings.cs:126",
+   "where": "game/menu/framework/ClientSettings.cs:154",
    "kind": "Register"
   },
   {
    "name": "cl_movement_errorcompensation",
    "base": "1",
    "code": "0",
-   "where": "game/menu/framework/ClientSettings.cs:157",
+   "where": "game/menu/framework/ClientSettings.cs:240",
    "kind": "Register"
   },
   {
    "name": "volume",
    "base": "1",
    "code": "0.7",
-   "where": "game/menu/framework/ClientSettings.cs:420",
+   "where": "game/menu/framework/ClientSettings.cs:626",
    "kind": "Register"
   },
   {
    "name": "bgmvolume",
    "base": "0.75",
    "code": "1",
-   "where": "game/menu/framework/ClientSettings.cs:421",
+   "where": "game/menu/framework/ClientSettings.cs:627",
    "kind": "Register"
   },
   {
    "name": "g_powerups",
    "base": "-1",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:513",
+   "where": "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:513",
    "kind": "fallback"
   },
   {
    "name": "g_pickup_items",
    "base": "-1",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:515",
+   "where": "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:515",
    "kind": "fallback"
   },
   {
    "name": "g_ctf_allow_vehicle_carry",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:2119",
+   "where": "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:2155",
    "kind": "fallback"
   },
   {
    "name": "g_respawn_delay_large_count",
    "base": "8",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/GameTypes/EntityGametypeState.cs:230",
+   "where": "src/VortexArena.Common/Gameplay/GameTypes/EntityGametypeState.cs:230",
    "kind": "fallback"
   },
   {
    "name": "g_nades_bonus_score_high",
    "base": "60",
    "code": "15",
-   "where": "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:1212",
+   "where": "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:1212",
    "kind": "fallback"
   },
   {
    "name": "g_lms_forfeit_min_match_time",
    "base": "30",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:671",
+   "where": "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:671",
    "kind": "fallback"
   },
   {
    "name": "g_balance_armor_regenstable",
    "base": "100",
    "code": "50",
-   "where": "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:355",
+   "where": "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:355",
    "kind": "fallback"
   },
   {
    "name": "g_balance_armor_regenstable",
    "base": "100",
    "code": "50",
-   "where": "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:447",
+   "where": "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:447",
    "kind": "fallback"
   },
   {
    "name": "g_monsters_miniboss_chance",
    "base": "5",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:292",
+   "where": "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:292",
    "kind": "fallback"
   },
   {
    "name": "g_pickup_healthsmall_max",
    "base": "200",
    "code": "5",
-   "where": "src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs:116",
+   "where": "src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs:122",
    "kind": "fallback"
   },
   {
    "name": "g_throughfloor_damage",
    "base": "0.75",
    "code": "0.5",
-   "where": "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:69",
+   "where": "src/VortexArena.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:69",
    "kind": "fallback"
   },
   {
    "name": "g_throughfloor_force",
    "base": "0.75",
    "code": "0.7",
-   "where": "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:70",
+   "where": "src/VortexArena.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:70",
    "kind": "fallback"
   },
   {
    "name": "g_nades_override_dropweapon",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:110",
+   "where": "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:110",
    "kind": "fallback"
   },
   {
    "name": "g_freezetag_revive_nade",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:243",
+   "where": "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:243",
    "kind": "fallback"
   },
   {
    "name": "g_freezetag_revive_nade",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:368",
+   "where": "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:368",
    "kind": "fallback"
   },
   {
    "name": "g_warmup_start_ammo_cells",
    "base": "90",
    "code": "30",
-   "where": "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:1213",
+   "where": "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:1443",
    "kind": "fallback"
   },
   {
    "name": "g_vehicles_enter",
    "base": "0",
    "code": "1",
-   "where": "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:184",
+   "where": "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:184",
    "kind": "fallback"
   },
   {
    "name": "g_instagib_extralives",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:806",
+   "where": "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:806",
    "kind": "fallback"
   },
   {
    "name": "g_vehicles_enter",
    "base": "0",
    "code": "1",
-   "where": "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:852",
+   "where": "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:852",
    "kind": "fallback"
   },
   {
    "name": "g_rm_laser_damage",
    "base": "80",
    "code": "150",
-   "where": "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:446",
+   "where": "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:447",
    "kind": "fallback"
   },
   {
    "name": "g_sandbox",
    "base": "0",
    "code": "g_sandbox <subcommand> [args] \u2014 sandbox build mode (object_spawn/edit/attach/\u2026)",
-   "where": "src/XonoticGodot.Server/Commands.cs:874",
+   "where": "src/VortexArena.Server/Commands.cs:892",
    "kind": "Register"
   },
   {
    "name": "g_warmup_start_ammo_cells",
    "base": "90",
    "code": "30",
-   "where": "src/XonoticGodot.Server/Cvars.cs:265",
+   "where": "src/VortexArena.Server/Cvars.cs:291",
    "kind": "table"
   },
   {
    "name": "g_balance_contents_playerdamage_drowning",
    "base": "20",
    "code": "30",
-   "where": "src/XonoticGodot.Server/Cvars.cs:270",
+   "where": "src/VortexArena.Server/Cvars.cs:296",
    "kind": "table"
   },
   {
    "name": "g_balance_contents_playerdamage_lava_burn_time",
    "base": "2.5",
    "code": "5",
-   "where": "src/XonoticGodot.Server/Cvars.cs:274",
+   "where": "src/VortexArena.Server/Cvars.cs:300",
    "kind": "table"
   },
   {
    "name": "g_balance_contents_playerdamage_slime",
    "base": "30",
    "code": "40",
-   "where": "src/XonoticGodot.Server/Cvars.cs:275",
+   "where": "src/VortexArena.Server/Cvars.cs:301",
    "kind": "table"
   },
   {
    "name": "g_balance_falldamage_factor",
    "base": "0.20",
    "code": "0.15",
-   "where": "src/XonoticGodot.Server/Cvars.cs:278",
+   "where": "src/VortexArena.Server/Cvars.cs:304",
    "kind": "table"
   },
   {
    "name": "bot_ai_custom_weapon_priority_far",
    "base": "vaporizer oknex vortex rifle electro devastator mortar hagar hlac crylink blaster okmachinegun machinegun fireball seeker okshotgun shotgun tuba minelayer",
    "code": "",
-   "where": "src/XonoticGodot.Server/Cvars.cs:342",
+   "where": "src/VortexArena.Server/Cvars.cs:372",
    "kind": "table"
   },
   {
    "name": "bot_ai_custom_weapon_priority_mid",
    "base": "vaporizer devastator oknex vortex fireball seeker mortar electro okmachinegun machinegun arc crylink hlac hagar okshotgun shotgun blaster rifle tuba minelayer",
    "code": "",
-   "where": "src/XonoticGodot.Server/Cvars.cs:343",
+   "where": "src/VortexArena.Server/Cvars.cs:373",
    "kind": "table"
   },
   {
    "name": "bot_ai_custom_weapon_priority_close",
    "base": "vaporizer oknex vortex okshotgun shotgun okmachinegun machinegun arc hlac tuba seeker hagar crylink mortar electro devastator blaster fireball rifle minelayer",
    "code": "",
-   "where": "src/XonoticGodot.Server/Cvars.cs:344",
+   "where": "src/VortexArena.Server/Cvars.cs:374",
    "kind": "table"
   },
   {
    "name": "sv_maxidle_alsokickspectators",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Server/Cvars.cs:361",
+   "where": "src/VortexArena.Server/Cvars.cs:391",
    "kind": "table"
   },
   {
    "name": "sv_maxidle_slots_countbots",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Server/Cvars.cs:363",
+   "where": "src/VortexArena.Server/Cvars.cs:393",
    "kind": "table"
   },
   {
    "name": "hostname",
    "base": "Xonotic  Server",
-   "code": "Xonotic XonoticGodot Server",
-   "where": "src/XonoticGodot.Server/Cvars.cs:370",
+   "code": "Xonotic VortexArena Server",
+   "where": "src/VortexArena.Server/Cvars.cs:400",
    "kind": "table"
   },
   {
    "name": "sv_eventlog_console",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Server/Cvars.cs:424",
+   "where": "src/VortexArena.Server/Cvars.cs:454",
    "kind": "table"
   },
   {
    "name": "sv_eventlog_files_nameprefix",
    "base": "xonotic",
    "code": "ServerLog-",
-   "where": "src/XonoticGodot.Server/Cvars.cs:427",
+   "where": "src/VortexArena.Server/Cvars.cs:457",
    "kind": "table"
   },
   {
    "name": "g_playerstats_gamereport_uri",
    "base": "https://stats.xonotic.org/stats/submit",
    "code": "",
-   "where": "src/XonoticGodot.Server/Cvars.cs:431",
+   "where": "src/VortexArena.Server/Cvars.cs:461",
    "kind": "table"
   },
   {
    "name": "lastlevel",
    "base": "",
    "code": "0",
-   "where": "src/XonoticGodot.Server/Cvars.cs:503",
+   "where": "src/VortexArena.Server/Cvars.cs:533",
    "kind": "table"
   },
   {
    "name": "g_pickup_items",
    "base": "-1",
    "code": "1",
-   "where": "src/XonoticGodot.Server/Cvars.cs:520",
+   "where": "src/VortexArena.Server/Cvars.cs:550",
    "kind": "table"
   },
   {
    "name": "g_pickup_weapons_anyway",
    "base": "1",
    "code": "0",
-   "where": "src/XonoticGodot.Server/Cvars.cs:523",
+   "where": "src/VortexArena.Server/Cvars.cs:553",
    "kind": "table"
   },
   {
    "name": "g_powerups",
    "base": "-1",
    "code": "1",
-   "where": "src/XonoticGodot.Server/Cvars.cs:526",
+   "where": "src/VortexArena.Server/Cvars.cs:556",
    "kind": "table"
   }
  ],
@@ -485,7 +492,6 @@
   "cl_gibs_velocity_random",
   "cl_gibs_velocity_scale",
   "cl_gibs_velocity_up",
-  "cl_hitsound_antispam_time",
   "cl_items_vehicle_alpha",
   "cl_items_vehicle_color",
   "cl_jumpspeedcap_max",
@@ -532,7 +538,6 @@
   "cl_vehicles_hud_tactical",
   "cl_vehicles_hudscale",
   "cl_vehicles_notify_time",
-  "cl_weapon_stay_color",
   "cl_welcome",
   "con_chat",
   "con_chatpos",
@@ -550,7 +555,6 @@
   "con_completion_vmap",
   "con_completion_vnextmap",
   "con_notifyalign",
-  "con_notifysize",
   "con_textsize",
   "debug_text_3d_default_align",
   "debug_text_3d_default_duration",
@@ -594,6 +598,7 @@
   "g_buffs_luck",
   "g_buffs_luck_time",
   "g_buffs_magnet",
+  "g_buffs_magnet_range",
   "g_buffs_magnet_time",
   "g_buffs_medic",
   "g_buffs_medic_time",
@@ -767,6 +772,7 @@
   "g_mayhem_weapon_stay",
   "g_mayhem_weaponarena",
   "g_mod_config",
+  "g_mod_physics",
   "g_monster_golem_attack_claw_damage",
   "g_monster_golem_attack_lightning_damage",
   "g_monster_golem_attack_lightning_damage_zap",
@@ -1611,9 +1617,6 @@
   "hud_postprocessing",
   "hud_postprocessing_maxblurradius",
   "hud_powerup",
-  "hud_progressbar_superweapons_color",
-  "hud_progressbar_vehicles_ammo1_color",
-  "hud_progressbar_vehicles_ammo2_color",
   "hud_showbinds",
   "hud_showbinds_limit",
   "joy_deadzoneforward",
@@ -1730,7 +1733,6 @@
   "scoreboard_color_bg_g",
   "scoreboard_color_bg_r",
   "scoreboard_color_bg_team",
-  "scoreboard_columns",
   "scoreboard_dynamichud",
   "scoreboard_fadeinspeed",
   "scoreboard_fadeoutspeed",
@@ -1799,13 +1801,11 @@
   "sv_gameplayfix_droptofloorstartsolid",
   "sv_gameplayfix_gravityunaffectedbyticrate",
   "sv_gameplayfix_nogravityonground",
-  "sv_gameplayfix_q2airaccelerate",
   "sv_gameplayfix_stepmultipletimes",
   "sv_gameplayfix_unstickplayers",
   "sv_join_notices",
   "sv_join_notices_time",
   "sv_legacy_bbox_expand",
-  "sv_maxvelocity",
   "sv_minigames_bulldozer_startlevel",
   "sv_minigames_pong_ai_thinkspeed",
   "sv_minigames_pong_ai_tolerance",

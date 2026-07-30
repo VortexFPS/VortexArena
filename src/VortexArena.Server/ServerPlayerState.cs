@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// Server-only per-player bookkeeping that QuakeC kept as flat fields on the client edict but which has no

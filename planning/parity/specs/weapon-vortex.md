@@ -1,7 +1,7 @@
 # Vortex — parity spec
 
 **Base refs:** `common/weapons/weapon/vortex.{qc,qh}` · `server/weapons/tracing.qc` (FireRailgunBullet, W_SetupShot, Headshot) · `common/weapons/calculations.qc` (W_CalculateSpread) · `lib/math.qh` (ExponentialFalloff) · `bal-wep-xonotic.cfg` (g_balance_vortex_*)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs` · `WeaponFiring.cs` (SetupShot/FireRailgunBullet) · `WeaponFireDriver.cs` · `game/hud/CrosshairPanel.cs` · `game/net/NetGame.cs` (zoom/reticle) · `game/client/ViewModel.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Vortex.cs` · `WeaponFiring.cs` (SetupShot/FireRailgunBullet) · `WeaponFireDriver.cs` · `game/hud/CrosshairPanel.cs` · `game/net/NetGame.cs` (zoom/reticle) · `game/client/ViewModel.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

@@ -1,9 +1,9 @@
 using System.Linq;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Pins the <c>weapon_byid_N</c> selection order — the C# port of QC's <c>Weapon_from_impulse(230 + N)</c>

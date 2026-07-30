@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Score" panel configuration dialog — a faithful C# port of <c>XonoticHUDScoreDialog_fill</c>

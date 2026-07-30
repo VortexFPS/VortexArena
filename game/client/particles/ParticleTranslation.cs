@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using XonoticGodot.Game.Client;   // EffectInfoEmitter, EiType/EiBlend/EiOrientation
+using VortexArena.Game.Client;   // EffectInfoEmitter, EiType/EiBlend/EiOrientation
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  ParticleTranslation — the two bidirectional translation layers of §D.2 (planning/particles-dual-system.md).

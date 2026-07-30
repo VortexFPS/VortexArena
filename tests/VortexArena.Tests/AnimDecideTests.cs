@@ -1,10 +1,10 @@
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Simulation;
 using Xunit;
-using A = XonoticGodot.Common.Gameplay.AnimDecide.AnimUpperAction;
-using P = XonoticGodot.Common.Gameplay.AnimDecide.AnimPriority;
+using A = VortexArena.Common.Gameplay.AnimDecide.AnimUpperAction;
+using P = VortexArena.Common.Gameplay.AnimDecide.AnimPriority;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// [W14b Stage 3] Tests the Godot-free upper-body animdecide DECISION port (<see cref="AnimDecide"/>) and the
@@ -164,8 +164,8 @@ public class AnimDecideTests
     public void Split_Action_Routes_ActionClip_Into_Frame3_4_And_Animates_Torso()
     {
         // legs clip frames 0..3, the SHOOT action clip frames 20..23 (non-looping), phase 0.05s @ 10 fps → 0.5 lerp.
-        var legs = new XonoticGodot.Formats.Sidecars.FrameGroup(0, 4, 10f, true);
-        var action = new XonoticGodot.Formats.Sidecars.FrameGroup(20, 4, 10f, loop: false);
+        var legs = new VortexArena.Formats.Sidecars.FrameGroup(0, 4, 10f, true);
+        var action = new VortexArena.Formats.Sidecars.FrameGroup(20, 4, 10f, loop: false);
         SkeletonAnim anim = LocomotionBlend.Split(legs, legsTime: 0.15f, action, actionPhase: 0.05f, _actionTag: true);
 
         // legs base unchanged (lower body): Frame/Frame2 from the legs clip.
@@ -182,8 +182,8 @@ public class AnimDecideTests
     [Fact]
     public void Split_Action_Clamps_NonLooping_Clip_At_LastFrame()
     {
-        var legs = new XonoticGodot.Formats.Sidecars.FrameGroup(0, 4, 10f, true);
-        var action = new XonoticGodot.Formats.Sidecars.FrameGroup(20, 4, 10f, loop: false);
+        var legs = new VortexArena.Formats.Sidecars.FrameGroup(0, 4, 10f, true);
+        var action = new VortexArena.Formats.Sidecars.FrameGroup(20, 4, 10f, loop: false);
         // a phase far past the clip's end clamps the non-looping action at its last frame (no wrap, holds the pose).
         SkeletonAnim anim = LocomotionBlend.Split(legs, 0f, action, actionPhase: 99f, _actionTag: true);
         Assert.Equal(23, anim.Frame3); // last action frame

@@ -5,16 +5,16 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Server;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Server;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Bot-load server-tick benchmark — the deterministic harness for the "NetGame hitches with bots, GameDemo
@@ -26,21 +26,19 @@ namespace XonoticGodot.Tests;
 /// <see cref="Prof"/> per-scope breakdown of the worst tick, so it attributes the spike.
 ///
 /// <para>Parameterised by env vars so it doubles as an experiment harness — change something, re-run, compare:
-/// <c>XG_BOTS</c> (default 6), <c>XG_MAP</c> (stormkeep), <c>XG_TICKS</c> (72*30). Run:
-/// <c>XG_BOTS=8 dotnet test tests/XonoticGodot.Tests --filter BotTickPerfBench -l "console;verbosity=detailed"</c>.
-/// Skips without the content checkout (<c>XG_DATA_DIR</c> overrides the path).</para>
+/// <c>VA_BOTS</c> (default 6), <c>VA_MAP</c> (stormkeep), <c>VA_TICKS</c> (72*30). Run:
+/// <c>VA_BOTS=8 dotnet test tests/VortexArena.Tests --filter BotTickPerfBench -l "console;verbosity=detailed"</c>.
+/// Skips without the content checkout (<c>VA_DATA_DIR</c> overrides the path).</para>
 /// </summary>
 [Collection("GlobalState")]
 public class BotTickPerfBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
-    private static string Map => Environment.GetEnvironmentVariable("XG_MAP") ?? "stormkeep";
+    private static readonly string DataDir = TestPaths.Data;
+    private static string Map => Environment.GetEnvironmentVariable("VA_MAP") ?? "stormkeep";
     private static int BotCount =>
-        int.TryParse(Environment.GetEnvironmentVariable("XG_BOTS"), out int n) ? n : 6;
+        int.TryParse(Environment.GetEnvironmentVariable("VA_BOTS"), out int n) ? n : 6;
     private static int BenchTicks =>
-        int.TryParse(Environment.GetEnvironmentVariable("XG_TICKS"), out int n) ? n : 72 * 30;
+        int.TryParse(Environment.GetEnvironmentVariable("VA_TICKS"), out int n) ? n : 72 * 30;
 
     private readonly ITestOutputHelper _out;
     public BotTickPerfBench(ITestOutputHelper output) => _out = output;
@@ -53,9 +51,11 @@ public class BotTickPerfBench
 
         // --- build the world exactly like the live listen server (NetGame.StartListenServer) ---
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
-        Assert.True(vfs.Exists(bspPath), $"missing {bspPath}");
+        // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
+        // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.
+        if (!vfs.Exists(bspPath)) return;
         BspData bsp = BspReader.Read(vfs.ReadBytes(bspPath));
         BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp);
         var world = new GameWorld(built.World, BuildEntityDicts(bsp)) { MapName = Map };

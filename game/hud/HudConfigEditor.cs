@@ -26,10 +26,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Engine.Simulation; // CvarService (the shared menu/console store)
-using XonoticGodot.Game.Menu;          // MenuState.Cvars
+using VortexArena.Engine.Simulation; // CvarService (the shared menu/console store)
+using VortexArena.Game.Menu;          // MenuState.Cvars
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 public partial class HudConfigEditor : Control
 {
@@ -156,7 +156,7 @@ public partial class HudConfigEditor : Control
             if (a.Count >= 3 && a[1] == "save")
                 ExportCfg(a[2]);
             else
-                XonoticGodot.Common.Diagnostics.Log.Info(
+                VortexArena.Common.Diagnostics.Log.Info(
                     "Usage: hud save <configname> — export the current HUD layout (QC `hud save`)");
         });
     }
@@ -1234,12 +1234,12 @@ public partial class HudConfigEditor : Control
         {
             string path = UserPaths.Resolve("data/" + filename);
             System.IO.File.WriteAllText(path, sb.ToString());
-            XonoticGodot.Common.Diagnostics.Log.Info(
+            VortexArena.Common.Diagnostics.Log.Info(
                 $"[HudConfigEditor] Successfully exported to {filename}! (Note: it's saved in {path})");
         }
         catch (Exception ex)
         {
-            XonoticGodot.Common.Diagnostics.Log.Warn($"[HudConfigEditor] Couldn't write to {filename}: {ex.Message}");
+            VortexArena.Common.Diagnostics.Log.Warn($"[HudConfigEditor] Couldn't write to {filename}: {ex.Message}");
         }
     }
 
@@ -1554,7 +1554,7 @@ public partial class HudConfigEditor : Control
     {
         // QC localcmd: fire-and-forget into the shared command interpreter (the menu/console buffer).
         try { MenuState.Interp?.ExecuteLine(line); }
-        catch (Exception ex) { XonoticGodot.Common.Diagnostics.Log.Warn($"[HudConfigEditor] localcmd failed '{line}': {ex.Message}"); }
+        catch (Exception ex) { VortexArena.Common.Diagnostics.Log.Warn($"[HudConfigEditor] localcmd failed '{line}': {ex.Message}"); }
     }
 
     // ---- our K_* key ids: Godot Key codes for real keys; small negatives for mouse buttons ----

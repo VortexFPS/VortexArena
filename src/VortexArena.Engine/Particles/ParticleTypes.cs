@@ -1,13 +1,13 @@
 using System.Numerics;
 
-namespace XonoticGodot.Engine.Particles;
+namespace VortexArena.Engine.Particles;
 
 // =====================================================================================================
 //  Engine-side (Godot-free) mirror of the parsed effectinfo data model. The host's
 //  game/client/EffectInfoParticle.cs (EiType/EiBlend/EiOrientation + EffectInfoEmitter) is the parse-time
 //  representation; these are the SAME enums in the SAME ORDER so the host converts with a plain cast, and
 //  ParticleEmitterInfo is the sim-facing snapshot the faithful backend + parity tests consume. Keeping it
-//  here (not in game/) lets ParticleSim live in XonoticGodot.Engine and stay headless-testable.
+//  here (not in game/) lets ParticleSim live in VortexArena.Engine and stay headless-testable.
 // =====================================================================================================
 
 /// <summary>DP particle kind (ptype_t). Order mirrors host <c>EiType</c> exactly — cast-compatible.</summary>

@@ -15,7 +15,7 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:REGISTER_MUTATOR(melee_only,...)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:IsEnabled"
     constants:
       - { name: "g_melee_only (default)", base: "0", port: "0", match: true }
       - { name: "cvar read", base: "expr_evaluate(autocvar_g_melee_only) [string expr]", port: "ExprEvaluate(GetString(\"g_melee_only\")) [string expr]", match: true }
@@ -43,8 +43,8 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnSetStartItems"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
     constants:
       - { name: "start_ammo_shells", base: "0", port: "0", match: true }
       - { name: "start_weapons", base: "WEPSET(SHOTGUN)", port: "SetWeapons(\"shotgun\")", match: true }
@@ -69,7 +69,7 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnPlayerSpawn"
     constants:
       - { name: "warmup_start_ammo_shells", base: "0", port: "0 (via OnPlayerSpawn, NOT via warmup loadout)", match: true }
       - { name: "warmup_start_weapons", base: "WEPSET(SHOTGUN)", port: "shotgun-only (via OnPlayerSpawn ClearWeapons+GiveWeapon)", match: true }
@@ -94,7 +94,7 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnPlayerSpawn"
     constants:
       - { name: "weapons given", base: "(via start_weapons/warmup_start_weapons)", port: "ClearWeapons + GiveWeapon(shotgun) + SwitchToBest", match: true }
       - { name: "shells set", base: "(via start_ammo_shells/warmup_start_ammo_shells=0)", port: "SetResource(Shells, 0)", match: true }
@@ -118,8 +118,8 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, SetWeaponArena)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnSetWeaponArena"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnSetWeaponArena"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
     constants:
       - { name: "arena value", base: "\"off\"", port: "\"off\"", match: true }
     status:
@@ -143,8 +143,8 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, ForbidRandomStartWeapons)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnForbidRandomStartWeapons"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ApplyStartLoadout"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnForbidRandomStartWeapons"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ApplyStartLoadout"
     constants:
       - { name: "return", base: "true", port: "true", match: true }
     status:
@@ -167,7 +167,7 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, ForbidThrowCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnForbidThrow"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnForbidThrow"
     constants:
       - { name: "return", base: "true", port: "true", match: true }
     status:
@@ -190,8 +190,8 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, FilterItemDefinition)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnFilterItemDefinition"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:Build"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:Build"
     constants:
       - { name: "forbidden items", base: "ITEM_HealthSmall, ITEM_ArmorSmall", port: "item_health_small/item_armor_small (ClassName) or health_small/armor_small (NetName)", match: true }
       - { name: "forbid polarity", base: "hook returns false -> wrapper !negates -> forbid", port: "hook returns true -> forbid", match: true }
@@ -215,8 +215,8 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, BuildMutatorsString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Server/GameWorld.cs:GameLogInit (MutatorActivation.BuildMutatorsString call, :1068)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:BuildMutatorsString"
+      - "src/VortexArena.Server/GameWorld.cs:GameLogInit (MutatorActivation.BuildMutatorsString call, :1068)"
     constants:
       - { name: "machine tag", base: "\":MeleeOnly\"", port: "\":MeleeOnly\"", match: true }
     status:
@@ -239,8 +239,8 @@ features:
     base_refs:
       - "common/mutators/mutator/melee_only/sv_melee_only.qc:MUTATOR_HOOKFUNCTION(melee_only, BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:BuildMutatorsPrettyString"
-      - "src/XonoticGodot.Server/GameWorld.cs:MatchInit (MutatorActivation.BuildMutatorsPrettyString call, :1079)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Server/GameWorld.cs:MatchInit (MutatorActivation.BuildMutatorsPrettyString call, :1079)"
     constants:
       - { name: "pretty label", base: "\", Melee only Arena\"", port: "\", Melee only Arena\"", match: true }
     status:

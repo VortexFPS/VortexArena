@@ -1,7 +1,7 @@
 # Clan Arena — parity spec
 
 **Base refs:** `common/gametypes/gametype/clanarena/{sv_clanarena.qc, sv_clanarena.qh, cl_clanarena.qc, cl_clanarena.qh, clanarena.qc, clanarena.qh}` · `server/round_handler.qc` · `server/elimination.qc` · `server/teamplay.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs` · `src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs` (dead) · `src/XonoticGodot.Server/RoundHandler.cs` (live) · `src/XonoticGodot.Server/GameWorld.cs` (wiring + DriveGametypeFrame) · `src/XonoticGodot.Server/SpectatorRules.cs` · `src/XonoticGodot.Net/GametypeStatusBlock.cs` · `game/hud/ModIconsPanel.cs` · `game/net/NetGame.cs` (UpdateModIcons)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs` · `src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs` (dead) · `src/VortexArena.Server/RoundHandler.cs` (live) · `src/VortexArena.Server/GameWorld.cs` (wiring + DriveGametypeFrame) · `src/VortexArena.Server/SpectatorRules.cs` · `src/VortexArena.Net/GametypeStatusBlock.cs` · `game/hud/ModIconsPanel.cs` · `game/net/NetGame.cs` (UpdateModIcons)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22 (adversarial verify pass)
 
 ## Overview
@@ -136,7 +136,7 @@ round time limit (180 s) elapses with multiple teams alive, the round is normall
 ## Port mapping
 
 The port splits CA's round driver across **two** RoundHandler classes, only one of which is live:
-- **`src/XonoticGodot.Server/RoundHandler.cs`** (`GameWorld.Rounds`) — the LIVE round state machine. For CA it
+- **`src/VortexArena.Server/RoundHandler.cs`** (`GameWorld.Rounds`) — the LIVE round state machine. For CA it
   is created by a **bare `EnableRounds()`** with NO CA callbacks, so it runs the generic `DefaultCanRoundStart`
   (≥2 teams have players) / `DefaultCanRoundEnd` (≤1 team alive) and the QC-faithful `Init(5, 5, 180)` from
   `Spawn`. It handles the countdown/end-delay/`reset_map`/round-start announcer (NUM_ROUNDSTART/BEGIN).

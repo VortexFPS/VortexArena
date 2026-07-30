@@ -8,7 +8,7 @@
 // NEW file, so adding them here respects the task constraint (no existing file modified). All names
 // are prefixed with their owning mutator to keep the shared Entity namespace collision-free.
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -102,7 +102,7 @@ namespace XonoticGodot.Common.Framework
 
         // --- overkill (sv_overkill.qc) ---
         /// <summary>QC .ok_lastwep[slot] — NetName of the weapon held per slot at death, restored on respawn (HMG→MG, RPC→Nex).</summary>
-        public readonly string?[] OkLastWeapon = new string?[XonoticGodot.Common.Gameplay.MutatorConstants.MaxWeaponSlots];
+        public readonly string?[] OkLastWeapon = new string?[VortexArena.Common.Gameplay.MutatorConstants.MaxWeaponSlots];
 
         // --- overkill weapons (okmachinegun/okshotgun/oknex/okhmg/okrpc) ---
         /// <summary>
@@ -161,7 +161,7 @@ namespace XonoticGodot.Common.Framework
         /// <summary>QC .buff_ammo_prev_infitems — whether the player already had unlimited ammo before the ammo buff.</summary>
         public bool BuffAmmoPrevInfItems;
         /// <summary>QC .buffdef — the buff type a buff pickup entity currently carries (null = none/random).</summary>
-        public XonoticGodot.Common.Gameplay.StatusEffectDef? BuffDef;
+        public VortexArena.Common.Gameplay.StatusEffectDef? BuffDef;
         /// <summary>QC .buff_active — a buff pickup is currently collectable (vs. on its respawn cooldown).</summary>
         public bool BuffActive;
         /// <summary>QC .lifetime (on a buff pickup) — absolute time the untouched buff re-randomizes/relocates
@@ -227,7 +227,7 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
     /// <summary>
     /// Shared constants for the ported mutators that QC kept as global #defines. Lives in the Mutators

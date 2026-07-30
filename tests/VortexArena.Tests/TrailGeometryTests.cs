@@ -1,9 +1,9 @@
 using System;
 using Xunit;
-using XonoticGodot.Engine.Effects;
+using VortexArena.Engine.Effects;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Covers the distance-stepped trail point generation (T1 — the vortex-beam-line fix). A trail must lay

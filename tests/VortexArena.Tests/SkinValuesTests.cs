@@ -1,8 +1,8 @@
 using System.IO;
-using XonoticGodot.Common.Localization;
+using VortexArena.Common.Localization;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Exercises <see cref="SkinValues"/> — the Godot-free port of skin.qh's <c>SKIN*</c> table + the
@@ -184,8 +184,8 @@ public class SkinValuesTests
     {
         string[] roots =
         {
-            @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir",
-            @"C:\Users\Bryan\Projects\Xonotic\Base\data\xonotic-data.pk3dir",
+            TestPaths.CorePk3Dir,
+            TestPaths.BaseCorePk3Dir,
         };
         foreach (string r in roots)
         {

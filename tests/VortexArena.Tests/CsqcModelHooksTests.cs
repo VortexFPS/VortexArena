@@ -1,14 +1,14 @@
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Engine.Simulation;
 using Xunit;
-using EF = XonoticGodot.Common.Framework.EffectFlags;
+using EF = VortexArena.Common.Framework.EffectFlags;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Parity tests for the ported CSQCModel PreDraw hooks (qcsrc/client/csqcmodel_hooks.qc): the EF_*/MF_*
 /// constants, the fallback-frame anim remap, the LOD distance selection, the force-color predicate, the
 /// unique-color combo, the palette and the death-fade glow factor. Pure logic only — these live in
-/// XonoticGodot.Engine.Simulation precisely so the test project (which can't see game/) can reach them.
+/// VortexArena.Engine.Simulation precisely so the test project (which can't see game/) can reach them.
 /// </summary>
 public class CsqcModelHooksTests
 {

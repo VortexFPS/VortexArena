@@ -1,7 +1,7 @@
 # Rocket Minsta (mutator) — parity spec
 
 **Base refs:** `common/mutators/mutator/rocketminsta/sv_rocketminsta.qc` · `common/weapons/weapon/vaporizer.qc` (the bulk of RM behavior lives in the Vaporizer weapon) · `common/mutators/mutator/instagib/sv_instagib.{qc,qh}` (owns the `g_rm*` autocvars) · `mutators.cfg:441-460`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/RocketMinstaMutator.cs` · `src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs` · `src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/RocketMinstaMutator.cs` · `src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs` · `src/VortexArena.Common/Gameplay/Effects/EffectsList.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

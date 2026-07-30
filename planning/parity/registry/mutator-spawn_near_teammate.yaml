@@ -16,9 +16,9 @@ features:
       - "common/mutators/mutator/spawn_near_teammate/spawn_near_teammate.qc:4 (REPLICATE cvar_cl_spawn_near_teammate)"
       - "lib/cvar.qh:48 (expr_evaluate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:64 (IsEnabled)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:489 (ExprEvaluate)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:506 (ExprToken)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:64 (IsEnabled)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:489 (ExprEvaluate)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:506 (ExprToken)"
     constants:
       - { name: "g_spawn_near_teammate", base: "0 (string/expr; overkill: \"!g_assault !g_freezetag\")", port: "ExprEvaluate(string) — real expr parser", match: true }
     status:
@@ -47,9 +47,9 @@ features:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:22-55 (Spawn_Score)"
       - "server/spawnpoints.qh (SPAWN_PRIO_NEAR_TEAMMATE_FOUND / _SAMETEAM)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:95 (OnSpawnScore)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:128 (checkpvs gate)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:566 (ScoreSpot → SpawnScore.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:95 (OnSpawnScore)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:128 (checkpvs gate)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:566 (ScoreSpot → SpawnScore.Call)"
     constants:
       - { name: "SPAWN_PRIO_NEAR_TEAMMATE_FOUND", base: "200", port: "200", match: true }
       - { name: "SPAWN_PRIO_NEAR_TEAMMATE_SAMETEAM", base: "100", port: "100", match: true }
@@ -78,9 +78,9 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:204-214 (else if spawn_spot.msnt_lookat)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:171-177 (OnPlayerSpawn look-at branch)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:438 (FaceAngles → FixAngle/FixAngleAngles)"
-      - "src/XonoticGodot.Server/ClientManager.cs:722,749 (PutPlayerInServer THEN PlayerSpawn.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:171-177 (OnPlayerSpawn look-at branch)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:438 (FaceAngles → FixAngle/FixAngleAngles)"
+      - "src/VortexArena.Server/ClientManager.cs:722,749 (PutPlayerInServer THEN PlayerSpawn.Call)"
     constants: []
     status:
       logic: faithful
@@ -104,8 +104,8 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:58-102 (PlayerSpawn relocate gates)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:145 (OnPlayerSpawn guard)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:187 (RelocateNearTeammate)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:145 (OnPlayerSpawn guard)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:187 (RelocateNearTeammate)"
     constants:
       - { name: "g_spawn_near_teammate_ignore_spawnpoint_max", base: "10", port: "10 (cvar, shipped)", match: true }
       - { name: "g_spawn_near_teammate_ignore_spawnpoint_check_health", base: "1", port: "1 (cvar, shipped)", match: true }
@@ -133,9 +133,9 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:104-163 (snt_ofs traces + rejects)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:309 (TryOffset)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:240-248 (offsets)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:325 (sky reject), :330 (liquids reject), :335 (hurt-trigger reject), :345 (nade reject)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:309 (TryOffset)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:240-248 (offsets)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:325 (sky reject), :330 (liquids reject), :335 (hurt-trigger reject), :345 (nade reject)"
     constants:
       - { name: "snt_offsets", base: "up*64 ±right*128 -fwd*64; up*64 ±right*192; up*64 ±right*64 -fwd*128", port: "identical", match: true }
       - { name: "vertical_trace_down", base: "400 qu", port: "400", match: true }
@@ -167,9 +167,9 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:166-202"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:250-301 (pair commit + closetodeath)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:276 (player.DeathOrigin)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:424 (Place → FaceAngles)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:250-301 (pair commit + closetodeath)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:276 (player.DeathOrigin)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:424 (Place → FaceAngles)"
     constants:
       - { name: "g_spawn_near_teammate_ignore_spawnpoint_closetodeath", base: "1", port: "1 (cvar, shipped)", match: true }
       - { name: "g_spawn_near_teammate_ignore_spawnpoint_delay", base: "2.5 s", port: "2.5 (cvar, shipped)", match: true }
@@ -197,8 +197,8 @@ features:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:24 (Spawn_Score)"
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:60 (PlayerSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:97 (OnSpawnScore)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:147 (OnPlayerSpawn)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:97 (OnSpawnScore)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:147 (OnPlayerSpawn)"
     constants: []
     status:
       logic: faithful
@@ -221,7 +221,7 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:36,66,90 (IS_PLAYER / FOREACH_CLIENT)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:452 (IsPlayer = EntFlags.Client)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:452 (IsPlayer = EntFlags.Client)"
     constants: []
     status:
       logic: faithful

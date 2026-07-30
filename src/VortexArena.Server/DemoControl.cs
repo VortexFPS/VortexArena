@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// Server-side demo recording control — the C# home for the demo feature that, in Xonotic, lives almost

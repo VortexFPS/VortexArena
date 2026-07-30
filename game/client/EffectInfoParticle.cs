@@ -1,7 +1,7 @@
 using System;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 // =====================================================================================================
 //  Parsed effectinfo.txt data model — the C# successor to Darkplaces' particleeffectinfo_t and its

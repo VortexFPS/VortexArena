@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// First-run setup dialog — a faithful C# port of <c>XonoticFirstRunDialog_fill</c>
@@ -22,7 +22,7 @@ namespace XonoticGodot.Game.Menu;
 ///     tab — same cvar (<c>_menu_prvm_language</c>), approximate option set, INERT until a localization
 ///     backend exists (the Save command is still issued faithfully).
 ///   * QC <c>makeXonoticColorpicker(box)</c> + <c>makeXonoticCharmap(box)</c> (the name-color picker and
-///     character map that edit the name field's colors/glyphs) have no XonoticGodot backend yet; rendered as a
+///     character map that edit the name field's colors/glyphs) have no VortexArena backend yet; rendered as a
 ///     short honest note label. INERT.
 /// </summary>
 public partial class DialogFirstRun : MenuScreen
@@ -75,7 +75,7 @@ public partial class DialogFirstRun : MenuScreen
             Widgets.InputBox("_cl_name", "player", "Name under which you will appear in the game")));
 
         // QC makeXonoticColorpicker(box) + makeXonoticCharmap(box): name-color picker + character map editing
-        // the name field. No XonoticGodot backend yet — honest note. INERT.
+        // the name field. No VortexArena backend yet — honest note. INERT.
         var pickerNote = MakeLabel("(name color picker / character map — editing backend pending)");
         pickerNote.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.72f));
         root.AddChild(pickerNote);
@@ -119,7 +119,7 @@ public partial class DialogFirstRun : MenuScreen
         // way out (saveconfig's local equivalent) and provide the universal Back.
         var save = Widgets.CommandButton("Save settings",
             "prvm_language \"$_menu_prvm_language\"; saveconfig; menu_restart");
-        save.Pressed += MenuState.SaveUserConfig; // mirror QC saveconfig against the XonoticGodot cvar store
+        save.Pressed += MenuState.SaveUserConfig; // mirror QC saveconfig against the VortexArena cvar store
 
         root.AddChild(MakeButtonBar(save, MakeButton("Back", OnBack)));
     }

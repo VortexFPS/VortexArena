@@ -1,7 +1,7 @@
 using System.Text;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The server player-stats game report — the Godot-free essence of common/playerstats.qc's GameReport

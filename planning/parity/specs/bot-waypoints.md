@@ -1,7 +1,7 @@
 # Bot waypoints (navigation graph, pathfinding, steering) — parity spec
 
 **Base refs:** `server/bot/default/waypoints.qc` (+`.qh`), `server/bot/default/navigation.qc` (+`.qh`), `server/pathlib/*`, `server/steerlib.qc`, `server/bot/api.qh` (WAYPOINTFLAG_*)
-**Port refs:** `src/XonoticGodot.Server/Bot/Waypoint.cs` (graph + load + A*), `src/XonoticGodot.Server/Bot/BotNavigation.cs` (goal stack + steering), `src/XonoticGodot.Server/Bot/BotTracewalk.cs` (reachability), `src/XonoticGodot.Server/GameWorld.cs:LoadWaypointNetwork`
+**Port refs:** `src/VortexArena.Server/Bot/Waypoint.cs` (graph + load + A*), `src/VortexArena.Server/Bot/BotNavigation.cs` (goal stack + steering), `src/VortexArena.Server/Bot/BotTracewalk.cs` (reachability), `src/VortexArena.Server/GameWorld.cs:LoadWaypointNetwork`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

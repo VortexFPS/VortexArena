@@ -1,7 +1,7 @@
 using System.Numerics;
-using XonoticGodot.Common.Math;
+using VortexArena.Common.Math;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// One received authoritative snapshot of a remote entity at a server time — the pair of these

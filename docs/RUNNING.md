@@ -16,7 +16,7 @@ Performance capture + hitch diagnosis has its own playbook: **[PERF-DEBUGGING.md
 | Godot bundled C# packages | `C:\Program Files\Godot\GodotSharp\Tools\nupkgs` | Holds `Godot.NET.Sdk 4.6.3` etc. `VortexArena/nuget.config` adds this folder as a package source (exact editor parity + offline builds). The 4.6.3 packages **are** also on public NuGet (verified 2026-06) — CI removes this source and restores from nuget.org (see `.github/workflows/ci.yml`). |
 | .NET SDK | `dotnet --version` → 9.0.308 (builds the `net8.0` targets) | net8.0 ref pack auto-restores. |
 | Project root | `C:\Users\Bryan\Projects\Xonotic\VortexArena` | `project.godot` + `VortexArena.csproj` (the Godot host) live here. |
-| Xonotic asset data | `data/` (in-tree, gitignored) | Downloaded by `download-assets.sh` from the upstream Xonotic GitLab repos + official release. The VFS mounts this at runtime (see `Shell.DataPath` / the `--data` flag, default `res://data`). **`Base/` is only the historical port source — the game no longer reads it.** |
+| Game content | `data/` (committed) | Core content ships with the clone. Compiled maps are fetched into `data/maps/` by `python tools/data/fetch-maps.py`, pinned by `data/maps.lock.json`. The VFS mounts this at runtime (see `Shell.DataPath` / the `--data` flag, default `res://data`). **`Base/` is only the upstream reference used by the parity tooling — the game never reads it.** |
 
 **Tip — set an env var once per shell** so commands/tests are short:
 ```bash
@@ -141,7 +141,7 @@ the frame — screenshots then look like the viewmodel is missing). Scripted win
 
 For a packaged install, `tools/run-dedicated.sh` (shipped beside the exported `linux-dedicated`
 binary by `tools/package.sh`) `cd`s to its own directory first, matching upstream's
-`xonotic-linux-dedicated.sh`. The exported build resolves `data` relative to the **executable**
+`xonotic-linux-dedicated.sh`. The exported build resolves `data/` relative to the **executable**
 (`DataPaths.Resolve` — exe-dir, plus the macOS `../Resources` bundle path), so the data just has
 to sit beside the binary; the launcher is a convenience, not a requirement (`--data <path>` overrides).
 
@@ -178,7 +178,7 @@ Weapons:   24
 ```
 Add `--map stormkeep` (or `--host stormkeep --bots 2`) to boot a 0-bot listen server on a real map instead —
 that adds `[NetGame] listen server on 127.0.0.1:26000 …`, `[AssetSystem] loaded … shaders`, the map's
-`collision brushes`, and `handshake accepted` to the log (the heavier smoke; needs `data`).
+`collision brushes`, and `handshake accepted` to the log (the heavier smoke; needs the stormkeep map).
 Error patterns to grep for: `^ERROR:`, `SCRIPT ERROR`, `Unhandled exception`, `WARNING:`, `at VortexArena.` (managed
 stack frames). Godot prints managed exceptions with a `WARNING:`/`ERROR:` banner + a C# stack trace.
 
@@ -337,7 +337,7 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - `--menu-screen <id>` → open one dialog for a screenshot. ids: `settings` (or `settings:Audio` to pick a tab),
   `media` (or `media:Demos`), `multiplayer`, `singleplayer`, `create`, `credits`, `pause`, `profile`,
   `mutators`, `serverinfo`, `teamselect`, `firstrun`, `tos`, `welcome`, `hudpanels`, `hudweapons`, `cvarlist`,
-  `sandbox`. e.g.:
+  `sandbox`, `disclaimer`. e.g.:
   ```bash
   "$GODOT" --path . --menu-screen "settings:Audio" --screenshot "$PWD/screenshots/audio.png"
   ```
@@ -370,10 +370,10 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   `planning/`, `.godot/`, `obj/`, `bin/` so it doesn't double-compile the libraries. Don't drop those removes.
 - **`dotnet build VortexArena.csproj` outputs to `.godot/mono/temp/bin`** (the Godot SDK redirects it), not `bin/` —
   that's where the engine looks for the assembly.
-- **Maps:** the **31 official compiled maps** ship in `data/xonotic-20230620-maps.pk3`
+- **Maps:** the **32 pinned compiled maps** install as one `.pk3` each into `data/maps/` via `tools/data/fetch-maps.py`
   (downloaded from the `xonotic-0.8.6.zip` release; `xonotic-20230620-nexcompat.pk3` adds the Nexuiz-compat set).
   `maps/_init/_init.bsp` is still present (inside the maps pk3) as the lightweight placeholder. To add more,
-  drop another `*.pk3` into `data/` — `MountGameDir` picks it up automatically.
+  drop another `*.pk3` into `data/maps/` — `MountGameDir` picks it up automatically.
 - **Sounds** load from the mounted content (`sound/*.ogg|wav`) via `AssetLoader.LoadSound` (wired into
   `ClientWorld.AudioLoader`); the old `res://sound/<sample>.ogg` convention remains as a fallback. The same
   loader feeds **announcer voices** (`HudNotifications.AudioLoader` → `sound/announcer/<voice>/<snd>.ogg`).

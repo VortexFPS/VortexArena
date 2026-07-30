@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Confirm-quit dialog. C# port of <c>XonoticQuitDialog</c> (qcsrc/menu/xonotic/dialog_quit.qc):

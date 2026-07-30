@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The HUD skin layer — the C# successor to QuakeC's <c>draw_BorderPicture</c> / <c>HUD_Panel_DrawBg</c>

@@ -1,7 +1,7 @@
 # sv-teamplay — parity spec
 
 **Base refs:** `server/teamplay.qc` · `server/teamplay.qh` · `common/teams.qh` · `server/bot/default/bot.qc` (bot_vs_human sizing) · `server/client.qc` (forced-team determination on connect)
-**Port refs:** `src/XonoticGodot.Server/Teamplay.cs` · `src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs` (TeamBalance) · `src/XonoticGodot.Common/Gameplay/Teams.cs` · `src/XonoticGodot.Server/ClientManager.cs` · `src/XonoticGodot.Server/GameWorld.cs` (BalanceTeamsTick) · `src/XonoticGodot.Server/Commands.cs` (lock/shuffle/moveplayer)
+**Port refs:** `src/VortexArena.Server/Teamplay.cs` · `src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs` (TeamBalance) · `src/VortexArena.Common/Gameplay/Teams.cs` · `src/VortexArena.Server/ClientManager.cs` · `src/VortexArena.Server/GameWorld.cs` (BalanceTeamsTick) · `src/VortexArena.Server/Commands.cs` (lock/shuffle/moveplayer)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

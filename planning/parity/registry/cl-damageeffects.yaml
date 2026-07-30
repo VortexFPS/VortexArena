@@ -18,7 +18,7 @@ features:
       - "common/effects/qc/damageeffects.qc:Damage_DamageInfo (35)"
       - "common/effects/qc/damageeffects.qc:Damage_DamageInfo_SendEntity (7)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:DamageInfoNetwork (1082, named no-op)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:DamageInfoNetwork (1082, named no-op)"
     constants:
       - { name: "silent flag", base: "deathtype |= 0x8000 when !sound_allowed(MSG_BROADCAST, dmgowner)", port: "no wire bit; SoundSystem.SoundAllowedGate gates bot_sound_monopoly at server emission instead", match: false }
       - { name: "force encoding", base: "dir 3x WriteChar rint(v*127) + length byte dmg_force/4 (max 1020)", port: "n/a (no wire entity; full-precision vectors on the EFF_NET channel)", match: false }
@@ -86,10 +86,10 @@ features:
     base_refs:
       - "common/effects/qc/damageeffects.qc:NET_HANDLE weapon-impact tail (439-461)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (606)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:FireOne (398-408)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:343-344 (ImpactSound + GRENADE_EXPLODE emit)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:ImpactSound/ImpactSoundAt (282-297)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (606)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:FireOne (398-408)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:343-344 (ImpactSound + GRENADE_EXPLODE emit)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:ImpactSound/ImpactSoundAt (282-297)"
     constants:
       - { name: "impact FX origin", base: "org2 = w_org + w_backoff * 2", port: "impactPos + backoff * 2 (BulletImpactFx:611)", match: true }
       - { name: "particle velocity", base: "w_backoff * 1000", port: "backoff * 1000 (BulletImpactFx:611)", match: true }
@@ -238,7 +238,7 @@ features:
     base_refs:
       - "common/effects/qc/damageeffects.qc:NET_HANDLE DEATH_ISVEHICLE switch (307-378)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:640 (RAPTOR_BOMB_SPREAD emit at bomb burst)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:640 (RAPTOR_BOMB_SPREAD emit at bomb burst)"
       - "game/client/EffectSystem.cs:474-478 (RAPTOR_BOMB_SPREAD -> SpawnRaptorShellfrags)"
       - "game/client/ModelGibs.cs:TossShellfrags (111)"
     constants:
@@ -262,7 +262,7 @@ features:
       - "Raptor bomb burst is missing its SND_ROCKET_IMPACT crack (particles + shellfrags are live)."
     verification:
       - { kind: code, ref: "grep '\"RACER_IMPACT\"|\"SPIDERBOT_MINIGUN_IMPACT\"|\"RAPTOR_CANNON_IMPACT\"|\"RAPTOR_BOMB_IMPACT\"|\"BIGPLASMA_IMPACT\"' over src/+game/: only the EffectsList registrations; vehicle weapon fire paths emit muzzleflashes only", result: fail }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/VehicleRuntimeTests.cs:410 Raptor_BombBurst_EmitsShellfragSpreadEffect", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/VehicleRuntimeTests.cs:410 Raptor_BombBurst_EmitsShellfragSpreadEffect", result: pass }
     confidence: high
     notes: "Vehicle-* units own the firing/damage logic; this row owns the impact-point presentation Base dispatches from the DamageInfo handler. The shellfrag client consumer is a faithful port of RaptorCBShellfragToss/Draw per ModelGibs.cs comments (gravity 0.15, avelocity jitter 15)."
 

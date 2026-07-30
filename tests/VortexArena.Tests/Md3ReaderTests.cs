@@ -3,12 +3,12 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats;
+using VortexArena.Formats.Md3;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — direct coverage for <see cref="Md3Reader"/> (port of Darkplaces <c>Mod_IDP3_Load</c>,
@@ -21,7 +21,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class Md3ReaderTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     // ---------------------------------------------------------------- synthetic buffer builder
 
@@ -236,7 +236,7 @@ public class Md3ReaderTests
     {
         if (!Directory.Exists(DataDir)) return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return null;
+        if (!vfs.MountContentRoot(DataDir)) return null;
         string? path = vfs.Find("models/", "md3").FirstOrDefault();
         return path is null ? null : Md3Reader.Read(vfs.ReadBytes(path));
     });

@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The server-side lag-compensation hook (port of the <c>antilag_takeback</c> … <c>antilag_restore</c> bracket
@@ -8,7 +8,7 @@ namespace XonoticGodot.Common.Gameplay;
 /// authoritative trace and <see cref="End"/> after, so other players are momentarily rewound to where the
 /// shooter saw them at fire time — making hit registration fair under latency.
 ///
-/// Gameplay lives in <c>XonoticGodot.Common</c> and must not know about the netcode, so this is an ambient hook (the
+/// Gameplay lives in <c>VortexArena.Common</c> and must not know about the netcode, so this is an ambient hook (the
 /// same pattern as <c>EffectEmitter.Sink</c>): the server installs a <see cref="ILagCompensation"/> provider; on
 /// a client, in a test, or a bot-only server it stays null and the bracket is a no-op (no rewind — correct,
 /// since there is no remote-view latency to compensate for).
@@ -17,7 +17,7 @@ public static class LagComp
 {
     // SUPERCONTENTS bits (DP collision.h). Common can't reference the Engine's SuperContents class
     // (Engine depends on Common, not the reverse), so mirror the bit values here exactly as
-    // Projectiles.MakeTrigger does. These MUST match XonoticGodot.Engine.Collision.SuperContents.
+    // Projectiles.MakeTrigger does. These MUST match VortexArena.Engine.Collision.SuperContents.
     private const int SuperContentsSolid  = 0x00000001;
     private const int SuperContentsBody   = 0x02000000;
     private const int SuperContentsCorpse = 0x20000000;

@@ -1,10 +1,10 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Formats.Dpm;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Md3;
+using VortexArena.Formats.Dpm;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Md3;
 
-namespace XonoticGodot.Formats;
+namespace VortexArena.Formats;
 
 /// <summary>
 /// Computes a weapon's per-model shot origin (QC <c>movedir</c>) in <b>model-LOCAL Quake coordinates</b>

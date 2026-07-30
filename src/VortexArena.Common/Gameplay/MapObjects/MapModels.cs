@@ -22,11 +22,11 @@
 //    is already built before the entity lump spawns in both hosts.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>The models.qc decoration/wall spawnfuncs. Registered by <see cref="MapObjectsRegistry"/>.</summary>
 public static class MapModels

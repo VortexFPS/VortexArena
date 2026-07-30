@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// "Warning" language-change popup — a faithful C# port of <c>XonoticLanguageWarningDialog</c>

@@ -1,7 +1,7 @@
 using System.Reflection;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Per-category catalog accessors (the C# successors to QC's FOREACH(Weapons, …) targets).
 
@@ -73,11 +73,11 @@ public static class GameTypes
 
 /// <summary>
 /// Populates the registries. The body of <see cref="Bootstrap"/> is the source-generated
-/// <c>GeneratedRegistrations.RegisterAll()</c> (emitted into this assembly by <c>XonoticGodot.SourceGen</c>
+/// <c>GeneratedRegistrations.RegisterAll()</c> (emitted into this assembly by <c>VortexArena.SourceGen</c>
 /// from the <c>[Weapon]</c>/<c>[Item]</c>/<c>[Mutator]</c>/<c>[GameType]</c>/<c>[Monster]</c>/<c>[Turret]</c>/
 /// <c>[Vehicle]</c> markers — ADR-0003, the C# successor to QC's REGISTER_* / [[accumulate]] compile-time
 /// registration, lib/registry.qh). A reflection scan remains ONLY for explicitly-passed extra (mod)
-/// assemblies; registrable content in the port itself must live in <c>XonoticGodot.Common</c>.
+/// assemblies; registrable content in the port itself must live in <c>VortexArena.Common</c>.
 /// Bootstrap is idempotent (the <c>_done</c> flag; use <see cref="Reset"/> in tests to re-run it).
 /// </summary>
 public static class GameRegistries

@@ -1,7 +1,7 @@
 # eWheel Turret — parity spec
 
 **Base refs:** `common/turrets/turret/ewheel.qc` · `ewheel.qh` · `ewheel_weapon.qc` · `ewheel_weapon.qh` · `common/turrets/sv_turrets.qc` (shared framework) · `turrets.cfg` (balance)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretAI.cs` · `TurretMath.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretAI.cs` · `TurretMath.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

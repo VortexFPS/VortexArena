@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Net;
+using VortexArena.Engine.Simulation;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the snapshot delta-compression spine: the per-entity change-mask codec (<see cref="EntityStateCodec"/>)

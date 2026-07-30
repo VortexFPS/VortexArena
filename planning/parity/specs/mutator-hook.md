@@ -1,7 +1,7 @@
 # Grappling Hook mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/hook/{hook,sv_hook,cl_hook}.qc` (+ `common/weapons/weapon/hook.qc` `OffhandHook`, `server/hook.qc` grapple lifecycle, `server/weapons/weaponsystem.qc` offhand-think dispatch)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs` · `src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs` · `src/VortexArena.Common/Gameplay/Weapons/Hook.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

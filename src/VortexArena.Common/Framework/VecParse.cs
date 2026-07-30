@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// The canonical "parse a float vector from a string" helper for CVAR/CLI values. The codebase had

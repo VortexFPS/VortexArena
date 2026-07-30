@@ -1,10 +1,10 @@
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// Player-movement bookkeeping fields, split out of <see cref="Entity"/> so the physics port
-/// (<c>XonoticGodot.Common.Physics</c>) can carry the small amount of per-player state the Xonotic
+/// (<c>VortexArena.Common.Physics</c>) can carry the small amount of per-player state the Xonotic
 /// movement code keeps between ticks without touching <c>Framework/Entity.cs</c>.
 ///
 /// These mirror the QuakeC fields used by <c>qcsrc/common/physics/player.qc</c> and

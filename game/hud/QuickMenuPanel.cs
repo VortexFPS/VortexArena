@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;          // CvarFlags
-using XonoticGodot.Engine.Simulation;        // CvarService
-using XonoticGodot.Game.Menu;                // MenuState.Cvars (live console/menu store)
+using VortexArena.Common.Services;          // CvarFlags
+using VortexArena.Engine.Simulation;        // CvarService
+using VortexArena.Game.Menu;                // MenuState.Cvars (live console/menu store)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// QuickMenu panel — the C# successor to QuakeC's <c>HUD_QuickMenu</c> (the #QUICKMENU HUD panel,
@@ -512,7 +512,7 @@ public partial class QuickMenuPanel : HudPanel
             // The sink is host-supplied (the console interpreter): isolate its exceptions so a bad row command
             // can't tear down input handling. QC's localcmd is fire-and-forget; mirror that here.
             try { CommandSink?.Invoke(cmd); }
-            catch (Exception ex) { XonoticGodot.Common.Diagnostics.Log.Warn($"[QuickMenu] command failed: {ex.Message}"); }
+            catch (Exception ex) { VortexArena.Common.Diagnostics.Log.Warn($"[QuickMenu] command failed: {ex.Message}"); }
             ResetTimeout();
             // Toggle / keep-open rows stay; plain commands close.
             return pe.Type != CmdType.Toggle && pe.Type != CmdType.Keep;

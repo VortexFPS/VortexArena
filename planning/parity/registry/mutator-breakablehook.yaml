@@ -14,8 +14,8 @@ features:
     base_refs:
       - "common/mutators/mutator/breakablehook/sv_breakablehook.qc:6 REGISTER_MUTATOR(breakablehook, cvar(\"g_breakablehook\"))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs:37 IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:60 Apply"
+      - "src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs:37 IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:60 Apply"
     constants:
       - { name: "g_breakablehook", base: "0", port: "0", match: true }
       - { name: "g_breakablehook_owner", base: "0", port: "0", match: true }
@@ -31,7 +31,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "[Mutator]-discovered into Mutators.All; MutatorActivation.Apply() walks Mutators.All and Add()s each IsEnabled mutator → Hook() subscribes the handler. Enable predicate reads g_breakablehook live (IsEnabled, BreakablehookMutator.cs:37-38). Re-confirmed UNCHANGED 2026-06-25.", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:102 (Mutators.ByName(\"breakablehook\")) + :522 (IsEnabled under g_breakablehook 1) — both present.", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:102 (Mutators.ByName(\"breakablehook\")) + :522 (IsEnabled under g_breakablehook 1) — both present.", result: pass }
       - { kind: code, ref: "mutators.cfg defaults g_breakablehook 0 / g_breakablehook_owner 0 both match port GetFloat default-0 semantics", result: pass }
     confidence: high
     notes: "Server-only mutator (_mod.inc is #ifdef SVQC only; no client/HUD/sound component). Enable predicate reads g_breakablehook live; defaults match. On the real activation loop, not dead. Re-audited 2026-06-25: no change to this feature."
@@ -42,8 +42,8 @@ features:
     base_refs:
       - "common/mutators/mutator/breakablehook/sv_breakablehook.qc:16-20 MUTATOR_HOOKFUNCTION(breakablehook, Damage_Calculate) block 1"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs:56-64 OnDamageCalculate (block 1)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:255 MutatorHooks.DamageCalculate.Call(ref dc) + write-back :257"
+      - "src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs:56-64 OnDamageCalculate (block 1)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:255 MutatorHooks.DamageCalculate.Call(ref dc) + write-back :257"
     constants:
       - { name: "target.classname guard", base: "\"grapplinghook\"", port: "\"grapplinghook\"", match: true }
       - { name: "zero-damage condition", base: "!autocvar_g_breakablehook || (!autocvar_g_breakablehook_owner && frag_attacker==frag_target.realowner)", port: "!Breakable || (!BreakableOwner && ReferenceEquals(attacker, owner))", match: true }
@@ -59,7 +59,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "DamageSystem.cs:254-260 builds DamageCalculateArgs(target=targ), Calls the chain live, writes back dc.Damage. Chain target is the shootable grapplinghook (Hook.cs:241 ClassName, :247 TakeDamage=Aim, :242 Owner=actor). target.RealOwner => Owner (firer). Re-confirmed UNCHANGED 2026-06-25.", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:519 Breakablehook_ZeroesDamage_OnOwnHook_WhenOwnerBreakOff asserts args.Damage==0", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:519 Breakablehook_ZeroesDamage_OnOwnHook_WhenOwnerBreakOff asserts args.Damage==0", result: pass }
     confidence: high
     notes: "Independent if-block from the punish branch, matching Base. Self-hit gate uses ReferenceEquals(attacker, owner) == QC frag_attacker==frag_target.realowner. Breakable/BreakableOwner are live-reading properties; the gate logic + the zeroing line are faithful. VERIFIED."
 
@@ -70,9 +70,9 @@ features:
       - "common/mutators/mutator/breakablehook/sv_breakablehook.qc:23-28 Damage_Calculate (DIFF_TEAM branch)"
       - "common/teams.qh:242 DIFF_TEAM"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs:69-78 OnDamageCalculate (DiffTeam branch)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs:93-94 DiffTeam helper"
-      - "src/XonoticGodot.Common/Gameplay/Teams.cs:35 Teams.SameTeam (a.Team!=0 && a.Team==b.Team; reads live server Entity.Team)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs:69-78 OnDamageCalculate (DiffTeam branch)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs:93-94 DiffTeam helper"
+      - "src/VortexArena.Common/Gameplay/Teams.cs:35 Teams.SameTeam (a.Team!=0 && a.Team==b.Team; reads live server Entity.Team)"
     constants:
       - { name: "owner_splash_damage", base: "5", port: "5f", match: true }
       - { name: "deathtype", base: "WEP_HOOK.m_id | HITTYPE_SPLASH", port: "WithHitType(FromWeapon(\"hook\"), Splash)", match: true }
@@ -104,8 +104,8 @@ features:
       - "server/hook.qc:48 RemoveHook"
       - "common/mutators/mutator/breakablehook/sv_breakablehook.qc:26 RemoveHook(frag_target)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:258 ProjectileDamage => RemoveHook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs:77 target.ProjectileDamage?.Invoke"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:258 ProjectileDamage => RemoveHook"
+      - "src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs:77 target.ProjectileDamage?.Invoke"
     constants: []
     status:
       logic: faithful
@@ -128,7 +128,7 @@ features:
     base_refs:
       - "common/mutators/mutator/breakablehook/sv_breakablehook.qc:8-9,18-19 autocvar_g_breakablehook / autocvar_g_breakablehook_owner (read live each Damage_Calculate; .qc:8 comment \"allow toggling mid match?\")"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs:29,32 Breakable/BreakableOwner expression-bodied properties (read the cvar live each call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs:29,32 Breakable/BreakableOwner expression-bodied properties (read the cvar live each call)"
     constants:
       - { name: "cvar read cadence", base: "autocvar_ read live on every Damage_Calculate", port: "expression-bodied property reads Api.Cvars.GetFloat each access (live every Damage_Calculate)", match: true }
     status:

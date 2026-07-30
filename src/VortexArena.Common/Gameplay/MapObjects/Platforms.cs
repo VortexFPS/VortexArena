@@ -11,11 +11,11 @@
 // platmovetype easing details beyond the shared CalcMove bezier, and CSQC networking.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary><c>func_plat</c> — a vertically-riding platform. Registered as a spawnfunc (<see cref="PlatSetup"/>).</summary>
 public static class Platforms

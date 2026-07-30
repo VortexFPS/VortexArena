@@ -1,11 +1,11 @@
 using System;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Net;
+using VortexArena.Common.Services;
+using VortexArena.Common.Physics;
+using VortexArena.Engine.Simulation;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for <see cref="PhysicsPreset"/> — the port of <c>Physics_Valid</c>/<c>Physics_ClientOption</c>
@@ -304,16 +304,16 @@ public class PhysicsPresetTests
         var world = new AnalyticWorld();
         var clock = new MutableClock();
         IEngineServices? saved = Api.Services;
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
         try
         {
             Api.Services = new MovementTestServices(world, clock);
             MovementParameters.PredictionOverride = warsow; // predicted leg reads this instead of the cvars
 
             // Airborne, moving forward-only (move.y == 0, move.x != 0 — the AirBranch warsow guard), facing +X.
-            var player = new XonoticGodot.Common.Framework.Entity
+            var player = new VortexArena.Common.Framework.Entity
             {
                 Origin = new System.Numerics.Vector3(0f, 0f, 1024f),
                 Velocity = new System.Numerics.Vector3(400f, 0f, 0f),
@@ -354,9 +354,9 @@ public class PhysicsPresetTests
         finally
         {
             MovementParameters.PredictionOverride = null;
-            XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-            XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-            XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
             Api.Services = saved!;
         }
     }
@@ -377,14 +377,14 @@ public class PhysicsPresetTests
         const float dt = 1f / 60f;
 
         // CASE A — curspeed (300) below the topspeed ramp, wishdir +X, side velocity present (back-to-side fires).
-        var a = new XonoticGodot.Common.Framework.Entity { Velocity = new System.Numerics.Vector3(300f, 40f, 0f) };
+        var a = new VortexArena.Common.Framework.Entity { Velocity = new System.Numerics.Vector3(300f, 40f, 0f) };
         System.Numerics.Vector3 expectedA = BaseAirAccel(a.Velocity, new System.Numerics.Vector3(1f, 0f, 0f), 320f, mp, dt);
         PMAccelerate.AirAccelerate(a, mp, dt, new System.Numerics.Vector3(1f, 0f, 0f), 320f);
         Assert.Equal(expectedA.X, a.Velocity.X, 3);
         Assert.Equal(expectedA.Y, a.Velocity.Y, 3);
 
         // CASE B — wishspeed (200) ABOVE curspeed*1.01 (curspeed 100): the airforwardaccel clamp branch.
-        var b = new XonoticGodot.Common.Framework.Entity { Velocity = new System.Numerics.Vector3(100f, 0f, 0f) };
+        var b = new VortexArena.Common.Framework.Entity { Velocity = new System.Numerics.Vector3(100f, 0f, 0f) };
         System.Numerics.Vector3 expectedB = BaseAirAccel(b.Velocity, new System.Numerics.Vector3(1f, 0f, 0f), 200f, mp, dt);
         PMAccelerate.AirAccelerate(b, mp, dt, new System.Numerics.Vector3(1f, 0f, 0f), 200f);
         Assert.Equal(expectedB.X, b.Velocity.X, 3);
@@ -434,7 +434,7 @@ public class PhysicsPresetTests
     [Fact]
     public void PredictionOverride_DrivesThePredictedResolve_AndDefaultsAreInert()
     {
-        var player = new XonoticGodot.Common.Framework.Entity();
+        var player = new VortexArena.Common.Framework.Entity();
         // default-inert: no override, no provider → both legs read the ambient cvars (here: no services → a
         // FromCvars call would throw, so prove inertness via the override path only).
         MovementParameters mp = MovementParameters.Defaults;

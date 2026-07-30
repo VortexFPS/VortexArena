@@ -18,10 +18,10 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_SpawnBalls"
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_Handler_CheckBall"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:SpawnBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:AdoptBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:SpawnForGametype"
-      - "src/XonoticGodot.Server/GameWorld.cs:756"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:SpawnBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:AdoptBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:SpawnForGametype"
+      - "src/VortexArena.Server/GameWorld.cs:756"
     constants:
       - { name: "g_keepawayball_count", base: "1", port: "1 (single ball only)", match: true }
       - { name: "ball_bbox", base: "+-24 24 24", port: "+-24 24 24 (BallConfig.WithKindDefaults KeepawayBall)", match: true }
@@ -53,10 +53,10 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_RespawnBall"
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_DamageEvent"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:RespawnBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnBallDamage"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:Relocate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:RandomMapLocation"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:RespawnBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnBallDamage"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:Relocate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:RandomMapLocation"
     constants:
       - { name: "g_keepawayball_respawntime", base: "10", port: "10 (RespawnTime fallback)", match: true }
       - { name: "respawn_velocity", base: "0 0 200", port: "0 0 200 (RespawnVelocity)", match: true }
@@ -89,10 +89,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_TouchEvent"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:PickUp"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:BallTouchEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:AttachToCarrier"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:IsRecaptureLocked"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:PickUp"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:BallTouchEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:AttachToCarrier"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:IsRecaptureLocked"
     constants:
       - { name: "carried_scale", base: "12/16 = 0.75", port: "none (no entity scale field)", match: false }
       - { name: "self_recapture_lockout_wait", base: "0.5", port: "0.5 (BallEntity.SelfRecaptureLockout)", match: true }
@@ -129,11 +129,11 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ClientDisconnect"
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:MakePlayerObserver"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:Drop"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnUseKey"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnPlayerRemoved"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:DropFromCarrier"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:Drop"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnUseKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnPlayerRemoved"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:DropFromCarrier"
     constants:
       - { name: "drop_offset_z", base: "10", port: "10 (DropFromCarrier carrier.Origin + '0 0 10')", match: true }
       - { name: "drop_velocity_base", base: "0 0 200 + crandom xy ('0 100 0'*crandom + '100 0 0'*crandom)", port: "0 0 200 + Vec(0,100,0)*Signed + Vec(100,0,0)*Signed", match: true }
@@ -166,8 +166,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_BallThink_Carried"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:Tick"
-      - "src/XonoticGodot.Server/GameWorld.cs:2036"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:Tick"
+      - "src/VortexArena.Server/GameWorld.cs:2036"
     constants:
       - { name: "g_keepaway_score_timepoints", base: "0", port: "0 (DefaultScoreTimePoints)", match: true }
     status:
@@ -193,8 +193,8 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_BallThink_Carried"
       - "common/gametypes/gametype/keepaway/sv_keepaway.qh:GameRules_scoring"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:Tick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:Activate"
     constants:
       - { name: "bctime_sort_prio", base: "SFL_SORT_PRIO_SECONDARY", port: "SetSortKeys(Score, KEEPAWAY_BCTIME)", match: true }
     status:
@@ -221,8 +221,8 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:PlayerDies"
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:GiveFragsForKill"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnGiveFragsForKill"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnGiveFragsForKill"
     constants:
       - { name: "g_keepaway_score_bckill", base: "1 (cfg gametypes-server.cfg:437)", port: "1 (DefaultScoreBcKill)", match: true }
       - { name: "g_keepaway_score_killac", base: "1 (cfg gametypes-server.cfg:438)", port: "1 (DefaultScoreKillAc)", match: true }
@@ -254,10 +254,10 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qh:GameRules_limit_score"
       - "common/gametypes/gametype/keepaway/keepaway.qh:gametype_init pointlimit=30"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:UpdateLeaderAndCheckLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:RecomputeLeader"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:PointLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:2486"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:RecomputeLeader"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:PointLimit"
+      - "src/VortexArena.Server/GameWorld.cs:2486"
     constants:
       - { name: "pointlimit_default", base: "30 (mapinfo; g_keepaway_point_limit=-1 → mapinfo)", port: "30 (DefaultPointLimit literal)", match: true }
       - { name: "g_keepaway_point_limit_cfg", base: "-1 (gametypes-server.cfg:436; -1 = use mapinfo)", port: "-1 mapped to mapinfo/gametype_init default 30 (PointLimit getter: pl != -1f guard)", match: true }
@@ -285,8 +285,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/keepaway.qh:gametype_init GAMETYPE_FLAG_USEPOINTS"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:TeamGame"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:ReportsTie"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:TeamGame"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:ReportsTie"
     constants:
       - { name: "teamplay", base: "false (no GAMETYPE_FLAG_TEAMPLAY)", port: "TeamGame=false", match: true }
     status:
@@ -310,10 +310,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:Damage_Calculate"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:DamageScale"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:DamageForceScale"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:ScaleFactor"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:DamageScale"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:DamageForceScale"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:ScaleFactor"
     constants:
       - { name: "g_keepaway_ballcarrier_damage", base: "1 1 1 (vector cfg)", port: "1 1 1 (vector string parse, per-component)", match: true }
       - { name: "g_keepaway_ballcarrier_force", base: "1 1 1 (vector cfg)", port: "1 1 1 (vector string parse)", match: true }
@@ -343,9 +343,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:PlayerPhysics_UpdateStats"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnPlayerPhysics"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:BallCarrierHighspeed"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:221"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnPlayerPhysics"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:BallCarrierHighspeed"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:221"
     constants:
       - { name: "g_keepaway_ballcarrier_highspeed", base: "1", port: "1 (BallCarrierHighspeed default)", match: true }
     status:
@@ -375,7 +375,7 @@ features:
     port_refs:
       - "game/hud/ModIconsPanel.cs:DrawKeepaway"
       - "game/net/NetGame.cs:3518"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:110"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:110"
     constants:
       - { name: "blink", base: "blink(0.85,0.15,5)", port: "Blink(0.85,0.15,5)", match: true }
       - { name: "expand_transition", base: "bound(0, elapsed*2, 1)", port: "Clamp(elapsed*2,0,1)", match: true }
@@ -406,9 +406,9 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_RespawnBall (WP_KaBall)"
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_TouchEvent (WP_KaBallCarrier)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:CollectWaypoints"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:BallTracking"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:137"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:BallTracking"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:137"
       - "game/net/ServerNet.cs:927"
     constants:
       - { name: "g_keepawayball_tracking", base: "1 (0=none/1=always/2=dropped-only)", port: "1 (BallTracking default; honored in CollectWaypoints)", match: true }
@@ -444,11 +444,11 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:havocbot_goalrating_ball"
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:Bot_ForbidAttack"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleKeepaway"
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:FindBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:ForbidBotAttack"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:797"
-      - "src/XonoticGodot.Server/GameWorld.cs:2920"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleKeepaway"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:FindBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:ForbidBotAttack"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:797"
+      - "src/VortexArena.Server/GameWorld.cs:2920"
     constants:
       - { name: "ball_goalrating_scale", base: "8000", port: "RatingBall = 8000f", match: true }
       - { name: "routerating_dist", base: "2000", port: "2000f", match: true }
@@ -480,7 +480,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:PlayerDies (g_keepaway_noncarrier_warn → CENTER_KEEPAWAY_WARN)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnDeath"
     constants:
       - { name: "g_keepaway_noncarrier_warn", base: "1 (gametypes-server.cfg:446 — NOT 0; baseline mis-recorded the bare-autocvar 0)", port: "reads g_keepaway_noncarrier_warn live (CvarNonCarrierWarn); fires when != 0", match: true }
     status:
@@ -508,9 +508,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:Scores_CountFragsRemaining"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:AnnounceFragsRemaining"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:RecomputeLeader"
-      - "src/XonoticGodot.Server/GameWorld.cs:2820"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:AnnounceFragsRemaining"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:RecomputeLeader"
+      - "src/VortexArena.Server/GameWorld.cs:2820"
     constants:
       - { name: "guard", base: "return !autocvar_g_keepaway_score_timepoints", port: "if (ScoreTimePoints != 0f) return; (AnnounceFragsRemaining)", match: true }
     status:
@@ -538,9 +538,9 @@ features:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_TouchEvent (ka_EventLog pickup)"
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:ka_DropEvent (ka_EventLog dropped)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:EmitEventLog"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:EventLogEcho"
-      - "src/XonoticGodot.Server/GameWorld.cs:2916"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:EmitEventLog"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:EventLogEcho"
+      - "src/VortexArena.Server/GameWorld.cs:2916"
     constants:
       - { name: "log_format", base: "strcat(\":ka:\", mode, \":\", ftos(actor.playerid))", port: "\":ka:\" + mode + \":\" + actor.PlayerId (EmitEventLog)", match: true }
       - { name: "guard", base: "autocvar_sv_eventlog", port: "if (Cvars.Bool(\"sv_eventlog\")) GameLog.Echo(line) (GameWorld.cs:2916)", match: true }
@@ -567,7 +567,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:MUTATOR_HOOKFUNCTION(ka, reset_map_global)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:Activate"
     constants:
       - { name: "reset_scope", base: "FOREACH_CLIENT(true) it.float2int_decimal_fld = 0", port: "Keepaway._timePointsRemainder = 0 (single accumulator, reset in Activate)", match: false }
     status:
@@ -593,10 +593,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/keepaway/sv_keepaway.qc:MUTATOR_HOOKFUNCTION(ka, PreferPlayerScore_Clear)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:OnPreferPlayerScoreClear"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:Activate"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ClearPlayerOnJoin"
-      - "src/XonoticGodot.Server/ClientManager.cs:294"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:OnPreferPlayerScoreClear"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ClearPlayerOnJoin"
+      - "src/VortexArena.Server/ClientManager.cs:294"
     constants:
       - { name: "return", base: "return true", port: "OnPreferPlayerScoreClear returns true (Keepaway.cs:225)", match: true }
     status:

@@ -6,10 +6,10 @@
 // teamkill/suicide wipes the attacker's bonus; spree milestones award a flat spree bonus. The accrual is a
 // fractional score that, when it crosses 1.0, banks one bonus nade (decremented when a bonus nade is primed).
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades;
+namespace VortexArena.Common.Gameplay.Nades;
 
 /// <summary>The bonus-nade economy (QC nades_GiveBonus / nades_RemoveBonus + the kill-bonus award).</summary>
 public static class NadeBonus

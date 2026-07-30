@@ -2,15 +2,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the BSP → collision split: worldspawn (<c>Models[0]</c>) goes to the static collision world, while
@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class BspCollisionTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
     private const int Solid = SuperContents.Solid;
 
     // ---- synthetic two-box BSP: one worldspawn brush + one inline-model brush -----------------------
@@ -275,7 +275,7 @@ public class BspCollisionTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? bspPath = vfs.Find("maps/", "bsp").FirstOrDefault();
         if (bspPath is null) return;
 
@@ -304,7 +304,7 @@ public class BspCollisionTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? bspPath = vfs.Find("maps/", "bsp").FirstOrDefault(p => p.Contains("stormkeep"));
         if (bspPath is null) return;
 

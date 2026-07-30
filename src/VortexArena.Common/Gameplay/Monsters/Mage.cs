@@ -1,11 +1,11 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Common.Gameplay.Damage;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using VortexArena.Common.Gameplay.Damage;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Mage — port of common/monsters/monster/mage.{qh,qc}. A nanotech support-caster: it throws homing

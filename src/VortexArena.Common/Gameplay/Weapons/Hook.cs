@@ -1,10 +1,10 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Grappling Hook — port of common/weapons/weapon/hook.{qh,qc}. Primary fires a chain that latches onto
@@ -60,6 +60,7 @@ public sealed class Hook : Weapon
     public Hook()
     {
         NetName = "hook";
+        BotPickupBaseValue = 0;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Fuel;   // QC ammo_type
         DisplayName = "Grappling Hook";
         Impulse = 0;

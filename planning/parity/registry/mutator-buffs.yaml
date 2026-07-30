@@ -21,7 +21,7 @@ last_audited: "2026-06-28"
 # DRIFT: every row's status/liveness re-confirmed by reading the CURRENT port code, not assumed. Liveness spot-checks
 # this pass (all PASS): map item_buff_* spawnfuncs LIVE (ItemSpawnFuncs.RegisterBuffSpawnFuncs:207 -> SpawnFuncs.Register
 # -> BuffsMutator.SpawnMapBuff:356); FilterItem powerup-replace LIVE (StartItem.cs:119 MutatorHooks.FireFilterItem ->
-# OnFilterItem:906); medic PlayerRegen mods CONSUMED on the live path (XonoticGodot.Server/PlayerFrameLogic.cs:56-62 reads
+# OnFilterItem:906); medic PlayerRegen mods CONSUMED on the live path (VortexArena.Server/PlayerFrameLogic.cs:56-62 reads
 # RotMod/RegenMod/MaxMod/LimitMod back from the hook); jump-velocity override is genuinely LIVE+READ (PlayerPhysics.cs:1079-1080
 # mjumpheight = player.JumpVelocityOverride — the historical DEAD gap is closed); disability fire-rate slow LIVE
 # (WeaponFireGate.cs:489 WeaponRateFactor.Call); +use drop LIVE (VehicleBoarding.cs:106 FirePlayerUseKey). StatusEffects
@@ -37,8 +37,8 @@ last_audited: "2026-06-28"
 # regen 0.2/1.5/1.7, vampire 0.4, jump 600, vengeance 0.4, bash 2, inferno 0.3, swapper 1500, luck 0.15,
 # disability speed/attack 0.7/1.5, weaponspeed still un-ported). Confirmed-live wiring intact: FilterItem via
 # StartItem.cs:119 FireFilterItem; map spawnfuncs via ItemSpawnFuncs.cs:84 RegisterBuffSpawnFuncs -> SpawnMapBuff;
-# medic PlayerRegen mods consumed in XonoticGodot.Server/PlayerFrameLogic.cs (port_ref path corrected from the
-# stale PlayerFrameLogic.cs:56-89 note — the file lives under XonoticGodot.Server, behavior unchanged). The
+# medic PlayerRegen mods consumed in VortexArena.Server/PlayerFrameLogic.cs (port_ref path corrected from the
+# stale PlayerFrameLogic.cs:56-89 note — the file lives under VortexArena.Server, behavior unchanged). The
 # detailed 2026-06-25 history below is retained as-is.
 # --- 2026-06-25 history ---
 # TWO MAJOR FIXES since the prior write — 0 regressions:
@@ -76,7 +76,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qh:REGISTER_MUTATOR(buffs, autocvar_g_buffs)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:IsEnabled"
     constants:
       - { name: "g_buffs", base: "-1", port: "-1 (any != 0 enables)", match: true }
     status:
@@ -102,9 +102,9 @@ features:
       - "common/mutators/mutator/buffs/buffs.qh:BUFF_SPAWNFUNCS / BUFF_SPAWNFUNC_Q3COMPAT"
       - "common/mutators/mutator/buffs/buffs.qc:Buff_CompatName"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:SpawnMapBuff"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:ConfigureBuffEntity"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:RegisterBuffSpawnFuncs"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:SpawnMapBuff"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:ConfigureBuffEntity"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:RegisterBuffSpawnFuncs"
     constants:
       - { name: "model MDL_BUFF", base: "models/relics/relic.md3 (buff)", port: "models/relics/relic.md3 (MdlBuff fallback; asset present)", match: true }
       - { name: "box ITEM_D_MINS..ITEM_L_MAXS", base: "'-30 -30 0'..'30 30 70'", port: "ItemBoxes.DefaultMins..LargeMaxs", match: true }
@@ -134,7 +134,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buffs_Initialize / buffs_DelayedInit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:SpawnInitialBuffs"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:SpawnInitialBuffs"
     constants:
       - { name: "g_buffs_spawn_count", base: "0", port: "0", match: true }
       - { name: "spawn velocity", base: "randomvec() * 250", port: "Prandom.Vec() * 250", match: true }
@@ -161,7 +161,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuffTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffTouch"
     constants:
       - { name: "cl_buffs_autoreplace", base: "1 (REPLICATE'd; replace only if set)", port: "1 (CvarBool default-true; honored)", match: true }
     status:
@@ -187,8 +187,8 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Touch (ITEM_TOUCH_NEEDKILL -> buff_Respawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuffInNeedKill"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuffTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffInNeedKill"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffTouch"
     constants:
       - { name: "DPCONTENTS_NODROP (lava/slime)", base: "0x80000000", port: "0x80000000", match: true }
       - { name: "Q3SURFACEFLAG_SKY", base: "0x4", port: "0x4", match: true }
@@ -216,7 +216,7 @@ features:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_SetCooldown"
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Reset"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:ScheduleRespawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:ScheduleRespawn"
     constants:
       - { name: "g_buffs_cooldown_activate", base: "5", port: "5 (Cvar fallback)", match: true }
       - { name: "g_buffs_cooldown_respawn", base: "3", port: "3 (Cvar fallback)", match: true }
@@ -246,10 +246,10 @@ features:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Respawn"
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Reset"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuffRespawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:MaybeRandomize"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:MaybeRelocate"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuffThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffRespawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:MaybeRandomize"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:MaybeRelocate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffThink"
     constants:
       - { name: "g_buffs_random_location", base: "0", port: "0 (read in MaybeRelocate)", match: true }
       - { name: "g_buffs_random_lifetime", base: "30", port: "read; arms BuffLifetime", match: true }
@@ -279,7 +279,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_NewType"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:RandomBuff"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:RandomBuff"
     constants:
       - { name: "weight", base: "max(0.2, 1/seencount)", port: "uniform", match: false }
     status:
@@ -303,7 +303,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Available"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuffAvailable"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffAvailable"
     constants:
       - { name: "g_melee_only excludes ammo", base: "yes", port: "yes", match: true }
       - { name: "g_vampire excludes vampire", base: "yes", port: "yes", match: true }
@@ -330,7 +330,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/buff/resistance.qc:buff_Resistance_CalculateDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
     constants:
       - { name: "g_buffs_resistance_blockpercent", base: "0.5", port: "0.5", match: true }
     status:
@@ -355,7 +355,7 @@ features:
       - "common/mutators/mutator/buffs/buff/medic.qc:buff_Medic_CalculateSurviveDamage"
       - "common/mutators/mutator/buffs/sv_buffs.qc:Damage_Calculate (medic branch, !ITEM_DAMAGE_NEEDKILL guard)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
     constants:
       - { name: "g_buffs_medic_survive_chance", base: "0.6", port: "0.6", match: true }
       - { name: "g_buffs_medic_survive_health", base: "5", port: "5", match: true }
@@ -380,7 +380,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/buff/medic.qc:MUTATOR_HOOKFUNCTION(buffs, PlayerRegen)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerRegen"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerRegen"
     constants:
       - { name: "g_buffs_medic_regen", base: "1.7", port: "1.7", match: true }
       - { name: "g_buffs_medic_max", base: "1.5", port: "1.5", match: true }
@@ -396,7 +396,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "OnPlayerRegen (BuffsMutator.cs:774-781) sets RotMod=g_buffs_medic_rot (0.2), LimitMod=MaxMod=g_buffs_medic_max (1.5), RegenMod=g_buffs_medic_regen (1.7) — QC M_ARGV(1..4) slots; XonoticGodot.Server/PlayerFrameLogic.cs Regen consumes all four on the live path (rot_mod gates rotFrameTime, max_mod scales health stable set-points, limit_mod scales the cap)", result: pass }
+      - { kind: code, ref: "OnPlayerRegen (BuffsMutator.cs:774-781) sets RotMod=g_buffs_medic_rot (0.2), LimitMod=MaxMod=g_buffs_medic_max (1.5), RegenMod=g_buffs_medic_regen (1.7) — QC M_ARGV(1..4) slots; VortexArena.Server/PlayerFrameLogic.cs Regen consumes all four on the live path (rot_mod gates rotFrameTime, max_mod scales health stable set-points, limit_mod scales the cap)", result: pass }
     confidence: high
     notes: "FIXED since the prior 2026-06-25 baseline: the ad-hoc MedicTick is DELETED; OnPlayerRegen now scales the shared regen/limit(max)/rot factors exactly like QC PlayerRegen (rot_mod=0.2 slower above-stable rot, limit_mod=max_mod=1.5 raised ceiling, regen_mod=1.7 faster heal). The live regen loop reads them. logic/values/timing partial->faithful; g_buffs_medic_rot now applied (was dropped); verification fail->pass."
 
@@ -406,7 +406,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/buff/vampire.qc:MUTATOR_HOOKFUNCTION(buffs, PlayerDamage_SplitHealthArmor)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnSplitHealthArmor"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnSplitHealthArmor"
     constants:
       - { name: "g_buffs_vampire_damage_steal", base: "0.4", port: "0.4", match: true }
     status:
@@ -430,7 +430,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/buff/jump.qc:MUTATOR_HOOKFUNCTION(buffs, PlayerPhysics)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPhysics"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPhysics"
     constants:
       - { name: "g_buffs_jump_velocity", base: "600", port: "600", match: true }
       - { name: "g_buffs_jump", base: "0 (off)", port: "0", match: true }
@@ -455,7 +455,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/buff/jump.qc:buff_Jump_ChangeDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
     constants: []
     status:
       logic: faithful
@@ -479,7 +479,7 @@ features:
       - "common/mutators/mutator/buffs/buff/bash.qc:buff_Bash_TargetCalculateForce"
       - "common/mutators/mutator/buffs/buff/bash.qc:buff_Bash_AttackerCalculateForce"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
     constants:
       - { name: "g_buffs_bash_force", base: "2", port: "2", match: true }
       - { name: "g_buffs_bash_force_self", base: "1.2", port: "1.2", match: true }
@@ -508,9 +508,9 @@ features:
       - "common/mutators/mutator/buffs/buff/disability.qc:MUTATOR_HOOKFUNCTION(buffs, WeaponSpeedFactor)"
       - "common/mutators/mutator/buffs/buff/disability.qc:MUTATOR_HOOKFUNCTION(buffs, MonsterMove)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPhysics"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnWeaponRateFactor"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPhysics"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnWeaponRateFactor"
     constants:
       - { name: "g_buffs_disability_slowtime", base: "3", port: "3", match: true }
       - { name: "g_buffs_disability_speed", base: "0.7", port: "0.7", match: true }
@@ -543,8 +543,8 @@ features:
       - "common/mutators/mutator/buffs/buff/vengeance.qc:buff_Vengeance_CalculateDamage"
       - "common/mutators/mutator/buffs/sv_buffs.qc:Damage_Calculate (vengeance branch, !ITEM_DAMAGE_NEEDKILL guard)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:ScheduleVengeance"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:ScheduleVengeance"
     constants:
       - { name: "g_buffs_vengeance_damage_multiplier", base: "0.4", port: "0.4", match: true }
       - { name: "delay", base: "0.1s", port: "0.1s", match: true }
@@ -569,7 +569,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/buff/luck.qc:buff_Luck_CalculateDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
     constants:
       - { name: "g_buffs_luck_chance", base: "0.15", port: "0.15", match: true }
       - { name: "g_buffs_luck_damagemultiplier", base: "2 (mutators.cfg)", port: "2", match: true }
@@ -596,9 +596,9 @@ features:
       - "common/mutators/mutator/buffs/buff/ammo.qc:AmmoBuff.m_tick"
       - "common/mutators/mutator/buffs/buff/ammo.qc:AmmoBuff.m_remove"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:ApplyBuff"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:AmmoTick"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:RemoveAllBuffs"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:ApplyBuff"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:AmmoTick"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:RemoveAllBuffs"
     constants:
       - { name: "IT_UNLIMITED_AMMO", base: "BIT(0)", port: "1<<0", match: true }
     status:
@@ -623,7 +623,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/buff/magnet.qc:MagnetBuff.m_tick"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:MagnetTick"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:MagnetTick"
     constants:
       - { name: "g_buffs_magnet_range_item", base: "250", port: "250", match: true }
       - { name: "g_buffs_magnet_range_buff", base: "100", port: "100", match: true }
@@ -651,9 +651,9 @@ features:
       - "common/mutators/mutator/buffs/buff/flight.qc:FlightBuff.m_remove"
       - "common/mutators/mutator/buffs/sv_buffs.qc:MUTATOR_HOOKFUNCTION(buffs, PlayerPreThink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPreThink"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:ApplyBuff"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:RemoveAllBuffs"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:ApplyBuff"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:RemoveAllBuffs"
     constants:
       - { name: "g_buffs_flight", base: "0 (off)", port: "0", match: true }
     status:
@@ -680,9 +680,9 @@ features:
       - "common/mutators/mutator/buffs/buff/inferno.qc:buff_Inferno_CalculateDamage"
       - "common/mutators/mutator/buffs/sv_buffs.qc:Damage_Calculate (inferno target fire/lava + attacker Fire_AddDamage)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:InfernoBurnTime"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:AddFireDamage"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:InfernoBurnTime"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:AddFireDamage"
     constants:
       - { name: "g_buffs_inferno_damagemultiplier", base: "0.3", port: "0.3", match: true }
       - { name: "g_buffs_inferno_burntime_min_time", base: "0.5", port: "0.5", match: true }
@@ -713,7 +713,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/buff/swapper.qc:MUTATOR_HOOKFUNCTION(buffs, ForbidThrowCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnForbidThrowCurrentWeapon"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnForbidThrowCurrentWeapon"
     constants:
       - { name: "g_buffs_swapper_range", base: "1500", port: "1500", match: true }
       - { name: "g_buffs_swapper", base: "0 (off)", port: "0", match: true }
@@ -795,10 +795,10 @@ features:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Waypoint_visible_for_player"
       - "common/mutators/mutator/buffs/cl_buffs.qc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:SpawnBuffWaypoint"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuffColor"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:WaypointSprites.Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:WaypointSprite.VisibleForPlayer"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:SpawnBuffWaypoint"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffColor"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:WaypointSprites.Spawn"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:WaypointSprite.VisibleForPlayer"
     constants:
       - { name: "g_buffs_waypoint_distance", base: "1024", port: "1024 (read; maxDistance on Spawn)", match: true }
       - { name: "WP_Buff sprite", base: "RADARICON_Buff", port: 'Add("Buff",...,Orange) registered (Waypoints.cs:164), radarIcon 1', match: true }
@@ -826,7 +826,7 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:MUTATOR_HOOKFUNCTION(buffs, PlayerUseKey, CBC_ORDER_FIRST)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerUseKey"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerUseKey"
     constants:
       - { name: "g_buffs_drop", base: "0 (off)", port: "0 (read via Api.Cvars)", match: true }
       - { name: "g_buffs_pickup_delay", base: "0.7", port: "0.7 (BuffShield = time + delay)", match: true }
@@ -853,8 +853,8 @@ features:
       - "common/mutators/mutator/buffs/sv_buffs.qc:MUTATOR_HOOKFUNCTION(buffs, FilterItem)"
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_SpawnReplacement"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnFilterItem"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:ConfigureBuffEntity"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnFilterItem"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:ConfigureBuffEntity"
     constants:
       - { name: "g_buffs_replace_powerups", base: "0", port: "0 (read via Api.Cvars)", match: true }
       - { name: "g_buffs < 0 disables replace", base: "yes (return false)", port: "yes (return false when g_buffs<0)", match: true }
@@ -882,8 +882,8 @@ features:
       - "common/mutators/mutator/buffs/sv_buffs.qc:MUTATOR_HOOKFUNCTION(buffs, BuildMutatorsString)"
       - "common/mutators/mutator/buffs/sv_buffs.qc:MUTATOR_HOOKFUNCTION(buffs, BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuildMutatorsPrettyString"
     constants:
       - { name: "report token", base: "':Buffs' / ', Buffs' when g_buffs > 0", port: "':Buffs' / ', Buffs' when g_buffs > 0", match: true }
     status:
@@ -908,8 +908,8 @@ features:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Touch (ITEM_BUFF_GOT / INFO_ITEM_BUFF / INFO_ITEM_BUFF_LOST)"
       - "common/mutators/mutator/buffs/sv_buffs.qc:PlayerUseKey (ITEM_BUFF_DROP / INFO_ITEM_BUFF_LOST / SND_BUFF_LOST)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:BuffTouch"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerUseKey"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerUseKey"
     constants: []
     status:
       logic: faithful
@@ -957,8 +957,8 @@ features:
     layer: [authority]
     base_refs: []
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPhysics (speed)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPreThink (invisible)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPhysics (speed)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPreThink (invisible)"
     constants:
       - { name: "g_buffs_speed / g_buffs_invisible", base: "do not exist (speed/invisibility are POWERUPS)", port: "_speedSpeed 1.5 / _invisibleAlpha 0.5 fields", match: false }
     status:
@@ -983,8 +983,8 @@ features:
     base_refs:
       - "common/mutators/mutator/status_effects/status_effects.qh:StatusEffects_Write / NET_HANDLE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:Write"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:Read"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:Write"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:Read"
     constants:
       - { name: "StatusEffects_groups_minor", base: "8", port: "8", match: true }
       - { name: "StatusEffects_groups_major", base: "4", port: "4", match: true }
@@ -1022,8 +1022,8 @@ features:
       - "common/mutators/mutator/buffs/buff/vampire.qh:REGISTER_BUFF(VAMPIRE) / VampireBuff ATTRIBs"
       - "common/mutators/mutator/buffs/buff/vengeance.qh:REGISTER_BUFF(VENGEANCE) / VengeanceBuff ATTRIBs"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:RegisterAll (buff defs, 240-252)"
-      - "src/XonoticGodot.Common/GameInit.cs:26 (RegisterAll call)"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:RegisterAll (buff defs, 240-252)"
+      - "src/VortexArena.Common/GameInit.cs:26 (RegisterAll call)"
     constants:
       - { name: "m_skin per buff (13)", base: "ammo 3 / bash 5 / disability 7 / flight 11 / inferno 16 / jump 10 / luck 19 / magnet 18 / medic 1 / resistance 0 / swapper 17 / vampire 2 / vengeance 15", port: "Skin = identical 13 values (StatusEffects.cs:240-252)", match: true }
       - { name: "m_color per buff (13)", base: "e.g. bash '1 0.39 0', medic '1 0.12 0', luck '0.17 0.85 0.12'", port: "Color = identical 13 triples (StatusEffects.cs:240-252)", match: true }
@@ -1058,8 +1058,8 @@ features:
       - "common/mutators/mutator/buffs/buff/vampire.qh:BUFF_SPAWNFUNC_Q3COMPAT(holdable_invulnerability, BUFF_VAMPIRE)"
       - "common/mutators/mutator/buffs/buff/vengeance.qh:BUFF_SPAWNFUNC_Q3COMPAT(holdable_kamikaze, BUFF_VENGEANCE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:BuffCompatClassnames (189-202)"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:RegisterBuffSpawnFuncs (223-227)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:BuffCompatClassnames (189-202)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:RegisterBuffSpawnFuncs (223-227)"
     constants:
       - { name: "compat map (11 classnames)", base: "ammoregen->ammo scout->bash flight->flight doubler->inferno jumper->jump regen/revival->medic guard->resistance teleporter->swapper invulnerability->vampire kamikaze->vengeance", port: "identical 11-entry table", match: true }
       - { name: "buffs with NO compat classname", base: "disability, luck, magnet (no Q3COMPAT line)", port: "absent from the table (correct)", match: true }
@@ -1115,8 +1115,8 @@ features:
       - "common/mutators/mutator/buffs/buff/luck.qh:autocvar_g_buffs_luck_chance = 0.15 / autocvar_g_buffs_luck_damagemultiplier = 3"
       - "common/mutators/mutator/buffs/buff/magnet.qh:autocvar_g_buffs_magnet_range_buff = 100"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:56-59 (field defaults 0.15/2/250/100)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:122-125 (cvar refresh)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:56-59 (field defaults 0.15/2/250/100)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:122-125 (cvar refresh)"
     constants:
       - { name: "g_buffs_luck_chance", base: ".qh fallback 0.15 == mutators.cfg 0.15", port: "0.15", match: true }
       - { name: "g_buffs_luck_damagemultiplier (effective)", base: "mutators.cfg 2 (the .qh fallback 3 is shadowed on any stock install)", port: "2", match: true }

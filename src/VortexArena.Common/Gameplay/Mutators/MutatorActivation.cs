@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The mutator activation loop — the C# successor to QuakeC's <c>Mutator_Add</c> / <c>Mutator_Remove</c> and
@@ -26,7 +26,7 @@ public static class MutatorActivation
     /// <summary>
     /// Host seam for QC <c>cvar_settemp(name, value)</c> from a mutator's <c>MUTATOR_ONADD</c> (e.g. Random
     /// Gravity settemps <c>sv_gravity</c> so the original is restored at match end). The settemp restore-stack
-    /// (<c>cvar_settemp_restore</c>) is owned by the server host (XonoticGodot.Server.SettempCvars), which the
+    /// (<c>cvar_settemp_restore</c>) is owned by the server host (VortexArena.Server.SettempCvars), which the
     /// Godot-free Common layer can't reference, so the host wires this to <c>SettempCvars.Set</c> at boot. When
     /// unwired (headless tests) it falls back to a plain cvar set — the override still applies, only the
     /// match-end restore is skipped (which has no live cvar host to restore to anyway).
@@ -40,7 +40,7 @@ public static class MutatorActivation
     public static void SettempCvar(string name, string value)
     {
         if (SettempCvarHandler is { } h) h(name, value);
-        else if (XonoticGodot.Common.Services.Api.Services is not null) XonoticGodot.Common.Services.Api.Cvars.Set(name, value);
+        else if (VortexArena.Common.Services.Api.Services is not null) VortexArena.Common.Services.Api.Cvars.Set(name, value);
     }
 
     /// <summary>

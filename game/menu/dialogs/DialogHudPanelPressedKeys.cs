@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Pressed Keys" panel config dialog — a faithful C# port of <c>XonoticHUDPressedKeysDialog_fill</c>
@@ -13,7 +13,7 @@ namespace XonoticGodot.Game.Menu;
 /// checkbox.
 ///
 /// FAITHFUL UI NOW: every binding writes the real <c>hud_panel_pressedkeys*</c> cvars the in-game pressed-keys
-/// panel reads. There is no live HUD editor/preview in XonoticGodot yet, so nothing previews here.
+/// panel reads. There is no live HUD editor/preview in VortexArena yet, so nothing previews here.
 /// </summary>
 public partial class DialogHudPanelPressedKeys : MenuScreen
 {

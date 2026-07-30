@@ -1,11 +1,11 @@
 // Port of qcsrc/menu/xonotic/weaponslist.qc (XonoticWeaponsList).
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The reorderable weapon-priority list — a faithful C# port of <c>XonoticWeaponsList</c>

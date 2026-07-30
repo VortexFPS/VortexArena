@@ -17,12 +17,12 @@
 //  * The beam VISUAL (Draw_Laser) is client-side — see game/client/LaserRenderer.cs.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary><c>misc_laser</c> — the hazard/detector laser beam. Registered by <see cref="MapObjectsRegistry"/>.</summary>
 public static class Laser

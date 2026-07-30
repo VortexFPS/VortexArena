@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Threading;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Loopback round-trip test for the UDP socket layer of the master/server-info protocol
@@ -34,7 +34,7 @@ public class MasterServerLinkTests
         using var client = new MasterServerLink();
         var serverEp = new IPEndPoint(IPAddress.Loopback, server.LocalEndPoint.Port);
 
-        var info = new Dictionary<string, string> { ["hostname"] = "XonoticGodot Test", ["mapname"] = "dm_exomorph", ["clients"] = "3" };
+        var info = new Dictionary<string, string> { ["hostname"] = "VortexArena Test", ["mapname"] = "dm_exomorph", ["clients"] = "3" };
         string? gotChallenge = null;
         server.GetInfoRequested += (from, challenge) => { gotChallenge = challenge; server.SendInfoResponse(from, info); };
 
@@ -46,7 +46,7 @@ public class MasterServerLinkTests
 
         Assert.True(ok, "expected an infoResponse over loopback");
         Assert.Equal("ping42", gotChallenge);            // the server saw our getinfo + challenge
-        Assert.Equal("XonoticGodot Test", got!["hostname"]);  // and we parsed its infostring back
+        Assert.Equal("VortexArena Test", got!["hostname"]);  // and we parsed its infostring back
         Assert.Equal("dm_exomorph", got["mapname"]);
         Assert.Equal("3", got["clients"]);
     }

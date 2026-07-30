@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 public delegate void EntityThink(Entity self);
 public delegate void EntityTouch(Entity self, Entity other);
@@ -17,7 +17,7 @@ public delegate void EntityContentsTransition(Entity self, int prevContents, int
 
 /// <summary>
 /// Marker for the presentation-side binding (a Godot node wrapper, set on the client only).
-/// Defined as an interface so <c>XonoticGodot.Common</c> stays Godot-free (ADR-0008).
+/// Defined as an interface so <c>VortexArena.Common</c> stays Godot-free (ADR-0008).
 /// </summary>
 public interface IEntityPresence { }
 

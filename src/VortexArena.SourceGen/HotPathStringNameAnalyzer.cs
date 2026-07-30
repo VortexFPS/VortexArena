@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
-namespace XonoticGodot.SourceGen
+namespace VortexArena.SourceGen
 {
     /// <summary>
     /// Roslyn analyzer enforcing the godot#105750 per-frame-allocation convention, Tier 2 (planning/PERFORMANCE_REPORT.md

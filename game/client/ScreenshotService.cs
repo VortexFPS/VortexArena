@@ -2,15 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Console; // BindInput (global-hotkey key resolution)
-using XonoticGodot.Game.Menu;    // KeyCaptureButton.Capturing (yield during a keybind rebind)
+using VortexArena.Common.Config;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Console;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Console; // BindInput (global-hotkey key resolution)
+using VortexArena.Game.Menu;    // KeyCaptureButton.Capturing (yield during a keybind rebind)
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The client-side <c>screenshot</c> command — the C# successor to DarkPlaces' <c>SCR_ScreenShot_f</c>

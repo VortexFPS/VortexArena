@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local CI mirror for VortexArena (T33 — ADR-0014). Runs the same gate as
 # .github/workflows/ci.yml PLUS the asset-dependent steps GitHub can't run:
-# with data mounted, the ~18 real-data test classes actually execute
+# with data/ mounted, the ~18 real-data test classes actually execute
 # (in CI they self-skip), and the headless boot smoke exercises real asset
 # loading — so THIS script, not the green Actions badge, is the authoritative
 # pre-push gate.
@@ -52,14 +52,36 @@ case "$(uname -s)" in
         ;;
 esac
 
+# ── 0. engine patch provenance (cheap, and fails before anything slow) ────────
+# Only the --patches half here: --binary needs an export, which this gate does not do (release.yml
+# runs that half straight after its export). This catches a patch edited or line-ending-mangled in
+# place, which would otherwise surface as a template rebuilt from something nobody reviewed.
+step "engine patch provenance (engine.lock.json)"
+python "$ROOT/tools/verify-engine-template.py" --patches
+
+# The parity registry's port_refs are pointers the differ and the parity workflows follow. A dangling one
+# does not look broken - it looks like coverage - so it needs a gate rather than a periodic audit. The
+# Tier-1 rename broke all 360 in a single commit and nothing noticed until someone went looking.
+step "parity registry pointers resolve"
+python "$ROOT/tools/check-parity-refs.py"
+
 # ── 1. libraries + tests build (plain .NET SDK, no Godot) ─────────────────────
 step "build libraries + tests"
 dotnet build "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --nologo
 
 # ── 2. the full test suite (assets present → real-data tests run too) ─────────
-step "dotnet test (baseline: 1159+ passed / 0 failed; real-data tests skip without data)"
+step "dotnet test (baseline: 3931 passed / 0 failed; only MAP-dependent cases can skip)"
 dotnet test "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --no-build --nologo
-[ -d "$ROOT/data" ] || echo "NOTE: data missing — the ~18 real-data test classes self-skipped (run download-assets.sh for full coverage)."
+# Core content is COMMITTED (item 21), so it cannot legitimately be absent — only compiled maps can,
+# and those are a fetch away. Fail loudly on a broken checkout instead of printing a note and carrying on
+# with the real-data classes quietly skipped.
+if [ ! -d "$ROOT/data" ]; then
+    fail "data/ is missing. Core content is committed — this checkout is broken (not a download away)."
+fi
+if [ ! -d "$ROOT/data/maps" ] || [ -z "$(ls -A "$ROOT/data/maps" 2>/dev/null)" ]; then
+    echo "NOTE: no compiled maps — the map-dependent cases self-skipped. For full coverage:"
+    echo "      python tools/data/fetch-maps.py"
+fi
 
 # ── 3. the Godot host project (restores Godot.NET.Sdk via nuget.config) ───────
 step "build the Godot host (VortexArena.csproj)"
@@ -80,7 +102,16 @@ if $do_smoke; then
         # Dedicated-server smoke (docs/RUNNING.md 'Dedicated server'): the headless listen server must load the
         # map, fill bots (waypoints load on the first frame with bots), and accept the self-connect — this
         # exact path regressed silently once (a FramePostDraw await that never fires headless). Needs assets.
-        if [ -d "$ROOT/data" ]; then
+        # Needs the stormkeep MAP, which is fetched build output rather than committed content. Fetch it
+        # instead of skipping: a smoke test that silently opts out on the machine where content is missing
+        # is a smoke test that never runs where it matters (item 22).
+        if [ ! -f "$ROOT/data/maps/stormkeep.pk3" ] && [ ! -d "$ROOT/data/maps/stormkeep.pk3dir" ]; then
+            step "fetching stormkeep for the host smoke"
+            # Non-fatal here: the presence check below decides, so an offline run gets one clear
+            # message from there rather than two from different layers.
+            python "$ROOT/tools/data/fetch-maps.py" --only stormkeep || true
+        fi
+        if [ -f "$ROOT/data/maps/stormkeep.pk3" ] || [ -d "$ROOT/data/maps/stormkeep.pk3dir" ]; then
             step "headless host smoke (--host stormkeep --bots 2, 20s)"
             log="$(mktemp)"
             timeout 240 "$GODOT" --headless --path "$ROOT" --host stormkeep --gametype dm --bots 2 \
@@ -125,7 +156,10 @@ if $do_smoke; then
             [ "${d_errors:-1}" -eq 0 ] || { echo "--- $dlog ---"; tail -40 "$dlog"; fail "dedicated smoke had $d_errors hard error(s)"; }
             rm -f "$dlog"
         else
-            echo "NOTE: data missing — skipping the headless host smoke (needs the stormkeep map)."
+            fail "stormkeep is not present and could not be fetched — the headless host smoke cannot run.
+      This smoke covers the listen-server path that regressed silently once (a FramePostDraw await
+      that never fires headless), so skipping it is not an acceptable outcome. Fetch manually:
+        python tools/data/fetch-maps.py --only stormkeep"
         fi
     else
         echo "NOTE: Godot not found at '$GODOT' — skipping the headless smoke (set GODOT= or pass --no-smoke to silence)."
@@ -140,17 +174,18 @@ fi
 # bind quat + non-zero scales), while DPM and MD3 deliberately PERMIT singular/non-unit-scale content per the
 # shipped DP baselines (DPM ships zero-scale helper bones; MD3 tag axes carry non-unit scale). Every .shader
 # script compiles (parses) with no hard failure. VisualQaTests already ran inside step 2's full suite; this re-runs JUST that filter for a
-# focused, greppable per-asset summary (and self-skips without data, exactly like the other real-data
+# focused, greppable per-asset summary (map-dependent theories self-skip without data/maps, like the other real-data
 # tests). It needs no Godot — pure xUnit over the parsed asset structures.
 step "Visual QA (headless assertions only): VisualQa map/model/shader sweep"
 vqa_log="$(mktemp)"
 dotnet test "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --no-build --nologo \
     --filter "FullyQualifiedName~VisualQa" > "$vqa_log" 2>&1 || { cat "$vqa_log"; rm -f "$vqa_log"; fail "Visual QA headless assertions failed"; }
 grep -E "Passed!|Failed!|Passed:|Failed:|Skipped:|Total tests" "$vqa_log" || true
-if [ -d "$ROOT/data" ]; then
+if [ -d "$ROOT/data/maps" ] && [ -n "$(ls -A "$ROOT/data/maps" 2>/dev/null)" ]; then
     echo "Visual QA (headless): asserted load + structure for every stock map/model/shader; pixel correctness is the WINDOWED tools/visual-qa.sh checklist (docs/RUNNING.md)."
 else
-    echo "NOTE: data missing — VisualQa theories self-skipped (run download-assets.sh for the full map/model/shader sweep)."
+    echo "NOTE: no compiled maps — the MAP theories self-skipped (models/shaders from core content still ran)."
+    echo "      python tools/data/fetch-maps.py"
 fi
 rm -f "$vqa_log"
 

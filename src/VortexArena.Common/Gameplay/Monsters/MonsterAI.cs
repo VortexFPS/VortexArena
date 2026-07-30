@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Common.Gameplay.Damage;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using VortexArena.Common.Gameplay.Damage;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Shared monster AI — the Godot-free core of <c>common/monsters/sv_monsters.qc</c>. This is the
@@ -2292,7 +2292,7 @@ public static class MonsterAI
     public const int EfNodepthtest = 8192;
 
     // SUPERCONTENTS_* bits for the monster's dphitcontentsmask (QC Monster_Spawn:1479/1488). Common can't
-    // reference XonoticGodot.Engine.Collision.SuperContents, so they are mirrored here EXACTLY as Invasion.cs /
+    // reference VortexArena.Engine.Collision.SuperContents, so they are mirrored here EXACTLY as Invasion.cs /
     // Nexball.cs / LagComp.cs do (DPCONTENTS_* values; TraceService honors Entity.DpHitContentsMask).
     private const int SuperContentsSolid       = 0x00000001; // QC DPCONTENTS_SOLID
     private const int SuperContentsBody        = 0x02000000; // QC DPCONTENTS_BODY

@@ -140,6 +140,12 @@ public sealed class Commands
     public Action<string>? ChangeLevelHandler { get; set; }
 
     /// <summary>
+    /// E6: the authoritative editing session, when the editor gametype has one open. Set by the host; null in
+    /// every other mode, which is what makes <c>editor_op</c> inert outside an editing session.
+    /// </summary>
+    public VortexArena.Formats.Vmap.VmapEditServer? EditorOps { get; set; }
+
+    /// <summary>
     /// Optional sink the host wires to shut the server down (QC <c>localcmd("quit\n")</c>). Invoked at match end
     /// by the <c>quit_when_empty</c> override in <see cref="GameWorld.DriveEndOfMatchMapFlow"/>. When unwired the
     /// decision is still taken (no map change happens) but the process keeps running.
@@ -819,6 +825,18 @@ public sealed class Commands
         Register("ready", "ready — toggle your ready state during warmup", CmdReady);
         Register("join", "join — join the game as a player", CmdJoin);
         Register("spectate", "spectate — become a spectator", CmdSpectate);
+        Register("editor_playtest", "editor_playtest — toggle between EDIT free-fly and PLAYTEST (editor gametype)",
+            CmdEditorPlaytest);
+
+        // ---- Base bind aliases (binds-xonotic.cfg F1-F6). These are the exact verbs the stock binds invoke;
+        // without them F1/F2/F3/F5/F6 are dead keys, which is what made F3-to-spectate look broken. QC defines
+        // them as aliases over the same underlying commands, so they forward rather than duplicate logic.
+        Register("vyes", "vyes — vote yes (F1)", ctx => CmdVoteAlias(ctx, "yes"));
+        Register("vno", "vno — vote no (F2)", ctx => CmdVoteAlias(ctx, "no"));
+        Register("vabstain", "vabstain — abstain from the current vote", ctx => CmdVoteAlias(ctx, "abstain"));
+        Register("spec", "spec — become a spectator (alias of spectate, F3)", CmdSpectate);
+        Register("team_auto", "team_auto — join the team the balancer picks (F6)", CmdTeamAuto);
+        Register("editor_op", "editor_op <wire> — apply a map-editor geometry op (server-authoritative)", CmdEditorOp);
         Register("selectteam", "selectteam <red|blue|yellow|pink|auto> — choose a team", CmdSelectTeam);
         // QC the engine `color` command → SV_ChangeTeam (server/teamplay.qc:1340): in DP `color`/`topcolor`/
         // `bottomcolor` are engine-handled (host_cmd.c) and call SV_ChangeTeam, which only re-colors in a NON-team
@@ -1552,6 +1570,14 @@ public sealed class Commands
     {
         if (ctx.Caller is null) { ctx.Print("join is a client command"); return true; }
         Player p = ctx.Caller;
+
+        // QC ClientCommand_join (server/command/cmd.qc:665): the join command is gated on joinAllowed(), the
+        // SAME predicate the delayed auto-join uses. The port was calling ClientManager.Join directly, so a
+        // `join` bypassed every gametype join rule — Duel's 2-player cap, LMS's round lockout, the team lock,
+        // and the editor's "EDIT is where you live" gate — while the auto-join path honored all of them.
+        // An already-live (dead) player is a respawn, not a join, and QC lets that through unchecked.
+        if (p.IsObserver && !_world.Clients.JoinAllowed(p, _world.Time))
+            return true;
         // QC Join_Try (client.qc:2274): a non-INGAME client in g_playban_list cannot (re)join — the play-ban's
         // load-bearing enforcement. A player who isn't currently in play is one sitting as observer/spectator;
         // a live (dead) player is already INGAME and falls through to respawn.
@@ -1589,6 +1615,79 @@ public sealed class Commands
         else
             _world.Clients.Spawn(p);
         ctx.Print("joined the game");
+        return true;
+    }
+
+    /// <summary>
+    /// Toggle the caller between the editor's EDIT (free-fly) and PLAYTEST (live player) states, preserving
+    /// position and view angles (design doc §11.3). Only meaningful in the editor gametype: everywhere else
+    /// this would be a free noclip/respawn, so it is refused.
+    /// </summary>
+    private bool CmdEditorPlaytest(CommandContext ctx)
+    {
+        if (ctx.Caller is null) { ctx.Print("editor_playtest is a client command"); return true; }
+        if (_world.GameType is not VortexArena.Common.Gameplay.EditorMode)
+        {
+            ctx.Print("editor_playtest: not in the editor gametype");
+            return true;
+        }
+
+        EditorSession.Toggle(_world, ctx.Caller, out string message);
+        ctx.Print(message);
+        return true;
+    }
+
+    /// <summary>
+    /// QC's <c>vyes</c>/<c>vno</c>/<c>vabstain</c> aliases (binds-xonotic.cfg F1/F2): forward to the real
+    /// <c>vote</c> command rather than reimplementing the vote state machine, so the two can never diverge.
+    /// </summary>
+    private bool CmdVoteAlias(CommandContext ctx, string verb)
+    {
+        var forwarded = new CommandContext(new[] { "vote", verb }, ctx.IsServerConsole, ctx.Caller);
+        bool handled = CmdVote(forwarded);
+        ctx.Print(forwarded.Output.TrimEnd());
+        return handled;
+    }
+
+    /// <summary>
+    /// QC <c>team_auto</c> (binds-xonotic.cfg F6): join with no team preference, letting the balancer pick.
+    /// In a non-team gametype this is just a plain join, which is what QC does too.
+    /// </summary>
+    private bool CmdTeamAuto(CommandContext ctx)
+    {
+        if (ctx.Caller is null) { ctx.Print("team_auto is a client command"); return true; }
+        ctx.Caller.WantsJoin = 0;   // QC wants_join 0 = autoselect
+        return CmdJoin(ctx);
+    }
+
+    /// <summary>
+    /// E6: apply a wire-encoded editor op on the server, which owns the authoritative geometry.
+    ///
+    /// Ops ride the existing <c>clc_stringcmd</c> channel rather than a new packet type — they are rare (one
+    /// per drag release, not per frame), so a dedicated channel and a protocol bump would buy nothing, and the
+    /// line is readable in a packet log when co-editing misbehaves. Per-brush locks stop two mappers from
+    /// interleaving edits on the same brush.
+    /// </summary>
+    private bool CmdEditorOp(CommandContext ctx)
+    {
+        if (_world.GameType is not VortexArena.Common.Gameplay.EditorMode)
+        {
+            ctx.Print("editor_op: not in the editor gametype");
+            return true;
+        }
+        if (EditorOps is null)
+        {
+            ctx.Print("editor_op: no editing session is open on the server");
+            return true;
+        }
+
+        // Client id: the caller's entity identity is enough to keep two editors' locks apart.
+        int clientId = ctx.Caller?.GetHashCode() ?? 0;
+
+        // Queued, not applied here. This runs on whichever thread read the packet, and the document belongs to
+        // the editor on the main thread; the host drains the queue there and broadcasts what landed. The reply
+        // is therefore an acknowledgement of receipt — the outcome arrives as the echo, or as its absence.
+        EditorOps.Enqueue(clientId, ctx.ArgTail(1));
         return true;
     }
 

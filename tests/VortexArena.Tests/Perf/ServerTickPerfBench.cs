@@ -5,16 +5,16 @@ using System.Globalization;
 using System.IO;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Server;
+using VortexArena.Common.Physics;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Server;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T33 perf bench (BotPerfBench pattern — measurement, not a CI assertion) for the WHOLE headless
@@ -25,9 +25,9 @@ namespace XonoticGodot.Tests;
 /// B/tick here are THE dedicated-server capacity numbers.
 ///
 /// No-ops when the content checkout is missing (CI without assets); the data dir can be overridden
-/// with the XG_DATA_DIR environment variable.
+/// with the VA_DATA_DIR environment variable.
 ///
-/// Run: dotnet test tests/XonoticGodot.Tests --filter ServerTickPerfBench -l "console;verbosity=detailed"
+/// Run: dotnet test tests/VortexArena.Tests --filter ServerTickPerfBench -l "console;verbosity=detailed"
 ///
 /// Measured baseline (2026-06-09, dev machine, Debug build, atelier — 453 map entities):
 ///   boot (cfg tree + registries + spawn): 172 ms
@@ -40,9 +40,7 @@ namespace XonoticGodot.Tests;
 [Collection("GlobalState")]
 public class ServerTickPerfBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
     private const string Map = "atelier";
 
     private readonly ITestOutputHelper _out;
@@ -74,9 +72,11 @@ public class ServerTickPerfBench
 
         // --- build the world exactly like the live listen server (NetGame.StartListenServer) ---
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
-        Assert.True(vfs.Exists(bspPath), $"missing {bspPath}");
+        // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
+        // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.
+        if (!vfs.Exists(bspPath)) return;
         BspData bsp = BspReader.Read(vfs.ReadBytes(bspPath));
         BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp);
 
@@ -103,7 +103,7 @@ public class ServerTickPerfBench
 
         // --- connect 4 human players and drive them with real movement input ---
         var inputs = new BenchInput[4];
-        var players = new XonoticGodot.Common.Gameplay.Player[4];
+        var players = new VortexArena.Common.Gameplay.Player[4];
         for (int i = 0; i < 4; i++)
         {
             inputs[i] = new BenchInput();
@@ -141,8 +141,8 @@ public class ServerTickPerfBench
 
         // (P9 2026-07-03) Loose budget gates: catch a 2×+ tick regression (the 2026-07-02 bot-strategy melt
         // class) before a human feels it, without tripping on machine noise — the thresholds are ~4-5× the
-        // 2026-06-09 Debug baselines documented above. A slower box can opt out with XG_PERF_ASSERT=0.
-        if (Environment.GetEnvironmentVariable("XG_PERF_ASSERT") != "0")
+        // 2026-06-09 Debug baselines documented above. A slower box can opt out with VA_PERF_ASSERT=0.
+        if (Environment.GetEnvironmentVariable("VA_PERF_ASSERT") != "0")
         {
             Assert.True(_emptyMsPerTick < 1.0,
                 $"empty-world server tick regressed: {_emptyMsPerTick:F4} ms/tick (budget 1.0, baseline 0.118)");

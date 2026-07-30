@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The client roster + connect/spawn lifecycle — the Godot-free essence of the relevant slice of
@@ -70,6 +70,13 @@ public sealed class ClientManager
     /// the Base default (noclip), preserving the previous no-net-state behaviour for tests/headless paths.
     /// </summary>
     public static System.Func<Player, bool>? ClippedSpectatingProvider { get; set; }
+
+    /// <summary>
+    /// Set by the host while the map-editor gametype is active: forces free-fly observers to MOVETYPE_NOCLIP
+    /// regardless of <see cref="ClippedSpectatingProvider"/>. Editing while colliding with the level is
+    /// needlessly fiddly, and a brush dragged around you would otherwise trap the camera.
+    /// </summary>
+    public static bool? EditorFreeFlyNoclip { get; set; }
 
     private readonly List<ClientInfo> _clients = new();
     private readonly List<Player> _players = new();          // dense Player view (matches SimulationLoop.Clients)
@@ -244,6 +251,13 @@ public sealed class ClientManager
         // OBSERVER, not yet a live player — it only enters the match via Join() (on +jump/+attack, a delayed
         // autojoin, or a bot's auto-join). Mark the observer phase here; the loadout/spawn happen in Join().
         p.IsObserver = true;
+        // QC ClientConnect -> PutObserverInServer(this, false, use_spawnpoint=true) (server/client.qc:1900):
+        // a connecting observer is placed AT A SPAWN POINT, not left at the world origin. The port skipped this
+        // because a fresh edict already sits at '0 0 0', which is usually inside solid or out in the void — so
+        // anyone who observes before joining (and, in the editor gametype, anyone who never joins at all) starts
+        // buried in geometry looking at nothing.
+        ApplyObserverHull(p);
+        PlaceObserverAtSpawnPoint(p);
         p.WantsJoin = 0;            // QC this.wants_join = 0 (no team chosen yet; 0 = autoselect on Join)
         p.AutoJoinChecked = 0;      // QC .autojoin_checked: not yet attempted
         p.JoinJumpReleased = true;  // re-armed so the first +jump/+attack press fires Join once
@@ -303,7 +317,7 @@ public sealed class ClientManager
         // 0 = no-op; 1 = always clear; -1 = clear unless PreferPlayerScore_Clear hook vetoes). This is the live
         // arm of the resetonjoin feature: at the default (0) it is a no-op, so joiners keep their score; only
         // diverges when an admin explicitly sets 1 or -1.
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.ClearPlayerOnJoin(p);
+        VortexArena.Common.Gameplay.Scoring.GameScores.ClearPlayerOnJoin(p);
 
         // QC the gametype PutClientInServer / lms_AddPlayer seed: register the joiner with the gametype (LMS seeds
         // its lives column + clamps a late joiner to the lowest life count) BEFORE the spawn loadout is applied.
@@ -496,9 +510,20 @@ public sealed class ClientManager
         // NOCLIP (pass through walls); the port previously hardcoded FLY_WORLDONLY (always clipped), the opposite.
         // Honor the replicated cvar here so a spectator who sets it gets the right collision behaviour. (The QC
         // momentary +use toggle is a transient cosmetic override and is not modelled; the persistent preference is.)
-        if (p.Spectatee is null && p.MoveType is MoveType.Noclip or MoveType.FlyWorldOnly)
+        // MoveType.None is included deliberately: a client that has connected but not yet joined sits at
+        // MOVETYPE_NONE (see ClientConnect), and this gate previously only PROMOTED an observer that was
+        // already flying — so a never-joining client stayed frozen in place forever. That was invisible while
+        // every client auto-joined within a second of connecting, and total in the editor gametype, where
+        // nobody ever joins. QC gives a connecting observer the free-fly movetype in PutObserverInServer
+        // (client.qc:261) precisely so a spectator can move before/without joining.
+        if (p.Spectatee is null && p.MoveType is MoveType.Noclip or MoveType.FlyWorldOnly or MoveType.None)
         {
-            bool wouldClip = ClippedSpectatingProvider?.Invoke(p) ?? false;
+            // The EDITOR always flies free. cl_clippedspectating is a spectator-watching preference; a mapper
+            // needs to pass through the geometry they are editing (and to get back out of a brush they just
+            // moved around themselves), so the editor gametype ignores it.
+            bool wouldClip = EditorFreeFlyNoclip is null or false
+                ? ClippedSpectatingProvider?.Invoke(p) ?? false
+                : false;
             p.MoveType = wouldClip ? MoveType.FlyWorldOnly : MoveType.Noclip;
         }
 
@@ -553,6 +578,49 @@ public sealed class ClientManager
     /// scoreboard. Used by the <c>spectate</c> command (the live-player→observer direction QC has but the port
     /// lacked) and any forced-spectate path. The observer keeps its current origin (free-flies from there).
     /// </summary>
+    /// <summary>
+    /// QC <c>PutObserverInServer</c>'s <c>use_spawnpoint</c> branch (server/client.qc): put a free-fly observer
+    /// at a spawn point, facing the way that spawn faces.
+    ///
+    /// Deliberately NOT applied by <see cref="PutObserverInServer"/> itself: the live-player→observer direction
+    /// must keep the player's current position (that is what makes `spectate` drop you where you were standing,
+    /// and what the editor's PLAYTEST→EDIT toggle relies on). Only the connect-time path wants relocation.
+    /// </summary>
+    /// <summary>
+    /// QC <c>PutObserverInServer</c>'s hull setup (client.qc:318-320): an observer gets the CROUCH hull and a
+    /// ZERO view offset — <c>setsize(this, PL_CROUCH_MIN, PL_CROUCH_MAX); this.view_ofs = '0 0 0'</c>.
+    ///
+    /// Both halves matter and the port had neither, because its connect path never ran the observer transition.
+    /// The zero view offset is why the free-fly camera sat at standing eye height instead of at the entity
+    /// origin (QC's own comment: so your view doesn't end up in the ceiling under MOVETYPE_FLY_WORLDONLY), and
+    /// the full-size hull is why a free-flying observer collided like a standing player.
+    /// </summary>
+    public static void ApplyObserverHull(Player p)
+    {
+        ArgumentNullException.ThrowIfNull(p);
+        p.ViewOfs = Vector3.Zero;
+        if (Api.Services is not null)
+            Api.Entities.SetSize(p, new Vector3(-16f, -16f, -24f), new Vector3(16f, 16f, 25f)); // QC PL_CROUCH_MIN/MAX
+    }
+
+    public void PlaceObserverAtSpawnPoint(Player p)
+    {
+        ArgumentNullException.ThrowIfNull(p);
+        if (Api.Services is null)
+            return;
+
+        SpawnPoint? sp = SpawnSystem.SelectSpawnPoint(p, LivePlayers(), targetCheck: false);
+        if (sp is not { } spot)
+            return;
+
+        Api.Entities.SetOrigin(p, spot.Origin);
+        // Level the view: a spawn point's roll is never meaningful, and a tilted observer camera reads as a bug.
+        var angles = new Vector3(0f, spot.Angles.Y, 0f);
+        p.Angles = angles;
+        p.FixAngle = true;
+        p.FixAngleAngles = angles;
+    }
+
     public void PutObserverInServer(Player p)
     {
         // QC PutObserverInServer (server/client.qc:268-273): if it WAS a live player with health, puff a despawn
@@ -568,6 +636,7 @@ public sealed class ClientManager
         StatusEffectsCatalog.ClearAll(p);
 
         p.IsObserver = true;
+        ApplyObserverHull(p);
 
         // QC MUTATOR_HOOKFUNCTION(<mode>, MakePlayerObserver) (e.g. ctf_RemovePlayer): a player demoted to
         // observer relinquishes any objective they hold — a CTF carrier drops the flag where they stand and any
@@ -725,7 +794,7 @@ public sealed class ClientManager
         // QC MUTATOR_HOOKFUNCTION(nades, SpectateCopy) (sv_nades.qc:937): a following observer mirrors the
         // spectatee's nade HUD/bonus stats (NADE_TIMER charge ring + NADE_BONUS_TYPE/pokenade_type/NADE_BONUS/
         // NADE_BONUS_SCORE) so the nade readouts track the watched player. No-op when g_nades is off.
-        XonoticGodot.Common.Gameplay.Nades.NadesMutator.OnSpectateCopy(spectator, target);
+        VortexArena.Common.Gameplay.Nades.NadesMutator.OnSpectateCopy(spectator, target);
 
         // QC SpectateCopy tail (server/client.qc:1837): anticheat_spectatecopy(this, spectatee) overrides the
         // observer's body angle with the spectatee's evade-tracked view angle. Runs last so it wins over the
@@ -783,7 +852,7 @@ public sealed class ClientManager
         // (re)spawning player's banked bonus + accrual is wiped so a bonus banked in a previous life doesn't
         // carry into the new one. No-op when g_nades is off. Runs before the PlayerSpawn nades hook (which then
         // re-assigns the offhand + nade_refire), matching the QC PutClientInServer→PlayerSpawn order.
-        XonoticGodot.Common.Gameplay.Nades.NadesMutator.OnPutClientInServer(p);
+        VortexArena.Common.Gameplay.Nades.NadesMutator.OnPutClientInServer(p);
 
         SpawnSystem.PutPlayerInServer(p, sp.Value, warmup: IsWarmup?.Invoke() ?? false);
 
@@ -818,7 +887,7 @@ public sealed class ClientManager
         // so a stale forced handicap from a previous round/match doesn't bleed across, and refresh handicap_level.
         // Runs BEFORE the PlayerSpawn mutator hook so the dynamic_handicap recompute (below) immediately overwrites
         // the reset with the freshly-computed value, matching Base's PutClientInServer → dynamic_handicap order.
-        XonoticGodot.Common.Gameplay.Handicap.Initialize(p);
+        VortexArena.Common.Gameplay.Handicap.Initialize(p);
 
         // QC: MUTATOR_CALLHOOK(PlayerSpawn, spot, this) — fired after the shared spawn setup.
         var args = new MutatorHooks.PlayerSpawnArgs(p, sp.Value.Source);

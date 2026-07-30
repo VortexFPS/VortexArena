@@ -15,11 +15,11 @@
 // knockback in Base either); it is intentionally not modelled.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The napalm nade detonation — port of <c>nade_napalm_boom</c>.</summary>
 public sealed class NadeNapalmBoom : INadeBoom

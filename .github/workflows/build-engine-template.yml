@@ -1,0 +1,396 @@
+name: build-engine-template
+
+# Builds the patched Godot Windows export template (restructure item 30, G10) and optionally publishes
+# it as a release asset so CI — and anyone who is not on the dev box — can export Windows.
+#
+# MANUAL ONLY, and rarely. The output changes when the engine version or the patch set changes, and
+# nothing else. tools/engine-patches/engine.lock.json pins what went in.
+#
+# ── Why this is more than one scons call ──────────────────────────────────────────────────────────
+# A .NET-enabled export template cannot be built on its own. The C# bindings compile from generated
+# glue (modules/mono/glue/*.gen.cpp), the glue is produced by RUNNING a Godot editor binary, and so the
+# editor has to be built first. That is Godot's own sequence — see their linux_builds.yml, which does
+# exactly this: build editor with module_mono_enabled=yes → `--headless --generate-mono-glue` →
+# build_assemblies.py → build templates. The editor build is the price of a mono template; it is not
+# something to optimise away.
+#
+# ── Two scons defaults that matter, both checked against 4.6.3-stable's platform/windows/detect.py ──
+#   accesskit  defaults to TRUE, and with accesskit_sdk_path EMPTY detect.py takes the else branch to
+#              ACCESSKIT_DYNAMIC rather than static-linking the SDK. So the build succeeds without the
+#              AccessKit SDK, which is why the dev-box build works. Leave the path empty: matching the
+#              dev-box template's configuration matters more than adding a dependency.
+#   angle_libs empty falls back to the vendored thirdparty/angle headers. Also fine, also left alone.
+# Godot's own CI passes both paths explicitly because it wants specific configurations, not because
+# they are required.
+#
+# d3d12=no matches export_presets.cfg's application/export_d3d12=0 — the project runs Vulkan, and the
+# D3D12 driver would pull an extra SDK for nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      godot_tag:
+        description: "Upstream Godot tag to build from"
+        default: "4.6.3-stable"
+        required: true
+      vortex_rev:
+        description: "Vortex revision of this template (bump when the patch set changes)"
+        default: "1"
+        required: true
+      platforms:
+        description: "Which templates to build"
+        type: choice
+        default: "all"
+        options: ["all", "windows", "linux", "macos", "windows+linux"]
+      publish:
+        description: "Publish as a PRERELEASE release asset (leave off to just get an artifact)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # Matches tools/engine-patches/README.md's rebuild recipe, so the CI artifact and the dev-box binary
+  # are the same configuration rather than merely both "patched". `arch` is per-platform (macOS builds
+  # two and lipos them), so it is not in here.
+  SCONS_COMMON: module_mono_enabled=yes
+
+jobs:
+  # Which matrix legs run, from the `platforms` input. Kept as a job so the choice is visible in the run
+  # summary rather than buried in a matrix expression.
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      legs: ${{ steps.pick.outputs.legs }}
+    steps:
+      - id: pick
+        shell: bash
+        run: |
+          case "${{ inputs.platforms }}" in
+            all)            legs='["windows","linux","macos"]' ;;
+            windows)        legs='["windows"]' ;;
+            linux)          legs='["linux"]' ;;
+            macos)          legs='["macos"]' ;;
+            "windows+linux") legs='["windows","linux"]' ;;
+            *) echo "::error::unknown platforms input"; exit 1 ;;
+          esac
+          echo "legs=$legs" >> "$GITHUB_OUTPUT"
+          echo "building: $legs"
+
+  build:
+    needs: select
+    strategy:
+      fail-fast: false   # a macOS failure must not discard a finished Windows template
+      matrix:
+        leg: ${{ fromJson(needs.select.outputs.legs) }}
+        include:
+          - leg: windows
+            runs-on: windows-latest
+            godot_platform: windows
+            editor_bin: ./bin/godot.windows.editor.x86_64.mono.exe
+            template_bin: bin/godot.windows.template_release.x86_64.mono.exe
+            extra_flags: "arch=x86_64 d3d12=no"
+            assemblies_platform: windows
+          - leg: linux
+            runs-on: ubuntu-latest
+            godot_platform: linuxbsd
+            editor_bin: ./bin/godot.linuxbsd.editor.x86_64.mono
+            template_bin: bin/godot.linuxbsd.template_release.x86_64.mono
+            extra_flags: "arch=x86_64"
+            assemblies_platform: linuxbsd
+          - leg: macos
+            runs-on: macos-latest
+            godot_platform: macos
+            editor_bin: ./bin/godot.macos.editor.arm64.mono
+            template_bin: bin/godot.macos.template_release.universal.mono
+            extra_flags: "arch=arm64"
+            assemblies_platform: macos
+    runs-on: ${{ matrix.runs-on }}
+    name: build (${{ matrix.leg }})
+    # Two full Godot compiles per leg. Well inside the 6h job ceiling, but not fast; the scons cache
+    # below makes re-runs much cheaper.
+    timeout-minutes: 330
+    steps:
+      - name: Check out the game repo (patch, lockfile, verifier)
+        uses: actions/checkout@v4
+        with:
+          path: arena
+
+      # Fail in seconds rather than three hours into a build that was going to produce the wrong
+      # binary. Asserts every patch matches its pinned sha256 in engine.lock.json.
+      - name: Verify the patch set against engine.lock.json
+        working-directory: arena
+        run: python tools/verify-engine-template.py --patches
+        shell: bash
+
+      - name: Check out Godot ${{ inputs.godot_tag }}
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ inputs.godot_tag }}
+          path: godot
+
+      # --check first: `git apply` reports exactly which hunk fails, whereas a half-applied tree fails
+      # later as a confusing compile error. The patch is pinned to one engine version (item 29's
+      # drop_at_engine), so a tag bump is expected to fail here until the patch is rebased.
+      - name: Apply the Vortex patches
+        working-directory: godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          patches=(../arena/tools/engine-patches/*.patch)
+          if [ ${#patches[@]} -eq 0 ]; then
+            echo "::error::no patches found — a stock template needs no custom build at all"
+            exit 1
+          fi
+          for p in "${patches[@]}"; do
+            echo "== $(basename "$p")"
+            if ! git apply --check "$p"; then
+              echo "::error::$(basename "$p") does not apply to ${{ inputs.godot_tag }}. If you changed"
+              echo "::error::godot_tag, the patch needs rebasing onto that tag first."
+              exit 1
+            fi
+            git apply "$p"
+          done
+          git --no-pager diff --stat | tail -5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install SCons
+        run: python -m pip install --disable-pip-version-check --quiet scons
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # Keyed on the engine tag AND the patch contents: a different patch produces different objects,
+      # so sharing a cache across patch sets would be wrong rather than merely useless.
+      - name: Restore the SCons cache
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache
+          key: scons-${{ inputs.godot_tag }}-${{ hashFiles('arena/tools/engine-patches/*.patch') }}
+          restore-keys: scons-${{ inputs.godot_tag }}-
+
+      # Resolve -j ONCE and assert it is a number before anything expensive starts.
+      #
+      # Everything below is bash, on all three runners (Git Bash on Windows). Deliberate: the only
+      # failures this workflow has had were PowerShell QUOTING — an unquoted token beginning with `-`
+      # does not interpolate there, so `-j$env:JOBS` reached scons as a literal and the job died on
+      # "invalid integer value". bash has no such rule, and one syntax across three platforms beats
+      # three near-identical step bodies. scons finds MSVC itself via vswhere, independent of the
+      # shell, and the preflight below proves that in under a minute rather than 50 minutes in.
+      - name: Resolve the parallel job count
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Windows) jobs="${NUMBER_OF_PROCESSORS:-}" ;;
+            Linux)   jobs="$(nproc)" ;;
+            macOS)   jobs="$(sysctl -n hw.ncpu)" ;;
+            *) echo "::error::unknown RUNNER_OS '$RUNNER_OS'"; exit 1 ;;
+          esac
+          if ! printf '%s' "$jobs" | grep -qE '^[1-9][0-9]*$'; then
+            echo "::error::resolved job count is '$jobs', not a positive integer. Refusing to start a"
+            echo "::error::multi-hour build on a malformed -j flag."
+            exit 1
+          fi
+          echo "building with -j$jobs on $RUNNER_OS"
+          echo "JOBS=$jobs" >> "$GITHUB_ENV"
+
+      # macOS will not configure without the Vulkan SDK: scons exits 255 with "MoltenVK SDK installation
+      # directory not found". Godot ships the installer and its own CI runs it — but their CI FALLS BACK
+      # to vulkan=no with a warning, which is right for a build smoke and wrong for us. A template built
+      # without Vulkan cannot render anything; shipping one would be worse than shipping none, and the
+      # marker check cannot see the difference. So this fails hard instead.
+      - name: Install the Vulkan SDK (macOS)
+        if: matrix.leg == 'macos'
+        working-directory: godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! sh misc/scripts/install_vulkan_sdk_macos.sh; then
+            echo "::error::Vulkan SDK install failed. Not falling back to vulkan=no: a template built"
+            echo "::error::without Vulkan cannot render, and nothing downstream would detect that."
+            exit 1
+          fi
+
+      # Parse the ENTIRE argument line without compiling. `--help` makes Godot's SConstruct configure,
+      # print its options and exit 0; a malformed line exits 2 with the reason. Verified locally against
+      # the real 4.6.3 tree in both directions.
+      - name: Preflight the scons argument line
+        working-directory: godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          scons platform=${{ matrix.godot_platform }} target=editor ${{ env.SCONS_COMMON }} \
+            ${{ matrix.extra_flags }} "cache_path=${{ github.workspace }}/.scons-cache" \
+            cache_limit=4 -j"$JOBS" --help > /dev/null
+          echo "scons accepts the argument line"
+
+      # Step 1 of Godot's mono sequence. The editor exists ONLY to generate the glue — never shipped.
+      - name: Build the editor (required to generate the C# glue)
+        working-directory: godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          scons platform=${{ matrix.godot_platform }} target=editor ${{ env.SCONS_COMMON }} \
+            ${{ matrix.extra_flags }} "cache_path=${{ github.workspace }}/.scons-cache" \
+            cache_limit=4 -j"$JOBS"
+
+      - name: Generate the C# glue
+        working-directory: godot
+        shell: bash
+        run: ${{ matrix.editor_bin }} --headless --generate-mono-glue ./modules/mono/glue
+
+      - name: Build the .NET assemblies
+        working-directory: godot
+        shell: bash
+        run: python ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=${{ matrix.assemblies_platform }}
+
+      - name: Build the release template
+        working-directory: godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          scons platform=${{ matrix.godot_platform }} target=template_release ${{ env.SCONS_COMMON }} \
+            ${{ matrix.extra_flags }} "cache_path=${{ github.workspace }}/.scons-cache" \
+            cache_limit=4 -j"$JOBS"
+
+      # macOS ships a UNIVERSAL template, so the second arch is built and lipo'd in. A single-arch macOS
+      # template would refuse to run on half the Mac fleet — a failure no marker check can see.
+      - name: Build the second macOS arch and lipo
+        if: matrix.leg == 'macos'
+        working-directory: godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          scons platform=macos target=template_release ${{ env.SCONS_COMMON }} arch=x86_64 \
+            "cache_path=${{ github.workspace }}/.scons-cache" cache_limit=4 -j"$JOBS"
+          lipo -create bin/godot.macos.template_release.arm64.mono \
+                       bin/godot.macos.template_release.x86_64.mono \
+               -output bin/godot.macos.template_release.universal.mono
+          lipo -info bin/godot.macos.template_release.universal.mono
+
+      # The whole point of the exercise — but ONLY where the lockfile has markers to check. The patch
+      # touches platform/windows/ exclusively, so a Linux or macOS template contains none of it and a
+      # marker check there would fail on a perfectly good binary. Absence of an entry means "nothing to
+      # assert", and the step says so out loud rather than skipping quietly.
+      - name: Verify the patch actually made it into the binary
+        shell: bash
+        env:
+          LEG: ${{ matrix.leg }}
+          TEMPLATE: godot/${{ matrix.template_bin }}
+        run: python arena/tools/verify-built-template.py "$LEG" "$TEMPLATE"
+
+      - name: Hash it and emit the lockfile snippet
+        id: hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          f="godot/${{ matrix.template_bin }}"
+          sum=$(python -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$f")
+          size=$(python -c "import os,sys;print(os.path.getsize(sys.argv[1]))" "$f")
+          tag="engine-${{ inputs.godot_tag }}-vortex${{ inputs.vortex_rev }}"
+          base=$(basename "$f")
+          {
+            echo "### ${{ matrix.leg }} template"
+            echo
+            echo '```json'
+            echo "  \"${{ matrix.leg }}\": {"
+            echo "    \"filename\": \"$base\","
+            echo "    \"url\": \"https://github.com/${{ github.repository }}/releases/download/$tag/$base\","
+            echo "    \"sha256\": \"$sum\","
+            echo "    \"bytes\": $size"
+            echo "  }"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$base  $sum  $size"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-template-${{ matrix.leg }}
+          path: godot/${{ matrix.template_bin }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    # `!cancelled()` rather than plain `needs: build`, because a matrix job is "failure" if ANY leg
+    # failed — so one bad platform would have withheld the templates that built fine, defeating the
+    # point of fail-fast: false. The "Show what will be published" step below is the real gate: it
+    # fails when dist/ is empty, so "publish whatever succeeded" cannot degrade into "publish nothing,
+    # quietly".
+    if: ${{ !cancelled() && inputs.publish }}
+    runs-on: ubuntu-latest
+    # Same reasoning as VortexMaps: GitHub has no releases-only scope, so publishing needs `contents`
+    # write. Confined to this job so the long build above runs with read-only credentials.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      # pattern + merge-multiple: every leg that ran lands flat in dist/. A leg that FAILED simply has
+      # no artifact, and `fail-fast: false` on the matrix means the others still published — so this
+      # publishes what succeeded rather than nothing.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: engine-template-*
+          path: dist
+          merge-multiple: true
+
+      - name: Show what will be published
+        run: |
+          ls -la dist
+          test -n "$(ls -A dist)" || { echo "::error::no templates were built"; exit 1; }
+
+      # --prerelease is NOT cosmetic and must never be dropped. The launcher's primary update path is
+      # /releases/latest/download/latest.json, and GitHub resolves `releases/latest` to the newest
+      # non-draft, NON-PRERELEASE release. A full release here would become `latest`, latest.json would
+      # 404, and every launcher would fall back to GitHubApiFeed — unauthenticated API at 60 req/hr,
+      # degrading quietly with nothing announcing it. Scripting the flag is the point: there is no
+      # checkbox for a human to forget.
+      - name: Publish as a prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: engine-${{ inputs.godot_tag }}-vortex${{ inputs.vortex_rev }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
+            --prerelease \
+            --title "Engine template $TAG" \
+            --notes "Patched Godot export templates.
+
+          Built from upstream \`${{ inputs.godot_tag }}\` plus \`tools/engine-patches/*.patch\`.
+          Per-asset sha256 is in each build job's summary; \`tools/engine-patches/engine.lock.json\` pins
+          the ones the export actually verifies.
+
+          **Only the Windows template differs from stock.** The patch set touches
+          \`platform/windows/\` exclusively, so the Linux and macOS templates here are
+          stock-equivalent in behaviour — they exist for provenance (a template we built and can
+          hash-verify) rather than to fix anything. The macOS template is universal (arm64 + x86_64).
+
+          Marked **prerelease deliberately** — see the workflow comment. A full release here hijacks
+          \`releases/latest\` and drops every launcher onto the rate-limited API feed.
+
+          Godot is MIT licensed; this is a modified build. The modifications are exactly the patches in
+          \`tools/engine-patches/\` of this repo, which document their upstream PRs."
+          gh release upload "$TAG" dist/* --clobber
+
+      # Asserts the property the --prerelease flag exists to protect, rather than trusting that it
+      # worked. Cheap, and it fails loudly the first time someone edits that flag out.
+      - name: Assert the launcher's update feed was not hijacked
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: engine-${{ inputs.godot_tag }}-vortex${{ inputs.vortex_rev }}
+        run: |
+          latest=$(gh api "repos/${{ github.repository }}/releases/latest" --jq '.tag_name' 2>/dev/null || echo "(none)")
+          echo "releases/latest resolves to: $latest"
+          if [ "$latest" = "$TAG" ]; then
+            echo "::error::releases/latest now points at the engine template ($TAG). The launcher's"
+            echo "::error::latest.json feed is hijacked and every client has silently fallen back to the"
+            echo "::error::rate-limited GitHub API feed. Mark this release as a prerelease immediately:"
+            echo "::error::  gh release edit $TAG --prerelease"
+            exit 1
+          fi
+          echo "feed intact — engine releases are not eligible for releases/latest"

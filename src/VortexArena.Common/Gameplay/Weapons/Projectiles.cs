@@ -1,10 +1,10 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Shared projectile setup helpers — the Godot-free successor to the QC projectile macros in
@@ -14,7 +14,7 @@ public static class Projectiles
 {
     // SUPERCONTENTS bits the projectile hit mask uses (DP collision.h). Common can't reference the Engine's
     // SuperContents class (Engine depends on Common, not the reverse), so mirror the bit values here — exactly
-    // as PlayerPhysics already does for the liquid bits. These MUST match XonoticGodot.Engine.Collision.SuperContents.
+    // as PlayerPhysics already does for the liquid bits. These MUST match VortexArena.Engine.Collision.SuperContents.
     private const int SuperContentsSolid  = 0x00000001;
     private const int SuperContentsBody   = 0x02000000;
     private const int SuperContentsCorpse = 0x20000000;

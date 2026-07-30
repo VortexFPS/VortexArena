@@ -4,16 +4,16 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Diagnostics;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// In-engine camera-trace capture (apparatus tier A2): drive the live <see cref="NetGame"/> with a SCRIPTED
 /// per-tick input sequence from a fixed spawn and record the RENDERED camera origin + the predicted player origin
 /// per frame to a JSON file, for offline drift/departure analysis and for diffing against the Base-engine golden
-/// capture (tier A3). This is the "same on XonoticGodot, with controlled start locations" the task asked for.
+/// capture (tier A3). This is the "same on VortexArena, with controlled start locations" the task asked for.
 ///
 /// <para>Activated by <c>--camera-trace &lt;scenario.json&gt; &lt;out.json&gt;</c> (parsed in <c>Main</c>, which sets
 /// the boot map from the scenario). Determinism: run with <c>--fixed-fps 72</c> and <c>cl_movement_perframe 0</c>
@@ -133,12 +133,12 @@ public static class CameraTrace
             _cvarsApplied = true;
             foreach (var kv in _cvars)
             {
-                XonoticGodot.Common.Services.Api.Cvars.Set(kv.Key, kv.Value);
+                VortexArena.Common.Services.Api.Cvars.Set(kv.Key, kv.Value);
                 Log.Info($"[camera-trace] cvar {kv.Key} = {kv.Value}");
             }
         }
         _frames.Add(new Frame(_frames.Count, time, dt, physicsOrigin,
-            XonoticGodot.Game.Coords.ToQuake(viewOriginGodot), velocity, onGround, viewOfsZ, reconcileError));
+            VortexArena.Game.Coords.ToQuake(viewOriginGodot), velocity, onGround, viewOfsZ, reconcileError));
     }
 
     /// <summary>Write the trace to the out path and quit the process. Idempotent.</summary>

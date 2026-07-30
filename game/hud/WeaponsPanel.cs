@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;          // Api (sim clock), CvarFlags
-using XonoticGodot.Engine.Simulation;        // CvarService
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;          // Api (sim clock), CvarFlags
+using VortexArena.Engine.Simulation;        // CvarService
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Owned-weapons strip — feature-complete port of Base/.../qcsrc/client/hud/panel/weapons.qc (HUD panel #0).

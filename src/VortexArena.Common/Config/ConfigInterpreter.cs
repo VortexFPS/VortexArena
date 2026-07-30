@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Config;
+namespace VortexArena.Common.Config;
 
 /// <summary>
 /// A Darkplaces-faithful console <em>config interpreter</em> — the C# successor to the engine command

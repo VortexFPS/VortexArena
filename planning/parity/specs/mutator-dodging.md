@@ -1,7 +1,7 @@
 # Dodging mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/dodging/{sv_dodging.qc,sv_dodging.qh,dodging.qc,dodging.qh,cl_dodging.qc,cl_dodging.qh}` · `mutators.cfg` (g_dodging / sv_dodging_* / cl_dodging*)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs`, `.../EntityMutatorState.cs` (dodging fields + `PressedKeyBits`), `.../MutatorHooks.cs` (`PlayerPhysics`/`PlayerSpawn`), `.../MutatorActivation.cs`, `src/XonoticGodot.Common/Physics/PlayerPhysics.cs` (the `PlayerPhysics` hook call site)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs`, `.../EntityMutatorState.cs` (dodging fields + `PressedKeyBits`), `.../MutatorHooks.cs` (`PlayerPhysics`/`PlayerSpawn`), `.../MutatorActivation.cs`, `src/VortexArena.Common/Physics/PlayerPhysics.cs` (the `PlayerPhysics` hook call site)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

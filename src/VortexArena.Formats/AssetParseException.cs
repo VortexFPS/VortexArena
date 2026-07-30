@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats;
+namespace VortexArena.Formats;
 
 /// <summary>
 /// Thrown when a binary asset (BSP / MD3) is malformed: bad magic, wrong version,

@@ -7,10 +7,10 @@
 // the per-entity forced give/take fields (Entity.HandicapGive/HandicapTake), the value<=0 guard, the
 // per-(re)spawn reset (Handicap_Initialize), and the derived 0..16 handicap_level for the scoreboard icon.
 
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Forced-handicap subsystem — faithful port of <c>server/handicap.qc</c>'s forced layer

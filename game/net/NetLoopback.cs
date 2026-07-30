@@ -1,15 +1,15 @@
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Game.Client;
-using XonoticGodot.Game.Hud;
-using XonoticGodot.Net;
-using XonoticGodot.Server;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Game.Client;
+using VortexArena.Game.Hud;
+using VortexArena.Net;
+using VortexArena.Server;
 using GVec3 = Godot.Vector3;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// An in-process loopback that runs the WHOLE networked stack end-to-end so it can be exercised (and headless

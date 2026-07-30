@@ -1,12 +1,12 @@
 using Godot;
-using XonoticGodot.Common.Gameplay;     // Teams.Red/Blue/Yellow/Pink (NUM_TEAM_* palette values)
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Net;
-using XonoticGodot.Net;
+using VortexArena.Common.Gameplay;     // Teams.Red/Blue/Yellow/Pink (NUM_TEAM_* palette values)
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Net;
+using VortexArena.Net;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Top-down radar / minimap — the C# successor to QuakeC's <c>hud_panel_radar</c> +
@@ -29,7 +29,7 @@ namespace XonoticGodot.Game.Hud;
 ///
 /// <para>As of the HUD parity refactor this is a real <see cref="HudPanel"/> so it is auto-discovered into the
 /// full HUD (laid out at the luma top-left corner with the <c>border_corner_northwest</c> frame) AND still works
-/// STANDALONE the way <see cref="XonoticGodot.Game.Net.NetGame"/> uses it — set directly (<see cref="Net"/>,
+/// STANDALONE the way <see cref="VortexArena.Game.Net.NetGame"/> uses it — set directly (<see cref="Net"/>,
 /// <see cref="Control.Position"/>/<see cref="Control.Size"/>, <see cref="LocalYawDegrees"/> each frame) without
 /// a manager driving <c>LoadConfig</c>. The draw code keys off the live <see cref="Control.Size"/> so it honours
 /// whichever path placed the panel. The standalone NetGame radar keeps its manual 200×200 at (24,24).</para>
@@ -215,7 +215,7 @@ public partial class RadarPanel : HudPanel
         int enable = Mathf.RoundToInt(GlobalF("hud_panel_radar", 1f));
         if (enable == 0)
             return;
-        if (enable != 2 && !XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay)
+        if (enable != 2 && !VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay)
             return;
 
         // Draw in the live control size so this works both as a discovered panel (Size == Cfg.SizePx, set by
@@ -490,7 +490,7 @@ public partial class RadarPanel : HudPanel
             // gfx/teamradar_icon_1 — there is no id-2 sprite. Size is NOT radius-relative.
             const float iconPx = 8f;
             Texture2D? icon = TextureCache.Get("gfx/teamradar_icon_1");
-            foreach (XonoticGodot.Common.Gameplay.Waypoints.WaypointNet wp in net.Waypoints)
+            foreach (VortexArena.Common.Gameplay.Waypoints.WaypointNet wp in net.Waypoints)
             {
                 if (wp.RadarIcon <= 0)
                     continue; // not a radar waypoint (some pings are 3D-only)
@@ -522,7 +522,7 @@ public partial class RadarPanel : HudPanel
         {
             Texture2D? glow = TextureCache.Get("gfx/teamradar_icon_glow");
             const float glowPx = 16f;
-            foreach (XonoticGodot.Common.Gameplay.Waypoints.WaypointNet wp in net.Waypoints)
+            foreach (VortexArena.Common.Gameplay.Waypoints.WaypointNet wp in net.Waypoints)
             {
                 if (!float.IsFinite(wp.Origin.X) || !float.IsFinite(wp.Origin.Y))
                     continue;

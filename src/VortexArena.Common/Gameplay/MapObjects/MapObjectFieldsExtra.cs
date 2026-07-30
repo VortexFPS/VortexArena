@@ -11,7 +11,7 @@
 using System.Globalization;
 using System.Numerics;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -119,9 +119,9 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
-    using XonoticGodot.Common.Framework;
+    using VortexArena.Common.Framework;
 
     /// <summary>
     /// Parses the T48 "content tail" map keys onto the edict — the shared helper both spawn paths call

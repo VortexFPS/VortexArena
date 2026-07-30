@@ -30,7 +30,7 @@ Created 2026-06-05 from `REBIRTH_FEATURE_COMPLETENESS.md` Part III (P0–P3), in
 
 ## 🚧 Open blockers for a public release
 
-**TODO-FONTS — two bundled font families ship with no licence notice.** Added 2026-07-29 during the
+**TODO-FONTS — ~~two~~ ONE bundled font family ships with no licence notice.** *(dejavu RESOLVED 2026-07-30 — see below.)* Added 2026-07-29 during the
 repo restructure, when `data/` became committed content (D1/D2) and the licence texts stopped living in
 an upstream checkout that travelled with nothing.
 
@@ -42,7 +42,7 @@ Verified by reading what each pack actually ships:
 |---|---|
 | `font-xolonium.pk3dir` | **OK** — `fonts/README.txt` carries the full GPLv2+ notice, © 2011–2020 Severin Meyer |
 | `font-unifont.pk3dir` | **partial** — names the work + URL, no licence text. Needs the GPL font-embedding exception from unifoundry.com |
-| `font-dejavu.pk3dir` | **missing** — 2 `.ttf` with no notice at all. Bitstream Vera / Arev licence, which is permissive but *specifically requires* the notice in all copies |
+| `font-dejavu.pk3dir` | **RESOLVED 2026-07-30** — `data/licenses/LICENSE.dejavu` carries both faces' notices verbatim from the fonts' own `name` table record 13. The two differ (Bold has an Arev-glyphs clause), so both are reproduced. |
 | `font-nimbussansl.pk3dir` | **missing** — URW++ Nimbus Sans L, no notice |
 
 **What to do:** fetch the authoritative licence text from each font project and add it as

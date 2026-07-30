@@ -1,5 +1,17 @@
-Font licensing — INCOMPLETE, needs the upstream licence texts added
-===================================================================
+Font licensing — PARTIALLY RESOLVED (2026-07-30)
+================================================
+
+RESOLVED: font-dejavu. Its full Bitstream Vera / Arev notice now ships as LICENSE.dejavu in
+this directory, extracted VERBATIM from the fonts' own OpenType name table (record 13) rather
+than transcribed from a website — that is the text the binaries we redistribute actually carry.
+Both faces are reproduced because they differ: DejaVuSans-Bold includes an Arev-glyphs clause
+that DejaVuSansMono does not, so shipping one notice would drop a clause covering the other.
+
+STILL OUTSTANDING: font-unifont. Its pack ships only a two-line README (name + URL) and its
+TTF carries NO licence record at all, so there is nothing on disk to extract. GPL-2 is present
+in this directory, but Unifont is GPLv2+ WITH THE FONT EMBEDDING EXCEPTION, and that exception
+text is what is missing. It has to come from unifoundry.com — deliberately not paraphrased here,
+because an approximated licence grant is worse than an absent one.
 
 The four font packs in this content tree are third-party works. They are NOT covered
 by COPYING.xonotic's blanket "GPL version 3 or any later version" grant: Team Xonotic

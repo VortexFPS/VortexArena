@@ -187,7 +187,7 @@ and the global `g_vehicles 1`. Boarding is `+use`-key by default (`g_vehicles_en
 ### Liveness — the dominant gap
 The deep implementation is real and unit-tested, but **the live boarding and damage paths are dead**:
 - `VehicleBoarding.UseKey` (the `+use` board/exit entry, the only way a player can pilot or gun the bumblebee in the
-  default `g_vehicles_enter 1` config) **has no caller anywhere in `src/`** — only `tests/VehicleRuntimeTests.cs` calls it
+  default `g_vehicles_enter 1` config) **has no caller anywhere in `src/`** — only `tests/VortexArena.Tests/VehicleRuntimeTests.cs` calls it
   directly. There is no `+use` rising-edge → `UseKey` dispatch in the net layer / `GameWorld` despite the file's own
   comment promising one. Bots also have no vehicle path. So no human or bot ever boards the bumblebee in a real match.
 - `VehicleCommon.DamageVehicle` (the shield→health→death dispatcher that fires `Bumblebee.Death`) likewise **has no live

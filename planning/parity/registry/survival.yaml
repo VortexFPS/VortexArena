@@ -79,7 +79,7 @@ features:
       - "server/round_handler.qc:round_handler_Think"
       - "common/gametypes/gametype/survival/sv_survival.qc:surv_Initialize"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/RoundHandler.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs:Tick"
       - "src/VortexArena.Server/GameWorld.cs:EnableRounds (Survival arm, 2900-2906)"
       - "src/VortexArena.Server/GameWorld.cs:MirrorRoundTiming (4667)"
     constants:

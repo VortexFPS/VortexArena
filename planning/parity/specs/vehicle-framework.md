@@ -172,7 +172,7 @@ own units. This unit covers ONLY the framework (`common/vehicles/*.qc`, not `com
 
 **Gaps (player-observable):**
 - **vehicles_damage is DEAD on the live path (headline gap).** `VehicleCommon.DamageVehicle` is a bit-faithful
-  port of `vehicles_damage`, but it has NO caller except `tests/VehicleRuntimeTests.cs:470`. No vehicle entity
+  port of `vehicles_damage`, but it has NO caller except `tests/VortexArena.Tests/VehicleRuntimeTests.cs:470`. No vehicle entity
   installs a damage handler — neither `vehicles_spawn` (`SpawnVehicle`) nor `vehicles_enter` (`EnterVehicle`)
   set `veh.event_damage`, and grep for `GtEventDamage =` under `Vehicles/` is empty. So when a player shoots a
   vehicle, `DamageSystem.EventDamage` (DamageSystem.cs:294) sees `GtEventDamage == null` and falls through to

@@ -345,7 +345,7 @@ features:
       - "src/VortexArena.Server/Commands.cs:1699 (CmdWaypointDeploy)"
       - "src/VortexArena.Server/Commands.cs:1757 (WaypointResolveLocation — here/crosshair-trace/death_origin)"
       - "src/VortexArena.Server/Commands.cs:1852 (CmdWaypointClear + CTS/race self-kill)"
-      - "src/VortexArena.Common/Gameplay/Waypoints/WaypointSprites.cs (DeployPersonal/DeployFixed/Attach/ClearPersonal/ClearOwned)"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs (DeployPersonal/DeployFixed/Attach/ClearPersonal/ClearOwned)"
     constants:
       - { name: "waypoint_impulse_range", base: "30-39 (here/crosshair/death x personal/here/danger) + 33 helpme + 47/48 clear", port: "30-39 routed (crosshair=server trace, death=DeathOrigin) + 47/48", match: true }
       - { name: "checkpoint_selfkill_cvar", base: "g_allow_checkpoints (g_cts||g_race), gated on this.personal != NULL; delete(this.personal)+ClientKill", port: "g_allow_checkpoints + (Cts||Race) + PersonalCheckpoint != null -> clears PersonalCheckpoint + KillCountdown.Begin", match: true }

@@ -2594,7 +2594,7 @@
      "headline": "Port the Webbed player move-speed slow (PlayerPhysics hook, signature CC), fix the web projectile to render as electro orb (PROJECTILE_ELECTRO catalog entry), emit EFFECT_ELECTRO_IMPACT on web explode, and the spider mr_pain/mr_death/mr_anim frame groups.",
      "files": [
       "src/VortexArena.Common/Gameplay/Monsters/Spider.cs",
-      "src/VortexArena.Common/Gameplay/PlayerPhysics.cs"
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ]
     },
     {
@@ -3261,8 +3261,8 @@
      "self_contained": false,
      "headline": "Render the warpzone surface as a live camera view through the seam (SubViewport+Camera3D), not a dark mirror placeholder",
      "files": [
-      "game/client/NetGame.cs",
-      "src/VortexArena.Common/Gameplay/Effects/HeroMaterials.cs"
+      "game/net/NetGame.cs",
+      "game/loaders/HeroMaterials.cs"
      ],
      "cross_unit_dep": "needs warpzones server zone state (already live)"
     },
@@ -3278,7 +3278,7 @@
      "self_contained": false,
      "headline": "Port WarpZone_FixView/FixNearClip/View_Inside/FixPMove so crossing a warpzone is visually seamless",
      "files": [
-      "game/client/NetGame.cs"
+      "game/net/NetGame.cs"
      ],
      "cross_unit_dep": "pairs with warpzones.client.render"
     },
@@ -3295,7 +3295,7 @@
      "headline": "Send warpzone_teleported + FixVAngle on a server crossing; client rotates view/input (CL_RotateMoves) so the view carries through the seam",
      "files": [
       "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs",
-      "game/client/NetGame.cs"
+      "game/net/NetGame.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3328,7 +3328,7 @@
      "headline": "Implement func_camera / func_warpzone_camera (fixed dpcamera security-camera view of a target position)",
      "files": [
       "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs",
-      "game/client/NetGame.cs"
+      "game/net/NetGame.cs"
      ],
      "cross_unit_dep": "shares the SubViewport render seam with warpzones.client.render"
     },
@@ -3723,7 +3723,7 @@
      "headline": "Consume per-entity bouncefactor/bouncestop (currently dropped \u2192 wrong restitution+settle for grenades/casings/balls/spider/vehicle projectiles); use signed Dot for bounce-down-slopes",
      "files": [
       "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs",
-      "src/VortexArena.Engine/Entity.cs"
+      "src/VortexArena.Common/Framework/Entity.cs"
      ],
      "cross_unit_dep": "producers (MonsterAI/Spider/Golem/weapon projectiles) already pass the values \u2014 needs the consumer fields"
     },
@@ -3768,7 +3768,7 @@
      "headline": "Port MatchTicrate sub-tick interpolation for gibs/casings/projectiles/trains (may be masked by the separate render interp layer)",
      "files": [
       "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs",
-      "src/VortexArena.Engine/Entity.cs"
+      "src/VortexArena.Common/Framework/Entity.cs"
      ],
      "cross_unit_dep": "none"
     },

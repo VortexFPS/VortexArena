@@ -54,7 +54,7 @@ Wave 1 also **absorbs every work-item that lands in a hot file** (one owner per 
 | `src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs` | 4 | sv-antilag, sv-world-rules |
 | `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs` | 3 | damage-pipeline |
 | `game/net/ServerNet.cs` | 3 | net-entity-state, sv-antilag |
-| `game/client/NetGame.cs` | 2 | warpzones |
+| `game/net/NetGame.cs` | 2 | warpzones |
 | `game/net/NetGame.cs` | 2 | cl-hud, sv-intermission |
 
 **Exit:** builds; tests green; each seam has a live caller proven by a smoke test or by `parity-diff` showing the dependent rows are now reachable.

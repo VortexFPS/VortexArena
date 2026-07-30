@@ -794,7 +794,7 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, PreferPlayerScore_Clear)"
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnPreferPlayerScoreClear"
-      - "src/VortexArena.Server/GameScores.cs:637 (FirePreferPlayerScore_Clear in ClearPlayerOnJoin)"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:637 (FirePreferPlayerScore_Clear in ClearPlayerOnJoin)"
     constants: []
     status:
       logic: faithful

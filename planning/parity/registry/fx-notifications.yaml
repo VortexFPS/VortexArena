@@ -489,7 +489,7 @@ features:
       - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:267 (SendCenterRaw)"
       - "src/VortexArena.Common/Gameplay/Notifications/Notification.cs:59 (MsgType.CenterRaw)"
       - "game/hud/HudNotifications.cs:146 (CenterRaw case -> CenterPrint.Add)"
-      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:801 (.message text), src/VortexArena.Server/Mutators/SuperSpecMutator.cs:231"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:801 (.message text), src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:231"
     constants:
       - { name: "no cpid group", base: "raw centerprint has no cpid (centerprint_AddStandard)", port: "CenterPrint.Add (no Id) (HudNotifications.cs:150)", match: true }
     status:

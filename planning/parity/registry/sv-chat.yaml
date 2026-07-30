@@ -161,7 +161,7 @@ features:
     port_refs:
       - "src/VortexArena.Server/Chat.cs:Say"
       - "src/VortexArena.Server/Chat.cs:IsIngame"
-      - "src/VortexArena.Common/Gameplay/MinigameSessionManager.cs:ActiveSessionOf"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:ActiveSessionOf"
     constants:
       - { name: "g_chat_nospectators", base: "0", port: "0", match: true }
       - { name: "g_chat_tellprivacy", base: "1", port: "1", match: true }

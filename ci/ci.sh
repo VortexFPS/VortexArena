@@ -59,6 +59,12 @@ esac
 step "engine patch provenance (engine.lock.json)"
 python "$ROOT/tools/verify-engine-template.py" --patches
 
+# The parity registry's port_refs are pointers the differ and the parity workflows follow. A dangling one
+# does not look broken - it looks like coverage - so it needs a gate rather than a periodic audit. The
+# Tier-1 rename broke all 360 in a single commit and nothing noticed until someone went looking.
+step "parity registry pointers resolve"
+python "$ROOT/tools/check-parity-refs.py"
+
 # ── 1. libraries + tests build (plain .NET SDK, no Godot) ─────────────────────
 step "build libraries + tests"
 dotnet build "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --nologo

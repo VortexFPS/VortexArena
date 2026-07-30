@@ -1,11 +1,11 @@
 // Port of common/mutators/mutator/overkill/okmachinegun.{qh,qc}
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Overkill MachineGun — port of common/mutators/mutator/overkill/okmachinegun.{qh,qc}. The Overkill
@@ -50,6 +50,7 @@ public sealed class OkMachinegun : Weapon
     public OkMachinegun()
     {
         NetName = "okmachinegun";
+        BotPickupBaseValue = 7000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Bullets;   // QC ammo_type RES_BULLETS
         DisplayName = "Overkill MachineGun";
         Impulse = 3;

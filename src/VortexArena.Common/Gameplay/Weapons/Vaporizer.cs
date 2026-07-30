@@ -1,10 +1,10 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Vaporizer (Nexuiz "MinstaNex") — port of common/weapons/weapon/vaporizer.{qh,qc}. A hitscan rail
@@ -58,6 +58,7 @@ public sealed class Vaporizer : Weapon
     public Vaporizer()
     {
         NetName = "vaporizer";
+        BotPickupBaseValue = 10000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Vaporizer";
         Impulse = 7;

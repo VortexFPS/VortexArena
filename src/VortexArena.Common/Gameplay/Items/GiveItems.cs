@@ -9,10 +9,10 @@
 // Weapon ownership is DUAL-REP: GiveWeapon writes BOTH Entity.OwnedWeaponSet (via Inventory) AND
 // Player.OwnedWeapons (the NetName set), per the port contract.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>QC the give operators (items.qc): SET / MIN / MAX / PLUS / MINUS.</summary>
 public enum GiveOp { Set, Min, Max, Plus, Minus }

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Server-side input-queue bounding for the LEGACY fixed-cadence input mode (DP

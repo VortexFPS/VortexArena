@@ -1,6 +1,6 @@
 [
 {
-"file": "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs",
+"file": "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs",
 "cat": "gametype",
 "impact": "M",
 "shards": [
@@ -9,7 +9,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/ViewLocation.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs",
 "cat": "mapobject",
 "impact": "M",
 "shards": [
@@ -18,7 +18,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -29,7 +29,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs",
 "cat": "mutator",
 "impact": "M",
 "shards": [
@@ -40,7 +40,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Server/OverTimeManager.cs",
+"file": "src/VortexArena.Server/OverTimeManager.cs",
 "cat": "server",
 "impact": "M",
 "shards": [
@@ -49,7 +49,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs",
+"file": "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs",
 "cat": "mapobject",
 "impact": "L",
 "shards": [
@@ -58,7 +58,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/DoublejumpMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/DoublejumpMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -67,7 +67,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -79,7 +79,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -91,7 +91,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs",
+"file": "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs",
 "cat": "mutator",
 "impact": "L",
 "shards": [
@@ -102,7 +102,7 @@
 ]
 },
 {
-"file": "src/XonoticGodot.Common/Physics/PMAccelerate.cs",
+"file": "src/VortexArena.Common/Physics/PMAccelerate.cs",
 "cat": "physics",
 "impact": "L",
 "shards": [
@@ -111,7 +111,7 @@
 "seams": []
 },
 {
-"file": "src/XonoticGodot.Engine/Simulation/FlyMove.cs",
+"file": "src/VortexArena.Engine/Simulation/FlyMove.cs",
 "cat": "physics",
 "impact": "L",
 "shards": [

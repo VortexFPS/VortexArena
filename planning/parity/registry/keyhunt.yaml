@@ -18,9 +18,9 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_WaitForPlayers"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_StartRound"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:Tick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:StartRound"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:AnyTeamMissing"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:StartRound"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:AnyTeamMissing"
     constants:
       - { name: "g_balance_keyhunt_delay_round", base: "5", port: "5 (DefaultDelayRound)", match: true }
       - { name: "g_balance_keyhunt_delay_tracking", base: "10", port: "10 (DefaultDelayTracking)", match: true }
@@ -50,9 +50,9 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Spawn"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_StartRound"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:SpawnKey"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:AssignKeyNoScore"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:PickRandomLivePlayer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:SpawnKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:AssignKeyNoScore"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:PickRandomLivePlayer"
     constants:
       - { name: "KH_KEY_MIN", base: "'-25 -25 -46'", port: "(-25,-25,-46) (KeyMins)", match: true }
       - { name: "KH_KEY_MAX", base: "'25 25 4'", port: "(25,25,4) (KeyMaxs)", match: true }
@@ -80,7 +80,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Spawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:SetKeyVisual"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:SetKeyVisual"
     constants:
       - { name: "KH_KEY_BRIGHTNESS", base: "2", port: "2 (KeyBrightness) + FullBright flag", match: true }
       - { name: "model", base: "models/keyhunt/key.md3 (MDL_KH_KEY)", port: "models/keyhunt/key.md3 (KeyModel)", match: true }
@@ -95,7 +95,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "KeyHuntVisualTests.cs (tests/XonoticGodot.Tests) SpawnKey model/color/spin", result: pass }
+      - { kind: test, ref: "KeyHuntVisualTests.cs (tests/VortexArena.Tests) SpawnKey model/color/spin", result: pass }
       - { kind: code, ref: "KeyHunt.cs:662-671 SetKeyVisual sets Model + FullBright + Skin + Team + per-team NetName", result: pass }
     confidence: high
     notes: "UNCHANGED + faithful. Networked entity stream renders the key (model+effects+team+netname). Per-team skin (red 0/blue 1/yellow 2/pink 3) + colored name faithful."
@@ -107,9 +107,9 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Think"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Attach"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:OrbitCarriedKey"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:KeyThinkEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/EntityGametypeState.cs:AttachToCarrier"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:OrbitCarriedKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:KeyThinkEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/EntityGametypeState.cs:AttachToCarrier"
     constants:
       - { name: "KH_KEY_ZSHIFT", base: "22", port: "22 (KeyZShift)", match: true }
       - { name: "KH_KEY_XYDIST", base: "24", port: "24 (KeyXyDist)", match: true }
@@ -138,8 +138,8 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Touch"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Collect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:KeyTouchEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CollectKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:KeyTouchEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CollectKey"
     constants:
       - { name: "g_balance_keyhunt_delay_collect", base: "1.5", port: "1.5 (DefaultDelayCollect)", match: true }
       - { name: "g_balance_keyhunt_score_collect", base: "3", port: "3 (DefaultScoreCollect)", match: true }
@@ -166,8 +166,8 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_AllOwnedByWhichTeam"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CheckCaptureGeometry"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:KeyThinkEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CheckCaptureGeometry"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:KeyThinkEntity"
     constants:
       - { name: "g_balance_keyhunt_maxdist", base: "150", port: "150 (DefaultMaxDist)", match: true }
     status:
@@ -192,7 +192,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:AssignKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:AssignKey"
     constants: []
     status:
       logic: faithful
@@ -217,8 +217,8 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_WinnerTeam"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Scores_Event"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:WinnerTeam"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CreditCapture"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:WinnerTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CreditCapture"
     constants:
       - { name: "g_balance_keyhunt_score_capture", base: "100", port: "100 (DefaultScoreCapture)", match: true }
       - { name: "capture_team_total", base: "(AVAILABLE_TEAMS-1)*score_capture (DistributeEvenly over keys, each chunk -> owner team ST_SCORE + carrier SP_SCORE)", port: "(teams-1)*score_capture DistributeEvenly chunks -> each carrier SP_SCORE + owner team ST_SCORE", match: true }
@@ -246,8 +246,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_FinishRound"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:WinnerTeam"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:WinnerTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:Tick"
     constants:
       - { name: "g_balance_keyhunt_delay_round", base: "5", port: "5", match: true }
     status:
@@ -272,9 +272,9 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Think"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_LoserTeam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:AutoReturnKey"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:LoserTeam"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:KeyThinkEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:AutoReturnKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:LoserTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:KeyThinkEntity"
     constants:
       - { name: "g_balance_keyhunt_delay_return", base: "60", port: "60 (DefaultDelayReturn)", match: true }
     status:
@@ -298,8 +298,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_LoserTeam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:LoserTeam"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:DropAllKeys"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:LoserTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:DropAllKeys"
     constants:
       - { name: "g_balance_keyhunt_score_push", base: "60", port: "60 (DefaultScorePush)", match: true }
       - { name: "g_balance_keyhunt_score_destroyed", base: "50", port: "50 (DefaultScoreDestroyed)", match: true }
@@ -331,9 +331,9 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:MUTATOR_HOOKFUNCTION(kh, ClientDisconnect)"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:MUTATOR_HOOKFUNCTION(kh, DropSpecialItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:DropAllKeys"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:OnPlayerRemoved"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:DropAllKeys"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:OnPlayerRemoved"
     constants:
       - { name: "g_balance_keyhunt_dropvelocity", base: "300", port: "300 (DefaultDropVelocity)", match: true }
       - { name: "g_balance_keyhunt_protecttime", base: "0.8", port: "0.8 (DefaultProtectTime)", match: true }
@@ -361,10 +361,10 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_DropOne"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:MUTATOR_HOOKFUNCTION(kh, PlayerUseKey)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:DropOneKey"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:OnUseKey"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:UseKey"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:Handle"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:DropOneKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:OnUseKey"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:UseKey"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:Handle"
     constants:
       - { name: "g_balance_keyhunt_throwvelocity", base: "400", port: "400 (DefaultThrowVelocity)", match: true }
     status:
@@ -390,8 +390,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:MUTATOR_HOOKFUNCTION(kh, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:IsCarrier"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:IsCarrier"
     constants:
       - { name: "g_balance_keyhunt_carrier_damage", base: "'1 1 1'", port: "g_balance_keyhunt_carrier_damage (read per-component, default 1)", match: true }
       - { name: "g_balance_keyhunt_carrier_force", base: "'1 1 1'", port: "g_balance_keyhunt_carrier_force (read per-component, default 1)", match: true }
@@ -420,7 +420,7 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_HandleFrags"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:MUTATOR_HOOKFUNCTION(kh, GiveFragsForKill)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:OnDeath"
     constants:
       - { name: "g_balance_keyhunt_score_carrierfrag", base: "2", port: "2 (DefaultScoreCarrierFrag)", match: true }
     status:
@@ -447,8 +447,8 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Spawn"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:KeyDamage"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:SpawnKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:KeyDamage"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:SpawnKey"
     constants:
       - { name: "g_balance_keyhunt_return_when_unreachable", base: "1", port: "1 (read; gates installing the KeyDamage handler)", match: true }
       - { name: "g_balance_keyhunt_delay_damage_return", base: "5", port: "5 (DefaultDelayDamageReturn)", match: true }
@@ -476,7 +476,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CheckCaptureGeometry"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CheckCaptureGeometry"
     constants:
       - { name: "siren_period", base: "2.5 s", port: "2.5 (SirenPeriod)", match: true }
     status:
@@ -504,12 +504,12 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_AssignTo"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Collect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:UpdateInterfereMessages"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:WinnerTeam"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CaptureVfx"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CollectKey"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:DropAllKeys"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:LoserTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:UpdateInterfereMessages"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:WinnerTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CaptureVfx"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CollectKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:DropAllKeys"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:LoserTeam"
     constants: []
     status:
       logic: faithful
@@ -537,8 +537,8 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_update_state"
       - "common/gametypes/gametype/keyhunt/cl_keyhunt.qc:HUD_Mod_KH"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:PackKeyState"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:Capture (case KeyHunt)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:PackKeyState"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:Capture (case KeyHunt)"
       - "game/hud/ModIconsPanel.cs:DrawKeyhunt"
     constants:
       - { name: "slot_encoding", base: "4 x 5-bit; 0 none / 30 dropped / 31 self / else key.team = SVQC NUM_TEAM code (5/14/13/10), CSQC decode -1 -> CSQC NUM_TEAM (4/13/12/9)", port: "0 none / 30 dropped / 31 self / else team INDEX+1 (2..5), panel decode -1 -> 1..4", match: false }
@@ -554,7 +554,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "Base cl_keyhunt.qc:25 decode -1 + case 29 dropped + 30->myteam self; KeyHunt.cs:1322-1342 PackKeyState (TeamIndex+1, 30 dropped, 31 self); returns 0 between rounds (Phase != InProgress)", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/GametypeStatusTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/GametypeStatusTests.cs", result: pass }
     confidence: high
     notes: "UNCHANGED + faithful. Personalized per recipient (self slot 31), packed/decoded faithfully; quad/horizontal/vertical layout + carrying-all blink + per-team skin art ported. Divergence verified observationally identical."
 
@@ -567,10 +567,10 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_KeyCarrier_waypointsprite_visible_for_player"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_waypointsprite_visible_for_player"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CollectWaypoints"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:DroppedKeyWaypointVisibleFor"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CarrierWaypointVisibleFor"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:WaypointRegistry (KeyDropped / KeyCarrier{Red,Blue,Yellow,Pink,Friend,Finish})"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:DroppedKeyWaypointVisibleFor"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CarrierWaypointVisibleFor"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:WaypointRegistry (KeyDropped / KeyCarrier{Red,Blue,Yellow,Pink,Friend,Finish})"
     constants:
       - { name: "KH_KEY_WP_ZSHIFT", base: "20", port: "20 (KeyWpZShift, dropped-key offset)", match: true }
       - { name: "carrier_wp_offset", base: "WaypointSprite_AttachCarrier head offset '0 0 64'", port: "(0,0,64) carrier offset", match: true }
@@ -603,10 +603,10 @@ features:
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:havocbot_role_kh_offense"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:MUTATOR_HOOKFUNCTION(kh, HavocBot_ChooseRole)"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleKeyHunt"
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RateKeyHuntTargets"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:96"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:144 (KhRole) / :152 (KhRoleTimeout)"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleKeyHunt"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RateKeyHuntTargets"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:96"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:144 (KhRole) / :152 (KhRoleTimeout)"
     constants:
       - { name: "defense/offense role_timeout", base: "time + random()*10 + 20", port: "now + Prandom.Float()*10 + 20", match: true }
       - { name: "freelancer role_timeout", base: "time + random()*10 + 10", port: "now + Prandom.Float()*10 + 10", match: true }

@@ -15,8 +15,8 @@ features:
     base_refs:
       - "client/announcer.qc:Announcer"
     port_refs:
-      - "src/XonoticGodot.Server/AnnouncerController.cs:Tick"
-      - "src/XonoticGodot.Server/GameWorld.cs:OnStartFrame"
+      - "src/VortexArena.Server/AnnouncerController.cs:Tick"
+      - "src/VortexArena.Server/GameWorld.cs:OnStartFrame"
     constants: []
     status:
       logic: faithful
@@ -39,10 +39,10 @@ features:
       - "client/announcer.qc:Announcer_Countdown"
       - "common/util.qc:Announcer_PickNumber"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastGameStartCountdown"
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastRoundStartCountdown"
-      - "src/XonoticGodot.Server/AnnouncerController.cs:PickCountdownNumber"
-      - "src/XonoticGodot.Server/AnnouncerController.cs:CountdownRounded"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastGameStartCountdown"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastRoundStartCountdown"
+      - "src/VortexArena.Server/AnnouncerController.cs:PickCountdownNumber"
+      - "src/VortexArena.Server/AnnouncerController.cs:CountdownRounded"
     constants:
       - { name: "NUM_GAMESTART_n enabled", base: "n<=5", port: "n<=5 (registry Enabled)", match: true }
       - { name: "NUM_ROUNDSTART_n enabled", base: "n<=3", port: "n<=3 (registry Enabled)", match: true }
@@ -69,7 +69,7 @@ features:
     base_refs:
       - "client/announcer.qc:Announcer_Gamestart"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastGameStartCountdown"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastGameStartCountdown"
     constants:
       - { name: "PREPARE gate", base: "time + 5.0 < startTime (>5s remain)", port: "secondsLeft > 5", match: true }
       - { name: "one-shot key", base: "previous_game_starttime != startTime", port: "_gameStartCountdownArmed rising edge", match: true }
@@ -95,8 +95,8 @@ features:
       - "client/announcer.qc:Announcer_Time"
       - "client/announcer.qc:ANNOUNCER_CHECKMINUTE"
     port_refs:
-      - "src/XonoticGodot.Server/AnnouncerController.cs:Tick"
-      - "src/XonoticGodot.Server/AnnouncerController.cs:CheckMinute"
+      - "src/VortexArena.Server/AnnouncerController.cs:Tick"
+      - "src/VortexArena.Server/AnnouncerController.cs:CheckMinute"
     constants:
       - { name: "arming window", base: "timeleft < m*60 && timeleft > m*60 - 1", port: "same", match: true }
       - { name: "warmup timeleft", base: "max(0, WARMUP_TIMELIMIT + start - time)", port: "same", match: true }
@@ -124,7 +124,7 @@ features:
       - "client/announcer.qh:autocvar_cl_announcer_maptime"
       - "menu/xonotic/dialog_settings_game_messages.qc"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:625"
+      - "src/VortexArena.Server/GameWorld.cs:625"
       - "game/menu/dialogs/DialogSettingsAudio.cs:107"
     constants:
       - { name: "cl_announcer_maptime default", base: "3 (both)", port: "3 (both)", match: true }
@@ -189,7 +189,7 @@ features:
       - "common/notifications/all.qc:AnnouncerFilename"
     port_refs:
       - "game/net/NetGame.cs:1488-1497"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:FireAnnouncerOption"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:FireAnnouncerOption"
       - "game/hud/HudNotifications.cs:AnnouncerVoice"
       - "game/hud/HudNotifications.cs:AntiSpamInterval"
     constants:
@@ -219,8 +219,8 @@ features:
       - "client/announcer.qc:Announcer_Gamestart"
       - "client/hud/panel/centerprint.qc:centerprint_SetTitle"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastCountdownTitle"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterTitle"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastCountdownTitle"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterTitle"
       - "game/hud/HudNotifications.cs:OnNotification (CenterTitle)"
       - "game/hud/CenterPrintPanel.cs:SetTitle"
     constants:
@@ -250,9 +250,9 @@ features:
       - "client/announcer.qc:Announcer_Countdown"
       - "client/hud/panel/centerprint.qc:centerprint_SetDuelTitle"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastCountdownTitle"
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastRoundStop"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterDuelTitle"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastCountdownTitle"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastRoundStop"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterDuelTitle"
       - "game/hud/CenterPrintPanel.cs:SetDuelTitle"
     constants:
       - { name: "duel title", base: "centerprint_SetDuelTitle(pl1, pl2), re-sent only on player change", port: "SendCenterDuelTitle(left,right), re-sent only when pair changes", match: true }

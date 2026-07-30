@@ -2,13 +2,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Math;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the skeletal CPU-manipulation builtins (<see cref="SkeletonManager"/> = the QC <c>skel_*</c>) and the
@@ -19,7 +19,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class SkeletonTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     /// <summary>A 3-bone chain root(0) → spine(1) → head(2), each 16u up its parent, plus two frames that
     /// shift the spine (+x) / head (+y) so the upper/lower split is observable.</summary>
@@ -149,7 +149,7 @@ public class SkeletonTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         // find an IQM that actually has a skeleton with several bones (player/weapon models)
         IqmData? skeletal = null;
         foreach (string path in vfs.Find("models/", "iqm").Take(80))

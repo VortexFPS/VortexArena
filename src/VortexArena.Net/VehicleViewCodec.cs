@@ -1,4 +1,4 @@
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The WIRE codec for <see cref="VehicleViewState"/> — the single Write/Read pair that is the source of truth for

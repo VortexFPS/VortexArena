@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// QC the <c>.personal</c> (<c>personal_wp</c>) speedrun-checkpoint snapshot (server/cheats.qc CHIMPULSE_SPEEDRUN_INIT

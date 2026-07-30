@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// "Reset key bindings" confirm popup — a faithful C# port of <c>XonoticBindingsResetDialog</c>
@@ -9,7 +9,7 @@ namespace XonoticGodot.Game.Menu;
 /// In the QC, "Yes" runs <c>KeyBinder_Bind_Reset_All</c> (keybinder.qc) which issues
 /// <c>unbindall; exec binds-xonotic.cfg; -zoom</c>, sets <c>_hud_showbinds_reload 1</c>, then closes the
 /// dialog. We reproduce that exactly: a <see cref="Widgets.CommandButton"/> carrying the same command string
-/// (routed through <see cref="MenuCommand"/>) plus the <c>_hud_showbinds_reload</c> set, then Back. XonoticGodot has
+/// (routed through <see cref="MenuCommand"/>) plus the <c>_hud_showbinds_reload</c> set, then Back. VortexArena has
 /// no keybind backend yet, so <c>unbindall</c>/<c>exec</c>/<c>-zoom</c> log inert; the cvar write is real.
 /// "No" was QC <c>Dialog_Close</c> — here the universal Back. Binds no persistent settings cvars of its own.
 /// QC title "Reset key bindings".

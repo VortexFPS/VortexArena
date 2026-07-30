@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
-using XonoticGodot.Common.Menu;
+using VortexArena.Common.Menu;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Exercises the menu data-list backends — the C# port of QC's shared DataSource abstraction

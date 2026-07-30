@@ -10,10 +10,10 @@
 // MonsterAI.RunThink suicides it when the clock runs out (the port's Monster_Think monster_lifetime kill);
 // the INSANE skill + owner/team are applied faithfully.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The monster ("pokenade") nade detonation — port of <c>nade_monster_boom</c>.</summary>
 public sealed class NadeMonsterBoom : INadeBoom

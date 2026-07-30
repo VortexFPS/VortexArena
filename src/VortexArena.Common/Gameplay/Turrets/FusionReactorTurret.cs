@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Fusion Reactor Turret — port of common/turrets/turret/fusionreactor.{qh,qc}. The one SUPPORT turret

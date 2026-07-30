@@ -1,7 +1,7 @@
 # MachineGun (Nexuiz "Uzi") — parity spec
 
 **Base refs:** `common/weapons/weapon/machinegun.qc` · `common/weapons/weapon/machinegun.qh` · `bal-wep-xonotic.cfg` (g_balance_machinegun_*) · shared fire math `server/weapons/tracing.qc` (`W_SetupShot*`, `fireBullet_falloff`), `common/weapons/calculations.qc` (`W_CalculateSpread`), `server/weapons/weaponsystem.qc` (`W_WeaponRateFactor`, `W_DecreaseAmmo`, `W_Reload`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs` · `WeaponFiring.cs` · `WeaponFireDriver.cs` · `game/client/WeaponFireSounds.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs` · `WeaponFiring.cs` · `WeaponFireDriver.cs` · `game/client/WeaponFireSounds.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -235,7 +235,7 @@ port-architecture decisions but not flagged as intended divergences here.
 ## Verification
 - Base constants read directly from `bal-wep-xonotic.cfg` and `machinegun.qc/.qh` (code, pass).
 - Shipped cfg verified to carry Base values (`spread_crouchmod 1`, `burst_spread 0`, `spread_decay 0.048`,
-  `mode 1`) at `assets/data/xonotic-data.pk3dir/bal-wep-xonotic.cfg` (code, pass).
+  `mode 1`) at `Base/data/xonotic-data.pk3dir/bal-wep-xonotic.cfg` (code, pass).
 - Live caller chain traced: `GameWorld.WeaponFireDriver.Frame` (line 1182) and the re-`ConfigureAll` after config
   load (lines 409/416) (code, pass).
 - Missing-feature claims (casings, ricochet, reload, zoom, bot wr_aim) verified by grep across `src/` + `game/`

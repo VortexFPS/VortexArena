@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Game settings tab — a faithful C# port of the Game settings group, which in QC
@@ -857,7 +857,7 @@ public partial class DialogSettingsGameMessages : SettingsTab
 /// <summary>
 /// Damage Text sub-tab — port of <c>XonoticDamageTextSettings_fill</c> (ui_damagetext.qc), which in QC is
 /// <c>REGISTER_SETTINGS(damagetext, …)</c>: a standalone Game-settings tab sitting alongside the six tabs above.
-/// Exposes the floating-damage-number cvars read live by <see cref="XonoticGodot.Game.Client.DamageTextConfig"/>:
+/// Exposes the floating-damage-number cvars read live by <see cref="VortexArena.Game.Client.DamageTextConfig"/>:
 /// the master toggle (cl_damagetext), the friendly-fire toggle, font size min/max, the enemy color (with a
 /// per-weapon override), initial opacity + fade time, and the two accumulate gates. Every widget binds the same
 /// cvar its QC counterpart does, in QC order, with the same dependencies (all gated on cl_damagetext==1).

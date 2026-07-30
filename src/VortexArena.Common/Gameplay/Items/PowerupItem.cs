@@ -13,10 +13,10 @@
 // only need ItemInit + the def metadata — there is no per-item give override (QC Pickup.giveTo is shared).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Base for powerup pickups — port of CLASS(Powerup, Pickup) (powerups.qh). Large bbox, glow, FL_POWERUP,
@@ -91,6 +91,9 @@ public sealed class StrengthItem : PowerupPickup
 [Item]
 public sealed class ShieldItem : PowerupPickup
 {
+    /// <summary>QC ShieldItem m_icon = "shield" (powerup/shield.qh) — its netname is "invincible".</summary>
+    public override string Icon => "shield";
+
     protected override string EnableCvar => "g_powerups_shield";
     public ShieldItem()
     {
@@ -120,6 +123,9 @@ public sealed class ShieldItem : PowerupPickup
 [Item]
 public sealed class SpeedItem : PowerupPickup
 {
+    /// <summary>QC SpeedItem m_icon = "buff_speed" (powerup/speed.qh).</summary>
+    public override string Icon => "buff_speed";
+
     protected override string EnableCvar => "g_powerups_speed";
     public SpeedItem()
     {
@@ -149,6 +155,9 @@ public sealed class SpeedItem : PowerupPickup
 [Item]
 public sealed class InvisibilityItem : PowerupPickup
 {
+    /// <summary>QC InvisibilityItem m_icon = "buff_invisible" (powerup/invisibility.qh).</summary>
+    public override string Icon => "buff_invisible";
+
     protected override string EnableCvar => "g_powerups_invisibility";
     public InvisibilityItem()
     {
@@ -236,6 +245,9 @@ public sealed class JetpackItem : PowerupPickup
 [Item]
 public sealed class FuelRegenItem : PowerupPickup
 {
+    /// <summary>QC FuelRegen m_icon = "fuelregen" (powerup/fuelregen.qh) — netname is "fuel_regen".</summary>
+    public override string Icon => "fuelregen";
+
     protected override string EnableCvar => "g_powerups_fuelregen";
     public FuelRegenItem()
     {

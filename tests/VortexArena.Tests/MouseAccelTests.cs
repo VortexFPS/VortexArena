@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Input;
+using VortexArena.Common.Input;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Pins <see cref="MouseAccel"/> to DP's cl_input.c:550-662 (the m_accelerate block + m_filter). The key

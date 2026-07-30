@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Guards the <see cref="WarpzoneTransform"/> math the warpzone PORTAL render relies on (PortalRenderer places its

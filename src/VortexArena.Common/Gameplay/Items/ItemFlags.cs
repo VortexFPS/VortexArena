@@ -8,11 +8,11 @@
 // pickup-anyway flag, the team). This file ports the flags + the GameItem metadata; ItemEntityState.cs
 // adds the per-spawn fields, and ItemPickupRules.cs ports Item_GiveTo / Item_ScheduleRespawn.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Item flag bits — the C# successor to QuakeC's <c>IT_*</c> constants (common/items/item.qh). These mark
-/// a player's <see cref="XonoticGodot.Common.Framework.Entity.Items"/> field (held powerups, keys, jetpack…)
+/// a player's <see cref="VortexArena.Common.Framework.Entity.Items"/> field (held powerups, keys, jetpack…)
 /// and identify a <see cref="GameItemDef.ItemId"/>. Bit values match QC exactly so any networked
 /// <c>.items</c> stat stays compatible.
 /// </summary>

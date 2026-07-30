@@ -23,7 +23,7 @@ last_audited: "2026-06-28"
 #
 # --- prior note (2026-06-27, post Wave 16/17 commit 2f0bfdb) retained below for history ---
 # OPUS re-audit 2026-06-27 (post Wave 16/17, commit 2f0bfdb): TWO real drifts, both UNDER-stated by the prior
-# audit — the prior pass grepped `src/XonoticGodot.Net` (which holds NO net code; the net layer lives in
+# audit — the prior pass grepped `src/VortexArena.Net` (which holds NO net code; the net layer lives in
 # `game/net/`) and so wrongly recorded the Assault waypoint sprites + the round freeze as missing/non-enforced.
 # Re-read the CURRENT port end-to-end; both gaps actually CLOSED in Wave 17 ("presentation consumers", 2f0bfdb):
 #
@@ -73,7 +73,7 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 19
   worst_gaps:
-    - "FIX (Wave 17, 2f0bfdb): the objective WAYPOINT SPRITES are now fully presented to the player. The prior audit recorded presentation:missing because it grepped src/XonoticGodot.Net (empty) — the net layer is in game/net/. The real pipeline: Assault.SpawnObjectiveSprite -> WaypointSprites.Active -> ServerNet.SendWaypoints (game/net/ServerNet.cs:1192, called live @493) serializes per-peer SpriteFor (Defend/Destroy) + RADARICON_OBJECTIVE + orange color + wp.Health (the health BAR) -> ClientNet.HandleWaypoints (game/net/ClientNet.cs:542) -> WaypointSpriteLayer (game/client/WaypointSpriteLayer.cs, drawn; health bar listed in its header) wired in NetGame.cs:1618/1628. The attacker now sees the objective marker, health/progress bar, and radar icon. presentation missing->faithful (waypoint_sprite); activate + destructible_heal sprite rows partial->faithful."
+    - "FIX (Wave 17, 2f0bfdb): the objective WAYPOINT SPRITES are now fully presented to the player. The prior audit recorded presentation:missing because it grepped src/VortexArena.Net (empty) — the net layer is in game/net/. The real pipeline: Assault.SpawnObjectiveSprite -> WaypointSprites.Active -> ServerNet.SendWaypoints (game/net/ServerNet.cs:1192, called live @493) serializes per-peer SpriteFor (Defend/Destroy) + RADARICON_OBJECTIVE + orange color + wp.Health (the health BAR) -> ClientNet.HandleWaypoints (game/net/ClientNet.cs:542) -> WaypointSpriteLayer (game/client/WaypointSpriteLayer.cs, drawn; health bar listed in its header) wired in NetGame.cs:1618/1628. The attacker now sees the objective marker, health/progress bar, and radar icon. presentation missing->faithful (waypoint_sprite); activate + destructible_heal sprite rows partial->faithful."
     - "FIX (Wave 17, 2f0bfdb): the 5s AS_ROUND_DELAY inter-round FREEZE is now enforced. GameStopped (GameWorld.cs:2159) = Intermission.Running || MatchEnded || IsAssaultRoundFreeze, and IsAssaultRoundFreeze (GameWorld.cs:2170) = Assault{SecondRoundPending:true} — so movement/firing/regen/respawns halt for the window exactly as QC's game_stopped=true. The prior 'does NOT actually freeze' residual on win.attacker_round + round.second_round is CLOSED. bprint('Starting second round...') IS emitted (Assault.cs:856 via aslt.BPrint=Commands.ChatBroadcast, GameWorld.cs:2970), so the round half has NO behavioral residual left."
     - "Round-flow logic all LIVE (no drift): spawn-point team swap (AssaultSwapSpawnTeams GameWorld.cs:4763), roundstart turret team-swap + unteamed seeding (AssaultTurretRoundstart GameWorld.cs:4729), destructible heal (HealDestructible + GtEventHeal), objective-aware spawn evalfunc (ShouldRejectSpawnSpot in SpawnSystem.ScoreSpot), warmup-incompatible ReadLevelCvars override (g_warmup=0 + sv_ready_restart_after_countdown=0, GameWorld.cs:2945-2949) + timelimit=20 mapinfo default (GameWorld.cs:2954)."
     - "PlayHitsound (assault.notify.play_hitsound) stays LIVE (no drift): MutatorHooks.FirePlayHitsound (MutatorHooks.cs:667, was 635) called from DamageSystem.Apply (DamageSystem.cs:352) for every non-player victim hit by a player attacker; the registered Assault.OnPlayHitsound handler is reached on the live damage path. liveness live, audio faithful."
@@ -88,8 +88,8 @@ features:
       - "common/gametypes/gametype/assault/assault.qh:CLASS(Assault)"
       - "common/gametypes/gametype/assault/sv_assault.qh:REGISTER_MUTATOR(as)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:Assault()"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:Assault()"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:Activate"
     constants:
       - { name: "teamplay_bitmask", base: "BITS(2) (red vs blue)", port: "SeedTeams(2)", match: true }
       - { name: "team_primary_score", base: "ST_ASSAULT_OBJECTIVES=1 (objectives, PRIO_PRIMARY)", port: "TeamSlotSecondary label 'objectives' PRIO_PRIMARY", match: true }
@@ -105,7 +105,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/AssaultSpawnTests.cs:SpawnfuncsBuildTheObjectiveChain", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/AssaultSpawnTests.cs:SpawnfuncsBuildTheObjectiveChain", result: pass }
     confidence: high
     notes: "Unchanged. Activate() builds the GameScores layout (player primary = objectives, team slot1 = objectives); always 2 teams (BITS(2))."
 
@@ -118,10 +118,10 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:spawnfunc(func_assault_destructible)"
       - "common/gametypes/gametype/assault/sv_assault.qc:assault_setenemytoobjective"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (Assault arm, GameWorld.cs:3111); ResolveObjectiveGraph called post-spawn at GameWorld.cs:722"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:ResolveObjectiveGraph"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:StageDecreaser"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:GametypeObjectiveSpawns (Assault block)"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (Assault arm, GameWorld.cs:3111); ResolveObjectiveGraph called post-spawn at GameWorld.cs:722"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:ResolveObjectiveGraph"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:StageDecreaser"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:GametypeObjectiveSpawns (Assault block)"
     constants:
       - { name: "decreaser_dmg_default", base: "101 (if(!this.dmg) this.dmg=101)", port: "101", match: true }
       - { name: "destructible_health_default", base: "100 (func_breakable_setup)", port: "100", match: true }
@@ -147,7 +147,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/assault/sv_assault.qh:ASSAULT_VALUE_INACTIVE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:ObjectiveInactive"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:ObjectiveInactive"
     constants:
       - { name: "ASSAULT_VALUE_INACTIVE", base: "1000", port: "1000", match: true }
     status:
@@ -172,8 +172,8 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:assault_objective_use"
       - "common/gametypes/gametype/assault/sv_assault.qc:target_objective_decrease_activate"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:ActivateObjective"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:SpawnObjectiveSprite"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:ActivateObjective"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:SpawnObjectiveSprite"
     constants:
       - { name: "activated_health", base: "100 (SetResourceExplicit RES_HEALTH 100)", port: "100 (ActivateObjective default)", match: true }
     status:
@@ -199,9 +199,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/assault/sv_assault.qc:assault_objective_decrease_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DamageDestructible"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DecreaseObjective"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (func_assault_destructible GtEventDamage arm)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DamageDestructible"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DecreaseObjective"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (func_assault_destructible GtEventDamage arm)"
     constants:
       - { name: "team_gate", base: "actor.team == assault_attacker_team", port: "byTeam == State.AttackerTeam", match: true }
       - { name: "score_on_hit", base: "SCORE += dmg (or remaining hlth on kill)", port: "actor.ScoreFrags += removed", match: true }
@@ -230,7 +230,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/assault/sv_assault.qc:assault_objective_decrease_use (SUB_UseTargets)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DecreaseObjective"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DecreaseObjective"
     constants:
       - { name: "destroyed_health", base: "-1 (SetResourceExplicit enemy RES_HEALTH -1)", port: "DamageObjective returns -1 when <=0", match: true }
     status:
@@ -256,11 +256,11 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:target_assault_roundend_use"
       - "common/gametypes/gametype/assault/sv_assault.qc:WinningCondition_Assault (winning branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DestroyFinalObjective"
-      - "src/XonoticGodot.Server/GameWorld.cs:IsMatchOver (Assault arm)"
-      - "src/XonoticGodot.Server/GameWorld.cs:TryGetWinner (Assault arm)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (TargetUtilities.IsCampaign assignment)"
-      - "src/XonoticGodot.Server/GameWorld.cs:GameStopped (GameWorld.cs:2159 = Intermission.Running || MatchEnded || IsAssaultRoundFreeze) + IsAssaultRoundFreeze (GameWorld.cs:2170 = Assault{SecondRoundPending:true})"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DestroyFinalObjective"
+      - "src/VortexArena.Server/GameWorld.cs:IsMatchOver (Assault arm)"
+      - "src/VortexArena.Server/GameWorld.cs:TryGetWinner (Assault arm)"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (TargetUtilities.IsCampaign assignment)"
+      - "src/VortexArena.Server/GameWorld.cs:GameStopped (GameWorld.cs:2159 = Intermission.Running || MatchEnded || IsAssaultRoundFreeze) + IsAssaultRoundFreeze (GameWorld.cs:2170 = Assault{SecondRoundPending:true})"
     constants:
       - { name: "winning_team_score_sentinel", base: "ST_ASSAULT_OBJECTIVES set to 666", port: "SetTeamScore(slot, 666)", match: true }
       - { name: "campaign_single_round_end", base: "ent.cnt == 1 || autocvar_g_campaign => WINNING_YES", port: "isFinalRound || Round>=1 || (IsCampaign?.Invoke() ?? false)", match: true }
@@ -291,10 +291,10 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:as_round_think"
       - "common/gametypes/gametype/assault/sv_assault.qc:AS_ROUND_DELAY"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:StartSecondRound"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DriveFrame (SecondRoundPending branch)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:AssaultState.FirstRoundDestroyTime"
-      - "src/XonoticGodot.Server/GameWorld.cs:Activate (aslt.OnSecondRoundRestart assignment, GameWorld.cs:2919)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:StartSecondRound"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DriveFrame (SecondRoundPending branch)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:AssaultState.FirstRoundDestroyTime"
+      - "src/VortexArena.Server/GameWorld.cs:Activate (aslt.OnSecondRoundRestart assignment, GameWorld.cs:2919)"
     constants:
       - { name: "AS_ROUND_DELAY", base: "5 (seconds inter-round freeze)", port: "RoundDelay = 5f", match: true }
       - { name: "round2_timelimit", base: "ceil(time - AS_ROUND_DELAY - game_starttime)/60 minutes", port: "ceil(FirstRoundDestroyTime/60) min; DriveFrame uses FirstRoundDestroyTime sec directly", match: true }
@@ -321,10 +321,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/assault/sv_assault.qc:WinningCondition_Assault (default SetWinners defender)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:TimeLimitReached"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DriveFrame"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame (Assault arm, GameWorld.cs:3356)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Activate (Assault timelimit=20 default, GameWorld.cs:2905)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:TimeLimitReached"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DriveFrame"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame (Assault arm, GameWorld.cs:3356)"
+      - "src/VortexArena.Server/GameWorld.cs:Activate (Assault timelimit=20 default, GameWorld.cs:2905)"
     constants:
       - { name: "default_timelimit_min", base: "20 (timelimit=20 default args)", port: "Activate asserts timelimit=20 when unset (GameWorld.cs:2905); DriveFrame reads live cvar*60", match: true }
     status:
@@ -351,8 +351,8 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:spawnfunc(info_player_defender)"
       - "common/gametypes/gametype/assault/sv_assault.qc:assault_new_round (g_saved_team team swap)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:275-276 (info_player_attacker/defender registration)"
-      - "src/XonoticGodot.Server/GameWorld.cs:AssaultSwapSpawnTeams (GameWorld.cs:4699)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:275-276 (info_player_attacker/defender registration)"
+      - "src/VortexArena.Server/GameWorld.cs:AssaultSwapSpawnTeams (GameWorld.cs:4699)"
     constants:
       - { name: "attacker_team", base: "NUM_TEAM_1 (red)", port: "Teams.Red", match: true }
       - { name: "defender_team", base: "NUM_TEAM_2 (blue)", port: "Teams.Blue", match: true }
@@ -380,9 +380,9 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:WinningCondition_Assault (CENTER_ASSAULT_OBJ_DESTROYED)"
       - "common/notifications/all.inc:560-562"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:786-788"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DestroyFinalObjective (ASSAULT_OBJ_DESTROYED broadcast)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:786-788"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DestroyFinalObjective (ASSAULT_OBJ_DESTROYED broadcast)"
     constants:
       - { name: "ASSAULT_ATTACKING_text", base: "^BGYou are attacking!", port: "^BGYou are attacking!", match: true }
       - { name: "ASSAULT_DEFENDING_text", base: "^BGYou are defending!", port: "^BGYou are defending!", match: true }
@@ -410,13 +410,13 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:target_objective_decrease_activate (WaypointSprite_SpawnFixed)"
       - "common/gametypes/gametype/assault/sv_assault.qc:assault_decreaser_sprite_visible"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:SpawnObjectiveSprite (Assault.cs:413)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DisownSprite (Assault.cs:490)"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:WaypointSprites (SpawnFixed/UpdateHealth/UpdateMaxHealth/Disown/Kill; Active)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:SpawnObjectiveSprite (Assault.cs:413)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DisownSprite (Assault.cs:490)"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:WaypointSprites (SpawnFixed/UpdateHealth/UpdateMaxHealth/Disown/Kill; Active)"
       - "game/net/ServerNet.cs:SendWaypoints (game/net/ServerNet.cs:1192, called @493) + WaypointVisible (:1294)"
       - "game/net/ClientNet.cs:HandleWaypoints (:542) -> ClientNet.Waypoints (:695)"
       - "game/client/WaypointSpriteLayer.cs (client draw incl. health bar @206-207/DrawHealthBar @239) wired in game/net/NetGame.cs:1649 (Source=()=>_client.Waypoints @1659)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2613 (WaypointSprites.Think per-tick)"
+      - "src/VortexArena.Server/GameWorld.cs:2613 (WaypointSprites.Think per-tick)"
     constants:
       - { name: "sprite_defend", base: "WP_AssaultDefend (radar RADARICON_OBJECTIVE)", port: "RadarIconObjective=1 + WaypointObjectiveColor orange (networked: ServerNet.cs:1233,1237)", match: true }
       - { name: "sprite_attacker_view", base: "WP_AssaultDestroy + UpdateMaxHealth/UpdateHealth", port: "SpawnObjectiveSprite('AssaultDestroy', UpdateMaxHealth/UpdateHealth); per-peer SpriteFor + wp.Health networked (ServerNet.cs:1229,1240)", match: true }
@@ -430,12 +430,12 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "The prior audit's 'no client render path' gap is CLOSED (Wave 17, 2f0bfdb) — it had grepped src/XonoticGodot.Net (no net code there; the net layer is game/net/). The visible result is rendered by a faithful QC port of Draw_WaypointSprite but was NOT runtime-observed in this code-read re-audit (game not launched); a live visual check would be the only remaining upgrade."
+      - "The prior audit's 'no client render path' gap is CLOSED (Wave 17, 2f0bfdb) — it had grepped src/VortexArena.Net (no net code there; the net layer is game/net/). The visible result is rendered by a faithful QC port of Draw_WaypointSprite but was NOT runtime-observed in this code-read re-audit (game not launched); a live visual check would be the only remaining upgrade."
     verification:
       - { kind: code_read, ref: "Assault.cs:413 SpawnObjectiveSprite (WP_AssaultDestroy + UpdateMaxHealth/UpdateHealth); DamageDestructible updates the bar each hit; DisownSprite on destroy. WaypointSprites.Think() ticked live (GameWorld.cs:2613).", result: pass }
       - { kind: code_read, ref: "game/net/ServerNet.cs:1192 SendWaypoints iterates WaypointSprites.Active, per-peer WaypointVisible gate (:1294, honors VisibleForPlayer + SPRITERULE_TEAMPLAY), writes radarByte (:1233) + wp.Health (health bar, :1240) + fade; CALLED live @ServerNet.cs:493. ClientNet.HandleWaypoints (:751, dispatched @555 on NetControl.Waypoints) decodes into .Waypoints (:708); WaypointSpriteLayer draws marker+arrow+HEALTH BAR (@206-207); wired NetGame.cs:1649 (Source=()=>_client.Waypoints @1659). Re-verified on branch claude/parity-port-waves (head c7cece5); 13/13 AssaultSpawnTests green.", result: pass }
     confidence: high
-    notes: "FIX (re-audit, Wave 17 2f0bfdb): the objective waypoint sprite (defend/push/destroy image + health bar + radar icon) is spawned/updated/disowned/ticked server-side AND serialized per-peer + rendered client-side end-to-end. The attacker now sees an on-screen objective marker, health/progress bar, and radar icon. presentation missing->faithful. The prior MISSING was a directory mistake (grepped src/XonoticGodot.Net instead of game/net/). Code-read confirmed at both ends; not yet runtime-observed."
+    notes: "FIX (re-audit, Wave 17 2f0bfdb): the objective waypoint sprite (defend/push/destroy image + health bar + radar icon) is spawned/updated/disowned/ticked server-side AND serialized per-peer + rendered client-side end-to-end. The attacker now sees an on-screen objective marker, health/progress bar, and radar icon. presentation missing->faithful. The prior MISSING was a directory mistake (grepped src/VortexArena.Net instead of game/net/). Code-read confirmed at both ends; not yet runtime-observed."
 
   - id: assault.mapobject.assault_wall
     name: "func_assault_wall cosmetic wall toggles with its objective's health"
@@ -444,10 +444,10 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:spawnfunc(func_assault_wall)"
       - "common/gametypes/gametype/assault/sv_assault.qc:assault_wall_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:Wall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:StageWall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:DriveWalls"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (func_assault_wall case)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:Wall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:StageWall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:DriveWalls"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (func_assault_wall case)"
     constants:
       - { name: "think_interval", base: "0.2 s (nextthink = time + 0.2)", port: "per-frame (DriveWalls runs every tick from DriveFrame)", match: false }
       - { name: "hide_predicate", base: "GetResource(enemy, RES_HEALTH) < 0", port: "ObjectiveRef.Health < 0f", match: true }
@@ -475,9 +475,9 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:assault_roundstart_use"
       - "common/gametypes/gametype/assault/sv_assault.qc:MUTATOR_HOOKFUNCTION(as, TurretSpawn)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:AssaultTurretRoundstart (GameWorld.cs:4665)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (initial roundstart, GameWorld.cs:757)"
-      - "src/XonoticGodot.Server/GameWorld.cs:OnSecondRoundRestart (round-2 swap, GameWorld.cs:2851)"
+      - "src/VortexArena.Server/GameWorld.cs:AssaultTurretRoundstart (GameWorld.cs:4665)"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (initial roundstart, GameWorld.cs:757)"
+      - "src/VortexArena.Server/GameWorld.cs:OnSecondRoundRestart (round-2 swap, GameWorld.cs:2851)"
     constants:
       - { name: "unteamed_seed", base: "turret.team == assault_attacker_team when 0/FLOAT_MAX (TurretSpawn hook)", port: "e.Team = attackerTeam when 0/float.MaxValue", match: true }
       - { name: "team_swap", base: "NUM_TEAM_1 <-> NUM_TEAM_2 then turret_respawn", base_note: "campaign forbids the swap (assault_turrets_teamswap_forbidden)", port: "Red<->Blue then TurretAI.Respawn; campaign-guarded", match: true }
@@ -504,9 +504,9 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:havocbot_role_ast_defense"
       - "common/gametypes/gametype/assault/sv_assault.qc:havocbot_goalrating_ast_targets"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleAssault (BotObjectiveRoles.cs:774)"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:ChooseRole (assault/as)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:AssaultRoleTimeout/AssaultAttackTime"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleAssault (BotObjectiveRoles.cs:774)"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:ChooseRole (assault/as)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:AssaultRoleTimeout/AssaultAttackTime"
     constants:
       - { name: "offense_enemyplayers_radius", base: "650 (havocbot_goalrating_enemyplayers org-radius, offense)", port: "650 (attacker)", match: true }
       - { name: "defense_enemyplayers_radius", base: "3000 (havocbot_goalrating_enemyplayers org-radius, defense)", port: "3000 (defender)", match: true }
@@ -536,8 +536,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/assault/sv_assault.qc:target_objective_spawn_evalfunc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:ShouldRejectSpawnSpot"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs (SpotEvalReject in ScoreSpot)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:ShouldRejectSpawnSpot"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs (SpotEvalReject in ScoreSpot)"
     constants:
       - { name: "reject_score", base: "'-1 0 0' when hlth<0 or hlth>=ASSAULT_VALUE_INACTIVE", port: "ShouldRejectSpawnSpot returns true (-> (-1,0) in ScoreSpot) when Health<0 or Health>=ObjectiveInactive", match: true }
     status:
@@ -562,9 +562,9 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:destructible_heal"
       - "common/gametypes/gametype/assault/sv_assault.qc:spawnfunc(func_assault_destructible) (this.event_heal = destructible_heal)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:HealDestructible"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (func_assault_destructible GtEventHeal arm)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageContracts.cs:102 (Heal -> GtEventHeal dispatch)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:HealDestructible"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (func_assault_destructible GtEventHeal arm)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageContracts.cs:102 (Heal -> GtEventHeal dispatch)"
     constants:
       - { name: "true_limit", base: "(limit != RES_LIMIT_NONE) ? limit : targ.max_health", port: "limit != Resources.LimitNone ? limit : wall.MaxHealth", match: true }
       - { name: "heal_guard", base: "bail if hlth<=0 || hlth>=true_limit (already destroyed/full)", port: "same guard", match: true }
@@ -591,7 +591,7 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:MUTATOR_HOOKFUNCTION(as, ReadLevelCvars)"
       - "common/gametypes/gametype/assault/sv_assault.qc:MUTATOR_HOOKFUNCTION(as, ReadyRestart_Deny)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:Activate (Assault arm, GameWorld.cs:2896-2899)"
+      - "src/VortexArena.Server/GameWorld.cs:Activate (Assault arm, GameWorld.cs:2896-2899)"
     constants:
       - { name: "warmup_stage", base: "0 (forced for Assault)", port: "Cvars.Set('g_warmup', 0) when not campaign", match: true }
       - { name: "sv_ready_restart_after_countdown", base: "0 (forced for Assault)", port: "Cvars.Set('sv_ready_restart_after_countdown', 0) when not campaign", match: true }
@@ -617,9 +617,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/assault/sv_assault.qc:MUTATOR_HOOKFUNCTION(as, PlayHitsound)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:OnPlayHitsound"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:PlayHitsound (chain) / FirePlayHitsound (MutatorHooks.cs:667)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:352 (live firing site: FirePlayHitsound(targ, attackerSave) for non-player victims)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:OnPlayHitsound"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:PlayHitsound (chain) / FirePlayHitsound (MutatorHooks.cs:667)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:352 (live firing site: FirePlayHitsound(targ, attackerSave) for non-player victims)"
     constants:
       - { name: "force_for_victim", base: "return (frag_victim.classname == 'func_assault_destructible')", port: "victim.ClassName == 'func_assault_destructible' (or DestructibleFor != null) => true", match: true }
     status:

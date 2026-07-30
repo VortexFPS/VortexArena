@@ -16,10 +16,10 @@
 // spiderweb slow). Note both monster effects are dormant for the same reason as Base: the orb touch only
 // flags nade_entrap_time / nade_veil_time on REAL CLIENTS (IsRealClient), never on monsters.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The entrap nade detonation — port of <c>nade_entrap_boom</c>.</summary>
 public sealed class NadeEntrapBoom : INadeBoom

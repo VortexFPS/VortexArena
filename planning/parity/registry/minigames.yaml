@@ -26,9 +26,9 @@ features:
       - "common/minigames/sv_minigames.qh:REGISTER_MINIGAME (70)"
       - "common/minigames/cl_minigames.qh:REGISTER_MINIGAME (111)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Minigame.cs:Minigames.RegisterAll (364)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Minigame.cs:Minigames.ByName (351)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Minigame.cs:Minigame (abstract descriptor, 271)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Minigame.cs:Minigames.RegisterAll (364)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Minigame.cs:Minigames.ByName (351)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Minigame.cs:Minigame (abstract descriptor, 271)"
     constants:
       - { name: "registered_games", base: "7 (nmm ttt c4 pong ps pp bd)", port: "8 (adds Snake, an original non-Base game)", match: false }
     status:
@@ -43,7 +43,7 @@ features:
     gaps:
       - "The extra 'snake' entry appears in `cmd minigame list` / the Create menu — a Base client would never see it (cosmetic-only divergence, flagged so cvar/asset diffs don't trip on it)."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MinigameSessionTests.cs:Create_RegistersSession_AndSeatsCreatorOnTeam1", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MinigameSessionTests.cs:Create_RegistersSession_AndSeatsCreatorOnTeam1", result: pass }
       - { kind: code, ref: "GameWorld.cs:929 builds MinigameSessionManager; Commands.cs:1949 lists Minigames.All", result: pass }
     confidence: high
     notes: "minigame_count_players -> MinigameSession.PlayerCount. Registry ordering fixed by Registry<Minigame>.Sort()."
@@ -59,8 +59,8 @@ features:
       - "common/minigames/minigames.qc:minigame_next_team (65)"
       - "common/minigames/minigames.qh:declarations (8-35)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Minigame.cs:MinigameTiles (99-127)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Minigame.cs:MinigameSession.NextTeam (255)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Minigame.cs:MinigameTiles (99-127)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Minigame.cs:MinigameSession.NextTeam (255)"
     constants:
       - { name: "tile_id_format", base: "\"<letter><1-based-number>\", row 0 = bottom", port: "identical (BuildName/Letter/Number)", match: true }
     status:
@@ -98,7 +98,7 @@ features:
       - "game/net/MinigameNetState.cs:EncodeEnvelope/DecodeEnvelope (211/239)"
       - "game/net/ServerNet.cs:SendMinigameState (921, called 490 each net frame)"
       - "game/net/ClientNet.cs:HandleMinigameState (569)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs:MarkDirty/DrainDirty (111/114)"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:MarkDirty/DrainDirty (111/114)"
     constants:
       - { name: "send_model", base: "per-entity delta (SendFlags byte + MSLE fields), gated per-client by minigame_CheckSend", port: "whole-session snapshot per participating peer on a reliable channel, dirty-flag driven", match: false }
     status:
@@ -165,9 +165,9 @@ features:
       - "common/minigames/sv_minigames.qc:end_minigame/end_minigames (224/255)"
       - "common/minigames/sv_minigames.qh:minigame_sessions/.active_minigame (54-61)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs:Create/JoinByName/AddPlayer/RemovePlayer/End/EndAll (146-338)"
-      - "src/XonoticGodot.Server/GameWorld.cs:929 (manager built + PlayBanned wired)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4773 (EndAll on match teardown)"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:Create/JoinByName/AddPlayer/RemovePlayer/End/EndAll (146-338)"
+      - "src/VortexArena.Server/GameWorld.cs:929 (manager built + PlayBanned wired)"
+      - "src/VortexArena.Server/GameWorld.cs:4773 (EndAll on match teardown)"
     constants:
       - { name: "sv_minigames default", base: "1 (minigames.cfg)", port: "1 (assets minigames.cfg exec'd; ConfigTests.cs:258 asserts 1)", match: true }
       - { name: "session netname", base: "\"<gameid>_<etof(ent)>\"", port: "\"<gameid>_<counter>\"", match: true }
@@ -196,8 +196,8 @@ features:
       - "common/minigames/sv_minigames.qc:player_clear_minigame (6)"
       - "common/minigames/sv_minigames.qh:autocvar_sv_minigames_observer (18)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs:AddPlayer observer branch (231-233)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs:ObserverForcer/ClearForcer seams (53/57)"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:AddPlayer observer branch (231-233)"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:ObserverForcer/ClearForcer seams (53/57)"
     constants:
       - { name: "sv_minigames_observer default", base: "0 (minigames.cfg)", port: "0 (same cfg mounted)", match: true }
     status:
@@ -223,8 +223,8 @@ features:
       - "common/minigames/sv_minigames.qc:ClientCommand_minigame (310)"
       - "common/minigames/sv_minigames.qh:MINIGAME_COMMON_CMD (14)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdMinigame (1917)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:163 (MinigameCommonCmd flood-control list)"
+      - "src/VortexArena.Server/Commands.cs:CmdMinigame (1917)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:163 (MinigameCommonCmd flood-control list)"
     constants:
       - { name: "subcommands", base: "create join list list-sessions end part invite", port: "identical set", match: true }
       - { name: "disabled msg", base: "\"Minigames are not enabled!\"", port: "identical", match: true }
@@ -251,8 +251,8 @@ features:
     base_refs:
       - "common/minigames/sv_minigames.qc:invite_minigame (263)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs:Invite (351)"
-      - "src/XonoticGodot.Server/Commands.cs:2000-2013 (invite verb)"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:Invite (351)"
+      - "src/VortexArena.Server/Commands.cs:2000-2013 (invite verb)"
     constants:
       - { name: "error strings", base: "Invalid minigame / Invalid player / You can't invite yourself / banned / already playing", port: "identical strings", match: true }
     status:
@@ -280,8 +280,8 @@ features:
       - "common/minigames/sv_minigames.qc:MinigameImpulse (296)"
       - "common/minigames/sv_minigames.qc:minigame_find_player (285)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs:Impulse (389)"
-      - "src/XonoticGodot.Server/Commands.cs:2100 (impulse dispatch calls it first)"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:Impulse (389)"
+      - "src/VortexArena.Server/Commands.cs:2100 (impulse dispatch calls it first)"
     constants: []
     status:
       logic: partial
@@ -526,9 +526,9 @@ features:
       - "common/minigames/minigame/ttt.qc:ttt_ai_choose_simple/ttt_aimove (468/485)"
       - "common/minigames/minigame/ttt.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/TicTacToe.cs:Move/Place (53/82)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/TicTacToe.cs:IsWinningPiece (145)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/TicTacToe.cs:ChooseSimple/AiMove (256/288)"
+      - "src/VortexArena.Common/Gameplay/Minigames/TicTacToe.cs:Move/Place (53/82)"
+      - "src/VortexArena.Common/Gameplay/Minigames/TicTacToe.cs:IsWinningPiece (145)"
+      - "src/VortexArena.Common/Gameplay/Minigames/TicTacToe.cs:ChooseSimple/AiMove (256/288)"
     constants:
       - { name: "grid", base: "3x3 (TTT_LET_CNT/TTT_NUM_CNT)", port: "Size=3", match: true }
       - { name: "ai policy", base: "win > block > random (ttt_ai_choose_simple)", port: "identical (Block3/RandomFlag)", match: true }
@@ -588,7 +588,7 @@ features:
       - "common/minigames/minigame/c4.qc:c4_winning_piece (37)"
       - "common/minigames/minigame/c4.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/ConnectFour.cs:Move (46)"
+      - "src/VortexArena.Common/Gameplay/Minigames/ConnectFour.cs:Move (46)"
     constants:
       - { name: "grid", base: "7x6 (C4_LET_CNT x C4_NUM_CNT)", port: "Columns=7 Rows=6", match: true }
       - { name: "win count / max tiles", base: "4 / 42", port: "4 / 42", match: true }
@@ -646,10 +646,10 @@ features:
       - "common/minigames/minigame/pong.qc:pong_ai_think (211)"
       - "common/minigames/minigame/pong.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Pong.cs:PongState.Tick (181)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Pong.cs:Move (417)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Pong.cs:AiDecide (319)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2689 (Minigames.Tick each frame)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Pong.cs:PongState.Tick (181)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Pong.cs:Move (417)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Pong.cs:AiDecide (319)"
+      - "src/VortexArena.Server/GameWorld.cs:2689 (Minigames.Tick each frame)"
     constants:
       - { name: "sv_minigames_pong_paddle_size", base: "0.3 (cvar)", port: "0.3 HARDCODED (PongState.PaddleSize; cvar never read)", match: true }
       - { name: "sv_minigames_pong_paddle_speed", base: "1 (cvar)", port: "1 hardcoded", match: true }
@@ -715,7 +715,7 @@ features:
       - "common/minigames/minigame/nmm.qc:nmm_spawn_tile_square (100)"
       - "common/minigames/minigame/nmm.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/NineMensMorris.cs:NmmState + Move handler"
+      - "src/VortexArena.Common/Gameplay/Minigames/NineMensMorris.cs:NmmState + Move handler"
     constants:
       - { name: "pieces per side", base: "7 (QC spawns 7 per team — NOT the classical 9)", port: "7 (header documents 'Each team has 7 pieces')", match: true }
       - { name: "board", base: "3 concentric squares on 7x7, distances 3/2/1", port: "same recursive construction (per header)", match: true }
@@ -771,7 +771,7 @@ features:
       - "common/minigames/minigame/pp.qc:pp_next_match (172)"
       - "common/minigames/minigame/pp.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/PushPull.cs:PpState + Move handler"
+      - "src/VortexArena.Common/Gameplay/Minigames/PushPull.cs:PpState + Move handler"
     constants:
       - { name: "grid", base: "7x7", port: "Size=7", match: true }
       - { name: "disabled team marker", base: "team 5", port: "PpState.Disabled=5", match: true }
@@ -829,7 +829,7 @@ features:
       - "common/minigames/minigame/ps.qc:ps_tile_blacklisted/ps_setup_pieces (38/117)"
       - "common/minigames/minigame/ps.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/PegSolitaire.cs:Move + SetupPieces"
+      - "src/VortexArena.Common/Gameplay/Minigames/PegSolitaire.cs:Move + SetupPieces"
     constants:
       - { name: "grid", base: "7x7 minus 2x2 corners (English cross), centre empty", port: "same blacklist + centre-empty setup (read)", match: true }
       - { name: "max players", base: "1", port: "MaxPlayers=1", match: true }
@@ -888,8 +888,8 @@ features:
       - "common/minigames/minigame/bd.qc:bd_next_match/bd_restart_match (613/622)"
       - "common/minigames/minigame/bd.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Bulldozer.cs:Move (133)"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Bulldozer.cs:LoadLevel/EditorPlace/CloseEditor (219/255/263)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Bulldozer.cs:Move (133)"
+      - "src/VortexArena.Common/Gameplay/Minigames/Bulldozer.cs:LoadLevel/EditorPlace/CloseEditor (219/255/263)"
     constants:
       - { name: "grid", base: "20x20 (BD_LET_CNT/BD_NUM_CNT)", port: "BdState.Size=20", match: true }
       - { name: "sv_minigames_bulldozer_startlevel", base: "\"level1\" (cvar, loads minigames/bulldozer/storage_level1.txt)", port: "\"level1\" set by the shipped minigames.cfg:18 but NO code reads it; no level ever loaded", match: false }
@@ -903,7 +903,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "UNPLAYABLE live: Start() clears the grid and no level is loaded (LoadLevel has zero live callers in src/, game/, or the server host; the shipped minigames/bulldozer/storage_level*.txt files — present under assets/data/xonotic-data.pk3dir — are never parsed; sv_minigames_bulldozer_startlevel is `set` by the shipped minigames.cfg but nothing reads it). Every live bd session is an empty board with no dozer, so Move returns Invalid forever."
+      - "UNPLAYABLE live: Start() clears the grid and no level is loaded (LoadLevel has zero live callers in src/, game/, or the server host; the shipped minigames/bulldozer/storage_level*.txt files — present under Base/data/xonotic-data.pk3dir — are never parsed; sv_minigames_bulldozer_startlevel is `set` by the shipped minigames.cfg but nothing reads it). Every live bd session is an empty board with no dozer, so Move returns Invalid forever."
       - "Server cmd verbs 'next'/'restart'/'edit'/'save'/'fill' are NOT dispatched: Bulldozer.Move parses every token through DirFromName, so the menu's Editor/Save/Next Level/Restart buttons make the (nonexistent) dozer step Down instead."
       - "Level SAVE (bd_save_level file write, boulder/target count validation, nextlevel chaining) and the bd_canedit permission gate are unported (editor exists only as in-memory static helpers with no live caller)."
       - "Move-count networking (BD_SF_PLAYERMOVES) / per-player bd_moves display N/A (state not networked at all — see presentation row)."
@@ -947,7 +947,7 @@ features:
     base_refs:
       - "common/minigames/minigame/_mod.inc (registry anchor: Base ships exactly 7 games)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Minigames/Snake.cs"
+      - "src/VortexArena.Common/Gameplay/Minigames/Snake.cs"
       - "game/hud/MinigameRenderer.cs:DrawSnake (233)"
     constants: []
     status:

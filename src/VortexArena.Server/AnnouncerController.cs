@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// [T41] Server-side announcer driver — the port of <c>qcsrc/client/announcer.qc</c> (<c>Announcer_Time</c>

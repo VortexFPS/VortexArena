@@ -2,7 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// [crash fix 2026-07-26] Main-thread visual cache for TRANSIENT props (shell casings, gibs, MD3

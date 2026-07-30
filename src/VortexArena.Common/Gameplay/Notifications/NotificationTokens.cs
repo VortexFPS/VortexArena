@@ -10,10 +10,10 @@
 // CSQC does. Color codes in the produced strings are left for the client to expand.
 
 using System.Globalization;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Resolves notification arg tokens (s1, s2loc, spree_inf, item_wepname, death_team, frag_stats, …) to

@@ -6,12 +6,12 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The server chat engine — the C# successor to <c>server/chat.qc</c>'s <see cref="Say"/> plus the ignore-list
@@ -633,7 +633,7 @@ public sealed class Chat
             return;
         System.Numerics.Vector3 eyes = self.Origin + self.ViewOfs;
         System.Numerics.Vector3 aim = self.ViewAngles != System.Numerics.Vector3.Zero ? self.ViewAngles : self.Angles;
-        XonoticGodot.Common.Math.QMath.AngleVectors(aim, out System.Numerics.Vector3 forward, out _, out _);
+        VortexArena.Common.Math.QMath.AngleVectors(aim, out System.Numerics.Vector3 forward, out _, out _);
         System.Numerics.Vector3 end = eyes + forward * WeaponFiring.CurrentMaxShotDistance;
         TraceResult tr = Api.Trace.Trace(eyes, System.Numerics.Vector3.Zero, System.Numerics.Vector3.Zero,
             end, MoveFilter.Normal, self);

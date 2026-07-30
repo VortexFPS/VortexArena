@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>Result of <see cref="WeaponFiring.SetupShot"/> — the C# successor to QC's w_shotorg / w_shotdir / w_shotend globals.</summary>
 public readonly struct ShotInfo
@@ -73,7 +73,7 @@ public static class WeaponFiring
     /// Per-weapon muzzle offset registry — the C# successor to QC's <c>ent.(weaponentity).movedir</c>, keyed by
     /// the weapon's RegistryId and holding the <c>tag_shot</c> position in MODEL-LOCAL Quake coords
     /// (X = forward, Y = +left, Z = up), exactly the value Base reads from the v_ model. The muzzle tag IS a
-    /// parsed-model datum (MD3 tag origin / IQM-DPM bind bone, extracted by <c>XonoticGodot.Formats.MuzzleTag</c>),
+    /// parsed-model datum (MD3 tag origin / IQM-DPM bind bone, extracted by <c>VortexArena.Formats.MuzzleTag</c>),
     /// just not something Common can read itself (it has no model loader), so it is populated on the Godot side at
     /// weapon-model load and read here by <see cref="SetupShot"/> via the firing actor's
     /// <see cref="Entity.ActiveWeaponId"/>. Empty by default, so an un-registered weapon falls back to

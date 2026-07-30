@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Vfs;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// Loads TrueType / OpenType UI fonts out of the virtual filesystem (the <c>font-*.pk3dir</c> packs Xonotic

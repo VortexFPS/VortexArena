@@ -1,11 +1,11 @@
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Common.Math;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the player-model skeletal-rendering support (REMAINING-WORK §6 follow-up): the model-info sidecar

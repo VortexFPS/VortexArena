@@ -10,7 +10,7 @@
 // a tall item (megahealth) renders half-sunk. For a resting item QC leaves anim_start_time at 0, so the wave is
 // driven by absolute client time and every item of a class bobs in phase; we do the same here.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The QC <c>ItemDraw</c> bob + yaw-spin for a resting world pickup (client/items/items.qc). Pure (Godot-free)

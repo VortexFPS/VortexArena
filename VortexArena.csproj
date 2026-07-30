@@ -6,7 +6,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <RootNamespace>XonoticGodot</RootNamespace>
+    <RootNamespace>VortexArena</RootNamespace>
     <!-- C1: pin the GC flavor explicitly so it isn't default-dependent (planning/PERFORMANCE_REPORT.md C1).
          Workstation (ServerGarbageCollection=false) + concurrent — short, non-blocking, background collections,
          the right trade for the interactive client's render loop. Both values ARE the .NET default for a client
@@ -40,16 +40,16 @@
     <Compile Remove="bin/**/*.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="src\XonoticGodot.Common\XonoticGodot.Common.csproj" />
-    <ProjectReference Include="src\XonoticGodot.Engine\XonoticGodot.Engine.csproj" />
-    <ProjectReference Include="src\XonoticGodot.Net\XonoticGodot.Net.csproj" />
-    <ProjectReference Include="src\XonoticGodot.Formats\XonoticGodot.Formats.csproj" />
-    <ProjectReference Include="src\XonoticGodot.Server\XonoticGodot.Server.csproj" />
+    <ProjectReference Include="src\VortexArena.Common\VortexArena.Common.csproj" />
+    <ProjectReference Include="src\VortexArena.Engine\VortexArena.Engine.csproj" />
+    <ProjectReference Include="src\VortexArena.Net\VortexArena.Net.csproj" />
+    <ProjectReference Include="src\VortexArena.Formats\VortexArena.Formats.csproj" />
+    <ProjectReference Include="src\VortexArena.Server\VortexArena.Server.csproj" />
   </ItemGroup>
   <!-- C3: run the StringApiAnalyzer over game/ (where all the Godot interop lives). The analyzer is also an
-       Analyzer reference from XonoticGodot.Common; analyzers don't flow transitively through ProjectReference,
+       Analyzer reference from VortexArena.Common; analyzers don't flow transitively through ProjectReference,
        so the host needs its own. ReferenceOutputAssembly=false — we consume only its analyzers, not its API. -->
   <ItemGroup>
-    <ProjectReference Include="src\XonoticGodot.SourceGen\XonoticGodot.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="src\VortexArena.SourceGen\VortexArena.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

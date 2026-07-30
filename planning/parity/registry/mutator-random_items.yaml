@@ -15,7 +15,7 @@ features:
       - "common/mutators/mutator/random_items/sv_random_items.qh:44 (REGISTER_MUTATOR)"
       - "mutators.cfg:550 (g_random_items 0); :551 (g_random_loot 0)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:76 (IsEnabled)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:76 (IsEnabled)"
     constants:
       - { name: "g_random_items", base: "0", port: "0", match: true }
       - { name: "g_random_loot", base: "0", port: "0", match: true }
@@ -41,8 +41,8 @@ features:
       - "common/mutators/mutator/random_items/sv_random_items.qc:64 (RandomItems_GetRandomVanillaItemClassName)"
       - "common/mutators/mutator/random_items/sv_random_items.qc:54 (RandomItems_GetRandomItemClassName)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:317 (GetRandomVanillaItemClassName)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:302 (GetRandomItemClassName)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:317 (GetRandomVanillaItemClassName)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:302 (GetRandomItemClassName)"
     constants:
       - { name: "type prob cvar pattern", base: "g_{prefix}_{type}_probability", port: "g_{prefix}_{type}_probability (ProbCvar:404)", match: true }
       - { name: "weighted-reservoir rule", base: "random()*total <= prob (RandomSelection_AddFloat)", port: "Prandom.Float()*total <= prob", match: true }
@@ -72,7 +72,7 @@ features:
       - "common/weapons/weapon/vortex.qh (m_canonical_spawnfunc = \"weapon_vortex\")"
       - "randomitems-xonotic.cfg:74 (g_random_items_weapon_vortex_probability 1)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:350 (GetRandomWeaponClassName)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:350 (GetRandomWeaponClassName)"
     constants:
       - { name: "weapon prob cvar name", base: "g_{prefix}_weapon_{netname}_probability", port: "g_{prefix}_weapon_{netname}_probability ($\"g_{prefix}_{spawnFunc}_probability\", spawnFunc=\"weapon_\"+netname)", match: true }
       - { name: "emitted classname", base: "\"weapon_\"+netname (== m_canonical_spawnfunc)", port: "\"weapon_\"+NetName", match: true }
@@ -98,7 +98,7 @@ features:
     base_refs:
       - "common/mutators/mutator/random_items/sv_random_items.qc:211 (RandomItems_GetRandomItemClassNameWithProperty)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:373 (GetRandomItemClassNameWithProperty)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:373 (GetRandomItemClassNameWithProperty)"
     constants:
       - { name: "item prob cvar pattern", base: "g_{prefix}_{m_canonical_spawnfunc}_probability (e.g. g_random_loot_item_health_small_probability)", port: "g_{prefix}_{CanonicalSpawnFunc(def)}_probability", match: true }
       - { name: "filter", base: "it.<prop> && (spawnflags & ITEM_FLAG_NORMAL) && Item_IsDefinitionAllowed(it)", port: "MatchesType(def,type) && (def.ItemDef.SpawnFlags & GameItemSpawnFlag.Normal) && def.ItemDef.IsAllowed", match: true }
@@ -127,10 +127,10 @@ features:
       - "common/mutators/mutator/random_items/sv_random_items.qc:56 (CALLHOOK at entry of RandomItems_GetRandomItemClassName)"
       - "common/mutators/mutator/overkill/sv_overkill.qc:58 (ok override); common/mutators/mutator/instagib/sv_instagib.qc:102 (instagib override)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:858 (RandomItemsGetClassName HookChain); :865 (FireRandomItemsGetClassName)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:305 (CALLHOOK at GetRandomItemClassName entry)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:131 (hook Add); :193 (OnRandomItemsGetClassName override)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:152 (hook Add); :773 (OnRandomItemsGetClassName override)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:858 (RandomItemsGetClassName HookChain); :865 (FireRandomItemsGetClassName)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:305 (CALLHOOK at GetRandomItemClassName entry)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:131 (hook Add); :193 (OnRandomItemsGetClassName override)"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:152 (hook Add); :773 (OnRandomItemsGetClassName override)"
     constants:
       - { name: "hook event EV_RandomItems_GetRandomItemClassName(prefix -> classname)", base: "present", port: "RandomItemsGetClassName HookChain (MutatorHooks.cs:858)", match: true }
       - { name: "overkill pool override (g_overkill_items + okhmg/okrpc)", base: "RandomItems_GetRandomOverkillItemClassName (sv_overkill.qc:21)", port: "OnRandomItemsGetClassName (OverkillMutator.cs:193)", match: true }
@@ -158,10 +158,10 @@ features:
       - "common/mutators/mutator/random_items/sv_random_items.qc:233 (RandomItems_ReplaceMapItem)"
       - "common/mutators/mutator/random_items/sv_random_items.qc:200 (RandomItems_GetItemReplacementClassNames)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:129 (OnFilterItem)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:160 (ReplaceMapItem)"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:119 (FireFilterItem caller)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:805 (FilterItem HookChain); :812 (FireFilterItem)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:129 (OnFilterItem)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:160 (ReplaceMapItem)"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:119 (FireFilterItem caller)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:805 (FilterItem HookChain); :812 (FireFilterItem)"
     constants:
       - { name: "g_random_items_replace_* default", base: "\"random\"", port: "read from cvar g_random_items_replace_{classname} (RandomItemsMutator.cs:165)", match: true }
       - { name: "new_item.lifetime", base: "-1 (permanent)", port: "ItemIsLoot=false; SpawnFuncs.TrySpawn (non-loot StartItem path) (:191-196)", match: true }
@@ -189,9 +189,9 @@ features:
     base_refs:
       - "common/mutators/mutator/random_items/sv_random_items.qc:347 (ItemTouched hook, CBC_ORDER_LAST)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:140 (OnItemTouched)"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:418 (FireItemTouched caller)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:832 (ItemTouched HookChain); :839 (FireItemTouched)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:140 (OnItemTouched)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:418 (FireItemTouched caller)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:832 (ItemTouched HookChain); :839 (FireItemTouched)"
     constants:
       - { name: "Item_ScheduleRespawn(new_item) + delete(item)", base: "respawn the replacement, drop original", port: "ScheduleRespawn(newItem) + RemoveItem(item) (:147-148)", match: true }
       - { name: "ITEM_IS_LOOT skip", base: "present (:355)", port: "if (item.ItemIsLoot) return false (:144)", match: true }
@@ -216,7 +216,7 @@ features:
     base_refs:
       - "common/mutators/mutator/random_items/sv_random_items.qc:369 (PlayerDies hook)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:223 (OnPlayerDies)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:223 (OnPlayerDies)"
     constants:
       - { name: "g_random_loot_min", base: "0", port: "0 (from cvar)", match: true }
       - { name: "g_random_loot_max", base: "4", port: "4 (from cvar)", match: true }
@@ -243,8 +243,8 @@ features:
     base_refs:
       - "common/mutators/mutator/random_items/sv_random_items.qc:286 (RandomItems_SpawnLootItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:244 (SpawnLootItem)"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:71 (SpawnLoot)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:244 (SpawnLootItem)"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:71 (SpawnLoot)"
     constants:
       - { name: "g_random_loot_spread", base: "200", port: "200 (field default 200; cvar override only if !=0)", match: true }
       - { name: "g_random_loot_time", base: "10", port: "10 (field default 10; cvar override only if !=0)", match: true }
@@ -274,8 +274,8 @@ features:
       - "common/mutators/mutator/random_items/sv_random_items.qc:330/335/355 (random_items_is_spawning + ITEM_IS_LOOT skips in FilterItem/ItemTouched)"
       - "common/mutators/mutator/random_items/sv_random_items.qc:274/303 (if MUTATOR_IS_ENABLED(ok) new_item.ok_item = true)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:85 (_isSpawning guard); :132/:144 (skips); :193/:265 (ok_item set)"
-      - "src/XonoticGodot.Common/Gameplay/Items/EntityItemState.cs:54 (Entity.OkItem field)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:85 (_isSpawning guard); :132/:144 (skips); :193/:265 (ok_item set)"
+      - "src/VortexArena.Common/Gameplay/Items/EntityItemState.cs:54 (Entity.OkItem field)"
     constants:
       - { name: "recursion guard", base: "random_items_is_spawning bool", port: "static bool _isSpawning (set/restored around ReplaceMapItem + SpawnLootItem)", match: true }
       - { name: "ITEM_IS_LOOT skip in FilterItem/ItemTouched", base: "present", port: "if (item.ItemIsLoot) return false (OnFilterItem:134, OnItemTouched:144)", match: true }
@@ -302,9 +302,9 @@ features:
       - "common/mutators/mutator/random_items/sv_random_items.qc:312 (BuildMutatorsString -> ':random_items')"
       - "common/mutators/mutator/random_items/sv_random_items.qc:317 (BuildMutatorsPrettyString -> ', Random items')"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:121 (BuildMutatorsString)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:124 (BuildMutatorsPrettyString)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108/121 (BuildMutatorsString/PrettyString chains)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:121 (BuildMutatorsString)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:124 (BuildMutatorsPrettyString)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108/121 (BuildMutatorsString/PrettyString chains)"
     constants:
       - { name: "mutator net id", base: ":random_items", port: "s + \":random_items\" (:121)", match: true }
       - { name: "pretty label", base: ", Random items", port: "s + \", Random items\" (:124)", match: true }

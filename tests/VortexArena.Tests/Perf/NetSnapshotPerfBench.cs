@@ -3,11 +3,11 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T33 perf bench (BotPerfBench pattern — measurement, not a CI assertion) for the snapshot
@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests;
 /// Needs NO assets — runs everywhere (incl. CI), but is informational: it prints + records a
 /// baseline rather than asserting timings (machine-dependent).
 ///
-/// Run: dotnet test tests/XonoticGodot.Tests --filter NetSnapshotPerfBench -l "console;verbosity=detailed"
+/// Run: dotnet test tests/VortexArena.Tests --filter NetSnapshotPerfBench -l "console;verbosity=detailed"
 ///
 /// Measured baseline (2026-06-09, dev machine, Debug build):
 ///   full (no baseline):   5496 B wire for 256 entities

@@ -5,13 +5,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Particles;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Particles;
+using VortexArena.Formats.Vfs;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  SDF RUNTIME SERVICE (planning/particles-dual-system.md §A.4 / §A.5 / §A.6)

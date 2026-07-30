@@ -17,12 +17,12 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>func_rain/func_snow weather renderer. Hosted by <see cref="ClientWorld"/>.</summary>
 public partial class WeatherSystem : Node3D

@@ -1,9 +1,9 @@
 using System;
 using Godot;
-using XonoticGodot.Formats.Md3;
+using VortexArena.Formats.Md3;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The first-person weapon view-model — the Godot successor to CSQC's <c>viewmodel</c> / <c>weaponentity</c>
@@ -428,7 +428,7 @@ public partial class ViewModel : Node3D
     /// </summary>
     private static Marker3D? MarkerFromSkeletonBone(Node3D model, string boneName)
     {
-        Skeleton3D? skel = XonoticGodot.Game.Loaders.Models.IqmBuilder.FindSkeleton(model);
+        Skeleton3D? skel = VortexArena.Game.Loaders.Models.IqmBuilder.FindSkeleton(model);
         if (skel is null)
             return null;
         // Bones may be stored under a sanitized name (IqmBuilder replaces ':','/','@','%','.' with '_'); the
@@ -1059,15 +1059,15 @@ public partial class ViewModel : Node3D
 
     public override void _Process(double delta)
     {
-        using var _vmScope = XonoticGodot.Game.Client.FrameProfiler.Scope("viewmodel"); // [profiling] viewmodel sway/anim
+        using var _vmScope = VortexArena.Game.Client.FrameProfiler.Scope("viewmodel"); // [profiling] viewmodel sway/anim
         // #30 slowmo/pause: the whole viewmodel animation set (flash decay, recoil recovery, switch slide, sway,
         // fire/reload clips) advances on the slowmo-scaled delta — Base's viewmodel_draw runs on CSQC frametime,
         // which freezes/slows with the sim. The two self-advancing clip drivers are speed-scaled the same way.
-        float dt = XonoticGodot.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
+        float dt = VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
         if (_animator is not null && GodotObject.IsInstanceValid(_animator))
-            _animator.TimeScale = XonoticGodot.Game.Client.ClientRenderTime.Scale; // Advance() multiplies by this
+            _animator.TimeScale = VortexArena.Game.Client.ClientRenderTime.Scale; // Advance() multiplies by this
         if (_iqmAnimPlayer is not null && GodotObject.IsInstanceValid(_iqmAnimPlayer))
-            _iqmAnimPlayer.SpeedScale = XonoticGodot.Game.Client.ClientRenderTime.Scale;
+            _iqmAnimPlayer.SpeedScale = VortexArena.Game.Client.ClientRenderTime.Scale;
 
         RefreshCvars();
 
@@ -1112,7 +1112,7 @@ public partial class ViewModel : Node3D
     /// </summary>
     private void RefreshCvars()
     {
-        XonoticGodot.Common.Services.ICvarService cv = XonoticGodot.Game.Menu.MenuState.Cvars;
+        VortexArena.Common.Services.ICvarService cv = VortexArena.Game.Menu.MenuState.Cvars;
 
         // cl_gunalign: 3 = right (default), 4 = left, 1/2 = center. Rebuild the rest placement when it changes.
         int align = (int)CvarFloat(cv, "cl_gunalign", GunAlign);
@@ -1143,7 +1143,7 @@ public partial class ViewModel : Node3D
         ApplyModelAlpha(Mathf.Clamp(a, 0f, 1f));
     }
 
-    private static float CvarFloat(XonoticGodot.Common.Services.ICvarService cv, string name, float fallback)
+    private static float CvarFloat(VortexArena.Common.Services.ICvarService cv, string name, float fallback)
     {
         string s = cv.GetString(name);
         return string.IsNullOrWhiteSpace(s) ? fallback : cv.GetFloat(name);

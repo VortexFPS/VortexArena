@@ -1,7 +1,7 @@
 using System.Numerics;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Diagnostics;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Fixed-capacity ring buffer of sequence-numbered <see cref="InputCommand"/>s the client has issued
@@ -106,7 +106,7 @@ public sealed class PredictionBuffer
 
 /// <summary>
 /// Plugs the authoritative movement integrator into the reconcile loop. Implemented later by
-/// <c>XonoticGodot.Engine</c> (the shared fixed-tick movement step, ADR-0004); the predictor here is
+/// <c>VortexArena.Engine</c> (the shared fixed-tick movement step, ADR-0004); the predictor here is
 /// movement-agnostic. Takes the state to advance and the input for one frame and mutates the state
 /// in place — exactly what <c>CSQC_ClientMovement_PlayerMove_Frame</c> + <c>Movetype_Physics</c> do per
 /// <c>CSQCPlayer_Physics</c>.
@@ -327,7 +327,7 @@ public sealed class Reconciler
             {
                 _desyncLatched = true;
                 _desyncRepeat = 0;
-                XonoticGodot.Common.Diagnostics.Prof.Event(
+                VortexArena.Common.Diagnostics.Prof.Event(
                     $"net: PREDICTION DESYNC {errLen:0}qu (predicted vs acked-replay origin)");
             }
         }

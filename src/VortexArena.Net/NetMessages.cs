@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Wire identifier for a network message, one byte on the wire (port of the <c>m_id</c> tag from
@@ -11,7 +11,7 @@ namespace XonoticGodot.Net;
 /// layout, so we keep a single flat byte space, partitioned by <see cref="NetChannel"/> range to
 /// preserve the Linked / Temp / C2S distinction without three lookup tables. Ids here are illustrative
 /// samples; the real set is generated from <c>[Register]</c> message types later (ADR-0003) and the
-/// ordering is content-hashed for the build-parity gate (see <see cref="XonoticGodot.Common.Framework.Registry{T}"/>).
+/// ordering is content-hashed for the build-parity gate (see <see cref="VortexArena.Common.Framework.Registry{T}"/>).
 /// </summary>
 public enum NetMessageId : byte
 {

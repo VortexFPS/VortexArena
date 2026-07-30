@@ -1,7 +1,7 @@
 using System.Globalization;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Weapons" panel configuration dialog — a faithful C# port of <c>XonoticHUDWeaponsDialog_fill</c>

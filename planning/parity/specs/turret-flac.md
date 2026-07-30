@@ -1,7 +1,7 @@
 # FLAC Cannon turret — parity spec
 
 **Base refs:** `common/turrets/turret/flac.qc` · `common/turrets/turret/flac_weapon.qc` · `flac.qh` / `flac_weapon.qh`; balance `turrets.cfg` (`g_turrets_unit_flac_*`); shared AI `common/turrets/sv_turrets.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs` (+ shared `TurretAI.cs`, `TurretSpawn.cs`, `TurretSpawnFuncs.cs`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs` (+ shared `TurretAI.cs`, `TurretSpawn.cs`, `TurretSpawnFuncs.cs`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

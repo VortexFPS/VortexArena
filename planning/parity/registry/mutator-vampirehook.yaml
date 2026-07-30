@@ -14,8 +14,8 @@ features:
     base_refs:
       - "common/mutators/mutator/vampirehook/sv_vampirehook.qc:4 (REGISTER_MUTATOR vh, expr_evaluate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs:47 (IsEnabled)"
-      - "src/XonoticGodot.Server/GameWorld.cs:511 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs:47 (IsEnabled)"
+      - "src/VortexArena.Server/GameWorld.cs:511 (MutatorActivation.Apply)"
     constants:
       - { name: "g_vampirehook", base: "0 (string)", port: "0 (mutators.cfg:425)", match: true }
     status:
@@ -40,8 +40,8 @@ features:
       - "server/hook.qc:273 (GrapplingHookTouch -> GrapplingHook_Stop + SetMovetypeFollow(this, toucher))"
       - "common/util.qc:2129 (SetMovetypeFollow sets ent.aiment = e, with explicit IS_PLAYER(aiment) view_ofs clamping)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:269 (GrapplingHookTouch)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:284 (self.Aiment = other + IS_PLAYER bbox clamp 287-294)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:269 (GrapplingHookTouch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:284 (self.Aiment = other + IS_PLAYER bbox clamp 287-294)"
     constants:
       - { name: "view_ofs bbox clamp inset", base: "+4 / -4 (util.qc:2140-2142)", port: "+4 / -4 (Hook.cs:291-293)", match: true }
     status:
@@ -70,9 +70,9 @@ features:
       - "server/hook.qc:137 (MUTATOR_CALLHOOK GrappleHookThink dispatch)"
       - "server/mutators/events.qh:899 (EV_GrappleHookThink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs:76 (OnGrappleHookThink)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:323 (GrappleHookThink.Call dispatch)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:410 (GrappleHookThink chain)"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs:76 (OnGrappleHookThink)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:323 (GrappleHookThink.Call dispatch)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:410 (GrappleHookThink chain)"
     constants:
       - { name: "g_vampirehook_damage", base: "2", port: "cvar (Hook(), VampireHookMutator.cs:63); field default 0", match: true }
       - { name: "g_vampirehook_damagerate", base: "0.2", port: "cvar (line 64); field default 0.2 (line 39)", match: true }
@@ -108,9 +108,9 @@ features:
       - "server/damage.qc:948 (Heal -> game_stopped/spectator/FROZEN/IS_DEAD guards -> event_heal)"
       - "server/player.qc:615 (PlayerHeal: heals only when 0 < health < limit)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs:117 (HealPlayer call)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs:134 (HealPlayer: reproduces Heal + PlayerHeal guards)"
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:145 (GiveResourceWithLimit)"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs:117 (HealPlayer call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs:134 (HealPlayer: reproduces Heal + PlayerHeal guards)"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:145 (GiveResourceWithLimit)"
     constants:
       - { name: "heal limit (g_pickup_healthsmall_max)", base: "5", port: "5", match: true }
     status:

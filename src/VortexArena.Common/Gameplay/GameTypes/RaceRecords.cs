@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>The outcome of recording a finish time (QC race_setTime's branches → the INFO_RACE_* notifications).</summary>
 public enum RaceRecordKind

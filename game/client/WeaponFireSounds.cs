@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Client-side map of a weapon's PRIMARY fire sound, for local fire prediction (cl_predictfire): the client
 /// plays this the instant the local player fires (on the refire clock) and drops the matching networked copy of
 /// its OWN shot so it isn't doubled. Mirrors the hardcoded <c>Api.Sound.Play(actor, …)</c> sample in each
-/// weapon's <c>Attack()</c> (src/XonoticGodot.Common/Gameplay/Weapons/*.cs) — the server stays the single
+/// weapon's <c>Attack()</c> (src/VortexArena.Common/Gameplay/Weapons/*.cs) — the server stays the single
 /// authority that everyone ELSE hears; this is purely the local-feedback twin. A weapon absent here (Arc/Tuba
 /// loops, Hook grapple) simply isn't predicted: its networked fire sound plays normally, unsuppressed.
 ///

@@ -15,7 +15,7 @@ features:
     base_refs:
       - "common/weapons/weapon/porto.qh:CLASS(PortoLaunch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:Porto()"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:Porto()"
     constants:
       - { name: "ammo_type", base: "RES_NONE", port: "n/a (infinite ammo)", match: true }
       - { name: "m_color", base: "'0.404 0.545 0.937'", port: "(0.404,0.545,0.937)", match: true }
@@ -45,7 +45,7 @@ features:
       - "common/weapons/weapon/porto.qc:W_Porto_Attack"
       - "server/weapons/tracing.qh:W_SetupProjVelocity_Basic"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:Attack"
     constants:
       - { name: "primary/secondary speed", base: "1000 qu/s", port: "1000 (cvar-seeded)", match: true }
       - { name: "W_SetupShot recoil", base: "4", port: "4 (Porto.cs:164)", match: true }
@@ -80,9 +80,9 @@ features:
       - "common/weapons/weapon/porto.qc:wr_think"
       - "common/weapons/weapon/porto.qc:porto_ticker (SV_StartFrame)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PortoTickerMutator.cs:OnStartFrame"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs (PortoForbidden = 2 on checkpoint)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/PortoTickerMutator.cs:OnStartFrame"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs (PortoForbidden = 2 on checkpoint)"
     constants:
       - { name: "primary/secondary refire", base: "1.5 s", port: "1.5 (cvar-seeded)", match: true }
       - { name: "primary/secondary animtime", base: "0.3 s", port: "0.3 (cvar-seeded)", match: true }
@@ -109,7 +109,7 @@ features:
     base_refs:
       - "common/weapons/weapon/porto.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:WrThink"
     constants:
       - { name: "g_balance_porto_secondary", base: "1 (default)", port: "true (cvar-seeded)", match: true }
     status:
@@ -134,9 +134,9 @@ features:
     base_refs:
       - "common/weapons/weapon/porto.qc:W_Porto_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:OnTouch"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:ProbeImpact"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:CheckWireframeBox"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:OnTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:ProbeImpact"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:CheckWireframeBox"
     constants:
       - { name: "type 0 -> in-portal only", base: "Portal_SpawnInPortalAtTrace", port: "PlacePortal(isIn=true)+Success", match: true }
       - { name: "type 1 -> out-portal only", base: "Portal_SpawnOutPortalAtTrace", port: "PlacePortal(isIn=false)+Success", match: true }
@@ -172,10 +172,10 @@ features:
       - "server/portals.qc:Portal_SpawnOutPortalAtTrace"
       - "server/portals.qc:Portal_Connect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:PlacePortal"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:PortalSpawner"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:PlacePortoPortal"
-      - "src/XonoticGodot.Server/GameWorld.cs:424"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:PlacePortal"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:PortalSpawner"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:PlacePortoPortal"
+      - "src/VortexArena.Server/GameWorld.cs:424"
     constants:
       - { name: "in/out pair link", base: "Portal_Connect two-way transform", port: "Warpzones.PlacePortoPortal pair link", match: true }
       - { name: "portal angles", base: "fixedvectoangles2(plane_normal, right_vector)", port: "FixedVecToAngles2(surfaceNormal, rightVector) in PlacePortoPortal (Warpzone.cs:543-544); right_vector now handed over (Porto.cs:468)", match: true }
@@ -207,12 +207,12 @@ features:
       - "common/weapons/weapon/porto.qc:W_Porto_Success"
       - "server/weapons/throwing.qc:W_ThrowNewWeapon"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:PortoThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:PortoFail"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:PortoSuccess"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:TryThrowableDrop"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:CleanupProjectile"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponThrowing.cs:ThrowNewWeapon"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:PortoThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:PortoFail"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:PortoSuccess"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:TryThrowableDrop"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:CleanupProjectile"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponThrowing.cs:ThrowNewWeapon"
     constants:
       - { name: "lifetime (nextthink)", base: "5 s", port: "5 (cvar-seeded)", match: true }
       - { name: "clear porto_current on end", base: "yes", port: "yes (CleanupProjectile)", match: true }
@@ -245,12 +245,12 @@ features:
       - "common/weapons/weapon/porto.qc:wr_resetplayer"
       - "server/portals.qc:Portal_ClearAll"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:WrPlayerDeath"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:WrResetPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:637+644 (WrPlayerDeath dispatch)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:905+908 (WrResetPlayer dispatch)"
-      - "src/XonoticGodot.Server/ClientManager.cs:550+806 (PortalClearAll on observer/disconnect)"
-      - "src/XonoticGodot.Server/GameWorld.cs:431 (PortalClearAll -> Warpzones.ClearAllPortoPortals)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:WrPlayerDeath"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:WrResetPlayer"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:637+644 (WrPlayerDeath dispatch)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:905+908 (WrResetPlayer dispatch)"
+      - "src/VortexArena.Server/ClientManager.cs:550+806 (PortalClearAll on observer/disconnect)"
+      - "src/VortexArena.Server/GameWorld.cs:431 (PortalClearAll -> Warpzones.ClearAllPortoPortals)"
     constants:
       - { name: "death: hard-fail in-flight porto + clear porto_current", base: "W_Porto_Remove -> W_Porto_Fail(failhard) (porto.qc:151)", port: "WrPlayerDeath: PortalClearAll + clear PortoCurrent + delete in-flight gren (Porto.cs:583)", match: true }
       - { name: "death: clear ALL owner portals", base: "Portal_ClearAll (server/portals.qc, via MakePlayerObserver/ClientDisconnect)", port: "PortalClearAll?.Invoke(actor) -> Warpzones.ClearAllPortoPortals (Porto.cs:586); ALSO ClientManager.cs:550/806 on observer/disconnect", match: true }
@@ -333,8 +333,8 @@ features:
     base_refs:
       - "common/weapons/weapon/porto.qc:W_Porto_Attack (StatusEffects_active(STATUSEFFECT_Strength))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:StrengthForce"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:StrengthForce"
     constants:
       - { name: "strength status-effect name", base: "STATUSEFFECT_Strength (netname \"strength\")", port: "queried as \"strength\" -> resolves", match: true }
       - { name: "g_balance_powerup_strength_force", base: "3 (balance-xonotic.cfg:237)", port: "Bal(\"g_balance_powerup_strength_force\", 3f) seeded in Configure (Porto.cs:78)", match: true }
@@ -359,8 +359,8 @@ features:
     base_refs:
       - "common/weapons/weapon/porto.qc:METHOD(PortoLaunch, wr_aim)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:BotForbidsFire"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:434"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:BotForbidsFire"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:434"
     constants:
       - { name: "bot_aim(speed, 0, lifetime, false, true)", base: "WEP_CVAR_PRI speed/lifetime; only when !secondary", port: "generic bot-aim leads by primary speed; presses ATCK on target in cone", match: true }
       - { name: "secondary-mode fire veto", base: "wr_aim presses nothing when WEP_CVAR(secondary)", port: "BotForbidsFire() => SecondaryEnabled (vetoes all bot fire in stock secondary mode)", match: true }
@@ -386,8 +386,8 @@ features:
     base_refs:
       - "common/weapons/weapon/porto.qc:W_Porto_Attack (gren.bot_dodge=true; gren.bot_dodgerating=200; IL_PUSH g_bot_dodge)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:Attack (gren.BotDodge/BotDodgeRating)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:629 (HavocbotDodge reads BotDodge/BotDodgeRating)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:Attack (gren.BotDodge/BotDodgeRating)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:629 (HavocbotDodge reads BotDodge/BotDodgeRating)"
     constants:
       - { name: "bot_dodge", base: "true", port: "gren.BotDodge = true (Porto.cs:192)", match: true }
       - { name: "bot_dodgerating", base: "200", port: "gren.BotDodgeRating = 200f (Porto.cs:193)", match: true }

@@ -1,7 +1,7 @@
 # Devastator (Rocket Launcher) — parity spec
 
 **Base refs:** `common/weapons/weapon/devastator.qc` · `common/weapons/weapon/devastator.qh` · `bal-wep-xonotic.cfg` (g_balance_devastator_*) · shared `server/weapons/tracing.qc` (W_SetupShot*, W_SetupProjVelocity_Basic) · `server/damage.qc` (RadiusDamage / RadiusDamageForSource) · `common/weapons/calculations.qc` (W_WeaponSpeedFactor)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs` · `WeaponSplash.cs` · `WeaponFiring.cs` · `WeaponFireDriver.cs` · `WeaponFireGate.cs` · `Projectiles.cs` · `game/client/ProjectileCatalog.cs` + `ProjectileRenderer.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Devastator.cs` · `WeaponSplash.cs` · `WeaponFiring.cs` · `WeaponFireDriver.cs` · `WeaponFireGate.cs` · `Projectiles.cs` · `game/client/ProjectileCatalog.cs` + `ProjectileRenderer.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -164,9 +164,9 @@ not modeled per-weapon in the port.
   and the looping fly sound (`rocket_fly`) are all wired with the correct cues/channels. Faithful for the audited cues.
 
 ## Verification
-- `tests/XonoticGodot.Tests/DevastatorForceXyScaleTests.cs` — contact blast force_xyscale shapes X/Y not Z; remote
+- `tests/VortexArena.Tests/DevastatorForceXyScaleTests.cs` — contact blast force_xyscale shapes X/Y not Z; remote
   blast ignores it; xyscale 0 is a no-op. PASS-asserted (drives real WrThink → Attack → Explode path).
-- `tests/XonoticGodot.Tests/RocketFlyingGateTests.cs` — detonate-gate field timer-vs-proximity seeding, rocket-flying
+- `tests/VortexArena.Tests/RocketFlyingGateTests.cs` — detonate-gate field timer-vs-proximity seeding, rocket-flying
   mutator clears the gate, SOLID_CORPSE firer-transparency, end-to-end remote-detonate hold/open. PASS-asserted.
 - Live caller chain read: `GameWorld.cs:1182` WeaponFireDriver.Frame; `WeaponFireDriver.cs:155` weapon.WrThink.
 - Balance defaults diffed against `bal-wep-xonotic.cfg:428-467` (exact match for ported constants).

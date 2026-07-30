@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// Velocity clipping against an impact plane — a faithful port of Darkplaces' <c>ClipVelocity</c>

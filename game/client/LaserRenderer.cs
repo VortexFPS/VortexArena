@@ -22,13 +22,13 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>Persistent misc_laser beam renderer (the Draw_Laser successor). Hosted by <see cref="ClientWorld"/>.</summary>
 public partial class LaserRenderer : Node3D

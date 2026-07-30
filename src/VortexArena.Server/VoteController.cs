@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The in-match call-vote system — a faithful Godot-free port of server/command/vote.qc

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Guide tab — a faithful C# port of <c>XonoticGuideTab_fill</c>
@@ -14,7 +14,7 @@ namespace XonoticGodot.Game.Menu;
 ///
 /// FAITHFUL UI NOW: the topic list is real and complete (it's a fixed set, so we populate it
 /// faithfully). The entry list and descriptions come from the in-game registries (weapons, items,
-/// monsters, …) which XonoticGodot's menu can't yet enumerate, so the entry list is an empty
+/// monsters, …) which VortexArena's menu can't yet enumerate, so the entry list is an empty
 /// <see cref="ItemList"/> with an honest note, the filter box is inert, and the description pane
 /// shows a short placeholder.
 /// </summary>

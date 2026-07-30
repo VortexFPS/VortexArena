@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Engine.Collision;
+namespace VortexArena.Engine.Collision;
 
 /// <summary>
 /// A rigid (rotation + translation, uniform-scale-1) 3x4 transform — the collision-relevant slice of

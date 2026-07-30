@@ -10,7 +10,7 @@
 // sv_forbid_pickuptimer; the other bits (TEAMPLAY / PLAYERSTATS*) are set elsewhere in Base and are defined
 // here for completeness so a future port of those reads the same table.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// QC <c>serverflags</c> (server/world.qc) + the <c>SERVERFLAG_*</c> bit table (common/constants.qh). The

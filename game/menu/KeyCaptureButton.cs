@@ -1,7 +1,7 @@
 using System;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// A keybind button: shows the currently bound key and, when clicked, enters "press a key" capture mode —

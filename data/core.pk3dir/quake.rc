@@ -1,0 +1,14 @@
+exec default.cfg
+if_client exec config.cfg
+exec data/campaign.cfg
+if_client exec config_update.cfg
+if_client exec font-xolonium.cfg
+exec autoexec/*.cfg
+exec autoexec.cfg
+stuffcmds
+//startdemos demos/demo1 demos/demo2 demos/demo3
+//startdemos
+//play announcer/male/welcome.ogg
+crypto_keygen 0 https://ca.xonotic.org/?ca=0&key=
+
+exec post-config.cfg

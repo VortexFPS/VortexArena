@@ -1,12 +1,12 @@
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common;
+namespace VortexArena.Common;
 
 /// <summary>
 /// The composition root: wires the gameplay systems onto their ambient facades and builds the registries.
 /// The host (client/server) calls <see cref="Boot"/> once at startup with the engine-services
-/// implementation. Keeping this in <c>XonoticGodot.Common</c> means the headless server boots without Godot.
+/// implementation. Keeping this in <c>VortexArena.Common</c> means the headless server boots without Godot.
 /// </summary>
 public static class GameInit
 {
@@ -16,15 +16,15 @@ public static class GameInit
     /// </summary>
     public static void InstallGameplaySystems()
     {
-        XonoticGodot.Common.Physics.Movement.System = new XonoticGodot.Common.Physics.PlayerPhysics();
-        XonoticGodot.Common.Gameplay.Damage.Combat.System = new XonoticGodot.Common.Gameplay.Damage.DamageSystem();
-        XonoticGodot.Common.Gameplay.MapObjectsRegistry.RegisterAll();  // BSP entity spawnfuncs (func_door, trigger_*, …)
-        XonoticGodot.Common.Gameplay.Effects.RegisterAll();             // named particle effects
-        XonoticGodot.Common.Gameplay.Notifications.RegisterAll();       // kill-feed / announcer / centerprint
-        XonoticGodot.Common.Gameplay.Sounds.RegisterAll();              // sound catalog
-        XonoticGodot.Common.Gameplay.Minigames.RegisterAll();           // in-game minigames
-        XonoticGodot.Common.Gameplay.StatusEffectsCatalog.RegisterAll(); // frozen/burning/buffs
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.RegisterAll();   // SP_* networked score columns
+        VortexArena.Common.Physics.Movement.System = new VortexArena.Common.Physics.PlayerPhysics();
+        VortexArena.Common.Gameplay.Damage.Combat.System = new VortexArena.Common.Gameplay.Damage.DamageSystem();
+        VortexArena.Common.Gameplay.MapObjectsRegistry.RegisterAll();  // BSP entity spawnfuncs (func_door, trigger_*, …)
+        VortexArena.Common.Gameplay.Effects.RegisterAll();             // named particle effects
+        VortexArena.Common.Gameplay.Notifications.RegisterAll();       // kill-feed / announcer / centerprint
+        VortexArena.Common.Gameplay.Sounds.RegisterAll();              // sound catalog
+        VortexArena.Common.Gameplay.Minigames.RegisterAll();           // in-game minigames
+        VortexArena.Common.Gameplay.StatusEffectsCatalog.RegisterAll(); // frozen/burning/buffs
+        VortexArena.Common.Gameplay.Scoring.GameScores.RegisterAll();   // SP_* networked score columns
         // (more systems — gametype activation, etc. — wired as they land)
     }
 

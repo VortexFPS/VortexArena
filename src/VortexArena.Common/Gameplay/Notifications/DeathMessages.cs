@@ -15,9 +15,9 @@
 // LOG_TRACEF "has no notification for weapon" and Obituary then drops to Obituary_SpecialDeath; the generic
 // DEATH_MURDER_FRAG / DEATH_SELF_GENERIC is the closest faithful default).
 
-using XonoticGodot.Common.Gameplay.Damage;
+using VortexArena.Common.Gameplay.Damage;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The central kill/suicide-message selector — the C# successor to every weapon's QC

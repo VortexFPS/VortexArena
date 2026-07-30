@@ -14,8 +14,8 @@ features:
       - "common/mutators/mutator/weaponarena_random/_mod.inc"
       - "common/mutators/mutator/weaponarena_random/sv_weaponarena_random.qc:REGISTER_MUTATOR"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:WeaponArenaRandomMutator"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:WeaponArenaRandomMutator"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
     constants:
       - { name: "enable_predicate", base: "REGISTER_MUTATOR(...,true) = always added", port: "IsEnabled = g_weaponarena!=0 && g_weaponarena_random!=0", match: true }
     status:
@@ -39,8 +39,8 @@ features:
     base_refs:
       - "common/mutators/mutator/weaponarena_random/sv_weaponarena_random.qc:6"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:OnSetStartItems"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
     constants:
       - { name: "g_weaponarena_random", base: "0", port: "0", match: true }
       - { name: "g_weaponarena_random_with_blaster", base: "1", port: "1", match: true }
@@ -67,8 +67,8 @@ features:
     base_refs:
       - "common/mutators/mutator/weaponarena_random/sv_weaponarena_random.qc:16"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Server/ClientManager.cs:570"
+      - "src/VortexArena.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Server/ClientManager.cs:570"
     constants:
       - { name: "with_blaster set-aside/re-add", base: "&= ~WEPSET(BLASTER) then |= WEPSET(BLASTER)", port: "Remove(blaster) then Add(blaster)", match: true }
       - { name: "draw_count", base: "g_weaponarena_random", port: "RandomCount", match: true }
@@ -97,8 +97,8 @@ features:
     base_refs:
       - "common/mutators/mutator/weaponarena_random/sv_weaponarena_random.qc:26"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:OnGiveFragsForKill"
-      - "src/XonoticGodot.Server/Scores.cs:520"
+      - "src/VortexArena.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:OnGiveFragsForKill"
+      - "src/VortexArena.Server/Scores.cs:520"
     constants:
       - { name: "suicide skip", base: "if(targ==attacker) return", port: "ReferenceEquals(targ,attacker) return", match: true }
       - { name: "culprit detection", base: "DEATH_WEAPONOF(deathtype) else held; not-owned fallback to held", port: "DeathTypes.WeaponNetNameOf else held; same fallback", match: true }
@@ -129,7 +129,7 @@ features:
     base_refs:
       - "common/weapons/all.qc:178"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:RandomWeapons"
+      - "src/VortexArena.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs:RandomWeapons"
     constants:
       - { name: "weights", base: "RandomSelection_AddEnt weight 1,1 (uniform)", port: "reservoir 1/count (uniform)", match: true }
       - { name: "without replacement", base: "remaining &= ~chosen each draw", port: "remaining.Remove(chosen) each draw", match: true }
@@ -160,9 +160,9 @@ features:
       - "server/world.qc:1924 weapons_devall"
       - "server/world.qc:2085 start_weapons = g_weaponarena_weapons; start_items |= IT_UNLIMITED_AMMO|IT_UNLIMITED_SUPERWEAPONS"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ExpandWeaponArena"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:SetWeaponArena"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ExpandWeaponArena"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:SetWeaponArena"
     constants:
       - { name: "g_weaponarena keyword parse", base: "0/off/'' | all/1 | devall | most | none | all_available | most_available | devall_available | <weapon list>", port: "same switch in ExpandWeaponArena", match: true }
       - { name: "weapons_all", base: "!(WEP_FLAG_MUTATORBLOCKED|WEP_FLAG_HIDDEN)", port: "!HasAny(MutatorBlocked|Hidden)", match: true }

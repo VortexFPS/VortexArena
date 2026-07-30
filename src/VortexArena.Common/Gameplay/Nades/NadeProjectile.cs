@@ -15,12 +15,12 @@
 // damage-dealing hit (vortex/shotgun/machinegun launch + shoot-down-to-detonate) is faithful.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades;
+namespace VortexArena.Common.Gameplay.Nades;
 
 /// <summary>The thrown-nade projectile — its launch (<see cref="Toss"/>) and touch/shot-down/pickup behaviour.</summary>
 public static class NadeProjectile

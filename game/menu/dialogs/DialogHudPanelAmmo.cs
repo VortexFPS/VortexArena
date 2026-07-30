@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Ammo" panel configuration dialog — a faithful C# port of <c>XonoticHUDAmmoDialog_fill</c>
@@ -10,7 +10,7 @@ namespace XonoticGodot.Game.Menu;
 /// noncurrent opacity/scale sliders, the icon-align radio and the status-bar checkbox.
 ///
 /// FAITHFUL UI NOW: this drives the in-game HUD's <c>hud_panel_ammo_*</c> cvars (the shared store the HUD reads
-/// in configure mode). XonoticGodot has no live HUD editor yet, but the cvar bindings are real — every control here
+/// in configure mode). VortexArena has no live HUD editor yet, but the cvar bindings are real — every control here
 /// writes the same cvar the QC binds, with the same <c>setDependent</c> grey-outs. The QC background color uses
 /// a string-RGB color picker (<c>makeXonoticColorpickerString</c>), built via the shared
 /// <see cref="Widgets.ColorButton"/> (<see cref="CvarColorButton"/>) bound to the same "r g b" string cvar.

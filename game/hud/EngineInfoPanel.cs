@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Engine-info HUD panel (#13) — the faithful C# port of Xonotic's CSQC <c>HUD_EngineInfo</c>

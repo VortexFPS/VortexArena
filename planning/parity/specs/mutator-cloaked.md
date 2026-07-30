@@ -1,7 +1,7 @@
 # Cloaked mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/cloaked/{cloaked.qc,cloaked.qh,sv_cloaked.qc,sv_cloaked.qh}`
-· **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/CloakedMutator.cs`
+· **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/CloakedMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -112,7 +112,7 @@ mutator *is* registered and its handler *is* subscribed on the live path. The ha
   `SetDefaultAlphaArgs` struct whose `PlayerAlpha`/`WeaponAlpha` are never read by any spawn/render
   code — there is no `default_player_alpha` equivalent. So with `g_cloaked 1` in the port, players
   render at full opacity, exactly as without the mutator.
-- **No alpha networking/render for players.** `NetEntity` (XonoticGodot.Net) networks ModelIndex,
+- **No alpha networking/render for players.** `NetEntity` (VortexArena.Net) networks ModelIndex,
   Effects, StatusEffects, etc. but has no per-entity alpha channel; `PlayerModel.cs` never applies a
   transparency. So there is no plumbing for any player-opacity feature to ride on, cloaked or otherwise.
 - **Value present but inert.** The one constant (`g_balance_cloaked_alpha` = 0.25) is read correctly

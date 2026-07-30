@@ -1,17 +1,17 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Physics;
+using VortexArena.Net;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// Bridges the prediction loop's abstract <see cref="IMovementStep"/> to the shared, deterministic
 /// <see cref="Movement"/> sim (QC PM_Main) by driving a real <see cref="Entity"/>. The
 /// <see cref="Reconciler"/> hands us a <see cref="PredictedState"/> (origin/velocity/onground) and one
 /// <see cref="InputCommand"/>; we load that onto the carrier entity, run one authoritative movement tick
-/// against the same <see cref="XonoticGodot.Engine.Collision.CollisionWorld"/> the server uses, and read the
+/// against the same <see cref="VortexArena.Engine.Collision.CollisionWorld"/> the server uses, and read the
 /// result back. Because it is the SAME sim the server runs, client prediction and server authority stay in
 /// lockstep (ADR-0010 determinism), which is what keeps reconciliation corrections tiny.
 ///
@@ -47,7 +47,7 @@ public sealed class EntityMovementStep : IMovementStep
 
         // Key the predictors' one-shot pulses by this command's sequence (see TriggerTouch.PredictionSeq): a
         // reconcile REPLAY re-runs the same seq, so a seq-keyed pulse fires exactly once per real crossing.
-        XonoticGodot.Engine.Simulation.TriggerTouch.PredictionSeq = cmd.Seq;
+        VortexArena.Engine.Simulation.TriggerTouch.PredictionSeq = cmd.Seq;
 
         // build the per-tick movement input from the command (the same conversion the server applies).
         InputButtons b = cmd.TypedButtons;
@@ -60,7 +60,7 @@ public sealed class EntityMovementStep : IMovementStep
         {
             ViewAngles = cmd.ViewAngles,
             MoveValues = WishMoveScaling.Scale(cmd.Forward, cmd.Side, cmd.Up),
-            FrameTime = cmd.DeltaTime > 0f ? cmd.DeltaTime : XonoticGodot.Engine.Simulation.SimulationLoop.TicRate,
+            FrameTime = cmd.DeltaTime > 0f ? cmd.DeltaTime : VortexArena.Engine.Simulation.SimulationLoop.TicRate,
             ButtonJump = (b & InputButtons.Jump) != 0,
             ButtonCrouch = (b & InputButtons.Crouch) != 0,
             ButtonAttack1 = (b & InputButtons.Attack) != 0,
@@ -100,14 +100,14 @@ public sealed class EntityMovementStep : IMovementStep
         // (SimulationLoop) — so the predicted local player feels pads IN LOCKSTEP with authority. Without this
         // the server launches but the client predicts ordinary jump/fall, and reconciliation jitters the camera
         // (the "jump through the floor / bounce" felt on a pad). Velocity-only, no side effects (see TriggerTouch).
-        XonoticGodot.Engine.Simulation.TriggerTouch.PredictJumppadsAmbient(_carrier);
+        VortexArena.Engine.Simulation.TriggerTouch.PredictJumppadsAmbient(_carrier);
 
         // Client-side teleporter prediction (CSQC Teleport_Touch): relocate + reproject the carrier through any
         // single-destination trigger_teleport it now overlaps, IN LOCKSTEP with the server's post-move teleport,
         // so a teleport doesn't rubber-band the camera (the reconcile would otherwise measure a teleport-sized
         // origin error and hard-snap). It also stamps the carrier's .fixangle so the host can snap the local view
         // to the exit facing this tick. Predicted mode = no sound/telefrag/targets (server-authoritative).
-        XonoticGodot.Engine.Simulation.TriggerTouch.PredictTeleportsAmbient(_carrier);
+        VortexArena.Engine.Simulation.TriggerTouch.PredictTeleportsAmbient(_carrier);
 
         // Client-side warpzone prediction (CSQC WarpZone_FixPMove): warp the carrier through any linked
         // trigger_warpzone it now overlaps — origin/velocity/angles rotated by the seam transform — IN LOCKSTEP
@@ -116,7 +116,7 @@ public sealed class EntityMovementStep : IMovementStep
         // predictor it stamps the carrier's .fixangle so the host snaps the local view to the rotated exit facing
         // this tick. Gate matches the authoritative WarpzoneManager.Teleport plane-side test exactly; predicted
         // mode = no SUB_UseTargets/projectile/stuck-recovery side effects (server-authoritative).
-        XonoticGodot.Engine.Simulation.TriggerTouch.PredictWarpzonesAmbient(_carrier);
+        VortexArena.Engine.Simulation.TriggerTouch.PredictWarpzonesAmbient(_carrier);
 
         // read the result back into the predicted state.
         state.Origin = _carrier.Origin;
@@ -152,10 +152,10 @@ internal static class WishMoveScaling
     /// <summary>The live fixspeed value: <c>max(sv_maxspeed, sv_maxairspeed)</c>, unset → 360.</summary>
     public static float Speed()
     {
-        if (XonoticGodot.Common.Services.Api.Services is null)
+        if (VortexArena.Common.Services.Api.Services is null)
             return StockSpeed;
-        float maxspeed = XonoticGodot.Common.Services.Api.Cvars.GetFloat("sv_maxspeed");
-        float maxairspeed = XonoticGodot.Common.Services.Api.Cvars.GetFloat("sv_maxairspeed");
+        float maxspeed = VortexArena.Common.Services.Api.Cvars.GetFloat("sv_maxspeed");
+        float maxairspeed = VortexArena.Common.Services.Api.Cvars.GetFloat("sv_maxairspeed");
         if (maxspeed <= 0f) maxspeed = StockSpeed;       // unset → stock (the FromCvars fallback idiom)
         if (maxairspeed <= 0f) maxairspeed = StockSpeed;
         return System.MathF.Max(maxspeed, maxairspeed);

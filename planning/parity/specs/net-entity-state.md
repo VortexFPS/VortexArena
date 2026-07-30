@@ -1,7 +1,7 @@
 # Networked entity client-state — parity spec
 
 **Base refs:** `common/ent_cs.qc` · `common/wepent.qc` · `common/replicate.qc` · `lib/csqcmodel/{sv_model.qc,cl_model.qc,interpolate.qc,common.qh}` · `common/csqcmodel_settings.qh` · `client/csqcmodel_hooks.qc`
-**Port refs:** `src/XonoticGodot.Net/{NetEntity.cs,SnapshotDelta.cs,SnapshotInterpolation.cs}` · `src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs` · `game/net/{ServerNet.cs,ClientNet.cs,ClientEntityView.cs,ViewEntityRenderer.cs}` · `game/client/ShowNamesLayer.cs` · `game/hud/{RadarPanel.cs,CrosshairPanel.cs}`
+**Port refs:** `src/VortexArena.Net/{NetEntity.cs,SnapshotDelta.cs,SnapshotInterpolation.cs}` · `src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs` · `game/net/{ServerNet.cs,ClientNet.cs,ClientEntityView.cs,ViewEntityRenderer.cs}` · `game/client/ShowNamesLayer.cs` · `game/hud/{RadarPanel.cs,CrosshairPanel.cs}`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

@@ -5,8 +5,8 @@
 `menu/xonotic/*.qc` (EXCEPT `dialog_settings_*` / `dialog_multiplayer_*` → menu-dialogs unit),
 `menu/xonotic/guide/*.qc`
 **Port refs:** `game/menu/**` (MenuRoot/MainMenu/PauseMenu/screens + `dialogs/` + `framework/`),
-`game/Shell.cs` (wiring), `src/XonoticGodot.Common/Menu/DataSource.cs`,
-`src/XonoticGodot.Common/Localization/LanguagesTxt.cs`
+`game/Shell.cs` (wiring), `src/VortexArena.Common/Menu/DataSource.cs`,
+`src/VortexArena.Common/Localization/LanguagesTxt.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-07-02
 
 ## Overview

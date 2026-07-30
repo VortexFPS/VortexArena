@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The Darkplaces "skin" material shader: a diffuse surface plus the team-colorable <c>_shirt</c>/<c>_pants</c>
@@ -96,7 +96,7 @@ public static class PlayerSkinShader
     /// channel so Godot's environment reflection shows through where the mask is bright. Optional
     /// normal/roughness(gloss)/glow are honored when their samplers are bound.
     /// </summary>
-    public const string Code = @"// XonoticGodot player-skin shader (Darkplaces _shirt/_pants/_reflect masks). Generated in C#.
+    public const string Code = @"// VortexArena player-skin shader (Darkplaces _shirt/_pants/_reflect masks). Generated in C#.
 shader_type spatial;
 // OPAQUE skin. These DP alias-model skins (players + weapon viewmodels) are solid: real translucency comes
 // from a shader blendFunc (which compiles elsewhere), never from the diffuse alpha — in DP a model skin's
@@ -159,7 +159,7 @@ uniform float reflect_strength = 1.0;
 // stage instance uniforms are unreliable); ModelAnimator gives each morphing surface its own Duplicate()
 // of the resolved skin material (same Shader object — no new pipeline family) and drives the value there.
 uniform float morph_amount = 0.0;
-// Dynamic scene tint (XonoticGodot.Game.WorldTint) — a GLOBAL shader parameter applied to every model/skin
+// Dynamic scene tint (VortexArena.Game.WorldTint) — a GLOBAL shader parameter applied to every model/skin
 // (players, weapon viewmodels, pickups) so the ""everything else"" grade can differ from the whole-map tint.
 // Strength is folded in on the C# side; default (1,1,1) is identity. Distinct from the per-entity colormod.
 global uniform vec3 entity_tint;

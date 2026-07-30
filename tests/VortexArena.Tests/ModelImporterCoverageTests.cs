@@ -10,10 +10,10 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Guards which model importers <c>AssetLoader.BuildModelFactory</c> implements. AssetLoader itself is a
@@ -27,8 +27,8 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class ModelImporterCoverageTests
 {
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
+    private static readonly string DataDir = TestPaths.Data;
 
     // The four model magics the port's AssetLoader.BuildModelFactory dispatches (extensions lie, so dispatch
     // is by leading magic — same tags AssetLoader uses as MagicIqm/MagicDpm/MagicMd3/MagicMdl).
@@ -123,7 +123,7 @@ public class ModelImporterCoverageTests
     {
         if (!Directory.Exists(DataDir)) return; // no checkout → no-op
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         string[] mdls = vfs.Find("models/", "mdl").ToArray();
         Assert.NotEmpty(mdls); // the data tree ships .mdl files (19 in stock Base)
@@ -162,7 +162,7 @@ public class ModelImporterCoverageTests
     {
         if (!Directory.Exists(DataDir)) return; // no checkout → no-op
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         Assert.Empty(vfs.Find("", "md2")); // MD2 ("IDP2"): zero shipped content
         Assert.Empty(vfs.Find("", "psk")); // PSK ("ACTRHEAD"): zero shipped content

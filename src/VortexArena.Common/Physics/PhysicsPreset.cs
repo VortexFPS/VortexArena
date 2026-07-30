@@ -3,9 +3,9 @@
 // named preset (cl_physics, via `cmd physics <set>` or the sentcvar channel) and every preset-resolvable
 // movement stat resolves through the g_physics_<set>_<option> cvar table (physics.cfg) before falling back to
 // the global sv_* value.
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Physics;
+namespace VortexArena.Common.Physics;
 
 /// <summary>
 /// The QC <c>Physics_ClientOption</c> resolution chain, host-agnostic over <see cref="ICvarService"/>:

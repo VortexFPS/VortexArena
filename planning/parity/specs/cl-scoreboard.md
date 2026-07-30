@@ -1,7 +1,7 @@
 # Client scoreboard (HUD panel #24) — parity spec
 
 **Base refs:** `client/hud/panel/scoreboard.qc` · `client/hud/panel/scoreboard.qh` (+ `common/scores.qh`, `common/util.qc:ScoreString`, `lib/counting.qh:count_ordinal`, `lib/string.qh:clockedtime_tostring`)
-**Port refs:** `game/hud/ScoreboardPanel.cs` · `src/XonoticGodot.Net/ScoreboardBlock.cs` · `src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs` · `game/net/NetGame.cs` (UpdateScoreboard / FeedScoreboardHeader) · `src/XonoticGodot.Engine/Console/BindTable.cs` (+showscores)
+**Port refs:** `game/hud/ScoreboardPanel.cs` · `src/VortexArena.Net/ScoreboardBlock.cs` · `src/VortexArena.Common/Gameplay/Scoring/GameScores.cs` · `game/net/NetGame.cs` (UpdateScoreboard / FeedScoreboardHeader) · `src/VortexArena.Engine/Console/BindTable.cs` (+showscores)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -83,7 +83,7 @@ The scoreboard is the full-screen score table shown while `+showscores` is held 
 - **Liveness:** core panel is **live** via `NetGame → UpdateScoreboard → SetWireRows`, toggled by `BindTable.ShowScores` (`+showscores`/`score` bind, default TAB). Accuracy + map-stats (monsters) feeds are live. **Dead/absent:** cross-fade (Active never set), spectator list (SetSpectators never called), respawn line (RespawnRemaining never set), rankings (SetRankings targets ScorePanel not ScoreboardPanel), item-stats, interactive UI, ping/pl columns.
 
 ## Verification
-- `tests/XonoticGodot.Tests/ScoreboardColumnsTests.cs`: layout-hash agreement across a mode switch, ScoreInfo round-trip, end-to-end remote-client column render, ScoreString/ordinal/time formatting. (PASS — automated.)
+- `tests/VortexArena.Tests/ScoreboardColumnsTests.cs`: layout-hash agreement across a mode switch, ScoreInfo round-trip, end-to-end remote-client column render, ScoreString/ordinal/time formatting. (PASS — automated.)
 - Live wiring: traced `NetGame.UpdateScoreboard` (NetGame.cs:2696) ← `_Process` and `BindTable.cs:129` (`+showscores`). (code-traced, not runtime-observed.)
 - Value mismatches (ping bands, missing fps/skill/pl/items/rankings/UI): code diff Base ↔ port (unverified at runtime — they show by absence).
 

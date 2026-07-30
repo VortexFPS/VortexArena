@@ -15,7 +15,7 @@ features:
     base_refs:
       - "server/chat.qc:Say"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:Say"
+      - "src/VortexArena.Server/Chat.cs:Say"
     constants:
       - { name: "g_chat_allowed", base: "1", port: "1", match: true }
       - { name: "g_chat_private_allowed", base: "1", port: "1", match: true }
@@ -44,8 +44,8 @@ features:
     base_refs:
       - "server/chat.qc:Say"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:Say"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:MagicEarProcessAllEars"
+      - "src/VortexArena.Server/Chat.cs:Say"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:MagicEarProcessAllEars"
     constants:
       - { name: "g_chat_teamcolors", base: "0", port: "0", match: true }
       - { name: "g_chat_show_playerid", base: "0", port: "0", match: true }
@@ -73,7 +73,7 @@ features:
     base_refs:
       - "server/chat.qc:Say"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:Say"
+      - "src/VortexArena.Server/Chat.cs:Say"
     constants:
       - { name: "say_prefix_marker", base: "\\{1} / \\{1}\\{13}", port: "\\x01 / \\x01\\x0d", match: true }
     status:
@@ -97,9 +97,9 @@ features:
     base_refs:
       - "server/chat.qc:Say"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:Say"
-      - "src/XonoticGodot.Server/Chat.cs:GetWrappedLine"
-      - "src/XonoticGodot.Common/Gameplay/Player/Player.cs:FloodControlChat/FloodControlChatTeam/FloodControlChatTell"
+      - "src/VortexArena.Server/Chat.cs:Say"
+      - "src/VortexArena.Server/Chat.cs:GetWrappedLine"
+      - "src/VortexArena.Common/Gameplay/Player/Player.cs:FloodControlChat/FloodControlChatTeam/FloodControlChatTell"
     constants:
       - { name: "g_chat_flood_spl", base: "3", port: "3", match: true }
       - { name: "g_chat_flood_burst", base: "2", port: "2", match: true }
@@ -135,7 +135,7 @@ features:
     base_refs:
       - "server/chat.qc:Say"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:Say"
+      - "src/VortexArena.Server/Chat.cs:Say"
     constants: []
     status:
       logic: faithful
@@ -159,9 +159,9 @@ features:
     base_refs:
       - "server/chat.qc:Say"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:Say"
-      - "src/XonoticGodot.Server/Chat.cs:IsIngame"
-      - "src/XonoticGodot.Common/Gameplay/MinigameSessionManager.cs:ActiveSessionOf"
+      - "src/VortexArena.Server/Chat.cs:Say"
+      - "src/VortexArena.Server/Chat.cs:IsIngame"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:ActiveSessionOf"
     constants:
       - { name: "g_chat_nospectators", base: "0", port: "0", match: true }
       - { name: "g_chat_tellprivacy", base: "1", port: "1", match: true }
@@ -190,8 +190,8 @@ features:
       - "server/chat.qc:Say"
       - "server/command/cmd.qc:ignore_playerinlist"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:IgnorePlayerInList"
-      - "src/XonoticGodot.Server/Chat.cs:Say"
+      - "src/VortexArena.Server/Chat.cs:IgnorePlayerInList"
+      - "src/VortexArena.Server/Chat.cs:Say"
     constants: []
     status:
       logic: faithful
@@ -215,8 +215,8 @@ features:
     base_refs:
       - "server/chat.qc:Say"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:Say"
-      - "src/XonoticGodot.Common/Gameplay/Player/Player.cs:Muted"
+      - "src/VortexArena.Server/Chat.cs:Say"
+      - "src/VortexArena.Common/Gameplay/Player/Player.cs:Muted"
     constants: []
     status:
       logic: faithful
@@ -243,10 +243,10 @@ features:
       - "server/command/cmd.qc:ignore_clearall"
       - "server/command/cmd.qh:IGNORE_MAXPLAYERS"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:IgnoreAddPlayer"
-      - "src/XonoticGodot.Server/Chat.cs:IgnoreRemovePlayer"
-      - "src/XonoticGodot.Server/Chat.cs:IgnoreClearAll"
-      - "src/XonoticGodot.Server/Commands.cs:CmdIgnore"
+      - "src/VortexArena.Server/Chat.cs:IgnoreAddPlayer"
+      - "src/VortexArena.Server/Chat.cs:IgnoreRemovePlayer"
+      - "src/VortexArena.Server/Chat.cs:IgnoreClearAll"
+      - "src/VortexArena.Server/Commands.cs:CmdIgnore"
     constants:
       - { name: "IGNORE_MAXPLAYERS", base: "16", port: "16", match: true }
     status:
@@ -275,9 +275,9 @@ features:
       - "server/chat.qc:WeaponNameFromWeaponentity"
       - "server/chat.qc:AmmoNameFromWeaponentity"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:FormatMessage"
-      - "src/XonoticGodot.Server/Chat.cs:ResolveEscape"
-      - "src/XonoticGodot.Server/Chat.cs:PlayerHealth"
+      - "src/VortexArena.Server/Chat.cs:FormatMessage"
+      - "src/VortexArena.Server/Chat.cs:ResolveEscape"
+      - "src/VortexArena.Server/Chat.cs:PlayerHealth"
     constants:
       - { name: "replacement_budget_n", base: "7", port: "7", match: true }
     status:
@@ -305,9 +305,9 @@ features:
       - "server/chat.qc:NearestLocation"
       - "server/chat.qc:findnearest"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:ResolveEscape"
-      - "src/XonoticGodot.Server/Chat.cs:CrosshairTrace"
-      - "src/XonoticGodot.Server/Chat.cs:NearestLocation"
+      - "src/VortexArena.Server/Chat.cs:ResolveEscape"
+      - "src/VortexArena.Server/Chat.cs:CrosshairTrace"
+      - "src/VortexArena.Server/Chat.cs:NearestLocation"
     constants: []
     status:
       logic: faithful
@@ -333,7 +333,7 @@ features:
     base_refs:
       - "common/effects/qc/globalsound.qh:VoiceMessage"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdVoice"
+      - "src/VortexArena.Server/Commands.cs:CmdVoice"
     constants: []
     status:
       logic: faithful
@@ -359,7 +359,7 @@ features:
       - "server/main.qc:dedicated_print"
       - "server/chat.qc:Say"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:DedicatedPrint"
+      - "src/VortexArena.Server/Chat.cs:DedicatedPrint"
     constants:
       - { name: "sv_dedicated_gate", base: "if (autocvar_sv_dedicated) print(input)", port: "if (Cvars.Bool(\"sv_dedicated\")) ChatConsole.Invoke", match: true }
     status:
@@ -385,9 +385,9 @@ features:
       - "server/chat.qc:PrintToChatAll"
       - "server/chat.qc:PrintToChatTeam"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:PrintToChat"
-      - "src/XonoticGodot.Server/Chat.cs:PrintToChatAll"
-      - "src/XonoticGodot.Server/Chat.cs:PrintToChatTeam"
+      - "src/VortexArena.Server/Chat.cs:PrintToChat"
+      - "src/VortexArena.Server/Chat.cs:PrintToChatAll"
+      - "src/VortexArena.Server/Chat.cs:PrintToChatTeam"
     constants: []
     status:
       logic: faithful

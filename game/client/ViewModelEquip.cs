@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Game.Loaders;            // AssetLoader
-using XonoticGodot.Game.Loaders.Models;     // IqmBuilder
+using VortexArena.Game.Loaders;            // AssetLoader
+using VortexArena.Game.Loaders.Models;     // IqmBuilder
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Builds the first-person weapon view-model node for a <c>v_*</c> weapon path, faithful to Base

@@ -2,16 +2,16 @@ using System;
 using System.Linq;
 using System.Text;
 using Godot;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Console;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Config;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Console;
+using VortexArena.Game.Loaders;
 using FileAccess = Godot.FileAccess;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Process-wide menu/client state — the C# stand-in for the engine's global cvar store + gamedir that the
@@ -101,7 +101,7 @@ public static class MenuState
             if (a is "--no-save-config" or "--quit-after-seconds" or "--camera-trace" or "--screenshot")
             {
                 ConfigSaveSuppressedBy = a;
-                XonoticGodot.Common.Diagnostics.Log.Info(
+                VortexArena.Common.Diagnostics.Log.Info(
                     $"[MenuState] {a} present — config.cfg will NOT be saved this run (DP -benchmark rule).");
                 break;
             }
@@ -117,14 +117,17 @@ public static class MenuState
         try
         {
             var vfs = new VirtualFileSystem();
-            if (vfs.MountGameDir(DataPaths.Resolve(dataPath)))
+
+            // MountContentRoot mounts <data>/maps (the fetched per-map packages) and then <data> itself,
+            // in that order — see its remarks for why the order is load-bearing. Restructure G11, §9.3.
+            if (vfs.MountContentRoot(DataPaths.Resolve(dataPath)))
                 _vfs = vfs;
             else
-                XonoticGodot.Common.Diagnostics.Log.Warn($"[MenuState] data dir '{dataPath}' not found — menu runs on registered cvar defaults only.");
+                VortexArena.Common.Diagnostics.Log.Warn($"[MenuState] data dir '{dataPath}' not found — menu runs on registered cvar defaults only.");
         }
         catch (Exception ex)
         {
-            XonoticGodot.Common.Diagnostics.Log.Severe($"[MenuState] failed to mount data dir '{dataPath}': {ex.Message}");
+            VortexArena.Common.Diagnostics.Log.Severe($"[MenuState] failed to mount data dir '{dataPath}': {ex.Message}");
         }
 
         // --- build the PROCESS-LIFETIME asset loader now (parses every scripts/*.shader ONCE, here at boot,
@@ -137,13 +140,13 @@ public static class MenuState
             try { _sharedAssets = new AssetLoader(_vfs); }
             catch (Exception ex)
             {
-                XonoticGodot.Common.Diagnostics.Log.Severe($"[MenuState] shared asset loader failed to build: {ex.Message}");
+                VortexArena.Common.Diagnostics.Log.Severe($"[MenuState] shared asset loader failed to build: {ex.Message}");
             }
         }
 
         // --- publish the process-wide facade so Api.Cvars resolves to the shared store at the menu ---
         Api.Services = new EngineServices(new CollisionWorld(), _cvars);
-        XonoticGodot.Server.Cvars.RegisterDefaults();
+        VortexArena.Server.Cvars.RegisterDefaults();
 
         // --- load authentic defaults: the client master cfg (settings/binds/hud/crosshairs/effects) + the
         //     server gameplay tree (balance/physics/gametypes/mutators) + the notification table. The interpreter
@@ -158,14 +161,18 @@ public static class MenuState
                 // The archive hook carries DP's CF_ARCHIVE provenance: a stock-tree `seta` marks the cvar
                 // archiveable (persist WHEN the user later changes it), a plain `set` does not — the shipped
                 // cfgs, not the C# registration tables, are the authority on what belongs in config.cfg.
+                // vortex-common.cfg LAST: it is the Vortex divergence layer (D8/§11) and relies on
+                // last-wins `set` to override the upstream chain without any xonotic-*.cfg being edited.
+                // It also has to land before LockDefaults below, which it does — see the G15 note there.
                 _interp = ConfigLoader.Load(_cvars, reader, name => _cvars.MarkArchived(name),
-                    "xonotic-client.cfg", "xonotic-server.cfg", "notifications.cfg");
-                XonoticGodot.Common.Diagnostics.Log.Info($"[MenuState] config: {_interp.CvarsAssigned} cvars from {_interp.FilesExecuted} cfg files " +
+                    "xonotic-client.cfg", "xonotic-server.cfg", "notifications.cfg",
+                    ConfigLoader.VortexCommonEntry);
+                VortexArena.Common.Diagnostics.Log.Info($"[MenuState] config: {_interp.CvarsAssigned} cvars from {_interp.FilesExecuted} cfg files " +
                          $"({_interp.AliasesDefined} aliases, {_interp.FilesMissing} missing).");
             }
             catch (Exception ex)
             {
-                XonoticGodot.Common.Diagnostics.Log.Severe($"[MenuState] config load failed: {ex.Message}");
+                VortexArena.Common.Diagnostics.Log.Severe($"[MenuState] config load failed: {ex.Message}");
             }
         }
         // Even without a data dir (config skipped/failed) the console still needs a live command buffer.
@@ -181,25 +188,34 @@ public static class MenuState
         // is built later; RegisterCommand overwrites by name, so that's harmless — both feed BindTable.)
         BindInput.RegisterBindCommands(_interp);
         if (_vfs is not null)
+        {
             _interp.ExecuteFile("binds-xonotic.cfg");
+            // The bind half of the Vortex layer (D8/§11). It CANNOT ride along in vortex-common.cfg:
+            // that runs during the config chain above, before the `bind` sink exists, so its binds would
+            // be parsed and dropped exactly as binds-xonotic.cfg's were. It has to follow the re-exec,
+            // here and in the settings scratch interpreter below — wire only one and Vortex binds land in
+            // one code path and not the other.
+            _interp.ExecuteFile("vortex-binds.cfg");
+        }
 
         // Fallback: if no data dir mounted (CI/bare run, so binds-xonotic.cfg never exec'd), seed the table from
         // the thin KeyBindings.Defaults so the game is still playable. With a data dir the cfg already filled it.
-        if (!XonoticGodot.Engine.Console.BindTable.List().Any())
+        if (!VortexArena.Engine.Console.BindTable.List().Any())
             BindInput.SeedFromActions(KeyBindings.Defaults);
 
-        // (perf §12.7) PORT "smoothest play" video defaults. These override Xonotic's SHIPPED cfg values
-        // (xonotic-client.cfg sets vid_fullscreen 1; vid_vsync is assigned nowhere) but run BEFORE LockDefaults +
-        // LoadUserConfig below — so they become the locked DEFAULT (persisted only if the player moves them, and a
-        // player's own config.cfg value still wins). vid_fullscreen 2 = EXCLUSIVE fullscreen (takes the desktop
-        // compositor out of the present path — desktop-fullscreen 1 still composites on Windows, the missed-vblank
-        // double-frames in the hitch logs). vid_vsync 0 = OFF (Bryan's 2026-07-06 call after the uncapped
-        // decomposition: vsync off measured −0.5 ms/frame AND better lows vs the previous mailbox default —
-        // perf-campaign doc Phase 1c; DP-style raw present, tearing accepted). 1/2/3 still selectable from the
-        // console or the video menu. (Setting vid_vsync here, before the lock, also makes it a proper locked
-        // default instead of the post-lock "always-save" cvar RegisterEngineVideoDefaults created.)
-        _cvars.Set("vid_fullscreen", "2");
-        _cvars.Set("vid_vsync", "0");
+        // (perf §12.7) The PORT "smoothest play" video defaults — vid_fullscreen 2 and vid_vsync 0 — used to
+        // be assigned here in C#. They now live in data/core.pk3dir/vortex-client.cfg (D8/§11), exec'd via
+        // vortex-common.cfg in the chain above, which is still before LockDefaults and so still makes them
+        // locked DEFAULTS rather than values indistinguishable from player-typed ones. The rationale and the
+        // measurements moved with them; config is the better home because it is visible to the player,
+        // greppable, changeable without a rebuild, and counted by the same FilesExecuted/CvarsAssigned
+        // accounting as everything else.
+        //
+        // One deliberate behaviour change: with no content tree mounted the layer is not there to exec, so
+        // these no longer apply on a bare CI run. That is the consistent reading — nothing else from the
+        // shipped cfgs applies either — but it is a change from unconditional, and it is why the values are
+        // NOT duplicated here as a fallback: two sources of truth for a "smoothest play" default is how they
+        // drift apart.
 
         // Lock the shipped baseline NOW — the full stock cfg tree is loaded but the user's saved overrides are
         // not yet applied. This is DP's Cvar_LockDefaults: it freezes each cvar's current value as its default so
@@ -208,7 +224,23 @@ public static class MenuState
         _cvars.LockDefaults();
 
         // --- the user's saved preferences win over the stock defaults (incl. their saved `bind` lines) ---
-        LoadUserConfig();
+        // --fresh-cvars: run on REGISTERED DEFAULTS, ignoring the player's saved cvar edits (the load-side
+        // counterpart of the save suppression above). For debugging and A/B testing: a stale value tuned
+        // against last week's semantics — e.g. an ambient saved as 10 when the scale meant something else —
+        // silently overrides every recalibrated default and produces results nothing in the current code can
+        // explain. The config FILE is untouched; a normal launch gets it all back.
+        bool freshCvars = false;
+        foreach (string a in OS.GetCmdlineArgs())
+            if (a == "--fresh-cvars")
+            {
+                freshCvars = true;
+                ConfigSaveSuppressedBy ??= a;   // never resave defaults over the player's real config
+                VortexArena.Common.Diagnostics.Log.Info(
+                    "[MenuState] --fresh-cvars — saved cvar edits IGNORED this run (registered defaults only).");
+                break;
+            }
+        if (!freshCvars)
+            LoadUserConfig();
 
         // --- i18n: load the active language's gettext catalog so the menu builds translated (menu.qc m_init +
         //     the engine's PRVM_PO_Load at progs load). prvm_language defaults to "en" (xonotic-client.cfg:91);
@@ -237,13 +269,17 @@ public static class MenuState
     /// </summary>
     public static void ReloadDefaultBinds()
     {
-        XonoticGodot.Engine.Console.BindTable.UnbindAll();
+        VortexArena.Engine.Console.BindTable.UnbindAll();
         Func<string, string?> reader = p => _vfs is not null && _vfs.Exists(p) ? _vfs.ReadText(p) : null;
         if (_vfs is not null)
         {
             var scratch = new ConfigInterpreter(new CvarService(), reader);
             BindInput.RegisterBindCommands(scratch);
             scratch.ExecuteFile("binds-xonotic.cfg");
+            // The Vortex bind layer must follow here too. "Reset all" means "back to SHIPPED defaults",
+            // and the Vortex binds are part of what we ship — omitting this would make the menu's reset
+            // quietly produce a different bind set than a fresh boot does.
+            scratch.ExecuteFile("vortex-binds.cfg");
         }
         else
         {
@@ -303,7 +339,7 @@ public static class MenuState
         if (!_booted || ConfigSaveSuppressedBy is not null)
             return;
         var sb = new StringBuilder();
-        sb.Append("// XonoticGodot — saved menu preferences (archived cvars + keybinds). Auto-generated; edits may be overwritten.\n");
+        sb.Append("// VortexArena — saved menu preferences (archived cvars + keybinds). Auto-generated; edits may be overwritten.\n");
         foreach (string name in _cvars.ArchivedNamesToPersist.OrderBy(n => n, StringComparer.Ordinal))
             sb.Append($"seta {name} \"{Escape(_cvars.GetString(name))}\"\n");
 

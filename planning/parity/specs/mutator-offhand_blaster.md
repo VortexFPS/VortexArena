@@ -1,6 +1,6 @@
 # Offhand Blaster mutator — parity spec
 
-**Base refs:** `common/mutators/mutator/offhand_blaster/{sv_,cl_,}offhand_blaster.qc/.qh`, `common/weapons/weapon/blaster.qc:OffhandBlaster.offhand_think`, `server/weapons/weaponsystem.qc` (offhand dispatch)  ·  **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs`, `src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs`
+**Base refs:** `common/mutators/mutator/offhand_blaster/{sv_,cl_,}offhand_blaster.qc/.qh`, `common/weapons/weapon/blaster.qc:OffhandBlaster.offhand_think`, `server/weapons/weaponsystem.qc` (offhand dispatch)  ·  **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs`, `src/VortexArena.Common/Gameplay/Weapons/Blaster.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -123,7 +123,7 @@ to fire ungated (the mutator owns the refire gate via `OffhandNextThink`). The r
 defect is purely that it is never triggered because no input maps to `OffhandFirePressed`.
 
 **Why the fire path is hard-dead (verified three layers deep):** (1) `InputButtons`
-(`src/XonoticGodot.Net/InputCommand.cs`) defines only Attack/Jump/Attack2/Zoom/Crouch/Use — there is no
+(`src/VortexArena.Net/InputCommand.cs`) defines only Attack/Jump/Attack2/Zoom/Crouch/Use — there is no
 hook/offhand bit, and `InputCommand.Serialize` carries no such bit on the C2S wire. (2)
 `BindTable.SetButton` has no `"hook"` case, so a bound `+hook` keypress runs `runCommand("+hook")` which
 updates no held-button state. (3) `OffhandFirePressed` is only ever *read* (HookMutator, NadesMutator,
@@ -179,7 +179,7 @@ from `weaponentities[1]` and gated by `jump_interval` instead of the held weapon
 - Liveness of `OffhandFirePressed`: `grep` across `src/`, `game/` — confirmed **zero** assignments of
   `OffhandFirePressed = true`; the net/input layer has no `+hook`/offhand button. (`NadeAltButton` IS
   set, by `NadeThrow.cs`, but that drives nades, not the blaster.)
-- `PlayerPreThink` live firing confirmed at `src/XonoticGodot.Server/GameWorld.cs:986-988`.
+- `PlayerPreThink` live firing confirmed at `src/VortexArena.Server/GameWorld.cs:986-988`.
 - Value match: Blaster primary balance verified against `bal-wep-xonotic.cfg` (refire 0.7, damage 20,
   etc.) — faithful.
 - No unit test exercises `OffhandBlasterMutator` (only `HookMutator_SetsOffhandHook_OnSpawn` covers the

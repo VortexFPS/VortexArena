@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;  // WarpzoneTrace, WarpzoneManager, Warpzone, WarpzoneTransform
-using XonoticGodot.Common.Services;  // Api
+using VortexArena.Common.Gameplay;  // WarpzoneTrace, WarpzoneManager, Warpzone, WarpzoneTransform
+using VortexArena.Common.Services;  // Api
 using NVec3 = System.Numerics.Vector3;
-// Coords (Quake<->Godot axis swap) lives in the parent XonoticGodot.Game namespace — reachable implicitly.
+// Coords (Quake<->Godot axis swap) lives in the parent VortexArena.Game namespace — reachable implicitly.
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The client-side warpzone PORTAL render — the C# stand-in for DarkPlaces' engine <c>r_water</c> portal pass
@@ -196,6 +196,34 @@ public partial class PortalRenderer : Node3D
         "    else if (wz_uvtest > 0.5) { ALBEDO = vec3(uv, 0.0); } else {\n" +      // 1 = paint UVs
         "    ALBEDO = texture(portal_tex, uv).rgb; }\n" +
         "}\n";
+
+    /// <summary>
+    /// Point the renderer at a DIFFERENT world root and rebuild from scratch.
+    ///
+    /// <see cref="Setup"/> deliberately builds once and latches, because on the normal path the map root lives
+    /// as long as the map does. The editor breaks that assumption: it swaps the compiled world out for one
+    /// regenerated from the document, and again on every geometry edit, so the portals built against the old
+    /// root are attached to nodes that are now hidden or freed — the warpzone stops rendering and shows its
+    /// flat placeholder shader instead.
+    /// </summary>
+    public void Rebind(Node3D mapRoot, Camera3D mainCamera)
+    {
+        foreach (Portal p in _portals)
+        {
+            // The window keeps its placeholder look rather than a material pointing at a freed viewport.
+            if (GodotObject.IsInstanceValid(p.Surface))
+                p.Surface.MaterialOverride = null;
+            if (GodotObject.IsInstanceValid(p.Notifier))
+                p.Notifier.QueueFree();
+            if (GodotObject.IsInstanceValid(p.Viewport))
+                p.Viewport.QueueFree();
+        }
+        _portals.Clear();
+        ActiveExitViewsQuake.Clear();
+        _built = false;
+        _scanned = false;
+        Setup(mapRoot, mainCamera);
+    }
 
     /// <summary>Wire the renderer: the map root (whose "Portals" child holds the window meshes) and the live
     /// first-person camera. Builds the per-portal SubViewports once; safe to call when there are no portals.</summary>

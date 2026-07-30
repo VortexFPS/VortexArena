@@ -18,7 +18,7 @@ features:
     base_refs:
       - "common/monsters/monster/zombie.qh:Zombie (CLASS / REGISTER_MONSTER)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:Zombie (ctor + Spawn SetSize)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:Zombie (ctor + Spawn SetSize)"
     constants:
       - { name: "model", base: "zombie.dpm", port: "models/monsters/zombie.dpm", match: true }
       - { name: "netname", base: "zombie", port: "zombie", match: true }
@@ -48,9 +48,9 @@ features:
       - "common/monsters/monster/zombie.qc:mr_setup"
       - "common/monsters/sv_monsters.qc:Monster_Spawn_Setup:1364 (monstersound_spawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:Spawn (sets st.Anim=Spawn)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Setup (spawn-sound MonsterSound, SoundCues-gated)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:RunThink:1144 (DriveAnimFrame during spawn window)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:Spawn (sets st.Anim=Spawn)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Setup (spawn-sound MonsterSound, SoundCues-gated)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:RunThink:1144 (DriveAnimFrame during spawn window)"
     constants:
       - { name: "g_monster_zombie_health", base: "200", port: "200 (live cvar; 200 fallback)", match: true }
       - { name: "g_monster_zombie_speed_walk", base: "300", port: "300", match: true }
@@ -85,8 +85,8 @@ features:
     base_refs:
       - "common/monsters/monster/zombie.qc:mr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:RunThink"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:RunThink"
     constants:
       - { name: "g_monster_zombie_damageforcescale", base: "0.55", port: "0.55", match: true }
     status:
@@ -112,9 +112,9 @@ features:
       - "common/monsters/sv_monsters.qc:Monster_Attack_Melee"
       - "common/monsters/sv_monsters.qc:468/478 (monstersound_melee on connecting swing)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MeleeAttack (melee-sound MonsterSound, SoundCues-gated)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Attack -> frame 4)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MeleeAttack (melee-sound MonsterSound, SoundCues-gated)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Attack -> frame 4)"
     constants:
       - { name: "g_monster_zombie_attack_melee_damage", base: "55", port: "55 (live cvar)", match: true }
       - { name: "g_monster_zombie_attack_melee_delay", base: "1", port: "1 (live cvar)", match: true }
@@ -145,9 +145,9 @@ features:
       - "common/monsters/monster/zombie.qc:M_Zombie_Defend_Block"
       - "common/monsters/monster/zombie.qc:M_Zombie_Defend_Block_End"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:DefendBlock (sets Anim=Block, then BlockEnd via delay)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:QueueDelayedAttack"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Block -> 8 / BlockEnd -> 7)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:DefendBlock (sets Anim=Block, then BlockEnd via delay)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:QueueDelayedAttack"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Block -> 8 / BlockEnd -> 7)"
     constants:
       - { name: "block_chance", base: "random()<0.3", port: "0.3", match: true }
       - { name: "self_health_cond", base: "<75", port: "<75", match: true }
@@ -181,10 +181,10 @@ features:
       - "common/monsters/monster/zombie.qc:M_Zombie_Attack (RANGED case)"
       - "common/monsters/sv_monsters.qc:Monster_Attack_Leap / Monster_Attack_Leap_Check"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:Attack (Leap with MonsterAnim.Shoot)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Leap (st.Anim=leapAnim:1347)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:TraceToss"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Shoot -> frame 0)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:Attack (Leap with MonsterAnim.Shoot)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Leap (st.Anim=leapAnim:1347)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:TraceToss"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Shoot -> frame 0)"
     constants:
       - { name: "g_monster_zombie_attack_leap_speed", base: "500", port: "500 (live cvar)", match: true }
       - { name: "leap_vertical_boost", base: "'0 0 200'", port: "(0,0,200)", match: true }
@@ -212,7 +212,7 @@ features:
     base_refs:
       - "common/monsters/monster/zombie.qc:M_Zombie_Attack_Leap_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:LeapTouch"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:LeapTouch"
     constants:
       - { name: "g_monster_zombie_attack_leap_damage", base: "60", port: "60 (live cvar)", match: true }
       - { name: "g_monster_zombie_attack_leap_force", base: "55", port: "55 (live cvar)", match: true }
@@ -241,9 +241,9 @@ features:
       - "common/monsters/sv_monsters.qc:Monster_Damage:1101 (monstersound_pain, 1.2, true, CH_PAIN)"
       - "common/monsters/sv_monsters.qc:Monster_Sound:368"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkPain (st.Anim=Pain:1559; MonsterSound:1563)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MonsterSound (SoundCues gate)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Pain -> frame 20)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkPain (st.Anim=Pain:1559; MonsterSound:1563)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MonsterSound (SoundCues gate)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Pain -> frame 20)"
     constants:
       - { name: "pain_finished_window", base: "time+0.34", port: "Now + st.Def.PainWindow; Zombie inherits Monster.PainWindow=>0.34f, no override -> 0.34", match: true }
       - { name: "pain_throttle (msound_delay)", base: "1.2 (delaytoo)", port: "1.2 (delayToo)", match: true }
@@ -274,10 +274,10 @@ features:
       - "common/monsters/monster/zombie.qc:mr_death"
       - "common/monsters/sv_monsters.qc:Monster_Dead:1044 (monstersound_death) / Monster_Dead_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead (st.Anim=Death:1643)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MonsterDeadDamage"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead (death cue:1610)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Death -> die1=9 / die2=12)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead (st.Anim=Death:1643)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MonsterDeadDamage"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead (death cue:1610)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (Death -> die1=9 / die2=12)"
     constants:
       - { name: "death_armor_restore", base: "g_monsters_armor_blockpercent=0.5", port: "handled generically", match: true }
       - { name: "death_anim_frame", base: "random()>0.5 -> die1 '9 1 0.5' / die2 '12 1 0.5'", port: "Death phase -> MarkDead rolls st.DeathLanded=RollDeathVariant() (MonsterAI.cs:1673); Zombie.RollDeathVariant()=!(Next()>0.5); AnimFrame(Death) die2?12:9 — both reachable, direction-faithful", match: true }
@@ -309,9 +309,9 @@ features:
       - "common/monsters/monster/zombie.qc:mr_setup (always-respawn + DEATHPOINT)"
       - "common/monsters/sv_monsters.qc:Monster_Respawn_Check / Monster_Respawn / Monster_Dead_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:RespawnCheck"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Respawn (clears DeathLanded:1842)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:DeadThink"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:RespawnCheck"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Respawn (clears DeathLanded:1842)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:DeadThink"
     constants:
       - { name: "always_respawn", base: "NORESPAWN cleared (zombies always respawn)", port: "AlwaysRespawn=true", match: true }
       - { name: "respawn_at_deathpoint", base: "MONSTER_RESPAWN_DEATHPOINT", port: "RespawnAtDeathPoint=true", match: true }
@@ -338,9 +338,9 @@ features:
     base_refs:
       - "common/monsters/monster/zombie.qc:mr_anim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (phase->frame table; full Spawn/Block/BlockEnd/Shoot)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame:1186 (stamps Entity.Frame each think)"
-      - "src/XonoticGodot.Common/Gameplay/EntityClasses.cs:79 (MonsterAnimPhase enum: Idle..Shoot)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:AnimFrame (phase->frame table; full Spawn/Block/BlockEnd/Shoot)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame:1186 (stamps Entity.Frame each think)"
+      - "src/VortexArena.Common/Gameplay/EntityClasses.cs:79 (MonsterAnimPhase enum: Idle..Shoot)"
       - "game/net/ServerNet.cs:1808 (networks Frame for Generic kind; Classify:2125)"
       - "game/net/ClientEntityView.cs:196-203 (Generic -> OnEntityUpdate frameDriven:true)"
       - "game/client/ClientWorld.cs:1622 (anim.FollowEntityFrame); ModelAnimator (FollowEntityFrame playback)"
@@ -377,7 +377,7 @@ features:
     base_refs:
       - "common/monsters/monster/zombie.qc:METHOD(Zombie, describe):178"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:Describe (236-242)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:Describe (236-242)"
       - "game/menu/dialogs/DialogMonsterTools.cs:27-33 (zombie spawn-radio tooltip == full describe prose)"
     constants:
       - { name: "describe prose", base: "Zombies are the undead remains of deceased soldiers... (4 paragraphs: charge+leap, melee punch/bite, block, destroy the corpse to stop it rising)", port: "same prose verbatim (Zombie.Describe() Zombie.cs:236-242 + DialogMonsterTools zombie radio tooltip)", match: true }

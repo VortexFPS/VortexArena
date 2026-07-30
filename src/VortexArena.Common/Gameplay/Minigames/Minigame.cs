@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Port of QuakeC's minigame framework (common/minigames/minigame.qh, minigames.qc, sv_minigames.qc) —
 // the SERVER-SIDE game logic only. CSQC rendering (cl_minigames*, the *_hud_board / *_hud_status draws)

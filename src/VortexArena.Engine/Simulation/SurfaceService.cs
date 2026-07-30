@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// One render surface of a model, in MODEL-LOCAL space — the unit the <c>getsurface*</c> builtins query.
@@ -31,7 +31,7 @@ public sealed class ModelSurface
 ///
 /// Ground truth: DarkPlaces <c>prvm_cmds.c</c> (<c>VM_getsurfacenumpoints</c> … <c>VM_getsurfacetriangle</c>)
 /// and <c>model_brush.c</c>/<c>model_alias.c</c> surface layout. Consumed by <c>lib/warpzone</c>'s
-/// brush→plane auto-derivation (<see cref="XonoticGodot.Common.Gameplay.WarpzoneManager"/>) and surface/decal code.
+/// brush→plane auto-derivation (<see cref="VortexArena.Common.Gameplay.WarpzoneManager"/>) and surface/decal code.
 /// </summary>
 public sealed class SurfaceService : ISurfaceService
 {

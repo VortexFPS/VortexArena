@@ -10,7 +10,7 @@
 
 using System.Globalization;
 
-namespace XonoticGodot.Common.Menu;
+namespace VortexArena.Common.Menu;
 
 /// <summary>
 /// The value math of Base's menu value-pair checkbox (<c>XonoticCheckBox</c>, checkbox.qc:44-84):

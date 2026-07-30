@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Config;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Engine.Console;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the in-game console's Godot-free core: the interpreter's unknown-command routing hook

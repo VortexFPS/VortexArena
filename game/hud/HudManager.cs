@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The CSQC on-screen HUD root — the C# successor to QuakeC's <c>HUD_Main</c> / <c>HUD_Draw</c>
@@ -204,7 +204,7 @@ public partial class Hud : CanvasLayer
 
     public override void _Process(double delta)
     {
-        using var _hudScope = XonoticGodot.Game.Client.FrameProfiler.Scope("hud.mgr");
+        using var _hudScope = VortexArena.Game.Client.FrameProfiler.Scope("hud.mgr");
 
         SyncSkin();
         Vector2 vp = GetViewport().GetVisibleRect().Size;
@@ -216,7 +216,7 @@ public partial class Hud : CanvasLayer
         if (Dock is not null)
         {
             Dock.HudFadeAlpha = fade;
-            Dock.TeamColor = Player is { } dp && XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay
+            Dock.TeamColor = Player is { } dp && VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay
                 ? HudDock.TeamRgb((int)dp.Team)
                 : (Color?)null;
         }
@@ -228,13 +228,13 @@ public partial class Hud : CanvasLayer
         if (Player is { } cp)
         {
             int cm = cp.ClientColors;
-            (float r, float g, float b) sh = XonoticGodot.Engine.Simulation.CsqcModelAppearance.ColormapPaletteColor(
+            (float r, float g, float b) sh = VortexArena.Engine.Simulation.CsqcModelAppearance.ColormapPaletteColor(
                 (cm >> 4) & 0x0F, isPants: false, (float)_shakeClock);
-            (float r, float g, float b) pa = XonoticGodot.Engine.Simulation.CsqcModelAppearance.ColormapPaletteColor(
+            (float r, float g, float b) pa = VortexArena.Engine.Simulation.CsqcModelAppearance.ColormapPaletteColor(
                 cm & 0x0F, isPants: true, (float)_shakeClock);
             HudPanel.LocalShirtColor = new Color(sh.r, sh.g, sh.b);
             HudPanel.LocalPantsColor = new Color(pa.r, pa.g, pa.b);
-            HudPanel.LocalTeamColor = XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay
+            HudPanel.LocalTeamColor = VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay
                 ? HudDock.TeamRgb((int)cp.Team) : (Color?)null;
         }
         else
@@ -268,11 +268,11 @@ public partial class Hud : CanvasLayer
         // cvar permits drawing. The manager OWNS Visible for the always-on panels — so `set hud_panel_<id> 0` or
         // the physics/strafehud Race/CTS show-modes hide/show them live — while net/event-gated panels
         // (StartHiddenIds) keep their data-driven Visible but are still force-hidden when their cvar disables them.
-        string gametype = XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype;
+        string gametype = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype;
         var showCtx = new HudShowContext(
             RaceOrCts: gametype is "rc" or "cts",
             Observing: Observing,
-            Configuring: global::XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat("_hud_configure") != 0f);
+            Configuring: global::VortexArena.Game.Menu.MenuState.Cvars.GetFloat("_hud_configure") != 0f);
 
         // HUD configure-mode entry/exit edge (QC HUD_Configure_Frame pokes every panel's update_time on entry):
         // re-resolve + repaint every panel so the editor-mode bg/alpha overrides (HudPanel.Resolve) apply the
@@ -407,13 +407,13 @@ public partial class Hud : CanvasLayer
 
     private static float CvarOr(string name, float def)
     {
-        string raw = global::XonoticGodot.Game.Menu.MenuState.Cvars.GetString(name);
-        return string.IsNullOrWhiteSpace(raw) ? def : global::XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat(name);
+        string raw = global::VortexArena.Game.Menu.MenuState.Cvars.GetString(name);
+        return string.IsNullOrWhiteSpace(raw) ? def : global::VortexArena.Game.Menu.MenuState.Cvars.GetFloat(name);
     }
 
     private static System.Numerics.Vector3 CvarVec3(string name, System.Numerics.Vector3 def)
     {
-        string raw = global::XonoticGodot.Game.Menu.MenuState.Cvars.GetString(name);
+        string raw = global::VortexArena.Game.Menu.MenuState.Cvars.GetString(name);
         if (string.IsNullOrWhiteSpace(raw)) return def;
         string[] p = raw.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
         if (p.Length < 3) return def;
@@ -428,7 +428,7 @@ public partial class Hud : CanvasLayer
     /// cache so panels reload art, and re-resolve every panel's config.</summary>
     private void SyncSkin()
     {
-        string skin = global::XonoticGodot.Game.Menu.MenuState.Cvars.GetString("hud_skin");
+        string skin = global::VortexArena.Game.Menu.MenuState.Cvars.GetString("hud_skin");
         if (string.IsNullOrWhiteSpace(skin)) skin = "luma";
         if (skin == _skin) return;
         _skin = skin;

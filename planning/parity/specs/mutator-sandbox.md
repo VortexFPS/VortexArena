@@ -120,7 +120,7 @@ be physically carried with the "drag object" key (+button8).
 
 ## Port mapping
 - **Mutator registration / activation:** NOT IMPLEMENTED. No `SandboxMutator.cs` exists in
-  `src/XonoticGodot.Common/Gameplay/Mutators/`; sandbox is absent from the mutator registry.
+  `src/VortexArena.Common/Gameplay/Mutators/`; sandbox is absent from the mutator registry.
 - **`sandbox` console command + all `object_*` subcommands:** NOT IMPLEMENTED. No server command
   handler matches `sandbox`/`object_spawn`/`object_edit`/`object_remove`/`object_attach`/
   `object_duplicate`/`object_claim`/`object_info` anywhere in `src/`. The `commands.cfg` alias
@@ -130,12 +130,12 @@ be physically carried with the "drag object" key (+button8).
 - **Storage save/load + auto-save:** NOT IMPLEMENTED.
 - **Drag/grab (`.grab`, Drag_*):** NOT IMPLEMENTED (the port has no generic object-drag system).
 - **Sandbox_DragAllowed / Sandbox_SaveAllowed / Sandbox_EditAllowed hooks:** NOT IMPLEMENTED.
-- **Cvars (`g_sandbox*`):** the defaults SHIP in `assets/data/.../mutators.cfg` (identical values to Base)
+- **Cvars (`g_sandbox*`):** the defaults SHIP in `Base/data/.../mutators.cfg` (identical values to Base)
   but nothing reads them on the gameplay path.
 - **Menu — Sandbox Tools dialog:** IMPLEMENTED as `game/menu/dialogs/DialogSandboxTools.cs`, registered
   in `game/Shell.cs` (`"sandbox" => new DialogSandboxTools()`). It is a faithful UI port (correct cvar
   bindings, slider ranges, command strings). However, its own doc-comment states every action button
-  drives the server-side backend "XonoticGodot does not have yet, so they route through MenuCommand and
+  drives the server-side backend "VortexArena does not have yet, so they route through MenuCommand and
   are logged inert." So the UI is live but its outputs are no-ops.
 
 ## Parity assessment

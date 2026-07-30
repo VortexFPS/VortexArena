@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Mdl;
+namespace VortexArena.Formats.Mdl;
 
 /// <summary>
 /// Engine-neutral, Godot-free representation of a Quake1 MDL ("IDPO", <see cref="MdlReader.Version"/> 6)

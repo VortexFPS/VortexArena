@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Crylink — port of common/weapons/weapon/crylink.{qh,qc}. A splash weapon firing a burst of
@@ -57,6 +57,7 @@ public sealed class Crylink : Weapon
     public Crylink()
     {
         NetName = "crylink";
+        BotPickupBaseValue = 6000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Crylink";
         Impulse = 6;

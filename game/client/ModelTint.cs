@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Drives the per-entity tint instance-uniforms of <see cref="PlayerSkinShader"/> on every
@@ -241,7 +241,7 @@ public static class ModelTint
     }
 
     /// <summary>
-    /// Map XonoticGodot's networked colormap/team value (the low nibble: 1=red, 2=blue, 3=yellow, 4=pink — see
+    /// Map VortexArena's networked colormap/team value (the low nibble: 1=red, 2=blue, 3=yellow, 4=pink — see
     /// <c>RadarPanel.TeamColor</c>) to its team color, using Xonotic's canonical <c>colormapPaletteColor</c>
     /// RGBs (<c>lib/color.qh</c>). <paramref name="hasTeam"/> is false for FFA / unknown.
     /// </summary>
@@ -262,7 +262,7 @@ public static class ModelTint
     /// <summary>
     /// Resolve a colormap's shirt (high nibble) + pants (low nibble) colors, mirroring QC's
     /// <c>colormapPaletteColor(nibble, isPants)</c> use. A PLAIN networked team id (high nibble 0, low nibble
-    /// 1..4 — what the XonoticGodot wire carries in <c>Entity.Team</c>) keeps the team mapping (<see cref="TeamColor"/>),
+    /// 1..4 — what the VortexArena wire carries in <c>Entity.Team</c>) keeps the team mapping (<see cref="TeamColor"/>),
     /// so team rendering is unchanged. A packed/forced colormap (any non-zero high nibble, e.g. the FORCECOLORS /
     /// unique-color combos which are <c>1024 + (shirt&lt;&lt;4) + pants</c>) is decoded through the full 0..15
     /// <c>colormapPaletteColor</c> palette so forced colors paint their real shirt/pants. <paramref name="hasColor"/>

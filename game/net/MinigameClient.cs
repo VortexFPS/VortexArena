@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Game.Hud;
+using VortexArena.Common.Gameplay;
+using VortexArena.Game.Hud;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// The client-side minigame coordinator — the C# successor to CSQC's <c>cl_minigames.qc</c>
@@ -24,7 +24,7 @@ namespace XonoticGodot.Game.Net;
 /// </summary>
 public sealed class MinigameClient
 {
-    private readonly XonoticGodot.Game.Hud.Hud _hud;
+    private readonly VortexArena.Game.Hud.Hud _hud;
     private readonly MinigameMenu _menu;
 
     /// <summary>Sends a <c>cmd minigame …</c> line to the server (wired by <see cref="NetGame"/> to
@@ -43,7 +43,7 @@ public sealed class MinigameClient
     public IReadOnlyCollection<string> KnownSessions => _knownSessions;
     private readonly HashSet<string> _knownSessions = new(StringComparer.Ordinal);
 
-    public MinigameClient(XonoticGodot.Game.Hud.Hud hud, MinigameMenu menu, Action<string> sendCommand)
+    public MinigameClient(VortexArena.Game.Hud.Hud hud, MinigameMenu menu, Action<string> sendCommand)
     {
         _hud = hud;
         _menu = menu;

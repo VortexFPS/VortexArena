@@ -5,7 +5,7 @@ last_audited: "2026-06-27"
 summary:
   feature_count: 8
   worst_gaps:
-    - "LIVE end-to-end (Wave-5, commit 66e378f; re-verified 2026-06-27, line numbers drifted but chain intact): the offhand-fire input wire. InputButtons.Hook = 1<<6 (src/XonoticGodot.Net/InputCommand.cs:20), C2S byte carries bit 6 (0x40), NetGame sets it from BindTable.HookHeld (game/net/NetGame.cs:4918), BindTable handles `+hook`→`case \"hook\"` (src/XonoticGodot.Engine/Console/BindTable.cs:153), ServerNet maps it to MovementInput.ButtonHook (game/net/ServerNet.cs:1617), and WeaponFireDriver.Frame (WeaponFireDriver.cs:69) assigns `player.OffhandFirePressed = input.ButtonHook`. Default binds `bind MOUSE5/e +hook` match Base. The offhand blaster genuinely shoots in a match."
+    - "LIVE end-to-end (Wave-5, commit 66e378f; re-verified 2026-06-27, line numbers drifted but chain intact): the offhand-fire input wire. InputButtons.Hook = 1<<6 (src/VortexArena.Net/InputCommand.cs:20), C2S byte carries bit 6 (0x40), NetGame sets it from BindTable.HookHeld (game/net/NetGame.cs:4918), BindTable handles `+hook`→`case \"hook\"` (src/VortexArena.Engine/Console/BindTable.cs:153), ServerNet maps it to MovementInput.ButtonHook (game/net/ServerNet.cs:1617), and WeaponFireDriver.Frame (WeaponFireDriver.cs:69) assigns `player.OffhandFirePressed = input.ButtonHook`. Default binds `bind MOUSE5/e +hook` match Base. The offhand blaster genuinely shoots in a match."
     - "BuildMutatorsString / BuildMutatorsPrettyString are ported AND both LIVE. OffhandBlasterMutator.cs:53/57 override both (`:offhand_blaster` / `, Offhand blaster`); MutatorActivation.BuildMutatorsString (MutatorActivation.cs:108) called LIVE from GameWorld.cs:1117 (sv_eventlog GameLog ':gameinfo:mutators:' line). The pretty-string chain has live callers too: GameWorld.cs:1128-1130 writes it to the 'modifications' serverinfo key at match-start, GameWorld.cs:1392 surfaces it per-player as the 'Active modifications:' chat line, and ServerNet.cs:608 (BuildServerInfo) surfaces it on the server-browser 'modifications' field."
     - "The client gameplay-tips line is PORTED and LIVE. GameWorld.cs:1314-1321 emits '^3offhand blaster^8 is enabled, press ^3<key>^8 to use it' (the exact Base cl_offhand_blaster.qc text) to the connecting non-bot player via Commands.ChatToPlayer, gated on `offhandMut.Added`, with the +hook bind resolved via BindTable.CommandKey(\"offhand hook\", \"+hook\") — matching Base getcommandkey(_(\"offhand hook\"), \"+hook\"). (The mut_is_active bitfield isn't networked, but the server knows the mutator state directly, so the gate is equivalent.)"
     - "FIXED (2026-06-27): the menu mutator-info describe text is NOW PORTED and LIVE. OffhandBlasterMutator.cs:27-31 provides the 3-paragraph GuideDescription override (faithful to Base MutatorOffhandBlaster.describe()), and DialogMediaGuide.cs:140-148/184-186 enumerates Mutators.All under the 'Mutators' guide topic, listing 'Offhand Blaster' (Humanize(NetName)) and rendering its GuideDescription. This is the media-guide / describe info page that Base's describe() feeds. The incidental reference in the Grappling Hook tooltip (DialogMutators.cs:197) still exists too. The only nuance vs Base: the port has no localized `message` ATTRIB, so the entry label is Humanize(NetName)='Offhand Blaster' rather than the localized string."
@@ -16,8 +16,8 @@ features:
     base_refs:
       - "common/mutators/mutator/offhand_blaster/sv_offhand_blaster.qc:REGISTER_MUTATOR (expr_evaluate(autocvar_g_offhand_blaster))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
     constants:
       - { name: "g_offhand_blaster", base: "\"0\" (string cvar; expr_evaluate)", port: "0 (Cvars.GetFloat != 0)", match: true }
     status:
@@ -32,7 +32,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "IsEnabled => Api.Cvars.GetFloat(\"g_offhand_blaster\") != 0; MutatorActivation.Apply() called live (Add/Remove reconcile against IsEnabled)", result: pass }
-      - { kind: value, ref: "Base mutators.cfg:435 'set g_offhand_blaster 0' == port assets/data/xonotic-data.pk3dir/mutators.cfg:435 'set g_offhand_blaster 0'", result: pass }
+      - { kind: value, ref: "Base mutators.cfg:435 'set g_offhand_blaster 0' == port Base/data/xonotic-data.pk3dir/mutators.cfg:435 'set g_offhand_blaster 0'", result: pass }
     confidence: high
     notes: "Unchanged by Wave-1/2/5 (still faithful/live). Port reads the cvar as a float (!=0); Base uses expr_evaluate on a string. Equivalent for the 0/1 default; would differ only for exotic string values. NOTE: HookMutator gained a faithful expr_evaluate grammar port in Wave-5, but OffhandBlasterMutator.IsEnabled was NOT switched to it — still the simple float compare. Fine for the realistic 0/1 default."
   - id: offhand_blaster.spawn.assign
@@ -42,7 +42,7 @@ features:
       - "common/mutators/mutator/offhand_blaster/sv_offhand_blaster.qc:MUTATOR_HOOKFUNCTION(offhand_blaster, PlayerSpawn) — player.offhand = OFFHAND_BLASTER"
       - "common/weapons/weapon/blaster.qh:STATIC_INIT(OFFHAND_BLASTER)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:OnPlayerSpawn"
     constants: []
     status:
       logic: faithful
@@ -65,11 +65,11 @@ features:
       - "common/weapons/weapon/blaster.qc:OffhandBlaster.offhand_think (l.138-147)"
       - "server/weapons/weaponsystem.qc:~610-618 (key_pressed = PHYS_INPUT_BUTTON_HOOK && !vehicle; weaponUseForbidden clears it; off.offhand_think dispatch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:OnPlayerPreThink"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:FireOffhand"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:WeaponRateFactor"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame (OffhandFirePressed = input.ButtonHook)"
-      - "src/XonoticGodot.Net/InputCommand.cs:20 (InputButtons.Hook = 1<<6)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:FireOffhand"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:WeaponRateFactor"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame (OffhandFirePressed = input.ButtonHook)"
+      - "src/VortexArena.Net/InputCommand.cs:20 (InputButtons.Hook = 1<<6)"
       - "game/net/NetGame.cs:4918 (BindTable.HookHeld -> InputButtons.Hook)"
       - "game/net/ServerNet.cs:1617 (InputButtons.Hook -> MovementInput.ButtonHook)"
     constants:
@@ -100,9 +100,9 @@ features:
       - "common/weapons/weapon/blaster.qc:W_Blaster_Attack"
       - "common/weapons/weapon/blaster.qc:W_Blaster_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:WrThink (slot.Index >= MaxWeaponSlots -> Attack)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:OnTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:WrThink (slot.Index >= MaxWeaponSlots -> Attack)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:OnTouch"
     constants:
       - { name: "damage", base: "20", port: "20", match: true }
       - { name: "edgedamage", base: "10", port: "10", match: true }
@@ -138,10 +138,10 @@ features:
       - "common/mutators/mutator/offhand_blaster/offhand_blaster.qc:describe (\"overrides the hook mutator, since they use the same bind\")"
       - "common/mutators/mutator/hook/sv_hook.qc:PlayerSpawn (.offhand = OFFHAND_HOOK)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Framework/Registry.cs:Sort (ordinal RegistryName)"
-      - "src/XonoticGodot.Common/Framework/Hooks.cs:HookChain.Add/Call (registration-order within bucket)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Framework/Registry.cs:Sort (ordinal RegistryName)"
+      - "src/VortexArena.Common/Framework/Hooks.cs:HookChain.Add/Call (registration-order within bucket)"
     constants: []
     status:
       logic: faithful
@@ -164,12 +164,12 @@ features:
       - "common/mutators/mutator/offhand_blaster/sv_offhand_blaster.qc:MUTATOR_HOOKFUNCTION(offhand_blaster, BuildMutatorsString)"
       - "common/mutators/mutator/offhand_blaster/sv_offhand_blaster.qc:MUTATOR_HOOKFUNCTION(offhand_blaster, BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:53 BuildMutatorsString (=> s + \":offhand_blaster\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:57 BuildMutatorsPrettyString (=> s + \", Offhand blaster\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108/121 BuildMutatorsString / BuildMutatorsPrettyString (per-active-mutator chain)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1117 (MutatorActivation.BuildMutatorsString -> GameLog ':gameinfo:mutators:' line, sv_eventlog-gated)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1128-1130 (MutatorActivation.BuildMutatorsPrettyString -> 'modifications' serverinfo key at match-start; QC server/client.qc:1107)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1392 (BuildMutatorsPrettyString -> per-player 'Active modifications:' chat line on connect; QC client/main.qc:1438)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:53 BuildMutatorsString (=> s + \":offhand_blaster\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:57 BuildMutatorsPrettyString (=> s + \", Offhand blaster\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108/121 BuildMutatorsString / BuildMutatorsPrettyString (per-active-mutator chain)"
+      - "src/VortexArena.Server/GameWorld.cs:1117 (MutatorActivation.BuildMutatorsString -> GameLog ':gameinfo:mutators:' line, sv_eventlog-gated)"
+      - "src/VortexArena.Server/GameWorld.cs:1128-1130 (MutatorActivation.BuildMutatorsPrettyString -> 'modifications' serverinfo key at match-start; QC server/client.qc:1107)"
+      - "src/VortexArena.Server/GameWorld.cs:1392 (BuildMutatorsPrettyString -> per-player 'Active modifications:' chat line on connect; QC client/main.qc:1438)"
       - "game/net/ServerNet.cs:608 (BuildServerInfo -> 'modifications' server-browser field via BuildMutatorsPrettyString)"
     constants:
       - { name: "machine_token", base: "\":offhand_blaster\"", port: "\":offhand_blaster\"", match: true }
@@ -195,8 +195,8 @@ features:
     base_refs:
       - "common/mutators/mutator/offhand_blaster/cl_offhand_blaster.qc:MUTATOR_HOOKFUNCTION(cl_offhand_blaster, BuildGameplayTipsString)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:1314-1321 (offhand-blaster gameplay tip emit on client connect)"
-      - "src/XonoticGodot.Engine/Console/BindTable.cs:64 (CommandKey -> getcommandkey)"
+      - "src/VortexArena.Server/GameWorld.cs:1314-1321 (offhand-blaster gameplay tip emit on client connect)"
+      - "src/VortexArena.Engine/Console/BindTable.cs:64 (CommandKey -> getcommandkey)"
     constants:
       - { name: "tip_text", base: "\"^3offhand blaster^8 is enabled, press ^3%s^8 to use it\"", port: "\"^3offhand blaster^8 is enabled, press ^3{key}^8 to use it\"", match: true }
       - { name: "key_lookup", base: "getcommandkey(_(\"offhand hook\"), \"+hook\")", port: "BindTable.CommandKey(\"offhand hook\", \"+hook\")", match: true }
@@ -224,7 +224,7 @@ features:
       - "common/mutators/mutator/offhand_blaster/offhand_blaster.qc:METHOD(MutatorOffhandBlaster, describe)"
       - "common/mutators/mutator/offhand_blaster/offhand_blaster.qh:CLASS(MutatorOffhandBlaster) message=\"Offhand blaster\""
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:27-31 (GuideDescription override — 3-paragraph describe text)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:27-31 (GuideDescription override — 3-paragraph describe text)"
       - "game/menu/dialogs/DialogMediaGuide.cs:140-148 (Mutators topic enumerates Mutators.All, lists those with GuideDescription)"
       - "game/menu/dialogs/DialogMediaGuide.cs:184-186 (selected mutator renders its GuideDescription in the description pane)"
     constants:

@@ -1,7 +1,7 @@
 # Team Mayhem (tmayhem) — parity spec
 
 **Base refs:** `common/gametypes/gametype/tmayhem/{tmayhem.qh, tmayhem.qc, sv_tmayhem.qc, sv_tmayhem.qh}` + the shared scoring in `common/gametypes/gametype/mayhem/sv_mayhem.qc` (`MayhemCalculatePlayerScore`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs` · `src/XonoticGodot.Common/Gameplay/GameTypes/Mayhem.cs` (the shared `MayhemScoring` static) · `src/XonoticGodot.Server/GameWorld.cs` (activation + per-frame drive + limits + reset)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs` · `src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs` (the shared `MayhemScoring` static) · `src/VortexArena.Server/GameWorld.cs` (activation + per-frame drive + limits + reset)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -151,7 +151,7 @@ is tmayhem-only.)
 **Gameplay logic + scoring numbers are a faithful, well-tested port.** The shared `MayhemScoring` math is
 line-by-line equivalent to `MayhemCalculatePlayerScore` (all three methods, `suicide_weight`, the ×100/floor(÷100)
 fixed-point scaling, `Rint` = round half away from zero) and has dedicated unit-test coverage
-(`tests/XonoticGodot.Tests/MayhemScoringTests.cs`) including the Team Mayhem SAME_TEAM friendly-fire rule, the
+(`tests/VortexArena.Tests/MayhemScoringTests.cs`) including the Team Mayhem SAME_TEAM friendly-fire rule, the
 team-routed score, the zeroed mirror damage, environmental-suicide subtraction, spawn-shield handling, and
 `reset_map_players`. Team count, point/lead-limit end-of-match, team-leader, team-tie overtime, team-spawn gating,
 and team-score read-through are all wired live in `GameWorld`.

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using XonoticGodot.Game.Client;   // EffectInfoEmitter
+using VortexArena.Game.Client;   // EffectInfoEmitter
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  EffectStyleRegistry — the router-facing view of the authoring overlay (planning/particles-dual-system.md

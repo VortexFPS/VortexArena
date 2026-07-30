@@ -1,7 +1,7 @@
 # Capture the Flag (ctf) — parity spec
 
 **Base refs:** `common/gametypes/gametype/ctf/{ctf.qh,ctf.qc,sv_ctf.qc,sv_ctf.qh,cl_ctf.qc,cl_ctf.qh}` · `gametypes-server.cfg` · `ctfscoring-samual.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs` (gametype + flag entity state machine) · `src/XonoticGodot.Server/GameWorld.cs` (live wiring) · `src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs` (bot role) · `game/hud/ModIconsPanel.cs` (CTF mod-icon renderer) · `src/XonoticGodot.Net/GametypeStatusBlock.cs` (OBJECTIVE_STATUS replication)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs` (gametype + flag entity state machine) · `src/VortexArena.Server/GameWorld.cs` (live wiring) · `src/VortexArena.Server/Bot/BotObjectiveRoles.cs` (bot role) · `game/hud/ModIconsPanel.cs` (CTF mod-icon renderer) · `src/VortexArena.Net/GametypeStatusBlock.cs` (OBJECTIVE_STATUS replication)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

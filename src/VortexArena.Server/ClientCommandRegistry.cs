@@ -17,7 +17,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The C# successor to QC's split between <c>CLIENT_COMMANDS</c> (server/command/cmd.qc — a client may
@@ -120,6 +120,15 @@ public static class ClientCommandRegistry
         //      + common command lists. Reachable by a client in Base, so allow it. (The port's help lists more
         //      names than Base's client-help, but the verbs themselves stay gated, so it's at most a name hint.)
         "help",
+
+        // ---- map editor (port; design doc §11.7, phase E6). A guest mapper submits geometry ops over the
+        //      clc_stringcmd channel, so the verb has to be client-reachable or co-editing cannot happen at
+        //      all. It has no Base counterpart because Base has no in-game editor. Not a privilege hole: the
+        //      handler is inert outside the editor gametype and inert without an open editing session, the
+        //      server validates every op against the real geometry before applying it, and per-brush locks stop
+        //      one client interfering with another's drag. ----
+        "editor_op",
+        "editor_playtest",
     };
 
     /// <summary>

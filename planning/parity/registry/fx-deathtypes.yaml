@@ -14,7 +14,7 @@ features:
     base_refs:
       - "common/deathtypes/all.qh:30-52 (DEATH_WEAPONMASK, HITTYPE_*, DT_FIRST, REGISTER_DEATHTYPE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs (DeathTypes string-tag scheme)"
+      - "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs (DeathTypes string-tag scheme)"
     constants:
       - { name: "DEATH_WEAPONMASK", base: "BITS(8)=0xFF", port: "weapon NetName via 'weapon/' prefix", match: false }
       - { name: "DT_FIRST", base: "BIT(14)", port: "bare lowercase special tag (no numeric base)", match: false }
@@ -41,7 +41,7 @@ features:
       - "common/deathtypes/all.qh:41-48 (DEATH_ISSPECIAL/DEATH_WEAPONOF/DEATH_ISWEAPON)"
       - "common/items/inventory.qh + server/damage.qc (DROWN||ARMORPIERCE armor bypass; FIRE/BUFF hitsound exclude)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs (IsWeapon/IsSpecial/BypassesArmor/IsFireOrBuff/IsAlwaysLethal/IsTeamChange)"
+      - "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs (IsWeapon/IsSpecial/BypassesArmor/IsFireOrBuff/IsAlwaysLethal/IsTeamChange)"
     constants:
       - { name: "armor bypass", base: "DEATH_IS(t,DROWN) || (t & HITTYPE_ARMORPIERCE)", port: "BaseOf==Drown || HasHitType(ArmorPierce)", match: true }
       - { name: "always-lethal set", base: "KILL/TEAMCHANGE/AUTOTEAMCHANGE", port: "Kill/TeamChange/AutoTeamChange", match: true }
@@ -67,7 +67,7 @@ features:
       - "common/deathtypes/all.qh:44-46 (DEATH_ISVEHICLE/ISTURRET/ISMONSTER)"
       - "common/deathtypes/all.inc:15-61 (monster/turret/vehicle rows carry .message)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs (_registry, Lookup/CategoryOf/IsMonster/IsTurret/IsVehicle)"
+      - "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs (_registry, Lookup/CategoryOf/IsMonster/IsTurret/IsVehicle)"
     constants:
       - { name: "monster rows", base: "8 (MAGE,GOLEM x3,SPIDER,WYVERN,ZOMBIE x2)", port: "8", match: true }
       - { name: "turret rows", base: "13 (TURRET + 12 variants)", port: "13", match: true }
@@ -96,8 +96,8 @@ features:
       - "common/weapons/weapon/*.qc (wr_killmessage/wr_suicidemessage METHODs)"
       - "server/damage.qc:Obituary_WeaponDeath (w_deathtype)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:37 (SelectKillMessage)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:115 (SelectSuicideMessage)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:37 (SelectKillMessage)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:115 (SelectSuicideMessage)"
     constants:
       - { name: "devastator murder", base: "(BOUNCE|SPLASH)?MURDER_SPLASH:MURDER_DIRECT", port: "same", match: true }
       - { name: "electro murder", base: "SEC?ORBS:(BOUNCE?COMBO:BOLT)", port: "same", match: true }
@@ -126,7 +126,7 @@ features:
       - "server/damage.qc:Obituary_SpecialDeath (reads death_msgself/death_msgmurder)"
       - "common/deathtypes/all.inc (DROWN/FALL/FIRE/LAVA/SLIME/SWAMP/HURTTRIGGER/TELEFRAG/BUFF_*/NOAMMO rows) + common/notifications/all.inc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:209-261 (SelectSpecial)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:209-261 (SelectSpecial)"
     constants:
       - { name: "telefrag", base: "murder-only (self->generic)", port: "murder TELEFRAG / self GENERIC", match: true }
       - { name: "noammo", base: "self-only (murder->frag)", port: "self NOAMMO / murder FRAG", match: true }
@@ -154,10 +154,10 @@ features:
       - "common/deathtypes/all.inc (NADE,NADE_DARKNESS/HEAL/ICE/NAPALM; CHEAT/CAMP/ROT/SHOOTING_STAR/TOUCHEXPLODE rows)"
       - "common/notifications/all.inc (DEATH_*_NADE/CHEAT/CAMP/ROT/SHOOTING_STAR/TOUCHEXPLODE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:218-258 (SelectSpecial - NADE family + cheat/camp/rot/shooting_star/touchexplode ALL present)"
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/{NadeNormalBoom,NadeIceBoom,NadeHealBoom,NadeDarknessBoom,NadeNapalmBoom}.cs (emit NadeDeathTypes.Nade/Ice/Heal/Darkness/Napalm via Combat.Damage — LIVE when g_nades)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:156,165 (camp, LIVE when g_campcheck); TouchExplodeMutator.cs:122 (touchexplode, LIVE); src/XonoticGodot.Server/Cheats.cs:271 (cheat, LIVE); src/XonoticGodot.Server/PlayerFrameLogic.cs:100 (rot regen-tick, LIVE) + src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs:79 (rot bloodloss-tick, LIVE — 2nd 'rot' emitter)"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:464 (shooting_star, LIVE via the FallDamage g_maxspeed over-speed guard; FallDamage called per-frame from GameWorld.cs:2107)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:218-258 (SelectSpecial - NADE family + cheat/camp/rot/shooting_star/touchexplode ALL present)"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/{NadeNormalBoom,NadeIceBoom,NadeHealBoom,NadeDarknessBoom,NadeNapalmBoom}.cs (emit NadeDeathTypes.Nade/Ice/Heal/Darkness/Napalm via Combat.Damage — LIVE when g_nades)"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:156,165 (camp, LIVE when g_campcheck); TouchExplodeMutator.cs:122 (touchexplode, LIVE); src/VortexArena.Server/Cheats.cs:271 (cheat, LIVE); src/VortexArena.Server/PlayerFrameLogic.cs:100 (rot regen-tick, LIVE) + src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs:79 (rot bloodloss-tick, LIVE — 2nd 'rot' emitter)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:464 (shooting_star, LIVE via the FallDamage g_maxspeed over-speed guard; FallDamage called per-frame from GameWorld.cs:2107)"
     constants:
       - { name: "camp self line", base: "DEATH_SELF_CAMP (NULL murder)", port: "DEATH_SELF_CAMP self / DEATH_MURDER_FRAG murder", match: true }
       - { name: "nade murder line", base: "DEATH_MURDER_NADE ('blown up by Y's Nade')", port: "DEATH_MURDER_NADE (NADE/_NAPALM/_ICE/_HEAL/_DARKNESS mapped)", match: true }
@@ -188,9 +188,9 @@ features:
       - "common/deathtypes/all.inc (MIRRORDAMAGE->DEATH_SELF_BETRAYAL; KILL->DEATH_SELF_SUICIDE)"
       - "server/damage.qc:Obituary_SpecialDeath (if (g_cts && deathtype == DEATH_KILL.m_id) return)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:241-243 (Kill->SUICIDE, MirrorDamage->BETRAYAL)"
-      - "src/XonoticGodot.Server/Scores.cs:672-673 (CTS /kill obituary suppression: baseType==Kill && GameScores.Gametype=='cts' -> return)"
-      - "src/XonoticGodot.Server/GameWorld.cs:957-961 (/kill emits DeathTypes.Kill, LIVE); src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:324 (reflected teamdamage emits MirrorDamage, LIVE; also Survival.cs:384)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:241-243 (Kill->SUICIDE, MirrorDamage->BETRAYAL)"
+      - "src/VortexArena.Server/Scores.cs:672-673 (CTS /kill obituary suppression: baseType==Kill && GameScores.Gametype=='cts' -> return)"
+      - "src/VortexArena.Server/GameWorld.cs:957-961 (/kill emits DeathTypes.Kill, LIVE); src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:324 (reflected teamdamage emits MirrorDamage, LIVE; also Survival.cs:384)"
     constants:
       - { name: "mirrordamage self", base: "DEATH_SELF_BETRAYAL", port: "DEATH_SELF_BETRAYAL", match: true }
       - { name: "kill self", base: "DEATH_SELF_SUICIDE", port: "DEATH_SELF_SUICIDE", match: true }
@@ -217,10 +217,10 @@ features:
       - "common/deathtypes/all.inc (AUTOTEAMCHANGE->DEATH_SELF_AUTOTEAMCHANGE; TEAMCHANGE->DEATH_SELF_TEAMCHANGE)"
       - "server/damage.qc:272-273 (SUICIDE branch: TEAMCHANGE/AUTOTEAMCHANGE -> Obituary_SpecialDeath with f1=targ.team); :304 (GiveFrags -1 SKIPPED for AUTOTEAMCHANGE)"
     port_refs:
-      - "src/XonoticGodot.Server/Scores.cs:680-692 (EmitObituary: TEAMCHANGE/AUTOTEAMCHANGE self-line + death_team=victim.Team f1 arg)"
-      - "src/XonoticGodot.Server/Teamplay.cs:1000-1015 (KillPlayerForTeamChange(p, bool autoBalance): manual -> DeathTypes.TeamChange, auto-balance -> DeathTypes.AutoTeamChange; both LIVE)"
-      - "src/XonoticGodot.Server/GameWorld.cs:993 + Teamplay.cs:605 (MANUAL switch -> autoBalance:false -> TeamChange); GameWorld.cs:1000 + 3405 (AUTO-balance -> autoBalance:true -> AutoTeamChange)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:287-291 + src/XonoticGodot.Server/Scores.cs:521-525 (suicide -1 SKIPPED for AUTOTEAMCHANGE via DeathTypes.IsAutoTeamChange — mirror of damage.qc:304)"
+      - "src/VortexArena.Server/Scores.cs:680-692 (EmitObituary: TEAMCHANGE/AUTOTEAMCHANGE self-line + death_team=victim.Team f1 arg)"
+      - "src/VortexArena.Server/Teamplay.cs:1000-1015 (KillPlayerForTeamChange(p, bool autoBalance): manual -> DeathTypes.TeamChange, auto-balance -> DeathTypes.AutoTeamChange; both LIVE)"
+      - "src/VortexArena.Server/GameWorld.cs:993 + Teamplay.cs:605 (MANUAL switch -> autoBalance:false -> TeamChange); GameWorld.cs:1000 + 3405 (AUTO-balance -> autoBalance:true -> AutoTeamChange)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:287-291 + src/VortexArena.Server/Scores.cs:521-525 (suicide -1 SKIPPED for AUTOTEAMCHANGE via DeathTypes.IsAutoTeamChange — mirror of damage.qc:304)"
     constants:
       - { name: "autoteamchange self line", base: "DEATH_SELF_AUTOTEAMCHANGE (f1=death_team)", port: "DEATH_SELF_AUTOTEAMCHANGE (f1=victim.Team) — LIVE via KillPlayerForTeamChange(autoBalance:true)", match: true }
       - { name: "teamchange self line", base: "DEATH_SELF_TEAMCHANGE (f1=death_team)", port: "DEATH_SELF_TEAMCHANGE (f1=victim.Team)", match: true }
@@ -249,9 +249,9 @@ features:
       - "server/damage.qc:Obituary_SpecialDeath (msg_from_ent ? death_msg_ent_murder/self : death_msgmurder/self)"
       - "common/notifications/all.inc (DEATH_SELF_VOID_ENT/DEATH_MURDER_VOID_ENT/DEATH_SELF_CUSTOM)"
     port_refs:
-      - "src/XonoticGodot.Server/Scores.cs:714-724 (VOID_ENT self), :820-830 (VOID_ENT murder), :911 (MsgFromEnt helper), :698-709 (DEATH_CUSTOM branch — selector+emit wired, NO live emitter)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs (trigger_hurt sets .Message default + passes itself as inflictor -> DeathTypes.Void)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageContracts.cs (DeathEvent.Inflictor) + DamageSystem.cs (Inflictor flows to the death event)"
+      - "src/VortexArena.Server/Scores.cs:714-724 (VOID_ENT self), :820-830 (VOID_ENT murder), :911 (MsgFromEnt helper), :698-709 (DEATH_CUSTOM branch — selector+emit wired, NO live emitter)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs (trigger_hurt sets .Message default + passes itself as inflictor -> DeathTypes.Void)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageContracts.cs (DeathEvent.Inflictor) + DamageSystem.cs (Inflictor flows to the death event)"
     constants:
       - { name: "self ENT gate", base: "case DEATH_HURTTRIGGER: inflictor.message != \"\" (damage.qc:281-283,442-444)", port: "MsgFromEnt: BaseOf==Void && inflictor.Message != \"\"", match: true }
       - { name: "murder ENT gate", base: "DEATH_ENT==HURTTRIGGER && inflictor.message2 != \"\" (damage.qc:420)", port: "MsgFromEnt(murder): BaseOf==Void && inflictor.Message2 != \"\"", match: true }
@@ -279,8 +279,8 @@ features:
     base_refs:
       - "server/damage.qc:268-477 (Obituary SUICIDE switch over DEATH_ENT; ACCIDENT GiveFrags(-1) + score==-5 -> ANNCE_ACHIEVEMENT_BOTLIKE)"
     port_refs:
-      - "src/XonoticGodot.Server/Scores.cs:655-838 (EmitObituary: SUICIDE/ACCIDENT branch with CTS-kill suppression, TEAMCHANGE/AUTOTEAMCHANGE, DEATH_CUSTOM, VOID_ENT, TEAMKILL, ENEMY FRAG branches; killstreak announcer; first-blood latch; typefrag/fire centerprints)"
-      - "src/XonoticGodot.Server/Scores.cs:878-884 (EmitBotlikeAchievement: accident (attacker==null) score==-5 -> ANNCE_ACHIEVEMENT_BOTLIKE)"
+      - "src/VortexArena.Server/Scores.cs:655-838 (EmitObituary: SUICIDE/ACCIDENT branch with CTS-kill suppression, TEAMCHANGE/AUTOTEAMCHANGE, DEATH_CUSTOM, VOID_ENT, TEAMKILL, ENEMY FRAG branches; killstreak announcer; first-blood latch; typefrag/fire centerprints)"
+      - "src/VortexArena.Server/Scores.cs:878-884 (EmitBotlikeAchievement: accident (attacker==null) score==-5 -> ANNCE_ACHIEVEMENT_BOTLIKE)"
     constants:
       - { name: "killstreak milestones", base: "3/5/10/15/20/25/30", port: "same (KillStreakAnnce)", match: true }
       - { name: "first-blood kill_count", base: "-1 attacker / -2 target", port: "-1 / -2", match: true }

@@ -1,7 +1,7 @@
 # Multijump mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/multijump/multijump.qc` · `common/mutators/mutator/multijump/multijump.qh` · `common/stats.qh` (stats) · `mutators.cfg` (cvar defaults)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs` · `src/XonoticGodot.Common/Physics/PlayerPhysics.cs` (PlayerJump/PlayerPhysics hosts) · `src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs` (MultijumpCount/MultijumpReady fields)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs` · `src/VortexArena.Common/Physics/PlayerPhysics.cs` (PlayerJump/PlayerPhysics hosts) · `src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs` (MultijumpCount/MultijumpReady fields)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

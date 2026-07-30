@@ -1,7 +1,7 @@
 # Plasma Cannon Turret — parity spec
 
 **Base refs:** `common/turrets/turret/plasma.qc`, `plasma.qh`, `plasma_weapon.qc`, `plasma_weapon.qh` (+ shared `common/turrets/sv_turrets.qc`, `turret.qh`, `cl_turrets.qc`, `turrets.cfg`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs`, `PlasmaDualTurret.cs`, `TurretAI.cs`, `TurretSpawn.cs`, `TurretCombat.cs`, `TurretSpawnFuncs.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs`, `PlasmaDualTurret.cs`, `TurretAI.cs`, `TurretSpawn.cs`, `TurretCombat.cs`, `TurretSpawnFuncs.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -189,7 +189,7 @@ presentation gap (one muzzle, not two), not a deliberate logic change.
   `SimulationLoop.RunThink` (SV_RunThink port) fires it. Live. (Code-read, not run.)
 - **`TurretAI.Damage` deadness:** `grep` over `src/` + `tests/` for `TurretAI.Damage(` returns only
   `TurretLifecycleTests.cs`. No production caller. (Verified.)
-- **Targeting/scoring:** unit-tested in `tests/XonoticGodot.Tests/TurretTargetingTests.cs` (ValidTarget gates,
+- **Targeting/scoring:** unit-tested in `tests/VortexArena.Tests/TurretTargetingTests.cs` (ValidTarget gates,
   bias formula, sticky enemy, range/LOS). `TurretLifecycleTests.cs` covers Use/Damage/Die/Respawn (but Damage is
   test-only). `TurretAimTrackTests.cs` covers aim/track. (Verified files exist; not executed here.)
 - **Values:** diffed `turrets.cfg` (g_turrets_unit_plasma[_dual]_*) against the hardcoded consts — all match.

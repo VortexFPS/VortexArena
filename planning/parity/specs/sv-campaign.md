@@ -1,7 +1,7 @@
 # Single-player campaign (sv-campaign) — parity spec
 
 **Base refs:** `server/campaign.qc` · `server/campaign.qh` · `common/campaign_file.qc` · `common/campaign_common.qh` · `common/campaign_setup.qc` · `common/mapobjects/target/levelwarp.qc` · `common/mapobjects/target/changelevel.qc` · `menu/xonotic/campaign.qc`
-**Port refs:** `src/XonoticGodot.Server/Campaign.cs` · `src/XonoticGodot.Server/CampaignCatalog.cs` · `src/XonoticGodot.Server/GameWorld.cs` · `src/XonoticGodot.Server/Commands.cs` (`warp`) · `src/XonoticGodot.Server/Bot/BotPopulation.cs` · `src/XonoticGodot.Server/ClientManager.cs` · `src/XonoticGodot.Server/OverTimeManager.cs` · `game/menu/SingleplayerScreen.cs` · `game/net/NetGame.cs` · `src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs`
+**Port refs:** `src/VortexArena.Server/Campaign.cs` · `src/VortexArena.Server/CampaignCatalog.cs` · `src/VortexArena.Server/GameWorld.cs` · `src/VortexArena.Server/Commands.cs` (`warp`) · `src/VortexArena.Server/Bot/BotPopulation.cs` · `src/VortexArena.Server/ClientManager.cs` · `src/VortexArena.Server/OverTimeManager.cs` · `game/menu/SingleplayerScreen.cs` · `game/net/NetGame.cs` · `src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -177,11 +177,11 @@ reproduce QC's single shared engine cvar store, not a behavior change.
   unloading; the port skips it (moot — `Aborted` falls back to normal play).
 
 ## Verification
-- `tests/XonoticGodot.Tests/CampaignFlowTests.cs` — 20+ facts covering Load (columns, offset, missing file),
+- `tests/VortexArena.Tests/CampaignFlowTests.cs` — 20+ facts covering Load (columns, offset, missing file),
   PreInit (settemps, global skill offset, unknown-map + cheats abort), PostInit (limits, `default` keyword,
   `+`-split), PreIntermission (solo win advances, loss no-advance, cheats block save, below-frontier no-regress,
   forcewin, time-up loss, bots excluded), PostIntermission (next/replay/last-level/last-loss), Setup, SaveCvar RMW.
-- `tests/XonoticGodot.Tests/CampaignCatalogTests.cs` — the menu all-levels parse half.
+- `tests/VortexArena.Tests/CampaignCatalogTests.cs` — the menu all-levels parse half.
 - The end-to-end flow (menu → boot → PreInit/PostInit → win → PreIntermission/PostIntermission/Setup → reboot)
   was traced and confirmed faithful in the prior T49 audit (project memory: "Campaign flow verified").
 - Dead map-entity seams: established by grep — `TargetUtilities.{NextLevelHandler,ChangeLevelHandler,

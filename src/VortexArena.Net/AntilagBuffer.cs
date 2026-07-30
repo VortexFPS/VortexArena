@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Fixed-size ring of timestamped position samples for ONE rewindable entity — the server-side
@@ -129,7 +129,7 @@ public sealed class AntilagBuffer
 
 /// <summary>
 /// Pure time/position helpers for server-side lag compensation (antilag), factored out so the rewind
-/// math can live in <c>XonoticGodot.Net</c> without referencing the engine's entities or <c>setorigin</c>.
+/// math can live in <c>VortexArena.Net</c> without referencing the engine's entities or <c>setorigin</c>.
 /// The structural port of how <c>server/antilag.qc</c> drives a shot:
 /// <list type="number">
 ///   <item>Each server frame, the server calls <see cref="AntilagBuffer.Store"/> once per rewindable

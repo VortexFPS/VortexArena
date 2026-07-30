@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;     // CvarFlags
-using XonoticGodot.Engine.Simulation;   // CvarService (RegisterDefaults)
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;     // CvarFlags
+using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Center-of-screen timed messages — port of Base/.../qcsrc/client/hud/panel/centerprint.qc (HUD panel

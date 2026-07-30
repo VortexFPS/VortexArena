@@ -1,7 +1,7 @@
 # cl-announcer — parity spec
 
 **Base refs:** `client/announcer.qc` · `client/announcer.qh` · `common/util.qc:Announcer_PickNumber` · `common/notifications/all.qc` (`Local_Notification_sound` / `Local_Notification_Queue_*` / `AnnouncerFilename`) · `common/notifications/all.inc` (the `MSG_ANNCE` notification table)
-**Port refs:** `src/XonoticGodot.Server/AnnouncerController.cs` · `src/XonoticGodot.Server/GameWorld.cs` (`BroadcastGameStartCountdown` / `BroadcastRoundStartCountdown` / `AnnceIfEnabled` / the `Announcer.*` wiring) · `game/hud/HudNotifications.cs` (the client announcer-voice player + antispam + queue) · `game/hud/CenterPrintPanel.cs` (title/duel title) · `game/net/NetGame.cs` (live client routing)
+**Port refs:** `src/VortexArena.Server/AnnouncerController.cs` · `src/VortexArena.Server/GameWorld.cs` (`BroadcastGameStartCountdown` / `BroadcastRoundStartCountdown` / `AnnceIfEnabled` / the `Announcer.*` wiring) · `game/hud/HudNotifications.cs` (the client announcer-voice player + antispam + queue) · `game/hud/CenterPrintPanel.cs` (title/duel title) · `game/net/NetGame.cs` (live client routing)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -103,8 +103,8 @@ The announcer is the client subsystem that (a) drives the pre-match / per-round 
 **Liveness:** the live chain is `GameWorld.OnStartFrame → Announcer.Tick()` (remaining-time) and `WarmupController/RoundHandler.OnCountdownTick → BroadcastGameStart/RoundStartCountdown → NotificationSystem` (countdown), then on the client `ClientNet.NotificationReceived → NetGame.OnNotificationReceived → HudNotifications.OnNotification → PlayAnnouncer`, with `ProcessAnnouncerQueue` pumped each frame from `NetGame` (≈2104). The title methods and the ROUNDSTOP notification are the only present-but-dead pieces.
 
 ## Verification
-- `tests/XonoticGodot.Tests/CountdownAnnouncerTests.cs` — countdown fires once per whole second (not per frame), maps to NUM_GAMESTART_5..1 / NUM_ROUNDSTART_3..1 + COUNTDOWN_* + BEGIN, and the disabled NUM_ROUNDSTART_5 is suppressed.
-- `tests/XonoticGodot.Tests/ClientFeedbackTests.cs` — `PickCountdownNumber` (3/2/1, out-of-range → null, RoundStart family), `CountdownRounded` (`floor(0.5+x)`), and the `Announcer_Time` hysteresis (fire-once-per-crossing, mode 1/2/3 gating, intermission suppression).
+- `tests/VortexArena.Tests/CountdownAnnouncerTests.cs` — countdown fires once per whole second (not per frame), maps to NUM_GAMESTART_5..1 / NUM_ROUNDSTART_3..1 + COUNTDOWN_* + BEGIN, and the disabled NUM_ROUNDSTART_5 is suppressed.
+- `tests/VortexArena.Tests/ClientFeedbackTests.cs` — `PickCountdownNumber` (3/2/1, out-of-range → null, RoundStart family), `CountdownRounded` (`floor(0.5+x)`), and the `Announcer_Time` hysteresis (fire-once-per-crossing, mode 1/2/3 gating, intermission suppression).
 - Voice-playback antispam + queue: logic verified by code read of `HudNotifications` against `common/notifications/all.qc`; not behaviorally tested in-game (no automated coverage of the client audio path) — **unverified at runtime**.
 - Dead callers (titles, ROUNDSTOP, `cl_announcer`/`cl_announcer_antispam` wiring): verified by grep — zero live call sites / cvar reads.
 

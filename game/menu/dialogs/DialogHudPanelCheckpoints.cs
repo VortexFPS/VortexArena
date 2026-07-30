@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Checkpoints" panel config dialog — a faithful C# port of <c>XonoticHUDCheckpointsDialog_fill</c>
@@ -8,7 +8,7 @@ namespace XonoticGodot.Game.Menu;
 /// group, via <see cref="HudPanelCommon"/>) then the checkpoints-specific rows: font scale slider, the flip
 /// checkpoint-order checkbox, and the text alignment radio set.
 ///
-/// FAITHFUL UI NOW: the Race/CTS checkpoints panel is drawn by the HUD backend XonoticGodot hasn't wired up; all
+/// FAITHFUL UI NOW: the Race/CTS checkpoints panel is drawn by the HUD backend VortexArena hasn't wired up; all
 /// cvar bindings are real (they write the shared store the game reads).
 /// </summary>
 public partial class DialogHudPanelCheckpoints : MenuScreen

@@ -1,8 +1,8 @@
 # Client damage effects (DamageInfo) — parity spec
 
 **Base refs:** `common/effects/qc/damageeffects.qc` + `.qh`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs` (no-op seam + blood),
-`src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs` / `WeaponSplash.cs` (server-side impact FX),
+**Port refs:** `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs` (no-op seam + blood),
+`src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs` / `WeaponSplash.cs` (server-side impact FX),
 `game/client/EffectSystem.cs` / `ModelGibs.cs` (raptor shellfrags), `game/menu/dialogs/DialogSettingsEffects.cs` (dead cvar UI)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-07-02
 

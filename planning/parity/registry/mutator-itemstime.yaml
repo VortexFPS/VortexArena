@@ -17,8 +17,8 @@ features:
       - "common/mutators/mutator/itemstime/itemstime.qc:Item_ItemsTime_Allow"
       - "common/mutators/mutator/itemstime/itemstime.qc:Item_ItemsTime_SpectatorOnly"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs:TimedItemClasses"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs:ClassKeyMap"
+      - "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs:TimedItemClasses"
+      - "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs:ClassKeyMap"
     constants:
       - { name: "set", base: "powerups + ArmorMega/Big + HealthMega/Big + superweapons slot", port: "health_mega/big, armor_mega/big, strength, shield, superweapons", match: true }
       - { name: "tracks_big_items_serverside", base: "true (SVQC hidebig=false)", port: "true", match: true }
@@ -33,7 +33,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:Itemstime_PublishesRespawnTime_ForTimedItem", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:Itemstime_PublishesRespawnTime_ForTimedItem", result: pass }
       - { kind: code, ref: "ItemstimeMutator.TimedItemClasses vs Item_ItemsTime_Allow (powerups Strength/Shield + mega/big H+A)", result: pass }
     confidence: high
     notes: "Set matches Base. Superweapon weapon-pickups map to the single aggregate slot via weapon_<netname> classnames where Weapon.IsSuperWeapon, mirroring WEPSET_SUPERWEAPONS. The Base powerup set is exactly Strength+Shield (the two instanceOfPowerup items), which the port enumerates explicitly. ItemstimeMutator.cs is unchanged at this drift check (the net-message work lives in ServerNet/ClientNet/NetGame)."
@@ -47,10 +47,10 @@ features:
       - "server/items/items.qc:Item_Respawn"
       - "server/items/items.qc:Item_ScheduleRespawnIn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs:Recompute"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs:Note"
+      - "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs:Recompute"
+      - "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs:Note"
     constants:
-      - { name: "sv_itemstime_default", base: "1", port: "1 (assets/data/.../xonotic-server.cfg:421)", match: true }
+      - { name: "sv_itemstime_default", base: "1", port: "1 (Base/data/.../xonotic-server.cfg:421)", match: true }
       - { name: "available_value_when_all_up", base: "0", port: "0", match: true }
     status:
       logic: faithful
@@ -63,8 +63,8 @@ features:
     divergence_rationale: "Base updates it_times event-driven (SetTime/UpdateTime called at each item pickup / respawn-schedule in items.qc). The port instead re-scans all live world items every server frame (OnStartFrame -> Recompute) reading each item's ScheduledRespawnTime. The published value is identical (min cooldown across copies); only the trigger differs. Documented in ItemstimeMutator.cs comments."
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:Itemstime_PublishesRespawnTime_ForTimedItem (t=20 on cooldown)", result: pass }
-      - { kind: code, ref: "src/XonoticGodot.Server/GameWorld.cs MutatorActivation.Apply -> Add -> Hook -> SvStartFrame.Add; MutatorHooks.FireStartFrame pumps it every server frame", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:Itemstime_PublishesRespawnTime_ForTimedItem (t=20 on cooldown)", result: pass }
+      - { kind: code, ref: "src/VortexArena.Server/GameWorld.cs MutatorActivation.Apply -> Add -> Hook -> SvStartFrame.Add; MutatorHooks.FireStartFrame pumps it every server frame", result: pass }
     confidence: high
     notes: "Reads Entity.ScheduledRespawnTime set by the item respawn scheduler (ItemPickupRules). Verified LIVE: sv_itemstime default 1 -> IsEnabled true -> Hook() adds SvStartFrame and seeds Recompute immediately; FireStartFrame fires every server frame. Producer logic unchanged at this drift check."
 
@@ -74,7 +74,7 @@ features:
     base_refs:
       - "common/mutators/mutator/itemstime/itemstime.qc:Item_ItemsTime_UpdateTime"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs:Recompute"
+      - "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs:Recompute"
     constants:
       - { name: "encoding", base: "if isavailable: return -t (negate min cooldown)", port: "avail ? -t : t", match: true }
     status:
@@ -88,7 +88,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:Itemstime_NegativeEncoding_WhenAnotherCopyAvailable (asserts -30)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:Itemstime_NegativeEncoding_WhenAnotherCopyAvailable (asserts -30)", result: pass }
     confidence: high
     notes: "When one copy is up and another is on cooldown, the min cooldown time is sent negated; the panel decodes it as 'available now' + a still-running countdown. Test asserts -30 for the two-copy case. hasMin flag correctly distinguishes 'no cooldown copy yet' from min==0 (matches QC's `t == 0 || it.scheduledrespawntime < t` guard). Unchanged at this drift check."
 
@@ -120,7 +120,7 @@ features:
       - { kind: code, ref: "game/net/ClientNet.cs:HandleItemsTime — decodes tier + table into ItemsTimeTier / ItemTimes / HasItemsTime; dispatched via NetControl.ItemsTime case (ClientNet.cs:531)", result: pass }
       - { kind: code, ref: "game/net/NetGame.cs:2500-2515 remote-client feed (`else if (_client.HasItemsTime)`) wires ItemTimes/ItemsTimeTier into ItemsTimePanel via ShouldDraw", result: pass }
     confidence: high
-    notes: "FIXED since the 2026-06-25 baseline (Wave 7/8). Was logic/values/timing/presentation=missing, liveness=dead with empty port_refs. The CSQC itemstime net-temp message is now ported as a batched reliable per-peer push (NetProtocol v10), gated by Base's SetTimesForAllPlayers send rule, decoded on the client and fed to ItemsTimePanel — so a pure remote/dedicated-server client now receives respawn times. The net layer lives under game/net (not src/XonoticGodot.Net, which is why the old grep over that dir showed nothing)."
+    notes: "FIXED since the 2026-06-25 baseline (Wave 7/8). Was logic/values/timing/presentation=missing, liveness=dead with empty port_refs. The CSQC itemstime net-temp message is now ported as a batched reliable per-peer push (NetProtocol v10), gated by Base's SetTimesForAllPlayers send rule, decoded on the client and fed to ItemsTimePanel — so a pure remote/dedicated-server client now receives respawn times. The net layer lives under game/net (not src/VortexArena.Net, which is why the old grep over that dir showed nothing)."
 
   - id: mutator-itemstime.producer.per_player_tiers
     name: "Per-player send tiers + observer/spawn/connect sync hooks"
@@ -191,7 +191,7 @@ features:
     base_refs:
       - "common/stats.qh:138"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs:Tier"
+      - "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs:Tier"
       - "game/net/ServerNet.cs:SendItemsTime"
       - "game/net/ClientNet.cs:ItemsTimeTier"
     constants:
@@ -285,12 +285,12 @@ features:
       - "common/mutators/mutator/waypoints/waypointsprites.qc:495"
       - "server/items/items.qc:293"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:RespawnCountdown"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs:IsSpectatorOnlyItem"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:RespawnCountdown"
+      - "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs:IsSpectatorOnlyItem"
       - "game/net/ServerNet.cs:WaypointVisible"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:SpriteRule.Spectator"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:SpriteRule.Spectator"
     constants:
-      - { name: "g_waypointsprite_itemstime_default", base: "2 (xonotic-client.cfg:518)", port: "cvar present in assets/data/.../xonotic-client.cfg:518 but UNREAD (no client draw-side gate); the spectator visibility is enforced server-side by ServerNet.WaypointVisible instead", match: false }
+      - { name: "g_waypointsprite_itemstime_default", base: "2 (xonotic-client.cfg:518)", port: "cvar present in Base/data/.../xonotic-client.cfg:518 but UNREAD (no client draw-side gate); the spectator visibility is enforced server-side by ServerNet.WaypointVisible instead", match: false }
       - { name: "spectator_rule_gate", base: "SPRITERULE_SPECTATOR + (sv_itemstime!=0; live players hidden unless warmup||sv_itemstime==2)", port: "SpriteRule.Spectator: sv_itemstime==0 -> hidden; !warmup && isPlayer && sv_itemstime!=2 -> hidden; else visible (ServerNet.cs:1142-1150)", match: true }
       - { name: "build_finished", base: "WaypointSprite_UpdateBuildFinished at scheduledrespawntime", port: "WaypointSprites.UpdateBuildFinished(wp, item.ScheduledRespawnTime)", match: true }
     status:
@@ -303,7 +303,7 @@ features:
     intended_divergence: true
     divergence_rationale: "Base gates the SPRITERULE_SPECTATOR respawn waypoint CLIENT-side via autocvar_g_waypointsprite_itemstime (1=spectating, 2=+warmup/sv_itemstime==2; default 2) in Draw_WaypointSprite. The port enforces the same spectator/warmup/sv_itemstime==2 audience SERVER-side in ServerNet.WaypointVisible (the SpriteRule.Spectator case) and does NOT read the client g_waypointsprite_itemstime cvar (which is present in xonotic-client.cfg but dead) — so a client cannot override the gate. The delivered visibility (only spectators in a live round, everyone in warmup / sv_itemstime==2) matches; only the gate location and the client override differ. Also: QC plays SND(ITEMRESPAWNCOUNTDOWN) per visible client via soundto(MSG_ONE); the port emits a single positional CH_TRIGGER cue on the item (ATTEN_NORM falloff) since the Common layer has no per-client soundto seam — slight over-broadcast to nearby live players."
     gaps:
-      - "The client-side g_waypointsprite_itemstime cvar (xonotic-client.cfg:518, default 2) is present but UNREAD — a client overriding it (e.g. to 1 or 0) has no effect; the spectator/warmup audience is enforced server-side in ServerNet.WaypointVisible instead. Documented in src/XonoticGodot.Server/Cvars.cs:578-584."
+      - "The client-side g_waypointsprite_itemstime cvar (xonotic-client.cfg:518, default 2) is present but UNREAD — a client overriding it (e.g. to 1 or 0) has no effect; the spectator/warmup audience is enforced server-side in ServerNet.WaypointVisible instead. Documented in src/VortexArena.Server/Cvars.cs:578-584."
       - "The per-second ITEMRESPAWNCOUNTDOWN countdown cue is broadcast positionally on the item (CH_TRIGGER, ATTEN_NORM) rather than soundto(MSG_ONE) per waypoint-visible client, so it can leak to nearby live players for a SpectatorOnly item (no per-client soundto seam in the Common layer)."
     verification:
       - { kind: code, ref: "ItemPickupRules.RespawnCountdown (ItemPickupRules.cs:771-826) spawns the countdown waypoint on the first tick, rule = SpriteRule.Spectator for IsSpectatorOnlyItem (Mega/Big Health+Armor) else Default; UpdateBuildFinished(wp, ScheduledRespawnTime); wired LIVE as item.Think = RespawnCountdown (ItemPickupRules.cs:660)", result: pass }

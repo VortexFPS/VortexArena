@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Port-O-Launch (Porto) — port of common/weapons/weapon/porto.{qh,qc}. A utility superweapon that
@@ -45,6 +45,7 @@ public sealed class Porto : Weapon
     public Porto()
     {
         NetName = "porto";
+        BotPickupBaseValue = 0;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         DisplayName = "Port-O-Launch";
         Impulse = 0;
         // WEP_TYPE_OTHER | WEP_FLAG_SUPERWEAPON | WEP_FLAG_NODUAL | WEP_FLAG_NOTRUEAIM

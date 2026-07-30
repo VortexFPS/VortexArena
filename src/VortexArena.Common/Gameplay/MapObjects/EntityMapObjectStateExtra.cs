@@ -8,9 +8,9 @@
 // partial (DmgTime).
 
 using System.Numerics;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     /// <summary>
     /// QC <c>.setactive</c> function pointer (mapobjects/triggers.qc <c>generic_setactive</c> / the per-family
@@ -26,7 +26,7 @@ namespace XonoticGodot.Common.Framework
         // ---- .setactive function pointer (QC mapobjects/triggers.qc) ----
         /// <summary>
         /// QC <c>.setactive</c> — the active-state setter relay_activators and generic_setactive dispatch to.
-        /// Null on most movers; callers fall back to <see cref="XonoticGodot.Common.Gameplay.LogicGates.GenericSetActive"/>.
+        /// Null on most movers; callers fall back to <see cref="VortexArena.Common.Gameplay.LogicGates.GenericSetActive"/>.
         /// </summary>
         public EntityUseActive? SetActive;
 
@@ -153,7 +153,7 @@ namespace XonoticGodot.Common.Framework
         // Dictionary<clientIndex, lastTriggerTime> — index == Entity.Index, time == server sim time.
         /// <summary>
         /// QC <c>.triggertimes</c> string-buffer (multi.qc): per-client last-trigger time keyed by
-        /// <see cref="Entity.Index"/>. Allocated in <see cref="XonoticGodot.Common.Gameplay.Triggers.MultipleSetup"/>
+        /// <see cref="Entity.Index"/>. Allocated in <see cref="VortexArena.Common.Gameplay.Triggers.MultipleSetup"/>
         /// only when the gametype is CTS (mirrors <c>buf_create()</c> in <c>spawnfunc(trigger_multiple)</c>).
         /// Null on non-CTS triggers (the shared <see cref="Entity.NextThink"/> path is used instead).
         /// </summary>
@@ -161,7 +161,7 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
     /// <summary>
     /// Process-wide map-object counters/registries that QC kept as globals or entity-lists

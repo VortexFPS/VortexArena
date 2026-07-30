@@ -1,7 +1,7 @@
 # Mayhem — parity spec
 
 **Base refs:** `common/gametypes/gametype/mayhem/{mayhem.qc, mayhem.qh, sv_mayhem.qc, sv_mayhem.qh}` (no `cl_mayhem.qc` — Mayhem has zero client/CSQC code) · scoring cvars in `gametypes-server.cfg` · loadout cvars in `balance-xonotic.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Mayhem.cs` (gametype + `MayhemScoring`) · `src/XonoticGodot.Server/GameWorld.cs` (Activate/DriveGametypeFrame/ResetMap wiring) · hook call sites `DamageSystem.cs`, `SpawnSystem.cs`, `StartItem.cs`, `PlayerFrameLogic.cs`, `WeaponThrowing.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs` (gametype + `MayhemScoring`) · `src/VortexArena.Server/GameWorld.cs` (Activate/DriveGametypeFrame/ResetMap wiring) · hook call sites `DamageSystem.cs`, `SpawnSystem.cs`, `StartItem.cs`, `PlayerFrameLogic.cs`, `WeaponThrowing.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

@@ -16,7 +16,7 @@ features:
     base_refs:
       - "common/turrets/turret/fusionreactor.qh:FusionReactor (CLASS / REGISTER_TURRET)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs:FusionReactorTurret (ctor + Spawn SetSize)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs:FusionReactorTurret (ctor + Spawn SetSize)"
     constants:
       - { name: "netname", base: "fusreac", port: "fusreac", match: true }
       - { name: "m_name", base: "Fusion Reactor", port: "Fusion Reactor", match: true }
@@ -48,7 +48,7 @@ features:
     base_refs:
       - "common/turrets/turret/fusionreactor.qc:tr_setup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs:Select / Spawn / ValidTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs:Select / Spawn / ValidTarget"
     constants:
       - { name: "target_select_flags", base: "TEAMCHECK|OWNTEAM|RANGELIMITS", port: "SelectTeamCheck|SelectOwnTeam|SelectRangeLimits", match: true }
       - { name: "ammo_flags", base: "TFL_AMMO_ENERGY|TFL_AMMO_RECHARGE", port: "implicit (ammo pool + per-frame regen, AmmoIsEnergy=true)", match: true }
@@ -80,7 +80,7 @@ features:
       - "common/turrets/sv_turrets.qc:turret_think (TFL_SHOOT_HITALLVALID branch)"
       - "common/turrets/turret/fusionreactor.qc:tr_attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs:Think"
     constants:
       - { name: "shot_dmg (ammo per top-up)", base: "20", port: "20", match: true }
       - { name: "shot_refire", base: "0.2", port: "0.2", match: true }
@@ -106,7 +106,7 @@ features:
     base_refs:
       - "common/turrets/turret/fusionreactor.qc:turret_fusionreactor_firecheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs:Think (inline checks) / IsRechargeableAlly / ValidTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs:Think (inline checks) / IsRechargeableAlly / ValidTarget"
     constants:
       - { name: "own-ammo gate", base: "this.ammo >= shot_dmg", port: "st.Ammo < ShotDamage -> break", match: true }
       - { name: "recipient-not-full gate", base: "targ.ammo < targ.ammo_max", port: "allyState.Ammo >= AmmoMax -> continue", match: true }
@@ -135,7 +135,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_think (ammo regen block)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs:Think (ammo regen)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs:Think (ammo regen)"
     constants:
       - { name: "ammo_max", base: "100", port: "100", match: true }
       - { name: "ammo_recharge", base: "100 (per second)", port: "100", match: true }
@@ -162,9 +162,9 @@ features:
       - "common/turrets/turret/fusionreactor.qc:tr_think (head avelocity = '0 250 0'*ammo/ammo_max)"
       - "common/turrets/cl_turrets.qc:turret_draw (head angle integration)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs:Think (EffectEmitter.TeSmallflash + HeadAVelocity)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:288 (TeSmallflash -> Emit TE_SMALLFLASH)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:270 (Effects.Register TE_SMALLFLASH as its own block)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs:Think (EffectEmitter.TeSmallflash + HeadAVelocity)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:288 (TeSmallflash -> Emit TE_SMALLFLASH)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:270 (Effects.Register TE_SMALLFLASH as its own block)"
     constants:
       - { name: "head avelocity scale", base: "'0 250 0' * ammo/ammo_max", port: "st.HeadAVelocity = '0 250*ammo/ammo_max 0' (computed, but no client head render integrates it)", match: false }
       - { name: "smallflash origin", base: "0.5*(enemy.absmin+enemy.absmax)", port: "0.5*(ally.AbsMin+ally.AbsMax)", match: true }
@@ -193,11 +193,11 @@ features:
       - "common/turrets/turret/fusionreactor.qc:spawnfunc(turret_fusionreactor)"
       - "common/turrets/sv_turrets.qc:turret_initialize / turret_link / turret_use / turret_damage / turret_die / turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:FusionReactor / Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Use / Damage / Die / Respawn / EnsureDeathHook"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:216 (SpawnFuncs.Register turret_fusionreactor)"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:RunThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:FusionReactor / Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Use / Damage / Die / Respawn / EnsureDeathHook"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:216 (SpawnFuncs.Register turret_fusionreactor)"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:RunThink"
     constants:
       - { name: "g_turrets master switch", base: "1 (0 disables)", port: "MasterSwitchEnabled", match: true }
       - { name: "health", base: "700", port: "700", match: true }
@@ -224,8 +224,8 @@ features:
     base_refs:
       - "common/turrets/turret/fusionreactor.qc:turret_fusionreactor_firecheck (MUTATOR_CALLHOOK FusionReactor_ValidTarget)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:1463 (FusionReactorValidTargetArgs / HookChain :1475) / 1484 (FireFusionReactorValidTarget)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs:122 (Think calls MutatorHooks.FireFusionReactorValidTarget, branches on tri-state)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:1463 (FusionReactorValidTargetArgs / HookChain :1475) / 1484 (FireFusionReactorValidTarget)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs:122 (Think calls MutatorHooks.FireFusionReactorValidTarget, branches on tri-state)"
     constants:
       - { name: "MUT_FUSREAC_TARG_CONTINUE", base: "0 (fall through)", port: "null (normal firecheck applies)", match: true }
       - { name: "MUT_FUSREAC_TARG_VALID", base: "1 (force accept)", port: "true (force accept, skip gates)", match: true }
@@ -252,7 +252,7 @@ features:
     base_refs:
       - "common/turrets/turret/fusionreactor.qc:METHOD(FusionReactor, describe) (MENUQC)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs:49 (Description const — defined, NO live reader)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs:49 (Description const — defined, NO live reader)"
     constants:
       - { name: "describe text", base: "\"The %s is a bit of a unique turret... generating power for nearby turrets...\" + \"This is the only turret that doesn't directly attack its targets.\"", port: "Description const (full string ported verbatim, %s resolved to \"Fusion Reactor\")", match: true }
     status:

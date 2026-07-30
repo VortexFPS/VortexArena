@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Materials;
+namespace VortexArena.Formats.Materials;
 
 /// <summary>
 /// The OpenGL blend factors a Quake 3 <c>blendFunc</c> can name, stored verbatim so the

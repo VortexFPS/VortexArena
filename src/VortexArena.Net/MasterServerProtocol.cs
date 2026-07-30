@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Text;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The Darkplaces/Quake3 <em>connectionless</em> (out-of-band, "OOB") query protocol: the small ASCII

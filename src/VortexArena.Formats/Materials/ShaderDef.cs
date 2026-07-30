@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Materials;
+namespace VortexArena.Formats.Materials;
 
 /// <summary>Back-face culling mode from the <c>cull</c> directive.</summary>
 public enum CullMode
@@ -75,6 +75,53 @@ public sealed class SkyParms
 /// the Q3 format, so it is parsed when present. Color is the three floats; <see cref="Distance"/> is the
 /// opacity distance.
 /// </summary>
+/// <summary>
+/// <c>q3map_sun &lt;r&gt; &lt;g&gt; &lt;b&gt; &lt;intensity&gt; &lt;degrees&gt; &lt;elevation&gt;</c> — the
+/// directional sun a sky shader casts. <c>degrees</c> is the compass angle the light comes FROM (Quake yaw);
+/// <c>elevation</c> is its height above the horizon. Both in degrees.
+/// </summary>
+public sealed class SunParms
+{
+    public float Red { get; init; }
+    public float Green { get; init; }
+    public float Blue { get; init; }
+
+    /// <summary>Brightness in q3map2's units (typically 50-300).</summary>
+    public float Intensity { get; init; }
+
+    /// <summary>Compass angle the sunlight comes FROM, degrees.</summary>
+    public float Degrees { get; init; }
+
+    /// <summary>Elevation above the horizon, degrees.</summary>
+    public float Elevation { get; init; }
+
+    /// <summary>
+    /// <c>q3map_sunExt</c> spread, in degrees: the angular radius the sun is jittered within. 0 is a point
+    /// sun with razor shadows; larger values give a penumbra that widens with distance from the occluder.
+    /// </summary>
+    public float Deviance { get; init; }
+
+    /// <summary>
+    /// <c>q3map_sunExt</c> sample count — how many jittered suns stand in for the disc. Only meaningful with
+    /// a non-zero <see cref="Deviance"/>; q3map2 divides the intensity between them.
+    /// </summary>
+    public int Samples { get; init; } = 1;
+}
+
+/// <summary>
+/// <c>q3map_skylight &lt;amount&gt; &lt;iterations&gt;</c> — diffuse light from the sky dome, which q3map2
+/// simulates as a hemisphere of weak suns (CreateSkyLights). This is what lights the ground of an open map
+/// everywhere the sky is visible, independently of the sun's direction.
+/// </summary>
+public sealed class SkyLightParms
+{
+    /// <summary>Total brightness spread across the dome.</summary>
+    public float Amount { get; init; }
+
+    /// <summary>Elevation subdivisions; q3map2 builds (iterations-1)*4 azimuths per elevation, plus a zenith.</summary>
+    public int Iterations { get; init; }
+}
+
 public sealed class FogParms
 {
     public float Red { get; init; }
@@ -254,6 +301,27 @@ public sealed class ShaderDef
 
     /// <summary>The <c>fogParms</c> directive, or null.</summary>
     public FogParms? FogParms { get; set; }
+
+    /// <summary>
+    /// <c>q3map_surfaceLight &lt;value&gt;</c> — this surface EMITS light of the given intensity. A q3map2
+    /// compile directive, so the shipped renderer never needed it; the in-game editor lights the world live
+    /// and does, because an Xonotic map is lit mostly by glowing strips and panels and is unrecognisable when
+    /// only its point-light entities are honoured. Null when the shader does not emit.
+    /// </summary>
+    public float? SurfaceLight { get; set; }
+
+    /// <summary>
+    /// <c>q3map_shadeAngle</c>, degrees: the widest angle between two faces whose lighting normals q3map2
+    /// still blends. It is phong shading for the lightmap only — the geometry stays faceted, the LIGHT stops
+    /// being. stormkeep's own shader sets 150, which smooths across very nearly everything.
+    /// </summary>
+    public float ShadeAngle { get; set; }
+
+    /// <summary>The <c>q3map_skylight</c> directive on a sky shader, or null.</summary>
+    public SkyLightParms? SkyLight { get; set; }
+
+    /// <summary>The <c>q3map_sun</c> / <c>q3map_sunExt</c> directive on a sky shader, or null.</summary>
+    public SunParms? Sun { get; set; }
 
     /// <summary>
     /// The <c>sort</c> directive. Q3 accepts a small set of named keys (portal, sky, opaque, banner,

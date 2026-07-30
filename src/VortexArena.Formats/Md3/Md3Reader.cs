@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Md3;
+namespace VortexArena.Formats.Md3;
 
 /// <summary>
 /// Parses an MD3 ("IDP3", version 15) model from a raw byte buffer into <see cref="Md3Data"/>.

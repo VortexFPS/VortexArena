@@ -256,7 +256,7 @@ features:
       - "lib/csqcmodel/cl_player.qc:CSQCPlayer_CalcRefdef (view_angles += view_punchangle, 566)"
       - "common/physics/player.qc:PM_check_punch (punchangle decay)"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:CheckPunch"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:CheckPunch"
       - "game/net/ServerNet.cs (writes PunchAngle)"
       - "game/net/ClientNet.cs (reads PunchAngle)"
       - "game/net/NetGame.cs (view_angles += PunchAngle)"
@@ -284,7 +284,7 @@ features:
       - "lib/csqcmodel/cl_player.qc:CSQCPlayer_CalcRefdef (vieworg += view_punchvector, 570)"
       - "common/physics/player.qc:PM_check_punch (punchvector decay 30u/s)"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:CheckPunch (decay)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:CheckPunch (decay)"
       - "game/net/ServerNet.cs (writes PunchVector, owner block)"
       - "game/net/ClientNet.cs (reads PunchVector)"
       - "game/net/NetGame.cs:5123 (PunchOriginQuake = _client.PunchVector)"
@@ -404,7 +404,7 @@ features:
     base_refs:
       - "lib/csqcmodel/cl_player.qc:CSQCPlayer_ApplySmoothing (227)"
     port_refs:
-      - "src/XonoticGodot.Net/FaithfulViewSmoothing.cs"
+      - "src/VortexArena.Net/FaithfulViewSmoothing.cs"
       - "game/net/NetGame.cs:5085-5098 (faithfulSmoothing path) / 5111 (port-mode adaptive offset)"
     constants:
       - { name: "cl_stairsmoothspeed", base: "200", port: "200", match: true }
@@ -767,7 +767,7 @@ features:
     port_refs:
       - "game/client/SpawnPointParticles.cs:65, 90 (reads cl_spawn_point_particles + cl_spawn_point_dist_max live)"
       - "game/client/ClientWorld.cs:451-452 (SpawnPointParticles node added — live)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:849-861 (team-colored SPAWN burst + SND SPAWN on CH_TRIGGER, gated on g_spawn_alloweffects)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:849-861 (team-colored SPAWN burst + SND SPAWN on CH_TRIGGER, gated on g_spawn_alloweffects)"
       - "game/menu/framework/ClientSettings.cs:189-194 (registers cl_spawn_point_particles 1 / cl_spawn_event_particles 1 / cl_spawn_point_dist_max 1200)"
     constants:
       - { name: "cl_spawn_point_particles", base: "1 (xonotic-client.cfg:76; effects-low/med presets set 0)", port: "1 (registered; read live)", match: true }
@@ -835,7 +835,7 @@ features:
     port_refs:
       - "game/menu/dialogs/DialogWelcome.cs (faithful UI port of dialog_welcome.qc — documented INERT: placeholder body, no connect backend)"
       - "game/Shell.cs:184 (menu route \"welcome\")"
-      - "src/XonoticGodot.Server/GameWorld.cs:1397-1554 (welcome CONTENT — campaign line / mutators / MOTD — rerouted to per-player console prints)"
+      - "src/VortexArena.Server/GameWorld.cs:1397-1554 (welcome CONTENT — campaign line / mutators / MOTD — rerouted to per-player console prints)"
     constants:
       - { name: "cl_welcome", base: "1 (show Welcome dialog when connecting)", port: "none (cvar unregistered, no reader)", match: false }
     status:

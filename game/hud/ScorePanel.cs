@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Gameplay;     // Teams
-using XonoticGodot.Common.Services;     // CvarFlags
-using XonoticGodot.Engine.Simulation;   // CvarService (RegisterDefaults)
+using VortexArena.Common.Gameplay;     // Teams
+using VortexArena.Common.Services;     // CvarFlags
+using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Score (#7) — the separate in-game score OVERLAY (NOT the full scoreboard). C# port of
@@ -228,6 +228,7 @@ public partial class ScorePanel : HudPanel
 
     protected override void DrawPanel()
     {
+        if (EditorSession) return;   // no standings in an editing session; the editor readout owns this corner
         if (!HasData) return; // self-blank until fed (contract §9)
 
         DrawBackground(); // skin corner frame (luma border_corner_northeast); no-op when bg is "0"

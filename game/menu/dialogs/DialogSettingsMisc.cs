@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Misc settings tab — a faithful C# port of <c>XonoticMiscSettingsTab_fill</c>
@@ -11,7 +11,7 @@ namespace XonoticGodot.Game.Menu;
 ///
 /// The two sub-dialogs the QC opens via buttons are represented here:
 ///   * "Advanced settings..." (the cvar-list editor, dialog_settings_misc_cvars.qc) — that full
-///     filterable cvar editor is a separate dialog XonoticGodot does not yet host, so this is a noted/inert
+///     filterable cvar editor is a separate dialog VortexArena does not yet host, so this is a noted/inert
 ///     button (it logs an unknown command via <see cref="MenuCommand"/>).
 ///   * "Factory reset" (dialog_settings_misc_reset.qc) — wired to the engine reset command
 ///     <c>cvar_resettodefaults_all</c> (MenuCommand handles it), per task spec.
@@ -96,7 +96,7 @@ public partial class DialogSettingsMisc : SettingsTab
         box.AddChild(Ui.Spacer());
 
         // QC: makeXonoticButton(_("Advanced settings..."), …) → opens main.cvarsDialog (the cvar editor).
-        // That filterable cvar-list editor (dialog_settings_misc_cvars.qc) is a separate dialog XonoticGodot
+        // That filterable cvar-list editor (dialog_settings_misc_cvars.qc) is a separate dialog VortexArena
         // does not yet host — inert/noted button (MenuCommand logs the unknown command).
         box.AddChild(Widgets.CommandButton("Advanced settings...", "menu_showcvarsdialog",
             "Advanced settings where you can tweak every single variable of the game"));

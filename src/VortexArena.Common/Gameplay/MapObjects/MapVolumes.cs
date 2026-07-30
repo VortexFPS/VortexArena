@@ -17,10 +17,10 @@
 // of scope.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The per-frame volume-scan brush volumes: trigger_conveyor / func_conveyor (push) and func_ladder /

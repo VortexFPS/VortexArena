@@ -1,4 +1,4 @@
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The FAITHFUL Base-Xonotic client view smoothing — a transcription of <c>CSQCPlayer_ApplySmoothing</c>

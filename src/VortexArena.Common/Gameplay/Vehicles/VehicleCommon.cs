@@ -5,7 +5,7 @@
 // and the Godot-free core of the shared enter/exit/spawn/think/regen/damage routines that every concrete
 // vehicle (Racer/Raptor/Spiderbot/Bumblebee) leans on.
 //
-// NAMESPACE NOTE: everything is in the flat `XonoticGodot.Common.Gameplay` namespace on purpose — a nested
+// NAMESPACE NOTE: everything is in the flat `VortexArena.Common.Gameplay` namespace on purpose — a nested
 // `.Vehicles` namespace would collide with the `Vehicles` catalog type in EntityClasses.cs. The folder is
 // named Vehicles/ but the namespace is not.
 //
@@ -13,12 +13,12 @@
 // Gameplay/Items/EntityResources.cs) and never edits an existing file.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -93,7 +93,7 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
     /// <summary>
     /// Client-render flags a vehicle entity packs into its networked <see cref="Framework.Entity.Effects"/>
@@ -281,9 +281,9 @@ namespace XonoticGodot.Common.Gameplay
                 // cycle re-sets the eye — the SAME eye-not-seeded bug the spawn path had. Reset the duck state +
                 // standing hull too so a pre-mount crouch doesn't linger.
                 player.IsDucked = false;
-                player.ViewOfs = XonoticGodot.Common.Physics.PlayerPhysics.StandViewOfs;
-                Vector3 standMins = XonoticGodot.Common.Physics.MovementParameters.Defaults.PlayerMins;
-                Vector3 standMaxs = XonoticGodot.Common.Physics.MovementParameters.Defaults.PlayerMaxs;
+                player.ViewOfs = VortexArena.Common.Physics.PlayerPhysics.StandViewOfs;
+                Vector3 standMins = VortexArena.Common.Physics.MovementParameters.Defaults.PlayerMins;
+                Vector3 standMaxs = VortexArena.Common.Physics.MovementParameters.Defaults.PlayerMaxs;
                 if (Api.Services is not null)
                     Api.Entities.SetSize(player, standMins, standMaxs);
                 else
@@ -950,7 +950,7 @@ namespace XonoticGodot.Common.Gameplay
         // =====================================================================================
 
         // QC DPCONTENTS_* hit-contents bits (qcsrc reference DPCONTENTS_*; the live values live in
-        // XonoticGodot.Engine.Collision.SuperContents which Common cannot reference — Engine depends on Common, not
+        // VortexArena.Engine.Collision.SuperContents which Common cannot reference — Engine depends on Common, not
         // the reverse). Mirrored here EXACTLY as MonsterAI.cs / Nexball.cs / LagComp.cs do; TraceService honors
         // Entity.DpHitContentsMask. Used to stamp the vehicle move-trace mask in SpawnVehicle (vehicle_initialize).
         private const int SuperContentsSolid      = 0x00000001; // QC DPCONTENTS_SOLID

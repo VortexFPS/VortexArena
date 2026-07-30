@@ -1,7 +1,7 @@
 # Vaporizer — parity spec
 
 **Base refs:** `common/weapons/weapon/vaporizer.{qc,qh}` · `server/weapons/tracing.qc` (`FireRailgunBullet`, `W_SetupShot`) · `common/mutators/mutator/instagib/sv_instagib.qc` · `common/mutators/mutator/rocketminsta/sv_rocketminsta.qc` · balance `bal-wep-xonotic.cfg` (`g_balance_vaporizer_*`), `mutators.cfg` (`g_instagib*`, `g_rm*`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs` · `WeaponFiring.cs` (`FireRailgunBullet`/`SetupShot`/`Headshot`) · `WeaponSplash.cs` · `Mutators/InstagibMutator.cs` · `Mutators/RocketMinstaMutator.cs` · `game/client/WeaponFireSounds.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs` · `WeaponFiring.cs` (`FireRailgunBullet`/`SetupShot`/`Headshot`) · `WeaponSplash.cs` · `Mutators/InstagibMutator.cs` · `Mutators/RocketMinstaMutator.cs` · `game/client/WeaponFireSounds.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

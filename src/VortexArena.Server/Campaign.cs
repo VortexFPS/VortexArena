@@ -1,7 +1,7 @@
 using System.Text;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// One campaign level — the C# successor to the parallel QC arrays <c>campaign_gametype[i]</c> /
@@ -144,7 +144,7 @@ public sealed class Campaign
         string baseFn = $"maps/campaign{Name}.txt";
         string? text = null;
         string lang = Cvars.String("prvm_language");
-        if (!XonoticGodot.Common.Localization.Ctx.IsIdentityLanguage(lang))
+        if (!VortexArena.Common.Localization.Ctx.IsIdentityLanguage(lang))
             text = FileReader?.Invoke($"maps/campaign{Name}.{lang}.txt");
         text ??= FileReader?.Invoke(baseFn);
         if (text is null)

@@ -19,8 +19,8 @@ features:
     base_refs:
       - "common/weapons/weapon/electro.qc:wr_think (fire & 1)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame"
     constants:
       - { name: "primary_refire", base: "0.6", port: "0.6", match: true }
       - { name: "secondary_refire2", base: "0.2", port: "0.2", match: true }
@@ -48,9 +48,9 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_Bolt_Think"
       - "client/weapons/projectile.qc:Projectile_Draw (PROJECTILE_ELECTRO_BEAM)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:AttackBolt"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:BoltThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:AttackBolt"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:BoltThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
       - "game/client/ProjectileCatalog.cs:ProjectileType.ElectroBeam (elaser model, TR_NEXUIZPLASMA, no fly loop)"
       - "game/client/ProjectileRenderer.cs:OnSpawn (driven by ClientWorld.OnEntitySpawn->IsProjectile)"
     constants:
@@ -81,9 +81,9 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_Explode"
       - "common/weapons/weapon/electro.qc:wr_impacteffect (primary branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:ExplodeBolt"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:ImpactSound"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:ExplodeBolt"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:ImpactSound"
     constants:
       - { name: "primary_damage", base: "40", port: "40", match: true }
       - { name: "primary_edgedamage", base: "20", port: "20", match: true }
@@ -111,8 +111,8 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_TriggerCombo"
       - "common/weapons/weapon/electro.qc:W_Electro_ExplodeCombo"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:TriggerCombo"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:ExplodeCombo"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:TriggerCombo"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:ExplodeCombo"
     constants:
       - { name: "primary_comboradius", base: "300", port: "300", match: true }
       - { name: "combo_comboradius", base: "300", port: "300", match: true }
@@ -145,7 +145,7 @@ features:
     base_refs:
       - "common/weapons/weapon/electro.qc:W_Electro_Bolt_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:BoltThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:BoltThink"
     constants:
       - { name: "primary_midaircombo_radius", base: "0 (OFF in xonotic; 100 in samual/xdf)", port: "0 (seeded from cvar)", match: true }
       - { name: "primary_midaircombo_explode", base: "1", port: "true", match: true }
@@ -178,9 +178,9 @@ features:
       - "common/weapons/weapon/electro.qc:wr_think (fire & 2)"
       - "common/weapons/weapon/electro.qc:W_Electro_CheckAttack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:CheckAttack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:ScheduleCheckAttack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:CheckAttack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:ScheduleCheckAttack"
     constants:
       - { name: "secondary_count", base: "3", port: "3", match: true }
       - { name: "secondary_refire", base: "1.2", port: "1.2", match: true }
@@ -207,8 +207,8 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_Attack_Orb"
       - "client/weapons/projectile.qc:Projectile_Draw (PROJECTILE_ELECTRO)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:AttackOrb"
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:PhysicsToss (Bounce case)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:AttackOrb"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:PhysicsToss (Bounce case)"
       - "game/client/ProjectileCatalog.cs:ProjectileType.Electro (ebomb model, TR_NEXUIZPLASMA, electro_fly loop)"
       - "game/client/ProjectileRenderer.cs:OnSpawn / AttachLoopSound"
     constants:
@@ -243,8 +243,8 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_Explode (orb path)"
       - "common/weapons/weapon/electro.qc:wr_impacteffect (secondary branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:OrbTouch"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:ExplodeOrb"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:OrbTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:ExplodeOrb"
     constants:
       - { name: "secondary_touchexplode", base: "1", port: "true", match: true }
       - { name: "secondary_damage", base: "30", port: "30", match: true }
@@ -274,9 +274,9 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_Orb_Damage"
       - "server/weapons/common.qc:W_CheckProjectileDamage / W_PrepareExplosionByDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:AttackOrb (ProjectileDamage callback)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable / ShootDown / CheckProjectileDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:EventDamage (GtEventDamage dispatch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:AttackOrb (ProjectileDamage callback)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable / ShootDown / CheckProjectileDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:EventDamage (GtEventDamage dispatch)"
     constants:
       - { name: "secondary_health", base: "5", port: "5", match: true }
       - { name: "secondary_damageforcescale", base: "4", port: "4", match: true }
@@ -304,10 +304,10 @@ features:
       - "common/weapons/weapon/electro.qc:wr_checkammo2"
       - "common/weapons/weapon/electro.qc:wr_reload"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:CheckAmmoSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WeaponAmmo.Check"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:CheckAmmoSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WeaponAmmo.Check"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload"
     constants:
       - { name: "primary_ammo", base: "4", port: "4", match: true }
       - { name: "secondary_ammo", base: "2", port: "2", match: true }
@@ -336,8 +336,8 @@ features:
       - "common/weapons/weapon/electro.qc:wr_killmessage"
       - "common/weapons/weapon/electro.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:DeathBolt/DeathOrb/DeathCombo"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:DeathBolt/DeathOrb/DeathCombo"
     constants: []
     status:
       logic: faithful
@@ -361,11 +361,11 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_Explode"
       - "common/physics/player.qc:IsFlying"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:ExplodeBolt (ELECTROBITCH test)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:IsFlying"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:Announce (NotificationSystem.cs:200)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:147 (A ACHIEVEMENT_ELECTROBITCH -> electrobitch)"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs:292 (electrobitch announcer sound)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:ExplodeBolt (ELECTROBITCH test)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:IsFlying"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:Announce (NotificationSystem.cs:200)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:147 (A ACHIEVEMENT_ELECTROBITCH -> electrobitch)"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs:292 (electrobitch announcer sound)"
     constants: []
     status:
       logic: faithful
@@ -388,8 +388,8 @@ features:
     base_refs:
       - "common/weapons/weapon/electro.qc:wr_aim (METHOD Electro, wr_aim)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:BotWantsSecondary (Electro.cs:249); BotAimShotSpeed(float, ref ctx) (Electro.cs:277-278)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:447 (w.BotWantsSecondary dispatch); BotBrain.cs:919 (CurrentShotSpeed -> w.BotAimShotSpeed(s, ref ctx))"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:BotWantsSecondary (Electro.cs:249); BotAimShotSpeed(float, ref ctx) (Electro.cs:277-278)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:447 (w.BotWantsSecondary dispatch); BotBrain.cs:919 (CurrentShotSpeed -> w.BotAimShotSpeed(s, ref ctx))"
     constants:
       - { name: "primary_speed", base: "2500", port: "2500 (BotAimShotSpeed primary lead)", match: true }
       - { name: "secondary_speed", base: "1000", port: "1000 (BotAimShotSpeed(ref ctx) returns Secondary.Speed when the electromooth toggle is secondary)", match: true }
@@ -445,7 +445,7 @@ features:
     base_refs:
       - "common/weapons/weapon/electro.qc:describe (METHOD Electro, describe)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:GuideDescription (Electro.cs:104-113)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:GuideDescription (Electro.cs:104-113)"
     constants: []
     status:
       logic: partial
@@ -547,9 +547,9 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_Attack_Orb (proj.damagedbycontents / g_damagedbycontents)"
       - "server/main.qc:CreatureFrame_hotliquids (projectile branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:AttackOrb (orb.DamagedByContents = Secondary.DamagedByContents)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2110-2124 (CreatureFrameAll g_damagedbycontents sweep)"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:ProjectileContentsDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:AttackOrb (orb.DamagedByContents = Secondary.DamagedByContents)"
+      - "src/VortexArena.Server/GameWorld.cs:2110-2124 (CreatureFrameAll g_damagedbycontents sweep)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:ProjectileContentsDamage"
     constants:
       - { name: "secondary_damagedbycontents", base: "1 (ON by default)", port: "true (BalBool, seeded in Configure)", match: true }
       - { name: "g_balance_contents_projectiledamage", base: "(content damage per tick)", port: "read live in ProjectileContentsDamage", match: true }

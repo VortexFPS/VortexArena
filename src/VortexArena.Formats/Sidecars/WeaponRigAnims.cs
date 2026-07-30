@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Sidecars;
+namespace VortexArena.Formats.Sidecars;
 
 /// <summary>
 /// Base's weapon hand-rig animation slot convention — <c>CL_WeaponEntity_SetModel</c> (all.qc:373-376) maps

@@ -1,10 +1,10 @@
 // Port of common/mutators/mutator/random_gravity/sv_random_gravity.qc
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Random Gravity mutator — port of common/mutators/mutator/random_gravity/sv_random_gravity.qc
@@ -21,7 +21,7 @@ namespace XonoticGodot.Common.Gameplay;
 /// host's settemp restore stack.
 ///
 /// SEAM: this hooks <see cref="MutatorHooks.SvStartFrame"/> (the Common-side per-frame chain) rather than the
-/// server-core <c>ServerHooks.SvStartFrame</c>, because the Godot-free gameplay layer can't reference XonoticGodot.Server.
+/// server-core <c>ServerHooks.SvStartFrame</c>, because the Godot-free gameplay layer can't reference VortexArena.Server.
 /// The server's per-frame loop must pump <see cref="MutatorHooks.SvStartFrame"/> for this to tick (crossTaskNeeds).
 /// </summary>
 [Mutator]

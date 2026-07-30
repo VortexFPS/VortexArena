@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server.Bot;
+namespace VortexArena.Server.Bot;
 
 /// <summary>
 /// The bot reachability test — a faithful, Godot-free port of QuakeC's <c>tracewalk</c>

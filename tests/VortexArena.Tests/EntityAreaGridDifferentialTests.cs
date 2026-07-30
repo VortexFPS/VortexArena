@@ -2,16 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Server;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Simulation;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
-/// Differential test for the entity area-grid broadphase (D1, <see cref="XonoticGodot.Engine.Collision.EntityAreaGrid"/>):
+/// Differential test for the entity area-grid broadphase (D1, <see cref="VortexArena.Engine.Collision.EntityAreaGrid"/>):
 /// the grid must return the SAME entities as the old flat O(n) linear scan, only with fewer candidates. Builds
 /// randomized entity sets (positions, mixed sizes including the oversized/<c>areagrid_outside</c> path, plus
 /// post-link MOVES and REMOVALS to exercise relink/unlink) and asserts:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Export + launch a TRUE RELEASE build of XonoticGodot — optimized C# (csharp=Release) AND
+# Export + launch a TRUE RELEASE build of VortexArena — optimized C# (csharp=Release) AND
 # godot-context=release, with NO editor/debugger overhead. This is the only way to measure real-world
 # performance: running from the Godot editor or a Rider "Player" config ALWAYS loads the Debug assembly and
 # reports godot-context=debug, regardless of the Rider build configuration.
@@ -20,10 +20,10 @@ case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*|Windows_NT)
         is_windows=true
         GODOT="${GODOT:-/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe}"
-        PRESET="windows-client"; OUT="$PROJ/dist/windows-client/XonoticGodot.exe" ;;   # preset.0
+        PRESET="windows-client"; OUT="$PROJ/dist/windows-client/VortexArena.exe" ;;   # preset.0
     Linux)
         GODOT="${GODOT:-godot}"
-        PRESET="linux-client";   OUT="$PROJ/dist/linux-client/XonoticGodot.x86_64" ;;  # preset.2
+        PRESET="linux-client";   OUT="$PROJ/dist/linux-client/VortexArena.x86_64" ;;  # preset.2
     Darwin)
         echo "[run-release] macOS export is CI-only / best-effort (ADR-0014) — use the release workflow." >&2
         exit 1 ;;
@@ -82,9 +82,9 @@ if [ ! -e "$OUT" ]; then
 fi
 echo "[run-release][debug] export OK — binary present: $OUT ($(wc -c <"$OUT" 2>/dev/null | tr -d ' ') bytes)"
 
-# Launch from the project root so the exported build's asset resolver finds the in-tree assets/data
-# (DataPaths.Resolve falls back to a CWD-relative 'assets/data' in an exported build; a packaged
-# zip instead carries assets beside the binary). Without this a release run boots into an empty world.
+# Launch from the project root so the exported build's content resolver finds the in-tree data/
+# (DataPaths.Resolve probes <exe-dir>/data then a CWD-relative 'data' in an exported build; a packaged
+# zip instead carries data/ beside the binary). Without this a release run boots into an empty world.
 cd "$PROJ"
 echo "[run-release] launching: $OUT $*"
 [ -x "$OUT" ] || echo "[run-release][debug] WARNING: '$OUT' is not marked executable — trying anyway" >&2

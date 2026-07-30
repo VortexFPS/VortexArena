@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Gameplay;   // Teams
-using XonoticGodot.Net;               // NetEntityState / EntityField / EntityStateCodec / BitWriter / BitReader
+using VortexArena.Common.Gameplay;   // Teams
+using VortexArena.Net;               // NetEntityState / EntityField / EntityStateCodec / BitWriter / BitReader
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T68 — the floating player name + health/armor tags (QC <c>client/shownames.qc</c>
@@ -310,7 +310,7 @@ public class ShowNamesTests
         => Assert.Equal(expected, Decolorize(mode, teamplay));
 
     // =====================================================================================================
-    //  Networked ARMOR slice (the real codec — XonoticGodot.Net is linked)
+    //  Networked ARMOR slice (the real codec — VortexArena.Net is linked)
     // =====================================================================================================
 
     [Fact]

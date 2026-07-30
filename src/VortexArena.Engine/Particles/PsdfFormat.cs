@@ -4,7 +4,7 @@ using System.IO.Compression;
 using System.Numerics;
 using System.Security.Cryptography;
 
-namespace XonoticGodot.Engine.Particles;
+namespace VortexArena.Engine.Particles;
 
 // =====================================================================================================
 //  Chunked SDF cache format (.psdf) — the contract between the generator (SdfGenerator.cs, written at

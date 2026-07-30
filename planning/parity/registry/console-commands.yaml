@@ -24,9 +24,9 @@ features:
       - "common/command/_mod.inc"
       - "common/command/_mod.qh"
     port_refs:
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:Register (67-114; generic block 100-108)"
-      - "src/XonoticGodot.Server/Commands.cs:RegisterBuiltins (generic block 899-903, settemp 878-879)"
-      - "src/XonoticGodot.Server/Commands.cs:Execute"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:Register (67-114; generic block 100-108)"
+      - "src/VortexArena.Server/Commands.cs:RegisterBuiltins (generic block 899-903, settemp 878-879)"
+      - "src/VortexArena.Server/Commands.cs:Execute"
       - "game/console/ConsoleOverlay.cs:107 (live ConsoleCommands construction + UnknownCommandHandler routing)"
     constants: []
     status:
@@ -40,7 +40,7 @@ features:
     divergence_rationale: "QC's per-program command registries (GENERIC_COMMANDS/CLIENT_COMMANDS/... + cfg-generated qc_cmd_* aliases + the sv_cmd/cl_cmd/menu_cmd prefixes) are replaced by two C# tables: the shared ConfigInterpreter registered-command table (client/menu console) and the server Commands table, glued by an unknown-command router (console → local listen world or remote clc_stringcmd). Commands are invoked BARE (no cl_cmd/sv_cmd prefix), matching how the shipped cfg aliases expose them to players."
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ConsoleTests.cs (routing) + tests/XonoticGodot.Tests/GenericCommandsTests.cs:Rpn_RegisteredOnConsole_WritesCvar", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ConsoleTests.cs (routing) + tests/VortexArena.Tests/GenericCommandsTests.cs:Rpn_RegisteredOnConsole_WritesCvar", result: pass }
       - { kind: code, ref: "ConsoleOverlay.cs:107 constructs ConsoleCommands on the live console; server table live per sv-commands-votes.dispatch rows", result: pass }
     confidence: high
     notes: "Infra/coverage row for the dispatcher + registry-macro files (command.qh, reg.qc/qh, _mod.*). The per-command behaviors are the rows below. The server-side dispatch shell (SV_ParseClientCommand / GameCommand) is owned by sv-commands-votes.dispatch.* — not duplicated."
@@ -52,11 +52,11 @@ features:
       - "common/command/generic.qc:GenericCommand_addtolist (60)"
       - "common/command/generic.qc:GenericCommand_removefromlist (356)"
     port_refs:
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:CmdAddToList (301)"
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:CmdRemoveFromList (324)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdAddToList (3035)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdRemoveFromList (3048)"
-      - "src/XonoticGodot.Engine/Console/WordList.cs:Cons"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:CmdAddToList (301)"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:CmdRemoveFromList (324)"
+      - "src/VortexArena.Server/Commands.cs:CmdAddToList (3035)"
+      - "src/VortexArena.Server/Commands.cs:CmdRemoveFromList (3048)"
+      - "src/VortexArena.Engine/Console/WordList.cs:Cons"
     constants:
       - { name: "addtolist position", base: "append at END (cons(list, value))", port: "append at END (WordList.Cons)", match: true }
       - { name: "dedup", base: "FOREACH_WORD it == value -> return", port: "word scan -> return", match: true }
@@ -71,7 +71,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/GenericCommandsTests.cs:AddToList_OnEmpty_SetsValue / AddToList_Appends_AndDedupes / RemoveFromList_DropsTheValue / Cons_MatchesQc", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/GenericCommandsTests.cs:AddToList_OnEmpty_SetsValue / AddToList_Appends_AndDedupes / RemoveFromList_DropsTheValue / Cons_MatchesQc", result: pass }
     confidence: high
     notes: "Ported twice (shared console + server builtin), matching QC's GENERIC_COMMAND being present in every program. cons() semantics unit-tested against QC."
 
@@ -83,10 +83,10 @@ features:
       - "common/command/generic.qc:maplist_shuffle (232)"
       - "common/command/generic.qh:maplist_shuffle (decl)"
     port_refs:
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:CmdMaplist (346)"
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:MapExists (292, hook)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdMaplist (3060)"
-      - "src/XonoticGodot.Engine/Console/WordList.cs:Shuffle"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:CmdMaplist (346)"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:MapExists (292, hook)"
+      - "src/VortexArena.Server/Commands.cs:CmdMaplist (3060)"
+      - "src/VortexArena.Engine/Console/WordList.cs:Shuffle"
     constants:
       - { name: "add position", base: "PREPEND (strcat(map, ' ', list))", port: "PREPEND (both impls)", match: true }
       - { name: "add existence gate", base: "fexists(maps/<map>.bsp) else ERROR", port: "console: MapExists hook (null on live path); server: NO check", match: false }
@@ -105,7 +105,7 @@ features:
       - "maplist add accepts nonexistent maps on both live paths: the server CmdMaplist (Commands.cs:3064-3070) has no existence check at all; the console CmdMaplist's MapExists hook is only assigned in tests (GenericCommandsTests.cs:94) — never wired to a live map catalog."
       - "maplist cleanup is inert on the live path (server: explicit identity, Commands.cs:3082-3084; console: identity because MapExists is null) — a rotation polluted with unusable maps is never filtered, unlike QC's MapInfo_CheckMap pass."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/GenericCommandsTests.cs:Maplist_Add_Prepends / Maplist_Shuffle_IsAPermutation / Maplist_Add_RejectsMissingMap_WhenCatalogWired (hook works when wired)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/GenericCommandsTests.cs:Maplist_Add_Prepends / Maplist_Shuffle_IsAPermutation / Maplist_Add_RejectsMissingMap_WhenCatalogWired (hook works when wired)", result: pass }
       - { kind: code, ref: "grep 'MapExists =' → only test files assign the ConsoleCommands hook; Commands.cs:3060-3088 confirms no server-side gate", result: fail }
     confidence: high
     notes: "add/remove/shuffle logic is faithful (including the add-PREPENDS-vs-addtolist-appends asymmetry). The two catalog-dependent behaviors (add existence gate, cleanup filter) are the gaps."
@@ -117,12 +117,12 @@ features:
       - "common/command/generic.qc:GenericCommand_settemp (448)"
       - "common/command/generic.qc:GenericCommand_settemp_restore (479)"
     port_refs:
-      - "src/XonoticGodot.Server/SettempCvars.cs:Set (33)"
-      - "src/XonoticGodot.Server/SettempCvars.cs:Restore (52)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdSettemp (2401)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdSettempRestore (2409)"
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:CmdSettemp (422, console-side table)"
-      - "src/XonoticGodot.Server/Campaign.cs:266-270 (live internal consumer)"
+      - "src/VortexArena.Server/SettempCvars.cs:Set (33)"
+      - "src/VortexArena.Server/SettempCvars.cs:Restore (52)"
+      - "src/VortexArena.Server/Commands.cs:CmdSettemp (2401)"
+      - "src/VortexArena.Server/Commands.cs:CmdSettempRestore (2409)"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:CmdSettemp (422, console-side table)"
+      - "src/VortexArena.Server/Campaign.cs:266-270 (live internal consumer)"
     constants:
       - { name: "capture-once semantics", base: "cvar_settemp saves original only on first override", port: "_saved.ContainsKey guard (SettempCvars.cs:38)", match: true }
     status:
@@ -137,7 +137,7 @@ features:
     gaps:
       - "No automatic restore trigger was found on the port's map-end path: SettempCvars.Restore() is only invoked by the settemp_restore console command (Commands.cs:2411 is its sole caller). Base restores via the shipped cfg hooks (cl_hook_* / sv_hook_* aliases run settemp_restore), which the port does not exec — so a settemp made mid-match may leak across maps unless something else re-seeds the cvar. Needs a runtime check (timing: unknown)."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/GenericCommandsTests.cs:Settemp_OverridesThenRestores / Settemp_CapturesOriginalOnlyOnce", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/GenericCommandsTests.cs:Settemp_OverridesThenRestores / Settemp_CapturesOriginalOnlyOnce", result: pass }
       - { kind: code, ref: "grep 'SettempCvars.Restore' → single call site Commands.cs:2411 (the command)", result: fail }
     confidence: medium
     notes: "The mechanism (capture-once, restore-all, unknown-cvar no-op) is faithful and live (campaign/mapinfo/nospectators/setbots all settemp through it). The open question is WHO calls restore at end-of-map in the port."
@@ -150,10 +150,10 @@ features:
       - "common/command/rpn.qc:rpn_push (22)"
       - "common/command/rpn.qh:MAX_RPN_STACK"
     port_refs:
-      - "src/XonoticGodot.Engine/Console/Rpn.cs:Run"
-      - "src/XonoticGodot.Engine/Console/Rpn.cs:Format9g (%.9g float round-trip)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdRpn (3028)"
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:102 (console registration)"
+      - "src/VortexArena.Engine/Console/Rpn.cs:Run"
+      - "src/VortexArena.Engine/Console/Rpn.cs:Format9g (%.9g float round-trip)"
+      - "src/VortexArena.Server/Commands.cs:CmdRpn (3028)"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:102 (console registration)"
     constants:
       - { name: "MAX_RPN_STACK", base: "16", port: "128 (Rpn.cs:37 MaxStack)", match: false }
       - { name: "float format", base: "sprintf(\"%.9g\", f)", port: "Format9g (C %.9g reproduction, not .NET G9)", match: true }
@@ -172,8 +172,8 @@ features:
       - "MAX_RPN_STACK is 128 in the port vs 16 in Base — an rpn program relying on QC's overflow-at-16 diagnostic behaves differently (benign in practice; no shipped cfg pushes >16)."
       - "db ops / digest / eval / localtime / gmtime / fexists fall to the cvar-push fallback rather than executing (intended, see rationale) — a cfg using them gets a different (non-crashing) result than Base."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/RpnTests.cs (op coverage incl. %.9g round-trip)", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/GenericCommandsTests.cs:Rpn_RegisteredOnConsole_WritesCvar", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/RpnTests.cs (op coverage incl. %.9g round-trip)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/GenericCommandsTests.cs:Rpn_RegisteredOnConsole_WritesCvar", result: pass }
     confidence: high
     notes: "Registered on BOTH the shared console (ConsoleCommands.cs:102) and the server table (Commands.cs:899), matching QC's every-program presence. The %.9g formatter is a deliberate C-reproduction (load-bearing for def round-trips)."
 
@@ -183,8 +183,8 @@ features:
     base_refs:
       - "common/command/generic.qc:GenericCommand_nextframe (336)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdNextFrame (3093, Deferred.Defer(0, tail))"
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:CmdNextFrame (403)"
+      - "src/VortexArena.Server/Commands.cs:CmdNextFrame (3093, Deferred.Defer(0, tail))"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:CmdNextFrame (403)"
     constants: []
     status:
       logic: faithful
@@ -198,7 +198,7 @@ features:
     gaps:
       - "On a bare menu/headless console (no world), the console impl runs the command INLINE instead of next frame (documented degenerate in ConsoleCommands.cs:398-401); with a live world it forwards to the server's defer-0 queue (a real next-tick)."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/GenericCommandsTests.cs:NextFrame_ForwardsToTheWorldRouter_WhenWired / NextFrame_NoWorld_RunsInline", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/GenericCommandsTests.cs:NextFrame_ForwardsToTheWorldRouter_WhenWired / NextFrame_NoWorld_RunsInline", result: pass }
     confidence: high
     notes: "queue_to_execute_next_frame == the sim-clock defer(0) queue on the server."
 
@@ -289,7 +289,7 @@ features:
       audio: na
       liveness: na
     intended_divergence: true
-    divergence_rationale: "QC's in-VM TEST_* harness is replaced wholesale by the port's xunit suite (tests/XonoticGodot.Tests, ~2.7k tests) run out-of-process; an in-game runtest command has no equivalent test registry to invoke."
+    divergence_rationale: "QC's in-VM TEST_* harness is replaced wholesale by the port's xunit suite (tests/VortexArena.Tests, ~2.7k tests) run out-of-process; an in-game runtest command has no equivalent test registry to invoke."
     gaps: []
     verification: []
     confidence: high
@@ -335,7 +335,7 @@ features:
       - "client/command/_mod.inc"
       - "client/command/_mod.qh"
     port_refs:
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:RouteUnknown (the client console's command routing)"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:RouteUnknown (the client console's command routing)"
       - "game/net/NetGame.cs:RunBoundCommand (5214-5262, bind-issued client command intercepts; wired live at NetGame.cs:5134 BindInput.HandleEvent)"
       - "game/console/ConsoleOverlay.cs:107"
     constants: []
@@ -423,9 +423,9 @@ features:
       - "server/command/getreplies.qc:GetCvars_handleString_Fixup (334)"
       - "server/command/getreplies.qc:GetCvars_handleFloatOnce (360)"
     port_refs:
-      - "src/XonoticGodot.Engine/Console/ConsoleCommands.cs:CmdSendCvar (454)"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:CmdSendCvar (454)"
       - "game/net/ClientNet.cs:954-985 (REPLICATE watcher: changed cvars pushed as sentcvar)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdSentCvar (3305, allowlist + weaponpriority fixups + choice-cvar store)"
+      - "src/VortexArena.Server/Commands.cs:CmdSentCvar (3305, allowlist + weaponpriority fixups + choice-cvar store)"
     constants:
       - { name: "cl_weaponpriority fixup", base: "W_FixWeaponOrder(W_NumberWeaponOrder(s), 1) force-complete", port: "WeaponOrder.FixWeaponOrderForceComplete on RECEIVE (Commands.cs:3331)", match: true }
       - { name: "cl_weaponpriority0..9 fixup", base: "W_FixWeaponOrder(..., 0) allow-incomplete", port: "FixWeaponOrder(complete:false) (Commands.cs:3338)", match: true }
@@ -441,7 +441,7 @@ features:
     divergence_rationale: "Two deliberate shifts, both documented in code: (1) the client-side W_FixWeaponOrder pre-send fixup moves to the server receive path (same math, one canonical implementation); (2) the deprecated server→client GetCvars f==0 'request' direction (getreplies.qc:392 itself warns it is deprecated in favor of REPLICATE) is not ported — the client watcher pushes changes unprompted, which is the REPLICATE model."
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/CvarReplicationTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/CvarReplicationTests.cs", result: pass }
       - { kind: code, ref: "ClientNet.cs:974-985 push loop live on the client frame; CmdSentCvar allowlist + fixups + choice store", result: pass }
     confidence: high
     notes: "The GetCvars_handle* family's job (per-client cvar mirror + fixup-on-receive + cleanup) maps onto SetClientCvar/allowlist/StoreChoiceCvar. sentcvar privilege gating is owned by sv-commands-votes.dispatch.client_parse."
@@ -550,8 +550,8 @@ features:
     base_refs:
       - "server/command/getreplies.qc:getrankings (46)"
     port_refs:
-      - "src/XonoticGodot.Server/CommandReplies.cs:GetRankings (146)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdRankings (3401)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetRankings (146)"
+      - "src/VortexArena.Server/Commands.cs:CmdRankings (3401)"
     constants:
       - { name: "row format", base: "strpad(8,ordinal) ' ' strpad(-8,TIME_ENCODED) ' ' name \\n", port: "PadLeft(8)/PadRight(8) same order (CommandReplies.cs:173)", match: true }
       - { name: "record type", base: "CTS_RECORD if g_cts else RACE_RECORD", port: "cts→CtsRecord / rc→RaceRecord (CommandReplies.cs:153)", match: true }
@@ -578,9 +578,9 @@ features:
       - "server/command/getreplies.qc:getrecords (35)"
       - "server/command/getreplies.qc:getladder (71)"
     port_refs:
-      - "src/XonoticGodot.Server/CommandReplies.cs:Recompute (70-71, RecordsReply zeroed)"
-      - "src/XonoticGodot.Server/CommandReplies.cs:GetLadder (183, hardcoded empty)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdRecords (3382)"
+      - "src/VortexArena.Server/CommandReplies.cs:Recompute (70-71, RecordsReply zeroed)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetLadder (183, hardcoded empty)"
+      - "src/VortexArena.Server/Commands.cs:CmdRecords (3382)"
     constants:
       - { name: "LADDER_FIRSTPOINT scoring", base: "floor(100/i) pts per place, 100/10 speed award", port: "none", match: false }
       - { name: "ladder empty case", base: "No ladder on this server!", port: "always returned", match: false }
@@ -609,10 +609,10 @@ features:
       - "server/command/getreplies.qc:getlsmaps (252)"
       - "server/command/getreplies.qc:getmonsterlist (296)"
     port_refs:
-      - "src/XonoticGodot.Server/CommandReplies.cs:GetMaplist (82)"
-      - "src/XonoticGodot.Server/CommandReplies.cs:GetLsmaps (106)"
-      - "src/XonoticGodot.Server/CommandReplies.cs:GetMonsterlist (126)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdLsmaps (3402) / CmdPrintMapList (3403)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetMaplist (82)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetLsmaps (106)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetMonsterlist (126)"
+      - "src/VortexArena.Server/Commands.cs:CmdLsmaps (3402) / CmdPrintMapList (3403)"
     constants:
       - { name: "maplist header", base: "^7Maps in list (N): + ^2/^3 alternating", port: "same", match: true }
       - { name: "lsmaps header", base: "^7Maps available (N)[new-maps note]: ", port: "^7Maps available (N): (no note)", match: false }
@@ -632,7 +632,7 @@ features:
       - "getmaplist skips QC's MapInfo_CheckMap filter (colorizes every g_maplist word; an unusable map still lists — consistent with the maplist-cleanup gap)."
       - "getlsmaps lists the g_maplist rotation instead of enumerating the full MapInfo catalog filtered by forbidden flags, and drops the new-map blue-asterisk marking + the LSMAPS_MAX 250 cap — on a big-content server 'lsmaps' under-reports what is actually available."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerClientCommandsTests.cs:PrintMapList_ShowsTheRotation", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerClientCommandsTests.cs:PrintMapList_ShowsTheRotation", result: pass }
       - { kind: code, ref: "CommandReplies.cs:82-137 vs getreplies.qc:233-307 (deviations documented in the file's doc comments)", result: pass }
     confidence: high
     notes: "getmonsterlist is faithful. The lsmaps/maplist deltas trace to the same missing map-catalog seam as generic.maplist."
@@ -644,8 +644,8 @@ features:
       - "server/command/getreplies.qc:1-33 (module header + cache contract)"
       - "server/command/getreplies.qh (reply-string globals + GetCvars decls)"
     port_refs:
-      - "src/XonoticGodot.Server/CommandReplies.cs:Recompute (63)"
-      - "src/XonoticGodot.Server/Commands.cs:3382-3404 (the reply commands print the cached fields)"
+      - "src/VortexArena.Server/CommandReplies.cs:Recompute (63)"
+      - "src/VortexArena.Server/Commands.cs:3382-3404 (the reply commands print the cached fields)"
     constants: []
     status:
       logic: faithful
@@ -670,8 +670,8 @@ features:
       - "server/command/common.qh:CLIENT_ACCEPTABLE (client-verification result consts -1..-3)"
       - "server/command/common.qh:TIMEOUT_SLOWMO_VALUE (timeout state consts + globals)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:Register (the flat command table replacing the COMMON_COMMANDS registry)"
-      - "src/XonoticGodot.Server/TimeoutController.cs (timeout state consumer)"
+      - "src/VortexArena.Server/Commands.cs:Register (the flat command table replacing the COMMON_COMMANDS registry)"
+      - "src/VortexArena.Server/TimeoutController.cs (timeout state consumer)"
     constants:
       - { name: "TIMEOUT_SLOWMO_VALUE", base: "0.0001", port: "audited in sv-commands-votes.timeout.state_machine", match: true }
     status:

@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Dpm;
-using XonoticGodot.Formats.Sidecars;
+using VortexArena.Formats.Dpm;
+using VortexArena.Formats.Sidecars;
 
-namespace XonoticGodot.Game.Loaders.Models;
+namespace VortexArena.Game.Loaders.Models;
 
 /// <summary>
 /// Turns a parsed <see cref="DpmData"/> (the Godot-free DarkPlaces DPM importer output) into a Godot

@@ -1,7 +1,7 @@
 # Overkill mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/overkill/{sv_overkill.qc,sv_overkill.qh,sv_weapons.qc,cl_overkill.qc,overkill.qh}`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs` (+ `MutatorActivation.cs`, `Weapons/OkWeapons.cs`, `Weapons/Ok*.cs`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs` (+ `MutatorActivation.cs`, `Weapons/OkWeapons.cs`, `Weapons/Ok*.cs`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

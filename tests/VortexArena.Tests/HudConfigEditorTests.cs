@@ -4,13 +4,13 @@ using System.Globalization;
 using System.Numerics;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Unit tests for T27 — the HUD configure-mode editor (port of qcsrc/client/hud/hud_config.qc, ported to
 /// <c>game/hud/HudConfigEditor.cs</c>).
 ///
-/// The editor lives in the Godot host assembly (<c>XonoticGodot.Game.Hud</c>), which this test project does NOT
+/// The editor lives in the Godot host assembly (<c>VortexArena.Game.Hud</c>), which this test project does NOT
 /// reference (it links only the Godot-free <c>src/</c> libraries). So — following the established repo idiom
 /// (see <c>InputCommandImpulseTests</c>, which mirrors <c>FirstPersonView.ComputeVerticalFov</c>) — these tests
 /// mirror the editor's pure geometry / cvar-normalization / step / collision algorithms VERBATIM from the same

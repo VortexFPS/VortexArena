@@ -1,11 +1,11 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Regression pin for the WalkMove on-ground rule (the bunnyhop "crippled jump" bug, 2026-07-05).
@@ -47,9 +47,9 @@ public class JumpGrantReproTests
 
     private static (PlayerPhysics physics, Entity player, MutableClock clock) Setup(float startHeightAboveFloor, float vz)
     {
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         var clock = new MutableClock();
         Api.Services = new MovementTestServices(FloorWorld(), clock);

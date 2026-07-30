@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Idle particle glow at every spawn point — the port of CSQC <c>Spawn_Draw</c>
@@ -65,7 +65,7 @@ public sealed partial class SpawnPointParticles : Node3D
         using var _prof = FrameProfiler.Scope("clientmisc");
         if (Effects is null || Api.Services is null)
             return;
-        if (XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat("cl_spawn_point_particles") == 0f)
+        if (VortexArena.Game.Menu.MenuState.Cvars.GetFloat("cl_spawn_point_particles") == 0f)
             return;
 
         // Lazy + periodic rescan (entities register during load; gametype filters can add/remove).
@@ -84,7 +84,7 @@ public sealed partial class SpawnPointParticles : Node3D
         // #30 slowmo/pause: the glow pulse cadence is CSQC-time-driven in Base (Spawn_Draw runs per CSQC frame) —
         // scale so a paused game stops emitting new pulses. (The rescan timer above stays on the raw delta: it's
         // port-internal entity-registry housekeeping, not an animation.)
-        _pulseTimer -= XonoticGodot.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
+        _pulseTimer -= VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
         if (_pulseTimer > 0f)
             return;
         _pulseTimer = PulseInterval;
@@ -93,7 +93,7 @@ public sealed partial class SpawnPointParticles : Node3D
         // cull entirely (Base only computes vdist when the cvar is non-zero). Registered in ClientSettings
         // with the Base default 1200 (xonotic-client.cfg:77) — registration matters: an UNSET cvar reads 0,
         // which silently meant "no cull" and rendered the glow at every spawn point map-wide.
-        float distMax = XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat("cl_spawn_point_dist_max");
+        float distMax = VortexArena.Game.Menu.MenuState.Cvars.GetFloat("cl_spawn_point_dist_max");
         bool cull = distMax > 0f;
 
         // Camera position for the draw-distance cull (Quake space).

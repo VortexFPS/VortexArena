@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
 Write-Host "=== perf-smoke: headless benches (budget-asserting) ==="
-dotnet test (Join-Path $root "tests\XonoticGodot.Tests\XonoticGodot.Tests.csproj") `
+dotnet test (Join-Path $root "tests\VortexArena.Tests\VortexArena.Tests.csproj") `
     --filter "ServerTickPerfBench" -l "console;verbosity=detailed" --nologo
 if ($LASTEXITCODE -ne 0) { Write-Error "perf bench budgets FAILED - a server-tick regression landed"; exit 1 }
 

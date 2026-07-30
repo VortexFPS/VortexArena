@@ -1,7 +1,7 @@
 # Hunter-Killer Turret (turret-hk) — parity spec
 
 **Base refs:** `common/turrets/turret/hk.qc`, `hk.qh`, `hk_weapon.qc`, `hk_weapon.qh` (+ shared `common/turrets/sv_turrets.qc`, balance `turrets.cfg`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs`, `GuidedProjectile.cs` (+ shared `TurretAI.cs`, `TurretSpawn.cs`, `TurretSpawnFuncs.cs`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs`, `GuidedProjectile.cs` (+ shared `TurretAI.cs`, `TurretSpawn.cs`, `TurretSpawnFuncs.cs`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

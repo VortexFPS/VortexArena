@@ -45,7 +45,7 @@ features:
   base_refs:                            # WHERE in Base this lives. file path relative to qcsrc + symbol.
     - "common/gametypes/gametype/ctf/cl_ctf.qc:ctf_FlagSetup"
   port_refs:                            # WHERE in the port. [] (empty) means NOT IMPLEMENTED.
-    - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:UpdateFlagVisual"
+    - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:UpdateFlagVisual"
   constants:                            # exact Base values that must match. [] if none relevant.
     - { name: "rotate_speed_deg_per_s", base: "wave anim via frame", port: "none", match: false }
   status:                               # per-dimension. Use the STATUS vocab below. Use `na` when N/A.

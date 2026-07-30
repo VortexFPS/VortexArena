@@ -1,7 +1,7 @@
 # Centerprint HUD panel (cl-centerprint) — parity spec
 
 **Base refs:** `client/hud/panel/centerprint.qc` · `client/hud/panel/centerprint.qh` · `client/announcer.qc` · `common/notifications/all.qc` (`Local_Notification` / `Local_Notification_centerprint_Add` / `ENT_CLIENT_NOTIFICATION` NET_HANDLE) · `common/notifications/all.qh` (`ENUMCLASS(CPID)`)
-**Port refs:** `game/hud/CenterPrintPanel.cs` · `game/hud/HudNotifications.cs` · `game/net/NetGame.cs` (`OnNotificationReceived`) · `game/net/ClientNet.cs` (`HandleReliableBundle`) · `src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs` · `src/XonoticGodot.Server/GameWorld.cs` (countdown broadcast) · `src/XonoticGodot.Server/AnnouncerController.cs`
+**Port refs:** `game/hud/CenterPrintPanel.cs` · `game/hud/HudNotifications.cs` · `game/net/NetGame.cs` (`OnNotificationReceived`) · `game/net/ClientNet.cs` (`HandleReliableBundle`) · `src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs` · `src/VortexArena.Server/GameWorld.cs` (countdown broadcast) · `src/VortexArena.Server/AnnouncerController.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

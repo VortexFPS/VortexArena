@@ -1,9 +1,9 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Unit tests for the effect wire-protocol encoder (<see cref="EffectNetProtocol"/>) — the C# port of
@@ -13,10 +13,10 @@ namespace XonoticGodot.Tests;
 /// SCOPE NOTE: the partner gap <c>fx-effectinfo.parser.tokenize</c> (the effectinfo.txt parser / keyword
 /// table / baseline defaults) is intentionally NOT covered here. The parser (<c>EffectInfo</c> /
 /// <c>EffectInfoEmitter</c> / <c>EiType</c>…) lives in the Godot client project (namespace
-/// <c>XonoticGodot.Game.Client</c>, game/client/EffectInfo.cs), which this test assembly does not
-/// reference (it references only the Godot-free src/ libraries — see XonoticGodot.Tests.csproj). Those
+/// <c>VortexArena.Game.Client</c>, game/client/EffectInfo.cs), which this test assembly does not
+/// reference (it references only the Godot-free src/ libraries — see VortexArena.Tests.csproj). Those
 /// types are unreachable from here, so the original multi-fact proposal could not compile; this file is
-/// scoped to the wire protocol, which lives in the referenced <c>XonoticGodot.Common</c> assembly.
+/// scoped to the wire protocol, which lives in the referenced <c>VortexArena.Common</c> assembly.
 ///
 /// Reference for the wire layout: <c>Net_Write_Effect</c> (origin, an extraflags byte, then conditional
 /// velocity / colour-min / colour-max triples and — point effects only — the count byte). Colour is

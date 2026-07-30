@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Bsp;
+namespace VortexArena.Formats.Bsp;
 
 /// <summary>
 /// Potentially-Visible-Set queries over a parsed <see cref="BspData"/> — the C# successor to DP's

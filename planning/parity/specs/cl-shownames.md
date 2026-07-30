@@ -1,7 +1,7 @@
 # cl-shownames (player nameplates / health bars / fade) — parity spec
 
 **Base refs:** `client/shownames.qc`, `client/shownames.qh`, `_hud_common.cfg:331-349`, `client/mutators/events.qh:241-246`
-**Port refs:** `game/client/ShowNamesLayer.cs`, `game/hud/ShownamesPanel.cs`, `game/net/NetGame.cs` (wiring), `tests/XonoticGodot.Tests/ShowNamesTests.cs`
+**Port refs:** `game/client/ShowNamesLayer.cs`, `game/hud/ShownamesPanel.cs`, `game/net/NetGame.cs` (wiring), `tests/VortexArena.Tests/ShowNamesTests.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

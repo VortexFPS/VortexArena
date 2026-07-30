@@ -17,8 +17,8 @@ features:
       - "common/resources/all.inc"
       - "common/resources/resources.qc:GetResourceType"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:ResourceType"
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:GetResource"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:ResourceType"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:GetResource"
     constants:
       - { name: "resource order", base: "NONE,HEALTH,ARMOR,SHELLS,BULLETS,ROCKETS,CELLS,FUEL", port: "same enum order", match: true }
       - { name: "field mapping", base: ".health/.armorvalue/.ammo_shells/.ammo_nails/.ammo_rockets/.ammo_cells/.ammo_fuel", port: "Health/ArmorValue/AmmoShells/AmmoBullets/AmmoRockets/AmmoCells/AmmoFuel", match: true }
@@ -46,7 +46,7 @@ features:
     base_refs:
       - "common/resources/sv_resources.qc:GetResourceLimit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:GetResourceLimit"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:GetResourceLimit"
     constants:
       - { name: "g_balance_health_limit", base: "200", port: "200", match: true }
       - { name: "g_balance_armor_limit", base: "200", port: "200", match: true }
@@ -78,8 +78,8 @@ features:
       - "common/resources/sv_resources.qc:SetResource"
       - "common/resources/sv_resources.qc:SetResourceExplicit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:SetResource"
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:SetResourceExplicit"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:SetResource"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:SetResourceExplicit"
     constants:
       - { name: "waste behavior", base: "amount_wasted = amount-max; fire ResourceWasted", port: "same", match: true }
     status:
@@ -103,8 +103,8 @@ features:
       - "common/resources/sv_resources.qc:GiveResource"
       - "common/resources/sv_resources.qc:GiveResourceWithLimit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:GiveResource"
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:GiveResourceWithLimit"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:GiveResource"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:GiveResourceWithLimit"
     constants:
       - { name: "g_balance_pause_health_rot", base: "1", port: "1", match: true }
       - { name: "g_balance_pause_armor_rot", base: "1", port: "1", match: true }
@@ -132,8 +132,8 @@ features:
       - "common/resources/sv_resources.qc:TakeResource"
       - "common/resources/sv_resources.qc:TakeResourceWithLimit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:TakeResource"
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:TakeResourceWithLimit"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:TakeResource"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:TakeResourceWithLimit"
     constants:
       - { name: "amount<=0 no-op (SVQC)", base: "yes", port: "yes", match: true }
       - { name: "TakeResourceWithLimit clamp", base: "if (current-amount < -limit) amount = -limit + current", port: "if (current-amount < -limit) amount = current - limit", match: true }
@@ -160,11 +160,11 @@ features:
       - "server/client.qc:CalcRegen"
       - "server/client.qc:CalcRot"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:Regen"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:RotRegen"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:CalcRegen"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:CalcRot"
-      - "src/XonoticGodot.Server/GameWorld.cs:OnPlayerPostThink"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:Regen"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:RotRegen"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:CalcRegen"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:CalcRot"
+      - "src/VortexArena.Server/GameWorld.cs:OnPlayerPostThink"
     constants:
       - { name: "g_balance_health_regen", base: "0.08", port: "0.08", match: true }
       - { name: "g_balance_health_regenlinear", base: "0.5", port: "0.5", match: true }
@@ -211,10 +211,10 @@ features:
       - "common/resources/sv_resources.qc:138"
       - "common/physics/player.qc:837"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageEntityState.cs:PauseRegenFinished"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:317"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:756"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:738"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageEntityState.cs:PauseRegenFinished"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:317"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:756"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:738"
     constants:
       - { name: "g_balance_pause_health_regen (on damage)", base: "5", port: "5", match: true }
       - { name: "g_balance_pause_health_regen_spawn", base: "0", port: "0", match: true }
@@ -244,7 +244,7 @@ features:
     base_refs:
       - "common/resources/cl_resources.qc:GetResource"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:GetResource"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:GetResource"
       - "game/hud/HealthArmorPanel.cs"
       - "game/hud/AmmoPanel.cs"
     constants: []
@@ -269,7 +269,7 @@ features:
     base_refs:
       - "common/resources/sv_resources.qc:GetAmmoConsumption"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/CompatRemaps.cs:GetAmmoConsumption"
+      - "src/VortexArena.Common/Gameplay/MapObjects/CompatRemaps.cs:GetAmmoConsumption"
     constants:
       - { name: "RES_NONE -> 0", base: "if (wpn.ammo_type == RES_NONE) return 0", port: "if (AmmoType == None) return 0f", match: true }
       - { name: "ARC special", base: "WEP_CVAR(ARC, beam_ammo)", port: "g_balance_arc_beam_ammo (6)", match: true }

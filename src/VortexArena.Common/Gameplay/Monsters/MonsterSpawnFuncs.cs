@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
     /// <summary>
     /// Map-placement spawnfuncs for the monster family — the thin <c>spawnfunc(monster_X)</c> entries each
@@ -99,7 +99,7 @@ namespace XonoticGodot.Common.Gameplay
     }
 }
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     /// <summary>
     /// QC monster edict keys (<c>common/monsters/sv_spawner.qc</c> + <c>sv_monsters.qc</c>) that have no home

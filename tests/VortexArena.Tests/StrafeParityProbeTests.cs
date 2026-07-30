@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Net;
-using XonoticGodot.Tests.Camera;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Net;
+using VortexArena.Tests.Camera;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// INVESTIGATION PROBE (air-strafe turn-rate parity vs Base): quantifies the maximum velocity-redirect
@@ -75,9 +75,9 @@ public class StrafeParityProbeTests
         // grounded tick's CheckPlayerJump re-jumps and UNSETs onground BEFORE the branch selection.
         var (world, clock) = FlatWorld();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         var step = new PlayerPhysicsStep(new Vector3(-16f, -16f, -24f), new Vector3(16f, 16f, 45f));
         var s = new PredictedState { Origin = new Vector3(0f, 0f, 88.03f), Velocity = new Vector3(StartSpeed, 0f, 0f), OnGround = true };
@@ -132,9 +132,9 @@ public class StrafeParityProbeTests
     {
         var (world, clock) = FlatWorld();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         var step = new PlayerPhysicsStep(new Vector3(-16f, -16f, -24f), new Vector3(16f, 16f, 45f));
         var s = new PredictedState { Origin = new Vector3(0f, 0f, 6000f), Velocity = new Vector3(speed0, 0f, 0f), OnGround = false };
@@ -161,9 +161,9 @@ public class StrafeParityProbeTests
     {
         var (world, clock) = FlatWorld();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         var step = new PlayerPhysicsStep(new Vector3(-16f, -16f, -24f), new Vector3(16f, 16f, 45f));
         // floor top is at z=64 (AnalyticWorld brush below), hull mins.z=-24 → stand at 88.

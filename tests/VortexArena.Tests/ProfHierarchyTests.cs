@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Threading;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Diagnostics;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Unit coverage for the <see cref="Prof"/> rework (per-thread accumulators + hierarchy/self-time + the watchdog

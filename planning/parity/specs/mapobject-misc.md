@@ -1,7 +1,7 @@
 # mapobject-misc — parity spec
 
 **Base refs:** `common/mapobjects/misc/{laser,corner,follow,dynlight,keys,teleport_dest}.qc` · `common/mapobjects/models.qc` · `common/mapobjects/subs.qc` (SUB_CalcMove) · `common/mapobjects/bgmscript.qc` (+ `client/bgmscript.qc`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/MapObjects/{Laser,Follow,DynamicLight,MapModels,MapObjectsCommon,Teleporters,MovingBrushes,MapObjectsRegistry}.cs` · `game/client/LaserRenderer.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/MapObjects/{Laser,Follow,DynamicLight,MapModels,MapObjectsCommon,Teleporters,MovingBrushes,MapObjectsRegistry}.cs` · `game/client/LaserRenderer.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

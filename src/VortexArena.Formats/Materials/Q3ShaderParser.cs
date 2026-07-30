@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace XonoticGodot.Formats.Materials;
+namespace VortexArena.Formats.Materials;
 
 /// <summary>
 /// Parses Quake 3 / Darkplaces <c>.shader</c> material scripts into <see cref="ShaderDef"/> POCOs.
@@ -280,6 +280,28 @@ public static class Q3ShaderParser
 
             case "fogparms":
                 ParseFogParms(def, p);
+                return;
+
+            // ---- q3map2 lighting directives. Compile-time for the shipped renderer, but the in-game editor
+            // lights the world live and needs to know which surfaces emit and where the sun is. ----
+            case "q3map_surfacelight":
+                if (p.Count >= 2 && TryF(p[1], out float surfaceLight))
+                    def.SurfaceLight = surfaceLight;
+                return;
+
+            case "q3map_sun":
+            case "q3map_sunext":
+                ParseSun(def, p);
+                return;
+
+            case "q3map_shadeangle":
+                if (p.Count >= 2 && TryF(p[1], out float shadeAngle))
+                    def.ShadeAngle = shadeAngle;
+                return;
+
+            case "q3map_skylight":
+                if (p.Count >= 3 && TryF(p[1], out float skyAmount) && TryF(p[2], out float skyIters))
+                    def.SkyLight = new SkyLightParms { Amount = skyAmount, Iterations = (int)skyIters };
                 return;
 
             // ---- Darkplaces extensions (already dp-prefixed by RemapDpPrefix). ----
@@ -656,6 +678,30 @@ public static class Q3ShaderParser
         string? cloud = p.Count >= 3 ? Dash(p[2]) : null;
         string? near = p.Count >= 4 ? Dash(p[3]) : null;
         def.SkyParms = new SkyParms { FarBox = far, CloudHeight = cloud, NearBox = near };
+    }
+
+    /// <summary>
+    /// <c>q3map_sun &lt;r&gt; &lt;g&gt; &lt;b&gt; &lt;intensity&gt; &lt;degrees&gt; &lt;elevation&gt;</c>.
+    /// <c>q3map_sunExt &lt;r&gt; &lt;g&gt; &lt;b&gt; &lt;intensity&gt; &lt;degrees&gt; &lt;elevation&gt;
+    /// &lt;deviance&gt; &lt;samples&gt;</c> adds the sun's angular spread and its sample count, which decide
+    /// whether its shadows have a penumbra. Both spellings share the leading six.
+    /// </summary>
+    private static void ParseSun(ShaderDef def, List<string> p)
+    {
+        var nums = new List<float>(8);
+        for (int i = 1; i < p.Count && nums.Count < 8; i++)
+            if (TryF(p[i].Trim('(', ')'), out float v))
+                nums.Add(v);
+        if (nums.Count < 6)
+            return;
+
+        def.Sun = new SunParms
+        {
+            Red = nums[0], Green = nums[1], Blue = nums[2],
+            Intensity = nums[3], Degrees = nums[4], Elevation = nums[5],
+            Deviance = nums.Count > 6 ? nums[6] : 0f,
+            Samples = nums.Count > 7 ? Math.Max(1, (int)nums[7]) : 1,
+        };
     }
 
     private static void ParseFogParms(ShaderDef def, List<string> p)

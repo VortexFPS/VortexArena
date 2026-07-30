@@ -1,10 +1,10 @@
 // Port of qcsrc/menu/xonotic/playermodel.qc (XonoticPlayerModelSelector).
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Vfs;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The player-model selector — a C# port of <c>XonoticPlayerModelSelector</c>

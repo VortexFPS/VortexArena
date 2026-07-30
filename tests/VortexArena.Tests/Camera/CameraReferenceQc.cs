@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 
-namespace XonoticGodot.Tests.Camera;
+namespace VortexArena.Tests.Camera;
 
 /// <summary>
 /// An INDEPENDENT C# transcription of Base Xonotic's client-side view smoothing + prediction-error decay,
@@ -11,7 +11,7 @@ namespace XonoticGodot.Tests.Camera;
 /// faithful mode against — the same "independent reference" discipline <c>tools/movement-ref/movement_ref.c</c>
 /// uses for the physics math, extended to the camera/view layer.
 ///
-/// It is deliberately NOT the port's <see cref="XonoticGodot.Net.Reconciler"/> (which is the code under test and
+/// It is deliberately NOT the port's <see cref="VortexArena.Net.Reconciler"/> (which is the code under test and
 /// reimplements stair smoothing as a render-only Z offset with port-only knobs). This class reproduces exactly
 /// what stock Xonotic renders as the eye Z each frame so a divergence is a genuine faithfulness bug.
 ///

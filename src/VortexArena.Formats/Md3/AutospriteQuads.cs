@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Md3;
+namespace VortexArena.Formats.Md3;
 
 /// <summary>
 /// Per-quad frame baking for Q3 <c>deformVertexes autosprite</c>/<c>autosprite2</c> surfaces — the pure

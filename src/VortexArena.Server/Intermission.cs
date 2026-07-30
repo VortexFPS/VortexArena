@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// End-of-match intermission — the Godot-free essence of <c>NextLevel</c> (server/world.qc) +

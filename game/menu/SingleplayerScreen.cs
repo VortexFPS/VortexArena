@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Server; // CampaignCatalog / CampaignLevel
+using VortexArena.Common.Gameplay;
+using VortexArena.Server; // CampaignCatalog / CampaignLevel
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Singleplayer dialog — C# successor to <c>XonoticSingleplayerDialog_fill</c> + the campaign listbox

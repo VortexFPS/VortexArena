@@ -1,6 +1,6 @@
 # Resources (health/armor/ammo + regen/rot) — parity spec
 
-**Base refs:** `common/resources/{resources,sv_resources,cl_resources}.qc`, `common/resources/all.inc`, `server/client.qc` (player_regen/RotRegen/CalcRegen/CalcRot), `server/player.qc` + `server/client.qc` (pause-timer writes)  ·  **Port refs:** `src/XonoticGodot.Common/Gameplay/Items/{Resources,ResourceHooks}.cs`, `src/XonoticGodot.Server/PlayerFrameLogic.cs` (Regen/RotRegen/CalcRegen/CalcRot), `src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs`, `src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs`
+**Base refs:** `common/resources/{resources,sv_resources,cl_resources}.qc`, `common/resources/all.inc`, `server/client.qc` (player_regen/RotRegen/CalcRegen/CalcRot), `server/player.qc` + `server/client.qc` (pause-timer writes)  ·  **Port refs:** `src/VortexArena.Common/Gameplay/Items/{Resources,ResourceHooks}.cs`, `src/VortexArena.Server/PlayerFrameLogic.cs` (Regen/RotRegen/CalcRegen/CalcRot), `src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs`, `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -191,7 +191,7 @@ Give/Set chains). Liveness is confirmed by `GameWorld.cs:1134`.
 
 ## Verification
 - Regen math + snap, damage-pauses-regen (REGEN1), pickup-pauses-rot (REGEN2), regen-resume: unit-tested in
-  `tests/XonoticGodot.Tests/PlayerLoopParityTests.cs` (`Regen_IsPaused_WhileDamagePauseTimerIsInFuture`,
+  `tests/VortexArena.Tests/PlayerLoopParityTests.cs` (`Regen_IsPaused_WhileDamagePauseTimerIsInFuture`,
   `GiveResource_PausesRot_ForHealthAndArmor`). Result: pass.
 - Liveness of the regen tick: `GameWorld.cs:1134` in `OnPlayerPostThink` — code-read confirmed, gated on
   alive/non-observer/non-game-stopped (matches QC).

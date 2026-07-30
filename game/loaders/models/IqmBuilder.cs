@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Sidecars;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Sidecars;
 using SN = System.Numerics;
 
-namespace XonoticGodot.Game.Loaders.Models;
+namespace VortexArena.Game.Loaders.Models;
 
 /// <summary>
 /// Turns a parsed <see cref="IqmData"/> (the engine-neutral IQM importer output) into a live Godot scene:

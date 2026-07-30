@@ -13,10 +13,10 @@
 // in there. This file plus the Nade core (registry/throw/projectile/bonus) is everything that makes a nade
 // thrown, charged, tracked, picked up, and detonated — no boom file edits needed.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades;
+namespace VortexArena.Common.Gameplay.Nades;
 
 /// <summary>
 /// The Nades mutator — gives every player offhand grenades (the g_nades arsenal). Enabled by the

@@ -1,7 +1,7 @@
 # mapobject-target — parity spec
 
 **Base refs:** `common/mapobjects/target/*.qc` (+ `common/mapobjects/misc/teleport_dest.qc`, the `target_position`/`info_notnull` jumppad-dest spawns in `common/mapobjects/trigger/jumppads.qc`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/MapObjects/{TargetUtilities,TargetSpeaker,TargetMusic,VoiceScript,Teleporters}.cs`, `game/client/MusicPlayer.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/MapObjects/{TargetUtilities,TargetSpeaker,TargetMusic,VoiceScript,Teleporters}.cs`, `game/client/MusicPlayer.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -192,7 +192,7 @@ by `MapObjectsCommon.UseTargets` (faithful `SUB_UseTargets`).
 
 ## Verification
 - `target_kill/speed/spawnpoint/location/changelevel/levelwarp/items/door_secret` — unit-tested in
-  `tests/XonoticGodot.Tests/TargetUtilitiesTests.cs` (logic + values), but the changelevel/levelwarp tests
+  `tests/VortexArena.Tests/TargetUtilitiesTests.cs` (logic + values), but the changelevel/levelwarp tests
   inject the seams locally, so they do NOT prove live wiring.
 - `target_voicescript` — `MapObjectLongTailTests.cs` (latch + advance + clear).
 - Liveness of changelevel/levelwarp/spawn seams established by grep: no `TargetUtilities.NextLevelHandler |

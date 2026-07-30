@@ -1,7 +1,7 @@
 # Status Effects (mutator-status_effects) — parity spec
 
 **Base refs:** `common/mutators/mutator/status_effects/` (`all.qh`, `status_effects.{qc,qh}`, `sv_status_effects.qc`, `cl_status_effects.qc`, `status_effect/{burning,frozen,spawnshield,stunned,superweapons}.{qc,qh}`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/StatusEffects.cs` · `src/XonoticGodot.Server/{GameWorld,PlayerFrameLogic}.cs` · `src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs` · `game/hud/PowerupsPanel.cs` · `game/client/ClientWorld.cs` · `src/XonoticGodot.Net/NetEntity.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/StatusEffects.cs` · `src/VortexArena.Server/{GameWorld,PlayerFrameLogic}.cs` · `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs` · `game/hud/PowerupsPanel.cs` · `game/client/ClientWorld.cs` · `src/VortexArena.Net/NetEntity.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

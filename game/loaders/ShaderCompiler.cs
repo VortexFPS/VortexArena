@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Godot;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Materials;
+using VortexArena.Formats.Vfs;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// Compiles a parsed <see cref="ShaderDef"/> into a Godot <see cref="Material"/>.
@@ -512,7 +512,7 @@ public static class ShaderCompiler
     private static string GenerateStageShader(ShaderDef def, ShaderStage stage, bool isBasePass)
     {
         var sb = new StringBuilder(1024);
-        sb.Append("// XonoticGodot animated Q3 stage shader for '").Append(Sanitize(def.Name)).Append("'. Generated in C#.\n");
+        sb.Append("// VortexArena animated Q3 stage shader for '").Append(Sanitize(def.Name)).Append("'. Generated in C#.\n");
         sb.Append("shader_type spatial;\n");
 
         // render_mode: cull + blend + (unshaded for additive/colored passes so blending reads true).
@@ -545,7 +545,7 @@ public static class ShaderCompiler
         for (int i = 1; i < animFrames; i++)
             sb.Append("uniform sampler2D anim_tex_").Append(i)
               .Append(" : source_color, filter_linear_mipmap_anisotropic;\n");
-        // Dynamic whole-map colour tint (XonoticGodot.Game.WorldTint) — a global shader parameter so animated
+        // Dynamic whole-map colour tint (VortexArena.Game.WorldTint) — a global shader parameter so animated
         // world surfaces (scrolling textures, lava) re-tint with the rest of the map. Identity (1,1,1) default.
         sb.Append("global uniform vec3 map_tint;\n");
         bool alphaTest = !string.IsNullOrEmpty(stage.AlphaFunc);
@@ -598,7 +598,7 @@ public static class ShaderCompiler
     }
 
     // EmitRgbGen / EmitTcMod / the waveform expressions moved to the Godot-free
-    // XonoticGodot.Formats.Materials.Q3StageGlsl so the autosprite deform shader generator
+    // VortexArena.Formats.Materials.Q3StageGlsl so the autosprite deform shader generator
     // (AutospriteShaderGen) emits the identical, unit-tested GLSL. Thin local aliases keep call sites terse.
     private static void EmitRgbGen(StringBuilder sb, ColorGen? cg) => Q3StageGlsl.EmitRgbGen(sb, cg);
 

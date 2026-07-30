@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
 
-namespace XonoticGodot.Formats;
+namespace VortexArena.Formats;
 
 /// <summary>
 /// Little-endian read helpers over a <see cref="ReadOnlySpan{T}"/> of bytes.

@@ -374,7 +374,7 @@ features:
     port_refs:
       - "game/hud/RaceTimerPanel.cs"
       - "game/net/NetGame.cs:UpdateRacePanels"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:RecordCheckpointSplit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RecordCheckpointSplit"
     constants: []
     status: { logic: faithful, values: faithful, timing: faithful, presentation: faithful, audio: na, liveness: live }
     intended_divergence: false
@@ -650,7 +650,7 @@ features:
     port_refs:
       - "game/hud/CheckpointsPanel.cs"
       - "game/net/NetGame.cs:UpdateRacePanels"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:RecordCheckpointSplit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RecordCheckpointSplit"
     constants: []
     status: { logic: faithful, values: faithful, timing: faithful, presentation: faithful, audio: na, liveness: live }
     intended_divergence: false
@@ -936,7 +936,7 @@ features:
       - "client/hud/panel/racetimer.qh"
     port_refs:
       - "game/net/NetGame.cs:UpdateRacePanels"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:RecordCheckpointSplit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RecordCheckpointSplit"
     constants:
       - { name: "hud_panel_racetimer_dynamichud", base: "true", port: "1 registered (RaceTimerPanel.cs:146)", match: true }
     status: { logic: partial, values: unknown, timing: na, presentation: partial, audio: na, liveness: partial }

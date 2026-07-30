@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Tests.Camera;
+using VortexArena.Common;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Tests.Camera;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Slowmo / host_timescale time-scaling tests (Path B "while we're at it"). The time scale maps real time → fixed
@@ -92,9 +92,9 @@ public class SlowmoTests
     {
         var (world, clock) = FlatWorld();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
         var dt = 1f / fps;
         var stream = new List<float>();
         for (float t = 0; t < seconds; t += dt) stream.Add(dt);

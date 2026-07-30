@@ -1,9 +1,9 @@
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// World-coordinate readout — the position sibling of <see cref="FpsPanel"/>/<see cref="PingPanel"/>, drawn in
@@ -15,7 +15,7 @@ namespace XonoticGodot.Game.Hud;
 ///
 /// <list type="bullet">
 ///   <item><b>Source</b> — the value comes from <see cref="PositionProvider"/>, which the net layer wires to
-///         <see cref="XonoticGodot.Game.Net.ClientNet.PredictedOrigin"/> (the local player's predicted physics
+///         <see cref="VortexArena.Game.Net.ClientNet.PredictedOrigin"/> (the local player's predicted physics
 ///         origin). It returns <c>null</c> when there's no live local body (menu / pre-spawn / model viewer), and
 ///         the panel then draws nothing.</item>
 ///   <item><b>Format</b> — <c>"x:&lt;x&gt; y:&lt;y&gt; z:&lt;z&gt;"</c>, the three coordinates rounded to whole Quake
@@ -32,8 +32,15 @@ public partial class PositionPanel : HudPanel
 {
     /// <summary>Supplies the local player's current Quake-space origin, or <c>null</c> when there's no live body
     /// (menu / pre-spawn / model viewer). The net layer sets this to read
-    /// <see cref="XonoticGodot.Game.Net.ClientNet.PredictedOrigin"/>; null on paths with no local player.</summary>
+    /// <see cref="VortexArena.Game.Net.ClientNet.PredictedOrigin"/>; null on paths with no local player.</summary>
     public System.Func<NVec3?>? PositionProvider { get; set; }
+
+    /// <summary>
+    /// View angles in Quake convention (pitch, yaw, roll), appended to the readout when supplied. Shown
+    /// because a position alone cannot reproduce a view: reporting "I see it here" needs the direction too,
+    /// and the yaw/pitch pair printed here is exactly what <c>--observe "x y z yaw pitch"</c> takes.
+    /// </summary>
+    public System.Func<NVec3?>? AnglesProvider { get; set; }
 
     /// <summary>Always animating — the origin changes continuously while moving, so redraw each frame while shown.</summary>
     public override bool IsDynamic => true;
@@ -52,11 +59,12 @@ public partial class PositionPanel : HudPanel
 
     // Last-drawn snapshot for the change gate (alloc-free primitive compare, not a formatted string).
     private int _lastX = int.MinValue, _lastY = int.MinValue, _lastZ = int.MinValue;
+    private int _lastYaw = int.MinValue, _lastPitch = int.MinValue;
     private bool _lastHave;
     private int _lastWidth, _lastHeight;
 
-    /// <summary>True only when the drawn coordinates (rounded to whole units), the have-position state, or the
-    /// viewport size changed since the last draw (3.2-3).</summary>
+    /// <summary>True only when the drawn values (coordinates and angles, rounded as displayed), the
+    /// have-position state, or the viewport size changed since the last draw (3.2-3).</summary>
     public override bool NeedsRedraw()
     {
         NVec3? p = ShowMode() != 0 && PositionProvider is not null ? PositionProvider() : null;
@@ -64,10 +72,21 @@ public partial class PositionPanel : HudPanel
         int x = have ? Mathf.RoundToInt(p!.Value.X) : 0;
         int y = have ? Mathf.RoundToInt(p!.Value.Y) : 0;
         int z = have ? Mathf.RoundToInt(p!.Value.Z) : 0;
+
+        // The ANGLES are drawn too, so they have to be in the gate. Comparing position alone left the
+        // readout stale through any turn that did not also move the camera — which is exactly how a mapper
+        // lines up a shot, so the numbers were wrong precisely when they were being read.
+        NVec3? a = AnglesProvider?.Invoke();
+        int yaw = a.HasValue ? Mathf.RoundToInt(a.Value.Y) : 0;
+        int pitch = a.HasValue ? Mathf.RoundToInt(a.Value.X) : 0;
+
         int w = (int)Size2.X, h = (int)Size2.Y;
-        if (have == _lastHave && x == _lastX && y == _lastY && z == _lastZ && w == _lastWidth && h == _lastHeight)
+        if (have == _lastHave && x == _lastX && y == _lastY && z == _lastZ
+            && yaw == _lastYaw && pitch == _lastPitch && w == _lastWidth && h == _lastHeight)
             return false;
-        _lastHave = have; _lastX = x; _lastY = y; _lastZ = z; _lastWidth = w; _lastHeight = h;
+        _lastHave = have; _lastX = x; _lastY = y; _lastZ = z;
+        _lastYaw = yaw; _lastPitch = pitch;
+        _lastWidth = w; _lastHeight = h;
         return true;
     }
 
@@ -112,6 +131,8 @@ public partial class PositionPanel : HudPanel
 
         NVec3 o = p.Value;
         string text = $"x:{Mathf.RoundToInt(o.X)} y:{Mathf.RoundToInt(o.Y)} z:{Mathf.RoundToInt(o.Z)}";
+        if (AnglesProvider?.Invoke() is { } a)
+            text += $"  yaw:{Mathf.RoundToInt(a.Y)} pitch:{Mathf.RoundToInt(a.X)}";
         Color color = new(1f, 1f, 1f, 1f);
 
         // Match FpsPanel's sizing/placement so the readouts share a column and line height; offset up so position

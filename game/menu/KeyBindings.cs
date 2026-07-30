@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The keybind catalog + the encode/decode glue between the menu's string-based bind table and Godot's
@@ -11,13 +11,13 @@ namespace XonoticGodot.Game.Menu;
 /// helpers that turn a captured input event into a stored string and back.
 ///
 /// <para>The runtime bind table itself is now loaded from the canonical <c>binds-xonotic.cfg</c> at boot
-/// (<see cref="XonoticGodot.Game.Console.BindInput.RegisterBindCommands"/> → <c>XonoticGodot.Engine.Console.BindTable</c>);
+/// (<see cref="VortexArena.Game.Console.BindInput.RegisterBindCommands"/> → <c>VortexArena.Engine.Console.BindTable</c>);
 /// this class is the <em>display/capture</em> layer the input-settings dialog uses (the action list + the
 /// key encode/decode), not a parallel store. <see cref="Defaults"/> survives only as a thin fallback for when
 /// no cfg is mounted.</para>
 ///
 /// Bind string format (engine-bind-ish, human readable in the config), matching what
-/// <see cref="XonoticGodot.Game.Console.BindInput"/> encodes a live event to:
+/// <see cref="VortexArena.Game.Console.BindInput"/> encodes a live event to:
 ///   * printable / named keyboard keys  -> Godot's <see cref="OS.GetKeycodeString"/> name, e.g.
 ///     "W", "Space", "Ctrl", "F1", "Up".  (Single ASCII letters are upper-cased for a tidy label.)
 ///   * mouse buttons                    -> "MOUSE1".."MOUSE5" for left/right/middle + the two X-buttons, and
@@ -27,7 +27,7 @@ public static class KeyBindings
 {
     /// <summary>
     /// The bindable actions in display order, with a stable id (used as the config key) and a human label for
-    /// the row. The id maps to a DP command in <see cref="XonoticGodot.Game.Console.BindInput"/>'s ActionToCommand;
+    /// the row. The id maps to a DP command in <see cref="VortexArena.Game.Console.BindInput"/>'s ActionToCommand;
     /// the vocabulary mirrors the core rows keybinder.qc's KeyBinds_BuildList lists (Moving / Attacking /
     /// Weapons / View / Communication / Misc).
     /// </summary>
@@ -68,7 +68,7 @@ public static class KeyBindings
     /// <summary>
     /// Fallback default key for each action id, used <em>only</em> when no <c>binds-xonotic.cfg</c> is mounted
     /// (e.g. a bare test/CI run). The canonical defaults are the cfg itself, ingested at boot; these are kept as
-    /// canonical key strings (matching <see cref="XonoticGodot.Game.Console.BindInput"/>'s encoder) so the menu still
+    /// canonical key strings (matching <see cref="VortexArena.Game.Console.BindInput"/>'s encoder) so the menu still
     /// shows a sensible face without a data dir. Reduced from the previous invented table (T15) — the cfg is the
     /// real source of truth.
     /// </summary>
@@ -133,7 +133,7 @@ public static class KeyBindings
         return name.Length == 1 ? name.ToUpperInvariant() : name;
     }
 
-    /// <summary>Engine mouse-button semantics (keys.c), matching <see cref="XonoticGodot.Game.Console.BindInput"/>:
+    /// <summary>Engine mouse-button semantics (keys.c), matching <see cref="VortexArena.Game.Console.BindInput"/>:
     /// the two X-buttons are MOUSE4/MOUSE5 and the wheel is MWHEELUP/MWHEELDOWN.</summary>
     private static string EncodeMouse(MouseButton button) => button switch
     {

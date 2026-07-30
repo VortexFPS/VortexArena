@@ -1,14 +1,14 @@
 using System.Numerics;
-using XonoticGodot.Common;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T43 — the monster damage → pain/death/reset seam (port of <c>Monster_Damage</c> / <c>Monster_Dead</c> /
@@ -451,7 +451,7 @@ public class MonsterDamageDeathTests
         // QC: if(!RES_ARMOR) SetResourceExplicit(RES_ARMOR, bound(0.2, 0.5*MONSTER_SKILLMOD(this), 0.9)).
         // skill 1 (g_monsters_skill default) -> SKILLMOD = 0.5 + 1*0.09 = 0.59 -> bound(0.2, 0.295, 0.9) = 0.295.
         var st = MonsterAI.StateOf(m)!;
-        float expected = XonoticGodot.Common.Math.QMath.Bound(0.2f, 0.5f * MonsterAI.SkillMod(st), 0.9f);
+        float expected = VortexArena.Common.Math.QMath.Bound(0.2f, 0.5f * MonsterAI.SkillMod(st), 0.9f);
         Assert.Equal(0.295f, expected, 3);          // pin the concrete value for skill 1
         Assert.Equal(expected, m.ArmorValue, 3);    // ...and that Setup actually seeded it (was 0 -> full damage)
         Assert.True(m.ArmorValue > 0f, "a freshly-spawned monster must carry default armor, not 0");
@@ -507,24 +507,24 @@ public class MonsterDamageDeathTests
     public void Kill_NaturalMonster_ByPlayer_AwardsMonsterScoreKill()
     {
         Boot();
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.GameStopped = false; // a prior test may have frozen scoring
+        VortexArena.Common.Gameplay.Scoring.GameScores.GameStopped = false; // a prior test may have frozen scoring
         Api.Cvars.Set("g_monsters_score_kill", "5");
 
         Entity m = SpawnNaturalZombie(new Vector3(0, 0, 26));
         var atk = NewPlayer();
-        Assert.Equal(0, XonoticGodot.Common.Gameplay.Scoring.GameScores.Get(atk, XonoticGodot.Common.Gameplay.Scoring.GameScores.Score));
+        Assert.Equal(0, VortexArena.Common.Gameplay.Scoring.GameScores.Get(atk, VortexArena.Common.Gameplay.Scoring.GameScores.Score));
 
         Combat.Damage(m, atk, atk, m.Health + 5f, DeathTypes.FromWeapon("blaster"), m.Origin, Vector3.Zero);
 
         // QC GameRules_scoring_add(attacker, SCORE, +autocvar_g_monsters_score_kill) = PlayerScore_Add(.., SP_SCORE, 5).
-        Assert.Equal(5, XonoticGodot.Common.Gameplay.Scoring.GameScores.Get(atk, XonoticGodot.Common.Gameplay.Scoring.GameScores.Score));
+        Assert.Equal(5, VortexArena.Common.Gameplay.Scoring.GameScores.Get(atk, VortexArena.Common.Gameplay.Scoring.GameScores.Score));
     }
 
     [Fact]
     public void Kill_SpawnedMonster_ByPlayer_AwardsNoScore_UnlessScoreSpawnedSet()
     {
         Boot();
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.GameStopped = false;
+        VortexArena.Common.Gameplay.Scoring.GameScores.GameStopped = false;
         Api.Cvars.Set("g_monsters_score_kill", "5");
 
         // A command/wave-spawned monster (MONSTERFLAG_SPAWNED): QC gate is (g_monsters_score_spawned || natural),
@@ -537,7 +537,7 @@ public class MonsterDamageDeathTests
 
         var atk = NewPlayer();
         Combat.Damage(m!, atk, atk, m!.Health + 5f, DeathTypes.FromWeapon("blaster"), m.Origin, Vector3.Zero);
-        Assert.Equal(0, XonoticGodot.Common.Gameplay.Scoring.GameScores.Get(atk, XonoticGodot.Common.Gameplay.Scoring.GameScores.Score));
+        Assert.Equal(0, VortexArena.Common.Gameplay.Scoring.GameScores.Get(atk, VortexArena.Common.Gameplay.Scoring.GameScores.Score));
 
         // With g_monsters_score_spawned set, the SAME spawned-monster kill DOES award the score.
         Api.Cvars.Set("g_monsters_score_spawned", "1");
@@ -547,6 +547,6 @@ public class MonsterDamageDeathTests
         Assert.NotNull(m2);
         ClearSpawnShield(m2!);
         Combat.Damage(m2!, atk, atk, m2!.Health + 5f, DeathTypes.FromWeapon("blaster"), m2.Origin, Vector3.Zero);
-        Assert.Equal(5, XonoticGodot.Common.Gameplay.Scoring.GameScores.Get(atk, XonoticGodot.Common.Gameplay.Scoring.GameScores.Score));
+        Assert.Equal(5, VortexArena.Common.Gameplay.Scoring.GameScores.Get(atk, VortexArena.Common.Gameplay.Scoring.GameScores.Score));
     }
 }

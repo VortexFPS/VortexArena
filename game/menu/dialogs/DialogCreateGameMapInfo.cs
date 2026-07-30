@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Menu;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Menu;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Create-Game map-info popup — a faithful C# port of <c>XonoticMapInfoDialog</c>

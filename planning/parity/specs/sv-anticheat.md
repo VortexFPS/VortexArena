@@ -1,6 +1,6 @@
 # sv-anticheat — parity spec
 
-**Base refs:** `server/anticheat.qc`, `server/anticheat.qh`, `lib/math.qh` (MEAN macros)  ·  **Port refs:** `src/XonoticGodot.Server/AntiCheat.cs`, `src/XonoticGodot.Server/GameWorld.cs`
+**Base refs:** `server/anticheat.qc`, `server/anticheat.qh`, `lib/math.qh` (MEAN macros)  ·  **Port refs:** `src/VortexArena.Server/AntiCheat.cs`, `src/VortexArena.Server/GameWorld.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -98,7 +98,7 @@ evade-tracked angle. Called from `server/client.qc:1837` (SpectateCopy).
   m2=2, m3=3, m4=4, m7=7, m10=10.
 
 ## Port mapping
-`src/XonoticGodot.Server/AntiCheat.cs` is a near-verbatim C# port:
+`src/VortexArena.Server/AntiCheat.cs` is a near-verbatim C# port:
 - `Mean` struct = MEAN_DECLARE/accumulate/evaluate (uses `double` internally; QC uses `float`).
 - `PlayerAnticheatState` = the `.anticheat_*` edict fields + per-player MEAN cells.
 - `AnticheatDetector[] Detectors` = the `ANTICHEATS(X)` table, with identical names/tmin/mi/ma.
@@ -163,7 +163,7 @@ DEAD (present but no live caller). No punishment in either Base or port — pari
   divergence, low impact — recorded as a `missing` row, not a behavioral gap.
 
 ## Verification
-- Unit tests: `tests/XonoticGodot.Tests/ServerInfraTests.cs` — `AntiCheat_Mean_PowerMean`,
+- Unit tests: `tests/VortexArena.Tests/ServerInfraTests.cs` — `AntiCheat_Mean_PowerMean`,
   `AntiCheat_MovementOddity_BotlikeReversalScoresHigh`, `AntiCheat_Physics_AccumulatesWithoutThrowing`,
   `AntiCheat_Display_Verdicts`. Confirm the math/logic/values/display path.
 - Live-caller trace: `GameWorld.cs` grep for every `AntiCheat.*` method (see line numbers above) establishes

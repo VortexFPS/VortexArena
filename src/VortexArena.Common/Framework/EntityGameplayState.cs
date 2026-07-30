@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// Gameplay-state fields on the base entity that cross the Framework/Gameplay boundary: the weapon

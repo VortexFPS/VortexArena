@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Scoring;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Scoring;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The player actor — the C# successor to a QuakeC client edict transmuted into <c>CLASS(Player)</c>

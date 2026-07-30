@@ -6,3 +6,17 @@
 *.ps1   text eol=crlf
 *.cmd   text eol=crlf
 *.bat   text eol=crlf
+
+# Engine patches must be byte-identical on every platform, for two independent reasons.
+#
+# 1. Their CONTENT HASH is load-bearing. tools/engine-patches/engine.lock.json (restructure item 29)
+#    pins the patch-set hash so an export cannot silently use a template built from different patches.
+#    Without a rule here the file is stored LF but checked out CRLF under core.autocrlf, so the same
+#    commit hashes differently on Windows and on the Linux CI runner — and the lockfile check fails on
+#    whichever platform did not write it, for a reason that looks nothing like line endings.
+# 2. `git apply` is strict about them. A CRLF patch against LF sources fails to apply, or applies and
+#    leaves CRLF in C++ files that had LF.
+#
+# eol=lf rather than -text: these ARE text (diffable, mergeable), they just must not be converted.
+*.patch text eol=lf
+*.diff  text eol=lf

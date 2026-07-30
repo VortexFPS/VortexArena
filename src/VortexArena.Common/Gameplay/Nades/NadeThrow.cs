@@ -8,11 +8,11 @@
 // to prime (bonus / strength / cvar / client-select), tracks the held nade, and computes the throw force.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades;
+namespace VortexArena.Common.Gameplay.Nades;
 
 /// <summary>The held-nade priming + charge-throw logic (QC the spawn_held_nade / nade_prime / CheckThrow set).</summary>
 public static class NadeThrow

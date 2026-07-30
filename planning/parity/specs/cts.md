@@ -1,7 +1,7 @@
 # Race CTS ("Complete The Stage") — parity spec
 
 **Base refs:** `common/gametypes/gametype/cts/{cts.qh,cts.qc,sv_cts.qc,sv_cts.qh,cl_cts.qc}` · shared engine `server/race.qc` + `server/race.qh` · client `common/gametypes/gametype/race/cl_race.qc` (`HUD_Mod_Race`) + `client/hud/panel/racetimer.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs`, `RaceRecords.cs` · host wiring `src/XonoticGodot.Server/GameWorld.cs` · HUD `game/hud/RaceTimerPanel.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Cts.cs`, `RaceRecords.cs` · host wiring `src/VortexArena.Server/GameWorld.cs` · HUD `game/hud/RaceTimerPanel.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

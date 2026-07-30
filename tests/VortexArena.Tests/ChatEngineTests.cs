@@ -1,13 +1,13 @@
 using System.Collections.Generic;
 using System.Linq;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Server;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the T46 server chat engine — the port of <c>server/chat.qc</c> <c>Say()</c> + <c>formatmessage()</c>

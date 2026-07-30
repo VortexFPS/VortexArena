@@ -1,13 +1,13 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Services;
+namespace VortexArena.Common.Services;
 
 /// <summary>
 /// The engine-services facade — the C# reimplementation of the QuakeC builtins / dpdefs binding
-/// (planning/decisions/ADR-0009, specs/engine-services-facade.md). Gameplay in <c>XonoticGodot.Common</c>
+/// (planning/decisions/ADR-0009, specs/engine-services-facade.md). Gameplay in <c>VortexArena.Common</c>
 /// depends only on these interfaces, never on Godot, so it stays headless-testable. The deterministic
-/// simulation (<c>XonoticGodot.Engine</c>) and the Godot host provide the implementations.
+/// simulation (<c>VortexArena.Engine</c>) and the Godot host provide the implementations.
 /// </summary>
 
 /// <summary>Result of a traceline/tracebox sweep (QC trace_* globals).</summary>

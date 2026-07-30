@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Mortar (Nexuiz "Grenade Launcher") — port of common/weapons/weapon/mortar.{qh,qc}. A splash weapon
@@ -51,6 +51,7 @@ public sealed class Mortar : Weapon
     public Mortar()
     {
         NetName = "mortar";
+        BotPickupBaseValue = 7000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type
         DisplayName = "Mortar";
         Impulse = 4;

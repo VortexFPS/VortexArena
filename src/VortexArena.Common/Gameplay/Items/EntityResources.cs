@@ -9,7 +9,7 @@
 // Entity is declared partial, and this lives in a new file, so extending it here is allowed by the
 // task constraints (no existing file is modified).
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {

@@ -12,7 +12,7 @@ export const meta = {
 
 // ---------- args ----------
 // args: { repo, waveName, tracks: [{ id, title, goal, units:[...] }] }
-const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Xonotic/XonoticGodot'
+const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Xonotic/VortexArena'
 const WAVE = (args && args.waveName) || 'framework build'
 const TRACKS = (args && args.tracks) || []
 
@@ -100,7 +100,7 @@ RELATED PARITY UNITS: ${(t.units || []).join(', ')}
 STEPS:
 1. For each related unit, read planning/parity/specs/<unit>.md (authoritative Base algorithm + exact constants/cvars/timings) and planning/parity/registry/<unit>.yaml (the open gap dimensions + their notes).
 2. Read the CURRENT port code (the spec's "Port refs", and the hub files this will touch: ServerNet.cs, ClientNet.cs, NetGame.cs, GameWorld.cs, ClientWorld.cs, the render/camera files). Understand the EXISTING patterns (how an existing networked entity/stat round-trips; how an existing renderer draws) and REUSE them.
-3. Grep the Base QuakeC under assets/data/xonotic-data.pk3dir for the exact behavior/wire format/constants when the spec is ambiguous.
+3. Grep the Base QuakeC under Base/data/xonotic-data.pk3dir for the exact behavior/wire format/constants when the spec is ambiguous.
 
 Produce a BUILD PLAN:
 - summary: the architecture in one paragraph (how state is produced server-side, networked, consumed/rendered client-side -- following the port's existing seams, e.g. the CTF-flag entity-feed pattern).
@@ -147,11 +147,11 @@ Return track, status (live/partial/failed), the call sites you wired, and concer
 
 const gatePrompt = (i) => `You are the OPUS build/test gate for "${WAVE}". Get the solution GREEN. Repo root: ${REPO}
 
-1. dotnet build tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj -c Debug --nologo
-2. dotnet build XonoticGodot.csproj -c Debug --nologo
+1. dotnet build tests/VortexArena.Tests/VortexArena.Tests.csproj -c Debug --nologo
+2. dotnet build VortexArena.csproj -c Debug --nologo
 If either FAILS: read the compiler errors, open the offending files, FIX them (most likely: signature/wire drift between the parallel build owners, missing usings, type mismatches, a referenced-but-unbuilt member). Rebuild after each fix; iterate up to ~15 cycles until BOTH build clean.
-3. When clean: dotnet test tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj -c Debug --no-build --nologo
-   Expect 0 failed (assets/data is present). Fix NEW failures this wave caused; do not chase pre-existing skips.
+3. When clean: dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj -c Debug --no-build --nologo
+   Expect 0 failed (Base/data is present). Fix NEW failures this wave caused; do not chase pre-existing skips.
 
 Gate attempt #${i}. Report build_passed, tests_passed, counts, fixes_made, remaining_errors.`
 

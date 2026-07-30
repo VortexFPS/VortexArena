@@ -1,12 +1,12 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for T18 Race DEPTH: penalty zones (QC trigger_race_penalty / race_ImposePenaltyTime — freeze in a
@@ -147,7 +147,7 @@ public class RaceOvertimePenaltyTests
         SetTime(es, 1f); race.CrossCheckpoint(r2, 0, true);
         SetTime(es, 13f); race.CrossCheckpoint(r2, 0, true);
 
-        Assert.Equal(2, XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamScore(
-            Teams.Red, XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamSlotSecondary));
+        Assert.Equal(2, VortexArena.Common.Gameplay.Scoring.GameScores.TeamScore(
+            Teams.Red, VortexArena.Common.Gameplay.Scoring.GameScores.TeamSlotSecondary));
     }
 }

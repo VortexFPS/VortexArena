@@ -2,11 +2,11 @@
 
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Overkill Nex — port of common/mutators/mutator/overkill/oknex.{qh,qc}. The Overkill loadout's
@@ -56,6 +56,7 @@ public sealed class OkNex : Weapon
     public OkNex()
     {
         NetName = "oknex";
+        BotPickupBaseValue = 8000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type RES_CELLS
         DisplayName = "Overkill Nex";
         Impulse = 7;

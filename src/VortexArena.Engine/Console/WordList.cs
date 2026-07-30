@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace XonoticGodot.Engine.Console;
+namespace VortexArena.Engine.Console;
 
 /// <summary>
 /// Space-separated word-list helpers — the C# successor to the QuakeC string utilities the generic command

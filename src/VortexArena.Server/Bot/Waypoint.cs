@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server.Bot;
+namespace VortexArena.Server.Bot;
 
 /// <summary>
 /// Waypoint type flags (QC WAYPOINTFLAG_*, server/bot/api.qh). Only the bits that affect navigation
@@ -253,6 +253,73 @@ public sealed class WaypointNetwork
     }
 
     /// <summary>
+    /// Rebuild the whole node list to <paramref name="count"/> entries — the undo journal's restore path.
+    ///
+    /// Two passes on purpose. Every node must exist before any link is wired, because a link holds a
+    /// REFERENCE and a snapshot's links are stored as indices into the list being rebuilt; wiring as we go
+    /// would mean half the targets did not exist yet.
+    /// </summary>
+    public void ReplaceAll(
+        int count,
+        Action<int, Waypoint> fill,
+        Action<int, Waypoint, IReadOnlyList<Waypoint>> link)
+    {
+        ArgumentNullException.ThrowIfNull(fill);
+        ArgumentNullException.ThrowIfNull(link);
+
+        _nodes.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            var wp = new Waypoint { Index = i };
+            fill(i, wp);
+            _nodes.Add(wp);
+        }
+        for (int i = 0; i < count; i++)
+            link(i, _nodes[i], _nodes);
+    }
+
+    /// <summary>
+    /// Remove a waypoint from the graph, unhooking every link that pointed at it (the editor's delete).
+    ///
+    /// Two things have to happen together or the graph is left corrupt. Every INCOMING link must go: a link is
+    /// a reference held by the SOURCE node, so dropping the node from the list on its own leaves neighbours
+    /// still routing through an object no longer in the graph. And the remaining nodes must be RE-INDEXED,
+    /// because <see cref="Waypoint.Index"/> is a dense index into <see cref="Nodes"/> that the A* uses to size
+    /// and address its score arrays — a stale index past the new count reads out of bounds.
+    /// </summary>
+    public bool RemoveNode(Waypoint wp)
+    {
+        ArgumentNullException.ThrowIfNull(wp);
+        if (!_nodes.Remove(wp))
+            return false;
+
+        foreach (Waypoint other in _nodes)
+            other.Links.RemoveAll(l => ReferenceEquals(l.To, wp));
+
+        for (int i = 0; i < _nodes.Count; i++)
+            _nodes[i].Index = i;
+
+        wp.Index = -1;
+        return true;
+    }
+
+    /// <summary>
+    /// Drop every link INTO <paramref name="target"/> except the one from <paramref name="keep"/> — what a
+    /// SUPPORT waypoint does to its destination (QC: "all incoming links are removed"), forcing traffic through
+    /// the supported route instead of leaving the problematic direct link in play.
+    /// </summary>
+    public void RemoveIncomingLinksExcept(Waypoint target, Waypoint keep)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        foreach (Waypoint other in _nodes)
+        {
+            if (ReferenceEquals(other, keep) || ReferenceEquals(other, target))
+                continue;
+            other.Links.RemoveAll(l => ReferenceEquals(l.To, target));
+        }
+    }
+
+    /// <summary>
     /// Add a directed link a-&gt;b with auto-computed cost (QC waypoint_addlink). Pass
     /// <paramref name="bidirectional"/> to also add b-&gt;a.
     /// </summary>
@@ -418,10 +485,10 @@ public sealed class WaypointNetwork
     /// (<see cref="AutoLink"/>). Lets bots navigate a map that ships no hand-authored <c>.waypoints</c> file.
     /// Returns the number of waypoints generated.
     /// </summary>
-    public int GenerateFromEntities(IReadOnlyList<XonoticGodot.Common.Framework.Entity> entities, bool autoLink = true)
+    public int GenerateFromEntities(IReadOnlyList<VortexArena.Common.Framework.Entity> entities, bool autoLink = true)
     {
         // index destinations by targetname so a trigger's .target resolves to its exit point.
-        var byTargetName = new Dictionary<string, XonoticGodot.Common.Framework.Entity>(StringComparer.OrdinalIgnoreCase);
+        var byTargetName = new Dictionary<string, VortexArena.Common.Framework.Entity>(StringComparer.OrdinalIgnoreCase);
         foreach (var e in entities)
             if (!string.IsNullOrEmpty(e.TargetName) && !byTargetName.ContainsKey(e.TargetName))
                 byTargetName[e.TargetName] = e;
@@ -441,9 +508,9 @@ public sealed class WaypointNetwork
         bool spawnItemWaypoints = forItemsCvar != 0 || !haveSpawns;
 
         int before = _nodes.Count;
-        var destWaypoints = new Dictionary<XonoticGodot.Common.Framework.Entity, Waypoint>(ReferenceEqualityComparer.Instance);
+        var destWaypoints = new Dictionary<VortexArena.Common.Framework.Entity, Waypoint>(ReferenceEqualityComparer.Instance);
 
-        Waypoint DestFor(XonoticGodot.Common.Framework.Entity dst)
+        Waypoint DestFor(VortexArena.Common.Framework.Entity dst)
         {
             if (!destWaypoints.TryGetValue(dst, out var wp))
             {
@@ -459,7 +526,7 @@ public sealed class WaypointNetwork
             string cn = e.ClassName ?? "";
 
             // items + spawn points → a stand-on-it point waypoint, floor-snapped (QC waypoint_fixorigin).
-            bool isItem = (e.Flags & XonoticGodot.Common.Framework.EntFlags.Item) != 0;
+            bool isItem = (e.Flags & VortexArena.Common.Framework.EntFlags.Item) != 0;
             bool isSpawn = cn.StartsWith("info_player", StringComparison.Ordinal);
             if (isItem || isSpawn)
             {
@@ -474,7 +541,7 @@ public sealed class WaypointNetwork
             bool isJumppad = cn == "trigger_push" || cn == "trigger_push_velocity";
             if (isTeleport || isJumppad)
             {
-                XonoticGodot.Common.Framework.Entity? dst = null;
+                VortexArena.Common.Framework.Entity? dst = null;
                 if (!string.IsNullOrEmpty(e.Target)) byTargetName.TryGetValue(e.Target, out dst);
                 var box = Add(e.Origin, e.Mins, e.Maxs, WaypointFlags.Generated | WaypointFlags.Teleport);
                 if (dst is not null)
@@ -497,14 +564,14 @@ public sealed class WaypointNetwork
     /// <summary>
     /// Ballistic flight time of a jumppad launch (QC trigger_push_get_push_time / the spawnforteleporter_wz cost):
     /// the time the toucher spends airborne arcing from the pad to its destination. Computed from the pad's actual
-    /// launch velocity (the same <see cref="XonoticGodot.Common.Gameplay.Jumppads.CalculateVelocity"/> solver that
+    /// launch velocity (the same <see cref="VortexArena.Common.Gameplay.Jumppads.CalculateVelocity"/> solver that
     /// drives the pad in-game), so the auto-generated teleport link costs what the jump actually takes. Falls back
     /// to the plain box→destination travel cost if the arc can't be solved (no upward launch).
     /// </summary>
-    private float JumppadFlightCost(XonoticGodot.Common.Framework.Entity pad, Waypoint box, Waypoint destWp)
+    private float JumppadFlightCost(VortexArena.Common.Framework.Entity pad, Waypoint box, Waypoint destWp)
     {
         Vector3 org = pad.Origin;
-        Vector3 vel = XonoticGodot.Common.Gameplay.Jumppads.CalculateVelocity(org, pad.Enemy ?? pad, pad.Height, pad);
+        Vector3 vel = VortexArena.Common.Gameplay.Jumppads.CalculateVelocity(org, pad.Enemy ?? pad, pad.Height, pad);
         // flight time of a ballistic arc back to launch height: t = 2*vz/g (QC's spawnforteleporter_wz push time).
         if (vel.Z > 0f && Gravity > 0f)
             return 2f * vel.Z / Gravity;
@@ -739,8 +806,8 @@ public sealed class WaypointNetwork
     /// </summary>
     public List<Waypoint>? FindPath(IReadOnlyList<(Waypoint Wp, float Cost)> seeds, Waypoint to)
     {
-        if (seeds.Count == 0)
-            return null;
+        if (seeds.Count == 0 || to.Index < 0)
+            return null;   // a goal the editor deleted is no longer in the graph (see the other FindPath)
 
         int n = _nodes.Count;
         if (_gScore.Length < n)
@@ -804,6 +871,12 @@ public sealed class WaypointNetwork
     {
         if (ReferenceEquals(from, to))
             return new List<Waypoint> { from };
+
+        // A node the editor deleted keeps its object identity but leaves the graph with Index = -1, and a bot
+        // can still be holding a reference to it from the route it was following. The neighbour loops below
+        // already skip those; the endpoints have to be checked too, or the first score write indexes at -1.
+        if (from.Index < 0 || to.Index < 0)
+            return null;
 
         int n = _nodes.Count;
         if (_gScore.Length < n)
@@ -995,7 +1068,7 @@ public sealed class WaypointNetwork
     /// <see cref="Nearest"/> per route build.</summary>
     public Waypoint? NearestForGoal(Entity target, Vector3 pos)
     {
-        float now = XonoticGodot.Common.Gameplay.MapMover.Now();
+        float now = VortexArena.Common.Gameplay.MapMover.Now();
         if (_goalWpCache.TryGetValue(target, out (Waypoint? Wp, float Until) c))
         {
             if (target.IsFreed) { _goalWpCache.Remove(target); return null; }
@@ -1030,7 +1103,7 @@ public sealed class WaypointNetwork
     /// Matches Base's quirk of only ever updating the FIRST <paramref name="maxUpdate"/> waypoints per call (the
     /// QC loop has no rotating cursor — it breaks at <c>c &gt;= maxupdate</c> from the head of g_waypoints).
     /// </summary>
-    public void UpdateDangerousObjects(IReadOnlyList<XonoticGodot.Common.Framework.Entity> entities, int maxUpdate)
+    public void UpdateDangerousObjects(IReadOnlyList<VortexArena.Common.Framework.Entity> entities, int maxUpdate)
     {
         if (maxUpdate <= 0 || _nodes.Count == 0)
             return;
@@ -1200,7 +1273,7 @@ public sealed class WaypointNetwork
     /// the built costs — matching Base, where the global skill is set before the waypoint costs are computed.
     /// Defaults to 0 (no speedup) so non-host callers keep the prior behaviour.
     /// </summary>
-    public static WaypointNetwork ForMap(string? waypointFileText, IReadOnlyList<XonoticGodot.Common.Framework.Entity> entities,
+    public static WaypointNetwork ForMap(string? waypointFileText, IReadOnlyList<VortexArena.Common.Framework.Entity> entities,
         string? linkCacheText = null, string? hardwiredText = null, int skill = 0, int bunnyhopSkillOffset = 7)
     {
         if (!string.IsNullOrWhiteSpace(waypointFileText))

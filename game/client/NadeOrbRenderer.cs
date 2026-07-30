@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Nades;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Nades;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Renders the networked nade <b>orb</b> entities — the heal / ammo / entrap / veil (and any other
 /// orb-type) fountain spheres a thrown nade leaves behind. The Godot successor to the CSQC
 /// <c>orb_setup</c> / <c>orb_draw</c> path (qcsrc/common/mutators/mutator/nades/nade.qc): the server spawns
-/// a <c>nade_orb</c> entity (<see cref="XonoticGodot.Net.NetEntityKind.NadeOrb"/>) carrying its
+/// a <c>nade_orb</c> entity (<see cref="VortexArena.Net.NetEntityKind.NadeOrb"/>) carrying its
 /// <c>OrbType</c> (a <see cref="NadeRegistry"/> id), absolute <c>OrbExpire</c> time and <c>OrbRadius</c>;
 /// this turns each into a tinted sphere that
 /// <list type="bullet">
@@ -422,7 +422,7 @@ public partial class NadeOrbRenderer : Node3D
     /// the orb's spawn-time and expiry are measured against. 0 in a headless/clockless harness — there the orb's
     /// spawn time seeds from this same 0, so the scale-up still resolves to grow=0 then ramps once the clock runs.</summary>
     private static float Now()
-        => XonoticGodot.Common.Services.Api.Services?.Clock?.Time ?? 0f;
+        => VortexArena.Common.Services.Api.Services?.Clock?.Time ?? 0f;
 
     /// <summary>Presence link for an orb entity (so the sim can reach its node, like EntityNode).</summary>
     private sealed class NadeOrbPresence : IEntityPresence

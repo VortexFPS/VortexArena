@@ -1,7 +1,7 @@
 # Damage Text mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/damagetext/{damagetext,sv_damagetext,cl_damagetext,ui_damagetext}.{qc,qh}`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/DamagetextMutator.cs`, `src/XonoticGodot.Common/Gameplay/Mutators/DamageTextFormat.cs`, `game/client/DamageTextLayer.cs`, `game/client/DamageTextConfig.cs`, `game/net/NetGame.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/DamagetextMutator.cs`, `src/VortexArena.Common/Gameplay/Mutators/DamageTextFormat.cs`, `game/client/DamageTextLayer.cs`, `game/client/DamageTextConfig.cs`, `game/net/NetGame.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -187,7 +187,7 @@ each frame; and a **menu tab** (`ui_damagetext.qc`) exposing the cvars. It is al
   is the common case. Documented in `DamagetextMutator` header.
 
 ## Verification
-- Server producer + format helper: unit tests in `tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs`
+- Server producer + format helper: unit tests in `tests/VortexArena.Tests/MutatorBatchT51Tests.cs`
   (`Damagetext_QueuesEvent_OnPlayerDamaged`, `Damagetext_AccumulatesSameFrameHits`, `Damagetext_Disabled_QueuesNothing`,
   `DamageTextFormat_*`). Verified by reading the tests.
 - Liveness: traced caller chain DamageSystem.cs:461 → DamagetextMutator → NetGame.cs:2074 → DamageTextLayer.Add.

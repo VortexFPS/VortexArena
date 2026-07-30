@@ -24,8 +24,8 @@ features:
       - "common/mutators/mutator/nades/sv_nades.qc:706 REGISTER_MUTATOR"
       - "common/mutators/mutator/nades/sv_nades.qc:818 PlayerSpawn offhand assign"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerSpawn"
     constants:
       - { name: "g_nades", base: "0 (mutators.cfg:196)", port: "GetFloat(g_nades)!=0", match: true }
       - { name: "g_nades_onspawn", base: "1 (mutators.cfg:199)", port: "1", match: true }
@@ -54,10 +54,10 @@ features:
       - "common/mutators/mutator/nades/sv_nades.qc:675 OFFHAND_NADE.offhand_think"
       - "common/mutators/mutator/nades/sv_nades.qc:715 ForbidThrowCurrentWeapon"
     port_refs:
-      - "src/XonoticGodot.Net/InputCommand.cs:20 InputButtons.Hook (BIT(6))"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:66 OffhandFirePressed = input.ButtonHook"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeThrow.cs:OffhandThink / CheckThrow"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerPreThink / OnForbidThrowCurrentWeapon"
+      - "src/VortexArena.Net/InputCommand.cs:20 InputButtons.Hook (BIT(6))"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:66 OffhandFirePressed = input.ButtonHook"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeThrow.cs:OffhandThink / CheckThrow"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerPreThink / OnForbidThrowCurrentWeapon"
     constants:
       - { name: "g_nades_nade_refire", base: "6 (mutators.cfg:208)", port: "6", match: true }
     status:
@@ -87,8 +87,8 @@ features:
       - "common/mutators/mutator/nades/sv_nades.qc:576 nade_prime"
       - "common/mutators/mutator/nades/sv_nades.qc:530 spawn_held_nade"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeThrow.cs:Prime"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeThrow.cs:SpawnHeldNade"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeThrow.cs:Prime"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeThrow.cs:SpawnHeldNade"
     constants:
       - { name: "g_nades_bonus_onstrength", base: "1 (mutators.cfg:233)", port: "1", match: true }
       - { name: "g_nades_bonus_only", base: "0 (mutators.cfg:235)", port: "0", match: true }
@@ -120,7 +120,7 @@ features:
       - "common/mutators/mutator/nades/sv_nades.qc:646 charge math (weapon_drop)"
       - "common/mutators/mutator/nades/sv_nades.qc:695 charge math (offhand)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeThrow.cs:ChargeDir"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeThrow.cs:ChargeDir"
     constants:
       - { name: "g_nades_nade_minforce", base: "400 (mutators.cfg:205)", port: "400", match: true }
       - { name: "g_nades_nade_maxforce", base: "2000 (mutators.cfg:206)", port: "2000", match: true }
@@ -150,7 +150,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/sv_nades.qc:321 toss_nade"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeProjectile.cs:Toss"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeProjectile.cs:Toss"
     constants:
       - { name: "g_nades_nade_health", base: "25 (mutators.cfg:207)", port: "25", match: true }
       - { name: "g_nades_nade_refire", base: "6 (mutators.cfg:208)", port: "6", match: true }
@@ -182,8 +182,8 @@ features:
       - "common/mutators/mutator/nades/sv_nades.qc:192 nade_touch"
       - "common/mutators/mutator/nades/sv_nades.qc:179 nade_pickup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeProjectile.cs:OnTouch"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeProjectile.cs:Pickup"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeProjectile.cs:OnTouch"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeProjectile.cs:Pickup"
     constants:
       - { name: "g_nades_pickup", base: "0 (mutators.cfg:201)", port: "0", match: true }
       - { name: "g_nades_pickup_time", base: "2 (mutators.cfg:202)", port: "2", match: true }
@@ -212,7 +212,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/sv_nades.qc:246 nade_damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeProjectile.cs:NadeDamage"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeProjectile.cs:NadeDamage"
     constants:
       - { name: "blaster", base: "force*1.5 damage=0", port: "force*1.5 damage=0", match: true }
       - { name: "vortex/vaporizer/okvortex", base: "force*6 damage=max_health*0.55", port: "same", match: true }
@@ -243,8 +243,8 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/sv_nades.qc:114 nade_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeBoom.cs:Detonate"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeBoom.cs:NadeBoomRegistry"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeBoom.cs:Detonate"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeBoom.cs:NadeBoomRegistry"
     constants: []
     status:
       logic: faithful
@@ -271,7 +271,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/nade/normal.qc:nade_normal_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:Boom"
     constants:
       - { name: "g_nades_nade_damage", base: "225 (mutators.cfg:209)", port: "225", match: true }
       - { name: "g_nades_nade_edgedamage", base: "90 (mutators.cfg:210)", port: "90", match: true }
@@ -302,7 +302,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/nade/napalm.qc:nade_napalm_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeNapalmBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeNapalmBoom.cs:Boom"
     constants:
       - { name: "g_nades_napalm_ball_count", base: "6 (mutators.cfg:252)", port: "6", match: true }
       - { name: "g_nades_napalm_ball_damage", base: "40 (mutators.cfg:255)", port: "40", match: true }
@@ -341,7 +341,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/nade/ice.qc:nade_ice_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeIceBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeIceBoom.cs:Boom"
     constants:
       - { name: "g_nades_ice_freeze_time", base: "3 (mutators.cfg:267)", port: "3", match: true }
       - { name: "g_nades_ice_radius", base: "300 (mutators.cfg:270)", port: "300", match: true }
@@ -371,7 +371,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/nade/translocate.qc:nade_translocate_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeTranslocateBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeTranslocateBoom.cs:Boom"
     constants:
       - { name: "g_nades_translocate_destroy_damage", base: "25 (mutators.cfg:274)", port: "25", match: true }
       - { name: "player_hull", base: "PL_MIN/MAX +-16 search box", port: "(-16,-16,-24)/(16,16,45) +-16", match: true }
@@ -401,8 +401,8 @@ features:
       - "common/mutators/mutator/nades/nade/spawn.qc:nade_spawn_boom"
       - "common/mutators/mutator/nades/sv_nades.qc:821 PlayerSpawn consume marker"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeSpawnBoom.cs:Boom"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeSpawnBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerSpawn"
     constants:
       - { name: "g_nades_spawn_count", base: "3 (mutators.cfg:278)", port: "3", match: true }
       - { name: "g_nades_spawn_health_respawn", base: "0=normal (mutators.cfg:279)", port: "0", match: true }
@@ -431,7 +431,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/nade/heal.qc:nade_heal_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeHealBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeHealBoom.cs:Boom"
     constants:
       - { name: "g_nades_heal_time", base: "10 (mutators.cfg:284)", port: "10", match: true }
       - { name: "g_nades_heal_radius", base: "300 (mutators.cfg:289)", port: "300", match: true }
@@ -463,7 +463,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/nade/ammo.qc:nade_ammo_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeAmmoBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeAmmoBoom.cs:Boom"
     constants:
       - { name: "g_nades_ammo_time", base: "4 (mutators.cfg:310)", port: "4", match: true }
       - { name: "g_nades_ammo_radius", base: "300 (mutators.cfg:315)", port: "300", match: true }
@@ -498,9 +498,9 @@ features:
       - "common/mutators/mutator/nades/nade/veil.qc:nade_veil_boom"
       - "common/mutators/mutator/nades/nade/darkness.qc:nade_darkness_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeEntrapBoom.cs:Boom"
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeVeilBoom.cs:Boom"
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeDarknessBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeEntrapBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeVeilBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeDarknessBoom.cs:Boom"
     constants:
       - { name: "g_nades_entrap_strength", base: "0.01 (mutators.cfg:298)", port: "0.01", match: true }
       - { name: "g_nades_entrap_speed", base: "0.5 (mutators.cfg:299)", port: "0.5", match: true }
@@ -534,7 +534,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/nade/monster.qc:nade_monster_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeMonsterBoom.cs:Boom"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeMonsterBoom.cs:Boom"
     constants:
       - { name: "g_nades_pokenade_monster_type", base: "\"zombie\" (mutators.cfg:294)", port: "\"zombie\"", match: true }
       - { name: "g_nades_pokenade_monster_lifetime", base: "150 (mutators.cfg:293)", port: "150 (set on MonsterState.Lifetime)", match: true }
@@ -564,9 +564,9 @@ features:
       - "common/mutators/mutator/nades/sv_nades.qc:836 PlayerDies bonus"
       - "common/mutators/mutator/nades/sv_nades.qc:896 MonsterDies bonus"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeBonus.cs"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerPreThink"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerDies"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeBonus.cs"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnPlayerDies"
     constants:
       - { name: "g_nades_bonus_max", base: "3 (mutators.cfg:234)", port: "3", match: true }
       - { name: "g_nades_bonus_score_max", base: "120 (mutators.cfg:238)", port: "120", match: true }
@@ -605,11 +605,11 @@ features:
       - "common/mutators/mutator/nades/sv_nades.qc:914 nades_RemovePlayer + MakePlayerObserver/ClientDisconnect/reset_map_global"
       - "common/mutators/mutator/nades/sv_nades.qc:937 SpectateCopy"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeThrow.cs:Clear"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeBonus.cs:RemoveBonus"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnVehicleEnter"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnMakePlayerObserver / OnClientDisconnect / RemovePlayer"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:ResetMapGlobal / OnPutClientInServer / OnSpectateCopy (host seams)"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeThrow.cs:Clear"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeBonus.cs:RemoveBonus"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnVehicleEnter"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnMakePlayerObserver / OnClientDisconnect / RemovePlayer"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:ResetMapGlobal / OnPutClientInServer / OnSpectateCopy (host seams)"
     constants: []
     status:
       logic: faithful
@@ -635,7 +635,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/sv_nades.qc:876 Damage_Calculate"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnDamageCalculate"
     constants:
       - { name: "g_freezetag_revive_nade", base: "0 (gametype cvar)", port: "0", match: true }
       - { name: "self_nade_window", base: "time-toss_time <= 0.1s", port: "0.1s", match: true }
@@ -703,8 +703,8 @@ features:
       - "common/mutators/mutator/nades/sv_nades.qc:954 BuildMutatorsString (\":Nades\")"
       - "common/mutators/mutator/nades/sv_nades.qc:949 BuildMutatorsPrettyString (\", Nades\")"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:79 BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:80 BuildMutatorsPrettyString"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:79 BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:80 BuildMutatorsPrettyString"
     constants:
       - { name: "mutators_string_token", base: "\":Nades\"", port: "\":Nades\"", match: true }
       - { name: "mutators_pretty_token", base: "\", Nades\"", port: "\", Nades\"", match: true }
@@ -743,9 +743,9 @@ features:
       - "common/mutators/mutator/nades/nade/ammo.qh (AmmoNade attribs + g_nades_ammo_* autocvars + proj 88/89)"
       - "common/mutators/mutator/nades/nade/darkness.qh (DarknessNade attribs + autocvars + proj 90/91)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeRegistry.cs:100 RegisterAll (Null=0 + the 11 types in all.inc order)"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:144 NadesSmall = g_nades_nade_small"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeProjectile.cs:63 small 16 / normal 32 hull"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeRegistry.cs:100 RegisterAll (Null=0 + the 11 types in all.inc order)"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:144 NadesSmall = g_nades_nade_small"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeProjectile.cs:63 small 16 / normal 32 hull"
     constants:
       - { name: "type ids", base: "Null=0, NORMAL=1 .. DARKNESS=11 (registry order)", port: "0..11 same order (NadeRegistry.cs:106-166)", match: true }
       - { name: "netnames", base: "normal/napalm/ice/translocate/spawn/heal/pokenade/entrap/veil/ammo/darkness (Null='random')", port: "identical incl. 'pokenade' for the monster nade", match: true }
@@ -822,7 +822,7 @@ features:
       - "common/mutators/mutator/nades/effects.inc:12 EFFECT(0, NADE_EXPLODE, \"nade_neutral_explode\")"
       - "common/mutators/mutator/nades/sv_nades.qc:139-152 SET_NADE_EFFECT per type + Send_Effect_Except(expef, findbetterlocation(origin,8), ..., expcol_min, expcol_max)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeBoom.cs:160 EmitDetonationFx"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeBoom.cs:160 EmitDetonationFx"
     constants:
       - { name: "explode effectinfo", base: "nade_neutral_explode tinted expcol_min..expcol_max (normal boom tinted by nades_PlayerColor of the thrower)", port: "EXPLOSION_MEDIUM/EXPLOSION_BIG/ICEORGLASS/HEALING/AMMO_REGEN tinted by NadeDef.Color (min==max; normal untinted white)", match: false }
     status:
@@ -932,9 +932,9 @@ features:
     base_refs:
       - "common/mutators/mutator/nades/sv_nades.qh:37-38 autocvar_g_nades_bonus_score_low/high + :67 nades_GiveBonus declaration"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeBonus.cs:33 GiveBonus (the public API)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:628,:640 (revive -> GiveBonus(g_nades_bonus_score_low))"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:1221 (key capture -> GiveBonus(g_nades_bonus_score_high) per carrier)"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeBonus.cs:33 GiveBonus (the public API)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:628,:640 (revive -> GiveBonus(g_nades_bonus_score_low))"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:1221 (key capture -> GiveBonus(g_nades_bonus_score_high) per carrier)"
     constants:
       - { name: "g_nades_bonus_score_low", base: "20 (mutators.cfg:240; freezetag revive)", port: "fallback 20 (FreezeTag.cs:639)", match: true }
       - { name: "g_nades_bonus_score_high", base: "60 (mutators.cfg:242; ctf capture / kh capture)", port: "KeyHunt bare fallback 15 (KeyHunt.cs:1212)", match: false }

@@ -122,14 +122,43 @@ jobs:
           key: scons-${{ inputs.godot_tag }}-${{ hashFiles('arena/tools/engine-patches/*.patch') }}
           restore-keys: scons-${{ inputs.godot_tag }}-
 
+      # Resolve -j ONCE, here, and assert it is a number before anything expensive starts.
+      #
+      # This step exists because of a real failure: the flag was originally written so that the job count
+      # came from the `${{ env.… }}` expression context, which sees only this workflow's own `env:` block
+      # and GitHub's contexts — never the runner's shell environment. It expanded to the empty string,
+      # scons got a bare `-j`, and the job died on "option requires an argument". (SCONS_COMMON resolves
+      # fine through `${{ }}` precisely because it IS declared in env: above.) Runner-provided variables
+      # like NUMBER_OF_PROCESSORS must be read by the shell, as `$env:NAME`.
+      #
+      # It failed in 18 seconds, so the cost was trivial — but the same silent-empty-expansion would be
+      # invisible in a flag where empty is merely *suboptimal* rather than a parse error. `-j` with no
+      # value happens to be loud; a dropped cache_path would not be. So validate rather than assume.
+      #
+      # It failed in 18 seconds, so the cost was trivial — but the same silent-empty-expansion would be
+      # invisible in a flag where empty is merely *suboptimal* rather than a parse error. `-j` with no
+      # value happens to be loud; a dropped cache_path would not be. So validate rather than assume.
+      - name: Resolve the parallel job count
+        shell: pwsh
+        run: |
+          $jobs = $env:NUMBER_OF_PROCESSORS
+          if (-not ($jobs -match '^[1-9][0-9]*$')) {
+            Write-Output "::error::NUMBER_OF_PROCESSORS is '$jobs', not a positive integer. Refusing to"
+            Write-Output "::error::start a multi-hour build on a malformed -j flag."
+            exit 1
+          }
+          Write-Output "building with -j$jobs"
+          "JOBS=$jobs" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       # Step 1 of Godot's mono sequence. The editor exists here ONLY to generate the glue — it is not
       # shipped and not uploaded.
       - name: Build the editor (required to generate the C# glue)
         working-directory: godot
-        run: >
-          scons platform=windows target=editor ${{ env.SCONS_COMMON }}
-          cache_path=${{ github.workspace }}/.scons-cache cache_limit=4
-          -j${{ env.NUMBER_OF_PROCESSORS }}
+        shell: pwsh
+        run: |
+          scons platform=windows target=editor ${{ env.SCONS_COMMON }} `
+            cache_path="${{ github.workspace }}/.scons-cache" cache_limit=4 `
+            -j$env:JOBS
 
       - name: Generate the C# glue
         working-directory: godot
@@ -141,10 +170,11 @@ jobs:
 
       - name: Build the release template
         working-directory: godot
-        run: >
-          scons platform=windows target=template_release ${{ env.SCONS_COMMON }}
-          cache_path=${{ github.workspace }}/.scons-cache cache_limit=4
-          -j${{ env.NUMBER_OF_PROCESSORS }}
+        shell: pwsh
+        run: |
+          scons platform=windows target=template_release ${{ env.SCONS_COMMON }} `
+            cache_path="${{ github.workspace }}/.scons-cache" cache_limit=4 `
+            -j$env:JOBS
 
       # The whole point of the exercise. Reads the required markers out of engine.lock.json rather than
       # hardcoding them, so the template build and the export-time check in release.yml cannot drift

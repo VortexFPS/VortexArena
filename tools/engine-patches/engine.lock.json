@@ -1,0 +1,64 @@
+{
+  "$comment": [
+    "Pins the engine template the Windows release export must be built from (restructure item 29, G10).",
+    "Two independent jobs, because the failure they guard has two ends:",
+    "  'patches' pins the SOURCE — the patch files on disk, by sha256, so a silent edit to a patch is",
+    "    caught before anyone rebuilds a template from it.",
+    "  'binary_markers' pins the RESULT — byte sequences that must (or must not) appear in the exported",
+    "    game binary, which is the only check that speaks to what actually shipped.",
+    "Verify with tools/verify-engine-template.py; see tools/engine-patches/README.md for the rebuild recipe."
+  ],
+  "engine": {
+    "version": "4.6.3",
+    "channel": "stable",
+    "dotnet": true,
+    "upstream_tag": "4.6.3-stable",
+    "scons": "platform=windows target=template_release arch=x86_64 module_mono_enabled=yes d3d12=no"
+  },
+  "patches": [
+    {
+      "file": "godot-4.6.3-pr109639-mouse-input-backport.patch",
+      "sha256": "be0a415f19f50223d4e20a0189c2cd1ad694718a0eeb22a502f321108ffa1cd5",
+      "bytes": 17879,
+      "upstream": "https://github.com/godotengine/godot/pull/109639",
+      "drop_at_engine": "4.8",
+      "$comment": [
+        "Hash is over the LF form. .gitattributes pins *.patch to eol=lf precisely so this value is",
+        "the same on Windows and on the Linux runner — without that rule the file checks out CRLF",
+        "under core.autocrlf and this hash fails on whichever platform did not write it."
+      ]
+    }
+  ],
+  "binary_markers": {
+    "$comment": [
+      "Applies to the windows-client preset only; the other presets use stock templates by design and",
+      "have custom_template/release empty legitimately.",
+      "",
+      "Chosen by MEASURING all three candidates against both real templates rather than by reading the",
+      "patch, because two of the three do not discriminate:",
+      "  GetRawInputBuffer  stock 0  patched 1   <- the only usable marker",
+      "  GetRawInputData    stock 2  patched 1   <- present in BOTH; the backport REPLACES per-message",
+      "                                            calls with the buffered path, so the count falls.",
+      "                                            A presence check here passes on a stock build.",
+      "  RAWINPUTHEADER     stock 0  patched 0   <- a struct type name; compile-time only, never in the",
+      "                                            binary. A presence check here fails on a GOOD build.",
+      "Both wrong choices are silent in the direction that matters, which is why this list is short."
+    ],
+    "windows-client": {
+      "required": ["GetRawInputBuffer"],
+      "forbidden": []
+    }
+  },
+  "template": {
+    "$comment": [
+      "PENDING: needs a published prebuilt template to point at, which is a hosting decision (which repo,",
+      "which release) plus item 30's build-engine-template.yml workflow. Until these are filled in,",
+      "custom_template/release stays an absolute dev-box path and only the dev box can export Windows.",
+      "fetch-engine-template.py must refuse to run while url/sha256 are null rather than guess a URL."
+    ],
+    "filename": "godot.windows.template_release.x86_64.mono.exe",
+    "url": null,
+    "sha256": null,
+    "bytes": 67325952
+  }
+}

@@ -52,6 +52,13 @@ case "$(uname -s)" in
         ;;
 esac
 
+# ── 0. engine patch provenance (cheap, and fails before anything slow) ────────
+# Only the --patches half here: --binary needs an export, which this gate does not do (release.yml
+# runs that half straight after its export). This catches a patch edited or line-ending-mangled in
+# place, which would otherwise surface as a template rebuilt from something nobody reviewed.
+step "engine patch provenance (engine.lock.json)"
+python "$ROOT/tools/verify-engine-template.py" --patches
+
 # ── 1. libraries + tests build (plain .NET SDK, no Godot) ─────────────────────
 step "build libraries + tests"
 dotnet build "$ROOT/tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj" -c Debug --nologo

@@ -825,13 +825,38 @@ else already does).
 
 - **Breaks:** the Windows release loses the mouse-input backport, and the frame-cadence stutter
   returns with nothing in the export output saying so.
-- **Why:** Godot hard-aborts on a *wrong* template path (`ERR_FILE_NOT_FOUND`, names the path) but
-  falls back to the stock template on an *empty* one. A wrong path fails loudly; an empty one fails
-  invisibly.
+- **Why:** Godot hard-aborts on a *wrong* template path but falls back to the stock template on an
+  *empty* one. A wrong path fails loudly; an empty one fails invisibly.
+- **Verified empirically 2026-07-29** (both halves, by running the real export twice against
+  Godot 4.6.3 and then discriminating on binary CONTENT rather than on size). The marker is
+  `GetRawInputBuffer`, which the mouse-input backport introduces and stock 4.6.3 does not contain:
+
+  | binary | `GetRawInputBuffer` | bytes |
+  | --- | --- | --- |
+  | export with `custom_template/release=""` | **0** | 108,301,144 |
+  | export with the patched template | **1** | 70,699,368 |
+  | patched template itself | 1 | 67,325,952 |
+  | stock 4.6.3 template | 0 | 104,896,512 |
+
+  - *Empty field:* produced a complete, launchable binary with **zero trace of the backport**. This is
+    the hole, confirmed.
+  - *Dead path:* exited **1** and produced no binary — so today's committed absolute path is safe on a
+    runner; it fails the job rather than shipping stock. The message is worth knowing, though, because
+    it does not mention the missing file: `Mismatching custom export template executable architecture:
+    found "invalid", expected "x86_64"`. Anyone who meets that error is looking at an unreadable
+    template, and the natural "fix" — blanking the field — is precisely the dangerous value.
+  - *Why an existence check cannot close this:* `release.yml` runs the export as `… || true` followed
+    by `test -f <output>`. A stock-template export produces a file, so the job goes green. The
+    assertion has to be about the binary's **content**, not its presence. That is independent of how
+    chatty Godot is on the way.
 - **Current state:** the path is absolute to one dev box, so CI cannot export Windows at all today,
   and the obvious "fix" is to blank the field, which is the dangerous value.
 - **Do:** fetch the template per `engine.lock.json` and assert, before every export, that the field
-  is non-empty and the file's sha256 matches the lockfile (§7.4).
+  is non-empty and the file's sha256 matches the lockfile (§7.4). **Also assert after the export**
+  that the produced binary carries the backport markers — that check subsumes empty-field, wrong-file
+  and stale-template in one, and is the only one that speaks to what actually shipped.
+- **Partly mitigated already:** `GodotProjectSettingsTests.Windows_Release_Export_Still_Points_At_A_Custom_Template`
+  fails the suite if every preset's field is blank, which catches the editor-regenerate route in.
 
 ---
 

@@ -118,6 +118,17 @@ jobs:
           test -f dist/windows-client/XonoticGodot.exe
         shell: bash
 
+      # G10. `test -f` above proves a file appeared, which is NOT the same as proving the right engine
+      # went into it: measured 2026-07-29, an empty custom_template/release makes Godot export a
+      # complete, launchable binary from the STOCK template, so `|| true` plus a file check goes green on
+      # a build missing every backport in tools/engine-patches/. This asserts on the binary's CONTENT,
+      # which is the only thing that speaks to what shipped.
+      - name: Verify the engine template that was used
+        run: |
+          python tools/verify-engine-template.py --patches \
+            --binary dist/windows-client/XonoticGodot.exe --preset windows-client
+        shell: bash
+
       - name: Fetch assets
         uses: actions/download-artifact@v8
         with: { name: assets-data }

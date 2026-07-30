@@ -9,9 +9,43 @@ export const meta = {
   ],
 }
 
-const BASE = 'C:/Users/Bryan/Projects/Xonotic/Base/data/xonotic-data.pk3dir/qcsrc'
-const PORT = 'C:/Users/Bryan/Projects/Xonotic/XonoticGodot'
+// ---- Resolve the two roots (never hardcode them) ----------------------------
+// This file used to carry `C:/Users/Bryan/Projects/Xonotic/...` literals. The tree moved to
+// Projects/Vortex/ and every one of them died — silently, and in the worst possible way: a diff
+// agent that cannot read the Base spec still returns changed=false, so the report reads
+// "No drift detected" and a run over a nonexistent baseline looks like a clean bill of health.
+// So resolve up front, verify, and abort before spending a single diff agent.
+const ROOTS_SCHEMA = {
+  type: 'object', required: ['port', 'base', 'ok'], additionalProperties: false,
+  properties: {
+    port: { type: 'string' }, base: { type: 'string' },
+    ok: { type: 'boolean' }, note: { type: 'string' },
+  },
+}
+const roots = await agent(`Resolve two absolute filesystem roots and return them. Do NOT read or
+analyze any game code — this is a path-resolution task only.
+
+port = the Vortex Arena repo root: \`git rev-parse --show-toplevel\` (you start inside it).
+base = the upstream Xonotic reference checkout's QuakeC spec tree. Take the FIRST that exists:
+  1. $VA_BASE_DIR/xonotic-data.pk3dir/qcsrc   (only if VA_BASE_DIR is set in the environment)
+  2. <parent of port>/Base/data/xonotic-data.pk3dir/qcsrc
+That order mirrors tests/XonoticGodot.Tests/TestPaths.cs, which is the existing contract for where
+the reference checkout lives; keep the two in agreement.
+
+Confirm each path with a real directory listing. Set ok=true ONLY if both directories exist AND base
+actually contains .qc files. Otherwise ok=false, and say in note exactly which path failed and what
+you saw there.`, { label: 'resolve-roots', phase: 'Discover', agentType: 'Explore', effort: 'low', schema: ROOTS_SCHEMA })
+
+if (!roots || !roots.ok) {
+  throw new Error(`parity-diff: cannot resolve the Base/port roots, so a drift report would be `
+    + `meaningless (every unit would come back "no drift" because nothing was readable). `
+    + `Resolver said: ${roots ? roots.note || '(no note)' : 'the resolver agent returned nothing'}. `
+    + `Fix: clone the upstream reference beside this repo as <parent>/Base/data, or point VA_BASE_DIR at it.`)
+}
+const BASE = roots.base
+const PORT = roots.port
 const REGDIR = `${PORT}/planning/parity/registry`
+log(`roots: port=${PORT} base=${BASE}`)
 
 const scope = (args && args.scope) || 'all'
 const mode = (args && args.mode) || 'diff'        // 'diff' = report only; 'update' = rewrite registry

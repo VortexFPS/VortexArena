@@ -32,6 +32,14 @@ internal static class TestPaths
     /// </summary>
     public const string Unresolved = "<no-content-tree>";
 
+    /// <summary>
+    /// The repository root. Unlike the content roots below, this one is NOT optional: every checkout
+    /// has one, and the files it locates (<c>project.godot</c>, <c>export_presets.cfg</c>) are
+    /// committed. So tests reading those assert this resolved rather than guarding and skipping —
+    /// a "repo root not found" skip would just be the suite declining to check anything.
+    /// </summary>
+    public static string RepoRoot { get; } = FindRepoRoot() ?? Unresolved;
+
     /// <summary>The game's content root — the directory that gets handed to <c>MountGameDir</c>.</summary>
     public static string Data { get; } = ResolveData();
 

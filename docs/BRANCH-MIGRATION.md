@@ -216,3 +216,50 @@ Work through these in order. Each one catches a different class of miss.
 Under roughly five commits and not touching `src/`, it is usually faster to read the diff and reapply
 it by hand onto a fresh branch off the new `main` than to run any of the above. Use judgement; the
 machinery here exists for the large branches.
+
+## Two commands, and why the second one exists
+
+```bash
+git worktree add ../wt-mybranch mybranch
+cd ../wt-mybranch && git checkout -b mybranch-migrated
+
+bash /path/to/main/tools/migrate-branch.sh        # T1–T5, mechanical
+git commit -am "chore: mechanical migration to the VortexArena structure"
+
+git merge main
+bash /path/to/main/tools/resolve-mechanical-conflicts.sh
+```
+
+`resolve-mechanical-conflicts.sh` takes **main's version of any conflicted file the branch never edited**.
+That is not a heuristic: a branch that made no change to a file between the merge base and its tip has no
+opinion about it, so main's version is by definition correct.
+
+Those conflicts happen for a reason that is not obvious. The Tier-1 rename changed the namespace on nearly
+every line of some files, so the pre- and post-rename versions of e.g. `GameInit.cs` fall **below git's
+rename-similarity threshold** and git cannot pair them at all. It then sees main deleting the old path and
+adding a new one, while the branch's own `git mv` also adds that path, and reports add/add (`AA`). Raising
+`merge.renameLimit` does not help — that governs how many rename candidates git considers, not how similar
+they must be. Measured at 999999: no change.
+
+Whatever is left after the resolver is the branch's real overlap with main.
+
+### Measured on all seven branches, 2026-07-30
+
+| branch | files in scope | conflicts raw | after resolver |
+| --- | --- | --- | --- |
+| `feature/anim-smoothness-ragdolls` | 14 | 5 | **3** |
+| `feature/dedicated-server-v2` | 22 | 9 | **7** |
+| `feature/demo-merge` | 18 | 7 | **5** |
+| `feature/launcher-updater` | 28 | 9 | **7** |
+| `feature/player-soft-collision` | 10 | 4 | **2** |
+| `feature/playermodel-lean` | 15 | 7 | **5** |
+| `fix/warpzone-view-smoothing` | 9 | 4 | **2** |
+| | | 45 | **31** |
+
+For comparison, an earlier version of `migrate-branch.sh` that rewrote the WHOLE tree rather than only the
+branch-touched files produced **67 conflicts on `fix/warpzone-view-smoothing` alone** — 55 of them in files
+that branch never touched. Rewriting a file the branch has no opinion about produces a third version
+agreeing with neither side.
+
+Pre-migrated branches are pushed as `migrated/<slug>`, each holding **only** the mechanical commit, so the
+merge and its resolution stay yours to review.

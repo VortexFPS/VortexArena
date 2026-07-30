@@ -38,7 +38,7 @@ all resolve `assets/data` correctly. Keep the files together when you unzip.
 ## Pipeline shape
 
 ```
-push tag v* ─┬─ assets   download-assets.sh → tar → artifact (cached on download-assets.sh hash)
+push tag v* ─┬─ (no assets job: core content is committed; maps fetched per data/maps.lock.json)
              ├─ windows  export windows-client                  ─┐
              ├─ linux    export linux-client + linux-dedicated  ─┤→ each: unpack assets, package.sh, upload zip
              ├─ macos    export macos-client (continue-on-error)─┘
@@ -56,7 +56,7 @@ You need the Godot **4.6.3 mono** editor and its **export templates** installed
 (editor → *Manage Export Templates* → *Download and Install*).
 
 ```bash
-./download-assets.sh                                    # one-time: fetch assets into assets/data/
+python tools/data/fetch-maps.py                         # one-time: fetch maps into data/maps/
 ci/ci.sh --export                                       # export windows-client + linux-dedicated (your OS only)
 # …or run a single preset:
 #   "$GODOT" --headless --path . --export-release "linux-client" dist/linux-client/XonoticGodot.x86_64

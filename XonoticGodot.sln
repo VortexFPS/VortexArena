@@ -15,7 +15,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Godot Project", "Godot Proj
 		nuget.config = nuget.config
 		global.json = global.json
 		Directory.Build.props = Directory.Build.props
-		download-assets.sh = download-assets.sh
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot.Common", "src\XonoticGodot.Common\XonoticGodot.Common.csproj", "{6F356C0E-DF6D-4A4B-8596-D97E4BC0250D}"

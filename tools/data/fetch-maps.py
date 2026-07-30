@@ -25,8 +25,9 @@ Installing rather than extracting removes a surprising amount of machinery and r
     pinned one" directly, where a stamp only records what was once true.
   * Roughly a quarter of the disk. stormkeep is 4.8 MB packed against ~19 MB extracted.
 
-Retries use exponential backoff and resume with an HTTP Range header, the behaviour ported from
-download-assets.sh, which was proven against real flaky transfers.
+Retries use exponential backoff and resume with an HTTP Range header, the behaviour ported from the
+now-deleted download-assets.sh, where it was proven against real flaky transfers. (Kept rather than
+simplified for that reason; `git log -- download-assets.sh` has the original if the reasoning is needed.)
 """
 from __future__ import annotations
 

@@ -82,17 +82,28 @@ headless-testable and enables a dedicated server that runs without the Godot ren
 - [Godot 4.6.3 (.NET / mono build)](https://godotengine.org/download) — the standard build won't
   run C# projects; you need the .NET variant
 
-### Assets
+### Content
 
-Game assets (textures, models, maps, sounds) are downloaded from the upstream Xonotic repositories:
+Core content — textures, models, sounds, fonts, music and the config tree — is **committed to this
+repository** under `data/` and arrives with the clone. Only compiled maps are fetched, because they are
+build output rather than source:
 
 ```bash
-./download-assets.sh            # full download (data + music + maps)
-./download-assets.sh --no-music # skip the ~300 MB music repo
-./download-assets.sh --no-maps  # skip the ~750 MB compiled map pk3s
+python tools/data/fetch-maps.py                 # install the pinned map set into data/maps/
+python tools/data/fetch-maps.py --verify-only    # report drift, change nothing
+python tools/data/fetch-maps.py --only stormkeep # just one map (a smoke test needs no more)
 ```
 
-This populates `assets/data/` which the game's VFS mounts at runtime. Without it, maps and models won't load.
+The set is pinned by [`data/maps.lock.json`](data/maps.lock.json) and published from
+[VortexMaps](https://github.com/VortexFPS/VortexMaps). The game's VFS mounts `data/` at runtime — see
+`Shell.DataPath` and the `--data` flag, default `res://data`. Without the map fetch the game runs but has
+no maps to load; everything else works.
+
+A blobless clone keeps the initial download small:
+
+```bash
+git clone --filter=blob:none https://github.com/VortexFPS/VortexArena.git
+```
 
 ### Build
 
@@ -150,8 +161,10 @@ Contributions are welcome. A few guidelines:
   should be commented.
 - **Keep `XonoticGodot.Common` Godot-free.** Gameplay and simulation code must not reference the Godot API.
   This is enforced architecturally (it's a plain .NET class library) and is non-negotiable.
-- **Don't commit binary assets.** Textures, models, sounds, and maps are downloaded by
-  `download-assets.sh` into `assets/` (gitignored). Don't commit them to this repository.
+- **Don't commit compiled maps.** Core content IS committed under `data/`, deliberately — it is the
+  fork's own content now, and the licence texts travel with it. Compiled maps are build output, fetched
+  per `data/maps.lock.json`; `data/maps/` is gitignored. Map *sources* live in
+  [VortexMaps](https://github.com/VortexFPS/VortexMaps).
 
 See [`planning/`](planning/) for architecture decision records and design context.
 
@@ -166,7 +179,7 @@ Because this is a derivative of GPLv3+ code, all source code in this repository 
 > Upstream's *engine* (DarkPlaces) is GPLv2+, but this project runs on Godot and does not include or
 > redistribute DarkPlaces, so GPLv2 does not govern this repository.
 
-Game assets (downloaded by `download-assets.sh` from the upstream Xonotic repositories) are
+Game assets (derived from the upstream Xonotic repositories and committed under `data/`) are
 distributed under their original licenses as established by the Xonotic project — primarily GPLv2+ for
 code-adjacent assets, with various Creative Commons and other free-content licenses for art, music,
 and sounds. See the Xonotic project's licensing documentation for specifics.

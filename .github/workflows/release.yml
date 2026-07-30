@@ -9,10 +9,9 @@
 #                            Use this to shake out the export path without cutting a real release.
 #
 # Topology â€” one job per native runner (each platform exports on its OWN OS; we do NOT cross-export, which
-# ADR-0014 flags as the flakiest path). The assets are downloaded ONCE (assets job) and fanned out as a
-# single-file tar artifact so the three build jobs don't each pull ~1.5 GB from gitlab/dl.xonotic.org.
+# ADR-0014 flags as the flakiest path). Core content is committed and arrives with checkout; only compiled
+# maps are fetched, per data/maps.lock.json, cached on the lockfile hash.
 #
-#   assets  â†’ download-assets.sh â†’ tar â†’ artifact (cached across runs)
 #   windows â†’ export windows-client                     â†’ fat zip
 #   linux   â†’ export linux-client + linux-dedicated     â†’ 2 fat zips
 #   macos   â†’ export macos-client (continue-on-error)   â†’ fat zip   [BEST-EFFORT: see ADR-0014 Â§macOS]
@@ -30,7 +29,7 @@ on:
 
 # Least privilege: read-only for every job, write granted only to the one job that publishes (below).
 # Previously this granted contents:write workflow-wide, so all six jobs held a token that could push to
-# the repository — including the four that only build and the one that fetches assets. GitHub's own
+# the repository — including the ones that only build. GitHub's own
 # security-hardening guidance is to keep the default read-only and grant per job, which is also why the
 # org's read-only default GITHUB_TOKEN setting is correct and should stay.
 permissions:
@@ -58,41 +57,21 @@ jobs:
           else
             echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           fi
+  # Core content, music and fonts arrive with `actions/checkout` (committed to this repo since the
+  # restructure), so the old `assets` job - download-assets.sh into a tar artifact fanned out to the
+  # build jobs - is gone entirely (item 20). Compiled maps come from tools/data/fetch-maps.py, keyed on
+  # data/maps.lock.json rather than on a script's hash: the key now invalidates when the MAP SET changes
+  # instead of when the fetching code changes, which is the correct trigger.
 
-  # â”€â”€ Download the Xonotic assets ONCE; publish as a single tar artifact â”€â”€â”€â”€â”€â”€â”€
-  assets:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      # The asset versions are pinned inside download-assets.sh, so its hash is the cache key.
-      - name: Cache downloaded assets
-        id: cache
-        uses: actions/cache@v6
-        with:
-          path: assets/data
-          key: xonotic-assets-${{ hashFiles('download-assets.sh') }}
-
-      - name: Download assets
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: bash ./download-assets.sh   # `bash` not `./` â€” the exec bit can be lost on a Windows checkout
-
-      - name: Tar assets (single file = fast artifact transfer)
-        run: tar -cf assets-data.tar --exclude='.git' assets/data
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: assets-data
-          path: assets-data.tar
-          retention-days: 1
-          if-no-files-found: error
 
   # â”€â”€ Windows desktop client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   windows:
-    needs: [prep, assets]
+    needs: [prep]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: false   # the map SOURCE tree (1.5 GB) is irrelevant to building a client
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: "9.0.x" }       # global.json: 8.0.0 + rollForward latestMajor
 
@@ -129,11 +108,16 @@ jobs:
             --binary dist/windows-client/XonoticGodot.exe --preset windows-client
         shell: bash
 
-      - name: Fetch assets
-        uses: actions/download-artifact@v8
-        with: { name: assets-data }
-      - name: Unpack assets
-        run: tar -xf assets-data.tar
+      # Maps are build output, fetched per data/maps.lock.json. Cached on the LOCKFILE hash so the cache
+      # invalidates when the pinned map set changes rather than when the fetch script is edited.
+      - name: Cache compiled maps
+        uses: actions/cache@v6
+        with:
+          path: data/maps
+          key: vortex-maps-${{ hashFiles('data/maps.lock.json') }}
+
+      - name: Fetch compiled maps
+        run: python tools/data/fetch-maps.py
         shell: bash
 
       - name: Package
@@ -145,10 +129,12 @@ jobs:
 
   # â”€â”€ Linux desktop client + headless dedicated server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   linux:
-    needs: [prep, assets]
+    needs: [prep]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: false   # the map SOURCE tree (1.5 GB) is irrelevant to building a client
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: "9.0.x" }
       - name: Drop the dev-machine Godot editor NuGet source
@@ -169,11 +155,18 @@ jobs:
           test -f dist/linux-client/XonoticGodot.x86_64
           test -f dist/linux-dedicated/xonoticgodot-dedicated.x86_64
 
-      - name: Fetch assets
-        uses: actions/download-artifact@v8
-        with: { name: assets-data }
-      - name: Unpack assets
-        run: tar -xf assets-data.tar
+
+      # Maps are build output, fetched per data/maps.lock.json. Cached on the LOCKFILE hash so the cache
+      # invalidates when the pinned map set changes rather than when the fetch script is edited.
+      - name: Cache compiled maps
+        uses: actions/cache@v6
+        with:
+          path: data/maps
+          key: vortex-maps-${{ hashFiles('data/maps.lock.json') }}
+
+      - name: Fetch compiled maps
+        run: python tools/data/fetch-maps.py
+        shell: bash
 
       - name: Package
         run: bash tools/package.sh --version "${{ needs.prep.outputs.version }}" linux-client linux-dedicated
@@ -183,11 +176,13 @@ jobs:
 
   # â”€â”€ macOS desktop client (BEST-EFFORT â€” never blocks the Win/Linux release) â”€â”€
   macos:
-    needs: [prep, assets]
+    needs: [prep]
     runs-on: macos-latest
     continue-on-error: true       # macOS export config (codesign/bundle id) is unverified â€” see ADR-0014
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: false   # the map SOURCE tree (1.5 GB) is irrelevant to building a client
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: "9.0.x" }
       - name: Drop the dev-machine Godot editor NuGet source
@@ -206,11 +201,18 @@ jobs:
           godot --headless --path . --export-release "macos-client" dist/macos-client/XonoticGodot.app || true
           test -d dist/macos-client/XonoticGodot.app
 
-      - name: Fetch assets
-        uses: actions/download-artifact@v8
-        with: { name: assets-data }
-      - name: Unpack assets
-        run: tar -xf assets-data.tar
+
+      # Maps are build output, fetched per data/maps.lock.json. Cached on the LOCKFILE hash so the cache
+      # invalidates when the pinned map set changes rather than when the fetch script is edited.
+      - name: Cache compiled maps
+        uses: actions/cache@v6
+        with:
+          path: data/maps
+          key: vortex-maps-${{ hashFiles('data/maps.lock.json') }}
+
+      - name: Fetch compiled maps
+        run: python tools/data/fetch-maps.py
+        shell: bash
 
       - name: Package
         run: bash tools/package.sh --version "${{ needs.prep.outputs.version }}" macos-client

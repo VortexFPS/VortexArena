@@ -45,7 +45,9 @@ _scratch/*
 /tools/movement-ref/movement_ref
 /tools/movement-ref/movement_ref.exe
 
-# Downloaded game assets (populated by download-assets.sh). The .gdignore IS tracked
+# The legacy pre-restructure content dir. Content is committed under data/ now; this entry survives
+# only so a dev-box assets/data junction to the upstream reference does not show up as untracked.
+# The .gdignore IS tracked
 # so the Godot editor skips this tree (the game reads it via its own VFS, not Godot's
 # resource importer) even on a fresh checkout before the assets are downloaded.
 assets/*

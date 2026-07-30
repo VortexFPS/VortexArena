@@ -16,7 +16,7 @@ Performance capture + hitch diagnosis has its own playbook: **[PERF-DEBUGGING.md
 | Godot bundled C# packages | `C:\Program Files\Godot\GodotSharp\Tools\nupkgs` | Holds `Godot.NET.Sdk 4.6.3` etc. `XonoticGodot/nuget.config` adds this folder as a package source (exact editor parity + offline builds). The 4.6.3 packages **are** also on public NuGet (verified 2026-06) — CI removes this source and restores from nuget.org (see `.github/workflows/ci.yml`). |
 | .NET SDK | `dotnet --version` → 9.0.308 (builds the `net8.0` targets) | net8.0 ref pack auto-restores. |
 | Project root | `C:\Users\Bryan\Projects\Xonotic\XonoticGodot` | `project.godot` + `XonoticGodot.csproj` (the Godot host) live here. |
-| Xonotic asset data | `assets/data/` (in-tree, gitignored) | Downloaded by `download-assets.sh` from the upstream Xonotic GitLab repos + official release. The VFS mounts this at runtime (see `Shell.DataPath` / the `--data` flag, default `res://assets/data`). **`Base/` is only the historical port source — the game no longer reads it.** |
+| Game content | `data/` (committed) | Core content ships with the clone. Compiled maps are fetched into `data/maps/` by `python tools/data/fetch-maps.py`, pinned by `data/maps.lock.json`. The VFS mounts this at runtime (see `Shell.DataPath` / the `--data` flag, default `res://data`). **`Base/` is only the upstream reference used by the parity tooling — the game never reads it.** |
 
 **Tip — set an env var once per shell** so commands/tests are short:
 ```bash

@@ -1,7 +1,7 @@
 # Onslaught — parity spec
 
 **Base refs:** `common/gametypes/gametype/onslaught/{onslaught,sv_onslaught,sv_controlpoint,sv_generator,cl_controlpoint,cl_generator}.qc` (+ `.qh`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs`, `OnslaughtControlPoint.cs` · `src/XonoticGodot.Server/GameWorld.cs` (Activate/Tick/spawn dispatch)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs`, `OnslaughtControlPoint.cs` · `src/VortexArena.Server/GameWorld.cs` (Activate/Tick/spawn dispatch)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -190,7 +190,7 @@ never calls them: no `ONS_CONTROLPOINT_BUILD/BUILT/UNDERATTACK`, `ONS_DAMAGEBLOC
 `play2all CTF_CAPTURE` on round win.
 
 ## Verification
-- `tests/XonoticGodot.Tests/OnslaughtCombatTests.cs` — build-to-capture + credits, destroy-mid-build aborts,
+- `tests/VortexArena.Tests/OnslaughtCombatTests.cs` — build-to-capture + credits, destroy-mid-build aborts,
   generator shield-block→destroy→round-win+score. All pass (logic/values/timing of the COMBAT core verified).
 - Live wiring traced in `GameWorld.cs`: `Activate` (1348), `Tick` (1621-1624), spawn dispatch (1420-1438), win
   latch (2093). Confirmed live.

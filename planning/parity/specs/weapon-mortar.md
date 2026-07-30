@@ -1,7 +1,7 @@
 # Mortar (Grenade Launcher) — parity spec
 
 **Base refs:** `common/weapons/weapon/mortar.qc` · `common/weapons/weapon/mortar.qh` · `server/weapons/tracing.qc` (W_SetupProjVelocity_Explicit, W_SetupShot) · `bal-wep-xonotic.cfg` (g_balance_mortar_*)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs` · `WeaponFiring.cs` (SetupShot, ProjectileVelocity) · `WeaponSplash.cs` (RadiusDamage) · `WeaponFireGate.cs` (PrepareAttack/WrCheckAmmo/WrReload) · `WeaponFireDriver.cs` (WrThink driver) · `XonoticGodot.Engine/Simulation/MoveTypePhysics.cs` (bounce/gravity/touch) · `Notifications/DeathMessages.cs` (kill/suicide)
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Mortar.cs` · `WeaponFiring.cs` (SetupShot, ProjectileVelocity) · `WeaponSplash.cs` (RadiusDamage) · `WeaponFireGate.cs` (PrepareAttack/WrCheckAmmo/WrReload) · `WeaponFireDriver.cs` (WrThink driver) · `VortexArena.Engine/Simulation/MoveTypePhysics.cs` (bounce/gravity/touch) · `Notifications/DeathMessages.cs` (kill/suicide)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

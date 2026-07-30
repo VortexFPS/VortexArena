@@ -1,7 +1,7 @@
 # Freeze Tag — parity spec
 
 **Base refs:** `common/gametypes/gametype/freezetag/{freezetag.qc,freezetag.qh,sv_freezetag.qc,sv_freezetag.qh,cl_freezetag.qc,cl_freezetag.qh}`
-· **Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs`, `src/XonoticGodot.Server/GameWorld.cs` (drive/wire), `src/XonoticGodot.Server/RoundHandler.cs` (live round flow), `src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs` (FT's own, dead), `src/XonoticGodot.Net/GametypeStatusBlock.cs`, `game/hud/ModIconsPanel.cs`, `game/hud/CrosshairPanel.cs`, `game/client/ClientWorld.cs`, `game/client/WaypointSpriteLayer.cs`
+· **Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs`, `src/VortexArena.Server/GameWorld.cs` (drive/wire), `src/VortexArena.Server/RoundHandler.cs` (live round flow), `src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs` (FT's own, dead), `src/VortexArena.Net/GametypeStatusBlock.cs`, `game/hud/ModIconsPanel.cs`, `game/hud/CrosshairPanel.cs`, `game/client/ClientWorld.cs`, `game/client/WaypointSpriteLayer.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

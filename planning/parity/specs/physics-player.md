@@ -3,9 +3,9 @@
 **Base refs:** `common/physics/player.qc`, `common/physics/player.qh`, `common/physics/movelib.qc`,
 `ecs/systems/physics.qc` (`sys_phys_update` / `sys_phys_simulate`), `ecs/systems/sv_physics.qc`,
 `ecs/systems/cl_physics.qc`
-**Port refs:** `src/XonoticGodot.Common/Physics/PlayerPhysics.cs`, `MovementParameters.cs`,
-`PMAccelerate.cs`, `Movement.cs`; driven from `src/XonoticGodot.Server/GameWorld.cs` (`Movement.Move`)
-and `src/XonoticGodot.Net/PredictionBuffer.cs` (client prediction).
+**Port refs:** `src/VortexArena.Common/Physics/PlayerPhysics.cs`, `MovementParameters.cs`,
+`PMAccelerate.cs`, `Movement.cs`; driven from `src/VortexArena.Server/GameWorld.cs` (`Movement.Move`)
+and `src/VortexArena.Net/PredictionBuffer.cs` (client prediction).
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -142,7 +142,7 @@ Base has no `.cfg` default → reads 0). That was WRONG: `physics.cfg:33` sets
 - **Logic/values/timing:** faithful across the board for the live Xonotic preset — the math is a verbatim
   float-for-float translation and the default constants match `physicsX.cfg` exactly. Backed by golden
   traces (`forward_jump_arc`, `bunnyhop_chain`, `strafe_jump_air`, `stair_step_up`) in
-  `tests/XonoticGodot.Tests/MovementParityTests.cs`.
+  `tests/VortexArena.Tests/MovementParityTests.cs`.
 - **Presentation/audio:** footsteps/landing/jump sounds ARE produced on the server tick (and prediction-gated),
   but the audio is only `partial`: footstep cadence is a fixed 0.3 s (Base jitters `0.3 + random()*0.1`), there
   is no `g_footsteps` master gate, and the jump grunt plays unconditionally where stock `g_jump_grunt 0` is

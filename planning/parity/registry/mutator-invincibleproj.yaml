@@ -14,9 +14,9 @@ features:
       - "common/mutators/mutator/invincibleproj/sv_invincibleproj.qc:4 REGISTER_MUTATOR(invincibleprojectiles, expr_evaluate(autocvar_g_invincible_projectiles))"
       - "mutators.cfg:116"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs:13 (class) / :18 (IsEnabled)"
-      - "src/XonoticGodot.Server/GameWorld.cs:631 (MutatorActivation.Apply)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:80 Apply / :49 Add (subscribes Hook() for enabled mutators)"
+      - "src/VortexArena.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs:13 (class) / :18 (IsEnabled)"
+      - "src/VortexArena.Server/GameWorld.cs:631 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:80 Apply / :49 Add (subscribes Hook() for enabled mutators)"
     constants:
       - { name: "g_invincible_projectiles (default)", base: "0", port: "0", match: true }
     status:
@@ -31,7 +31,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "InvincibleProjectilesMutator [Mutator] -> Mutators.All; NetName='invincibleprojectiles'; MutatorActivation.Apply() (GameWorld.cs:631; also NetGame.cs:1120) iterates Mutators.All and Add()s every IsEnabled mutator, which calls mut.Hook() subscribing OnEditProjectile to the EditProjectile chain. Live server boot path.", result: pass }
-      - { kind: value, ref: "assets/data/xonotic-data.pk3dir/mutators.cfg:116 'set g_invincible_projectiles 0 \"disable any damage to projectiles in all balance configs, regardless of g_projectiles_damage\"' == Base mutators.cfg:116 byte-identical incl. description", result: pass }
+      - { kind: value, ref: "Base/data/xonotic-data.pk3dir/mutators.cfg:116 'set g_invincible_projectiles 0 \"disable any damage to projectiles in all balance configs, regardless of g_projectiles_damage\"' == Base mutators.cfg:116 byte-identical incl. description", result: pass }
     confidence: high
     notes: "Re-verified 2026-06-27. Registered + activated on the live server boot path; IsEnabled reads the cvar via the facade (GetFloat(\"g_invincible_projectiles\") != 0). QC's string-cvar expr_evaluate reduced to a float-nonzero test — equivalent for the default and the menu 0/1 values. Activation call site drifted to GameWorld.cs:631 (was :626); still the same live boot path."
 
@@ -41,11 +41,11 @@ features:
     base_refs:
       - "common/mutators/mutator/invincibleproj/sv_invincibleproj.qc:6-15 MUTATOR_HOOKFUNCTION(invincibleprojectiles, EditProjectile)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs:35 OnEditProjectile"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs EditProjectileArgs + EditProjectile chain"
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs GetResource/SetResourceExplicit (Health -> Entity.Health)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:91 MakeShootable / :106 ShootDown (the now-live shoot-down path)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:369-372 EventDamage -> GtEventDamage dispatch"
+      - "src/VortexArena.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs:35 OnEditProjectile"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs EditProjectileArgs + EditProjectile chain"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs GetResource/SetResourceExplicit (Health -> Entity.Health)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:91 MakeShootable / :106 ShootDown (the now-live shoot-down path)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:369-372 EventDamage -> GtEventDamage dispatch"
     constants:
       - { name: "projectile RES_HEALTH set value", base: "0", port: "0", match: true }
       - { name: "guard: only projectiles with health", base: "if(GetResource(proj,RES_HEALTH))", port: "if(proj.GetResource(Health) != 0f)", match: true }
@@ -72,9 +72,9 @@ features:
     base_refs:
       - "common/mutators/mutator/invincibleproj/sv_invincibleproj.qc:17-20 MUTATOR_HOOKFUNCTION(invincibleprojectiles, BuildMutatorsString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs:45 BuildMutatorsString override"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108 BuildMutatorsString chain (iterates Added mutators)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1161 MutatorActivation.BuildMutatorsString(\"\") (gamelog init; gated by sv_eventlog)"
+      - "src/VortexArena.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs:45 BuildMutatorsString override"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108 BuildMutatorsString chain (iterates Added mutators)"
+      - "src/VortexArena.Server/GameWorld.cs:1161 MutatorActivation.BuildMutatorsString(\"\") (gamelog init; gated by sv_eventlog)"
     constants:
       - { name: "token", base: ":InvincibleProjectiles", port: ":InvincibleProjectiles", match: true }
     status:
@@ -99,10 +99,10 @@ features:
     base_refs:
       - "common/mutators/mutator/invincibleproj/sv_invincibleproj.qc:22-25 MUTATOR_HOOKFUNCTION(invincibleprojectiles, BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs:48 BuildMutatorsPrettyString override"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:121 BuildMutatorsPrettyString chain"
-      - "src/XonoticGodot.Server/GameWorld.cs:1172 MutatorActivation.BuildMutatorsPrettyString(\"\") (sets 'modifications' serverinfo key at match-start boot)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1453 MutatorActivation.BuildMutatorsPrettyString(\"\") in SendMutatorsWelcome (per-join welcome chat line; called :1339, the closest analogue to QC PutClientInServer/SendWelcomeMessage)"
+      - "src/VortexArena.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs:48 BuildMutatorsPrettyString override"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:121 BuildMutatorsPrettyString chain"
+      - "src/VortexArena.Server/GameWorld.cs:1172 MutatorActivation.BuildMutatorsPrettyString(\"\") (sets 'modifications' serverinfo key at match-start boot)"
+      - "src/VortexArena.Server/GameWorld.cs:1453 MutatorActivation.BuildMutatorsPrettyString(\"\") in SendMutatorsWelcome (per-join welcome chat line; called :1339, the closest analogue to QC PutClientInServer/SendWelcomeMessage)"
       - "game/net/ServerNet.cs:613 MutatorActivation.BuildMutatorsPrettyString(\"\") (BuildServerInfo -> server-browser infoResponse 'modifications' key)"
     constants:
       - { name: "label", base: ", Invincible Projectiles", port: ", Invincible Projectiles", match: true }

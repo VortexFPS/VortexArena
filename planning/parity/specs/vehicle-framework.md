@@ -1,7 +1,7 @@
 # Vehicle framework — parity spec
 
 **Base refs:** `common/vehicles/sv_vehicles.qc` · `sv_vehicles.qh` · `vehicle.qh` · `vehicles.qc` · `cl_vehicles.qc` · `cl_vehicles.qh`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Vehicles/{VehicleCommon,VehicleBoarding,VehiclePhysicsHelpers,VehicleSpawnFuncs,EntityVehicleStateExtra}.cs` · `game/hud/VehicleHud.cs` · `game/net/ServerNet.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Vehicles/{VehicleCommon,VehicleBoarding,VehiclePhysicsHelpers,VehicleSpawnFuncs,EntityVehicleStateExtra}.cs` · `game/hud/VehicleHud.cs` · `game/net/ServerNet.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -237,7 +237,7 @@ per-weapon damage rates 0.75/0.75/0.75/0.5/5/2, enter_radius 250, enter-delay 2s
 - **Code trace (hooks):** `MutatorHooks.cs` defines `VehicleInit`/`VehicleTouch`/`VehicleEnter`/`VehicleExit`;
   only `VehicleEnter`/`VehicleExit` have `.Call` sites (`VehicleBoarding.cs`). VehicleInit/Touch dead.
 - **Code trace (damage DEAD):** `DamageVehicle`'s only caller across `src/`, `game/`, `tests/` is
-  `tests/XonoticGodot.Tests/VehicleRuntimeTests.cs:470`. No `GtEventDamage =` / `event_damage =` assignment
+  `tests/VortexArena.Tests/VehicleRuntimeTests.cs:470`. No `GtEventDamage =` / `event_damage =` assignment
   exists under `src/**/Vehicles/`. `DamageSystem.EventDamage` (DamageSystem.cs:294) routes a non-player with no
   `GtEventDamage` to `PlayerDamage`. So live vehicle damage NEVER reaches `vehicles_damage`. FAIL (dead).
 - **Code trace (heal MISSING):** no `Heal` / `vehicles_heal` / `event_heal` helper under `src/**/Vehicles/`; the
@@ -246,7 +246,7 @@ per-weapon damage rates 0.75/0.75/0.75/0.5/5/2, enter_radius 250, enter-delay 2s
   owner-stat mirror QC runs every think is absent. FAIL.
 - **Code trace (missing):** no symbol for crush / `vehicles_impact` / `vehicles_painframe` / `vehicles_setreturn`
   / `vehicle_use` anywhere under `src/**` or `game/**` (grep). Confirmed NOT IMPLEMENTED.
-- **Unit tests:** `tests/XonoticGodot.Tests/VehicleRuntimeTests.cs` covers spawn+think, board (every guard),
+- **Unit tests:** `tests/VortexArena.Tests/VehicleRuntimeTests.cs` covers spawn+think, board (every guard),
   drive (VehInput → descriptor frame), impulse routing, exit, death→eject→respawn, multi-seat gunner, and the
   enter/exit hooks — all headless. No test exercises crush/impact/painframe/HUD/camera (the missing features).
 

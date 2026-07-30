@@ -1,7 +1,7 @@
 # Last Man Standing (LMS) — parity spec
 
 **Base refs:** `common/gametypes/gametype/lms/{lms.qh,lms.qc,sv_lms.qc,sv_lms.qh,cl_lms.qc,cl_lms.qh}`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs`, `src/XonoticGodot.Server/GameWorld.cs` (gametype drive), `src/XonoticGodot.Server/ClientManager.cs` (roster)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs`, `src/VortexArena.Server/GameWorld.cs` (gametype drive), `src/VortexArena.Server/ClientManager.cs` (roster)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

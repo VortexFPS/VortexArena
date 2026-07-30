@@ -18,9 +18,9 @@ features:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Attack"
       - "common/weapons/weapon/minelayer.qc:MineLayer.wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
     constants:
       - { name: "ammo", base: "4", port: "4", match: true }
       - { name: "speed", base: "800", port: "800", match: true }
@@ -44,7 +44,7 @@ features:
       - { kind: code, ref: "WeaponFireDriver.Frame -> WrThink(Primary); Attack reads cvars, sets Owner+Team+NetName, MakeTrigger, SetModel, MakeShootable; weapon is MutatorBlocked (Minelayer.cs:63)", result: pass }
       - { kind: value-diff, ref: "bal-wep-xonotic.cfg:178-208 — all 22 g_balance_minelayer_* match Configure() defaults", result: pass }
     confidence: high
-    notes: "Re-verified end-to-end this pass. W_MuzzleFlash emitted (EffectEmitter.Emit('ROCKET_MUZZLEFLASH', shot.Origin, shot.Dir*1000, 1, except: actor) — 'ROCKET_MUZZLEFLASH' registered EffectsList.cs:134) and the mine is SetModel'd (models/mine.md3 confirmed present, 24KB, under assets/data/xonotic-data.pk3dir/models/mine.md3). mine_fire.ogg present; velocity = dir*speed (spread 0). cnt deadline = time + (lifetime - countdown). Liveness still partial: SpawnFlags includes WeaponFlags.MutatorBlocked (Minelayer.cs:67) so a normal match never grants this weapon (confirmed against the actual flag, not just the spec note)."
+    notes: "Re-verified end-to-end this pass. W_MuzzleFlash emitted (EffectEmitter.Emit('ROCKET_MUZZLEFLASH', shot.Origin, shot.Dir*1000, 1, except: actor) — 'ROCKET_MUZZLEFLASH' registered EffectsList.cs:134) and the mine is SetModel'd (models/mine.md3 confirmed present, 24KB, under Base/data/xonotic-data.pk3dir/models/mine.md3). mine_fire.ogg present; velocity = dir*speed (spread 0). cnt deadline = time + (lifetime - countdown). Liveness still partial: SpawnFlags includes WeaponFlags.MutatorBlocked (Minelayer.cs:67) so a normal match never grants this weapon (confirmed against the actual flag, not just the spec note)."
 
   - id: minelayer.fire.mine_limit
     name: "Per-player mine limit gate"
@@ -53,9 +53,9 @@ features:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Attack"
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Count"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:CountMines"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:NotifyOverLimit"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:CountMines"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:NotifyOverLimit"
     constants:
       - { name: "limit", base: "4", port: "4", match: true }
     status:
@@ -82,7 +82,7 @@ features:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Stick"
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:OnTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:OnTouch"
     constants: []
     status:
       logic: faithful
@@ -108,8 +108,8 @@ features:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Think"
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_ProximityExplode"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:OnThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:ProximityExplode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:OnThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:ProximityExplode"
     constants:
       - { name: "proximity_radius", base: "125", port: "125", match: true }
       - { name: "proximity_time_core", base: "0.1", port: "0.1", match: true }
@@ -140,7 +140,7 @@ features:
     base_refs:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:OnThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:OnThink"
     constants:
       - { name: "lifetime", base: "30", port: "30", match: true }
       - { name: "lifetime_countdown", base: "0.5", port: "0.5", match: true }
@@ -167,7 +167,7 @@ features:
     base_refs:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:OnThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:OnThink"
     constants: []
     status:
       logic: faithful
@@ -192,11 +192,11 @@ features:
     base_refs:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:OnMineHit"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:OnMineDamage"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:ShootDown"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:OnMineHit"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:OnMineDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:ShootDown"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
     constants:
       - { name: "health", base: "15", port: "15", match: true }
       - { name: "damageforcescale", base: "1.25", port: "1.25", match: true }
@@ -228,7 +228,7 @@ features:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_DoRemoteExplode"
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_PlacedMines"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:RemoteDetonate"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:RemoteDetonate"
     constants:
       - { name: "detonatedelay", base: "-1", port: "-1", match: true }
       - { name: "remote_damage", base: "40", port: "40", match: true }
@@ -260,8 +260,8 @@ features:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Explode"
       - "common/weapons/weapon/minelayer.qc:MineLayer.wr_impacteffect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "damage", base: "40", port: "40", match: true }
       - { name: "edgedamage", base: "20", port: "20", match: true }
@@ -293,7 +293,7 @@ features:
       - "common/weapons/weapon/minelayer.qc:W_MineLayer_Attack"
       - "common/weapons/weapon/minelayer.qh:MODEL(MINELAYER_MINE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:Attack"
     constants:
       - { name: "mine_model", base: "models/mine.md3", port: "models/mine.md3", match: true }
     status:
@@ -308,7 +308,7 @@ features:
     gaps:
       - "No CSQCProjectile(PROJECTILE_MINE) in-flight networking analogue: Base networks the in-flight mine as a CSQC projectile and only the STUCK mine is a plain server entity. The port renders the mine as a plain server model for its whole life, so in-flight prediction/trail networking differs (functional but not the CSQC path)."
     verification:
-      - { kind: code, ref: "Attack (Minelayer.cs:152-156): mine.Model = 'models/mine.md3'; Api.Entities.SetModel (headless-guarded by Api.Services check); models/mine.md3 present under assets/data/.../models/mine.md3", result: pass }
+      - { kind: code, ref: "Attack (Minelayer.cs:152-156): mine.Model = 'models/mine.md3'; Api.Entities.SetModel (headless-guarded by Api.Services check); models/mine.md3 present under Base/data/.../models/mine.md3", result: pass }
     confidence: high
     notes: "Re-verified. The mine is SetModel'd ('models/mine.md3', present in assets) so the in-flight and placed mine is visible. Residual: CSQC in-flight projectile networking has no port analogue (shared with other projectile weapons)."
 
@@ -320,9 +320,9 @@ features:
       - "common/weapons/weapon/minelayer.qc:MineLayer.wr_checkammo2"
       - "common/weapons/weapon/minelayer.qc:MineLayer.wr_reload"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:CheckAmmoSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:CheckAmmoSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload"
     constants:
       - { name: "reload_ammo", base: "0", port: "0", match: true }
       - { name: "reload_time", base: "2", port: "2", match: true }
@@ -351,9 +351,9 @@ features:
       - "common/weapons/weapon/minelayer.qc:MineLayer.wr_suicidemessage"
       - "common/weapons/weapon/minelayer.qc:MineLayer.wr_killmessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:76"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:153"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:313"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:76"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:153"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:313"
     constants: []
     status:
       logic: faithful
@@ -377,8 +377,8 @@ features:
     base_refs:
       - "common/weapons/weapon/minelayer.qc:MineLayer.wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:BotWantsDetonate"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:416"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:BotWantsDetonate"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:416"
     constants:
       - { name: "skill_min_detonate", base: "2", port: "2", match: true }
       - { name: "group_detonate_threshold", base: "0.75*coredamage", port: "0.75*coredamage", match: true }

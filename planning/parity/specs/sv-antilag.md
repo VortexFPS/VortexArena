@@ -1,7 +1,7 @@
 # sv-antilag — parity spec
 
 **Base refs:** `server/antilag.qc`, `server/antilag.qh`, `server/world.qc:EndFrame`, `server/weapons/tracing.qc`, `common/weapons/weapon/arc.qc`, `common/weapons/weapon/shotgun.qc`, `common/turrets/util.qc`, `server/client.qc:PutClientInServer`
-**Port refs:** `src/XonoticGodot.Net/AntilagBuffer.cs` (`AntilagBuffer`, `LagCompensation`), `src/XonoticGodot.Common/Gameplay/LagComp.cs` (`LagComp`, `ILagCompensation`), `game/net/ServerNet.cs` (`BuildEntitySet`, `RecordAntilagEntities`, `BeginLagComp`, `EndLagComp`, `LagCompProvider`), `src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs` (`FireBullet`, `FireRailgunBullet`)
+**Port refs:** `src/VortexArena.Net/AntilagBuffer.cs` (`AntilagBuffer`, `LagCompensation`), `src/VortexArena.Common/Gameplay/LagComp.cs` (`LagComp`, `ILagCompensation`), `game/net/ServerNet.cs` (`BuildEntitySet`, `RecordAntilagEntities`, `BeginLagComp`, `EndLagComp`, `LagCompProvider`), `src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs` (`FireBullet`, `FireRailgunBullet`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -97,7 +97,7 @@ then restores everyone to the present. It is authority-side only (all in `qcsrc/
 | `antilag_takeback_all` / `antilag_restore_all` | `ServerNet.BeginLagComp` / `EndLagComp` (via `LagCompProvider` → `LagComp.Begin/End`) | live; players + monsters + nades; shooter ignored |
 | takeback bracket around the trace | `WeaponFiring.FireBullet` / `FireRailgunBullet` `try { LagComp.Begin(actor) … } finally { LagComp.End() }` | live for all hitscan weapons routed through these two |
 | `antilag_getlag` gating (`g_antilag==0`, `cl_noantilag`, lag<0.001) | `BeginLagComp` (`_antilagMode != 2` skip; `GetClientCvarBool(sp,"cl_noantilag")` skip; RTT<0→0; non-Player skip) | faithful gates |
-| `g_antilag` / `g_antilag_nudge` cvars | read in `RefreshFrameConfig`/`BroadcastSnapshots` (`_antilagMode`, `_antilagNudge`); empty→default 2 | faithful default; **shipped in the port's `assets/data/xonotic-data.pk3dir/xonotic-server.cfg:199-200`** (`set g_antilag 2` / `set g_antilag_nudge 0`, identical to Base) — the earlier "not registered" note was wrong |
+| `g_antilag` / `g_antilag_nudge` cvars | read in `RefreshFrameConfig`/`BroadcastSnapshots` (`_antilagMode`, `_antilagNudge`); empty→default 2 | faithful default; **shipped in the port's `Base/data/xonotic-data.pk3dir/xonotic-server.cfg:199-200`** (`set g_antilag 2` / `set g_antilag_nudge 0`, identical to Base) — the earlier "not registered" note was wrong |
 | **W_SetupShot trueaim + shotorg traces** antilagged (tracing.qc:46/85/97) | `WeaponFiring.SetupShot` plain traces | **NOT antilagged** — w_shotend/w_shotorg/w_shotdir computed against present positions for every weapon |
 | **Shotgun melee secondary** antilag trace (shotgun.qc:124) | `Shotgun.Melee` (Shotgun.cs:208) plain `Trace` | **NOT bracketed** |
 | `cl_noantilag` replicate | `ClientNet.cs:666` replicated cvar set | live |
@@ -169,9 +169,9 @@ then restores everyone to the present. It is authority-side only (all in `qcsrc/
   pattern (null on client/test/bot-only server) is a port architecture choice, not a behavioral change.
 
 ## Verification
-- `tests/XonoticGodot.Tests/AntilagTests.cs` — ring direct-hit, midpoint/multi-axis lerp, newer/older
+- `tests/VortexArena.Tests/AntilagTests.cs` — ring direct-hit, midpoint/multi-axis lerp, newer/older
   clamps, monotonic guard, 64-slot wrap, clear, `ComputeTakebackTime` ping+cap+negative. PASS (unit).
-- `tests/XonoticGodot.Tests/AntilagHookTests.cs` — `FireBullet`/`FireRailgunBullet` each call
+- `tests/VortexArena.Tests/AntilagHookTests.cs` — `FireBullet`/`FireRailgunBullet` each call
   `LagComp.Begin` once and `LagComp.End` once (bracket wired). PASS (unit).
 - Live wiring traced by reading: `BroadcastSnapshots` (per advanced tick) → `BuildEntitySet`/
   `RecordAntilagEntities` (record) and `WeaponFiring.Fire*` → `LagComp` provider → `Begin/EndLagComp`.

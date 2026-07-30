@@ -248,7 +248,7 @@ features:
       - "menu/xonotic/dialog_settings_game_messages.qc:XonoticGameMessageSettingsTab_fill"
     port_refs:
       - "game/menu/dialogs/DialogSettingsGame.cs:DialogSettingsGameMessages.Fill (700-783)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationTokens.cs:146 (notification_show_sprees live)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationTokens.cs:146 (notification_show_sprees live)"
     constants:
       - { name: "CTF labels", base: "sprintf with MapInfo_Type_ToText(CTF)", port: "hardcoded 'Capture the Flag' text", match: true }
     status:
@@ -344,9 +344,9 @@ features:
     port_refs:
       - "game/menu/dialogs/DialogSettingsGame.cs:DialogSettingsGameWeapons.Fill (600-682)"
       - "game/menu/framework/WeaponPriorityList.cs (cl_weaponpriority editor)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:177/587 (cl_weaponpriority / cl_weaponimpulsemode live)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:177/587 (cl_weaponpriority / cl_weaponimpulsemode live)"
       - "game/client/ViewModel.cs:933-953 (cl_gunalign/cl_followmodel/cl_bobmodel/cl_viewmodel_alpha live)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:408 (cl_tracers_teamcolor live)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:408 (cl_tracers_teamcolor live)"
     constants:
       - { name: "cl_gunalign radios", base: "4 left / 1 center / 3 right", port: "same values; ViewModel:933 consumes", match: true }
       - { name: "cl_autoswitch_cts", base: "0 never / -1 default / 1 always", port: "same; replicated to server (Commands.cs:225)", match: true }

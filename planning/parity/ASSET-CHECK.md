@@ -16,9 +16,9 @@ path/asset — or record it in [asset-check-known.yaml](asset-check-known.yaml) 
 | `gfx/vehicles/axh-ring` | game/hud/VehicleHud.cs:171 |
 | `gfx/vehicles/axh-target` | game/hud/VehicleHud.cs:154; game/hud/VehicleHud.cs:190; game/net/NetGame.cs:4962 |
 | `models/sphere.md3` | game/client/NadeOrbRenderer.cs:78; game/client/NadeOrbRenderer.cs:79 |
-| `models/weapons/h_` | src/XonoticGodot.Formats/Sidecars/WeaponRigAnims.cs:30 |
+| `models/weapons/h_` | src/VortexArena.Formats/Sidecars/WeaponRigAnims.cs:30 |
 | `textures/exx/base_wall01` | game/net/NetGame.cs:10026; game/vmap/EditorController.cs:1756 |
-| `textures/exx/floor01` | src/XonoticGodot.Formats/Vmap/VmapDocument.cs:476 |
+| `textures/exx/floor01` | src/VortexArena.Formats/Vmap/VmapDocument.cs:476 |
 
 ## Present but unsupported format (2) — magic sniff failed
 

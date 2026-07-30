@@ -18,8 +18,8 @@ features:
       - "server/world.qc:spawnfunc(worldspawn)"
       - "server/world.qc:InitGameplayMode"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot"
-      - "src/XonoticGodot.Server/GameWorld.cs:ApplyWorldspawn"
+      - "src/VortexArena.Server/GameWorld.cs:Boot"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyWorldspawn"
     constants:
       - { name: "matchid_format", base: "<counter>.<unixtime>.<rand6> (sprintf %d.%s.%06d)", port: "string.Format \"{0}.{1}.{2:D6}\" (sv_eventlog_files_counter . unix . rand6) GameWorld.cs:1110", match: true }
     status:
@@ -43,7 +43,7 @@ features:
     base_refs:
       - "server/world.qc:cvar_changes_init"
     port_refs:
-      - "src/XonoticGodot.Server/CommandReplies.cs:BuildCvarChanges"
+      - "src/VortexArena.Server/CommandReplies.cs:BuildCvarChanges"
     constants:
       - { name: "header_default_server", base: "// this server runs at default server settings", port: "same", match: true }
       - { name: "header_default_gameplay", base: "// this server runs at default gameplay settings", port: "same", match: true }
@@ -68,9 +68,9 @@ features:
       - "server/world.qc:readlevelcvars"
       - "server/command/vote.qc:ReadyCount"
     port_refs:
-      - "src/XonoticGodot.Server/WarmupController.cs:Begin"
-      - "src/XonoticGodot.Server/WarmupController.cs:ResolveWarmupLimit"
-      - "src/XonoticGodot.Server/WarmupController.cs:ResolveMinPlayers"
+      - "src/VortexArena.Server/WarmupController.cs:Begin"
+      - "src/VortexArena.Server/WarmupController.cs:ResolveWarmupLimit"
+      - "src/VortexArena.Server/WarmupController.cs:ResolveMinPlayers"
     constants:
       - { name: "g_warmup", base: "0", port: "0 (Cvars.cs:123)", match: true }
       - { name: "g_warmup_limit", base: "180 (xonotic-server.cfg)", port: "180 (Cvars.cs:124)", match: true }
@@ -96,9 +96,9 @@ features:
     base_refs:
       - "server/world.qc:readlevelcvars"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/ServerFlags.cs"
-      - "src/XonoticGodot.Server/GameWorld.cs:ReadLevelCvars"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot"
+      - "src/VortexArena.Common/Gameplay/ServerFlags.cs"
+      - "src/VortexArena.Server/GameWorld.cs:ReadLevelCvars"
+      - "src/VortexArena.Server/GameWorld.cs:Boot"
       - "game/hud/PickupPanel.cs"
     constants:
       - { name: "SERVERFLAG_ALLOW_FULLBRIGHT", base: "BIT(0) from sv_allow_fullbright", port: "1<<0 from sv_allow_fullbright (ServerFlags.cs:24)", match: true }
@@ -126,8 +126,8 @@ features:
     base_refs:
       - "server/command/vote.qc:ReadyCount"
     port_refs:
-      - "src/XonoticGodot.Server/WarmupController.cs:ReadyCountCheck"
-      - "src/XonoticGodot.Server/WarmupController.cs:ToggleReady"
+      - "src/VortexArena.Server/WarmupController.cs:ReadyCountCheck"
+      - "src/VortexArena.Server/WarmupController.cs:ToggleReady"
     constants:
       - { name: "majority_count_basis", base: "humans only (human_players)", port: "humans only (IsBot skip)", match: true }
       - { name: "majority_rounding", base: "rint(human_players * bound(0.5, factor, 1))", port: "Round(humans * clamp(factor,0.5,1), ToEven)", match: true }
@@ -154,8 +154,8 @@ features:
       - "server/command/vote.qc:ReadyRestart"
       - "server/command/vote.qc:ReadyRestart_force"
     port_refs:
-      - "src/XonoticGodot.Server/WarmupController.cs:ReadyRestart"
-      - "src/XonoticGodot.Server/GameWorld.cs:RestartMatch"
+      - "src/VortexArena.Server/WarmupController.cs:ReadyRestart"
+      - "src/VortexArena.Server/GameWorld.cs:RestartMatch"
     constants:
       - { name: "RESTART_COUNTDOWN", base: "10 (vote.qh:66)", port: "10 (WarmupController.RestartCountdown)", match: true }
       - { name: "campaign_countdown", base: "3", port: "3 (WarmupController.CampaignCountdown), LIVE", match: true }
@@ -182,8 +182,8 @@ features:
     base_refs:
       - "server/command/vote.qc:reset_map"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:ResetMap"
-      - "src/XonoticGodot.Server/GameWorld.cs:ResetMapObjects"
+      - "src/VortexArena.Server/GameWorld.cs:ResetMap"
+      - "src/VortexArena.Server/GameWorld.cs:ResetMapObjects"
     constants: []
     status:
       logic: partial
@@ -206,9 +206,9 @@ features:
     base_refs:
       - "server/world.qc:CheckRules_World"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:RunCheckRulesWorld"
-      - "src/XonoticGodot.Server/GameWorld.cs:CheckRulesAndIntermission"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
+      - "src/VortexArena.Server/GameWorld.cs:RunCheckRulesWorld"
+      - "src/VortexArena.Server/GameWorld.cs:CheckRulesAndIntermission"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
     constants:
       - { name: "warmup/pre-start limit zeroing", base: "warmup_stage || time<=game_starttime", port: "same", match: true }
       - { name: "timelimit offset", base: "timelimit += game_starttime", port: "same", match: true }
@@ -236,7 +236,7 @@ features:
       - "server/world.qc:InitiateOvertime"
       - "server/world.qc:GetWinningCode"
     port_refs:
-      - "src/XonoticGodot.Server/OverTimeManager.cs"
+      - "src/VortexArena.Server/OverTimeManager.cs"
       - "game/hud/TimerPanel.cs"
     constants:
       - { name: "timelimit_overtime", base: "2 (min)", port: "2 (Cvars.cs:114)", match: true }
@@ -264,8 +264,8 @@ features:
     base_refs:
       - "server/world.qc:NextLevel"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:NextLevel"
-      - "src/XonoticGodot.Server/Intermission.cs"
+      - "src/VortexArena.Server/GameWorld.cs:NextLevel"
+      - "src/VortexArena.Server/Intermission.cs"
     constants:
       - { name: "sv_mapchange_delay", base: "5", port: "5 (Cvars.cs:137)", match: true }
       - { name: "empty_server_exittime", base: "-1", port: "-1", match: true }
@@ -294,9 +294,9 @@ features:
       - "server/world.qc:RandomSeed_Think"
       - "server/world.qc:RandomSeed_Send"
     port_refs:
-      - "src/XonoticGodot.Server/RandomSeed.cs"
-      - "src/XonoticGodot.Server/GameWorld.cs:RandomSeed (field cs:186)"
-      - "src/XonoticGodot.Server/GameWorld.cs:OnStartFrame (RandomSeed.Tick cs:1771)"
+      - "src/VortexArena.Server/RandomSeed.cs"
+      - "src/VortexArena.Server/GameWorld.cs:RandomSeed (field cs:186)"
+      - "src/VortexArena.Server/GameWorld.cs:OnStartFrame (RandomSeed.Tick cs:1771)"
       - "game/net/ServerNet.cs:SendMatchState (cs:967-987)"
       - "game/net/ClientNet.cs:ReadMatchState (cs:600-618)"
     constants:
@@ -327,7 +327,7 @@ features:
       - "server/world.qc:PingPLReport_Think"
     port_refs:
       - "game/net/ServerNet.cs:BuildScoreboard"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:ScoreRowWire"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire"
       - "game/hud/ScoreboardPanel.cs:SetRows"
     constants:
       - { name: "ping_packetloss_byte", base: "min(ceil(ping_packetloss*255),255) (world.qc:74)", port: "min(ceil(PacketLoss*255),255) (ServerNet.cs:2234)", match: true }
@@ -355,8 +355,8 @@ features:
     base_refs:
       - "server/world.qc:spawnfunc(worldspawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/LightStyles.cs"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot"
+      - "src/VortexArena.Common/Gameplay/LightStyles.cs"
+      - "src/VortexArena.Server/GameWorld.cs:Boot"
       - "game/client/DynamicLightRenderer.cs"
     constants:
       - { name: "lightstyle_count", base: "12 named (0-11) + style 63", port: "12 named (0-11) + style 63 (LightStyles.cs:46-59)", match: true }
@@ -383,7 +383,7 @@ features:
     base_refs:
       - "server/world.qc:readlevelcvars"
     port_refs:
-      - "src/XonoticGodot.Server/WarmupController.cs:Begin"
+      - "src/VortexArena.Server/WarmupController.cs:Begin"
     constants:
       - { name: "g_start_delay", base: "0 (listen) / 15 (dedicated) (xonotic-common.cfg:185-186)", port: "0 (Cvars.cs:134); registered", match: true }
     status:
@@ -407,9 +407,9 @@ features:
     base_refs:
       - "server/world.qc:InitGameplayMode"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:SetMaxShotDistanceFromWorldBounds"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:CurrentMaxShotDistance"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:SetMaxShotDistanceFromWorldBounds"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:CurrentMaxShotDistance"
+      - "src/VortexArena.Server/GameWorld.cs:Boot"
     constants:
       - { name: "max_shot_distance", base: "min(230000, vlen(world.maxs-world.mins)) per-map (default 32768 in constants.qh)", port: "min(230000f, VLen(maxs-mins)) per-map at Boot; 32768f constant fallback (WeaponFiring.cs:60)", match: true }
     status:
@@ -433,8 +433,8 @@ features:
       - "server/world.qc:RedirectionThink"
       - "server/intermission.qc:redirection_target = autocvar_quit_and_redirect"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveEndOfMatchMapFlow (quit_and_redirect cs:3975-3982)"
-      - "src/XonoticGodot.Server/Commands.cs:RedirectHandler (cs:154)"
+      - "src/VortexArena.Server/GameWorld.cs:DriveEndOfMatchMapFlow (quit_and_redirect cs:3975-3982)"
+      - "src/VortexArena.Server/Commands.cs:RedirectHandler (cs:154)"
       - "game/net/NetGame.cs:RedirectHandler wiring (cs:777/810)"
     constants:
       - { name: "quit_and_redirect", base: "\"\" (empty default)", port: "\"\" (Cvars.cs:495)", match: true }
@@ -460,8 +460,8 @@ features:
     base_refs:
       - "server/world.qc:Shutdown"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:Shutdown"
-      - "src/XonoticGodot.Server/TimeoutController.cs:ResetSlowmoOnShutdown"
+      - "src/VortexArena.Server/GameWorld.cs:Shutdown"
+      - "src/VortexArena.Server/TimeoutController.cs:ResetSlowmoOnShutdown"
     constants: []
     status:
       logic: partial
@@ -485,9 +485,9 @@ features:
     base_refs:
       - "server/world.qc:DumpStats"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:DumpStats"
-      - "src/XonoticGodot.Server/Commands.cs:CmdPrintStats"
-      - "src/XonoticGodot.Server/GameWorld.cs:NextLevel"
+      - "src/VortexArena.Server/Commands.cs:DumpStats"
+      - "src/VortexArena.Server/Commands.cs:CmdPrintStats"
+      - "src/VortexArena.Server/GameWorld.cs:NextLevel"
     constants:
       - { name: "final_prefix", base: ":scores:", port: ":scores: (Commands.cs:2632)", match: true }
       - { name: "status_prefix", base: ":status:", port: ":status: (Commands.cs:2632)", match: true }
@@ -516,8 +516,8 @@ features:
       - "server/world.qc:InitializeEntity"
       - "server/world.qc:InitializeEntitiesRun"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RunPostSpawn"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (RunPostSpawn cs:739)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RunPostSpawn"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (RunPostSpawn cs:739)"
     constants: []
     status:
       logic: partial
@@ -540,8 +540,8 @@ features:
     base_refs:
       - "server/world.qc:SetDefaultAlpha"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:FireSetDefaultAlpha"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (FireSetDefaultAlpha cs:647)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:FireSetDefaultAlpha"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (FireSetDefaultAlpha cs:647)"
     constants:
       - { name: "g_player_alpha", base: "autocvar_g_player_alpha; 0 -> 1 fallback (world.qc:109-110)", port: "g_player_alpha; 0 -> 1 fallback (MutatorHooks.cs:1041)", match: true }
       - { name: "default_weapon_alpha", base: "= default_player_alpha (world.qc:112)", port: "WeaponAlpha = playerAlpha (MutatorHooks.cs:1041+)", match: true }

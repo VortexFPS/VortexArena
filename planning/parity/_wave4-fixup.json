@@ -115,7 +115,7 @@
 "unit": "duel",
 "regressions": 0,
 "notes": [
-"Non-blocking test-staleness (NOT a code regression, out of scope to edit): tests/XonoticGodot.Tests/FilterItemHookTests.cs:108 (DuelFilterItem_NotRegistered_PowerupStillSpawns) still asserts/documents the OLD dead behavior ('Duel.FilterItem is NEVER registered ... must NOT fire'). It still passes only because it boots a plain server without activating the Duel gametype, so the now-live subscription never registers. The assertion contradicts the now-fixed behavior and should be updated to activate Duel and assert the powerup IS filtered."
+"Non-blocking test-staleness (NOT a code regression, out of scope to edit): tests/VortexArena.Tests/FilterItemHookTests.cs:108 (DuelFilterItem_NotRegistered_PowerupStillSpawns) still asserts/documents the OLD dead behavior ('Duel.FilterItem is NEVER registered ... must NOT fire'). It still passes only because it boots a plain server without activating the Duel gametype, so the now-live subscription never registers. The assertion contradicts the now-fixed behavior and should be updated to activate Duel and assert the powerup IS filtered."
 ]
 },
 {

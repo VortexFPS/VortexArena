@@ -17,9 +17,9 @@ features:
       - "common/monsters/monster/golem.qc:Golem.mr_setup"
       - "common/monsters/sv_monsters.qc:Monster_Spawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Setup"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnFromMap"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Setup"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnFromMap"
     constants:
       - { name: "g_monster_golem_health", base: "650", port: "650", match: true }
       - { name: "attack_range", base: "150", port: "150", match: true }
@@ -57,9 +57,9 @@ features:
       - "common/monsters/monster/golem.qc:spawnfunc(monster_golem)"
       - "common/monsters/monster/golem.qc:spawnfunc(monster_shambler)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:Golem"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:Shambler"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:196"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:Golem"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:Shambler"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:196"
     constants: []
     status:
       logic: faithful
@@ -86,11 +86,11 @@ features:
       - "common/monsters/sv_monsters.qc:Monster_Move"
       - "common/monsters/monster/golem.qc:Golem.mr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:RunThink"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:AttackCheck"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:EnemyCheck"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MatchHalted"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:RunThink"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:AttackCheck"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:EnemyCheck"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MatchHalted"
     constants: []
     status:
       logic: faithful
@@ -118,9 +118,9 @@ features:
       - "common/monsters/monster/golem.qc:M_Golem_Attack_Swing"
       - "common/monsters/sv_monsters.qc:Monster_Attack_Melee"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:QueueCombo"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MeleeAttack"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:QueueCombo"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MeleeAttack"
     constants:
       - { name: "g_monster_golem_attack_claw_damage", base: "60", port: "60", match: true }
       - { name: "swing_count", base: "bound(1, floor(random*4), 3)", port: "Clamp(floor(rand*4),1,3)", match: true }
@@ -152,8 +152,8 @@ features:
       - "common/monsters/monster/golem.qc:M_Golem_Attack (RANGED smash branch)"
       - "common/monsters/monster/golem.qc:M_Golem_Attack_Smash"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:Smash"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:QueueDelayedAttack"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:Smash"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:QueueDelayedAttack"
     constants:
       - { name: "g_monster_golem_attack_smash_damage", base: "50", port: "50", match: true }
       - { name: "smash_edge_damage", base: "smash_damage*0.5", port: "SmashDamage*skill*0.5", match: true }
@@ -190,8 +190,8 @@ features:
       - "common/monsters/monster/golem.qc:M_Golem_Attack_Lightning_Think"
       - "common/monsters/monster/golem.qc:M_Golem_Attack_Lightning_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:ThrowLightning"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:ThrowLightning"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile"
     constants:
       - { name: "g_monster_golem_attack_lightning_speed", base: "1000", port: "1000", match: true }
       - { name: "g_monster_golem_attack_lightning_speed_up", base: "150", port: "150", match: true }
@@ -216,7 +216,7 @@ features:
       - "Projectile renders the correct model (models/ebomb.mdl) but at 1x — QC gren.scale = 2.5 (golem.qc:145) is not networked (Entity has no render-scale field; the CSQCMODEL scale-bit contract is unported). Visible bolt is smaller than Base but no longer headless."
     verification:
       - { kind: code-read, ref: "Golem.ThrowLightning:191-231 + SpawnProjectile (Bounce, 50hp, makeTrigger, size +/-8, +Z speedUp) vs M_Golem_Attack_Lightning", result: pass }
-      - { kind: code-read, ref: "Golem.cs:249 gren.Model = \"models/ebomb.mdl\" — projectile sets the QC CSQCProjectile model; ebomb.mdl asset present (assets/data/.../models/ebomb.mdl); rendered via the same Entity.Model feed as the monster body", result: pass }
+      - { kind: code-read, ref: "Golem.cs:249 gren.Model = \"models/ebomb.mdl\" — projectile sets the QC CSQCProjectile model; ebomb.mdl asset present (Base/data/.../models/ebomb.mdl); rendered via the same Entity.Model feed as the monster body", result: pass }
       - { kind: code-read, ref: "Golem.cs:250-251 — gren.scale = 2.5 deferred (no networked Entity render-scale field); bolt draws at 1x", result: fail }
       - { kind: code-read, ref: "Golem.cs:254-256 — NO launch cue (QC M_Golem_Attack_Lightning emits none); ThrowLightning:218 fires the dispatch melee cue (QC :478). Confirms launch_sound=NONE; the fabricated electro_fire2.wav from the stale spec is absent in current code", result: pass }
     confidence: high
@@ -228,8 +228,8 @@ features:
     base_refs:
       - "common/monsters/monster/golem.qc:M_Golem_Attack_Lightning_Explode"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:ThrowLightning (onExplode)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:ChainedZaps"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:ThrowLightning (onExplode)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:ChainedZaps"
     constants:
       - { name: "g_monster_golem_attack_lightning_damage", base: "25", port: "25", match: true }
       - { name: "lightning_edge_damage", base: "25 (same as center)", port: "25", match: true }
@@ -263,8 +263,8 @@ features:
       - "common/monsters/monster/golem.qc:Golem.mr_pain"
       - "common/monsters/sv_monsters.qc:Monster_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:PainWindow"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MonsterEventDamage"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:PainWindow"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MonsterEventDamage"
     constants:
       - { name: "pain_finished_window_s", base: "0.5", port: "0.5", match: true }
       - { name: "pain_anim", base: "anim_pain1 '7' or anim_pain2 '8' (random, golem.qc:241)", port: "AnimVariant 0->7 / 1->8 (random per pain event, MonsterAI.cs:1583)", match: true }
@@ -292,10 +292,10 @@ features:
       - "common/monsters/monster/golem.qc:Golem.mr_death"
       - "common/monsters/sv_monsters.qc:Monster_Dead"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:DropItem"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:ItemRandomFromList"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:SpawnLoot"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:DropItem"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:ItemRandomFromList"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:SpawnLoot"
     constants:
       - { name: "corpse_lifetime_s", base: "5", port: "5", match: true }
       - { name: "gib_threshold_health", base: "-100 (or DEATH_KILL)", port: "-100 or Kill", match: true }
@@ -332,15 +332,15 @@ features:
       - "common/monsters/sv_monsters.qc:Monster_Spawn_Setup (monstersound_spawn:1364)"
       - "models/monsters/golem.dpm_0.sounds"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MonsterSound (747)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:PlayMeleeCue (777)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Setup (323, spawn)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:EnemyCheck (823, sight)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Move (894, idle 7s)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:QueueCombo (1436, melee dispatch)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MonsterEventDamage (pain 1.2s)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead (death)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:SoundCues/SoundCueCount"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MonsterSound (747)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:PlayMeleeCue (777)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Setup (323, spawn)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:EnemyCheck (823, sight)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Move (894, idle 7s)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:QueueCombo (1436, melee dispatch)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MonsterEventDamage (pain 1.2s)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead (death)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:SoundCues/SoundCueCount"
     constants:
       - { name: "g_monsters_sounds (master gate)", base: "1 (default)", port: "1 (default)", match: true }
       - { name: "pain_sound_antilag_s", base: "1.2 (CH_PAIN=-6, delaytoo)", port: "1.2 (SoundChannel.PainAuto=-6)", match: true }
@@ -375,8 +375,8 @@ features:
       - "common/monsters/monster/golem.qc:Golem.mr_anim"
       - "common/monsters/monster/golem.qh:MODEL(MON_GOLEM, golem.dpm)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:AnimFrame"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame (1204)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:AnimFrame"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame (1204)"
     constants:
       - { name: "anim_idle", base: "'0 1 1'", port: "0", match: true }
       - { name: "anim_walk", base: "'1 1 1'", port: "1", match: true }
@@ -410,7 +410,7 @@ features:
     base_refs:
       - "common/monsters/monster/golem.qc:Golem.describe (MENUQC)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:43 (Description override)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:43 (Description override)"
     constants:
       - { name: "describe_text", base: "3-paragraph monster info (golem.qc:308-316)", port: "verbatim 3-paragraph text on Golem.Description (Golem.cs:43-49)", match: true }
     status:

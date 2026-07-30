@@ -227,11 +227,11 @@ features:
       - "common/vehicles/sv_vehicles.qc:1283 (MUTATOR_CALLHOOK(VehicleInit) abort)"
       - "common/vehicles/sv_vehicles.qh:8 (autocvar_g_vehicles)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:27 (Spawn)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:56 (drop-to-floor tracebox — NOW PORTED)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:73 (InitVehicle veto + delete)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:89 (MasterSwitchEnabled)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:409 (InitVehicle)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:27 (Spawn)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:56 (drop-to-floor tracebox — NOW PORTED)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:73 (InitVehicle veto + delete)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:89 (MasterSwitchEnabled)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:409 (InitVehicle)"
     constants:
       - { name: "g_vehicles (master)", base: "1", port: "1 (MasterSwitchEnabled per-vehicle g_vehicle_X !autocvar)", match: true }
       - { name: "g_vehicles_teams", base: "1", port: "1 (team-clear branch NOW PORTED, VehicleSpawnFuncs.cs:48-49 + TeamsEnabled)", match: true }
@@ -264,7 +264,7 @@ features:
     base_refs:
       - "common/vehicles/sv_vehicles.qc:1107 (vehicles_spawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:353 (SpawnVehicle)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:353 (SpawnVehicle)"
     constants:
       - { name: "MOVETYPE_STEP / SOLID_SLIDEBOX / DAMAGE_AIM / DEAD_NO / FL_NOTARGET", base: "set", port: "set", match: true }
       - { name: "angles=pos2; setorigin(pos1)", base: "yes", port: "yes (SpawnAngles/SpawnPos)", match: true }
@@ -299,9 +299,9 @@ features:
       - "common/vehicles/sv_vehicles.qc:620 (vehicles_frame -> vehicles_painframe)"
       - "common/vehicles/sv_vehicles.qh:20 (g_vehicles_thinkrate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:179 (DefaultThinkRate)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:733 (W2MODE owner-mirror in PainFrame)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:339 (PainFrame call from Think)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:179 (DefaultThinkRate)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:733 (W2MODE owner-mirror in PainFrame)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:339 (PainFrame call from Think)"
     constants:
       - { name: "g_vehicles_thinkrate", base: "0.1", port: "0.1 (DefaultThinkRate; descriptors may override)", match: true }
       - { name: "VEHICLESTAT_W2MODE owner mirror (owner.vehicle.VehW2Mode each think)", base: "yes (vehicles_think:1084)", port: "yes (PainFrame:722-723: vehic.Owner.VehW2Mode = vehic.VehW2Mode)", match: true }
@@ -328,8 +328,8 @@ features:
     base_refs:
       - "common/vehicles/sv_vehicles.qc:931 (vehicles_enter)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:163 (Enter)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:209 (EnterVehicle)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:163 (Enter)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:209 (EnterVehicle)"
     constants:
       - { name: "g_vehicles_allow_bots", base: "0", port: "0", match: true }
       - { name: "vehicle_enter_delay", base: "2", port: "2 (set on exit)", match: true }
@@ -359,8 +359,8 @@ features:
       - "common/vehicles/sv_vehicles.qc:960 (steal branch)"
       - "common/vehicles/sv_vehicles.qh:11 (g_vehicles_steal)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:212 (steal branch — NOW PORTED)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:302 (ExitVehicle restores SHIELDREGEN from old flags)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:212 (steal branch — NOW PORTED)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:302 (ExitVehicle restores SHIELDREGEN from old flags)"
     constants:
       - { name: "g_vehicles_steal", base: "1 (allow stealing; vehicles.cfg:5, sv_vehicles.qh:11 default true)", port: "1 (Cvar fallback 1f; DiffTeam now boards)", match: true }
       - { name: "shield=0 + old_vehicle_flags backup + ~VHF_SHIELDREGEN", base: "yes", port: "yes (VehicleBoarding.cs:217-219, restored in ExitVehicle:297)", match: true }
@@ -388,9 +388,9 @@ features:
     base_refs:
       - "common/vehicles/sv_vehicles.qc:775 (vehicles_exit)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:262 (Exit)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:307 (SetReturn — NOW CALLED from Exit)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:258 (ExitVehicle)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:262 (Exit)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:307 (SetReturn — NOW CALLED from Exit)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:258 (ExitVehicle)"
     constants:
       - { name: "vehicle_enter_delay on exit", base: "time+2", port: "time+2", match: true }
       - { name: "vehic.phase re-entry gate", base: "time+1", port: "time+1 (VehPhase)", match: true }
@@ -421,7 +421,7 @@ features:
       - "common/vehicles/sv_vehicles.qc:751 (vehicles_findgoodexit)"
       - "common/vehicles/sv_vehicles.qh:19 (g_vehicles_exit_attempts)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:314 (FindGoodExit)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:314 (FindGoodExit)"
     constants:
       - { name: "g_vehicles_exit_attempts", base: "25", port: "25", match: true }
       - { name: "ring radius", base: "1.5 * vlen(maxs-mins)", port: "1.5 * VLen(maxs-mins)", match: true }
@@ -447,10 +447,10 @@ features:
       - "common/vehicles/sv_vehicles.qc:625 (vehicles_damage)"
       - "common/vehicles/sv_vehicles.qh:24-29 (damagerate cvars)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:472 (EventDamage — the installed .event_damage shim)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:486 (DamageVehicle)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:570 (VehicleDamageRate)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:331 (EventDamage routing of non-players)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:472 (EventDamage — the installed .event_damage shim)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:486 (DamageVehicle)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:570 (VehicleDamageRate)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:331 (EventDamage routing of non-players)"
     constants:
       - { name: "g_vehicles_vortex_damagerate", base: "0.75", port: "0.75 (live)", match: true }
       - { name: "g_vehicles_machinegun_damagerate", base: "0.75", port: "0.75 (live)", match: true }
@@ -486,10 +486,10 @@ features:
     base_refs:
       - "common/vehicles/sv_vehicles.qc:708 (vehicles_heal)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:696 (HealVehicle — the .event_heal sink body)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:384 (vehic.GtEventHeal = HealVehicle install)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageContracts.cs:73 (Combat.Heal -> target.GtEventHeal dispatch)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:333 (live caller: Arc heal-beam non-player branch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:696 (HealVehicle — the .event_heal sink body)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:384 (vehic.GtEventHeal = HealVehicle install)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageContracts.cs:73 (Combat.Heal -> target.GtEventHeal dispatch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:333 (live caller: Arc heal-beam non-player branch)"
     constants:
       - { name: "limit fallback", base: "max_health when RES_LIMIT_NONE", port: "max_health when ResLimitNone (HealVehicle)", match: true }
       - { name: "owner.vehicle_health = (health/max)*100 mirror", base: "yes", port: "yes (in HealVehicle on success)", match: true }
@@ -518,8 +518,8 @@ features:
       - "common/vehicles/sv_vehicles.qc:549 (vehicles_regen)"
       - "common/vehicles/sv_vehicles.qc:564 (vehicles_regen_resource)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:421 (Regen)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:441 (RegenResource — mirrors owner.VehicleHealth)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:421 (Regen)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:441 (RegenResource — mirrors owner.VehicleHealth)"
     constants:
       - { name: "regen-pause gate (timer + rpause < time)", base: "yes", port: "yes", match: true }
       - { name: "healthscale (rate *= health/max_health)", base: "optional", port: "optional", match: true }
@@ -548,8 +548,8 @@ features:
       - "common/vehicles/sv_vehicles.qc:721 (vehicles_crushable)"
       - "common/vehicles/sv_vehicles.qh:13-15 (crush cvars)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:793 (Touch)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:777 (Crushable)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:793 (Touch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:777 (Crushable)"
     constants:
       - { name: "g_vehicles_crush_dmg", base: "70", port: "70 (Cvar fallback)", match: true }
       - { name: "g_vehicles_crush_force", base: "50", port: "50 (Cvar fallback)", match: true }
@@ -581,10 +581,10 @@ features:
       - "common/vehicles/sv_vehicles.qc:731 (vehicles_impact)"
       - "common/vehicles/vehicle/racer.qc:81 / raptor.qc:56 / bumblebee.qc:73 / spiderbot.qc:46 (bouncepain)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:835 (Impact)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:217 (vr_impact 200/0.15/150)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:673 (vr_impact 1/4/1000)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:398 (vr_impact 1/100/200)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:835 (Impact)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:217 (vr_impact 200/0.15/150)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:673 (vr_impact 1/4/1000)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:398 (vr_impact 1/100/200)"
     constants:
       - { name: "DEATH_FALL impact dmg", base: "min(speedfac*Δspeed, maxpain)", port: "min(speedfac*VLen(delta), maxpain)", match: true }
       - { name: "impact gate", base: "Δspeed > minspeed, once / 0.25s, skip NOIMPACT", port: "delta>minspeed + play_time<time gate; 0.25s; NOIMPACT deferred", match: false }
@@ -616,9 +616,9 @@ features:
       - "common/vehicles/sv_vehicles.qc:594 (vehicles_painframe)"
       - "common/vehicles/vehicle.qh:103-105 (VHF_DMGSHAKE/DMGROLL/DMGHEADROLL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:726 (PainFrame)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:752 (EFFECT_SMOKE_SMALL emit — NOW PORTED)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:339 / Raptor.cs:262 / Spiderbot.cs:247 / Bumblebee.cs:289 (live callers)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:726 (PainFrame)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:752 (EFFECT_SMOKE_SMALL emit — NOW PORTED)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:339 / Raptor.cs:262 / Spiderbot.cs:247 / Bumblebee.cs:289 (live callers)"
     constants:
       - { name: "trigger threshold", base: "health <= 50%", port: "myHealth <= 50 (PainFrame)", match: true }
       - { name: "FX cadence", base: "time + max(0.1, 0.1 + random()*0.5*ftmp)", port: "time + max(0.1, 0.1 + Prandom.Float()*0.5*ftmp)", match: true }
@@ -648,9 +648,9 @@ features:
       - "common/vehicles/sv_vehicles.qc:99 (vehicles_locktarget)"
       - "common/vehicles/sv_vehicles.qc:120-125 (target-validity gate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:264 (LockTarget)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:288 (validity gate — NOW COMPLETE)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:354 (IsVehicleOrTurret helper)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:264 (LockTarget)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:288 (validity gate — NOW COMPLETE)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:354 (IsVehicleOrTurret helper)"
     constants:
       - { name: "lock hold sound gate", base: "0.5s (locked) / 0.8s (lock) / 0.3s (locking)", port: "0.5 / 0.8 / 0.3", match: true }
       - { name: "off-target decay", base: "decr*2 if different target else decr", port: "decr*2 / decr", match: true }
@@ -678,7 +678,7 @@ features:
     base_refs:
       - "common/vehicles/sv_vehicles.qc:356 (vehicle_aimturret)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:231 (AimTurret)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:231 (AimTurret)"
     constants:
       - { name: "per-tick slew", base: "aimspeed * dt", port: "aimSpeed * dt", match: true }
       - { name: "pitch/yaw clamp", base: "bound(min, .., max)", port: "Bound(min, .., max)", match: true }
@@ -704,8 +704,8 @@ features:
       - "common/vehicles/sv_vehicles.qc:221 (vehicles_projectile)"
       - "common/vehicles/sv_vehicles.qc:165 (vehicles_projectile_damage)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:608 (SpawnProjectile)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:648 (GtEventDamage on shootable projectile)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:608 (SpawnProjectile)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:648 (GtEventDamage on shootable projectile)"
     constants:
       - { name: "default lifetime (nextthink)", base: "time + 30", port: "30 fallback", match: true }
       - { name: "movetype", base: "MOVETYPE_FLYMISSILE", port: "MoveType.FlyMissile", match: true }
@@ -736,8 +736,8 @@ features:
       - "common/vehicles/vehicles.qc:22 (force_fromtag_maglev)"
       - "common/vehicles/vehicles.qc:4 (vehicle_altitude)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:187 (ForceFromTag)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:121 (Altitude)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:187 (ForceFromTag)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:121 (Altitude)"
     constants:
       - { name: "hover power", base: "(1-frac) * max_power", port: "(1-frac) * maxPower", match: true }
       - { name: "maglev void sink", base: "'0 0 -200', normpower -0.25", port: "(0,0,-200), -0.25", match: true }
@@ -765,9 +765,9 @@ features:
       - "common/vehicles/sv_vehicles.qc:463 (vehicles_showwp)"
       - "common/vehicles/sv_vehicles.qc:442 (vehicles_return)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:869 (SetReturn)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:307 (Exit -> SetReturn, living-vehicle return)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:560 (DamageVehicle death tail -> SetReturn)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:869 (SetReturn)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:307 (Exit -> SetReturn, living-vehicle return)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:560 (DamageVehicle death tail -> SetReturn)"
     constants:
       - { name: "return delay", base: "respawntime-5 dead / respawntime-1 alive", port: "respawntime-5 dead / respawntime-1 alive (SetReturn:879)", match: true }
       - { name: "WP_Vehicle return waypoint", base: "spawned (vehicle_return + vehicles_showwp)", port: "none (deferred, CSQC)", match: false }
@@ -794,8 +794,8 @@ features:
     base_refs:
       - "common/vehicles/sv_vehicles.qc:912 (vehicle_impulse)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:330 (Impulse)"
-      - "src/XonoticGodot.Server/Commands.cs:1608 (live dispatch — seated-pilot guard before weapon impulses)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:330 (Impulse)"
+      - "src/VortexArena.Server/Commands.cs:1608 (live dispatch — seated-pilot guard before weapon impulses)"
     constants:
       - { name: "weapon_group/next/last/prev impulses", base: "1/2/3, 10/11/12", port: "1/2/3, 10/11/12", match: true }
       - { name: "IMP_weapon_drop chase toggle", base: "17 -> toggle cl_eventchase_vehicle", port: "17 consumed (no-op; client cvar)", match: false }
@@ -837,8 +837,8 @@ features:
       - "game/net/NetGame.cs:5769 (_view.InVehicle = _fullHud.Vehicle.InVehicle — feeds the camera gate every frame)"
       - "game/client/FirstPersonView.cs:416 (UpdateCamera vehicleChase branch -> ChaseCamera.ApplyVehicle — NOW PORTED)"
       - "game/client/ChaseCamera.cs:189 (ApplyVehicle — cockpit/chase camera, port of SVC_SETVIEWPORT(vehicle_viewport)+cl_eventchase_vehicle — NOW PORTED)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleViewResolver.cs (per-pilot VehicleViewState resolver — NEW)"
-      - "src/XonoticGodot.Net/VehicleViewCodec.cs (11-byte wire codec, EntityField.VehicleView=1<<24 — NEW)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleViewResolver.cs (per-pilot VehicleViewState resolver — NEW)"
+      - "src/VortexArena.Net/VehicleViewCodec.cs (11-byte wire codec, EntityField.VehicleView=1<<24 — NEW)"
     constants:
       - { name: "cl_vehicles_hudscale", base: "0.5", port: "0.5 (in VehicleHud)", match: true }
       - { name: "cl_vehicles_crosshair_size", base: "0.5", port: "0.5", match: true }
@@ -875,10 +875,10 @@ features:
       - "common/vehicles/sv_vehicles.qc:1283 (VehicleInit)"
       - "common/vehicles/sv_vehicles.qc:876 (VehicleTouch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:496 (FireVehicleInit)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:544 (FireVehicleTouch)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:73 (VehicleInit dispatched + delete-on-veto)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:746 (VehicleTouch dispatched from Touch)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:496 (FireVehicleInit)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:544 (FireVehicleTouch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:73 (VehicleInit dispatched + delete-on-veto)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:746 (VehicleTouch dispatched from Touch)"
     constants: []
     status:
       logic: faithful
@@ -906,10 +906,10 @@ features:
       - "common/vehicles/sv_vehicles.qc:1118 (this.reset = vehicles_reset install in vehicles_setup)"
       - "common/vehicles/sv_vehicles.qc:426 (vehicles_clearreturn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:390 (vehic.Reset = VehiclesReset install in SpawnVehicle)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:897 (VehiclesReset — exit + clearreturn + respawn)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4640 (ResetMapObjects invokes e.Reset on every non-client entity)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4579 (reset sweep call on round/match restart)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:390 (vehic.Reset = VehiclesReset install in SpawnVehicle)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:897 (VehiclesReset — exit + clearreturn + respawn)"
+      - "src/VortexArena.Server/GameWorld.cs:4640 (ResetMapObjects invokes e.Reset on every non-client entity)"
+      - "src/VortexArena.Server/GameWorld.cs:4579 (reset sweep call on round/match restart)"
     constants:
       - { name: "on round reset: if owner -> vehicles_exit(VHEF_RELEASE)", base: "yes", port: "yes (VehiclesReset:902-904 -> descriptor Exit -> ExitVehicle)", match: true }
       - { name: "vehicles_clearreturn (cancel pending return)", base: "called", port: "yes (VehiclesReset:910-911 nulls Think + NextThink before respawn)", match: true }
@@ -942,10 +942,10 @@ features:
       - "common/vehicles/sv_vehicles.qc:287 (vehicles_gib_think)"
       - "common/vehicles/vehicle/bumblebee.qc:817 (the sole consumer — bumblebee vr_death tosses gun gibs)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:957 (TossGib)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:933 (GibExplode — vehicles_gib_explode/touch)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:1001 (non-explode gib alpha-fade think — vehicles_gib_think)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:474 (live caller — vr_death tosses 3 gun gibs)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:957 (TossGib)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:933 (GibExplode — vehicles_gib_explode/touch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:1001 (non-explode gib alpha-fade think — vehicles_gib_think)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:474 (live caller — vr_death tosses 3 gun gibs)"
     constants:
       - { name: "gib MOVETYPE_TOSS / SOLID_CORPSE / colormod '-0.5 -0.5 -0.5' / EF_LOWPRECISION", base: "set", port: "set (TossGib:979-982)", match: true }
       - { name: "explode gib: SND_ROCKET_IMPACT + 2x EFFECT_EXPLOSION_SMALL, nextthink time+random*explode", base: "yes", port: "yes (GibExplode:938-944; nextthink time+random*maxtime, TossGib:993)", match: true }

@@ -269,7 +269,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "ShowNamesLayer.cs:378-386 box adj + 436-453 (health red rightAlign / armor green leftAlign / 0.7 grey highlight backing) vs QC:183-208", result: pass }
-      - { kind: code, ref: "ShowNamesLayer.cs:560-580 DrawStatusBar now renders the QC nametag_statusbar skin image via TextureCache.GetFirst(gfx/hud/<skin>/nametag_statusbar, gfx/hud/default/nametag_statusbar, .../progressbar) with a flat-rect fallback — matching QC HUD_Panel_DrawProgressBar precache_pic fall-through; asset present at assets/data/.../gfx/hud/{default,luminos}/nametag_statusbar.tga", result: pass }
+      - { kind: code, ref: "ShowNamesLayer.cs:560-580 DrawStatusBar now renders the QC nametag_statusbar skin image via TextureCache.GetFirst(gfx/hud/<skin>/nametag_statusbar, gfx/hud/default/nametag_statusbar, .../progressbar) with a flat-rect fallback — matching QC HUD_Panel_DrawProgressBar precache_pic fall-through; asset present at Base/data/.../gfx/hud/{default,luminos}/nametag_statusbar.tga", result: pass }
       - { kind: test, ref: "ShowNamesTests.StatusBar_OnlyForLivingTeammates_WhenStatusOn / HealthAndArmor_RoundTripTogether_ForATeammateTag", result: pass }
     confidence: high
     notes: "WAVE-6e FIX (presentation partial->faithful): the status bar is now drawn with the nametag_statusbar HUD skin image (HUD_Panel_DrawProgressBar port) rather than flat rects — DrawStatusBar tries the skin texture, then the generic progressbar skin, then a flat colored rect, exactly QC's precache fall-through. Teammate-only + alive + status-cvar gating, half-width split, red/green, highlight backing all faithful."
@@ -314,7 +314,7 @@ features:
     port_refs:
       - "game/client/ShowNamesLayer.cs:_Draw (a *= entcs alpha factor)"
       - "game/net/ServerNet.cs:QuantizeAlpha (gameplay player.Alpha -> wire byte)"
-      - "src/XonoticGodot.Net/NetEntity.cs:Alpha (EntityField.Alpha 1<<17, written/read)"
+      - "src/VortexArena.Net/NetEntity.cs:Alpha (EntityField.Alpha 1<<17, written/read)"
     constants:
       - { name: "entcs_GetAlpha factor", base: "remote CSQC model alpha (0->1, <0->0)", port: "s.Alpha==0?1:Alpha/255, clamp 0..1", match: true }
       - { name: "factor applies when", base: "!sameteam || sv_entnum==player_localentnum", port: "!sameteam || netId==LocalNetId", match: true }

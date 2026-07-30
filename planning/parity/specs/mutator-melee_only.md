@@ -1,7 +1,7 @@
 # Melee Only Arena — parity spec
 
 **Base refs:** `common/mutators/mutator/melee_only/sv_melee_only.qc` (+ `_mod.inc`, `_mod.qh`, `sv_melee_only.qh`) · `mutators.cfg:178`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

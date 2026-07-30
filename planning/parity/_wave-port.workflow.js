@@ -10,7 +10,7 @@ export const meta = {
 }
 
 // ---------- args ----------
-const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Xonotic/XonoticGodot'
+const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Xonotic/VortexArena'
 const WAVE = (args && args.waveName) || 'parity wave'
 const UNITS = (args && args.units) || []
 const modelFor = t => (t === 'haiku' ? 'haiku' : t === 'sonnet' ? 'sonnet' : 'opus')
@@ -95,10 +95,10 @@ STEPS (read, in this order):
 1. planning/parity/specs/${u.unit}.md  -- the AUTHORITATIVE Base algorithm + exact constants/cvars/timings.
 2. planning/parity/registry/${u.unit}.yaml -- the per-dimension parity rows. Every dimension whose status is NOT 'faithful' (logic/values/timing/presentation/audio) or NOT 'live' (liveness) is a gap to close. The row notes describe exactly what's missing/partial.
 3. The port .cs files named in the spec's "Port refs" (read them to see the CURRENT implementation).
-4. If the spec is ambiguous, grep the Base QuakeC under assets/data/xonotic-data.pk3dir for the exact behavior.
+4. If the spec is ambiguous, grep the Base QuakeC under Base/data/xonotic-data.pk3dir for the exact behavior.
 
 For EACH open gap, design the minimal faithful C# change. Emit edits[] of {file, anchor, action, code, rationale, crossFileApi?}:
-- file: repo-relative (e.g. src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs).
+- file: repo-relative (e.g. src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs).
 - anchor: a UNIQUE existing snippet (a method signature / distinctive line) near the change site -- NOT a line number; the applier locates by it.
 - code: REAL compiling C# matching the file's style/naming/comment-density. Reuse existing port helpers/patterns.
 - WIRE IT LIVE: if you add a method/field, ALSO add the edit at the live call site that invokes it. A coded-but-uncalled feature does NOT close a liveness gap -- you must close logic AND liveness together. Match Base constants/timing exactly (values/timing dimensions).
@@ -128,11 +128,11 @@ Return appliedCount, status, a short 'corrections' note (what you fixed in the p
 
 const gatePrompt = (i) => `You are the OPUS build/test gate for "${WAVE}". Get the solution GREEN. Work from repo root: ${REPO}
 
-1. Build the tests project: dotnet build tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj -c Debug --nologo
-2. Build the game:          dotnet build XonoticGodot.csproj -c Debug --nologo
+1. Build the tests project: dotnet build tests/VortexArena.Tests/VortexArena.Tests.csproj -c Debug --nologo
+2. Build the game:          dotnet build VortexArena.csproj -c Debug --nologo
 If either FAILS: read the compiler errors, open the offending files, and FIX them. The most likely breakage is signature drift between files from the parallel apply phase (a method added in file A with a different signature than file B calls), missing usings, typos, or type mismatches. Rebuild after each fix. Iterate until BOTH build clean (up to ~15 fix cycles).
-3. When the build is clean, run the suite: dotnet test tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj -c Debug --no-build --nologo
-   Baseline expectation: 0 failed (real-data tests need assets/data, which IS present on this machine, so expect the full suite to run). Fix any NEW failures this wave introduced; do NOT chase pre-existing skips/ignores.
+3. When the build is clean, run the suite: dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj -c Debug --no-build --nologo
+   Baseline expectation: 0 failed (real-data tests need Base/data, which IS present on this machine, so expect the full suite to run). Fix any NEW failures this wave introduced; do NOT chase pre-existing skips/ignores.
 
 This is gate attempt #${i}. If a prior attempt left errors, just re-run the builds to see the current state and continue fixing. Report build_passed, tests_passed, counts, fixes_made, and any remaining_errors you could not resolve.`
 

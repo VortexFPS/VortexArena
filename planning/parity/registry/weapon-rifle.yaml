@@ -42,7 +42,7 @@ features:
     base_refs:
       - "common/weapons/weapon/rifle.qh:CLASS(Rifle)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:Rifle (ctor)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:Rifle (ctor)"
     constants:
       - { name: "netname", base: "rifle", port: "rifle", match: true }
       - { name: "ammo_type", base: "RES_BULLETS", port: "ResourceType.Bullets", match: true }
@@ -73,9 +73,9 @@ features:
     base_refs:
       - "common/weapons/weapon/rifle.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:WrThink (cs:113)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame (cs:155 — WrThink(Primary) every tick)"
-      - "src/XonoticGodot.Server/GameWorld.cs:WeaponThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:WrThink (cs:113)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame (cs:155 — WrThink(Primary) every tick)"
+      - "src/VortexArena.Server/GameWorld.cs:WeaponThink"
     constants:
       - { name: "bursttime", base: "0", port: "0", match: true }
       - { name: "primary_burstcost", base: "0", port: "0", match: true }
@@ -108,8 +108,8 @@ features:
       - "common/weapons/weapon/rifle.qc:W_Rifle_BulletHail"
       - "common/weapons/weapon/rifle.qc:W_Rifle_BulletHail_Continue"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:BulletHail"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:BulletHailContinue"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:BulletHail"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:BulletHailContinue"
     constants:
       - { name: "primary_bullethail", base: "0", port: "0", match: true }
       - { name: "secondary_bullethail", base: "0", port: "0", match: true }
@@ -126,7 +126,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "rifle.qc:59-92 vs Rifle.BulletHail/Continue (QC secondary->primary-refire quirk preserved)", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/RifleBulletHailTests.cs (present)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/RifleBulletHailTests.cs (present)", result: pass }
     confidence: high
     notes: "Unchanged by Wave-2. OFF at stock bullethail 0 (one volley per pull). Test config turns it on and confirms repeated volleys gated by animtime + burst budget."
 
@@ -141,12 +141,12 @@ features:
       - "server/weapons/tracing.qc:Headshot"
       - "server/weapons/tracing.qc:W_SetupShot (maxdamage accuracy_add)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (cs:246)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot (Fired accuracy credit, cs:112)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpread"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ExponentialFalloff"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:Headshot"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (cs:246)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot (Fired accuracy credit, cs:112)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpread"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ExponentialFalloff"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:Headshot"
     constants:
       - { name: "primary_damage", base: "80", port: "80", match: true }
       - { name: "secondary_damage", base: "20", port: "20", match: true }
@@ -189,8 +189,8 @@ features:
       - "common/weapons/weapon/rifle.qc:W_Rifle_FireBullet (W_DecreaseAmmo call)"
       - "server/weapons/weaponsystem.qc:W_DecreaseAmmo"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (DecreaseAmmo, cs:254)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:DecreaseAmmo (cs:324, clip-aware)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (DecreaseAmmo, cs:254)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:DecreaseAmmo (cs:324, clip-aware)"
     constants:
       - { name: "primary_ammo", base: "10", port: "10", match: true }
       - { name: "secondary_ammo", base: "10", port: "10", match: true }
@@ -220,11 +220,11 @@ features:
       - "common/weapons/weapon/rifle.qc:wr_checkammo2"
       - "server/weapons/weaponsystem.qc:W_Reload"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:WrThink (forced+secondary reload, cs:121-123/150-152)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:ReloadingAmmoMin (cs:110)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:CheckAmmoPrimary/Secondary (clip term, cs:294-301)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload/WReload/WReloadedAndReady (cs:197-316)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:BeginRaise (clip seed, cs:278-282)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:WrThink (forced+secondary reload, cs:121-123/150-152)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:ReloadingAmmoMin (cs:110)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:CheckAmmoPrimary/Secondary (clip term, cs:294-301)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload/WReload/WReloadedAndReady (cs:197-316)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:BeginRaise (clip seed, cs:278-282)"
     constants:
       - { name: "reload_ammo (magazine)", base: "80", port: "80 (ReloadingAmmo() resolves g_balance_rifle_reload_ammo live; clip seeded full, now drained)", match: true }
       - { name: "reload_time", base: "2", port: "2 (ReloadingTime() resolves g_balance_rifle_reload_time live)", match: true }
@@ -257,9 +257,9 @@ features:
       - "common/weapons/weapon/rifle.qc:W_Rifle_Attack2 (m_id | HITTYPE_SECONDARY)"
       - "common/weapons/weapon/rifle.qc:wr_killmessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (deathTag = WithHitType(FromWeapon(NetName), Secondary) for secondary, cs:328-330; passed to FireBullet cs:336-338, deathTag: param)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:82-85 (rifle case)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet/ApplyDamage (deathTag channel)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (deathTag = WithHitType(FromWeapon(NetName), Secondary) for secondary, cs:328-330; passed to FireBullet cs:336-338, deathTag: param)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:82-85 (rifle case)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet/ApplyDamage (deathTag channel)"
     constants:
       - { name: "secondary deathtype flag", base: "m_id | HITTYPE_SECONDARY", port: "deathTag = WithHitType(FromWeapon, Secondary) for secondary fire", match: true }
       - { name: "*_PIERCING (HITTYPE_BOUNCE) variant", base: "wr_killmessage BOUNCE branch", port: "no bounce tag (faithful — Base fireBullet_falloff never sets HITTYPE_BOUNCE on a bullet)", match: true }
@@ -286,8 +286,8 @@ features:
       - "common/weapons/weapon/rifle.qc:W_Rifle_FireBullet (W_MuzzleFlash)"
       - "common/effects/all.inc:EFFECT(RIFLE_MUZZLEFLASH, rifle_muzzleflash)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (EffectEmitter.Emit RIFLE_MUZZLEFLASH, cs:366)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:128"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (EffectEmitter.Emit RIFLE_MUZZLEFLASH, cs:366)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:128"
     constants:
       - { name: "effect", base: "rifle_muzzleflash", port: "rifle_muzzleflash", match: true }
     status:
@@ -312,9 +312,9 @@ features:
       - "common/weapons/weapon/rifle.qc:wr_impacteffect"
       - "common/effects/all.inc:EFFECT(RIFLE_IMPACT, machinegun_impact)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (WeaponFiring.BulletImpactFx RIFLE_IMPACT, cs:279)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (cs:606)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:127"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (WeaponFiring.BulletImpactFx RIFLE_IMPACT, cs:279)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (cs:606)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:127"
     constants:
       - { name: "effect", base: "machinegun_impact", port: "machinegun_impact", match: true }
       - { name: "impact origin", base: "org2 = w_org + w_backoff*2", port: "impactPos + backoff*2 (WeaponFiring.cs:611)", match: true }
@@ -343,10 +343,10 @@ features:
       - "server/weapons/tracing.qc:fireBullet_falloff (trailparticles tracer_effect)"
       - "common/effects/all.inc:EFFECT(RIFLE, tr_rifle) / EFFECT(RIFLE_WEAK, tr_rifle_weak)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (tracerEffect = RIFLE/RIFLE_WEAK, cs:267/273)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet (tracerEffect param + EmitTrail, cs:241-259/322-329)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:EmitTrail (cs:237)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:129-130"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (tracerEffect = RIFLE/RIFLE_WEAK, cs:267/273)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet (tracerEffect param + EmitTrail, cs:241-259/322-329)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:EmitTrail (cs:237)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:129-130"
     constants:
       - { name: "primary_tracer", base: "1 (tr_rifle)", port: "Primary.Tracer 1 -> 'RIFLE'", match: true }
       - { name: "secondary_tracer", base: "0 (tr_rifle_weak)", port: "Secondary.Tracer 0 -> 'RIFLE_WEAK'", match: true }
@@ -376,7 +376,7 @@ features:
       - "common/weapons/weapon/rifle.qc:W_Rifle_Attack2 (SND_RIFLE_FIRE2)"
       - "common/weapons/weapon/rifle.qh:SOUND(RIFLE_FIRE/FIRE2)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (Api.Sound.Play, cs:286-287)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (Api.Sound.Play, cs:286-287)"
     constants:
       - { name: "primary sound", base: "campingrifle_fire", port: "campingrifle_fire", match: true }
       - { name: "secondary sound", base: "campingrifle_fire2", port: "campingrifle_fire2 (branches on secondary)", match: true }
@@ -402,9 +402,9 @@ features:
     base_refs:
       - "common/weapons/weapon/rifle.qc:wr_impacteffect (sound CH_SHOTS, SND_RIC_RANDOM, !w_issilent)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (WeaponFiring.BulletImpactFx, cs:279)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (SoundSystem.PlayRic, cs:622)"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:PlayRic (cs:403)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (WeaponFiring.BulletImpactFx, cs:279)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (SoundSystem.PlayRic, cs:622)"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:PlayRic (cs:403)"
     constants:
       - { name: "ricochet sound", base: "SND_RIC_RANDOM (ric1/ric2/ric3, weapons/ric*)", port: "RIC1..3 via PlayRic->PickRegistered (weapons/ric*)", match: true }
       - { name: "silence gate", base: "!w_issilent", port: "BulletImpactFx silent param (default false)", match: true }
@@ -431,8 +431,8 @@ features:
     base_refs:
       - "common/weapons/weapon/rifle.qc:W_Rifle_FireBullet (SpawnCasing, casing type 3)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (WeaponFiring.EjectCasing, cs:283)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:EjectCasing (cs:497)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (WeaponFiring.EjectCasing, cs:283)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:EjectCasing (cs:497)"
     constants:
       - { name: "g_casings gate", base: ">= 2", port: ">= 2 (EjectCasing reads g_casings, cs in WeaponFiring)", match: true }
       - { name: "casing type", base: "3 (bullet)", port: "CasingType.Bullet -> 'casing_bullet'", match: true }
@@ -462,8 +462,8 @@ features:
       - "common/weapons/weapon/rifle.qc:wr_zoom (SVQC & CSQC)"
       - "common/weapons/weapon/rifle.qc:wr_zoomdir"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:FireBullets (zoom-from-eye re-aim, cs:308-321)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame (buttonZoom -> st.ButtonZoom, cs:61/137/180)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:FireBullets (zoom-from-eye re-aim, cs:308-321)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame (buttonZoom -> st.ButtonZoom, cs:61/137/180)"
       - "game/net/ServerNet.cs:1575 (ButtonZoom = b & InputButtons.Zoom)"
       - "game/net/NetGame.cs:4687 (BindTable.ZoomHeld -> InputButtons.Zoom)"
       - "game/client/ReticleOverlay.cs"
@@ -493,9 +493,9 @@ features:
     base_refs:
       - "common/weapons/weapon/rifle.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:BotWantsSecondary (cs:133)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:355 (dispatch -> ButtonAttack2)"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:BotAimState (cs:24)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:BotWantsSecondary (cs:133)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:355 (dispatch -> ButtonAttack2)"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:BotAimState (cs:24)"
     constants:
       - { name: "to-secondary flip chance", base: "1% (random()<0.01)", port: "ctx.Random01<0.01 (cs:141)", match: true }
       - { name: "to-primary flip chance", base: "3% (random()<0.03)", port: "ctx.Random01<0.03 (cs:146)", match: true }
@@ -525,8 +525,8 @@ features:
     base_refs:
       - "common/weapons/weapon/rifle.qc:wr_resetplayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs:WrSetup (cs:118)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:284 (newwep.WrSetup on switch-in)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs:WrSetup (cs:118)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:284 (newwep.WrSetup on switch-in)"
     constants:
       - { name: "accumulator reset", base: "rifle_accumulator = time - bursttime", port: "RifleAccumulator = Api.Clock.Time - BurstTime (cs:120)", match: true }
     status:
@@ -550,7 +550,7 @@ features:
     base_refs:
       - "common/weapons/weapon/rifle.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectSuicideMessage (explicit case \"rifle\" cs:158-159)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectSuicideMessage (explicit case \"rifle\" cs:158-159)"
     constants:
       - { name: "suicide notification", base: "WEAPON_THINKING_WITH_PORTALS", port: "WEAPON_THINKING_WITH_PORTALS (explicit rifle case)", match: true }
     status:

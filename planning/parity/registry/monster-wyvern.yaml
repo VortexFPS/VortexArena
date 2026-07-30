@@ -14,8 +14,8 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qh:Wyvern (spawnflags MONSTER_TYPE_FLY|MON_FLAG_RANGED|MON_FLAG_RIDE, m_mins -30/-30/-48, m_maxs 30/30/30)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:Wyvern() ctor"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:Wyvern() ctor"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:Spawn"
     constants:
       - { name: "m_mins", base: "'-30 -30 -48'", port: "(-30,-30,-48)", match: true }
       - { name: "m_maxs", base: "'30 30 30'", port: "(30,30,30)", match: true }
@@ -41,8 +41,8 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:METHOD(Wyvern, mr_setup)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Setup"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Setup"
     constants:
       - { name: "g_monster_wyvern_health", base: "150", port: "150", match: true }
       - { name: "g_monster_wyvern_speed_walk", base: "120", port: "120", match: true }
@@ -72,9 +72,9 @@ features:
       - "common/monsters/monster/wyvern.qc:M_Wyvern_Attack"
       - "common/monsters/sv_monsters.qc:Monster_Attack_Check"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:QueueDelayedAttack"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:AttackCheck"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:QueueDelayedAttack"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:AttackCheck"
     constants:
       - { name: "wind-up (Monster_Delay defer)", base: "1.0s", port: "windUp:1f", match: true }
       - { name: "anim/attack lock", base: "time+1.2 then +0.2 => ~1.4s", port: "totalLock:1.4f", match: true }
@@ -100,8 +100,8 @@ features:
       - "common/monsters/monster/wyvern.qc:METHOD(WyvernAttack, wr_think)"
       - "common/monsters/monster/wyvern.qc:M_Wyvern_Attack_Fireball"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:FireFireball"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:FireFireball"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile"
     constants:
       - { name: "g_monster_wyvern_attack_fireball_speed", base: "1200", port: "1200", match: true }
       - { name: "missile size", base: "'-6 -6 -6' '6 6 6'", port: "(-6,-6,-6)/(6,6,6)", match: true }
@@ -131,7 +131,7 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:M_Wyvern_Attack_Fireball_Explode (RadiusDamage)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile (Explode -> WeaponSplash.RadiusDamage)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile (Explode -> WeaponSplash.RadiusDamage)"
     constants:
       - { name: "fireball_damage", base: "50", port: "50", match: true }
       - { name: "fireball_edgedamage", base: "20", port: "20", match: true }
@@ -159,8 +159,8 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:M_Wyvern_Attack_Fireball_Explode (FOREACH_ENTITY_RADIUS Fire_AddDamage)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:FireFireball (onExplode)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:AddFireDamage"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:FireFireball (onExplode)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:AddFireDamage"
     constants:
       - { name: "burn radius", base: "120 (fireball_radius)", port: "120", match: true }
       - { name: "burn total damage", base: "5 * MONSTER_SKILLMOD(own)", port: "5f * SkillMod(st)", match: true }
@@ -187,8 +187,8 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:M_Wyvern_Attack_Fireball_Explode (Send_Effect EFFECT_FIREBALL_EXPLODE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:187 (onExplode -> EffectEmitter.Emit(\"FIREBALL_EXPLODE\", p.Origin))"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:154 (Register \"FIREBALL_EXPLODE\" -> effectinfo fireball_explode)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:187 (onExplode -> EffectEmitter.Emit(\"FIREBALL_EXPLODE\", p.Origin))"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:154 (Register \"FIREBALL_EXPLODE\" -> effectinfo fireball_explode)"
     constants:
       - { name: "effect", base: "EFFECT_FIREBALL_EXPLODE", port: "\"FIREBALL_EXPLODE\" (effectinfo fireball_explode)", match: true }
     status:
@@ -241,7 +241,7 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:SOUND(WyvernAttack_FIRE, W_Sound(\"electro_fire\"))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:FireFireball (Api.Sound.Play weapons/electro_fire.wav)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:FireFireball (Api.Sound.Play weapons/electro_fire.wav)"
     constants:
       - { name: "sample", base: "weapons/electro_fire", port: "weapons/electro_fire.wav", match: true }
     status:
@@ -266,9 +266,9 @@ features:
       - "common/monsters/monster/wyvern.qc:METHOD(Wyvern, mr_think) (no-op)"
       - "common/monsters/sv_monsters.qc:Monster_Think / Monster_Move"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:RunThink"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Move"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:RunThink"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Move"
     constants:
       - { name: "vertical fly chase", base: "MONSTER_TYPE_FLY", port: "MonsterFlag_FlyVertical", match: true }
       - { name: "speed clamp", base: "bound(0, v*SKILLMOD, run*2.5)", port: "Bound(0, v*SkillMod, cap)", match: true }
@@ -293,9 +293,9 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:METHOD(Wyvern, mr_pain)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:36 (PainWindow => 0.5f)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:48 (AnimFrame Pain => 3f)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1440 (MarkPain: PainFinished + st.Anim=Pain)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:36 (PainWindow => 0.5f)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:48 (AnimFrame Pain => 3f)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1440 (MarkPain: PainFinished + st.Anim=Pain)"
     constants:
       - { name: "pain_finished window", base: "0.5", port: "0.5 (Wyvern.PainWindow override)", match: true }
       - { name: "pain anim", base: "anim_pain1 '3 1 2'", port: "AnimFrame Pain => frame 3 (networked Entity.Frame)", match: true }
@@ -322,9 +322,9 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:METHOD(Wyvern, mr_death)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:Think (dead branch, ds.Scattered)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:50 (AnimFrame Death => die2?8:7)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:Think (dead branch, ds.Scattered)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:50 (AnimFrame Death => die2?8:7)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead"
     constants:
       - { name: "death velocity x", base: "400*random()-200", port: "400*Prandom.Float()-200", match: true }
       - { name: "death velocity y", base: "400*random()-200", port: "400*Prandom.Float()-200", match: true }
@@ -353,9 +353,9 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:METHOD(Wyvern, mr_deadthink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:Think (dead branch, ds.Landed on EntFlags.OnGround -> st.DeathLanded)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:50 (AnimFrame Death, die2 => frame 8)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:Think (dead branch, ds.Landed on EntFlags.OnGround -> st.DeathLanded)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:50 (AnimFrame Death, die2 => frame 8)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame"
     constants:
       - { name: "on-ground die2 swap", base: "if(IS_ONGROUND) setanim(anim_die2)", port: "if(OnGround) st.DeathLanded=true -> AnimFrame(Death,die2=true)=8 networked", match: true }
     status:
@@ -381,8 +381,8 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:METHOD(Wyvern, mr_anim) (idle/walk/run/pain/melee/shoot/die1/die2)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs:43 (AnimFrame override: Idle 0 / Walk 1 / Run 2 / Pain 3 / Attack 6 / Death 7|8)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1084 (DriveAnimFrame -> Entity.Frame)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs:43 (AnimFrame override: Idle 0 / Walk 1 / Run 2 / Pain 3 / Attack 6 / Death 7|8)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1084 (DriveAnimFrame -> Entity.Frame)"
       - "game/net/ClientEntityView.cs:203 (Generic monster -> frameDriven:true)"
       - "game/client/ModelAnimator.cs:268 (FollowEntityFrame plays Entity.Frame as the MD3 playhead)"
     constants:
@@ -414,7 +414,7 @@ features:
     base_refs:
       - "common/notifications/all.inc:DEATH_MURDER_MON_WYVERN / DEATH_SELF_MON_WYVERN"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:179"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:179"
     constants:
       - { name: "obituary text", base: "^BG%s^K1 was fireballed by a Wyvern%s%s", port: "same string", match: true }
     status:
@@ -438,9 +438,9 @@ features:
     base_refs:
       - "common/monsters/monster/wyvern.qc:spawnfunc(monster_wyvern) -> Monster_Spawn(this,true,MON_WYVERN)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:Wyvern"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:200 (SpawnFuncs.Register monster_wyvern)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnFromMap"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:Wyvern"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:200 (SpawnFuncs.Register monster_wyvern)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnFromMap"
     constants:
       - { name: "g_monsters master switch", base: "default on", port: "MasterSwitchEnabled(g_monsters)", match: true }
     status:

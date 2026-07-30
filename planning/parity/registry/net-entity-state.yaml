@@ -12,7 +12,7 @@ summary:
     - "FIX since baseline (uncommitted wave 2026-06-28): the wepent charge/clip/heat HUD rings are now NETWORKED + LIVE across ALL clients — one authoritative WepentResolver.Resolve feeds (a) the per-player WepentView entity block (EntityField.WepentView BIT20) so a spectator following another player draws that player's rings, and (b) the owner-block OwnerWeaponRings (9 floats) so a pure remote / dedicated client draws its own rings; the host slot-scratch branch is unchanged. liveness partial(host-only)->live. Residual = the Phase-2 ViewmodelFrame/BeamState reserved fields have no render consumer yet. Tracked in net-entity-state.wepent.charges_clip_heat. (NOTE: wave is uncommitted in the working tree; HEAD is the warpzone branch.)"
     - "FIX since baseline (Wave-14b): the networked UPPER-body anim ACTION (anim_upper_action + start time) is now LIVE — EntityField.AnimAction (BIT18) carries UpperAction/AnimActionTime; server producers latch the action at the live gameplay sites (WeaponFireGate SHOOT/MELEE, DamageSystem PAIN1/PAIN2 + DIE1/DIE2, WeaponFireDriver DRAW, SoundSystem TAUNT), ServerNet (1918-1924/1977-1982) networks the expiry-resolved id, ClientEntityView (142-143) decodes it, and PlayerModel (214-234) renders it as a torso overlay (LocomotionBlend.SelectTorsoAction) over the velocity-derived legs, driven by the live ServerTimeProvider (NetGame.cs:1224). Residual missing: anim_state byte (BIT7) + the lower-body anim_lower_action split (BIT8) are still NOT separately networked — legs locomotion is reconstructed client-side from velocity. Tracked in net-entity-state.csqcmodel.anim_state."
     - "No out-of-PVS teammate GPS: Base keeps sending a teammate's coarse ent_cs origin out of PVS (radar blip persists); the port's relevance cull drops the entity entirely"
-    - "Replicate cvars (NARROWED 2026-06-27): g_xonoticversion has a live server-side consumer — Commands.CheckClientVersion reads the per-client replicated g_xonoticversion and sends the VERSION_OUTDATED/OLD/BETA mismatch notification, armed on connect (ClientManager.cs:229 VersionNagTime) and fired on the live PlayerPreThink path (src/XonoticGodot.Server/GameWorld.cs:2255). Residual = ONLY cl_autoscreenshot (driven client-locally off the networked intermission flag, not the per-client replicated value) is allowlisted+stored but not honored off the replicated value per-player."
+    - "Replicate cvars (NARROWED 2026-06-27): g_xonoticversion has a live server-side consumer — Commands.CheckClientVersion reads the per-client replicated g_xonoticversion and sends the VERSION_OUTDATED/OLD/BETA mismatch notification, armed on connect (ClientManager.cs:229 VersionNagTime) and fired on the live PlayerPreThink path (src/VortexArena.Server/GameWorld.cs:2255). Residual = ONLY cl_autoscreenshot (driven client-locally off the networked intermission flag, not the per-client replicated value) is allowlisted+stored but not honored off the replicated value per-player."
 features:
   - id: net-entity-state.csqcmodel.change_mask
     name: "csqcmodel SendFlags change-mask delta channel"
@@ -22,9 +22,9 @@ features:
       - "lib/csqcmodel/cl_model.qc:ENT_CLIENT_MODEL"
       - "lib/csqcmodel/common.qh:ALLPROPERTIES"
     port_refs:
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityField"
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityStateCodec.WriteDelta"
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityStateCodec.ReadDelta"
+      - "src/VortexArena.Net/NetEntity.cs:EntityField"
+      - "src/VortexArena.Net/NetEntity.cs:EntityStateCodec.WriteDelta"
+      - "src/VortexArena.Net/NetEntity.cs:EntityStateCodec.ReadDelta"
     constants:
       - { name: "mask_width_bits", base: "24 (WriteInt24_t)", port: "32 (uint)", match: false }
       - { name: "origin_quantization", base: "WriteVector 13.3 coord", port: "NetPrecision.Low", match: false }
@@ -51,8 +51,8 @@ features:
     base_refs:
       - "lib/csqcmodel/sv_model.qc:CSQCModel_LinkEntity"
     port_refs:
-      - "src/XonoticGodot.Net/SnapshotDelta.cs:ServerSnapshotHistory"
-      - "src/XonoticGodot.Net/SnapshotDelta.cs:ClientSnapshotHistory"
+      - "src/VortexArena.Net/SnapshotDelta.cs:ServerSnapshotHistory"
+      - "src/VortexArena.Net/SnapshotDelta.cs:ClientSnapshotHistory"
       - "game/net/ServerNet.cs:EncodeSnapshot"
       - "game/net/ClientNet.cs:HandleSnapshot"
     constants:
@@ -80,8 +80,8 @@ features:
       - "lib/csqcmodel/interpolate.qc:InterpolateOrigin_Note"
       - "lib/csqcmodel/interpolate.qc:InterpolateOrigin_Do"
     port_refs:
-      - "src/XonoticGodot.Net/SnapshotInterpolation.cs:InterpolationBuffer.Note"
-      - "src/XonoticGodot.Net/SnapshotInterpolation.cs:InterpolationBuffer.Sample"
+      - "src/VortexArena.Net/SnapshotInterpolation.cs:InterpolationBuffer.Note"
+      - "src/VortexArena.Net/SnapshotInterpolation.cs:InterpolationBuffer.Sample"
     constants:
       - { name: "teleport_snap_dist_u", base: "1000", port: "1000 (TeleportDistance)", match: true }
       - { name: "stall_snap_interval_s", base: "0.2 (dt>=0.2)", port: "0.2 (MaxInterval)", match: true }
@@ -112,7 +112,7 @@ features:
       - "lib/csqcmodel/sv_model.qc:CSQCModel_CheckUpdate"
       - "lib/csqcmodel/cl_model.qc:ENT_CLIENT_MODEL (CSQCMODEL_PROPERTY_TELEPORTED)"
     port_refs:
-      - "src/XonoticGodot.Net/NetEntity.cs:NetEntityFlags.Teleported"
+      - "src/VortexArena.Net/NetEntity.cs:NetEntityFlags.Teleported"
       - "game/net/ServerNet.cs:teleported (one-tick origin-jump detect)"
       - "game/net/ClientNet.cs:HandleSnapshot (Teleported -> Interp.Note)"
     constants:
@@ -166,7 +166,7 @@ features:
       - "common/ent_cs.qc:entcs_think"
       - "common/ent_cs.qh:entcs_GetTeam/GetName/GetClientColors"
     port_refs:
-      - "src/XonoticGodot.Net/NetEntity.cs:NetEntityState (Origin/Health/Armor/Colormap/Model)"
+      - "src/VortexArena.Net/NetEntity.cs:NetEntityState (Origin/Health/Armor/Colormap/Model)"
       - "game/hud/RadarPanel.cs:DrawBlip"
       - "game/client/ShowNamesLayer.cs"
     constants:
@@ -198,7 +198,7 @@ features:
     port_refs:
       - "game/net/ServerNet.cs:RelevantEntitiesFor (radarShowEnemies/teamplay/applyPrivacy gate + Health/Armor strip)"
       - "game/net/ServerNet.cs:BroadcastSnapshots (reads radar_showenemies + TeamGame once per broadcast, passes per-recipient)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:432 (sets radar_showenemies=1)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:432 (sets radar_showenemies=1)"
     constants:
       - { name: "private_fields", base: "origin, angles_y, health, armor", port: "health, armor stripped; origin/angles PVS-governed (folded model channel)", match: partial }
       - { name: "public_fields", base: "name, model, skin, colors, frags, handicap, wantsjoin, solid", base_note: "always sent", port: "all sent", match: true }
@@ -228,7 +228,7 @@ features:
       - "common/wepent.qc:WEPENT_NETPROPS (m_weapon)"
       - "common/wepent.qc:wepent_link"
     port_refs:
-      - "src/XonoticGodot.Net/NetEntity.cs:NetEntityState.Weapon"
+      - "src/VortexArena.Net/NetEntity.cs:NetEntityState.Weapon"
       - "game/net/ServerNet.cs:WriteOwnerState (ActiveWeaponId)"
       - "game/net/ClientNet.cs:ActiveWeaponId"
       - "game/net/ClientEntityView.cs:Player branch -> ViewEntityRenderer"
@@ -257,11 +257,11 @@ features:
       - "common/wepent.qc:WEPENT_NETPROPS (vortex_charge, oknex_charge, vortex_chargepool_ammo, oknex_chargepool_ammo, clip_load, clip_size, hagar_load, minelayer_mines, arc_heat_percent)"
       - "common/wepent.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WepentResolver.cs:Resolve (THE single authoritative resolver — engine-free; feeds all three sinks)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WepentViewState.cs (per-player view-state DATA struct, ×255 unit coding)"
-      - "src/XonoticGodot.Net/WepentViewCodec.cs:Write/Read (per-player WIRE codec, 13-byte block)"
-      - "src/XonoticGodot.Net/OwnerWeaponRings.cs:Write/Read (owner-block 9-float ring scalars — local player's own rings on a remote/dedicated client)"
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityField.WepentView (BIT20) + NetEntityState.WepentView + WriteDelta/ReadDelta (453)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WepentResolver.cs:Resolve (THE single authoritative resolver — engine-free; feeds all three sinks)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WepentViewState.cs (per-player view-state DATA struct, ×255 unit coding)"
+      - "src/VortexArena.Net/WepentViewCodec.cs:Write/Read (per-player WIRE codec, 13-byte block)"
+      - "src/VortexArena.Net/OwnerWeaponRings.cs:Write/Read (owner-block 9-float ring scalars — local player's own rings on a remote/dedicated client)"
+      - "src/VortexArena.Net/NetEntity.cs:EntityField.WepentView (BIT20) + NetEntityState.WepentView + WriteDelta/ReadDelta (453)"
       - "game/net/ServerNet.cs:2133 (per-player producer WepentView=WepentResolver.Resolve on the live snapshot loop) + ResolveOwnerWeaponRings (2676, delegates to WepentResolver) + WriteOwnerState (2818-2831 OwnerWeaponRings tail)"
       - "game/net/ClientNet.cs:HandleSnapshot (LocalWeaponRings=OwnerWeaponRings.Read, 1042) + LocalWeaponRings prop (188)"
       - "game/net/ClientEntityView.cs:157 (e.WepentView=s.WepentView per-player decode)"
@@ -299,8 +299,8 @@ features:
     base_refs:
       - "common/wepent.qc:WEPENT_NETPROPS (m_switchweapon, m_switchingweapon, m_alpha, m_gunalign, porto_v_angle_held, tuba_instrument, skin)"
     port_refs:
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityField.Wepent (BIT19) + NetEntityState.SwitchWeapon/SwitchingWeapon/WepPhase/ViewmodelSkin/WepAlpha/GunAlign"
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityStateCodec WriteDelta/ReadDelta (Wepent block: 2 shorts + 4 bytes)"
+      - "src/VortexArena.Net/NetEntity.cs:EntityField.Wepent (BIT19) + NetEntityState.SwitchWeapon/SwitchingWeapon/WepPhase/ViewmodelSkin/WepAlpha/GunAlign"
+      - "src/VortexArena.Net/NetEntity.cs:EntityStateCodec WriteDelta/ReadDelta (Wepent block: 2 shorts + 4 bytes)"
       - "game/net/ServerNet.cs:1970-1983 (producer: SwitchWeapon/SwitchingWeapon from slot-0 Switch*WeaponId, WepPhase from WeaponFireState, WepAlpha from QuantizeAlpha(DefaultWeaponAlpha))"
       - "game/net/ClientEntityView.cs:148-153 (decode onto proxy Entity)"
       - "game/net/ViewEntityRenderer.cs:92-143,194-218 (render: switch raise/lower dip + per-instance gun transparency; driven on the live Player path ClientEntityView.cs:213)"
@@ -341,7 +341,7 @@ features:
     base_refs:
       - "client/csqcmodel_hooks.qc:CSQCPlayer_ModelAppearance_Apply"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs"
       - "game/client/ModelTint.cs"
     constants:
       - { name: "unique_color_combo", base: "c1=num%15; c2=(c1+1+floor(num/15))%15; 1024+(c1<<4)+c2", port: "UniqueColormap (same)", match: true }
@@ -375,10 +375,10 @@ features:
     port_refs:
       - "game/net/ClientNet.cs:PumpReplicatedCvars"
       - "game/net/ClientNet.cs:ReplicatedCvars"
-      - "src/XonoticGodot.Server/Commands.cs:SentCvarAllowlist (179-198)"
-      - "src/XonoticGodot.Server/Commands.cs:Commands(GameWorld) provider wiring (342-396)"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:AutoswitchProvider/CtsAutoswitchProvider/CtsActiveProvider"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:VoluntaryHandicapProvider/HandicapTotal (381-384)"
+      - "src/VortexArena.Server/Commands.cs:SentCvarAllowlist (179-198)"
+      - "src/VortexArena.Server/Commands.cs:Commands(GameWorld) provider wiring (342-396)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:AutoswitchProvider/CtsAutoswitchProvider/CtsActiveProvider"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:VoluntaryHandicapProvider/HandicapTotal (381-384)"
       - "game/net/ServerNet.cs (cl_noantilag consume)"
     constants:
       - { name: "poll_interval_s", base: "0.8 + random()*0.4", port: "0.8 + rand*0.4 (ClientNet.cs:724)", match: true }
@@ -396,13 +396,13 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "ONE replicated cvar is stored server-side but not consumed off the replicated value: cl_autoscreenshot is in SentCvarAllowlist (Commands.cs:233) so it is accepted+stored per-client, but nothing on the server reads the REPLICATED value — autoscreenshot is driven CLIENT-locally off the networked intermission flag reading the client's own Api.Cvars cl_autoscreenshot (NetGame.cs), not the per-client replicated store. FIX 2026-06-27: g_xonoticversion left this list — it now has a live server consumer (Commands.CheckClientVersion reads the per-client replicated g_xonoticversion to send the version-mismatch notification, armed at ClientManager.cs:229, fired on the live PlayerPreThink path src/XonoticGodot.Server/GameWorld.cs:2255). FIX 2026-06-25: cl_clippedspectating left this list — live free-fly MOVETYPE consumer (ClientManager.ClippedSpectatingProvider)."
+      - "ONE replicated cvar is stored server-side but not consumed off the replicated value: cl_autoscreenshot is in SentCvarAllowlist (Commands.cs:233) so it is accepted+stored per-client, but nothing on the server reads the REPLICATED value — autoscreenshot is driven CLIENT-locally off the networked intermission flag reading the client's own Api.Cvars cl_autoscreenshot (NetGame.cs), not the per-client replicated store. FIX 2026-06-27: g_xonoticversion left this list — it now has a live server consumer (Commands.CheckClientVersion reads the per-client replicated g_xonoticversion to send the version-mismatch notification, armed at ClientManager.cs:229, fired on the live PlayerPreThink path src/VortexArena.Server/GameWorld.cs:2255). FIX 2026-06-25: cl_clippedspectating left this list — live free-fly MOVETYPE consumer (ClientManager.ClippedSpectatingProvider)."
     verification:
       - { kind: code_read, ref: "ClientNet.cs ReplicatedCvars = full Base REPLICATE list + cl_weaponpriority/cl_physics; cadence 0.8+rand*0.4 + send-all-on-accept exact vs lib/replicate.qh:48 (unchanged by fix-up)", result: pass }
       - { kind: code_read, ref: "FIX (4be8357): Commands.cs:191-197 SentCvarAllowlist EXPANDED with cl_autoscreenshot/cl_clippedspectating/cl_handicap(+given/taken)/g_xonoticversion — they are no longer dropped at Commands.cs:2036 gate.", result: pass }
       - { kind: code_read, ref: "FIX (4be8357): Commands(GameWorld) ctor wires AutoswitchProvider, CtsAutoswitchProvider, CtsActiveProvider, DynamicHandicapMutator.HandicapDisabledProvider, DamageSystem.VoluntaryHandicapProvider; cl_autoswitch_cts LIVE via ItemPickupRules.ApplyAutoswitch; cl_handicap LIVE via DamageSystem.HandicapTotal in ApplyDamage (DamageSystem.cs:381-384).", result: pass }
       - { kind: code_read, ref: "FIX (2026-06-25): Commands(GameWorld) ctor now ALSO wires ClientManager.ClippedSpectatingProvider = p => GetClientCvarFloat(p, cl_clippedspectating, 0) != 0 (Commands.cs:453); ClientManager.cs:454-457 consumes it on the live PlayerPreThink free-fly path (not-following spectator movetype = wouldClip ? MOVETYPE_FLY_WORLDONLY : MOVETYPE_NOCLIP, QC server/client.qc:2588-2593). cl_clippedspectating now honored per-player.", result: pass }
-      - { kind: code_read, ref: "FIX (2026-06-27): g_xonoticversion now HAS a live server consumer of the REPLICATED value: Commands.CheckClientVersion (Commands.cs:427-471) reads GetClientCvar(p, g_xonoticversion) — the per-client replicated store — compares it to the server's g_xonoticversion and sends VERSION_OUTDATED/VERSION_OLD/VERSION_BETA (QC server/client.qc:2925-2943). Armed on connect at ClientManager.cs:229 (VersionNagTime = Now + 10 + rand*10), fired on the live PlayerPreThink path src/XonoticGodot.Server/GameWorld.cs:2249-2256 (real clients only). [re-verified post-Waves 16/17: consumer + call site survive the state-producer/presentation refactors.]", result: pass }
+      - { kind: code_read, ref: "FIX (2026-06-27): g_xonoticversion now HAS a live server consumer of the REPLICATED value: Commands.CheckClientVersion (Commands.cs:427-471) reads GetClientCvar(p, g_xonoticversion) — the per-client replicated store — compares it to the server's g_xonoticversion and sends VERSION_OUTDATED/VERSION_OLD/VERSION_BETA (QC server/client.qc:2925-2943). Armed on connect at ClientManager.cs:229 (VersionNagTime = Now + 10 + rand*10), fired on the live PlayerPreThink path src/VortexArena.Server/GameWorld.cs:2249-2256 (real clients only). [re-verified post-Waves 16/17: consumer + call site survive the state-producer/presentation refactors.]", result: pass }
       - { kind: code_read, ref: "cl_autoscreenshot still has NO server consumer of the REPLICATED value: NetGame.cs reads the client's OWN Api.Cvars cl_autoscreenshot (client-local opt-in off the networked MatchIntermission flag), not the per-client server store.", result: pass }
     confidence: high
     notes: "FIX-UP history: 4be8357 closed cl_handicap + cl_autoswitch_cts; 2026-06-25 closed cl_clippedspectating (live free-fly-spectator consumer in ClientManager); 2026-06-27 closed g_xonoticversion (live version-nag consumer Commands.CheckClientVersion on the PlayerPreThink path). liveness live. values stays partial: ONLY cl_autoscreenshot (driven client-locally, not off the replicated value) remains stored-but-unconsumed-off-the-replicated-value server-side (down from 2 in the previous audit). Genuinely live+honored now: cl_autoswitch, cl_autoswitch_cts, cl_handicap(+given/taken), cl_weaponpriority(+N), cl_noantilag, cl_physics, cl_clippedspectating, g_xonoticversion, notification_CHOICE_*. cl_physics is a port-added preset cvar (T54), not Base."
@@ -415,12 +415,12 @@ features:
       - "common/animdecide.qc:animdecide_setaction"
       - "common/animdecide.qc:animdecide_setstate"
     port_refs:
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityField.AnimAction (BIT18) + NetEntityState.UpperAction/AnimActionTime + codec (307-311/364-368) — now LIVE-fed"
+      - "src/VortexArena.Net/NetEntity.cs:EntityField.AnimAction (BIT18) + NetEntityState.UpperAction/AnimActionTime + codec (307-311/364-368) — now LIVE-fed"
       - "game/net/ServerNet.cs:1918-1924 (resolve+expire via AnimDecideUnit.GetUpperAnim) + 1977-1982 (UpperAction/AnimActionTime producer from p.AnimUpperAction/AnimActionStart)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:163-173 (SHOOT/MELEE latch); src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:514-519 (PAIN1/PAIN2) + 733-736 (DIE1/DIE2); src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:303-305 (DRAW); src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:557-559 (TAUNT)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:163-173 (SHOOT/MELEE latch); src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:514-519 (PAIN1/PAIN2) + 733-736 (DIE1/DIE2); src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:303-305 (DRAW); src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:557-559 (TAUNT)"
       - "game/net/ClientEntityView.cs:142-143 (decode UpperAction/AnimActionTime onto the proxy)"
       - "game/client/PlayerModel.cs:214-234 (torso-overlay render via LocomotionBlend.SelectTorsoAction; serverNow from NetGame.cs:1224 ServerTimeProvider)"
-      - "src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs:115-121 SelectTorsoAction + Split (legs reconstructed client-side from velocity — the LOWER-body half stays client-side)"
+      - "src/VortexArena.Engine/Simulation/LocomotionBlend.cs:115-121 SelectTorsoAction + Split (legs reconstructed client-side from velocity — the LOWER-body half stays client-side)"
     constants:
       - { name: "anim_state_coding", base: "byte (per-player, BIT7)", port: "none (not networked; locomotion reconstructed client-side)", match: false }
       - { name: "anim_upper_action_coding", base: "char + WriteApproxPastTime (BIT9)", port: "UpperAction byte + AnimActionTime float, LIVE-fed by server producer (raw-float start time = death_time-class divergence)", match: partial }
@@ -451,8 +451,8 @@ features:
       - "common/csqcmodel_settings.qh:CSQCMODEL_EXTRAPROPERTIES (ALPHA m_alpha, BIT3, CSQCMODEL_PROPERTY_SCALED 254/-1/254)"
       - "lib/csqcmodel/cl_model.qc:ENT_CLIENT_MODEL (alpha apply)"
     port_refs:
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityField.Alpha / NetEntityState.Alpha"
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityStateCodec WriteDelta/ReadDelta (Alpha byte)"
+      - "src/VortexArena.Net/NetEntity.cs:EntityField.Alpha / NetEntityState.Alpha"
+      - "src/VortexArena.Net/NetEntity.cs:EntityStateCodec WriteDelta/ReadDelta (Alpha byte)"
       - "game/net/ServerNet.cs:QuantizeAlpha (2264) + producers at 1830 (player p.Alpha) / 1944 (entity e.Alpha)"
       - "game/net/ClientEntityView.cs:135 (s.Alpha -> Entity.Alpha: 0=>opaque, 255=>hidden(-1), else byte/255)"
     constants:
@@ -485,9 +485,9 @@ features:
     port_refs:
       - "game/net/ServerNet.cs:2187-2311 (entity snapshot loop: projectile branch — networks even with empty model)"
       - "game/net/ServerNet.cs:1978 (ProjectileCatalogKey: classname+netname -> catalog key in the model field, the QC csqcprojectile_type byte analog)"
-      - "src/XonoticGodot.Net/NetEntity.cs:NetEntityState (Origin/Velocity/Model/Owner/Colormap delta fields)"
+      - "src/VortexArena.Net/NetEntity.cs:NetEntityState (Origin/Velocity/Model/Owner/Colormap delta fields)"
       - "game/net/ClientEntityView.cs:216-224 (Projectile branch -> ProjectileRenderer)"
-      - "src/XonoticGodot.Common/Framework/EntityProjectileGate.cs:CsqcProjectileBouncing (the PROJECTILE_GRENADE_BOUNCING sub-variant token)"
+      - "src/VortexArena.Common/Framework/EntityProjectileGate.cs:CsqcProjectileBouncing (the PROJECTILE_GRENADE_BOUNCING sub-variant token)"
     constants:
       - { name: "type_coding", base: "byte csqcprojectile_type (sf & 2)", port: "catalog key string in the (otherwise unused) model field, classified by ProjectileCatalog.Classify", match: false }
       - { name: "origin_resend", base: "sf |= 0x01 on UpdateCSQCProjectile / CSQCProjectile_Check onground-move", port: "per-tick NetEntityState.Diff re-sends origin whenever it changed (subsumes the explicit resend)", match: true }
@@ -521,7 +521,7 @@ features:
       - "server/weapons/csqcprojectile.qc:CSQCProjectile_Check"
       - "client/weapons/projectile.qh (Projectile entityclass: iorigin1/iorigin2 interp fields, gravity, count 0x80; autocvar_cl_projectiles_sloppy)"
     port_refs:
-      - "src/XonoticGodot.Net/ProjectilePredictor.cs:Step (snap-to-server + local velocity extrapolation + world-trace stop/bounce)"
+      - "src/VortexArena.Net/ProjectilePredictor.cs:Step (snap-to-server + local velocity extrapolation + world-trace stop/bounce)"
       - "game/client/ProjectileRenderer.cs:308-333 (Predict path per frame; cl_projectile_prediction toggle via ClientWorld)"
       - "game/net/ClientEntityView.cs:216-224 (feeds the RAW authoritative origin, bypassing InterpolationBuffer)"
       - "game/net/ClientEntityView.cs:125 (e.Velocity = s.Velocity — velocity networked for every entity via the delta mask)"
@@ -545,7 +545,7 @@ features:
       - "No interpolated (non-clientanimate) projectile class: Base renders a server-moved projectile via iorigin1/iorigin2 two-snapshot interp; the port predicts everything, so a projectile whose server motion is NOT ballistic/linear (scripted movers) can wobble between snap corrections."
     verification:
       - { kind: code_read, ref: "ProjectilePredictor.cs:93-132 (snap on netOrigin change, extrapolate + trace otherwise, ClipVelocity bounce); ProjectileRenderer.cs:316-321 CollisionFor -> Step; ClientEntityView.cs:221-222 raw origin", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ProjectilePredictorTests.cs exists (codec-level predictor coverage)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ProjectilePredictorTests.cs exists (codec-level predictor coverage)", result: pass }
     confidence: high
     notes: "added 2026-07-02 (coverage fold). CSQCProjectile_Check (server re-send when an onground client-animated projectile moves) is subsumed by the per-tick delta diff — the origin re-sends whenever it changes, onground or not."
 
@@ -611,7 +611,7 @@ features:
       - "server/weapons/csqcprojectile.qc:UpdateCSQCProjectileAfterTeleport (SendFlags |= 0x01|0x02|0x08)"
       - "server/weapons/csqcprojectile.qc:CSQCProjectile_SendEntity (sf &= 0x0F; 0x08 = no trail/teleport bit)"
     port_refs:
-      - "src/XonoticGodot.Net/ProjectilePredictor.cs:102-108 (snap on ANY authoritative origin change — the position half needs no explicit bit)"
+      - "src/VortexArena.Net/ProjectilePredictor.cs:102-108 (snap on ANY authoritative origin change — the position half needs no explicit bit)"
     constants:
       - { name: "teleport_bit", base: "sf 0x08 explicit at the warpzone/teleport site", port: "implicit — predictor snaps on origin change regardless of distance", match: partial }
       - { name: "no_trail_suppression", base: "0x08 suppresses the trail segment across the jump", port: "none — ProjectileRenderer.cs:341-350 emits the faithful trail segment from the pre-jump TrailPos to the post-jump position with no discontinuity gate", match: false }
@@ -641,8 +641,8 @@ features:
       - "lib/net.qh:Net_LinkEntity/Net_UnlinkEntity/SetCustomizer"
     port_refs:
       - "game/net/NetProtocol.cs:NetControl (the LIVE top-level frame-kind byte: handshake/snapshot/input/event bundles + typed channels)"
-      - "src/XonoticGodot.Net/NetMessages.cs:NetMessageId/NetChannel/NetMessageRanges (C2S 1-31, Linked 32-159, Temp 160-255 — the QC three-registry partition as one byte space)"
-      - "src/XonoticGodot.Net/NetDispatcher.cs (id->handler dispatch — DEAD: no caller outside its own file)"
+      - "src/VortexArena.Net/NetMessages.cs:NetMessageId/NetChannel/NetMessageRanges (C2S 1-31, Linked 32-159, Temp 160-255 — the QC three-registry partition as one byte space)"
+      - "src/VortexArena.Net/NetDispatcher.cs (id->handler dispatch — DEAD: no caller outside its own file)"
     constants:
       - { name: "temp_id_base", base: "80 (TempEntities renumber)", port: "160 (NetMessageRanges.TempFirst)", match: false }
       - { name: "linked_id_base", base: "1", port: "32 (LinkedFirst)", match: false }
@@ -673,7 +673,7 @@ features:
       - "lib/yenc.qh:yenc_single/ydec_single (+42 offset, = escape for 0/\\n/\\r/=)"
     port_refs:
       - "game/net/NetProtocol.cs:NetControl.InputFrame + NetControl.ClientCommand (binary C2S frames on the ENet transport)"
-      - "src/XonoticGodot.Net/InputCommand.cs (the C2S input payload, BitWriter-serialized)"
+      - "src/VortexArena.Net/InputCommand.cs (the C2S input payload, BitWriter-serialized)"
       - "game/net/ServerNet.cs:693-697 (HandleInputFrame / ClientCommand dispatch — live)"
     constants:
       - { name: "byte_encoding", base: "yEnc (+42, '=' escape) so binary rides a console string", port: "raw binary (BitWriter/ENet) — no text tunnel exists to escape for", match: false }
@@ -701,9 +701,9 @@ features:
       - "lib/net.qh:WriteApproxPastTime/ReadApproxPastTime (APPROXPASTTIME_ACCURACY_REQUIREMENT 0.05)"
       - "lib/net.qh:Writebits/ReadRegistered/WriteRegistered/ReadCSQCEntity"
     port_refs:
-      - "src/XonoticGodot.Net/Quantize.cs (Int24, ApproxPastTime curve, Coord13i/Angle8i scales — QC arithmetic ported verbatim incl. the K=3.2 correction note)"
-      - "src/XonoticGodot.Net/BitWriter.cs:171-251 + BitReader.cs:153-234 (WriteInt24/ReadInt24, WriteBits, WriteApproxPastTime/ReadApproxPastTime)"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:133-207 (LIVE Int24 consumer — score columns/team scores/rankings on the snapshot)"
+      - "src/VortexArena.Net/Quantize.cs (Int24, ApproxPastTime curve, Coord13i/Angle8i scales — QC arithmetic ported verbatim incl. the K=3.2 correction note)"
+      - "src/VortexArena.Net/BitWriter.cs:171-251 + BitReader.cs:153-234 (WriteInt24/ReadInt24, WriteBits, WriteApproxPastTime/ReadApproxPastTime)"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:133-207 (LIVE Int24 consumer — score columns/team scores/rankings on the snapshot)"
     constants:
       - { name: "int24_coding", base: "short(val>>8) + byte", port: "Quantize.EncodeInt24 (same split)", match: true }
       - { name: "approxpasttime_curve", base: "dt=256*(dt/(MAX/256+dt)), MAX=819.2", port: "identical (Quantize.cs:33-42)", match: true }
@@ -761,7 +761,7 @@ features:
       - "lib/stats.qh:REGISTER_STAT/addstat/stats_get (per-player engine stat fields, 256 - STATS_ENGINE_RESERVE slots)"
       - "lib/stats.qh:Stats_renumber/MAGIC_STATS_FIX"
     port_refs:
-      - "src/XonoticGodot.Net/MoveVarsBlock.cs (the MOVEVARS_* slots 220-234/237-255: 48 movement cvars, positional floats, hash-gated per snapshot + per-peer preset-resolved block)"
+      - "src/VortexArena.Net/MoveVarsBlock.cs (the MOVEVARS_* slots 220-234/237-255: 48 movement cvars, positional floats, hash-gated per snapshot + per-peer preset-resolved block)"
       - "game/net/ServerNet.cs:1842-1883 (Capture/Hash/Serialize on the live snapshot) + game/net/ClientNet.cs:1065-1082 (Deserialize/Apply into the client cvar store)"
       - "game/net/NetProtocol.cs:NetControl.MatchState (TIMELIMIT/GAMESTARTTIME/WARMUP/OVERTIMES — QC STAT slots as a typed channel) + game/net/ClientNet.cs:617-645 HandleMatchState"
       - "game/net/ServerNet.cs:WriteOwnerState (per-player stats: respawn time, spectatee status, accuracy, rings — the addstat per-player field analog)"

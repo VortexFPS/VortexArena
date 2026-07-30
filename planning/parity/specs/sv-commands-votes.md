@@ -1,7 +1,7 @@
 # sv-commands-votes — parity spec
 
 **Base refs:** `server/command/{vote,common,banning,radarmap,cmd,sv_cmd}.qc` + `.qh`, `commands.cfg`, `xonotic-server.cfg`
-**Port refs:** `src/XonoticGodot.Server/{VoteController,Bans,TimeoutController,Commands,ClientCommandRegistry,CommandReplies,DeferredCommands}.cs`, `game/net/ServerNet.cs`
+**Port refs:** `src/VortexArena.Server/{VoteController,Bans,TimeoutController,Commands,ClientCommandRegistry,CommandReplies,DeferredCommands}.cs`, `game/net/ServerNet.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -152,11 +152,11 @@ and announcer/centerprint wording are presentation (host/client) and out of this
   `animbench`, `bbox`, `trace`, `stuffto`, `adminmsg`, `anticheat`, `delrec`, `database`,
   `effectindexdump`, `make_mapinfo`, `printstats` are not registered as commands. (No `getmodel`
   exists in Base; the unit hint's "getmodel" maps to no Base symbol — closest is `gettaginfo`.)
-  NOTE: the anticheat *detection subsystem* IS ported (`src/XonoticGodot.Server/AntiCheat.cs`, the
+  NOTE: the anticheat *detection subsystem* IS ported (`src/VortexArena.Server/AntiCheat.cs`, the
   QC `anticheat.qc` Mean detectors run live); only the `sv_cmd anticheat` *report command* is absent.
 
 ## Verification
-- Vote logic, bans, timeout, flood: unit tests in `tests/XonoticGodot.Tests/ServerInfraTests.cs`
+- Vote logic, bans, timeout, flood: unit tests in `tests/VortexArena.Tests/ServerInfraTests.cs`
   (Vote_*, Bans_*, Timeout_*) and `ClientCommandSecurityTests.cs` — green per repo state.
 - Liveness: traced `GameWorld.cs:638-643` (Voting wiring), `:909` (Timeout.Think), `:926`
   (Voting.Think), `game/net/ServerNet.cs:684-735` (HandleClientCommand 3-gate + dispatch). Live.

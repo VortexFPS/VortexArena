@@ -1,7 +1,7 @@
 # Doublejump mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/doublejump/doublejump.qc` · `common/mutators/mutator/doublejump/doublejump.qh` · consumed in `common/physics/player.qc` (`PlayerJump`) · `common/stats.qh` (`REGISTER_STAT(DOUBLEJUMP)`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/DoublejumpMutator.cs` · `src/XonoticGodot.Common/Physics/PlayerPhysics.cs` (`PlayerJump`) · `src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs` (`PlayerJump`/`PlayerJumpArgs`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/DoublejumpMutator.cs` · `src/VortexArena.Common/Physics/PlayerPhysics.cs` (`PlayerJump`) · `src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs` (`PlayerJump`/`PlayerJumpArgs`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -72,11 +72,11 @@ Live caller chain: `GameWorld` boot → `MutatorActivation.Apply()` (`GameWorld.
 None for the mutator logic. (The `PlayerPhysics.cs` change that makes the air-jump grant start `false` is a fidelity *fix*, not a divergence — it makes the default-0 path byte-identical to before while letting the mutator govern the non-default case.)
 
 ## Verification
-- `tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs`:
+- `tests/VortexArena.Tests/MutatorBatchT51Tests.cs`:
   - `Doublejump_Disabled_Inert` — `sv_doublejump 0` → mutator not enabled, `Multijump` stays false.
   - `Doublejump_GrantsAndClips_OnWalkableSurface` — on a floor, grant fires and into-plane velocity is clipped (`Velocity.Z >= ~0`).
   - `Doublejump_NoGrant_InMidair` — 500u above floor, no grant, velocity untouched (`-100` preserved).
-- `tests/XonoticGodot.Tests/PhysicsPresetTests.cs` — `PhysicsPreset.OptionFor("sv_doublejump") == "doublejump"` (preset-override plumbing).
+- `tests/VortexArena.Tests/PhysicsPresetTests.cs` — `PhysicsPreset.OptionFor("sv_doublejump") == "doublejump"` (preset-override plumbing).
 - Code-read verified the live caller chain (`GameWorld.cs:511` → `MutatorActivation.Apply` → `Hook` → `MutatorHooks.PlayerJump.Call` in `PlayerPhysics.PlayerJump`).
 - Base default `sv_doublejump 0`: golden movement traces remain byte-identical (the grant starts false, equal to the prior `mp.DoubleJump==false`), per `tools/movement-ref/verify-against-dp.md`.
 

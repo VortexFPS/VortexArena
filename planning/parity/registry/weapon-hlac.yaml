@@ -15,9 +15,9 @@ features:
       - "common/weapons/weapon/hlac.qc:W_HLAC_Attack_Frame"
       - "common/weapons/weapon/hlac.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:ScheduleAttackFrame"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:ScheduleAttackFrame"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:Attack"
     constants:
       - { name: "primary_damage", base: "10", port: "10", match: true }
       - { name: "primary_edgedamage", base: "5", port: "5", match: true }
@@ -48,7 +48,7 @@ features:
       - { kind: read, ref: "ScheduleAttackFrame (Hlac.cs:145-168) overwrites the pending w_ready think (ScheduleThink: 'last weapon_thinkf wins', WeaponFireDriver.cs:301), re-fires + ++MiscBulletCounter while ButtonAttack held & ammo/unlimited, else settles State=Ready WITHOUT resetting the counter -> re-tap restores accuracy. Matches hlac.qc:129-154", result: pass }
       - { kind: trace, ref: "WeaponFireDriver.cs:155 calls weapon.WrThink(player, slot, Primary) every server tick -> the fresh-press reset path is live on the real match path", result: pass }
       - { kind: value-diff, ref: "Configure() vs bal-wep-xonotic.cfg:537-548", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/HlacCrouchSpreadTests.cs — pins the crouchmod gate (single WrThink call); does NOT cover the cross-press counter reset (one WrThink per case)", result: partial }
+      - { kind: test, ref: "tests/VortexArena.Tests/HlacCrouchSpreadTests.cs — pins the crouchmod gate (single WrThink call); does NOT cover the cross-press counter reset (one WrThink per case)", result: partial }
     confidence: high
     notes: "WAVE-2 FIX (baseline worst gap closed). Per-press misc_bulletcounter reset is now implemented in WrThink(Primary) (Hlac.cs:126) and gated by PrepareAttack's READY-state requirement, so releasing+re-tapping primary restores accuracy — the weapon's signature feather-the-trigger mechanic. The new ScheduleAttackFrame faithfully models W_HLAC_Attack_Frame (held-fire self-reschedule loop: increment in the loop, NO reset in the loop; settle to READY on release/out-of-ammo). Adversarially verified live (driver calls WrThink(Primary) each tick) and double-fire-safe (PrepareAttack requires Ready, sets InUse). The HlacCrouchSpreadTests still only fire one WrThink/case so they do not exercise the cross-press reset — coverage gap remains but the logic is correct on read+trace."
 
@@ -59,7 +59,7 @@ features:
       - "common/weapons/weapon/hlac.qc:W_HLAC_Attack2"
       - "common/weapons/weapon/hlac.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:Attack2"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:Attack2"
     constants:
       - { name: "secondary_shots", base: "6", port: "6", match: true }
       - { name: "secondary_damage", base: "15", port: "15", match: true }
@@ -85,7 +85,7 @@ features:
     gaps:
       - "Base decrements ammo AFTER W_SetupShot; port decrements before the loop. No observable difference (single actor, single tick)."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/HlacCrouchSpreadTests.cs (Secondary_* cases)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/HlacCrouchSpreadTests.cs (Secondary_* cases)", result: pass }
       - { kind: value-diff, ref: "Configure() vs bal-wep-xonotic.cfg:551-563", result: pass }
     confidence: high
     notes: "Burst loops `shots` bolts with one shared (crouch-adjusted) secondary spread; one recoil kick for the whole burst (matches Base). Unchanged by Wave-2 except per-bolt deathTag now carries HITTYPE_SECONDARY (see weapon-hlac.bolt.impact)."
@@ -97,7 +97,7 @@ features:
       - "common/weapons/weapon/hlac.qc:33"
       - "common/weapons/weapon/hlac.qc:79"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:CrouchSpreadMod"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:CrouchSpreadMod"
     constants:
       - { name: "primary_spread_crouchmod", base: "0.25", port: "0.25", match: true }
       - { name: "secondary_spread_crouchmod", base: "0.5", port: "0.5", match: true }
@@ -112,7 +112,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/HlacCrouchSpreadTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/HlacCrouchSpreadTests.cs", result: pass }
     confidence: high
     notes: "Gate fires only when IS_DUCKED && IS_ONGROUND; per-mode crouchmod. Pinned bit-exact via deterministic PRNG (zero/one/0.25 multiplier cases). Unchanged by Wave-2."
 
@@ -122,8 +122,8 @@ features:
     base_refs:
       - "common/weapons/weapon/hlac.qc:W_HLAC_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:SpawnBolt"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:SpawnBolt"
     constants:
       - { name: "is_primary deathtype split (HITTYPE_SECONDARY)", base: "projectiledeathtype = m_id | HITTYPE_SECONDARY for secondary (hlac.qc:113), plain m_id for primary (hlac.qc:67)", port: "secondary deathTag = WithHitType(FromWeapon(hlac), Secondary); primary = RegistryId int (Hlac.cs:249-255)", match: true }
     status:
@@ -150,8 +150,8 @@ features:
       - "server/weapons/tracing.qc:W_SetupProjVelocity_Explicit"
       - "common/weapons/calculations.qc:W_CalculateSpread"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpread"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpread"
     constants:
       - { name: "g_projectiles_newton_style", base: "0", port: "0 (inheritance omitted)", match: true }
       - { name: "g_projectiles_spread_style", base: "0", port: "0 (dir + randomvec*spread)", match: true }
@@ -177,7 +177,7 @@ features:
       - "common/weapons/weapon/hlac.qc:38"
       - "common/weapons/weapon/hlac.qc:121"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:Recoil"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:Recoil"
     constants:
       - { name: "punchangle.x/y = random()-0.5 gated by !g_norecoil", base: "if (!autocvar_g_norecoil) (hlac.qc:38,121)", port: "if (Api.Cvars.GetFloat(\"g_norecoil\") != 0f) return; (Hlac.cs:269)", match: true }
     status:
@@ -204,9 +204,9 @@ features:
       - "common/weapons/weapon/hlac.qc:wr_reload"
       - "common/weapons/weapon/hlac.qc:wr_think (forced reload)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:CheckAmmoSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:CheckAmmoSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload"
     constants:
       - { name: "reload_ammo", base: "0", port: "0", match: true }
       - { name: "reload_time", base: "2", port: "2", match: true }
@@ -236,9 +236,9 @@ features:
       - "common/weapons/weapon/hlac.qh:m_muzzleeffect"
       - "common/weapons/weapon/hlac.qc:wr_impacteffect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:Attack (Emit GREEN_HLAC_MUZZLEFLASH)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:Explode (Emit GREEN_HLAC_IMPACT + ImpactSound)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:81"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:Attack (Emit GREEN_HLAC_MUZZLEFLASH)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:Explode (Emit GREEN_HLAC_IMPACT + ImpactSound)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:81"
     constants:
       - { name: "fire sound", base: "SND_HLAC_FIRE=lasergun_fire", port: "weapons/lasergun_fire.wav", match: true }
       - { name: "impact sound", base: "SND_LASERIMPACT", port: "weapons/laserimpact.wav", match: true }
@@ -269,12 +269,12 @@ features:
       - "common/weapons/weapon/hlac.qc:wr_suicidemessage"
       - "common/weapons/weapon/hlac.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:Hlac (ctor)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:BotWantsSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:BotAimShotSpeed"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponOrder.cs:209"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:66"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:368"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:Hlac (ctor)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:BotWantsSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:BotAimShotSpeed"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponOrder.cs:209"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:66"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:368"
       - "game/client/ProjectileCatalog.cs:165 (ProjectileType.Hlac desc)"
       - "game/client/ProjectileCatalog.cs:297 (hlacbolt -> ProjectileType.Hlac)"
     constants:
@@ -299,6 +299,6 @@ features:
       - { kind: trace, ref: "DeathMessages.cs / NotificationsList.cs HLAC_MURDER/SUICIDE wired", result: pass }
       - { kind: read, ref: "Hlac.BotWantsSecondary (Hlac.cs:184-185) now returns FALSE (primary only), matching QC wr_aim (hlac.qc:156-159) which only sets PHYS_INPUT_BUTTON_ATCK and never alt-fires — the ~10% secondary-burst divergence is removed. BotAimShotSpeed => Primary.Speed (Hlac.cs:188) leads at 6000 (primary==secondary). Both overrides called live: BotBrain.cs:457 (BotWantsSecondary) + BotBrain.cs:929 (BotAimShotSpeed). Bolt BotDodge=true rating=damage (Hlac.cs:274-275) so bots evade it", result: pass }
       - { kind: read, ref: "ProjectileCatalog.cs:172-173 desc now sets ModelPath=models/hlac_bullet.md3 (was unset) + GlowSprite fallback + no trail; :297 maps hlacbolt/hlac -> ProjectileType.Hlac. Matches Base projectile.qc:356 (traileffect=EFFECT_Null) + MDL_PROJECTILE_HLAC=hlac_bullet.md3 (all.inc:65). Renderer loads the real model via ModelFactory(ModelPath) and only falls back to GlowSprite when null (ProjectileRenderer.cs:414-422) — same wiring as Blaster's laser.mdl", result: pass }
-      - { kind: read, ref: "asset present: assets/data/xonotic-data.pk3dir/models/hlac_bullet.md3 exists -> the dedicated MD3 loads on a normal content build (glow-sprite fallback only on a headless/missing-content build)", result: pass }
+      - { kind: read, ref: "asset present: Base/data/xonotic-data.pk3dir/models/hlac_bullet.md3 exists -> the dedicated MD3 loads on a normal content build (glow-sprite fallback only on a headless/missing-content build)", result: pass }
     confidence: high
     notes: "WAVE (2026-06-28) FIX — both baseline worst_gaps for this row closed. (1) bot-aim secondary divergence: BotWantsSecondary changed ctx.Random01<=0.1 -> false, so port HLAC bots now press primary only, exactly like QC wr_aim. (2) bolt model: ProjectileType.Hlac now wires ModelPath=models/hlac_bullet.md3 (asset present) with the GlowSprite fallback, mirroring Blaster; the renderer instantiates the real MD3 via ModelFactory when mounted. presentation partial->faithful. Trail correctly absent (EFFECT_Null). Identity/flags/color/ammo/notifications all match; reachable via impulse/order/CompatRemaps/NewToys/NIX. Model render confirmed by read + asset-present, NOT by a live render capture — drop to medium only if a runtime visual check is later required."

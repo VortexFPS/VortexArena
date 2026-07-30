@@ -14,7 +14,7 @@ features:
     base_refs:
       - "common/turrets/turret/walker.qh:WalkerTurret"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:WalkerTurret"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:WalkerTurret"
     constants:
       - { name: "mins", base: "'-70 -70 0'", port: "(-70,-70,0)", match: true }
       - { name: "maxs", base: "'70 70 95'", port: "(70,70,95)", match: true }
@@ -45,8 +45,8 @@ features:
       - "common/turrets/turret/walker.qc:568"
       - "common/turrets/sv_turrets.qc:turret_initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "solid", base: "SOLID_SLIDEBOX", port: "Solid.SlideBox", match: true }
       - { name: "movetype", base: "MOVETYPE_STEP", port: "MoveType.Step", match: true }
@@ -78,8 +78,8 @@ features:
       - "common/turrets/turret/walker.qc:350"
       - "common/turrets/sv_turrets.qc:turret_link"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Walker"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:238"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Walker"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:238"
     constants:
       - { name: "g_turrets master switch", base: "1 (default on)", port: "MasterSwitchEnabled default-on", match: true }
     status:
@@ -104,8 +104,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_select_target"
       - "common/turrets/sv_turrets.qc:turret_firecheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:Think"
     constants:
       - { name: "targetscan_mindelay", base: "0.1", port: "0.1 (cvar g_turrets_targetscan_mindelay)", match: true }
       - { name: "targetscan_maxdelay", base: "1", port: "1 (cvar g_turrets_targetscan_maxdelay default 1)", match: true }
@@ -136,9 +136,9 @@ features:
       - "common/turrets/turret/walker.qc:249"
       - "common/turrets/turret/walker.qc:463"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:DoMovement"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:WalkerMoveTo"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:ApplyGait"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:DoMovement"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:WalkerMoveTo"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:ApplyGait"
     constants:
       - { name: "speed_run", base: "300", port: "300", match: true }
       - { name: "speed_walk", base: "200", port: "200", match: true }
@@ -170,7 +170,7 @@ features:
       - "common/turrets/turret/walker.qc:279"
       - "common/turrets/turret/walker.qc:326"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:IdleSelect"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:IdleSelect"
     constants:
       - { name: "idle stop time", base: "1 + random*5", port: "1 + Prandom.Float()*5", match: true }
       - { name: "roam walk time (TSL_ROAM, 50%)", base: "4 + random*2", port: "now + 4 + Prandom.Float()*2 (TslRoam spawnflag plumbed; IdleSelect roam branch)", match: true }
@@ -201,8 +201,8 @@ features:
       - "common/turrets/turret/walker.qc:471"
       - "common/turrets/turret/walker.qc:249"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:WalkerMoveTo"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:ApplyGait"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:WalkerMoveTo"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:ApplyGait"
     constants:
       - { name: "speed_swim", base: "200", port: "200", match: true }
       - { name: "speed_jump", base: "800", port: "800 (Gait.Jump case, never assigned)", match: true }
@@ -236,8 +236,8 @@ features:
       - "common/turrets/turret/walker_weapon.qc:6"
       - "common/turrets/sv_turrets.qc:fireBullet path"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
     constants:
       - { name: "shot_dmg", base: "5", port: "5", match: true }
       - { name: "shot_spread", base: "0.025", port: "0.025", match: true }
@@ -272,9 +272,9 @@ features:
       - "common/turrets/turret/walker.qc:108"
       - "common/turrets/turret/walker.qc:435"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:FireRocket"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs:WalkerRocketThink"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs:WalkerRocketLoop"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:FireRocket"
+      - "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs:WalkerRocketThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs:WalkerRocketLoop"
     constants:
       - { name: "rocket_damage", base: "45", port: "45", match: true }
       - { name: "rocket_radius", base: "150", port: "150", match: true }
@@ -314,8 +314,8 @@ features:
       - "common/turrets/turret/walker.qc:423"
       - "common/turrets/turret/walker.qc:514"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:DoMovement"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:ScheduleMelee"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:DoMovement"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:ScheduleMelee"
     constants:
       - { name: "melee_range", base: "100", port: "100", match: true }
       - { name: "melee_damage", base: "100", port: "100", match: true }
@@ -345,8 +345,8 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_track"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Track"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Track"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:Think"
     constants:
       - { name: "aim_speed", base: "45", port: "45", match: true }
       - { name: "aim_maxrot", base: "90", port: "90", match: true }
@@ -374,7 +374,7 @@ features:
       - "common/turrets/turret/walker.qc:558"
       - "common/turrets/sv_turrets.qc:turrets_setframe"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs:DoMovement"
+      - "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs:DoMovement"
     constants:
       - { name: "groundalign4point", base: "(300,100,0.25,45)", port: "(300,100,0.25,45) — VehiclePhysics.GroundAlign4Point folds pitch(X)/roll(Z) onto networked e.Angles (WalkerTurret.cs:304-308), gated to ground gaits (skip while WaterLevel>=2 / Swim)", match: true }
       - { name: "spark health threshold", base: "127", port: "127 (SparkHealthThreshold)", match: true }

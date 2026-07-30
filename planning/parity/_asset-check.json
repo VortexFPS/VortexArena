@@ -49,7 +49,7 @@
   {
    "ref": "models/weapons/h_",
    "where": [
-    "src/XonoticGodot.Formats/Sidecars/WeaponRigAnims.cs:30"
+    "src/VortexArena.Formats/Sidecars/WeaponRigAnims.cs:30"
    ]
   },
   {
@@ -62,7 +62,7 @@
   {
    "ref": "textures/exx/floor01",
    "where": [
-    "src/XonoticGodot.Formats/Vmap/VmapDocument.cs:476"
+    "src/VortexArena.Formats/Vmap/VmapDocument.cs:476"
    ]
   }
  ],

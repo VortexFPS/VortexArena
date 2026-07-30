@@ -17,9 +17,9 @@ features:
       - "common/monsters/monster/mage.qc:METHOD(Mage, mr_setup)"
       - "common/monsters/monster/mage.qh:CLASS(Mage)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:Mage"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:222"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:Mage"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:222"
     constants:
       - { name: "g_monster_mage_health", base: "400", port: "400 (cfg)", match: true }
       - { name: "g_monster_mage_speed_walk", base: "250", port: "250 (cfg)", match: true }
@@ -41,7 +41,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "MapObjectsRegistry.cs:222 SpawnFuncs.Register(monster_mage) -> MonsterSpawnFuncs.Mage -> Spawn(mage) -> MonsterAI.Setup; e.Think wired -> RunThink", result: pass }
-      - { kind: value-diff, ref: "assets/data/xonotic-data.pk3dir/monsters.cfg g_monster_mage_* == Base monsters.cfg (lines 31-64, line-for-line verified 2026-06-25)", result: pass }
+      - { kind: value-diff, ref: "Base/data/xonotic-data.pk3dir/monsters.cfg g_monster_mage_* == Base monsters.cfg (lines 31-64, line-for-line verified 2026-06-25)", result: pass }
     confidence: high
     notes: "Setup values flow through MonsterAI.Cvar from the shipped monsters.cfg, which matches Base exactly. Skin randomized 0..4 like QC; heal switch handles 0/1/2 (skins 3/4 = no per-skin heal, same as Base). MonsterSound(spawn) at Setup keeps audio:faithful. (Registry line moved 212->222 since baseline; spawn/dispatch chain re-verified live 2026-06-25.)"
 
@@ -51,8 +51,8 @@ features:
     base_refs:
       - "common/monsters/monster/mage.qc:M_Mage_Attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:AttackCheck"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:AttackCheck"
     constants:
       - { name: "g_monster_mage_attack_push_chance", base: "0.7", port: "0.7 (cfg)", match: true }
       - { name: "g_monster_mage_attack_spike_chance", base: "0.45", port: "0.45 (cfg)", match: true }
@@ -81,9 +81,9 @@ features:
       - "common/monsters/monster/mage.qc:M_Mage_Attack_Spike_Think"
       - "common/monsters/monster/mage.qc:M_Mage_Attack_Spike_Explode"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:FireSpike"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:HomeProjectile"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:FireSpike"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:HomeProjectile"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile"
     constants:
       - { name: "g_monster_mage_attack_spike_damage", base: "45", port: "45 (cfg)", match: true }
       - { name: "g_monster_mage_attack_spike_radius", base: "60", port: "60 (cfg)", match: true }
@@ -125,7 +125,7 @@ features:
     base_refs:
       - "common/monsters/monster/mage.qc:M_Mage_Attack_Push"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:Push"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:Push"
     constants:
       - { name: "g_monster_mage_attack_push_damage", base: "25", port: "25 (cfg)", match: true }
       - { name: "g_monster_mage_attack_push_radius", base: "150", port: "150 (cfg)", match: true }
@@ -154,8 +154,8 @@ features:
     base_refs:
       - "common/monsters/monster/mage.qc:M_Mage_Attack_Teleport"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:Teleport"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:RandomRelocate"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:Teleport"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:RandomRelocate"
     constants:
       - { name: "g_monster_mage_attack_teleport_delay", base: "5 (cfg; inline 2)", port: "5 (cfg); 5 inline", match: true }
       - { name: "g_monster_mage_attack_teleport_random", base: "0.4", port: "0.4 (cfg); 0.4 inline", match: true }
@@ -186,11 +186,11 @@ features:
       - "common/monsters/sv_monsters.qc:Monster_Damage"
       - "common/util.qc:healtharmor_applydamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:RaiseShield"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkPain"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:RunStatusTimers"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MonsterEventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:Shield"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:RaiseShield"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkPain"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:RunStatusTimers"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MonsterEventDamage"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:Shield"
     constants:
       - { name: "g_monster_mage_shield_time", base: "3", port: "3 (cfg)", match: true }
       - { name: "g_monster_mage_shield_delay", base: "7", port: "7 (cfg)", match: true }
@@ -220,8 +220,8 @@ features:
       - "common/monsters/monster/mage.qc:M_Mage_Defend_Heal"
       - "common/monsters/monster/mage.qc:M_Mage_Defend_Heal_Check"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:HealPulse"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:HealCheck"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:HealPulse"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:HealCheck"
     constants:
       - { name: "g_monster_mage_heal_allies", base: "20", port: "20 (cfg)", match: true }
       - { name: "g_monster_mage_heal_range", base: "250", port: "250 (cfg)", match: true }
@@ -252,8 +252,8 @@ features:
     base_refs:
       - "common/monsters/monster/mage.qc:METHOD(Mage, mr_think)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:NeedsHelpNearby"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:NeedsHelpNearby"
     constants:
       - { name: "g_monster_mage_heal_minhealth", base: "250", port: "250 (cfg)", match: true }
       - { name: "heal_random_gate", base: "random()<0.5", port: "MonsterRandom.Next()<0.5", match: true }
@@ -281,9 +281,9 @@ features:
       - "common/monsters/monster/mage.qc:METHOD(Mage, mr_pain)"
       - "common/monsters/monster/mage.qc:METHOD(Mage, mr_death)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkPain"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkPain"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead"
     constants:
       - { name: "mr_pain_return", base: "damage_take (unchanged)", port: "shared MarkPain (no mage override)", match: true }
       - { name: "die_anim_pick", base: "random()>0.5 ? die2 : die1", port: "Mage.Think DeathLanded = MonsterRandom.Next()>0.5 (one-shot per death)", match: true }
@@ -310,8 +310,8 @@ features:
     base_refs:
       - "common/monsters/monster/mage.qc:METHOD(Mage, mr_anim)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:AnimFrame"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MonsterAnim"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:AnimFrame"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MonsterAnim"
     constants:
       - { name: "anim_idle", base: "0 1 1", port: "AnimFrame Idle => 0", match: true }
       - { name: "anim_walk/run", base: "1 1 1", port: "AnimFrame Walk/Run => 1", match: true }
@@ -343,7 +343,7 @@ features:
     base_refs:
       - "common/monsters/monster/mage.qc:METHOD(Mage, describe):515"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:Describe"
+      - "src/VortexArena.Common/Gameplay/Monsters/Mage.cs:Describe"
     constants:
       - { name: "describe prose", base: "Wielding nanotechnology as if it were sorcery, the Mage employs a range of unique abilities... (5 paragraphs)", port: "verbatim 5-paragraph prose concatenated into Mage.Describe() (Mage.cs:86-93)", match: true }
     status:

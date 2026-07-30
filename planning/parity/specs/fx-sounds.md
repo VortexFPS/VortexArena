@@ -1,8 +1,8 @@
 # Sound system (registry + dispatch) — parity spec
 
 **Base refs:** `common/sounds/{sound.qh,all.qh,all.qc,all.inc}`, `common/effects/qc/globalsound.{qh,qc}`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Sounds/{GameSound,SoundsList,SoundSystem,VoiceMessage,VoiceTypes}.cs`,
-`src/XonoticGodot.Common/Services/Services.cs` (ISoundService / SoundChannel), `src/XonoticGodot.Engine/Simulation/EngineServices.cs` (SoundService / SoundEvent), `src/XonoticGodot.Net/SoundWire.cs`, `game/client/ClientWorld.cs` (playback), `game/client/HitSound.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Sounds/{GameSound,SoundsList,SoundSystem,VoiceMessage,VoiceTypes}.cs`,
+`src/VortexArena.Common/Services/Services.cs` (ISoundService / SoundChannel), `src/VortexArena.Engine/Simulation/EngineServices.cs` (SoundService / SoundEvent), `src/VortexArena.Net/SoundWire.cs`, `game/client/ClientWorld.cs` (playback), `game/client/HitSound.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -221,7 +221,7 @@ right cue, channel, volume and attenuation. The hit-sound is the one wrong cue (
 - Cvar defaults: confirmed `g_footsteps 1`, `sv_taunt 1`, `sv_autotaunt 1`, `bot_sound_monopoly 0`,
   `cl_voice_directional 1` etc. in the Base `.cfg` files.
 - Hit-sound bug: confirmed `HitSound.cs` loads `misc/hitconfirm` while the registry/file is `misc/hit`
-  (`assets/data/xonotic-data.pk3dir/sound/misc/hit.wav` exists; `hitconfirm` does not).
+  (`Base/data/xonotic-data.pk3dir/sound/misc/hit.wav` exists; `hitconfirm` does not).
 - **Body-sound path bug (NEW, more severe than draft):** `Sounds.PlayerSoundSample(null, "pain50")` →
   `sound/player/default.sounds/pain50`. `default.sounds` is a manifest FILE (verified: not a directory), so
   `AssetLoader` probes `sound/player/default.sounds/pain50.ogg/.wav` and finds nothing. The real file is

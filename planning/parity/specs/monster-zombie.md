@@ -1,7 +1,7 @@
 # Zombie monster — parity spec
 
 **Base refs:** `common/monsters/monster/zombie.qc` · `common/monsters/monster/zombie.qh` (+ shared driver `common/monsters/sv_monsters.qc`, balance `monsters.cfg`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs` · `src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs` · `src/XonoticGodot.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Monsters/Zombie.cs` · `src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs` · `src/VortexArena.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

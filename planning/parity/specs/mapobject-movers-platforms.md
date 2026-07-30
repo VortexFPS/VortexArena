@@ -1,7 +1,7 @@
 # Map-object movers: platforms (`func_plat`) — parity spec
 
 **Base refs:** `common/mapobjects/platforms.qc`, `common/mapobjects/func/plat.qc`, `common/mapobjects/subs.qc` (SUB_CalcMove/SUB_CalcAngleMove), `lib/math.qh` (cubic_speedfunc)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs`, `src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs` (MapMover), `src/XonoticGodot.Engine/Simulation/FlyMove.cs` (PhysicsPusher/PushMove)
+**Port refs:** `src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs`, `src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs` (MapMover), `src/VortexArena.Engine/Simulation/FlyMove.cs` (PhysicsPusher/PushMove)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

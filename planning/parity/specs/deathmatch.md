@@ -1,7 +1,7 @@
 # Deathmatch (DM / FFA) — parity spec
 
 **Base refs:** `common/gametypes/gametype/deathmatch/{deathmatch.qh,deathmatch.qc,sv_deathmatch.qc,sv_deathmatch.qh}` · the FFA slice of `server/damage.qc` (`GiveFrags`/`Obituary`), `server/world.qc` (`WinningCondition_Scores`/`CheckRules_World`), `common/gametypes/sv_rules.qc` (limit wiring), `server/client.qc` (`calculate_player_respawn_time`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs`, `.../GameTypes/MatchController.cs` · `src/XonoticGodot.Server/GameWorld.cs` (activation + `RunCheckRulesWorld`), `src/XonoticGodot.Server/Scores.cs` (aux columns), `src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs`, `.../GameTypes/MatchController.cs` · `src/VortexArena.Server/GameWorld.cs` (activation + `RunCheckRulesWorld`), `src/VortexArena.Server/Scores.cs` (aux columns), `src/VortexArena.Common/Gameplay/Scoring/GameScores.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

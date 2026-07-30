@@ -16,9 +16,9 @@ features:
       - "common/stats.qh:153,167 (int autocvar_g_multijump; REGISTER_STAT(MULTIJUMP, INT, autocvar_g_multijump))"
       - "mutators.cfg:474 (set g_multijump 0)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs:59-60 (IsEnabled), :65-84 (Hook caches tuning cvars)"
-      - "src/XonoticGodot.Server/GameWorld.cs:614 (MutatorActivation.Apply on the live boot path)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:60-69 (Apply: only IsEnabled mutators are Hook()ed)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs:59-60 (IsEnabled), :65-84 (Hook caches tuning cvars)"
+      - "src/VortexArena.Server/GameWorld.cs:614 (MutatorActivation.Apply on the live boot path)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:60-69 (Apply: only IsEnabled mutators are Hook()ed)"
     constants:
       - { name: "g_multijump default", base: "0 (disabled)", port: "0 via cvar store; field fallback MaxJumps=1 (unused when disabled because Hook() is not called)", match: true }
       - { name: "enable predicate", base: "autocvar_g_multijump != 0", port: "Cvars.GetFloat(\"g_multijump\") != 0f", match: true }
@@ -45,9 +45,9 @@ features:
       - "common/mutators/mutator/multijump/multijump.qc:36-47 (MUTATOR_HOOKFUNCTION(multijump, PlayerPhysics))"
       - "common/stats.qh:165-166 (.int multijump_count; REGISTER_STAT(MULTIJUMP_COUNT, INT, this.multijump_count))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs:93-100 (OnPlayerPhysics)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:188-189 (MutatorHooks.PlayerPhysics.Call each physics step)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs:50 (int MultijumpCount)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs:93-100 (OnPlayerPhysics)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:188-189 (MutatorHooks.PlayerPhysics.Call each physics step)"
+      - "src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs:50 (int MultijumpCount)"
     constants:
       - { name: "reset trigger", base: "IS_ONGROUND(player) -> multijump_count = 0", port: "player.OnGround -> MultijumpCount = 0", match: true }
       - { name: "disabled short-circuit", base: "!PHYS_MULTIJUMP(player) -> return", port: "MaxJumps == 0 -> return (effectively never, since only hooked when enabled)", match: true }
@@ -75,9 +75,9 @@ features:
       - "common/physics/player.qh:205 (IS_JUMP_HELD = !(flags & FL_JUMPRELEASED); FL_JUMPRELEASED = BIT(12))"
       - "common/stats.qh:163 (REGISTER_STAT(MULTIJUMP_SPEED, FLOAT))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs:103-167 (OnPlayerJump), :116 (IS_JUMP_HELD mapping), :118 (ready-gate truthiness factor present), :126 (3D maxspeed via Velocity.Length()), :169-180 (Horiz2D, JumpVelocity)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:759-792 (CheckPlayerJump host; calls PlayerJump only on ButtonJump||ButtonJetpack; sets JumpReleased when jump not held), :819-823 (PlayerJumpArgs build + pj.Multijump writeback), :841 (doublejump bypasses the airborne early-out)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs:50,52 (MultijumpCount, MultijumpReady)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs:103-167 (OnPlayerJump), :116 (IS_JUMP_HELD mapping), :118 (ready-gate truthiness factor present), :126 (3D maxspeed via Velocity.Length()), :169-180 (Horiz2D, JumpVelocity)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:759-792 (CheckPlayerJump host; calls PlayerJump only on ButtonJump||ButtonJetpack; sets JumpReleased when jump not held), :819-823 (PlayerJumpArgs build + pj.Multijump writeback), :841 (doublejump bypasses the airborne early-out)"
+      - "src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs:50,52 (MultijumpCount, MultijumpReady)"
     constants:
       - { name: "ready gate", base: "!IS_JUMP_HELD && !IS_ONGROUND && client_multijump -> ready=true else false", port: "!jumpHeld && !OnGround && clientMultijump != 0 -> ready=true else false (truthiness factor present)", match: true }
       - { name: "count gate", base: "PHYS_MULTIJUMP_COUNT < phys_multijump || phys_multijump == -1", port: "MaxJumps == -1 || MultijumpCount < MaxJumps", match: true }
@@ -111,8 +111,8 @@ features:
       - "common/stats.qh:158,164 (bool autocvar_g_multijump_client = true; REGISTER_STAT(MULTIJUMP_CLIENT, BOOL, autocvar_g_multijump_client))"
       - "mutators.cfg:473,475 (seta cl_multijump -1; set g_multijump_client 1)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs:46 (ClientDefault field), :54 (ClientMultijumpProvider hook), :82 (ClientDefault read from g_multijump_client cvar), :110-114 (gate: provider->-1->ClientDefault substitution, >1 -> return)"
-      - "src/XonoticGodot.Server/Commands.cs:228 (\"cl_multijump\" IN SentCvarAllowlist, declared at :210), :550-551 (ClientMultijumpProvider assigned in Commands ctor: e is Player p ? (int)GetClientCvarFloat(p,\"cl_multijump\",-1f) : -1), :3201 (CmdSentCvar gates on SentCvarAllowlist before storing into the per-client store), :333 (GetClientCvarFloat reads it back)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs:46 (ClientDefault field), :54 (ClientMultijumpProvider hook), :82 (ClientDefault read from g_multijump_client cvar), :110-114 (gate: provider->-1->ClientDefault substitution, >1 -> return)"
+      - "src/VortexArena.Server/Commands.cs:228 (\"cl_multijump\" IN SentCvarAllowlist, declared at :210), :550-551 (ClientMultijumpProvider assigned in Commands ctor: e is Player p ? (int)GetClientCvarFloat(p,\"cl_multijump\",-1f) : -1), :3201 (CmdSentCvar gates on SentCvarAllowlist before storing into the per-client store), :333 (GetClientCvarFloat reads it back)"
     constants:
       - { name: "cl_multijump (replicated per-client field) default", base: "-1 (server decides)", port: "provider reads GetClientCvarFloat(p,\"cl_multijump\",-1f) (Commands.cs:551); cl_multijump is allowlisted (Commands.cs:228) so a client `sentcvar cl_multijump <n>` passes the CmdSentCvar gate (:3201), lands in the per-client store, and is read back", match: true }
       - { name: "g_multijump_client (STAT MULTIJUMP_CLIENT, the server default for cl_multijump==-1) default", base: "1 (true)", port: "ClientDefault = (int)Cvars.GetFloat(\"g_multijump_client\") -> 1 (mutators.cfg:475); read and honored", match: true }
@@ -139,7 +139,7 @@ features:
       - "common/mutators/mutator/multijump/multijump.qc:84-108 (PHYS_MULTIJUMP_DODGING redirect inside the granted branch; vlen(vec2(velocity)); makevectors(v_angle_y*'0 1 0'); wishdir*curspeed; keep z)"
       - "common/stats.qh:157,160 (float autocvar_g_multijump_dodging = 1; REGISTER_STAT(MULTIJUMP_DODGING, INT, autocvar_g_multijump_dodging))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs:149-160 (dodging branch, runs only when args.Multijump granted)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs:149-160 (dodging branch, runs only when args.Multijump granted)"
     constants:
       - { name: "g_multijump_dodging default", base: "1 (REGISTER_STAT INT; cvar declared float)", port: "1 -> bool true", match: true }
       - { name: "input gate", base: "PHYS_CS.movement_x != 0 || movement_y != 0", port: "MovementForward != 0 || MovementRight != 0", match: true }
@@ -168,7 +168,7 @@ features:
       - "common/stats.qh:165-166 (REGISTER_STAT(MULTIJUMP_COUNT, INT, this.multijump_count))"
       - "common/mutators/mutator/multijump/multijump.qc:40-42 (CSQC PlayerPhysics: player.multijump_count = PHYS_MULTIJUMP_COUNT(player) before the on-ground reset)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs:50 (int MultijumpCount field)"
+      - "src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs:50 (int MultijumpCount field)"
     constants:
       - { name: "count sync", base: "multijump_count is a networked stat; CSQC copies the server value into the local field every PlayerPhysics tick before the reset", port: "MultijumpCount is a plain entity field; no explicit stat-replication or CSQC-style copy", match: false }
     status:
@@ -193,10 +193,10 @@ features:
     base_refs:
       - "common/mutators/mutator/multijump/multijump.qc:119-131 (SVQC: BuildMutatorsString -> strcat ':multijump'; BuildMutatorsPrettyString -> strcat ', Multi jump')"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs:170 (BuildMutatorsString override -> s + \":multijump\"), :173 (BuildMutatorsPrettyString override -> s + \", Multi jump\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108-114 (BuildMutatorsString aggregator), :121-127 (BuildMutatorsPrettyString aggregator)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1117 (MutatorActivation.BuildMutatorsString(\"\") consumed by gamelog init, gated by sv_eventlog -- LIVE for the machine tag)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1128 (MutatorActivation.BuildMutatorsPrettyString(\"\") -> 'modifications' serverinfo key at match init), :1392 (SendMutatorsWelcome, called at :1291 on the real-client welcome path) -- LIVE for the pretty label"
+      - "src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs:170 (BuildMutatorsString override -> s + \":multijump\"), :173 (BuildMutatorsPrettyString override -> s + \", Multi jump\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108-114 (BuildMutatorsString aggregator), :121-127 (BuildMutatorsPrettyString aggregator)"
+      - "src/VortexArena.Server/GameWorld.cs:1117 (MutatorActivation.BuildMutatorsString(\"\") consumed by gamelog init, gated by sv_eventlog -- LIVE for the machine tag)"
+      - "src/VortexArena.Server/GameWorld.cs:1128 (MutatorActivation.BuildMutatorsPrettyString(\"\") -> 'modifications' serverinfo key at match init), :1392 (SendMutatorsWelcome, called at :1291 on the real-client welcome path) -- LIVE for the pretty label"
     constants:
       - { name: "code tag", base: "\":multijump\"", port: "\":multijump\" via override; aggregated + consumed by gamelog (LIVE)", match: true }
       - { name: "pretty tag", base: "\", Multi jump\"", port: "\", Multi jump\" via override; aggregated + consumed by SendMutatorsWelcome / 'modifications' serverinfo (LIVE)", match: true }
@@ -211,6 +211,6 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "FIX since baseline. Overrides at MultijumpMutator.cs:170,173. BuildMutatorsString aggregator (MutatorActivation.cs:108) CALLED at GameWorld.cs:1117 (gamelog init) -> ':multijump' live. BuildMutatorsPrettyString aggregator (MutatorActivation.cs:121) now CALLED at GameWorld.cs:1128 ('modifications' serverinfo at match init) AND :1392 in SendMutatorsWelcome, which is invoked at :1291 on the non-bot client-welcome path -> ', Multi jump' pretty label reaches a real client. grep BuildMutatorsPrettyString over src/XonoticGodot.Server now returns live callers (was zero at baseline).", result: pass }
+      - { kind: code, ref: "FIX since baseline. Overrides at MultijumpMutator.cs:170,173. BuildMutatorsString aggregator (MutatorActivation.cs:108) CALLED at GameWorld.cs:1117 (gamelog init) -> ':multijump' live. BuildMutatorsPrettyString aggregator (MutatorActivation.cs:121) now CALLED at GameWorld.cs:1128 ('modifications' serverinfo at match init) AND :1392 in SendMutatorsWelcome, which is invoked at :1291 on the non-bot client-welcome path -> ', Multi jump' pretty label reaches a real client. grep BuildMutatorsPrettyString over src/VortexArena.Server now returns live callers (was zero at baseline).", result: pass }
     confidence: high
     notes: "FIX since baseline (liveness partial -> live). At the prior audit both per-mutator overrides + the central MutatorActivation aggregators existed, but the pretty-string aggregator had NO live consumer (only the machine ':multijump' tag was consumed by the gamelog chain). Since then a live consumer was added: GameWorld.SendMutatorsWelcome (GameWorld.cs:1387) calls MutatorActivation.BuildMutatorsPrettyString(\"\"), strips the leading ', ', and surfaces 'Active modifications: ^3<list>' to the connecting real client via the per-client chat sink (QC SendWelcomeMessage non-campaign branch, server/client.qc:1107); it is invoked at GameWorld.cs:1291 on the client-welcome path for every non-bot join. The same pretty string is also stored into the 'modifications' serverinfo key at match init (GameWorld.cs:1128). The machine ':multijump' code tag remains live via the gamelog BuildMutatorsString chain (GameWorld.cs:1117, gated by sv_eventlog). Both tags are now produced AND consumed on the live path; cosmetic, no gameplay effect."

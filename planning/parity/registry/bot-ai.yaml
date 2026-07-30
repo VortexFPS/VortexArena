@@ -75,10 +75,10 @@ features:
       - "server/bot/default/bot.qc:bot_fixcount"
       - "server/bot/default/bot.qc:bot_removenewest"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:ServerFrame"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:FixCount"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:TargetBotCount"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:RemoveNewest"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:ServerFrame"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:FixCount"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:TargetBotCount"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:RemoveNewest"
     constants:
       - { name: "bot_number", base: "0", port: "0 (cvar)", match: true }
       - { name: "minplayers", base: "0", port: "0 (cvar)", match: true }
@@ -111,8 +111,8 @@ features:
       - "server/bot/default/bot.qc:bot_serverframe"
       - "server/bot/default/bot.qc:bot_relinkplayerlist"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:RotateStrategyToken"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ThinkProduce"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:RotateStrategyToken"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ThinkProduce"
     constants: []
     status:
       logic: faithful
@@ -135,11 +135,11 @@ features:
     base_refs:
       - "server/bot/default/bot.qc:bot_setnameandstuff"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:PickNameAndModel"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:ParseBotFile"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:SpawnBot"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:ApplyPreferredSkin"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:ParseColorNibble"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:PickNameAndModel"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:ParseBotFile"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:SpawnBot"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:ApplyPreferredSkin"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:ParseColorNibble"
     constants:
       - { name: "bot_prefix", base: "[BOT]", port: "[BOT] (cvar)", match: true }
       - { name: "bot_suffix", base: "(empty)", port: "(empty) (cvar)", match: true }
@@ -169,7 +169,7 @@ features:
     base_refs:
       - "server/bot/default/bot.qc:bot_think"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ThinkProduce"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ThinkProduce"
     constants:
       - { name: "think interval", base: "bot_ai_thinkinterval 0.05 × min(14/(skill+14),1), floor 0.01", port: "same formula", match: true }
       - { name: "SUPERBOT think", base: "0.005 s", port: "0.005 s", match: true }
@@ -198,8 +198,8 @@ features:
     base_refs:
       - "server/bot/default/aim.qc:bot_aimdir"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotAim.cs:AimAt"
-      - "src/XonoticGodot.Server/Bot/BotAim.cs:MaxFireDeviation"
+      - "src/VortexArena.Server/Bot/BotAim.cs:AimAt"
+      - "src/VortexArena.Server/Bot/BotAim.cs:MaxFireDeviation"
     constants:
       - { name: "bot_ai_aimskill_offset", base: "1.8", port: "1.8 (read live)", match: true }
       - { name: "bot_ai_aimskill_think", base: "1", port: "1 (read live)", match: true }
@@ -233,9 +233,9 @@ features:
       - "server/bot/default/aim.qc:bot_aim"
       - "server/bot/default/aim.qc:bot_aimdir"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:AimAndDecideFire"
-      - "src/XonoticGodot.Server/Bot/BotAim.cs:MaxFireDeviation"
-      - "src/XonoticGodot.Server/Bot/BotAim.cs:ShouldFire"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:AimAndDecideFire"
+      - "src/VortexArena.Server/Bot/BotAim.cs:MaxFireDeviation"
+      - "src/VortexArena.Server/Bot/BotAim.cs:ShouldFire"
     constants:
       - { name: "maxfiredeviation", base: "1000/(dist-9) - 0.35, capped 90", port: "same", match: true }
       - { name: "accuracy factor f", base: "(accurate?1:1.6)+bound(0,(10-(skill+aimskill))*0.3,3)", port: "same (AimSkill folded)", match: true }
@@ -265,9 +265,9 @@ features:
       - "server/bot/default/aim.qc:bot_shotlead"
       - "server/bot/default/aim.qc:findtrajectorywithleading"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotAim.cs:ShotLead"
-      - "src/XonoticGodot.Server/Bot/BotAim.cs:BallisticArc"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:CurrentShotSpeed"
+      - "src/VortexArena.Server/Bot/BotAim.cs:ShotLead"
+      - "src/VortexArena.Server/Bot/BotAim.cs:BallisticArc"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:CurrentShotSpeed"
     constants:
       - { name: "lead time", base: "shotdelay + dist/shotspeed", port: "shotdelay + dist/shotspeed", match: true }
       - { name: "per-weapon lead speed override (wr_aim spd)", base: "wr_aim passes a per-weapon shotspeed to bot_aim", port: "Weapon.BotAimShotSpeed override (Devastator/Crylink/Fireball); default = primary_speed cvar", match: true }
@@ -295,7 +295,7 @@ features:
     base_refs:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_chooseenemy"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ChooseEnemy"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ChooseEnemy"
     constants:
       - { name: "bot_ai_enemydetectionradius", base: "10000", port: "10000", match: true }
       - { name: "bot_ai_enemydetectioninterval", base: "2 s", port: "2 s (0.1 SUPERBOT)", match: true }
@@ -326,7 +326,7 @@ features:
     base_refs:
       - "server/bot/default/aim.qc:bot_shouldattack"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ShouldAttack"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ShouldAttack"
     constants:
       - { name: "bot_ignore_bots", base: "0", port: "0 (cvar)", match: true }
       - { name: "bot_typefrag", base: "0", port: "0 (cvar)", match: true }
@@ -352,8 +352,8 @@ features:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_chooseweapon"
       - "server/bot/default/bot.qc:bot_custom_weapon_priority_setup"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ChooseWeapon"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:PickOwned"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ChooseWeapon"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:PickOwned"
     constants:
       - { name: "bot_ai_chooseweaponinterval", base: "0.5 s", port: "0.5 s", match: true }
       - { name: "priority distances", base: "300 / 850 (close/far)", port: "300 / 850 (read from cvar)", match: true }
@@ -382,7 +382,7 @@ features:
     base_refs:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_ai"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:IdleReload"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:IdleReload"
     constants:
       - { name: "held-weapon reload skill gate", base: "skill >= 2", port: "skill >= 2", match: true }
       - { name: "inventory pre-reload skill gate", base: "skill >= 5", port: "skill >= 5", match: true }
@@ -414,20 +414,20 @@ features:
       - "common/weapons/weapon/mortar.qc:wr_aim"
       - "common/weapons/weapon/hagar.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:AimAndDecideFire"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:Emit"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsDetonate"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:Weapon.BotForbidsFire"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs:BotWantsSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:BotWantsSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:BotForbidsFire"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:BotWantsSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:BotWantsSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs:BotWantsSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:BotAimShotSpeed"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:BotAimShotSpeed"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:BotAimShotSpeed"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:AimAndDecideFire"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:Emit"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsDetonate"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:Weapon.BotForbidsFire"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:BotWantsSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:BotWantsSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:BotForbidsFire"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:BotWantsSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:BotWantsSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs:BotWantsSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:BotAimShotSpeed"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:BotAimShotSpeed"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:BotAimShotSpeed"
     constants:
       - { name: "weapon slots driven", base: "MAX_WEAPONSLOTS (all), each wr_aim", port: "1 (the ChosenWeapon's wr_aim hooks only)", match: false }
       - { name: "ButtonAttack2 (secondary)", base: "set by wr_aim per weapon", port: "driven by Weapon.BotWantsSecondary / BotWantsDetonate (not hardcoded false)", match: true }
@@ -459,18 +459,18 @@ features:
       - "server/bot/default/navigation.qc:navigation_routerating"
       - "server/bot/default/havocbot/havocbot.qc:havocbot_goalrating_items"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:GoalRater.Rate"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:GoalRater.SeedRoute (LIVE: called from BotBrain.cs:335)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ThinkProduce (calls SeedRoute before Role)"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:RoleGeneric"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:GoalrateItems"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:GoalrateEnemyPlayers"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:GoalrateRoamWaypoints"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:ComputeRouteCosts (LIVE: multi-seed Dijkstra, called from SeedRoute)"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:RouteCostTo (LIVE: read by GoalRater.Rate when _routeSeeded)"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:NearestSeeds (LIVE: feeds SetGoal FindPath(seeds) + ComputeRouteCosts)"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:SetGoal (multi-seed NearestSeeds + FindPath(seeds))"
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:GoalRater.Rate"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:GoalRater.SeedRoute (LIVE: called from BotBrain.cs:335)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ThinkProduce (calls SeedRoute before Role)"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:RoleGeneric"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:GoalrateItems"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:GoalrateEnemyPlayers"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:GoalrateRoamWaypoints"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:ComputeRouteCosts (LIVE: multi-seed Dijkstra, called from SeedRoute)"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:RouteCostTo (LIVE: read by GoalRater.Rate when _routeSeeded)"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:NearestSeeds (LIVE: feeds SetGoal FindPath(seeds) + ComputeRouteCosts)"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:SetGoal (multi-seed NearestSeeds + FindPath(seeds))"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs"
     constants:
       - { name: "distance metric", base: "navigation_routerating cost over the waypoint graph (Dijkstra path length)", port: "multi-seed Dijkstra path cost (RouteCostTo); straight-line only as the graphless/unreachable fallback — NOW WIRED via SeedRoute", match: true }
       - { name: "rating discount", base: "f * rangebias/(rangebias+pathcost)", port: "f * rangebias/(rangebias+pathcost) (route branch now executes; straight-line tail for the unreachable case)", match: true }
@@ -508,8 +508,8 @@ features:
       - "server/bot/default/havocbot/roles.qc:havocbot_role_ft_offense"
       - "common/gamemodes/gamemode/freezetag/sv_freezetag.qc:havocbot_goalrating_freeplayers"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleFreezeTag"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:ChooseRole"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleFreezeTag"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:ChooseRole"
     constants:
       - { name: "role split + timeouts", base: "two roles alternating on random()*10+20 (20-30s); offense also flips to freeing when its whole team is frozen; initial random 50/50 + 10-20s join stagger", port: "same (FtBotRole on BotBrain, 2026-07-11)", match: true }
       - { name: "rating triples", base: "offense items 12000 / enemies 10000 / free 9000; freeing items 10000 / enemies 5000 / free 20000 (all radius 10000)", port: "same literals", match: true }
@@ -537,10 +537,10 @@ features:
       - "server/bot/default/bot.qc:bot_calculate_stepheightvec"
       - "server/bot/default/waypoints.qc:waypoint_gettravelcost"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:Steer"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:SetGoal"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:JumpStepHeightLive"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:TravelCost"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:Steer"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:SetGoal"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:JumpStepHeightLive"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:TravelCost"
     constants:
       - { name: "stepheight (Steer)", base: "sv_stepheight", port: "Cvars.FloatOr(\"sv_stepheight\", 34) read live", match: true }
       - { name: "obstacle jump-reach (Steer)", base: "stepheight + jumpheight_vec (apex sv_jumpvelocity²/2g)", port: "StepHeightLive + JumpHeightApex", match: true }
@@ -569,7 +569,7 @@ features:
     base_refs:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_bunnyhop"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:Bunnyhop"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:Bunnyhop"
     constants:
       - { name: "bot_ai_bunnyhop_skilloffset", base: "7", port: "7 (cvar)", match: true }
       - { name: "bot_ai_bunnyhop_dir_deviation_max", base: "20", port: "20 (cvar)", match: true }
@@ -600,11 +600,11 @@ features:
       - "common/mapobjects/trigger/hurt.qc:tracebox_hits_trigger_hurt"
       - "server/bot/default/bot.qc:botframe_updatedangerousobjects"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotDanger.cs:CheckDanger"
-      - "src/XonoticGodot.Server/Bot/BotDanger.cs:HitsTriggerHurt"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ThinkProduce"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:UpdateDangerousObjects (LIVE: called from BotPopulation.cs:218)"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:ServerFrame (0.25 s danger-detection clock)"
+      - "src/VortexArena.Server/Bot/BotDanger.cs:CheckDanger"
+      - "src/VortexArena.Server/Bot/BotDanger.cs:HitsTriggerHurt"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ThinkProduce"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:UpdateDangerousObjects (LIVE: called from BotPopulation.cs:218)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:ServerFrame (0.25 s danger-detection clock)"
     constants:
       - { name: "down-probe depth", base: "3000 qu", port: "3000 qu", match: true }
       - { name: "cliff threshold", base: ">100 qu below feet & goal", port: ">100 qu", match: true }
@@ -634,11 +634,11 @@ features:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_dodge"
       - "server/bot/default/havocbot/havocbot.qc:havocbot_movetogoal"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:HavocbotDodge"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:CombatMovement"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ThinkProduce (step 4c-ii — SUPERBOT combat jitter)"
-      - "src/XonoticGodot.Common/Framework/Entity.cs:BotDodge"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs:BotDodge (and 13 more weapon/turret producers, incl. OkRpc)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:HavocbotDodge"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:CombatMovement"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ThinkProduce (step 4c-ii — SUPERBOT combat jitter)"
+      - "src/VortexArena.Common/Framework/Entity.cs:BotDodge"
+      - "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs:BotDodge (and 13 more weapon/turret producers, incl. OkRpc)"
     constants:
       - { name: "dodge applies (SUPERBOT gate)", base: "SUPERBOT only (skill>100)", port: "HavocbotDodge SUPERBOT-gated (skill>100); generic CombatMovement strafe for all skills", match: true }
       - { name: "dodge basis", base: "scan bot_dodge edicts, evade perpendicular to flight path; bestdanger=-20", port: "HavocbotDodge = faithful flight-path scan (bestDanger=-20); plus generic strafe-flip+HP-bias", match: true }
@@ -668,7 +668,7 @@ features:
     base_refs:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_movetogoal"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ThinkProduce"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ThinkProduce"
     constants:
       - { name: "bot_ai_navigation_jetpack", base: "0", port: "n/a (jetpack NAV still unported)", match: false }
       - { name: "bot_ai_navigation_jetpack_mindistance", base: "3500", port: "n/a", match: false }
@@ -696,9 +696,9 @@ features:
     base_refs:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_keyboard_movement"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:KeyboardMovement"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:BlendKeyboard"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:Steer"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:KeyboardMovement"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:BlendKeyboard"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:Steer"
     constants:
       - { name: "bot_ai_keyboard_distance", base: "250", port: "250 (cvar, read live)", match: true }
       - { name: "bot_ai_keyboard_threshold", base: "0.57", port: "0.57 (cvar, read live)", match: true }
@@ -753,10 +753,10 @@ features:
       - "server/bot/default/bot.qc:autoskill"
       - "server/bot/default/bot.qc:bot_serverframe"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:ServerFrame"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:Autoskill"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:ReadSkillColumn"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:Skill"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:ServerFrame"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:Autoskill"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:ReadSkillColumn"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:Skill"
     constants:
       - { name: "skill (default)", base: "8 (server cfg)", port: "Cvars.Skill seeds BotSkill", match: true }
       - { name: "per-bot skill modifiers", base: "12 randomized columns (move/dodge/ping/weapon/aggres/range/aim/offset/mouse/think/ai/keyboard)", port: "4 facets carried: single BotSkill knob + MoveSkill + AggresSkill (argv11) + AimSkill (argv13); other 8 folded", match: false }
@@ -788,8 +788,8 @@ features:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_ai"
       - "server/bot/default/navigation.qc:1863 (AI_STATUS_STUCK gates the wander fallback)"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:CheckGoalProgress (no-progress 'stuck' signal, BotNavigation.cs:147)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ThinkProduce (per-behavior locals/fields — dangerBrakeEngaged, _triggerHurtEscape, WantBunnyhop — instead of a bitfield)"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:CheckGoalProgress (no-progress 'stuck' signal, BotNavigation.cs:147)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ThinkProduce (per-behavior locals/fields — dangerBrakeEngaged, _triggerHurtEscape, WantBunnyhop — instead of a bitfield)"
     constants: []
     status:
       logic: partial
@@ -830,7 +830,7 @@ features:
     gaps:
       - "INTENDED DIVERGENCE (2026-07-27), not an oversight: bots have zero simulated latency — no skill-based ping and no bot_aimlatency delay folded into the shot lead. BotAim.ShotLead's shotDelay parameter defaults to 0 and no live caller (BotBrain.AimAndDecideFire) passes a latency. Low-skill bots lead/react sharper than stock, so skill numbers are not numerically interchangeable with the upstream ones. See divergence_rationale. (Cross-ref: bot-ai.think.throttle owns the ping half; this row owns the aim.qh-side latency term.)"
     verification:
-      - { kind: code, ref: "grep AimLatency/aimlatency/ping across src/XonoticGodot.Server/Bot: no hits; BotAim.cs:114 ShotLead(…, shotDelay = 0f) — no caller passes non-zero", result: fail }
+      - { kind: code, ref: "grep AimLatency/aimlatency/ping across src/VortexArena.Server/Bot: no hits; BotAim.cs:114 ShotLead(…, shotDelay = 0f) — no caller passes non-zero", result: fail }
     confidence: high
     notes: "added 2026-07-02 (coverage fold). Reclassified missing -> INTENDED DIVERGENCE 2026-07-27 after the superbot parity audit: the SUPERBOT ping = 0 branch (bot.qc:96) is already our behaviour by accident, but so is skill 0's — that is the real divergence, and it is now recorded deliberately instead of reading as an oversight."
 
@@ -844,9 +844,9 @@ features:
       - "common/mapobjects/teleporters.qc:118"
       - "lib/warpzone/server.qc:58"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotAim.cs:Reset (BotAim.cs:97, faithful port of the reset itself)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:184 (constructor — the ONLY caller)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:362 (bot ViewAngles re-stamp at the seam)"
+      - "src/VortexArena.Server/Bot/BotAim.cs:Reset (BotAim.cs:97, faithful port of the reset itself)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:184 (constructor — the ONLY caller)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:362 (bot ViewAngles re-stamp at the seam)"
     constants: []
     status:
       logic: partial
@@ -918,7 +918,7 @@ features:
     gaps:
       - "The BOT_CMD_MOVETO/MOVETOTARGET handler is missing: no personal-waypoint spawn+link (havocbot_personal_waypoint with its searchtime/failcounter retry), no cmd_moveto/cmd_resetgoal bindings, no AI_STATUS_WAYPOINT_PERSONAL_LINKING→GOING→REACHED progression — 'send this bot to X' (cutscenes, benchmarks, waypoint-editor driving) cannot work even once the command queue exists."
     verification:
-      - { kind: code, ref: "grep moveto/personal.waypoint across src/XonoticGodot.Server/Bot: no analogue; BotNavigation.SetGoal only routes AI-chosen goals", result: fail }
+      - { kind: code, ref: "grep moveto/personal.waypoint across src/VortexArena.Server/Bot: no analogue; BotNavigation.SetGoal only routes AI-chosen goals", result: fail }
     confidence: high
     notes: "added 2026-07-02 (coverage fold). Kept separate from bot-ai.scripting.console_interface because it is the havocbot-side handler (havocbot.qh/qc) a future queue port must call into."
 
@@ -934,10 +934,10 @@ features:
       - "server/bot/default/bot.qc:739 (bot_navigation_movemode = ignoreplayers ? MOVE_NOMONSTERS : MOVE_NORMAL)"
       - "server/bot/default/navigation.qc:1863 (bot_wander_enable wander fallback gate)"
     port_refs:
-      - "src/XonoticGodot.Server/Cvars.cs:301 (bot_usemodelnames declared, no reader)"
-      - "src/XonoticGodot.Server/Cvars.cs:309 (bot_wander_enable declared, no reader)"
-      - "src/XonoticGodot.Server/Cvars.cs:345 (bot_navigation_ignoreplayers declared, no reader)"
-      - "src/XonoticGodot.Server/Bot/BotTracewalk.cs:196 (traces hardwired MoveFilter.NoMonsters)"
+      - "src/VortexArena.Server/Cvars.cs:301 (bot_usemodelnames declared, no reader)"
+      - "src/VortexArena.Server/Cvars.cs:309 (bot_wander_enable declared, no reader)"
+      - "src/VortexArena.Server/Cvars.cs:345 (bot_navigation_ignoreplayers declared, no reader)"
+      - "src/VortexArena.Server/Bot/BotTracewalk.cs:196 (traces hardwired MoveFilter.NoMonsters)"
     constants:
       - { name: "bot_usemodelnames", base: "0", port: "0 (declared, dead)", match: true }
       - { name: "bot_navigation_ignoreplayers", base: "0 (tracewalk movemode MOVE_NORMAL — collide with players)", port: "0 (declared, dead); BotTracewalk hardwires NoMonsters = ignoreplayers ALWAYS ON", match: false }

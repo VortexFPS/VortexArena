@@ -19,9 +19,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/survival/survival.qh:CLASS(Survival)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:Survival()"
-      - "src/XonoticGodot.Server/GameWorld.cs:ResolveGameType"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (Survival arm timelimit/fraglimit asserts, 2888-2891)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:Survival()"
+      - "src/VortexArena.Server/GameWorld.cs:ResolveGameType"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (Survival arm timelimit/fraglimit asserts, 2888-2891)"
     constants:
       - { name: "net_name", base: "surv", port: "surv", match: true }
       - { name: "default_match", base: "timelimit=20 pointlimit=12", port: "asserted at activation: timelimit=20 (GameWorld.cs:2888-2889) + fraglimit=12 (2890-2891) when unconfigured", match: true }
@@ -48,9 +48,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/survival/sv_survival.qc:Surv_RoundStart"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:AssignRoles"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:HunterCount"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (EnableRounds onRoundStart: surv.AssignRoles, 2903)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:AssignRoles"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:HunterCount"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (EnableRounds onRoundStart: surv.AssignRoles, 2903)"
     constants:
       - { name: "g_survival_hunter_count", base: "0.25", port: "0.25 (cvar; 0.25f fallback)", match: true }
       - { name: "hunter_count_formula", base: "bound(1, cvar>=1?cvar:floor(live*cvar), live-1)", port: "same", match: true }
@@ -79,9 +79,9 @@ features:
       - "server/round_handler.qc:round_handler_Think"
       - "common/gametypes/gametype/survival/sv_survival.qc:surv_Initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/RoundHandler.cs:Tick"
-      - "src/XonoticGodot.Server/GameWorld.cs:EnableRounds (Survival arm, 2900-2906)"
-      - "src/XonoticGodot.Server/GameWorld.cs:MirrorRoundTiming (4667)"
+      - "src/VortexArena.Common/Gameplay/RoundHandler.cs:Tick"
+      - "src/VortexArena.Server/GameWorld.cs:EnableRounds (Survival arm, 2900-2906)"
+      - "src/VortexArena.Server/GameWorld.cs:MirrorRoundTiming (4667)"
     constants:
       - { name: "round_handler_Init(delay, warmup, timelimit)", base: "(5, g_survival_warmup=10, g_survival_round_timelimit=120)", port: "EnableRounds endDelay=5, countdown=g_survival_warmup||10, roundTimeLimit=g_survival_round_timelimit||120 (GameWorld.cs:2904-2906); end-delay arg hardcoded 5 (NOT g_survival_round_enddelay)", match: true }
       - { name: "round_handler_Spawn predicates", base: "Surv_CheckPlayers / Surv_CheckWinner / Surv_RoundStart", port: "HandlerCanRoundStart / CheckWinningCondition / AssignRoles (GameWorld.cs:2901-2903)", match: true }
@@ -110,7 +110,7 @@ features:
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, GiveFragsForKill)"
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, ClientObituary)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:OnDeath"
     constants:
       - { name: "bank_amount_normal", base: "M_ARGV(2,float) frag delta (=1 stock)", port: "+1 per valid kill", match: true }
       - { name: "bank_amount_teamkill", base: "GiveFrags(-1 if punish else -2)", port: "-1 if PunishTeamkill else -2", match: true }
@@ -138,7 +138,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/survival/sv_survival.qc:Surv_UpdateScores"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:UpdateScores"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:UpdateScores"
     constants:
       - { name: "SP_SURV_SURVIVALS / SP_SURV_HUNTS", base: "survivals (primary) / hunts (secondary)", port: "SURV_SURVIVALS / SURV_HUNTS", match: true }
       - { name: "g_survival_reward_survival", base: "1 (true)", port: "default-on (cvar)", match: true }
@@ -166,8 +166,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, AddPlayerScore)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:AnonymizeScore"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:AddPlayerScoreHook"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:AnonymizeScore"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:AddPlayerScoreHook"
     constants:
       - { name: "suppressed_fields", base: "SP_KILLS,SP_DEATHS,SP_SUICIDES,SP_DMG,SP_DMGTAKEN", port: "KILLS,DEATHS,SUICIDES,DMG,DMGTAKEN", match: true }
     status:
@@ -192,7 +192,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/survival/sv_survival.qc:Surv_CheckWinner"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:CheckWinningCondition"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:CheckWinningCondition"
     constants:
       - { name: "win_resolution", base: "hunter_count>0 → hunters; else survivor_count>0 → survivors; else tie", port: "hunters>0 → Hunter; else prey>0 → Prey; else None (tie)", match: true }
       - { name: "g_survival_round_enddelay deferral", base: "enddelay>0 → defer resolution by min(time+enddelay, endtime), re-check each frame; reset on both-sides-alive", port: "MODELED (CheckWinningCondition cs:474-491 + _endDelayTime sentinel, reset at cs:468)", match: true }
@@ -220,9 +220,9 @@ features:
       - "common/gametypes/gametype/survival/sv_survival.qc:Surv_CheckWinner (timeout branch, gated on g_survival_round_enddelay == -1)"
       - "server/round_handler.qc:round_handler_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:RoundTimedOut"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:EndRoundTimedOut"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:CheckWinningCondition"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:RoundTimedOut"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:EndRoundTimedOut"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:CheckWinningCondition"
     constants:
       - { name: "g_survival_round_timelimit", base: "120 (s)", port: "120 via cvar (RoundEndTime armed via EnableRounds roundTimeLimit AND checked)", match: true }
       - { name: "g_survival_round_enddelay == -1 gate", base: "timeout→survivors-win branch ONLY runs when enddelay==-1 (default 0, so OFF in stock)", port: "MODELED — RoundTimedOut returns false unless enddelay==-1 (Survival.cs:514-516)", match: true }
@@ -250,9 +250,9 @@ features:
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, PlayerDies)"
       - "common/gametypes/gametype/survival/sv_survival.qc:surv_isEliminated"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:IsEliminatedPlayer"
-      - "src/XonoticGodot.Server/GameWorld.cs:RespawnDuePlayers (round-gated)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:IsEliminatedPlayer"
+      - "src/VortexArena.Server/GameWorld.cs:RespawnDuePlayers (round-gated)"
     constants:
       - { name: "respawn_flags", base: "RESPAWN_FORCE always; RESPAWN_SILENT + respawn_time=time+2 while !allowed_to_spawn", port: "RespawnFlag.Force always (cs:368); RespawnFlag.Silent + RespawnTime=time+2 when roundStarted (cs:363-367)", match: true }
     status:
@@ -279,9 +279,9 @@ features:
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, PlayerDies)"
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, ClientObituary)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:OnDeath (teamkill block)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:PunishTeamkill"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:NeedKill"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:OnDeath (teamkill block)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:PunishTeamkill"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:NeedKill"
     constants:
       - { name: "g_survival_punish_teamkill", base: "1 (true)", port: "PunishTeamkill = cvar != 0 (default true)", match: true }
       - { name: "mirror_damage", base: "Damage(attacker, attacker, attacker, 100000, DEATH_MIRRORDAMAGE)", port: "Combat.Damage(attacker, attacker, attacker, 100000f, MirrorDamage, …)", match: true }
@@ -313,8 +313,8 @@ features:
       - "common/gametypes/gametype/survival/sv_survival.qc:SurvivalStatuses_SendEntity"
       - "common/gametypes/gametype/survival/cl_survival.qc:NET_HANDLE(ENT_CLIENT_SURVIVALSTATUSES)"
     port_refs:
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:Capture (Survival arm)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:DisclosesHuntersTo"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:Capture (Survival arm)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:DisclosesHuntersTo"
       - "game/net/ServerNet.cs:Capture call"
       - "game/net/ClientNet.cs:Deserialize"
     constants: []
@@ -367,9 +367,9 @@ features:
       - "common/gametypes/gametype/survival/cl_survival.qc:NET_HANDLE (colormap), MUTATOR_HOOKFUNCTION(cl_surv, ForcePlayercolors_Skip), MUTATOR_HOOKFUNCTION(cl_surv, DrawScoreboard)"
       - "common/gametypes/gametype/survival/sv_survival.qc:Surv_RoundStart (CENTER_SURVIVAL_SURVIVOR/HUNTER), Surv_CheckWinner (SURVIVAL_*_WIN / ROUND_TIED)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:ISurvivalNotifications (Role/RoundResult)"
-      - "src/XonoticGodot.Server/GameWorld.cs:SurvivalNotifyHost (host sink, wired at GameWorld.cs:2934)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs (SURVIVAL_*/ROUND_TIED declared)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:ISurvivalNotifications (Role/RoundResult)"
+      - "src/VortexArena.Server/GameWorld.cs:SurvivalNotifyHost (host sink, wired at GameWorld.cs:2934)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs (SURVIVAL_*/ROUND_TIED declared)"
       - "game/net/ServerNet.cs:NotificationNetSink (live broadcast sink, installed at ServerNet.cs:300)"
       - "game/client/ClientWorld.cs:ResolveForcedColormap (Survival colormap override, 1359-1367)"
       - "game/net/NetGame.cs:BuildAppearanceContext (SurvivalActive + SurvivalHunterIds, 5511-5525)"
@@ -398,8 +398,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, Bot_ForbidAttack)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (Survival arm, Bot.BotBrain.ForbidAttackHook, 2927-2929)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ShouldAttack (ForbidAttackHook consult)"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (Survival arm, Bot.BotBrain.ForbidAttackHook, 2927-2929)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ShouldAttack (ForbidAttackHook consult)"
     constants:
       - { name: "forbid_rule", base: "targ.survival_status == bot.survival_status → forbid", port: "surv.StatusOf(bot) == surv.StatusOf(victim) → forbid (both must be Player)", match: true }
     status:
@@ -425,11 +425,11 @@ features:
       - "common/gametypes/gametype/survival/sv_survival.qc:surv_LastPlayerForTeam_Notify"
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, PlayerDies/ClientDisconnect/MakePlayerObserver)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:NotifyLastForTeam"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:OnPlayerRemoved (disconnect/observe dispatch)"
-      - "src/XonoticGodot.Server/ClientManager.cs:535/814 (OnPlayerRemoved call sites)"
-      - "src/XonoticGodot.Server/GameWorld.cs:SurvivalNotifyHost.Alone (live sink)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:ALONE (declared)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:NotifyLastForTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:OnPlayerRemoved (disconnect/observe dispatch)"
+      - "src/VortexArena.Server/ClientManager.cs:535/814 (OnPlayerRemoved call sites)"
+      - "src/VortexArena.Server/GameWorld.cs:SurvivalNotifyHost.Alone (live sink)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:ALONE (declared)"
     constants:
       - { name: "CENTER_ALONE", base: "sent to the now-sole survivor of a status when a same-status ally dies/leaves (round active only)", port: "Notifications.Alone(last) → SurvivalNotifyHost.Alone → NotificationSystem.Send(OneOnly, Center, ALONE)", match: true }
     status:
@@ -455,10 +455,10 @@ features:
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, ForbidSpawn)"
       - "common/gametypes/gametype/survival/sv_survival.qc:MUTATOR_HOOKFUNCTION(surv, PutClientInServer)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:CanJoin (603-610)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs:OnJoin (620-624)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (Survival arm join-gate wiring, 2920-2921)"
-      - "src/XonoticGodot.Server/ClientManager.cs:356 (GametypeJoinGate consulted) / :298 (GametypeOnJoin)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:CanJoin (603-610)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:OnJoin (620-624)"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (Survival arm join-gate wiring, 2920-2921)"
+      - "src/VortexArena.Server/ClientManager.cs:356 (GametypeJoinGate consulted) / :298 (GametypeOnJoin)"
     constants:
       - { name: "forbid_spawn_gate", base: "!allowed_to_spawn && INGAME(player) → ForbidSpawn true; PutClientInServer: !allowed_to_spawn && IS_PLAYER → TRANSMUTE(Observer) + INGAME_STATUS_JOINING + INFO_CA_JOIN_LATE", port: "CanJoin(p, RoleAssigned) returns false while a round is live (Survival.cs:603-610) → join refused → client stays observer; OnJoin registers an ALLOWED (pre-round/warmup) joiner. Wired GameWorld.cs:2920-2921; consulted ClientManager.cs:356.", match: true }
     status:

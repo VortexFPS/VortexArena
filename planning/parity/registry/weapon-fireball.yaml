@@ -15,7 +15,7 @@ features:
     base_refs:
       - "common/weapons/weapon/fireball.qh:CLASS(Fireball)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:Fireball()"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:Fireball()"
     constants:
       - { name: "spawnflags", base: "SUPERWEAPON|TYPE_SPLASH|NODUAL", port: "SuperWeapon|TypeSplash|NoDual", match: true }
       - { name: "impulse", base: "9", port: "9", match: true }
@@ -44,7 +44,7 @@ features:
       - "bal-wep-xonotic.cfg:633-671"
       - "common/weapons/weapon/fireball.qh:W_PROPS"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:Configure"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:Configure"
     constants:
       - { name: "primary_damage/edgedamage/radius/force", base: "200/50/200/600", port: "200/50/200/600", match: true }
       - { name: "primary_bfgdamage/bfgforce/bfgradius", base: "100/0/1000", port: "100/0/1000", match: true }
@@ -75,8 +75,8 @@ features:
       - "common/weapons/weapon/fireball.qc:W_Fireball_Attack1_Frame0"
       - "common/weapons/weapon/fireball.qc:W_Fireball_AttackEffect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:FireballPrefireFrame"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:AttackEffect"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:FireballPrefireFrame"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:AttackEffect"
     constants:
       - { name: "prefire_frames", base: "5 (Frame0..4, each weapon_thinkf animtime)", port: "Frame0..4 via ScheduleThink animtime*rate (Frame4 launches)", match: true }
       - { name: "SND_FIREBALL_PREFIRE2", base: "played on CH_WEAPON_SINGLE at Frame0", port: "weapons/fireball_prefire2.wav on SoundChannel.WeaponSingle at frame 0", match: true }
@@ -103,7 +103,7 @@ features:
     base_refs:
       - "common/weapons/weapon/fireball.qc:W_Fireball_Attack1"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:Attack1"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:Attack1"
     constants:
       - { name: "bbox", base: "±16", port: "±16", match: true }
       - { name: "speed/spread", base: "1200/0", port: "1200/0", match: true }
@@ -133,7 +133,7 @@ features:
     base_refs:
       - "common/weapons/weapon/fireball.qc:W_Fireball_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:OnFireballThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:OnFireballThink"
     constants:
       - { name: "think_interval", base: "0.1s", port: "0.1s", match: true }
       - { name: "lifetime (pushltime)", base: "15s", port: "15s", match: true }
@@ -161,8 +161,8 @@ features:
       - "common/weapons/weapon/fireball.qc:W_Fireball_Explode"
       - "server/damage.qc:RadiusDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "damage/edgedamage/radius/force", base: "200/50/200/600", port: "200/50/200/600", match: true }
       - { name: "damageforcescale", base: "0", port: "0 (default)", match: true }
@@ -188,7 +188,7 @@ features:
     base_refs:
       - "common/weapons/weapon/fireball.qc:W_Fireball_Explode (findradius bfgradius loop)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:Explode (BFG loop)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:Explode (BFG loop)"
     constants:
       - { name: "bfgdamage/bfgforce/bfgradius", base: "100/0/1000", port: "100/0/1000", match: true }
       - { name: "points falloff", base: "1 - sqrt(dist/bfgradius)", port: "1 - sqrt(dist/bfgradius)", match: true }
@@ -219,7 +219,7 @@ features:
     base_refs:
       - "common/weapons/weapon/fireball.qc:W_Fireball_LaserPlay"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:LaserPlay"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:LaserPlay"
     constants:
       - { name: "primary laserradius/damage/edgedamage/burntime", base: "256/80/20/0.5", port: "256/80/20/0.5", match: true }
       - { name: "scorch rate", base: "damage + (edgedamage-damage)*(d/dist)", port: "same formula", match: true }
@@ -250,9 +250,9 @@ features:
       - "server/weapons/common.qc:W_CheckProjectileDamage"
       - "server/weapons/common.qc:W_PrepareExplosionByDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:Attack1 (proj.TakeDamage=Yes + proj.ProjectileDamage + Projectiles.MakeShootable, exception -1)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable / ShootDown / CheckProjectileDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:358 (GtEventDamage live dispatch for non-player edicts)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:Attack1 (proj.TakeDamage=Yes + proj.ProjectileDamage + Projectiles.MakeShootable, exception -1)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable / ShootDown / CheckProjectileDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:358 (GtEventDamage live dispatch for non-player edicts)"
     constants:
       - { name: "health", base: "0 (DAMAGE_YES, event_damage set UNCONDITIONALLY, but 0 HP)", port: "0 (DAMAGE_YES + GtEventDamage now set UNCONDITIONALLY)", match: true }
       - { name: "hp<=0 early return", base: "GetResource(HEALTH)<=0 -> return (a 0-HP fireball takes no damage, never explodes from being shot)", port: "ShootDown: self.Health<=0 -> return (same no-op at default 0 HP)", match: true }
@@ -283,7 +283,7 @@ features:
     base_refs:
       - "common/weapons/weapon/fireball.qc:W_Fireball_Attack2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:Attack2"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:Attack2"
     constants:
       - { name: "bbox", base: "±4", port: "±4", match: true }
       - { name: "speed/speed_up/speed_z/spread", base: "900/100/0/0", port: "900/100/0/0", match: true }
@@ -313,8 +313,8 @@ features:
       - "common/weapons/weapon/fireball.qc:W_Fireball_Firemine_Think"
       - "common/weapons/weapon/fireball.qc:W_Fireball_Firemine_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:FiremineThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:FiremineTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:FiremineThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:FiremineTouch"
     constants:
       - { name: "lifetime", base: "7s", port: "7s", match: true }
       - { name: "secondary laserradius/damage/edgedamage/burntime", base: "110/50/20/0.5", port: "110/50/20/0.5", match: true }
@@ -344,9 +344,9 @@ features:
       - "server/damage.qc:Fire_AddDamage"
       - "server/damage.qc:Fire_ApplyDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:FireAddDamage"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:FireApplyDamage"
-      - "src/XonoticGodot.Server/GameWorld.cs:1925 (StatusEffectsCatalog.Tick on the live player loop)"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:FireAddDamage"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:FireApplyDamage"
+      - "src/VortexArena.Server/GameWorld.cs:1925 (StatusEffectsCatalog.Tick on the live player loop)"
     constants:
       - { name: "per-frame burn", base: "fire_damagepersec * min(frametime, fireend-time)", port: "dps * min(frametime, fireEnd-now)", match: true }
       - { name: "dps", base: "d / max(t,0.1)", port: "d / max(t,0.1)", match: true }
@@ -377,10 +377,10 @@ features:
       - "common/weapons/weapon/fireball.qc:wr_killmessage"
       - "common/weapons/weapon/fireball.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:61,138"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:361-364,1194-1197"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:BotWantsSecondary,BotAimShotSpeed"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:365,658"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:61,138"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:361-364,1194-1197"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:BotWantsSecondary,BotAimShotSpeed"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:365,658"
     constants:
       - { name: "obituary split", base: "HITTYPE_SECONDARY -> FIREMINE else BLAST (kill + suicide)", port: "sec ? *_MURDER/_SUICIDE_FIREMINE : *_BLAST", match: true }
       - { name: "bot mode-swap clock", base: "random()<0.02 -> prefer secondary; random()<0.01 -> back to primary", port: "ctx.Random01<0.02 -> SecondaryToggle=true; <0.01 -> false", match: true }

@@ -23,7 +23,7 @@ features:
       - "common/vehicles/vehicle/raptor.qc:vr_setup"
       - "common/vehicles/vehicle/raptor.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Spawn"
       - "game/client/VehicleCatalog.cs:66 (Raptor Desc: body model, rotor specs, gun mounts) + game/client/VehicleVisuals.cs (renders body + spinning rotors)"
     constants:
       - { name: "health", base: "250", port: "250", match: true }
@@ -62,9 +62,9 @@ features:
     base_refs:
       - "common/vehicles/vehicle/raptor.qc:spawnfunc(vehicle_raptor)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:Raptor (line 97)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:251"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs (engine think-pump)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:Raptor (line 97)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:251"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs (engine think-pump)"
     constants:
       - { name: "master cvar g_vehicle_raptor", base: "true", port: "g_vehicle_raptor (default-on)", match: true }
     status:
@@ -89,8 +89,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/raptor.qc:vr_enter"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Enter"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:Enter"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Enter"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:Enter"
     constants:
       - { name: "default W2 mode", base: "RSM_BOMB", port: "RaptorMode.Bomb", match: true }
       - { name: "movetype on enter", base: "MOVETYPE_BOUNCEMISSILE", port: "MoveType.BounceMissile", match: true }
@@ -122,7 +122,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/raptor.qc:raptor_takeoff"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Takeoff"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Takeoff"
     constants:
       - { name: "takefftime", base: "1.5", port: "1.5", match: true }
       - { name: "frame target", base: "25", port: "25", match: true }
@@ -151,7 +151,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/raptor.qc:raptor_frame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Frame"
     constants:
       - { name: "movestyle", base: "1", port: "1", match: true }
       - { name: "turnspeed", base: "200", port: "200", match: true }
@@ -191,10 +191,10 @@ features:
       - "common/vehicles/sv_vehicles.qc:vehicles_locktarget"
       - "common/vehicles/sv_vehicles.qc:vehicle_aimturret"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Frame"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:PredictAim"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:AimTurret"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:LockTarget"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:PredictAim"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:AimTurret"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:LockTarget"
     constants:
       - { name: "cannon_turnspeed", base: "120", port: "120", match: true }
       - { name: "cannon_turnlimit", base: "20", port: "20", match: true }
@@ -231,7 +231,7 @@ features:
       - "common/vehicles/vehicle/raptor_weapons.qc:RaptorCannon.wr_think"
       - "common/vehicles/vehicle/raptor_weapons.qc:RaptorCannon.wr_checkammo1"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:FireCannon"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:FireCannon"
     constants:
       - { name: "cannon_cost", base: "1", port: "1", match: true }
       - { name: "cannon_damage", base: "10", port: "10", match: true }
@@ -273,8 +273,8 @@ features:
       - "common/vehicles/vehicle/raptor_weapons.qc:raptor_bomblet_touch"
       - "common/vehicles/vehicle/raptor_weapons.qc:raptor_bomblet_boom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:DropBombs"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:DropOneBomb"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:DropBombs"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:DropOneBomb"
     constants:
       - { name: "bombs_refire", base: "5", port: "5", match: true }
       - { name: "bomblets", base: "8", port: "8", match: true }
@@ -315,7 +315,7 @@ features:
       - "common/vehicles/vehicle/raptor_weapons.qc:raptor_flare_damage"
       - "common/vehicles/vehicle/raptor_weapons.qc:raptor_flare_touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:FireFlares"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:FireFlares"
     constants:
       - { name: "flare_refire", base: "5", port: "5", match: true }
       - { name: "flare count", base: "3", port: "3", match: true }
@@ -350,9 +350,9 @@ features:
     base_refs:
       - "common/vehicles/vehicle/raptor.qc:raptor_impulse"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:SetMode"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:CycleMode"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:Impulse"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:SetMode"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:CycleMode"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:Impulse"
     constants:
       - { name: "RSM_BOMB / RSM_FLARE", base: "1 / 2", port: "1 / 2", match: true }
       - { name: "group1->bomb, group2->flare", base: "yes", port: "imp 1/2", match: true }
@@ -381,9 +381,9 @@ features:
       - "common/vehicles/vehicle/raptor.qc:raptor_exit"
       - "common/vehicles/vehicle/raptor.qc:raptor_land"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Exit"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Land"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:Exit"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Exit"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Land"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:Exit"
     constants:
       - { name: "eject velocity", base: "(v_up + v_forward*0.25)*750", port: "same", match: true }
       - { name: "fast-exit velocity", base: "normalize(vel)*maxairspeed*2 + z200", port: "same", match: true }
@@ -416,8 +416,8 @@ features:
       - "common/vehicles/vehicle/raptor.qc:vr_impact (METHOD Raptor)"
       - "common/vehicles/sv_vehicles.qc:vehicles_impact"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Impact"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:Impact"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Impact"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:Impact"
     constants:
       - { name: "bouncepain", base: "'1 4 1000' (minspeed, damagemultiplier, maxpain)", port: "Impact(1, 4, 1000) — args present + correct", match: true }
     status:
@@ -431,7 +431,7 @@ features:
     divergence_rationale: null
     gaps:
       - "CONFIRMED LIVE (fixup commit 4be8357, re-verified 2026-06-22): Raptor.Spawn no longer nulls vehicle.Touch, so the VehicleCommon.Touch dispatcher SpawnVehicle installs stands and calls vehic.VehicleDef.Impact on a hard touch (matches Racer.cs:217-219 / QC vr_spawn which does NOT reset .touch). Raptor.Think:231 snapshots vehicle.OldVelocity BEFORE the tick's physics (matches Racer.Think:296), and Spawn:141 seeds PlayTime = Time to clear the impact debounce on respawn — so vehicles_impact computes the true Velocity-OldVelocity delta. The raptor takes DEATH_FALL crash damage on hard impacts."
-      - "Dispatch chain VERIFIED (2026-06-27): a BounceMissile-movetype raptor is integrated by MoveTypePhysics (src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:190) which calls PushEntity(doTouch:true) -> FlyMove invokes e.Touch for non-Solid.Not solids -> VehicleCommon.Touch:793 -> VehicleDef.Impact:819 when PlayTime<Time. (Earlier baseline cited TriggerTouch.cs for this; the actual moving-solid touch dispatch is FlyMove/MoveTypePhysics — corrected, behavior unchanged.)"
+      - "Dispatch chain VERIFIED (2026-06-27): a BounceMissile-movetype raptor is integrated by MoveTypePhysics (src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:190) which calls PushEntity(doTouch:true) -> FlyMove invokes e.Touch for non-Solid.Not solids -> VehicleCommon.Touch:793 -> VehicleDef.Impact:819 when PlayTime<Time. (Earlier baseline cited TriggerTouch.cs for this; the actual moving-solid touch dispatch is FlyMove/MoveTypePhysics — corrected, behavior unchanged.)"
       - "VehicleCommon.Impact:835 is line-for-line faithful to vehicles_impact (delta=Velocity-OldVelocity, min(speedfac*len,maxpain), DEATH_FALL, play_time=time+0.25). Only the trace_dphitq3surfaceflags & Q3SURFACEFLAG_NOIMPACT skip is deferred (no per-touch surface-flag in the headless collision result)."
     verification:
       - { kind: code, ref: "Raptor.cs:736-740 Impact -> VehicleCommon.Impact:835 (matches sv_vehicles.qc:vehicles_impact exactly); Spawn keeps SpawnVehicle's Touch (no null) + seeds PlayTime; Think:231 snapshots OldVelocity; dispatch MoveTypePhysics.cs:190->FlyMove->VehicleCommon.Touch:793->VehicleDef.Impact:819 — identical live wiring to Racer", result: pass }
@@ -446,9 +446,9 @@ features:
       - "common/vehicles/vehicle/raptor.qc:raptor_diethink"
       - "common/vehicles/vehicle/raptor.qc:raptor_blowup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Death"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Blowup"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:555 (Death dispatch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Death"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Blowup"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:555 (Death dispatch)"
       - "game/client/VehicleVisuals.cs:311 (Die — client death gibs + explosion + death sound)"
     constants:
       - { name: "diethink wait", base: "time + 5 + random()*5", port: "time + 5 + Range(0,5)", match: true }
@@ -486,8 +486,8 @@ features:
       - "common/vehicles/sv_vehicles.qc:vehicles_painframe"
       - "common/vehicles/sv_vehicles.qc:vehicles_think (calls vehicles_painframe every tick)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:PainFrame (line 726)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:278"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:PainFrame (line 726)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:278"
     constants:
       - { name: "trigger threshold", base: "myhealth <= 50", port: "myHealth <= 50f", match: true }
       - { name: "pain_frame cadence", base: "time + max(0.1, 0.1 + random()*0.5*ftmp)", port: "Time + MathF.Max(0.1, 0.1 + Prandom.Float()*0.5*ftmp)", match: true }
@@ -521,7 +521,7 @@ features:
       - "game/hud/VehicleHud.cs (the in-vehicle HUD overlay: bars, per-mode reticle, dropmark, aux crosshairs)"
       - "game/net/NetGame.cs:3381 (UpdateVehicleHud — fed live each render frame, called NetGame.cs:2650)"
       - "game/net/NetGame.cs:3499 (FeedRaptorReticle — per-mode reticle + dropmark predictor + linger)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:358 (BombDropPredict — tracetoss impact predictor)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:358 (BombDropPredict — tracetoss impact predictor)"
     constants:
       - { name: "bomb crosshair", base: "vCROSS_BURST", port: "gfx/vehicles/crosshair_burst (NetGame.cs:3518)", match: true }
       - { name: "flare crosshair", base: "vCROSS_RAIN", port: "gfx/vehicles/crosshair_rain (NetGame.cs:3518)", match: true }
@@ -553,7 +553,7 @@ features:
       - "common/vehicles/vehicle/raptor_weapons.qc:RaptorCBShellfragToss (CSQC)"
       - "common/vehicles/vehicle/raptor_weapons.qc:RaptorCBShellfragDraw (CSQC)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:631 (emits RAPTOR_BOMB_SPREAD w/ bomb velocity on burst)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:631 (emits RAPTOR_BOMB_SPREAD w/ bomb velocity on burst)"
       - "game/client/EffectSystem.cs:477 (RAPTOR_BOMB_SPREAD -> SpawnRaptorShellfrags)"
       - "game/client/ModelGibs.cs:111 (TossShellfrags — the 3 bouncing frag drawables)"
     constants:
@@ -585,7 +585,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/raptor.qc:raptor_frame (bomb1.cnt incoming-missile scan block, lines 405-425)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:Frame (incoming-missile alarm block, lines 423-441)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:Frame (incoming-missile alarm block, lines 423-441)"
     constants:
       - { name: "scan filter", base: "IL_EACH(g_projectiles, it.enemy == vehic) + MIF_GUIDED_TRACKING", port: "FindByClass(vehicles_projectile) proj.Enemy==vehicle + VehGuideMode>=0", match: true }
       - { name: "alarm range", base: "2 * flare_range (2*2000 = 4000)", port: "2f * FlareRange (4000)", match: true }

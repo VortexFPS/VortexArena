@@ -21,7 +21,7 @@
 # (the layer does not touch it), so the suppression was hiding a name that no longer diverges, which is
 # exactly the invisible-suppression risk the discipline note above warns about.
 #
-# Fixed alongside: the differ's PORT_DATA defaulted into the `assets/data` junction, which points at
+# Fixed alongside: the differ's PORT_DATA defaulted into the old `assets/data` junction, which pointed at
 # `Base/data`. Both roots resolved to the same directory, so the tool was diffing Base against itself
 # and could not report any divergence at all — see assert_distinct_roots(). Treat every "0 value diffs"
 # result predating 2026-07-30 as meaningless rather than reassuring.

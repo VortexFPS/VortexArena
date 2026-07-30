@@ -18,9 +18,9 @@ features:
       - "common/gametypes/gametype/cts/cts.qh:RaceCTS"
       - "common/gametypes/gametype/cts/sv_cts.qh:REGISTER_MUTATOR(cts) MUTATOR_ONADD"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:Cts"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:Qualifying"
-      - "src/XonoticGodot.Server/GameWorld.cs:ResolveGameType"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:Cts"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:Qualifying"
+      - "src/VortexArena.Server/GameWorld.cs:ResolveGameType"
     constants:
       - { name: "timelimit (gametype default)", base: "20 min", port: "asserted to 20 when unset (GameWorld:3157-3158, case Cts)", match: true }
       - { name: "g_race_qualifying", base: "1 (forced on add)", port: "forced to 1 in Activate() (Api.Cvars.Set), then read", match: true }
@@ -49,7 +49,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/cts/sv_cts.qc:cts_ScoreRules"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:DeclareScoreRules"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:DeclareScoreRules"
     constants:
       - { name: "score_enabled", base: "false", port: "false", match: true }
       - { name: "qualifying primary", base: "RACE_FASTEST LOWER|TIME", port: "RACE_FASTEST LowerIsBetter|Time", match: true }
@@ -77,10 +77,10 @@ features:
       - "server/race.qc:race_SendTime"
       - "common/gametypes/gametype/cts/sv_cts.qc:Race_FinalCheckpoint"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:StartTimer"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:FinishStage"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnPlayerPhysics (.race_movetime accumulator)"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (Cts arm)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:StartTimer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:FinishStage"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnPlayerPhysics (.race_movetime accumulator)"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (Cts arm)"
     constants:
       - { name: "run clock source", base: ".race_movetime per-frame accumulator (PlayerPhysics)", port: ".race_movetime per-frame accumulator (OnPlayerPhysics, dt-accumulated) on the live path; wall-clock delta only as a no-physics-frame fallback (unit harness)", match: true }
       - { name: "fastest = min(run)", base: "SP_RACE_FASTEST LOWER", port: "FastestTime min + SetBestTime", match: true }
@@ -109,9 +109,9 @@ features:
       - "server/race.qc:spawnfunc(target_startTimer)"
       - "server/race.qc:spawnfunc(target_stopTimer)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:SpawnStartTimer"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:SpawnStopTimer"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (Cts arm)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:SpawnStartTimer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:SpawnStopTimer"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (Cts arm)"
     constants:
       - { name: "SOLID_TRIGGER + touch", base: "EXACTTRIGGER_INIT", port: "Solid.Trigger + touch", match: true }
     status:
@@ -166,9 +166,9 @@ features:
       - "server/race.qc:race_readPos"
       - "server/race.qc:race_setTime"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs:SetTime"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs:WriteTime"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs:ReadPos"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:SetTime"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:WriteTime"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:ReadPos"
     constants:
       - { name: "RANKINGS_CNT", base: "99", port: "99", match: true }
       - { name: "CTS_RECORD key seg", base: "CTS_RECORD", port: "/cts100record/", match: true }
@@ -198,9 +198,9 @@ features:
       - "server/race.qc:race_SendTime (INFO_RACE_FINISHED)"
       - "server/race.qc:race_SendStatus"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:SendRecordNotification"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:FinishStage (LastRecord/LastRecordTime + SendRecordNotification call)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:RACE_NEW_SET/IMPROVED/BROKEN, RACE_FAIL_RANKED/UNRANKED, RACE_NEW_MISSING_UID"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:SendRecordNotification"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:FinishStage (LastRecord/LastRecordTime + SendRecordNotification call)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:RACE_NEW_SET/IMPROVED/BROKEN, RACE_FAIL_RANKED/UNRANKED, RACE_NEW_MISSING_UID"
       - "game/net/NetGame.cs:UpdateRacePanels (CTS branch -> RaceStatus medal flash from cts.LastRecord)"
     constants:
       - { name: "INFO_RACE_* set", base: "fired by race_setTime via the qualifying finish branch", port: "fired live for CTS by Cts.SendRecordNotification (NotificationSystem.Info)", match: true }
@@ -229,10 +229,10 @@ features:
       - "common/gametypes/gametype/cts/sv_cts.qc:Race_FinalCheckpoint"
       - "common/gametypes/gametype/cts/sv_cts.qc:ClientKill"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:ScheduleRetract"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:RetractRunner"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:Tick"
-      - "src/XonoticGodot.Server/GameWorld.cs:3165 (cts.OnFinishRetract = silent DEATH_KILL via Combat.Damage 100000 DeathTypes.Kill); cts.Tick in the server frame (GameWorld:3526)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:ScheduleRetract"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:RetractRunner"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:Tick"
+      - "src/VortexArena.Server/GameWorld.cs:3165 (cts.OnFinishRetract = silent DEATH_KILL via Combat.Damage 100000 DeathTypes.Kill); cts.Tick in the server frame (GameWorld:3526)"
     constants:
       - { name: "g_cts_finish_kill_delay", base: "2 s (-1 instant, 0 off)", port: "read; DefaultFinishKillDelay=2 when cvar unset", match: true }
       - { name: "retract = ClientKill_Silent", base: "silent self-kill (DEATH_KILL through the damage pipeline)", port: "Combat.Damage(p,p,p,1e5,DeathTypes.Kill) (GameWorld:2993)", match: true }
@@ -258,8 +258,8 @@ features:
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, PlayerPhysics)"
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, FixClientCvars)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnPlayerPhysics"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:261 (MutatorHooks.PlayerPhysics.Call) + 272-275 (fold rewritten MovementForward/Right back into wish-move)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnPlayerPhysics"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:261 (MutatorHooks.PlayerPhysics.Call) + 272-275 (fold rewritten MovementForward/Right back into wish-move)"
     constants:
       - { name: "diagonal quantize", base: "M_SQRT1_2 * wishspeed", port: "M_SQRT1_2 (0.70710678...) * wishspeed", match: true }
       - { name: "pure-axis threshold", base: "wishvel.x >= 2*wishvel.y / vice versa", port: "ax >= 2f*ay / ay >= 2f*ax", match: true }
@@ -289,8 +289,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:264 (MutatorHooks.DamageCalculate.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:264 (MutatorHooks.DamageCalculate.Call)"
     constants:
       - { name: "g_cts_selfdamage default", base: "1 (gametypes-server.cfg:364)", port: "TryCvar -> treated as 1 when unset", match: true }
     status:
@@ -314,8 +314,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, WantWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:ForceShotgunOnly"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:ForceShotgunOnly"
     constants:
       - { name: "want weapon", base: "WEP_SHOTGUN only (start loadout)", port: "OwnedWeaponSet forced to {shotgun} ONLY on spawn", match: true }
       - { name: "g_cts_weapon_stay", base: "2", port: "not modeled", match: false }
@@ -343,8 +343,8 @@ features:
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, ForbidThrowCurrentWeapon)"
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, ForbidDropCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnForbidThrowCurrentWeapon"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponThrowing.cs:157/193 (ForbidThrowCurrentWeapon.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnForbidThrowCurrentWeapon"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponThrowing.cs:157/193 (ForbidThrowCurrentWeapon.Call)"
     constants: []
     status:
       logic: faithful
@@ -370,9 +370,9 @@ features:
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, PlayerDamaged)"
       - "server/race.qc:race_AbandonRaceCheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/Player/RespawnTiming.cs:Calculate (gametype-defaulted delay + OR Force)"
-      - "src/XonoticGodot.Server/GameWorld.cs:RespawnTiming.Calculate(..., GameType?.NetName)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/Player/RespawnTiming.cs:Calculate (gametype-defaulted delay + OR Force)"
+      - "src/VortexArena.Server/GameWorld.cs:RespawnTiming.Calculate(..., GameType?.NetName)"
     constants:
       - { name: "g_cts_respawn_delay_small/large", base: "-1 (instant)", port: "GametypeDefaulted('cts',...) reads g_cts_respawn_delay_*=-1 -> 0 (instant); cfg loaded at boot", match: true }
       - { name: "respawn_flags RESPAWN_FORCE", base: "set on death, honored", port: "set in OnDeath, OR'd-in (preserved) by RespawnTiming.Calculate", match: true }
@@ -400,8 +400,8 @@ features:
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, FilterItem)"
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, MonsterDropItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnFilterItemDefinition"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:106 (FilterItemDefinition.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:106 (FilterItemDefinition.Call)"
     constants:
       - { name: "g_cts_drop_monster_items default", base: "0 (gametypes-server.cfg:368)", port: "TryCvar -> 0 when unset", match: true }
     status:
@@ -431,9 +431,9 @@ features:
       - "server/race.qc:race_send_speedaward / race_send_speedaward_alltimebest"
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, GetPressedKeys)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:SpeedAwardFrame"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs:ReadSpeedAwardBest/WriteSpeedAwardBest/ReadSpeedAwardBestHolder/SetName"
-      - "src/XonoticGodot.Server/GameWorld.cs:3526 (case Cts cts: cts.Tick(Time); cts.SpeedAwardFrame(Clients.Players))"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:SpeedAwardFrame"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:ReadSpeedAwardBest/WriteSpeedAwardBest/ReadSpeedAwardBestHolder/SetName"
+      - "src/VortexArena.Server/GameWorld.cs:3526 (case Cts cts: cts.Tick(Time); cts.SpeedAwardFrame(Clients.Players))"
       - "game/net/ServerNet.cs:2285-2289 (_scoreSpeedAward from cts.SpeedAwardSpeed/Holder/Best/BestHolder)"
       - "game/hud/ScoreboardPanel.cs:DrawSpeedAward / SetSpeedAward"
     constants:
@@ -536,8 +536,8 @@ features:
       - "common/gametypes/gametype/cts/sv_cts.qc:cts_EventLog"
       - "server/race.qc:race_ClearRecords"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:ResetMapGlobal"
-      - "src/XonoticGodot.Server/GameWorld.cs:4647 (case Cts c: c.ResetMapGlobal(Clients.Players))"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:ResetMapGlobal"
+      - "src/VortexArena.Server/GameWorld.cs:4647 (case Cts c: c.ResetMapGlobal(Clients.Players))"
     constants: []
     status:
       logic: partial
@@ -568,10 +568,10 @@ features:
       - "server/race.qc:race_PreparePlayer"
       - "server/race.qc:race_RetractPlayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnPlayerSpawn (run-clock reset + race_checkpoint=-1)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:OnMakePlayerObserver (FRAGS_PLAYER_OUT_OF_GAME + race_checkpoint=-1)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:AbortSpeedrun (Cts.cs:448, drops the in-progress run clock)"
-      - "src/XonoticGodot.Server/Commands.cs:2155 (impulse-141 CHIMPULSE_SPEEDRUN dispatch -> cts.AbortSpeedrun on a successful Cheats.Speedrun restore)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnPlayerSpawn (run-clock reset + race_checkpoint=-1)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:OnMakePlayerObserver (FRAGS_PLAYER_OUT_OF_GAME + race_checkpoint=-1)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:AbortSpeedrun (Cts.cs:448, drops the in-progress run clock)"
+      - "src/VortexArena.Server/Commands.cs:2155 (impulse-141 CHIMPULSE_SPEEDRUN dispatch -> cts.AbortSpeedrun on a successful Cheats.Speedrun restore)"
     constants:
       - { name: "race_checkpoint init", base: "-1 on connect/observe/spawn", port: "set to -1 in OnPlayerSpawn (Cts.cs:719) + OnMakePlayerObserver (Cts.cs:636); NOT on ClientConnect (no hook)", match: false }
       - { name: "FRAGS_PLAYER_OUT_OF_GAME", base: "set on a ranked observer", port: "OnMakePlayerObserver sets Player.FragsOutOfGame when FastestTimeOf(p)>0 (Cts.cs:631)", match: true }
@@ -627,8 +627,8 @@ features:
       - "server/race.qc:race_readTime"
       - "server/race.qc:race_readName"
     port_refs:
-      - "src/XonoticGodot.Server/CommandReplies.cs:GetRankings (reads RaceRecords CTS table for the current map)"
-      - "src/XonoticGodot.Server/Commands.cs:896-897 (records/rankings console commands) -> CmdRecords/CmdRankings -> Replies.RankingsReply"
+      - "src/VortexArena.Server/CommandReplies.cs:GetRankings (reads RaceRecords CTS table for the current map)"
+      - "src/VortexArena.Server/Commands.cs:896-897 (records/rankings console commands) -> CmdRecords/CmdRankings -> Replies.RankingsReply"
     constants:
       - { name: "records page size", base: "200 maps/page (multi-map)", port: "single-map rankings only (no paging)", match: false }
       - { name: "per-rank line fmt", base: "strpad(8,pos) ' ' strpad(-8,TIME_ENCODED_TOSTRING) ' ' name", port: "pos.PadLeft(8) ' ' time.PadRight(8) ' ' name (CommandReplies.cs:173)", match: true }

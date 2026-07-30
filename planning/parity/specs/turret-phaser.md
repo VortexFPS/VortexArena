@@ -1,7 +1,7 @@
 # Phaser Cannon turret — parity spec
 
 **Base refs:** `common/turrets/turret/phaser.qc` · `phaser.qh` · `phaser_weapon.qc` · `phaser_weapon.qh` (+ shared `common/turrets/sv_turrets.qc`, `util.qc` `FireImoBeam`, `turrets.cfg`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs` (+ shared `TurretAI.cs`, `TurretSpawn.cs`, `TurretSpawnFuncs.cs`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs` (+ shared `TurretAI.cs`, `TurretSpawn.cs`, `TurretSpawnFuncs.cs`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

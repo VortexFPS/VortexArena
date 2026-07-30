@@ -1,7 +1,7 @@
 # Random Weapon Arena (weaponarena_random) — parity spec
 
 **Base refs:** `common/mutators/mutator/weaponarena_random/sv_weaponarena_random.qc` (+ `.qh`, `_mod.inc`, `_mod.qh`), `common/weapons/all.qc:W_RandomWeapons`, `server/world.qc:readplayerstartcvars`/`weaponarena_available_*_update`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs` · `src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs` (SetStartItems seam) · `src/XonoticGodot.Server/ClientManager.cs` (PlayerSpawn) · `src/XonoticGodot.Server/Scores.cs` (GiveFragsForKill)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs` · `src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs` (SetStartItems seam) · `src/VortexArena.Server/ClientManager.cs` (PlayerSpawn) · `src/VortexArena.Server/Scores.cs` (GiveFragsForKill)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -112,7 +112,7 @@ SVQC-only unit; no models, particles, HUD, or sounds.
 - Code read: `WeaponArenaRandomMutator.cs` (full), all four Base files, `W_RandomWeapons`, `world.qc` arena setup.
 - Live `.Call` sites confirmed: `SpawnSystem.cs:669` (SetStartItems), `ClientManager.cs:542` (PlayerSpawn), `Scores.cs:520` (GiveFragsForKill); `MutatorActivation.Apply()` live at `GameWorld.cs:511`; mutator registered via `[Mutator]` source-gen.
 - Cvar defaults diffed: `xonotic-server.cfg:223-224` (port copy) == Base.
-- Unit tests: `tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs` 4 tests (spawn subset, with_blaster, frag swap, RandomWeapons count) — all pass, but seed the pool manually (do not exercise the live arena-set path).
+- Unit tests: `tests/VortexArena.Tests/MutatorBatchT19Tests.cs` 4 tests (spawn subset, with_blaster, frag swap, RandomWeapons count) — all pass, but seed the pool manually (do not exercise the live arena-set path).
 - **Unverified at runtime:** in-game behavior with a real `g_weaponarena all` + `g_weaponarena_random 3` match (the starvation gap is inferred from the missing `start_weapons` expansion, not observed in a live session).
 
 ## Open questions

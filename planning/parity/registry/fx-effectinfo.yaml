@@ -19,8 +19,8 @@ features:
       - "common/effects/all.qh:EFFECT"
       - "common/effects/all.inc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:RegisterAll"
-      - "src/XonoticGodot.Common/Gameplay/Effects/Effect.cs:Effects"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:RegisterAll"
+      - "src/VortexArena.Common/Gameplay/Effects/Effect.cs:Effects"
     constants:
       - { name: "registry_size_bits", base: "BITS(8) (256 max)", port: "Registry<Effect>", match: true }
       - { name: "EFFECT_Null id", base: "0", port: "0 (registered first)", match: true }
@@ -51,8 +51,8 @@ features:
       - "common/effects/all.qc:Send_Effect_Except"
       - "common/effects/effect.qh:pointparticles"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:Emit"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:EmitTrail"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:Emit"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:EmitTrail"
       - "game/net/ServerNet.cs:EffectNetSink.Emit"
     constants:
       - { name: "null-effect guard", base: "if(!eff) return", port: "if (effect is null) return", match: true }
@@ -79,8 +79,8 @@ features:
     base_refs:
       - "common/effects/all.qc:Send_Effect_"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:EmitByEffectInfoName"
-      - "src/XonoticGodot.Common/Gameplay/Effects/Effect.cs:Effects.ByEffectInfoName"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:EmitByEffectInfoName"
+      - "src/VortexArena.Common/Gameplay/Effects/Effect.cs:Effects.ByEffectInfoName"
     constants:
       - { name: "registry name scan", base: "linear scan of registered effectinfo names", port: "Effects.ByEffectInfoName", match: true }
       - { name: "engine fallback when name not registered", base: "__pointparticles(_particleeffectnum(name), ...)", port: "queues EffectRequest with Effect=null + EffectName", match: true }
@@ -107,7 +107,7 @@ features:
       - "common/effects/all.qc:Net_Write_Effect"
       - "common/effects/all.qc:net_effect (NET_HANDLE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:EffectNetProtocol.Encode"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:EffectNetProtocol.Encode"
       - "game/net/ServerNet.cs:WriteEffect"
       - "game/net/ClientNet.cs:DecodeEffect"
       - "game/net/NetGame.cs:OnEffectReceived"
@@ -141,7 +141,7 @@ features:
       - "data/xonotic-data.pk3dir/effectinfo.txt"
       - "common/effects/effectinfo.inc"
     port_refs:
-      - "assets/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
     constants:
       - { name: "effect block count", base: "800 blocks (violence build)", port: "800 blocks", match: true }
       - { name: "file size", base: "9043 lines", port: "9043 lines", match: true }
@@ -190,7 +190,7 @@ features:
     verification:
       - { kind: code, ref: "Tokenize reproduces DP whitespace/newline/'//'/quote scanner; blocks layer by name; diffed against CL_Particles_ParseEffectInfo:314-479", result: pass }
     confidence: medium
-    notes: "Lazy-loaded once per map via EffectSystem.EnsureInfoLoaded (NetGame.Warmup, NetGame.cs:948). VFS text loader preferred, disk fallback to assets/data. Miss leaves catalog empty -> heuristic fallback."
+    notes: "Lazy-loaded once per map via EffectSystem.EnsureInfoLoaded (NetGame.Warmup, NetGame.cs:948). VFS text loader preferred, disk fallback to Base/data. Miss leaves catalog empty -> heuristic fallback."
 
   - id: fx-effectinfo.model.baseline_defaults
     name: "Parsed emitter data model + baseline defaults (particleeffectinfo_t)"
@@ -295,10 +295,10 @@ features:
       - "common/effects/qc/lightningarc.qc:TE_CSQC_ARC"
       - "darkplaces:te_explosion/te_spark/te_gunshot/te_smallflash (builtins)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:TeExplosion"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:TeSpark"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:TeCsqcLightningArc"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:TeBeam"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:TeExplosion"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:TeSpark"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:TeCsqcLightningArc"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:TeBeam"
     constants:
       - { name: "te_* -> registered effect name mapping", base: "engine te_* builtins / named effects", port: "Emit(\"NAME\", ...) wrappers", match: true }
       - { name: "lightning arc carried as beam (END point in velocity)", base: "TE_CSQC_ARC from/to", port: "EmitByEffectInfoName(arc_lightning, from, to, 0)", match: true }
@@ -347,11 +347,11 @@ features:
     base_refs:
       - "common/effects/effectinfo_vehicles.inc"
     port_refs:
-      - "assets/data/xonotic-data.pk3dir/effectinfo.txt"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:160-178"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:610"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:462"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs:583"
+      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:160-178"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:610"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:462"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:583"
       - "game/client/ProjectileCatalog.cs:216-218"
     constants:
       - { name: "effect names / block counts", base: "16 DEF names, 60 SUB blocks", port: "all 16 names present, 60 'effect' blocks total (byte-identical shipped file)", match: true }
@@ -378,8 +378,8 @@ features:
     base_refs:
       - "common/effects/effectinfo_nades.inc"
     port_refs:
-      - "assets/data/xonotic-data.pk3dir/effectinfo.txt"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeBoom.cs:172-192"
+      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeBoom.cs:172-192"
     constants:
       - { name: "8 colors x (trail 3 blocks + burn 4 + explode 9)", base: "generated blocks", port: "identical blocks in shipped file (incl. the Base quirk: nade_green_burn is defined in the .inc but absent from the shipped txt in BOTH trees — stale upstream regen)", match: true }
     status:
@@ -408,7 +408,7 @@ features:
       - "common/effects/effectinfo_gentle_happy.inc"
       - "common/effects/effectinfo_gentle_particlegibs.inc"
     port_refs:
-      - "assets/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
     constants:
       - { name: "name families", base: "damage_hit/damage_dissolve + morphed_/happy_/particlegibs_ prefixed variants", port: "all 8 names present with matching block counts (3/3, 2/4, 3/3, 3/5)", match: true }
     status:
@@ -434,8 +434,8 @@ features:
     base_refs:
       - "common/effects/effectinfo_onslaught.inc"
     port_refs:
-      - "assets/data/xonotic-data.pk3dir/effectinfo.txt"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:233"
+      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:233"
     constants:
       - { name: "block counts", base: "onslaught_generator_gib_explode 3 blocks, _gib_flame 3 blocks", port: "3 + 3 (identical file)", match: true }
     status:
@@ -460,7 +460,7 @@ features:
     base_refs:
       - "common/effects/effectinfo_buffs.inc"
     port_refs:
-      - "assets/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
     constants:
       - { name: "17 relic_* names, 1 block each", base: "17 DEF/SUB", port: "17 blocks present (identical file)", match: true }
     status:
@@ -484,9 +484,9 @@ features:
     base_refs:
       - "common/effects/effectinfo_instagib.inc"
     port_refs:
-      - "assets/data/xonotic-data.pk3dir/effectinfo.txt"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:285"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:405"
+      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:285"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:405"
       - "game/client/ProjectileCatalog.cs:234"
     constants:
       - { name: "5 team variants x 2 blocks", base: "rocketminsta_laser_{red,blue,yellow,pink,neutral}", port: "all 10 blocks present; only the neutral variant is registered (ROCKETMINSTA_LASER, isTrail) — Base comments out the per-team registry entries (all.inc:250-253) identically", match: true }
@@ -511,10 +511,10 @@ features:
     base_refs:
       - "common/effects/effectinfo_ctf.inc"
     port_refs:
-      - "assets/data/xonotic-data.pk3dir/effectinfo.txt"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:207-223"
-      - "src/XonoticGodot.Common/Gameplay/Effects/Effect.cs:106-108"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:787"
+      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:207-223"
+      - "src/VortexArena.Common/Gameplay/Effects/Effect.cs:106-108"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:787"
     constants:
       - { name: "block coverage", base: "flag_touch x5 teams, _pass x5 (3 blocks each), _cap x4 (2 blocks each; NO neutral_cap block despite EFFECT_CAP_NEUTRAL being registered — Base quirk)", port: "identical file; port also registers CAP_NEUTRAL -> neutral_cap (EffectsList.cs:223), matching Base all.inc:192", match: true }
     status:

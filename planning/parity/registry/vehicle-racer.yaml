@@ -17,7 +17,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/racer.qh:Racer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Racer (ctor)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Racer (ctor)"
     constants:
       - { name: "mins", base: "'-120 -120 -40'*0.5 = (-60,-60,-20)", port: "(-60,-60,-20)", match: true }
       - { name: "maxs", base: "'120 120 40'*0.5 = (60,60,20)", port: "(60,60,20)", match: true }
@@ -41,7 +41,7 @@ features:
       - "hud cockpit model + tag_viewport attachment and the scale-0.5 model hack are cosmetic-only and not instantiated (physics uses the real hitbox)."
       - "view_ofs '0 0 50' + height 200 (camera view offset/dist) not set; affects the cockpit camera, not the sim."
     verification:
-      - { kind: test, ref: "VehicleRuntimeTests.RacerSpawn_RegistersDescriptor_ArmsThink_AndIdlesWithoutNaN (tests/XonoticGodot.Tests/VehicleRuntimeTests.cs)", result: pass }
+      - { kind: test, ref: "VehicleRuntimeTests.RacerSpawn_RegistersDescriptor_ArmsThink_AndIdlesWithoutNaN (tests/VortexArena.Tests/VehicleRuntimeTests.cs)", result: pass }
       - { kind: code_read, ref: "racer.qh vs Racer ctor + Spawn", result: pass }
     confidence: high
     notes: "Identity/hitbox/model faithful; cockpit hud model + view_ofs are presentation-only and still unported (Racer.Spawn lines 227-228 TODO confirms)."
@@ -53,8 +53,8 @@ features:
       - "common/vehicles/vehicle/racer.qc:vr_setup"
       - "common/vehicles/sv_vehicles.qc:vehicles_spawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:SpawnVehicle"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:SpawnVehicle"
     constants:
       - { name: "health", base: "200", port: "200", match: true }
       - { name: "shield", base: "100", port: "100", match: true }
@@ -93,9 +93,9 @@ features:
       - "common/vehicles/vehicle/racer.qc:vr_spawn (autocvar_g_vehicle_racer_* reads)"
       - "common/vehicles/sv_vehicles.qc:vehicle_initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:Racer"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:219"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:LoadCvars"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:Racer"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:219"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:LoadCvars"
     constants:
       - { name: "g_vehicles master", base: "1 (default on)", port: "default-on (absent=enabled)", match: true }
       - { name: "g_vehicle_racer", base: "1 (default on)", port: "MasterSwitchEnabled (absent=enabled, 0 disables)", match: true }
@@ -125,12 +125,12 @@ features:
       - "common/vehicles/sv_vehicles.qc:vehicles_touch (g_vehicles_enter==0 board)"
       - "common/vehicles/vehicle/racer.qc:vr_enter"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:UseKey"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:EnterVehicle"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:ExitVehicle"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:Touch"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Enter"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:Tick (FlagVehicleCarryOffset)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:UseKey"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:EnterVehicle"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:ExitVehicle"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:Touch"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Enter"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:Tick (FlagVehicleCarryOffset)"
     constants:
       - { name: "g_vehicles_enter", base: "1 (use-key board); 0 = touch-board via vehicles_touch", port: "1 default; touch-board wired (Touch dispatches Enter when g_vehicles_enter==0)", match: true }
       - { name: "g_vehicles_enter_radius", base: "250", port: "250", match: true }
@@ -159,8 +159,8 @@ features:
       - "common/vehicles/vehicle/racer.qc:racer_align4point"
       - "common/vehicles/vehicles.qc:vehicles_force_fromtag_hover"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Align4Point"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:ForceFromTag"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Align4Point"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:ForceFromTag"
     constants:
       - { name: "hoverpower", base: "8000 (x4 engines)", port: "8000", match: true }
       - { name: "springlength", base: "90", port: "90", match: true }
@@ -191,7 +191,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/racer.qc:racer_frame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Frame"
     constants:
       - { name: "turnspeed", base: "220", port: "220", match: true }
       - { name: "turnroll", base: "30", port: "30", match: true }
@@ -224,7 +224,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/racer.qc:racer_frame (afterburn + booster FX + engine-sound block)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Frame"
     constants:
       - { name: "speed_afterburn", base: "3000", port: "3000", match: true }
       - { name: "afterburn_cost (energy/s)", base: "130", port: "130", match: true }
@@ -258,8 +258,8 @@ features:
       - "common/vehicles/vehicle/racer_weapon.qc:RacerAttack.wr_think (fire&1)"
       - "common/vehicles/sv_vehicles.qc:vehicles_projectile"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:FireCannon"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:SpawnProjectile"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:FireCannon"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:SpawnProjectile"
     constants:
       - { name: "cannon_cost (energy/shot)", base: "1.5", port: "1.5", match: true }
       - { name: "cannon_damage", base: "15", port: "15", match: true }
@@ -297,9 +297,9 @@ features:
       - "common/vehicles/vehicle/racer_weapon.qc:racer_rocket_groundhugger"
       - "common/vehicles/sv_vehicles.qc:vehicles_locktarget"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:FireRocket"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:GuideRocket"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:LockTarget"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:FireRocket"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:GuideRocket"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:LockTarget"
     constants:
       - { name: "rocket_damage", base: "100", port: "100", match: true }
       - { name: "rocket_radius", base: "125", port: "125", match: true }
@@ -339,8 +339,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/racer.qc:racer_frame (vehicle_ammo2/reload2 writes)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Frame (player.VehicleAmmo2 / player.VehicleReload2 writes)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:Entity.VehicleAmmo2,VehicleReload2 (the networked stat the on-foot HUD reads)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Frame (player.VehicleAmmo2 / player.VehicleReload2 writes)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:Entity.VehicleAmmo2,VehicleReload2 (the networked stat the on-foot HUD reads)"
     constants:
       - { name: "vehicle_ammo2", base: "100 idle / 50 after shot1 / 0 after pair", port: "100 idle / 50 after shot1 / 0 after pair (player.VehicleAmmo2)", match: true }
       - { name: "vehicle_reload2", base: "bound(0,100*(time-lip)/(delay-lip),100)", port: "Bound(0,100*(Time-VehReloadStart)/(VehWeaponDelay-VehReloadStart),100) -> player.VehicleReload2", match: true }
@@ -365,10 +365,10 @@ features:
       - "common/vehicles/vehicle/racer.qc:racer_frame (regen + VEHICLE_UPDATE_PLAYER block)"
       - "common/vehicles/sv_vehicles.qc:vehicles_regen"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Think (regen + player %-mirror block)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Enter (%-seed)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:Regen"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:RegenResource"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Think (regen + player %-mirror block)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Enter (%-seed)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:Regen"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:RegenResource"
     constants:
       - { name: "energy_regen / pause", base: "90 / 0.35", port: "90 / 0.35", match: true }
       - { name: "shield_regen / pause", base: "30 / 1", port: "30 / 1", match: true }
@@ -400,10 +400,10 @@ features:
       - "common/vehicles/vehicle/racer.qc:racer_blowup"
       - "common/vehicles/sv_vehicles.qc:vehicles_setreturn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Death"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Blowup"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:DamageVehicle"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:SetReturn"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Death"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Blowup"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:DamageVehicle"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:SetReturn"
     constants:
       - { name: "blowup_coredamage", base: "250", port: "250", match: true }
       - { name: "blowup_edgedamage", base: "15", port: "15", match: true }
@@ -441,9 +441,9 @@ features:
       - "common/vehicles/sv_vehicles.qc:vehicles_impact"
       - "common/vehicles/sv_vehicles.qc:vehicles_touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs:Impact"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:Impact"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:Touch"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs:Impact"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:Impact"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:Touch"
     constants:
       - { name: "bouncepain", base: "'200 0.15 150' (minspeed, speedchange_factor, max_damage)", port: "Impact(200f, 0.15f, 150f)", match: true }
       - { name: "impact cooldown", base: "0.25s (play_time = time + 0.25)", port: "PlayTime = Time + 0.25f", match: true }

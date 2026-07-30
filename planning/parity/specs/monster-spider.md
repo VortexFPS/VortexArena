@@ -1,7 +1,7 @@
 # Spider monster — parity spec
 
 **Base refs:** `common/monsters/monster/spider.qc` · `common/monsters/monster/spider.qh` · `common/monsters/sv_monsters.qc` (shared engine) · `monsters.cfg` (balance)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs` · `MonsterAI.cs` · `MonsterFramework.cs` · `MonsterSpawnFuncs.cs` · `src/XonoticGodot.Engine/Simulation/SimulationLoop.cs` (think driver)
+**Port refs:** `src/VortexArena.Common/Gameplay/Monsters/Spider.cs` · `MonsterAI.cs` · `MonsterFramework.cs` · `MonsterSpawnFuncs.cs` · `src/VortexArena.Engine/Simulation/SimulationLoop.cs` (think driver)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

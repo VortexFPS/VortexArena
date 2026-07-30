@@ -1,7 +1,7 @@
 # Console commands (generic + client + reply builders) — parity spec
 
 **Base refs:** `common/command/{generic,rpn,markup}.qc/.qh`, `common/command/{command.qh,reg.qc,reg.qh,_mod.inc,_mod.qh}`, `client/command/cl_cmd.qc/.qh` + `client/command/_mod.*`, `server/command/getreplies.qc/.qh`, `server/command/common.qh`
-**Port refs:** `src/XonoticGodot.Engine/Console/{ConsoleCommands,Rpn,WordList}.cs`, `src/XonoticGodot.Server/{Commands,CommandReplies,SettempCvars}.cs`, `game/console/ConsoleOverlay.cs`, `game/net/{NetGame,ClientNet}.cs`, `game/hud/{HudConfigEditor,QuickMenuPanel,ScoreboardPanel,VotePanel}.cs`
+**Port refs:** `src/VortexArena.Engine/Console/{ConsoleCommands,Rpn,WordList}.cs`, `src/VortexArena.Server/{Commands,CommandReplies,SettempCvars}.cs`, `game/console/ConsoleOverlay.cs`, `game/net/{NetGame,ClientNet}.cs`, `game/hud/{HudConfigEditor,QuickMenuPanel,ScoreboardPanel,VotePanel}.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-07-02
 
 ## Overview
@@ -162,7 +162,7 @@ generic/client verbs only. (Note: at this rev there is **no** `version` GENERIC_
 
 ## Verification
 
-- Unit tests: `tests/XonoticGodot.Tests/GenericCommandsTests.cs` (cons/addtolist/maplist/settemp/
+- Unit tests: `tests/VortexArena.Tests/GenericCommandsTests.cs` (cons/addtolist/maplist/settemp/
   nextframe/rpn-registration), `RpnTests.cs` (op coverage + `%.9g`), `CvarReplicationTests.cs`,
   `ServerClientCommandsTests.cs:PrintMapList_ShowsTheRotation`, `ConsoleTests.cs` (routing).
 - Dead/missing claims re-verified 2026-07-02 by grep: no `"hud"` command registration; `ColumnSpec`

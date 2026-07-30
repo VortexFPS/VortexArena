@@ -18,9 +18,9 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_FlagSetup"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_DelayedFlagSetup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:SpawnFlag"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:SpawnNeutralFlag"
-      - "src/XonoticGodot.Server/GameWorld.cs:3095 (item_flag_team* sink)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:SpawnFlag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:SpawnNeutralFlag"
+      - "src/VortexArena.Server/GameWorld.cs:3095 (item_flag_team* sink)"
     constants:
       - { name: "FLAG_SCALE", base: "0.5625", port: "n/a (bbox hardcoded)", match: false }
       - { name: "flag bbox mins/maxs (vrint'd)", base: "-30 -30 -32 / 30 30 38", port: "-30 -30 -32 / 30 30 38", match: true }
@@ -51,9 +51,9 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:Flag.giveTo"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_FlagTouch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:FlagTouch"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:FlagTouchEntity"
-      - "src/XonoticGodot.Engine/Simulation/TriggerTouch.cs:46"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:FlagTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:FlagTouchEntity"
+      - "src/VortexArena.Engine/Simulation/TriggerTouch.cs:46"
     constants: []
     status:
       logic: faithful
@@ -77,8 +77,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Handle_Pickup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:Pickup"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:DroppedPickupScore"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:Pickup"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:DroppedPickupScore"
     constants:
       - { name: "g_ctf_score_pickup_base", base: "1 (samual cfg)", port: "cvar; fallback 1", match: true }
       - { name: "g_ctf_score_pickup_dropped_early", base: "1 (samual cfg)", port: "cvar; fallback 1", match: true }
@@ -107,9 +107,9 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Handle_Capture"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_CaptureRecord"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:Capture"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CaptureDropped"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CaptureRecord"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:Capture"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureDropped"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureRecord"
     constants:
       - { name: "g_ctf_score_capture (team SCORE)", base: "20 (samual cfg)", port: "cvar; fallback 20", match: true }
       - { name: "CTF_CAPS per capture", base: "+1", port: "+1", match: true }
@@ -138,8 +138,8 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Handle_Return"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_CheckFlagReturn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:ReturnFlag"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:AutoReturnFlag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:ReturnFlag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:AutoReturnFlag"
     constants:
       - { name: "g_ctf_score_return", base: "10 (samual cfg)", port: "cvar; fallback 10", match: true }
       - { name: "g_ctf_score_penalty_returned", base: "1 (samual cfg)", port: "cvar; fallback 1", match: true }
@@ -167,9 +167,9 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Handle_Throw (DROP_NORMAL)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:DropFlag"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnDeath"
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:PhysicsToss"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:DropFlag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnDeath"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:PhysicsToss"
     constants:
       - { name: "g_ctf_score_penalty_drop", base: "1 (samual cfg)", port: "cvar; fallback 1", match: true }
       - { name: "FLAG_DROP_OFFSET", base: "0 0 32", port: "0 0 32", match: true }
@@ -197,8 +197,8 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, PlayerDies)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnDamageCalculate"
     constants:
       - { name: "g_ctf_score_kill", base: "5 (samual cfg)", port: "cvar; fallback 5", match: true }
       - { name: "g_ctf_flagcarrier_*damagefactor/forcefactor", base: "1", port: "cvar; fallback 1", match: true }
@@ -226,9 +226,9 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Handle_Throw (DROP_THROW)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, PlayerUseKey)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:ThrowFlag"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:ThrowDropCommon"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:HandleUseKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:ThrowFlag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:ThrowDropCommon"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:HandleUseKey"
       - "game/net/ServerNet.cs:UseKeyEdge"
     constants:
       - { name: "g_ctf_throw_velocity_forward / _up", base: "500 / 200", port: "cvar; fallback 500 / 200", match: true }
@@ -259,11 +259,11 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Handle_Retrieve"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_FlagThink (FLAG_PASSING)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:PassFlag"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:RequestPass"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:DrivePass"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:RetrieveFlag"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:ThrowDropCommon"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:PassFlag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:RequestPass"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:DrivePass"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:RetrieveFlag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:ThrowDropCommon"
     constants:
       - { name: "g_ctf_pass_velocity", base: "750", port: "750", match: true }
       - { name: "g_ctf_pass_radius", base: "500", port: "500", match: true }
@@ -296,14 +296,14 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, ClientDisconnect)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, PortalTeleport)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:RemovePlayer"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnPlayerRemoved"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnVehicleEnter"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnVehicleExit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnPortalTeleport"
-      - "src/XonoticGodot.Server/ClientManager.cs:MakePlayerObserver"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:198"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:415 (OnPortalTeleport event fire)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:RemovePlayer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnPlayerRemoved"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnVehicleEnter"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnVehicleExit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnPortalTeleport"
+      - "src/VortexArena.Server/ClientManager.cs:MakePlayerObserver"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:198"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:415 (OnPortalTeleport event fire)"
     constants:
       - { name: "g_ctf_portalteleport drop polarity", base: "0 default => DROP on portal cross (cvar=1 KEEPS)", port: "INVERTED: drops only when cvar!=0; keeps at default 0", match: false }
     status:
@@ -328,9 +328,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_FlagThink"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:FlagThinkEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CaptureDropped"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:FlagThinkEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureDropped"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:Tick"
     constants:
       - { name: "g_ctf_flag_return_time", base: "30 s", port: "30 s", match: true }
       - { name: "g_ctf_dropped_capture_radius / _delay", base: "100 / 1 s", port: "cvar; fallback 100 / 1", match: true }
@@ -360,11 +360,11 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_CaptureShield_Update"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_CaptureShield_Spawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CaptureShieldStatus"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CtfShieldScore"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:UpdateCaptureShields"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:SpawnShieldEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:ShieldTouchEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureShieldStatus"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CtfShieldScore"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:UpdateCaptureShields"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:SpawnShieldEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:ShieldTouchEntity"
     constants:
       - { name: "g_ctf_shield_min_negscore", base: "20", port: "20", match: true }
       - { name: "g_ctf_shield_max_ratio", base: "0 (disabled)", port: "cvar; fallback 0 (matches Base default)", match: true }
@@ -394,9 +394,9 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_CheckStalemate"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Stalemate_Customize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CheckStalemate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CollectWaypoints"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:PackCtfStatus:208"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CheckStalemate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CollectWaypoints"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:PackCtfStatus:208"
     constants:
       - { name: "g_ctf_stalemate", base: "1", port: "cvar; fallback 1", match: true }
       - { name: "g_ctf_stalemate_time", base: "60 s", port: "cvar; fallback 60", match: true }
@@ -425,7 +425,7 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, PlayerPreThink) (STAT OBJECTIVE_STATUS)"
     port_refs:
       - "game/hud/ModIconsPanel.cs:DrawCtf"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:PackCtfStatus"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:PackCtfStatus"
       - "game/net/NetGame.cs:2898 (UpdateModIcons Ctf case)"
       - "game/net/ServerNet.cs:1536 (Capture per peer)"
     constants:
@@ -457,7 +457,7 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Handle_Drop (WP_FlagDropped*)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_FlagcarrierWaypoints"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CollectWaypoints"
       - "game/net/ServerNet.cs:924"
     constants:
       - { name: "FLAG_WAYPOINT_OFFSET", base: "0 0 64", port: "0 0 64", match: true }
@@ -483,8 +483,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_ScoreRules"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:DeclareScoreRules"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:ReportsTie"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:DeclareScoreRules"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:ReportsTie"
     constants:
       - { name: "team primary", base: "ST_CTF_CAPS (caps)", port: "team slot 1 (caps)", match: true }
       - { name: "player keys", base: "SP_SCORE primary, SP_CTF_CAPS secondary", port: "Score primary, CTF_CAPS secondary", match: true }
@@ -511,9 +511,9 @@ features:
       - "common/gametypes/gametype/ctf/ctf.qh:CaptureTheFlag (gametype_init caplimit/leadlimit)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:REGISTER_MUTATOR(ctf) GameRules_limit_score/_lead"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:UpdateLeaderAndCheckLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CaptureLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:LeadLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:LeadLimit"
     constants:
       - { name: "caplimit", base: "10", port: "10", match: true }
       - { name: "leadlimit", base: "6", port: "6", match: true }
@@ -541,8 +541,8 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:Flag.giveTo (ctf_oneflag branches)"
       - "common/gametypes/gametype/ctf/sv_ctf.qh:ctf_oneflag / g_ctf_oneflag_reverse"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:FlagTouch (OneFlag branch)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:SpawnNeutralFlag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:FlagTouch (OneFlag branch)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:SpawnNeutralFlag"
     constants:
       - { name: "g_ctf_oneflag", base: "0", port: "detected from neutral flag presence", match: true }
       - { name: "g_ctf_oneflag_reverse", base: "0", port: "cvar", match: true }
@@ -569,7 +569,7 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:havocbot_role_ctf_carrier/offense/defense/middle/escort/retriever"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:havocbot_goalrating_ctf_*"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleCtf (dispatcher) + CtfRoleCarrier/Retriever/Middle/Offense/Defense/Escort + CtfResetRole/CtfSetRole"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleCtf (dispatcher) + CtfRoleCarrier/Retriever/Middle/Offense/Defense/Escort + CtfResetRole/CtfSetRole"
     constants:
       - { name: "flag/base goal ratings", base: "per-role QC literals (carrier 10000/2000/1000; retriever 10000/12000/8000; middle 8000/9000/3000 + 25000 enemies/items; offense 10000/22000; defense 10000/5000/6000 + 25000; escort 10000/6000/21000)", port: "same literals", match: true }
       - { name: "role timeouts", base: "retriever 10-20s, middle 10s, defense 30s, offense 120s, escort 30-90s", port: "same", match: true }
@@ -586,7 +586,7 @@ features:
       - "Oneflag: carrier routes to OWN base (the port's pinned capture rule, sv_ctf.qc:1186); QC's oneflag find_enemy_flag/enemybase bot call contradicts its own capture rule and is not mirrored."
     verification:
       - { kind: trace, ref: "BotRoles.ChooseRole(\"ctf\") => RoleCtf; the role runs EVERY token hold (BotBrain strategy block), goal rating gated on GoalRatingTimedOut — the QC havocbot_ai:64 cadence", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/BotCtfObjectiveTests.cs — reset balancing (solo→offense, 1 mate→defense), carrier routes home, retriever chases the thief, middle on enemy-flag-taken, offense→escort switch, retriever revert", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/BotCtfObjectiveTests.cs — reset balancing (solo→offense, 1 mate→defense), carrier routes home, retriever chases the thief, middle on enemy-flag-taken, offense→escort switch, retriever revert", result: pass }
     confidence: high
     notes: "REWRITTEN 2026-07-11 (parity/bot-objectives): the collapsed single-rater replaced with the FULL six-role QC state machine — teamcount position balancing (middlepoint = mean of flag HomeOrigins), per-role rating scales/timeouts, carrier health-adjusted enemyflag rating, defense PVS-or-coinflip base rush, escort/retriever previous-role revert with timeout_force/_expire on switches."
 
@@ -596,9 +596,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Reset"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:FlagResetEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:SpawnFlag (e.Reset = FlagResetEntity)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ResetMapObjects"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:FlagResetEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:SpawnFlag (e.Reset = FlagResetEntity)"
+      - "src/VortexArena.Server/GameWorld.cs:ResetMapObjects"
     constants: []
     status:
       logic: faithful
@@ -622,8 +622,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, MatchEnd)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnMatchEnd"
-      - "src/XonoticGodot.Server/GameWorld.cs:FireMatchEnd"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnMatchEnd"
+      - "src/VortexArena.Server/GameWorld.cs:FireMatchEnd"
     constants: []
     status:
       logic: faithful
@@ -646,7 +646,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, AbortSpeedrun)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:AbortSpeedrun (Ctf.cs:1984)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:AbortSpeedrun (Ctf.cs:1984)"
     constants: []
     status:
       logic: faithful
@@ -693,8 +693,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, LogDeath_AppendItemCodes)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:LogDeathAppendItemCodes"
-      - "src/XonoticGodot.Server/Scores.cs:640 (active-gametype dispatch in AppendItemcodes)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:LogDeathAppendItemCodes"
+      - "src/VortexArena.Server/Scores.cs:640 (active-gametype dispatch in AppendItemcodes)"
     constants: []
     status:
       logic: faithful
@@ -717,8 +717,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, GiveFragsForKill)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnGiveFragsForKill"
-      - "src/XonoticGodot.Server/Scores.cs:556 (GiveFragsForKill.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnGiveFragsForKill"
+      - "src/VortexArena.Server/Scores.cs:556 (GiveFragsForKill.Call)"
     constants:
       - { name: "g_ctf_ignore_frags", base: "0 (default off)", port: "cvar; default 0", match: true }
     status:
@@ -793,8 +793,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, PreferPlayerScore_Clear)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:OnPreferPlayerScoreClear"
-      - "src/XonoticGodot.Server/GameScores.cs:637 (FirePreferPlayerScore_Clear in ClearPlayerOnJoin)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnPreferPlayerScoreClear"
+      - "src/VortexArena.Server/GameScores.cs:637 (FirePreferPlayerScore_Clear in ClearPlayerOnJoin)"
     constants: []
     status:
       logic: faithful

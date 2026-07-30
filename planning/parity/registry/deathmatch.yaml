@@ -16,8 +16,8 @@ features:
       - "common/gametypes/gametype/deathmatch/deathmatch.qh:INIT(Deathmatch)"
       - "common/gametypes/gametype/deathmatch/sv_deathmatch.qh:REGISTER_MUTATOR(dm)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:Deathmatch (ctor)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:OnInit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:Deathmatch (ctor)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:OnInit"
     constants:
       - { name: "short_name", base: "dm", port: "dm", match: true }
       - { name: "display_name", base: "Deathmatch", port: "Deathmatch", match: true }
@@ -49,9 +49,9 @@ features:
       - "server/damage.qc:GiveFrags"
       - "server/damage.qc:Obituary"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:OnDeath"
-      - "src/XonoticGodot.Server/Scores.cs:GiveFrags"
-      - "src/XonoticGodot.Server/Scores.cs:Obituary"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:OnDeath"
+      - "src/VortexArena.Server/Scores.cs:GiveFrags"
+      - "src/VortexArena.Server/Scores.cs:Obituary"
     constants:
       - { name: "enemy_frag", base: "+1", port: "+1", match: true }
       - { name: "suicide", base: "-1", port: "-1", match: true }
@@ -81,7 +81,7 @@ features:
     base_refs:
       - "server/damage.qc:GiveFrags (teamkills * (teamkills-1) * 0.5 penalty)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:OnDeath (teamkill branch, flat -1)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:OnDeath (teamkill branch, flat -1)"
     constants:
       - { name: "g_teamkill_punishing", base: "0 (default off)", port: "not read; flat -1 on teamkill", match: false }
       - { name: "penalty_curve", base: "tk*(tk-1)*0.5 = -1,-2,-4,-7,-11,...", port: "flat -1", match: false }
@@ -108,11 +108,11 @@ features:
       - "server/world.qc:WinningCondition_Scores (fraglimit_reached)"
       - "common/gametypes/sv_rules.qc:GameRules_limit_score"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:FragLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:UpdateLeaderAndCheckLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:RecomputeLeader"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame"
-      - "src/XonoticGodot.Server/GameWorld.cs:RunCheckRulesWorld"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:FragLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:RecomputeLeader"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame"
+      - "src/VortexArena.Server/GameWorld.cs:RunCheckRulesWorld"
     constants:
       - { name: "pointlimit_default", base: "30 (fraglimit)", port: "30 (DefaultFragLimit)", match: true }
       - { name: "limit==0 means unlimited", base: "yes", port: "yes (limit>0 guard)", match: true }
@@ -139,10 +139,10 @@ features:
     base_refs:
       - "server/world.qc:WinningCondition_Scores (leadlimit_reached, leadlimit_and_fraglimit, world.qc:1626-1633)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:LeadLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:LeadAndFrag"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:RecomputeLeader"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:LeadLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:LeadAndFrag"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:RecomputeLeader"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame"
     constants:
       - { name: "leadlimit_default", base: "0 (disabled)", port: "0 (CvarLeadLimit, DefaultLeadLimit=0)", match: true }
       - { name: "leadlimit_reached formula", base: "topscore - secondscore >= leadlimit", port: "best.ScoreFrags - second.ScoreFrags >= leadlimit", match: true }
@@ -171,12 +171,12 @@ features:
       - "server/world.qc:WinningCondition_Scores (GetWinningCode/equality)"
       - "server/world.qc:CheckRules_World (overtime/sudden-death cascade)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:RunCheckRulesWorld"
-      - "src/XonoticGodot.Server/GameWorld.cs:OverTime (OnOvertimeStarted/OnSuddenDeathStarted sinks)"
-      - "src/XonoticGodot.Server/OverTimeManager.cs"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:ReportsTie"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:FfaTie.TopTwoTied"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:OVERTIME_TIME/OVERTIME_FRAG"
+      - "src/VortexArena.Server/GameWorld.cs:RunCheckRulesWorld"
+      - "src/VortexArena.Server/GameWorld.cs:OverTime (OnOvertimeStarted/OnSuddenDeathStarted sinks)"
+      - "src/VortexArena.Server/OverTimeManager.cs"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:ReportsTie"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:FfaTie.TopTwoTied"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:OVERTIME_TIME/OVERTIME_FRAG"
     constants:
       - { name: "timelimit_default_min", base: "15", port: "15", match: true }
       - { name: "timelimit_seconds", base: "minutes*60 offset by game_starttime", port: "TimeLimitMinutes*60 + GameStartTime", match: true }
@@ -207,10 +207,10 @@ features:
       - "common/gametypes/gametype/deathmatch/sv_deathmatch.qc:MUTATOR_HOOKFUNCTION(dm, Scores_CountFragsRemaining)"
       - "server/world.qc:WinningCondition_Scores (ANNCE_REMAINING_FRAG_1/2/3 send, world.qc:1590-1622)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ResetFragsRemaining"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:RecomputeLeader"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:REMAINING_FRAG_1/2/3"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ResetFragsRemaining"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:RecomputeLeader"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:REMAINING_FRAG_1/2/3"
       - "game/hud/HudNotifications.cs:PlayAnnouncer"
     constants:
       - { name: "announce_thresholds", base: "fragsleft == 1,2,3", port: "fragsleft == 1,2,3", match: true }
@@ -244,13 +244,13 @@ features:
       - "server/client.qc:PlayerThink (DEAD_* respawn state machine, client.qc:2359-2438)"
       - "server/client.qh:GAMETYPE_DEFAULTED_SETTING"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/RespawnTiming.cs:Calculate"
-      - "src/XonoticGodot.Common/Gameplay/Player/RespawnTiming.cs:GametypeDefaulted"
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink (RespawnTiming.Calculate(..., GameType?.NetName))"
-      - "src/XonoticGodot.Server/GameWorld.cs:OnClientMove"
-      - "src/XonoticGodot.Server/GameWorld.cs:ShowRespawnCountdown (10-9-8 announcer reader)"
-      - "src/XonoticGodot.Server/GameWorld.cs:AnnceIfEnabledTo (NUM_RESPAWN_n send, opt-in/disabled by default)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:NUM_RESPAWN_{n} (enabled:false)"
+      - "src/VortexArena.Common/Gameplay/Player/RespawnTiming.cs:Calculate"
+      - "src/VortexArena.Common/Gameplay/Player/RespawnTiming.cs:GametypeDefaulted"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink (RespawnTiming.Calculate(..., GameType?.NetName))"
+      - "src/VortexArena.Server/GameWorld.cs:OnClientMove"
+      - "src/VortexArena.Server/GameWorld.cs:ShowRespawnCountdown (10-9-8 announcer reader)"
+      - "src/VortexArena.Server/GameWorld.cs:AnnceIfEnabledTo (NUM_RESPAWN_n send, opt-in/disabled by default)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:NUM_RESPAWN_{n} (enabled:false)"
     constants:
       - { name: "dm_respawn_delay_small", base: "g_dm_respawn_delay_small 0 → fallback g_respawn_delay_small 2", port: "g_respawn_delay_small (fallback 2)", match: true }
       - { name: "dm_respawn_delay_large", base: "g_dm_respawn_delay_large 0 → fallback g_respawn_delay_large 2", port: "g_respawn_delay_large (fallback 2)", match: true }
@@ -288,8 +288,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/deathmatch/deathmatch.qc:METHOD(Deathmatch, describe) (MENUQC)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:MenuDescription"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:GameType.MenuDescription (virtual, default null)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:MenuDescription"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:GameType.MenuDescription (virtual, default null)"
       - "game/net/NetGame.cs:UpdateMapVotePanel (reads gt.MenuDescription → Candidate.Description, gametype-vote branch)"
       - "game/hud/MapVotePanel.cs:DrawDescription (renders the wrapped multi-line description on GametypeVote items)"
     constants:

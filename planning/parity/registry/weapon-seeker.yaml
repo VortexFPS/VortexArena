@@ -15,7 +15,7 @@ features:
     base_refs:
       - "common/weapons/weapon/seeker.qh:Seeker"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:Seeker()"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:Seeker()"
     constants:
       - { name: "ammo_type", base: "RES_ROCKETS", port: "ResourceType.Rockets", match: true }
       - { name: "impulse", base: "8", port: "8", match: true }
@@ -43,11 +43,11 @@ features:
     base_refs:
       - "common/weapons/weapon/seeker.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:RefireFor"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:AnimtimeFor"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:PrepareAttack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:RefireFor"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:AnimtimeFor"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:PrepareAttack"
     constants:
       - { name: "type", base: "0", port: "0", match: true }
       - { name: "missile_refire/animtime", base: "0.5 / 0.2 s", port: "0.5 / 0.2 s", match: true }
@@ -76,8 +76,8 @@ features:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Fire_Missile"
       - "server/weapons/tracing.qh:W_SetupProjVelocity_UP_PRE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:FireMissile"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:FireMissile"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
       - "game/client/ProjectileCatalog.cs:Seeker(ModelScale=2)"
     constants:
       - { name: "missile_ammo", base: "2", port: "2", match: true }
@@ -107,8 +107,8 @@ features:
     base_refs:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Missile_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:MissileThink"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:RunThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:MissileThink"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:RunThink"
     constants:
       - { name: "missile_accel", base: "1400", port: "1400", match: true }
       - { name: "missile_decel", base: "1400", port: "1400", match: true }
@@ -142,9 +142,9 @@ features:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Missile_Explode"
       - "common/weapons/weapon/seeker.qc:W_Seeker_Missile_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:ExplodeMissile"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:SeekerExpSample"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:ExplodeMissile"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:SeekerExpSample"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "missile_damage", base: "30", port: "30", match: true }
       - { name: "missile_edgedamage", base: "10", port: "10", match: true }
@@ -172,10 +172,10 @@ features:
     base_refs:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Missile_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:FireMissile"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:ShootDown"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:FireMissile"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:ShootDown"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
     constants:
       - { name: "missile_health", base: "5", port: "5", match: true }
       - { name: "missile_damageforcescale", base: "4", port: "4", match: true }
@@ -203,8 +203,8 @@ features:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Fire_Flac"
       - "common/weapons/weapon/seeker.qc:W_Seeker_Flac_Explode"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:FireFlac"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:ExplodeFlac"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:FireFlac"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:ExplodeFlac"
     constants:
       - { name: "flac_ammo", base: "1", port: "1", match: true }
       - { name: "flac_speed / speed_up", base: "3000 / 1000", port: "3000 / 1000", match: true }
@@ -237,11 +237,11 @@ features:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Tag_Touch"
       - "common/weapons/weapon/seeker.qc:W_Seeker_Tagged_Info"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:FireTag"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:TagTouch"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:FindTaggedInfo"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:TE_KNIGHTSPIKE"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:Seeker"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:FireTag"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:TagTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:FindTaggedInfo"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:TE_KNIGHTSPIKE"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:Seeker"
     constants:
       - { name: "tag_ammo", base: "1", port: "1", match: true }
       - { name: "tag_speed", base: "5000", port: "5000", match: true }
@@ -271,9 +271,9 @@ features:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Tag_Damage"
       - "common/weapons/weapon/seeker.qc:W_Seeker_Tag_Explode"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:FireTag"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:FireTag"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
     constants:
       - { name: "tag_health", base: "5", port: "5", match: true }
       - { name: "tag_damageforcescale", base: "4", port: "4", match: true }
@@ -299,7 +299,7 @@ features:
     base_refs:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Vollycontroller_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:VolleyControllerThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:VolleyControllerThink"
     constants:
       - { name: "missile_count", base: "3", port: "3", match: true }
       - { name: "missile_delay", base: "0.25 s", port: "0.25 s", match: true }
@@ -327,7 +327,7 @@ features:
     base_refs:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:SeekerAttack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:SeekerAttack"
     constants: []
     status:
       logic: faithful

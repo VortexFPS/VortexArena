@@ -1,7 +1,7 @@
 # Invincible Projectiles mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/invincibleproj/sv_invincibleproj.qc` (+ `_mod.inc`, `_mod.qh`, `sv_invincibleproj.qh`) · `mutators.cfg:116`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs` · `src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs` (EditProjectile chain) · `game/menu/dialogs/DialogMutators.cs:181`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs` · `src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs` (EditProjectile chain) · `game/menu/dialogs/DialogMutators.cs:181`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -79,7 +79,7 @@ that string and the create-game menu checkbox.
 | `EditProjectile` hook (zero RES_HEALTH) | `InvincibleProjectilesMutator.OnEditProjectile` subscribed to `MutatorHooks.EditProjectile` | `if (proj.GetResource(ResourceType.Health) != 0) proj.SetResourceExplicit(ResourceType.Health, 0)`. `GetResource(Health)`/`SetResourceExplicit` (Resources.cs) read/write `Entity.Health` — the SAME field weapons set. Faithful, including the "only if has health" guard. |
 | `MUTATOR_CALLHOOK(EditProjectile, …)` call sites | `MutatorHooks.EditProjectile.Call(ref ep)` in Arc/Blaster/Crylink/Devastator/Electro/Fireball/Hagar/Hlac/Hook/Minelayer/Mortar/OkRpc/Porto/Seeker/Vaporizer | Fired live per projectile, after health is seeded (e.g. Devastator sets `missile.Health` at :162, calls EditProjectile at :191; Electro orb sets `orb.Health` at :308, calls at :334). Ordering matches QC. |
 | Projectile shoot-down (`W_*_Damage` reading `RES_HEALTH<=0`) | **NOT IMPLEMENTED on the live damage path** | Port models a projectile's "shot down → explode" as `Entity.ProjectileDamage` (`EntityWeaponState.cs:59`). But `DamageSystem.EventDamage` (DamageSystem.cs:287-304) routes non-player targets ONLY through `GtEventDamage`; it NEVER invokes `ProjectileDamage`. The only live caller of `ProjectileDamage` is `BreakablehookMutator`. So projectiles are never actually shot down in the port. |
-| `g_invincible_projectiles` default 0 | `assets/data/xonotic-data.pk3dir/mutators.cfg:116` (verbatim) | Value preserved. |
+| `g_invincible_projectiles` default 0 | `Base/data/xonotic-data.pk3dir/mutators.cfg:116` (verbatim) | Value preserved. |
 | BuildMutatorsString → `:InvincibleProjectiles` | **NOT IMPLEMENTED** | No port chain emits the machine-readable token. |
 | BuildMutatorsPrettyString → `, Invincible Projectiles` | **NOT IMPLEMENTED** | No port chain emits the pretty label; no active-mutators string assembly exists. |
 | Client active-mutator flag `MUT_INVINCIBLE_PROJECTILES = 5` (`util.qc:300` / `util.qh:60`) | **NOT IMPLEMENTED** | The cvar-driven `mut_set_active`/`active_mutators` detection scan is absent port-wide (grep `active_mutators`/`mut_set_active`/`MUT_` = 0 hits). Distinct from the two server-side BuildMutatorsString hooks. |

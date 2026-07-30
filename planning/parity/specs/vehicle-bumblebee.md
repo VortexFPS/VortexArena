@@ -1,7 +1,7 @@
 # Bumblebee vehicle — parity spec
 
 **Base refs:** `common/vehicles/vehicle/bumblebee.qc` (+ `bumblebee.qh`, `bumblebee_weapons.qc`, `bumblebee_weapons.qh`)
-· **Port refs:** `src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs` (+ `VehicleCommon.cs`, `VehicleBoarding.cs`, `VehiclePhysicsHelpers.cs`, `VehicleSpawnFuncs.cs`)
+· **Port refs:** `src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs` (+ `VehicleCommon.cs`, `VehicleBoarding.cs`, `VehiclePhysicsHelpers.cs`, `VehicleSpawnFuncs.cs`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -224,7 +224,7 @@ UseKey` and `damage → DamageVehicle` seams are wired.
 - Touch-board is treated as a flagged unreachable partial (PlayerPhysics design); not a deliberate gameplay change — recorded as a gap on the touch feature but not the headline.
 
 ## Verification
-- **Unit tests** (`tests/XonoticGodot.Tests/VehicleRuntimeTests.cs`): `Bumblebee_SecondSameTeamBoarder_TakesAGunnerSeat`
+- **Unit tests** (`tests/VortexArena.Tests/VehicleRuntimeTests.cs`): `Bumblebee_SecondSameTeamBoarder_TakesAGunnerSeat`
   (multi-seat slot assignment) and `Bumblebee_GunnerFire_SpawnsAProjectile` (gunner fire spawns a `vehicles_projectile`
   through the sim tick) both PASS — but both DRIVE `VehicleBoarding.UseKey` directly, which is exactly the seam that has
   no live caller. So the tests prove the descriptor logic, not the live reachability.

@@ -56,45 +56,45 @@ with the Base effective value. Bites on any path that reads before/without the c
 | `cl_movement_errorcompensation` | `1` | `0` | game/menu/framework/ClientSettings.cs:240 | Register |
 | `volume` | `1` | `0.7` | game/menu/framework/ClientSettings.cs:626 | Register |
 | `bgmvolume` | `0.75` | `1` | game/menu/framework/ClientSettings.cs:627 | Register |
-| `g_powerups` | `-1` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:513 | fallback |
-| `g_pickup_items` | `-1` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:515 | fallback |
-| `g_ctf_allow_vehicle_carry` | `1` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:2155 | fallback |
-| `g_respawn_delay_large_count` | `8` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/EntityGametypeState.cs:230 | fallback |
-| `g_nades_bonus_score_high` | `60` | `15` | src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:1212 | fallback |
-| `g_lms_forfeit_min_match_time` | `30` | `0` | src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:671 | fallback |
-| `g_balance_armor_regenstable` | `100` | `50` | src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:355 | fallback |
-| `g_balance_armor_regenstable` | `100` | `50` | src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs:447 | fallback |
-| `g_monsters_miniboss_chance` | `5` | `0` | src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:292 | fallback |
-| `g_pickup_healthsmall_max` | `200` | `5` | src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs:122 | fallback |
-| `g_throughfloor_damage` | `0.75` | `0.5` | src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:69 | fallback |
-| `g_throughfloor_force` | `0.75` | `0.7` | src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:70 | fallback |
-| `g_nades_override_dropweapon` | `1` | `0` | src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:110 | fallback |
-| `g_freezetag_revive_nade` | `1` | `0` | src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:243 | fallback |
-| `g_freezetag_revive_nade` | `1` | `0` | src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:368 | fallback |
-| `g_warmup_start_ammo_cells` | `90` | `30` | src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:1443 | fallback |
-| `g_vehicles_enter` | `0` | `1` | src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:184 | fallback |
-| `g_instagib_extralives` | `1` | `0` | src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:806 | fallback |
-| `g_vehicles_enter` | `0` | `1` | src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:852 | fallback |
-| `g_rm_laser_damage` | `80` | `150` | src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:447 | fallback |
-| `g_sandbox` | `0` | `g_sandbox <subcommand> [args] — sandbox build mode (object_spawn/edit/attach/…)` | src/XonoticGodot.Server/Commands.cs:892 | Register |
-| `g_warmup_start_ammo_cells` | `90` | `30` | src/XonoticGodot.Server/Cvars.cs:291 | table |
-| `g_balance_contents_playerdamage_drowning` | `20` | `30` | src/XonoticGodot.Server/Cvars.cs:296 | table |
-| `g_balance_contents_playerdamage_lava_burn_time` | `2.5` | `5` | src/XonoticGodot.Server/Cvars.cs:300 | table |
-| `g_balance_contents_playerdamage_slime` | `30` | `40` | src/XonoticGodot.Server/Cvars.cs:301 | table |
-| `g_balance_falldamage_factor` | `0.20` | `0.15` | src/XonoticGodot.Server/Cvars.cs:304 | table |
-| `bot_ai_custom_weapon_priority_far` | `vaporizer oknex vortex rifle electro devastator mortar hagar hlac crylink blaster okmachinegun machinegun fireball seeker okshotgun shotgun tuba minelayer` | `` | src/XonoticGodot.Server/Cvars.cs:372 | table |
-| `bot_ai_custom_weapon_priority_mid` | `vaporizer devastator oknex vortex fireball seeker mortar electro okmachinegun machinegun arc crylink hlac hagar okshotgun shotgun blaster rifle tuba minelayer` | `` | src/XonoticGodot.Server/Cvars.cs:373 | table |
-| `bot_ai_custom_weapon_priority_close` | `vaporizer oknex vortex okshotgun shotgun okmachinegun machinegun arc hlac tuba seeker hagar crylink mortar electro devastator blaster fireball rifle minelayer` | `` | src/XonoticGodot.Server/Cvars.cs:374 | table |
-| `sv_maxidle_alsokickspectators` | `1` | `0` | src/XonoticGodot.Server/Cvars.cs:391 | table |
-| `sv_maxidle_slots_countbots` | `1` | `0` | src/XonoticGodot.Server/Cvars.cs:393 | table |
-| `hostname` | `Xonotic  Server` | `Xonotic XonoticGodot Server` | src/XonoticGodot.Server/Cvars.cs:400 | table |
-| `sv_eventlog_console` | `1` | `0` | src/XonoticGodot.Server/Cvars.cs:454 | table |
-| `sv_eventlog_files_nameprefix` | `xonotic` | `ServerLog-` | src/XonoticGodot.Server/Cvars.cs:457 | table |
-| `g_playerstats_gamereport_uri` | `https://stats.xonotic.org/stats/submit` | `` | src/XonoticGodot.Server/Cvars.cs:461 | table |
-| `lastlevel` | `` | `0` | src/XonoticGodot.Server/Cvars.cs:533 | table |
-| `g_pickup_items` | `-1` | `1` | src/XonoticGodot.Server/Cvars.cs:550 | table |
-| `g_pickup_weapons_anyway` | `1` | `0` | src/XonoticGodot.Server/Cvars.cs:553 | table |
-| `g_powerups` | `-1` | `1` | src/XonoticGodot.Server/Cvars.cs:556 | table |
+| `g_powerups` | `-1` | `0` | src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:513 | fallback |
+| `g_pickup_items` | `-1` | `0` | src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:515 | fallback |
+| `g_ctf_allow_vehicle_carry` | `1` | `0` | src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:2155 | fallback |
+| `g_respawn_delay_large_count` | `8` | `0` | src/VortexArena.Common/Gameplay/GameTypes/EntityGametypeState.cs:230 | fallback |
+| `g_nades_bonus_score_high` | `60` | `15` | src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:1212 | fallback |
+| `g_lms_forfeit_min_match_time` | `30` | `0` | src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:671 | fallback |
+| `g_balance_armor_regenstable` | `100` | `50` | src/VortexArena.Common/Gameplay/Monsters/Mage.cs:355 | fallback |
+| `g_balance_armor_regenstable` | `100` | `50` | src/VortexArena.Common/Gameplay/Monsters/Mage.cs:447 | fallback |
+| `g_monsters_miniboss_chance` | `5` | `0` | src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:292 | fallback |
+| `g_pickup_healthsmall_max` | `200` | `5` | src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs:122 | fallback |
+| `g_throughfloor_damage` | `0.75` | `0.5` | src/VortexArena.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:69 | fallback |
+| `g_throughfloor_force` | `0.75` | `0.7` | src/VortexArena.Common/Gameplay/Nades/Booms/NadeNormalBoom.cs:70 | fallback |
+| `g_nades_override_dropweapon` | `1` | `0` | src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:110 | fallback |
+| `g_freezetag_revive_nade` | `1` | `0` | src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:243 | fallback |
+| `g_freezetag_revive_nade` | `1` | `0` | src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:368 | fallback |
+| `g_warmup_start_ammo_cells` | `90` | `30` | src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:1443 | fallback |
+| `g_vehicles_enter` | `0` | `1` | src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:184 | fallback |
+| `g_instagib_extralives` | `1` | `0` | src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:806 | fallback |
+| `g_vehicles_enter` | `0` | `1` | src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:852 | fallback |
+| `g_rm_laser_damage` | `80` | `150` | src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:447 | fallback |
+| `g_sandbox` | `0` | `g_sandbox <subcommand> [args] — sandbox build mode (object_spawn/edit/attach/…)` | src/VortexArena.Server/Commands.cs:892 | Register |
+| `g_warmup_start_ammo_cells` | `90` | `30` | src/VortexArena.Server/Cvars.cs:291 | table |
+| `g_balance_contents_playerdamage_drowning` | `20` | `30` | src/VortexArena.Server/Cvars.cs:296 | table |
+| `g_balance_contents_playerdamage_lava_burn_time` | `2.5` | `5` | src/VortexArena.Server/Cvars.cs:300 | table |
+| `g_balance_contents_playerdamage_slime` | `30` | `40` | src/VortexArena.Server/Cvars.cs:301 | table |
+| `g_balance_falldamage_factor` | `0.20` | `0.15` | src/VortexArena.Server/Cvars.cs:304 | table |
+| `bot_ai_custom_weapon_priority_far` | `vaporizer oknex vortex rifle electro devastator mortar hagar hlac crylink blaster okmachinegun machinegun fireball seeker okshotgun shotgun tuba minelayer` | `` | src/VortexArena.Server/Cvars.cs:372 | table |
+| `bot_ai_custom_weapon_priority_mid` | `vaporizer devastator oknex vortex fireball seeker mortar electro okmachinegun machinegun arc crylink hlac hagar okshotgun shotgun blaster rifle tuba minelayer` | `` | src/VortexArena.Server/Cvars.cs:373 | table |
+| `bot_ai_custom_weapon_priority_close` | `vaporizer oknex vortex okshotgun shotgun okmachinegun machinegun arc hlac tuba seeker hagar crylink mortar electro devastator blaster fireball rifle minelayer` | `` | src/VortexArena.Server/Cvars.cs:374 | table |
+| `sv_maxidle_alsokickspectators` | `1` | `0` | src/VortexArena.Server/Cvars.cs:391 | table |
+| `sv_maxidle_slots_countbots` | `1` | `0` | src/VortexArena.Server/Cvars.cs:393 | table |
+| `hostname` | `Xonotic  Server` | `Xonotic VortexArena Server` | src/VortexArena.Server/Cvars.cs:400 | table |
+| `sv_eventlog_console` | `1` | `0` | src/VortexArena.Server/Cvars.cs:454 | table |
+| `sv_eventlog_files_nameprefix` | `xonotic` | `ServerLog-` | src/VortexArena.Server/Cvars.cs:457 | table |
+| `g_playerstats_gamereport_uri` | `https://stats.xonotic.org/stats/submit` | `` | src/VortexArena.Server/Cvars.cs:461 | table |
+| `lastlevel` | `` | `0` | src/VortexArena.Server/Cvars.cs:533 | table |
+| `g_pickup_items` | `-1` | `1` | src/VortexArena.Server/Cvars.cs:550 | table |
+| `g_pickup_weapons_anyway` | `1` | `0` | src/VortexArena.Server/Cvars.cs:553 | table |
+| `g_powerups` | `-1` | `1` | src/VortexArena.Server/Cvars.cs:556 | table |
 
 ## 5. Base-effective cvars never referenced in port source (1548)
 

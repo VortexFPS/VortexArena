@@ -1,7 +1,7 @@
 # Electro — parity spec
 
 **Base refs:** `common/weapons/weapon/electro.qc` · `common/weapons/weapon/electro.qh` · `bal-wep-xonotic.cfg` (`g_balance_electro_*`) · `common/weapons/calculations.qc` (`W_SetupProjVelocity_*`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs` · `WeaponFireDriver.cs` · `WeaponFiring.cs` · `WeaponSplash.cs` · `MoveTypePhysics.cs` · `DamageSystem.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Electro.cs` · `WeaponFireDriver.cs` · `WeaponFiring.cs` · `WeaponSplash.cs` · `MoveTypePhysics.cs` · `DamageSystem.cs`
 
 > **VERIFIER NOTE (2026-06-22):** the first pass cited `game/client/ProjectileCatalog.cs` / `ProjectileRenderer.cs` — **these files do not exist** (the repo has only `Common/Engine/Server/Net`, no client render project). In-flight electro projectiles get **no model, no trail, no electro_fly loop**; they are invisible. Several "live & faithful" claims below have been corrected inline.
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22

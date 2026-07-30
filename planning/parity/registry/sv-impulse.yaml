@@ -21,13 +21,13 @@ features:
       - "server/impulse.qc:399 (CheatImpulse)"
       - "common/impulses/all.qh:3 (REGISTRY(IMPULSES, 255))"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:2059 (CmdImpulse)"
-      - "src/XonoticGodot.Server/Commands.cs:2073 (DispatchImpulse)"
-      - "src/XonoticGodot.Server/Commands.cs:2080 (MapVote.CastVote route)"
-      - "src/XonoticGodot.Server/Commands.cs:2095 (Minigames.Impulse, before timeout gate)"
-      - "src/XonoticGodot.Server/Commands.cs:2096 (Timeout.IsPaused gate)"
-      - "src/XonoticGodot.Server/Commands.cs:2103 (round-not-started gate: imp 17/20/21)"
-      - "src/XonoticGodot.Server/Commands.cs:2109 (VehicleBoarding.Impulse)"
+      - "src/VortexArena.Server/Commands.cs:2059 (CmdImpulse)"
+      - "src/VortexArena.Server/Commands.cs:2073 (DispatchImpulse)"
+      - "src/VortexArena.Server/Commands.cs:2080 (MapVote.CastVote route)"
+      - "src/VortexArena.Server/Commands.cs:2095 (Minigames.Impulse, before timeout gate)"
+      - "src/VortexArena.Server/Commands.cs:2096 (Timeout.IsPaused gate)"
+      - "src/VortexArena.Server/Commands.cs:2103 (round-not-started gate: imp 17/20/21)"
+      - "src/VortexArena.Server/Commands.cs:2109 (VehicleBoarding.Impulse)"
       - "game/net/ServerNet.cs (ProvideInput / ProvideInputPerFrame dispatch `impulse N`)"
     constants:
       - { name: "round_gate_impulses", base: "weapon_drop=17 / weapon_reload=20 / use=21", port: "17 / 20 / 21", match: true }
@@ -58,8 +58,8 @@ features:
       - "server/weapons/selection.qc:302 (W_NextWeaponOnImpulse)"
       - "common/impulses/all.qh:38-47 (weapon_group_1..9=1..9, group_0=14)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:63 (group branch)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:495 (NextWeaponOnImpulse)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:63 (group branch)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:495 (NextWeaponOnImpulse)"
     constants:
       - { name: "cl_weaponimpulsemode", base: "0", port: "0 (read; default-on path)", match: true }
       - { name: "group_0_impulse", base: "14", port: "14", match: true }
@@ -89,11 +89,11 @@ features:
       - "server/weapons/selection.qc:295 (W_CycleWeapon)"
       - "common/impulses/all.qh:52-83 (200-229 = priority_<0..9>_prev/best/next)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:78 (priority branches)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:145 (PriorityHandle -> CycleWeaponGroup, dir + number)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:579 (CycleWeaponGroup)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:200 (WeaponPriorityForGroup -> per-group list; PriorityProviderForGroup NULL -> server-global cvar facade fallback)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:191 (PriorityProviderForGroup field — DECLARED but NEVER ASSIGNED)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:78 (priority branches)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:145 (PriorityHandle -> CycleWeaponGroup, dir + number)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:579 (CycleWeaponGroup)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:200 (WeaponPriorityForGroup -> per-group list; PriorityProviderForGroup NULL -> server-global cvar facade fallback)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:191 (PriorityProviderForGroup field — DECLARED but NEVER ASSIGNED)"
     constants:
       - { name: "priority_group_list", base: "cvar_cl_weaponpriorities[number] = cl_weaponpriority0..9 (per-group, PER-CLIENT)", port: "WeaponPriorityForGroup -> server-global cl_weaponpriority<N> cvar facade (PriorityProviderForGroup is NULL, so the per-client replicated value is NOT consulted); main cl_weaponpriority fallback if unset", match: false }
       - { name: "dir_mapping", base: "prev=-1 / best=0 / next=+1", port: "prev=-1 / best=0 / next=+1", match: true }
@@ -123,9 +123,9 @@ features:
       - "common/weapons/all.qh (Weapon_from_impulse, WEP_IMPULSE_BEGIN=230)"
       - "server/weapons/selection.qc (W_SwitchWeapon_TryOthers)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:158 (ByIdHandle)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponOrder.cs:WeaponByIdIndex"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:353 (SwitchWeaponWithComplain)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:158 (ByIdHandle)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponOrder.cs:WeaponByIdIndex"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:353 (SwitchWeaponWithComplain)"
     constants:
       - { name: "byid_begin_impulse", base: "230", port: "230", match: true }
       - { name: "byid_0", base: "blaster", port: "blaster", match: true }
@@ -141,7 +141,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: unit_test, ref: "tests/XonoticGodot.Tests/WeaponByIdTests.cs (ByIdOrder_Is_QC_DefinitionOrder_Not_Alphabetical)", result: pass }
+      - { kind: unit_test, ref: "tests/VortexArena.Tests/WeaponByIdTests.cs (ByIdOrder_Is_QC_DefinitionOrder_Not_Alphabetical)", result: pass }
       - { kind: code_read, ref: "ByIdHandle (WeaponImpulses.cs:158) uses WeaponByIdIndex (QC unique-impulse order) + the TryOthers fallback gated on cl_weapon_switch_fallback_to_impulse (read with !=0f)", result: pass }
     confidence: high
     notes: "Unchanged behavior. The unique-impulse allocation order (definition order, skipping Null/SpecialAttack/Ball-Stealer) is pinned by a test."
@@ -154,10 +154,10 @@ features:
       - "server/weapons/selection.qc:310 (W_NextWeapon)"
       - "server/weapons/selection.qc:321 (W_PreviousWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:101 (switch)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:506 (NextWeapon)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:514 (PreviousWeapon)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:228 (WeaponOrderByImpulse — list 1)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:101 (switch)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:506 (NextWeapon)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:514 (PreviousWeapon)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:228 (WeaponOrderByImpulse — list 1)"
     constants:
       - { name: "next_byid_impulse", base: "10", port: "10", match: true }
       - { name: "weapon_best_impulse", base: "13", port: "13", match: true }
@@ -185,8 +185,8 @@ features:
       - "server/weapons/selection.qc:122 (W_GetCycleWeapon)"
       - "server/weapons/selection.qc (client_hasweapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:259 (GetCycleWeapon)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:224 (ClientHasWeapon)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:259 (GetCycleWeapon)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:224 (ClientHasWeapon)"
     constants: []
     status:
       logic: partial
@@ -212,9 +212,9 @@ features:
       - "server/weapons/selection.qc:237 (W_SwitchWeapon_Force)"
       - "server/weapons/selection.qc:289 (W_SwitchWeapon_TryOthers)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:353 (SwitchWeaponWithComplain)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:85 (SwitchWeapon == W_SwitchWeapon_Force)"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:375 (SwitchToOtherWeapon)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:353 (SwitchWeaponWithComplain)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:85 (SwitchWeapon == W_SwitchWeapon_Force)"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:375 (SwitchToOtherWeapon)"
     constants:
       - { name: "cl_weapon_switch_reload", base: "1", port: "1 (read at Inventory.cs:366, !=0f)", match: true }
     status:
@@ -240,8 +240,8 @@ features:
       - "server/weapons/throwing.qc (W_ThrowWeapon)"
       - "server/weapons/tracing.qc (W_CalculateProjectileVelocity)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:179 (DropHandle)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponThrowing.cs:177 (ThrowWeapon)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:179 (DropHandle)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponThrowing.cs:177 (ThrowWeapon)"
     constants:
       - { name: "drop_velocity", base: "v_forward * 750", port: "v_forward * 750", match: true }
       - { name: "g_weaponspeedfactor", base: "1", port: "1 (read, only >0 applied)", match: true }
@@ -273,9 +273,9 @@ features:
       - "server/weapons/weaponsystem.qc (weaponLocked)"
       - "common/weapons/weapon/tuba.qc:360 (Tuba wr_reload = instrument cycle)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:213 (ReloadHandle)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:243 (WeaponLocked)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:234 (Reload — instrument cycle)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:213 (ReloadHandle)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:243 (WeaponLocked)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:234 (Reload — instrument cycle)"
     constants:
       - { name: "tuba_instrument_count", base: "3 (Tuba/Accordion/Klein Bottle)", port: "% 3", match: true }
       - { name: "tuba_reload_anim_time", base: "0.5 (weapon_thinkf WFRAME_RELOAD 0.5)", port: "0.5 (ScheduleThink 0.5)", match: true }
@@ -306,13 +306,13 @@ features:
       - "server/mutators/mutator/gamemode_ctf.qc:2452 (ctf PlayerUseKey hook)"
       - "server/mutators/mutator/gamemode_onslaught.qc:1990 (ons PlayerUseKey hook)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:2191 (imp==21 -> VehicleBoarding.UseKey + Ctf.HandleUseKey / Onslaught.HandleUseKey)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:74 (UseKey)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:106 (MutatorHooks.FirePlayerUseKey — the trailing hook)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:1713 (HandleUseKey — throw/pass-request)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:971 (HandleUseKey — own-control-point click-radar gate)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/{Keepaway,TeamKeepaway,KeyHunt}.cs (PlayerUseKey hook subscribers)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/{BuffsMutator,PowerupsMutator}.cs (PlayerUseKey hook subscribers)"
+      - "src/VortexArena.Server/Commands.cs:2191 (imp==21 -> VehicleBoarding.UseKey + Ctf.HandleUseKey / Onslaught.HandleUseKey)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:74 (UseKey)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:106 (MutatorHooks.FirePlayerUseKey — the trailing hook)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:1713 (HandleUseKey — throw/pass-request)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:971 (HandleUseKey — own-control-point click-radar gate)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/{Keepaway,TeamKeepaway,KeyHunt}.cs (PlayerUseKey hook subscribers)"
+      - "src/VortexArena.Common/Gameplay/Mutators/{BuffsMutator,PowerupsMutator}.cs (PlayerUseKey hook subscribers)"
     constants:
       - { name: "g_vehicles_enter_radius", base: "250", port: "250 (DefaultEnterRadius)", match: true }
       - { name: "use_impulse", base: "21", port: "21 (routed by DispatchImpulse + WeaponImpulses.Handle)", match: true }
@@ -341,11 +341,11 @@ features:
       - "common/impulses/all.qh:133-144 (waypoint impulses 30-39, 47, 48)"
       - "common/mutators/mutator/waypoints/waypointsprites.qc:WaypointSprite_DeployPersonal/DeployFixed/Attach/ClearPersonal/ClearOwned"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:2130-2151 (impulse 30-39/47/48 -> CmdWaypointDeploy/CmdWaypointClear; 30 also SpeedrunInit snapshot)"
-      - "src/XonoticGodot.Server/Commands.cs:1699 (CmdWaypointDeploy)"
-      - "src/XonoticGodot.Server/Commands.cs:1757 (WaypointResolveLocation — here/crosshair-trace/death_origin)"
-      - "src/XonoticGodot.Server/Commands.cs:1852 (CmdWaypointClear + CTS/race self-kill)"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/WaypointSprites.cs (DeployPersonal/DeployFixed/Attach/ClearPersonal/ClearOwned)"
+      - "src/VortexArena.Server/Commands.cs:2130-2151 (impulse 30-39/47/48 -> CmdWaypointDeploy/CmdWaypointClear; 30 also SpeedrunInit snapshot)"
+      - "src/VortexArena.Server/Commands.cs:1699 (CmdWaypointDeploy)"
+      - "src/VortexArena.Server/Commands.cs:1757 (WaypointResolveLocation — here/crosshair-trace/death_origin)"
+      - "src/VortexArena.Server/Commands.cs:1852 (CmdWaypointClear + CTS/race self-kill)"
+      - "src/VortexArena.Common/Gameplay/Waypoints/WaypointSprites.cs (DeployPersonal/DeployFixed/Attach/ClearPersonal/ClearOwned)"
     constants:
       - { name: "waypoint_impulse_range", base: "30-39 (here/crosshair/death x personal/here/danger) + 33 helpme + 47/48 clear", port: "30-39 routed (crosshair=server trace, death=DeathOrigin) + 47/48", match: true }
       - { name: "checkpoint_selfkill_cvar", base: "g_allow_checkpoints (g_cts||g_race), gated on this.personal != NULL; delete(this.personal)+ClientKill", port: "g_allow_checkpoints + (Cts||Race) + PersonalCheckpoint != null -> clears PersonalCheckpoint + KillCountdown.Begin", match: true }
@@ -378,12 +378,12 @@ features:
       - "server/cheats.qc:264 (CHIMPULSE_R00T)"
       - "common/impulses/all.qh:156-161 (CHIMPULSE GIVE_ALL=99 / TELEPORT=143 / R00T=148)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:2114 (imp==99 -> Cheats.GiveAll)"
-      - "src/XonoticGodot.Server/Commands.cs:2122 (imp==148 -> Cheats.R00t)"
-      - "src/XonoticGodot.Server/Commands.cs:2129 (imp==143 -> Cheats.Teleport)"
-      - "src/XonoticGodot.Server/Cheats.cs:229 (GiveAll — sv_cheats gate + give all + cheat count)"
-      - "src/XonoticGodot.Server/Cheats.cs:246 (R00t — sv_cheats gate + nuke random enemy + cheat count)"
-      - "src/XonoticGodot.Server/Cheats.cs:294 (Teleport — sv_cheats gate + info_autoscreenshot/random-location + cheat count)"
+      - "src/VortexArena.Server/Commands.cs:2114 (imp==99 -> Cheats.GiveAll)"
+      - "src/VortexArena.Server/Commands.cs:2122 (imp==148 -> Cheats.R00t)"
+      - "src/VortexArena.Server/Commands.cs:2129 (imp==143 -> Cheats.Teleport)"
+      - "src/VortexArena.Server/Cheats.cs:229 (GiveAll — sv_cheats gate + give all + cheat count)"
+      - "src/VortexArena.Server/Cheats.cs:246 (R00t — sv_cheats gate + nuke random enemy + cheat count)"
+      - "src/VortexArena.Server/Cheats.cs:294 (Teleport — sv_cheats gate + info_autoscreenshot/random-location + cheat count)"
     constants:
       - { name: "give_all_impulse", base: "99", port: "99 (routed)", match: true }
       - { name: "r00t_impulse", base: "148", port: "148 (routed)", match: true }
@@ -418,15 +418,15 @@ features:
       - "server/cheats.qc:188 (CHIMPULSE_SPEEDRUN 141 — teleport back to .personal)"
       - "common/impulses/all.qh:155-159 (CHIMPULSE SPEEDRUN_INIT=30 / CLONE_MOVING=140 / SPEEDRUN=141 / CLONE_STANDING=142)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:2139 (imp==141 -> Cheats.Speedrun, then Race/Cts.AbortSpeedrun on success)"
-      - "src/XonoticGodot.Server/Commands.cs:2163 (imp==30 -> Cheats.SpeedrunInit snapshot, then waypoint sprite)"
-      - "src/XonoticGodot.Server/Cheats.cs:347 (SpeedrunInit -> Speedrun.SnapshotPersonal)"
-      - "src/XonoticGodot.Server/Cheats.cs:357 (Speedrun -> g_allow_checkpoints gate + Speedrun.RestorePersonal + cheat count)"
-      - "src/XonoticGodot.Common/Gameplay/Player/Speedrun.cs:56 (SnapshotPersonal — .personal snapshot)"
-      - "src/XonoticGodot.Common/Gameplay/Player/Speedrun.cs:99 (RestorePersonal — start-solid tracebox guard + teleport-back + state restore + pause/statuseffect rebase)"
-      - "src/XonoticGodot.Common/Gameplay/Player/Speedrun.cs:16 (PersonalCheckpoint — the .personal value record)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:1022 (AbortSpeedrun — rc lap-clock reset, fired post-restore)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs:448 (AbortSpeedrun — cts run-clock reset, fired post-restore)"
+      - "src/VortexArena.Server/Commands.cs:2139 (imp==141 -> Cheats.Speedrun, then Race/Cts.AbortSpeedrun on success)"
+      - "src/VortexArena.Server/Commands.cs:2163 (imp==30 -> Cheats.SpeedrunInit snapshot, then waypoint sprite)"
+      - "src/VortexArena.Server/Cheats.cs:347 (SpeedrunInit -> Speedrun.SnapshotPersonal)"
+      - "src/VortexArena.Server/Cheats.cs:357 (Speedrun -> g_allow_checkpoints gate + Speedrun.RestorePersonal + cheat count)"
+      - "src/VortexArena.Common/Gameplay/Player/Speedrun.cs:56 (SnapshotPersonal — .personal snapshot)"
+      - "src/VortexArena.Common/Gameplay/Player/Speedrun.cs:99 (RestorePersonal — start-solid tracebox guard + teleport-back + state restore + pause/statuseffect rebase)"
+      - "src/VortexArena.Common/Gameplay/Player/Speedrun.cs:16 (PersonalCheckpoint — the .personal value record)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:1022 (AbortSpeedrun — rc lap-clock reset, fired post-restore)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:448 (AbortSpeedrun — cts run-clock reset, fired post-restore)"
     constants:
       - { name: "clone_moving_impulse", base: "140 (CopyBody + v_forward*300 nudge)", port: "not routed", match: false }
       - { name: "speedrun_impulse", base: "141 (teleport back to .personal checkpoint)", port: "141 (routed -> Cheats.Speedrun -> RestorePersonal)", match: true }

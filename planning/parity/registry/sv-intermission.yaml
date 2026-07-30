@@ -21,7 +21,7 @@ last_audited: "2026-06-27"
 # Confirmed-still-true from the prior baseline (verified again this pass): matchend.nextlevel — NextLevel
 #   (GameWorld.cs:3946) reproduces VoteReset/MatchEnd hooks/MarkWinners/DumpStats(true)/:gameover/PlayerStats/
 #   Kill_Notification/Campaign.PreIntermission/Demo.OnMatchEnd/GameEndHookHandler; WeaponStats_Shutdown STILL the
-#   lone omission (grep: zero refs in src/XonoticGodot.Server). nextmap.override all three exits live; overtime.cascade
+#   lone omission (grep: zero refs in src/VortexArena.Server). nextmap.override all three exits live; overtime.cascade
 #   STAT(OVERTIMES) networked via MatchState (ServerNet.cs:971/977/990 region); nextmap_broadcast rides MatchState
 #   WriteString(nextMap) (ServerNet.cs:990). audio.cdtrack Intermission/PickIntermissionTrack untouched (the W16
 #   MusicPlayer.cs edit was trigger_music last-wins ordering, a different unit).
@@ -46,10 +46,10 @@ features:
     base_refs:
       - "server/world.qc:NextLevel"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:NextLevel"
-      - "src/XonoticGodot.Server/Commands.cs:DumpStats"
-      - "src/XonoticGodot.Server/Intermission.cs:Begin"
-      - "src/XonoticGodot.Server/Intermission.cs:BeginTeam"
+      - "src/VortexArena.Server/GameWorld.cs:NextLevel"
+      - "src/VortexArena.Server/Commands.cs:DumpStats"
+      - "src/VortexArena.Server/Intermission.cs:Begin"
+      - "src/VortexArena.Server/Intermission.cs:BeginTeam"
     constants:
       - { name: "sv_mapchange_delay (s)", base: "5", port: "5", match: true }
       - { name: "sv_eventlog", base: "0", port: "0", match: true }
@@ -65,11 +65,11 @@ features:
     gaps:
       - "NextLevel now reproduces the winner latch (MarkWinners), VoteReset (Voting.Stop), the MatchEnd_BeforeScores + MatchEnd mutator hooks, DumpStats(true) (Commands.DumpStats — colon-delimited :scores: score-log block), Kill_Notification(NOTIF_ALL) (SendCenterKill), the :gameover event log (sv_eventlog gated), PlayerStats_GameReport, the campaign PreIntermission decision, the demo stop, AND the trailing localcmd(sv_hook_gameend) admin-script alias (Commands.GameEndHookHandler → LoadedConfig.ExecuteLine). STILL OMITS: WeaponStats_Shutdown() (per-weapon accuracy stats export) — the lone remaining gap. (target_music_kill is ported but client-side — see sv-intermission.audio.cdtrack.)"
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:GameWorld_EndOfMatch_RotatesToNextMap", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:GameWorld_EndOfMatch_RotatesToNextMap", result: pass }
       - { kind: code-read, ref: "GameWorld.NextLevel (lines 3946-4000): Voting.Stop + FireMatchEndBeforeScores + MarkWinners + Commands.DumpStats(final:true) + GameLog.GameOver/Close (sv_eventlog) + PlayerStats.GameReport + SendCenterKill(NotifBroadcast.All) + Campaign.PreIntermission + Demo.OnMatchEnd + FireMatchEnd + Commands.GameEndHookHandler?.Invoke() (sv_hook_gameend, GameWorld.cs:3999). No WeaponStats_Shutdown — verified again post-Wave-16/17 (2026-06-27).", result: pass }
       - { kind: code-read, ref: "Commands.DumpStats (Commands.cs:2675): faithful colon block — :scores:<gt>_<map>:<time>, :labels:player:, per-player :player:see-labels: rows (real + logscores_bots), teamplay :teamscores: rows, :end; sinks = sv_logscores_console / sv_eventlog / sv_eventlog_console doubling-suppression (2026-06-27).", result: pass }
       - { kind: code-read, ref: "sv_hook_gameend NOW WIRED: Commands.GameEndHookHandler (Commands.cs:179) invoked at NextLevel GameWorld.cs:3910; bound LIVE by NetGame.cs:833 (non-threaded) — also covered on the threaded path — to _serverWorld.LoadedConfig.ExecuteLine(\"sv_hook_gameend\"), resolving the stock empty alias (no-op, matching Base QC server/world.qc:1463 localcmd) or any server.cfg redefine (2026-06-27).", result: pass }
-      - { kind: grep, ref: "no WeaponStats_Shutdown anywhere in src/XonoticGodot.Server (the single remaining omission; Base server/world.qc:1433) — 2026-06-27.", result: fail }
+      - { kind: grep, ref: "no WeaponStats_Shutdown anywhere in src/VortexArena.Server (the single remaining omission; Base server/world.qc:1433) — 2026-06-27.", result: fail }
     confidence: high
     notes: "FIXED since the prior 2026-06-27 baseline: the trailing localcmd(sv_hook_gameend) admin-script alias is now ported+live (Commands.GameEndHookHandler, wired on both host paths) — it was previously recorded as still-omitted. The lone remaining omission is WeaponStats_Shutdown (an accuracy-stats export seam with no stock-config gameplay effect). DumpStats(true) and the rest of the NextLevel bookkeeping remain ported and live."
 
@@ -80,8 +80,8 @@ features:
       - "server/world.qc:NextLevel"
       - "server/client.qc:PlayerThink"
     port_refs:
-      - "src/XonoticGodot.Server/Intermission.cs:Running"
-      - "src/XonoticGodot.Server/GameWorld.cs:GameStopped"
+      - "src/VortexArena.Server/Intermission.cs:Running"
+      - "src/VortexArena.Server/GameWorld.cs:GameStopped"
     constants: []
     status:
       logic: faithful
@@ -105,9 +105,9 @@ features:
       - "server/world.qc:NextLevel"
       - "server/intermission.qc:IntermissionThink"
     port_refs:
-      - "src/XonoticGodot.Server/Intermission.cs:ExitTime"
-      - "src/XonoticGodot.Server/Intermission.cs:Think"
-      - "src/XonoticGodot.Server/GameWorld.cs:CheckRulesAndIntermission"
+      - "src/VortexArena.Server/Intermission.cs:ExitTime"
+      - "src/VortexArena.Server/Intermission.cs:Think"
+      - "src/VortexArena.Server/GameWorld.cs:CheckRulesAndIntermission"
     constants:
       - { name: "sv_mapchange_delay (s)", base: "5", port: "5", match: true }
       - { name: "no-player exittime sentinel", base: "-1", port: "-1", match: true }
@@ -134,8 +134,8 @@ features:
     base_refs:
       - "server/intermission.qc:IntermissionThink"
     port_refs:
-      - "src/XonoticGodot.Server/Intermission.cs:RequestExit"
-      - "src/XonoticGodot.Server/GameWorld.cs (live player movement path)"
+      - "src/VortexArena.Server/Intermission.cs:RequestExit"
+      - "src/VortexArena.Server/GameWorld.cs (live player movement path)"
     constants: []
     status:
       logic: faithful
@@ -162,8 +162,8 @@ features:
       - "server/world.qc:InitiateOvertime"
       - "server/world.qc:GetWinningCode"
     port_refs:
-      - "src/XonoticGodot.Server/OverTimeManager.cs"
-      - "src/XonoticGodot.Server/GameWorld.cs:RunCheckRulesWorld"
+      - "src/VortexArena.Server/OverTimeManager.cs"
+      - "src/VortexArena.Server/GameWorld.cs:RunCheckRulesWorld"
       - "game/net/ServerNet.cs:SendMatchState"
       - "game/net/ClientNet.cs:MatchOvertimes"
       - "game/hud/TimerPanel.cs:Overtimes"
@@ -183,7 +183,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/OverTimeManagerTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/OverTimeManagerTests.cs", result: pass }
       - { kind: code-read, ref: "RunCheckRulesWorld ports overtimes_prev + the just-begun-sudden-death revert line-for-line; OverTimeManager InitiateSuddenDeath/InitiateOvertime/GetWinningCode faithful; OnOvertimeStarted/OnSuddenDeathStarted wired to NotificationSystem (one-shot center notifications). 2026-06-27.", result: pass }
       - { kind: code-read, ref: "STAT(OVERTIMES) now NETWORKED: ServerNet.SendMatchState writes _world.OverTime.Overtimes as a 32-bit long (ServerNet.cs:966/982 — OVERTIME_SUDDENDEATH 1<<24 exceeds 24-bit); ClientNet decodes to MatchOvertimes (ClientNet.cs:577/596); NetGame feeds TimerPanel.Overtimes (NetGame.cs:3457) for the persistent 'Overtime #N' / 'Sudden Death' HUD banner. 2026-06-27.", result: pass }
     confidence: high
@@ -198,7 +198,7 @@ features:
       - "server/intermission.qc:Map_Check"
       - "server/intermission.qc:Map_MarkAsRecent"
     port_refs:
-      - "src/XonoticGodot.Server/MapRotation.cs"
+      - "src/VortexArena.Server/MapRotation.cs"
     constants:
       - { name: "g_maplist_shuffle", base: "1", port: "1", match: true }
       - { name: "g_maplist_selectrandom", base: "0", port: "0", match: true }
@@ -215,7 +215,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:MapRotation_GetNextMap_Iterates / _RecentMapsExcluded / _BuildBallot", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:MapRotation_GetNextMap_Iterates / _RecentMapsExcluded / _BuildBallot", result: pass }
       - { kind: code-read, ref: "MapRotation.Init/GetNextMap/MaplistMethod_Random/Iterate/Repeat/Map_Check + MarkAsRecent/IsRecent faithful; fexists/MapInfo_CheckMap are pluggable predicates wired by the host", result: pass }
     confidence: high
     notes: "Random→Iterate→Repeat fallback, shuffle (Fisher-Yates seeded), cursor resume, and recent-map store all match Base. MapHasRightSize (player-count map-size restriction filter) is the one Map_Check sub-detail not modelled but is gated behind cvars off by default. UNCHANGED since baseline."
@@ -227,11 +227,11 @@ features:
       - "server/intermission.qc:DoNextMapOverride"
       - "server/intermission.qc:GotoNextMap"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
-      - "src/XonoticGodot.Server/GameWorld.cs:ApplyMapChange"
-      - "src/XonoticGodot.Server/Commands.cs:QuitHandler"
-      - "src/XonoticGodot.Server/Commands.cs:RedirectHandler"
-      - "src/XonoticGodot.Server/Commands.cs:LastLevelHandler"
+      - "src/VortexArena.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyMapChange"
+      - "src/VortexArena.Server/Commands.cs:QuitHandler"
+      - "src/VortexArena.Server/Commands.cs:RedirectHandler"
+      - "src/VortexArena.Server/Commands.cs:LastLevelHandler"
     constants:
       - { name: "samelevel", base: "0", port: "0", match: true }
       - { name: "quit_when_empty", base: "0", port: "0 (player_count<=currentbots → QuitHandler)", match: true }
@@ -261,7 +261,7 @@ features:
       - "server/intermission.qc:Map_Goto"
       - "server/intermission.qc:Map_MarkAsRecent"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:ApplyMapChange"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyMapChange"
     constants: []
     status:
       logic: faithful
@@ -286,9 +286,9 @@ features:
       - "server/mapvoting.qc:MapVote_Start"
       - "server/mapvoting.qc:MapVote_Finished"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
-      - "src/XonoticGodot.Server/Commands.cs:DispatchImpulse"
+      - "src/VortexArena.Server/MapVoting.cs"
+      - "src/VortexArena.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
+      - "src/VortexArena.Server/Commands.cs:DispatchImpulse"
     constants:
       - { name: "g_maplist_votable", base: "6", port: "6", match: true }
       - { name: "g_maplist_votable_timeout (s)", base: "30", port: "30", match: true }
@@ -346,7 +346,7 @@ features:
       - "server/intermission.qc:Set_NextMap"
       - "server/intermission.qc:Send_NextMap_To_Player"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:NextMapBroadcast"
+      - "src/VortexArena.Server/GameWorld.cs:NextMapBroadcast"
       - "game/net/ServerNet.cs:SendMatchState"
       - "game/net/ClientNet.cs:NextMap"
       - "game/net/NetGame.cs:UpdateScoreboard"

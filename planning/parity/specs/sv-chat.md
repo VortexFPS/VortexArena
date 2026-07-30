@@ -1,7 +1,7 @@
 # sv-chat — parity spec
 
 **Base refs:** `server/chat.qc` · `server/chat.qh` · `server/command/cmd.qc` (ignore CRUD + say/say_team/tell verbs) · `common/effects/qc/globalsound.qh` (VoiceMessage→Say) · `server/main.qc:dedicated_print`
-**Port refs:** `src/XonoticGodot.Server/Chat.cs` · `src/XonoticGodot.Server/Commands.cs` (CmdSay/CmdSayTeam/CmdTell/CmdIgnore/CmdVoice) · `game/net/NetGame.cs` (sink wiring) · `game/net/ServerNet.cs:SendChatToPlayer` · `src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs` (magicear)
+**Port refs:** `src/VortexArena.Server/Chat.cs` · `src/VortexArena.Server/Commands.cs` (CmdSay/CmdSayTeam/CmdTell/CmdIgnore/CmdVoice) · `game/net/NetGame.cs` (sink wiring) · `game/net/ServerNet.cs:SendChatToPlayer` · `src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs` (magicear)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -142,7 +142,7 @@ to the net layer on both the stock and threaded paths (the historical T46 "deliv
 - **Delivery abstracted behind sinks** for headless testability (the `Delivered`/`DeliveredCenter` capture lists).
 
 ## Verification
-- `tests/XonoticGodot.Tests/ChatEngineTests.cs` — 30+ facts: allowed gates, public/team/spectator/private routing,
+- `tests/VortexArena.Tests/ChatEngineTests.cs` — 30+ facts: allowed gates, public/team/spectator/private routing,
   ignore add/remove/clear/full/no-id, muted fake-accept, per-type flood throttle + persistence + separate stamps,
   formatmessage %%/%h/%a/%l/unknown/7-budget, command registration + self-tell/usage gating. (verified, passing per memory.)
 - Cvar defaults diffed against `xonotic-server.cfg:395-411` — all match.

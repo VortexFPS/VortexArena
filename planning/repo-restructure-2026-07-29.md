@@ -856,9 +856,18 @@ else already does).
     the tag is a *fast-forward*, so `non_fast_forward` permits it. Verified the hard way — the test moved
     `maps-2026.07` from `92ad037` to a commit five ahead, and then could not move it back, because
     moving *backwards* is the non-fast-forward the rule does block. The protection is asymmetric.
-  - **Needs the `update` rule added** ("Restrict updates" in the UI). Until then the ruleset stops a
-    tag being deleted or rewound but not advanced, which is the more likely accident: a `git tag -f` on
-    a newer commit followed by a push.
+  - **Fixed by adding the `update` rule** ("Restrict updates" in the UI). Final state:
+    `deletion` + `non_fast_forward` + `update`, no bypass actors. Re-tested all four cases —
+    delete blocked, rewind blocked, **forward move now blocked** ("Cannot update this protected ref"),
+    and **creating a new `maps-*` tag still succeeds**, which matters: the protection must not stop
+    releasing. `maps-2026.07` restored to `92ad037`, 32/32 assets intact.
+  - **A no-bypass never-delete rule means mistakes are permanent too**, which the testing demonstrated
+    by accident: a stray probe tag could not be removed. That is arguably the right friction here, since
+    lockfiles pin these tags by name — but it means **cleanup has a procedure, not a shortcut**:
+    set the ruleset to `enforcement: disabled`, do the deletion, set it back to `active`. Deliberately
+    two steps. If that ever proves too coarse, the alternative is a `bypass_actors` entry for
+    `OrganizationAdmin`, at the cost of no longer blocking the admin's own accidental force-push —
+    which is the accident most worth blocking.
   - **Impact of that test, checked:** none. The 32 release assets stayed attached, and the `sources/`
     tree hash is identical at both commits (`6930c37`) because the five intervening commits touched only
     build tooling — so a rebuild from the tag would use the same sources either way. The tag now points

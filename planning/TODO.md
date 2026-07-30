@@ -1414,3 +1414,26 @@ Same convention as above: `qcsrc/…` = `Base/data/xonotic-data.pk3dir/qcsrc/…
 - `qcsrc/common/effects/qc/globalsound.qc` — **_GlobalSound VOICETYPE_TEAMRADIO/TAUNT/AUTOTAUNT/LASTATTACKER routing + directional attenuation; the voice/taunt commands**
   - → *port:* `game/hud/HudNotifications.cs`, `src/.../Gameplay/{Damage/DeathTypes,Notifications,Sounds}/*`
   - *notes:* Announcer voices currently stomp (no queue/dedup); voice-message/taunt subsystem is registry-only (`PlayVoiceMessage` ignores all VOICETYPE routing and has zero call sites). Mostly gated behind T40 obituary emission existing.
+
+## TODO-CORE-ZIP — the `-core` split and manifest wiring are still only on a retired branch
+
+`feature/launcher-updater` was retired locally on 2026-07-30 (the launcher itself now lives in
+[VortexLauncher](https://github.com/VortexFPS/VortexLauncher)). `tools/make-manifest.py` was recovered
+onto `main` at that point, because it is the GAME side of the boundary — it emits the `latest.json` the
+launcher consumes.
+
+What was **not** recovered, and is worth knowing before the first launcher-served release:
+
+| file | on that branch | why not recovered now |
+| --- | --- | --- |
+| `.github/workflows/release.yml` | +84 lines: `-core` zip per target, re-upload only when the content key changes, emit `latest.json` | main's `release.yml` has since lost its whole `assets` job and been re-keyed on `data/maps.lock.json`. The branch's version assumes the old shape, so this is a rewrite, not a cherry-pick. |
+| `tools/package.sh` | +83/-38: the fat/core split | same — main's `package.sh` was rewritten for the committed `data/` tree. |
+| `docs/RELEASING.md` | the two-zip layout | follows whatever the above becomes. |
+
+The branch is still on `origin/feature/launcher-updater` (`39e96e9`), so none of this is lost — read it
+there when wiring the split up properly.
+
+The design still holds and is worth keeping: a **fat** zip (binary + runtime + content) for a plain
+download, and a **core** zip (binary + runtime) plus a shared content pack the launcher dedupes across
+releases, so a patch release does not re-push ~900 MB to every player. `make-manifest.py` already models
+both, and `--print-content-key` supplies the pack's identity from the `data/` tree SHA.

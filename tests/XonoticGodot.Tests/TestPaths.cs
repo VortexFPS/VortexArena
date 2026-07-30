@@ -77,19 +77,32 @@ internal static class TestPaths
         if (!Directory.Exists(Data))
             return false;
 
-        // Post-restructure: fetch-maps.py extracts to data/maps/<map>.pk3dir/maps/<map>.bsp.
+        // Current layout: fetch-maps.py installs one .pk3 per map into data/maps/, unextracted, because
+        // MountGameDir mounts a .pk3 natively. Presence of a pack is enough - opening it to confirm
+        // would cost a zip scan on every probe.
+        //
+        // This case was MISSING for a while and the omission is instructive: every earlier probe looked
+        // for a loose .bsp or for a .pk3 at the data ROOT, so when the fetch switched from extracting to
+        // installing, HasMaps silently went false with all 32 packs present. Nothing went red, because a
+        // false HasMaps only LOWERS thresholds and SKIPS assertions - so the suite stayed green while the
+        // map-dependent half of it stopped asserting. TestPathsTests now guards this directly.
         string maps = Path.Combine(Data, "maps");
+        if (Directory.Exists(maps)
+            && Directory.EnumerateFiles(maps, "*.pk3", SearchOption.TopDirectoryOnly).Any())
+            return true;
+
+        // Extracted per-map packages, which fetch-maps.py no longer produces but a developer may still
+        // have unpacked by hand for editing (a .pk3dir IS the loose form - see section 9.3).
         if (Directory.Exists(maps)
             && Directory.EnumerateFiles(maps, "*.bsp", SearchOption.AllDirectories).Any())
             return true;
 
-        // Pre-restructure: the BSPs live inside the shipped .pk3 archives at the data root. Presence of
-        // the archive is enough — opening it to confirm would cost a zip scan for a guard.
+        // Pre-restructure: the BSPs live inside the bundled .pk3 archives at the data root.
         if (Directory.EnumerateFiles(Data, "*.pk3", SearchOption.TopDirectoryOnly)
             .Any(p => Path.GetFileName(p).Contains("maps", StringComparison.OrdinalIgnoreCase)))
             return true;
 
-        // Either layout can also carry loose BSPs in a pk3dir (a locally built or authored map).
+        // Any layout can also carry loose BSPs (a locally built or authored map).
         return Directory.EnumerateFiles(Data, "*.bsp", SearchOption.AllDirectories).Any();
     }
 

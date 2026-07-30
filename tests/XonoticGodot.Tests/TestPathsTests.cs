@@ -76,6 +76,45 @@ public class TestPathsTests
             $"'{TestPaths.CorePk3Dir}' (expected core.pk3dir or xonotic-data.pk3dir)");
     }
 
+    /// <summary>
+    /// The guard this file was missing, and its absence cost real coverage.
+    ///
+    /// <see cref="TestPaths.HasMaps"/> gates the map-dependent assertions, and it fails in the one
+    /// direction that cannot report itself: a false value only LOWERS thresholds and SKIPS assertions, so
+    /// the suite stays green while a third of it stops checking anything. That happened — when the map
+    /// fetch changed from extracting archives to installing <c>.pk3</c> packs, every probe in
+    /// <c>ResolveHasMaps</c> was looking for a loose <c>.bsp</c> or a root-level <c>.pk3</c>, so
+    /// <c>HasMaps</c> went false with all 32 packs installed and nothing went red.
+    ///
+    /// So: if map content is discoverable by ANY layout, HasMaps must say so.
+    /// </summary>
+    [Fact]
+    public void HasMaps_Is_True_When_Map_Content_Is_Present()
+    {
+        if (!TestPaths.HasData)
+            return;
+
+        string maps = Path.Combine(TestPaths.Data, "maps");
+        bool packedPerMap = Directory.Exists(maps)
+            && Directory.EnumerateFiles(maps, "*.pk3", SearchOption.TopDirectoryOnly).Any();
+        bool extracted = Directory.Exists(maps)
+            && Directory.EnumerateFiles(maps, "*.bsp", SearchOption.AllDirectories).Any();
+        bool bundled = Directory.EnumerateFiles(TestPaths.Data, "*.pk3", SearchOption.TopDirectoryOnly)
+            .Any(p => Path.GetFileName(p).Contains("maps", StringComparison.OrdinalIgnoreCase));
+        bool looseBsp = Directory.EnumerateFiles(TestPaths.Data, "*.bsp", SearchOption.AllDirectories).Any();
+
+        bool discoverable = packedPerMap || extracted || bundled || looseBsp;
+        if (!discoverable)
+            return; // genuinely no maps installed — the map-dependent tests are right to skip
+
+        Assert.True(
+            TestPaths.HasMaps,
+            $"map content IS present under {TestPaths.Data} (per-map .pk3={packedPerMap}, "
+                + $"extracted={extracted}, bundled .pk3={bundled}, loose .bsp={looseBsp}) but "
+                + "TestPaths.HasMaps is false — every map-dependent assertion is silently skipped or "
+                + "running against a lowered threshold. Fix ResolveHasMaps.");
+    }
+
     [Fact]
     public void No_Test_Hardcodes_A_Workstation_Path()
     {

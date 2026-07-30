@@ -67,3 +67,7 @@ __pycache__/
 
 # Compiled maps are fetched per data/maps.lock.json, never committed (restructure D7).
 data/maps/
+
+# Fetched engine export templates (tools/data/fetch-engine-template.py, pinned by
+# tools/engine-patches/engine.lock.json). Build inputs, not source — ~300 MB across three platforms.
+tools/engine-templates/

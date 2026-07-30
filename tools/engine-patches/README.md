@@ -71,8 +71,27 @@ Two things that follow, and one trap:
 
 ## Exporting on another machine
 
-`custom_template/release` in `export_presets.cfg` is an **absolute path to the dev box** — anyone
-exporting elsewhere must re-point it at their own build. That is deliberate, and the failure mode is
+**No longer true as of 2026-07-30.** `custom_template/release` is now the repo-relative
+`tools/engine-templates/godot.windows.template_release.x86_64.mono.exe`, fetched by
+`python tools/data/fetch-engine-template.py` and verified against the sha256 in `engine.lock.json`.
+Any machine — including CI — can produce a correct Windows build:
+
+```bash
+python tools/data/fetch-engine-template.py --only windows
+```
+
+Templates for all three platforms are published at
+[`engine-4.6.3-stable-vortex1`](https://github.com/VortexFPS/VortexArena/releases/tag/engine-4.6.3-stable-vortex1),
+deliberately as a **prerelease** — GitHub resolves `releases/latest` to the newest non-prerelease, and the
+launcher's update feed reads `/releases/latest/download/latest.json`. Only the Windows template differs
+from stock; the patch set touches `platform/windows/` exclusively, so the Linux and macOS templates are
+stock-equivalent and exist for provenance.
+
+The paragraph below describes the OLD arrangement and is kept because its failure analysis still applies
+to anyone who points the field somewhere by hand:
+
+`custom_template/release` in `export_presets.cfg` was an **absolute path to the dev box** — anyone
+exporting elsewhere had to re-point it at their own build. That is deliberate, and the failure mode is
 safe: Godot hard-aborts an export whose custom template is missing. You get an error and no binary,
 never a silently wrong one.
 

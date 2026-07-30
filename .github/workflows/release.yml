@@ -88,6 +88,15 @@ jobs:
         run: godot --headless --path . --import || true
         shell: bash
 
+      # The Windows export needs the PATCHED template (ADR-0017). Until this step existed,
+      # custom_template/release was an absolute path to one dev box, so CI could not produce a correct
+      # Windows build at all — it failed the export outright, which was at least loud. Verified against
+      # the sha256 in engine.lock.json; a mismatch deletes the download rather than leaving a
+      # half-verified engine binary where the next run would find it.
+      - name: Fetch the pinned engine template
+        run: python tools/data/fetch-engine-template.py --only windows
+        shell: bash
+
       - name: Export windows-client
         # Godot's headless export often exits non-zero on benign warnings â€” `|| true`, then assert the
         # binary actually appeared so a REAL export failure (no output) still fails the job.

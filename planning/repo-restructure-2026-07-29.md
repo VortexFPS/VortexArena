@@ -849,6 +849,22 @@ else already does).
 - **Do (1):** a GitHub tag-protection ruleset on `VortexMaps` blocking tag deletion and update, plus
   a never-delete policy for map releases. Platform-enforced and free; closes the accidental-cleanup
   and force-push paths.
+  - **Created 2026-07-29** — ruleset `20010534`, "Map release tags are immutable", target `tag`,
+    condition `refs/tags/maps-*`, enforcement active, no bypass actors.
+  - **`deletion` + `non_fast_forward` is NOT enough, and testing it proved that.** Deletion is blocked
+    (`GH013: Cannot delete this tag`). But a **forward** move succeeds: pushing a descendant commit over
+    the tag is a *fast-forward*, so `non_fast_forward` permits it. Verified the hard way — the test moved
+    `maps-2026.07` from `92ad037` to a commit five ahead, and then could not move it back, because
+    moving *backwards* is the non-fast-forward the rule does block. The protection is asymmetric.
+  - **Needs the `update` rule added** ("Restrict updates" in the UI). Until then the ruleset stops a
+    tag being deleted or rewound but not advanced, which is the more likely accident: a `git tag -f` on
+    a newer commit followed by a push.
+  - **Impact of that test, checked:** none. The 32 release assets stayed attached, and the `sources/`
+    tree hash is identical at both commits (`6930c37`) because the five intervening commits touched only
+    build tooling — so a rebuild from the tag would use the same sources either way. The tag now points
+    one commit set later than where it was cut, which is untidy rather than harmful.
+  - **Lesson worth keeping:** a protection rule that has not been tested against the specific action you
+    fear is a guess. This one read as complete and had a hole in exactly the direction that matters.
 - **Do (2):** `fetch-maps.py --rebuild`, which compiles from the pinned `maps-src` submodule when a
   fetch fails. This makes the **git sources the real backup** — distributed, and every clone is a
   copy — rather than depending on one host staying up. §8.3 already requires pinning the q3map2
@@ -1120,8 +1136,19 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
      the "This repository moved" notice.
    - **Create `VortexFPS/VortexMaps` and `VortexFPS/VortexLauncher`** — still to do. **Stage 1 is
      blocked on `VortexMaps`.**
-   - **Check the org's default Actions permissions** — **measured 2026-07-29, and §5.0's warning was
-     right to flag it.** All three repos have `default_workflow_permissions = read`:
+   - ~~**Check the org's default Actions permissions**~~ — **settled 2026-07-29, and §5.0's worry does
+     not apply.** Measured, then tested. All three repos have `default_workflow_permissions = read`, and
+     the repo-level control is greyed out because the org caps what a repo may set as its *default*. But
+     a probe workflow declaring `permissions: contents: write` on a job was granted exactly that — the
+     job log's `GITHUB_TOKEN Permissions` block read `Contents: write`
+     ([run](https://github.com/VortexFPS/VortexMaps/actions/runs/30506256613)).
+     **So the read-only setting is a default, not a ceiling, and nothing needs changing** — which is the
+     outcome that keeps least privilege intact. Both `release.yml` and `build-maps.yml` now declare
+     `contents: read` at workflow level and grant `contents: write` only to the job that publishes;
+     previously `release.yml` handed write to all six of its jobs. Publishing needs `contents` because
+     GitHub folds releases into that scope and offers nothing narrower.
+
+     For the record, the raw values:
 
      ```
      VortexArena     default=read     VortexMaps  default=read     VortexLauncher  default=read

@@ -1,12 +1,12 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Gameplay.Waypoints;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Gameplay.Waypoints;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Buffs mutator — port of common/mutators/mutator/buffs/sv_buffs.qc + buff/*.qc, built on the shared

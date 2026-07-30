@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Particles;
-using XonoticGodot.Game.Client.Particles;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Particles;
+using VortexArena.Game.Client.Particles;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The client-side renderer for the named particle-effect catalog (<see cref="Effects"/>): the Godot
@@ -202,7 +202,7 @@ public partial class EffectSystem : Node3D
     /// </summary>
     public bool UseFaithfulTrails =>
         FaithfulParticles is not null &&
-        (int)XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat(ParticleCvars.Modern) != 2;
+        (int)VortexArena.Game.Menu.MenuState.Cvars.GetFloat(ParticleCvars.Modern) != 2;
 
     /// <summary>
     /// DP CL_ParticleTrail: spawn one trail segment of <paramref name="effectName"/> along
@@ -230,7 +230,7 @@ public partial class EffectSystem : Node3D
     /// surface triangles, not the collision brushes — the difference shows on bevelled trim and patches,
     /// where a brush-clipped mark stops at the wrong edge). Call after map load with the loaded BSP.
     /// </summary>
-    public void SetDecalGeometry(XonoticGodot.Formats.Bsp.BspData bsp)
+    public void SetDecalGeometry(VortexArena.Formats.Bsp.BspData bsp)
     {
         if (Splats is null || bsp is null)
             return;
@@ -272,7 +272,7 @@ public partial class EffectSystem : Node3D
         // MenuState.Cvars. The faithful sim, renderer, router and SDF service MUST read them from there — NOT
         // the ambient Api.Cvars, which on a listen server is the SERVER store (it lacks the client particle
         // cvars, so cl_particles reads 0 and every spawn is gated off → nothing renders). See SetCvars.
-        ICvarService clientCvars = XonoticGodot.Game.Menu.MenuState.Cvars;
+        ICvarService clientCvars = VortexArena.Game.Menu.MenuState.Cvars;
 
         FaithfulParticles = new FaithfulParticleBackend { Name = "FaithfulParticles" };
         AddChild(FaithfulParticles);
@@ -417,7 +417,7 @@ public partial class EffectSystem : Node3D
         try { Styles.Load(VfsTextLoader); }
         catch { /* no overlay => Auto everywhere */ }
 
-        int mode = (int)XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat(ParticleCvars.Modern);
+        int mode = (int)VortexArena.Game.Menu.MenuState.Cvars.GetFloat(ParticleCvars.Modern);
         string modeName = mode switch { 0 => "original", 2 => "modern", _ => "mixed" };
         GD.Print($"[EffectSystem] effectinfo: {Info.Count} effects, particlefont atlas: " +
                  (Font?.Loaded == true ? "loaded" : "MISSING (solid-quad fallback)") +
@@ -434,7 +434,7 @@ public partial class EffectSystem : Node3D
     /// Only meaningful for modern-collision (cl_particles_modern 1/2); harmless in mode 0 (default).
     /// </summary>
     public void BuildSdfForMap(string mapName, byte[] bspBytes, CollisionWorld collision,
-        XonoticGodot.Formats.Vfs.VirtualFileSystem vfs)
+        VortexArena.Formats.Vfs.VirtualFileSystem vfs)
     {
         if (Sdf is null || collision is null || bspBytes is null)
             return;
@@ -1169,8 +1169,8 @@ public partial class EffectSystem : Node3D
         // cl_particles.c:1745-1752). DP uses AnglesFromVectors(.., flippitch:false) → the makevectors-consistent
         // (round-trippable) angles, i.e. our FixedVecToAngles; for a trail the basis comes from the trail dir.
         NVec3 basisDir = isTrail ? (originMax - originMin) : emitVel;
-        XonoticGodot.Common.Math.QMath.AngleVectors(
-            XonoticGodot.Common.Math.QMath.FixedVecToAngles(basisDir),
+        VortexArena.Common.Math.QMath.AngleVectors(
+            VortexArena.Common.Math.QMath.FixedVecToAngles(basisDir),
             out NVec3 fwd, out NVec3 right, out NVec3 up);
 
         foreach (EffectInfoEmitter info in blocks)
@@ -1402,7 +1402,7 @@ public partial class EffectSystem : Node3D
             // frame it fired, rather than a cloud fading in across the segment's bounding box over its lifetime.
             NVec3 segStart = originMin + relOrigin + info.OriginOffset;
             NVec3 segEnd = originMax + relOrigin + info.OriginOffset;
-            NVec3[] ptsQ = XonoticGodot.Engine.Effects.TrailGeometry.PointsAlongSegment(
+            NVec3[] ptsQ = VortexArena.Engine.Effects.TrailGeometry.PointsAlongSegment(
                 segStart, segEnd, n, info.OriginJitter, () => (float)GD.RandRange(-1.0, 1.0));
             var pointImg = Image.CreateEmpty(n, 1, false, Image.Format.Rgbf);
             for (int i = 0; i < n; i++)
@@ -2147,7 +2147,7 @@ public partial class EffectSystem : Node3D
             return;
         // #30 slowmo/pause: flash-light fades are CSQC dlight decay in Base (cl.time) — scale with the client
         // render-time factor so a paused game holds the flashes instead of fading them out on wall clock.
-        float dt = XonoticGodot.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
+        float dt = VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
         for (int i = count - 1; i >= 0; i--)
         {
             FxLight l = _liveFxLights[i];

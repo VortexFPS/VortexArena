@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Net;
-using XonoticGodot.Tests.Camera;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Net;
+using VortexArena.Tests.Camera;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// BUNNYHOP / JUMP-TIMING characterization. Xonotic BASE steps the LOCAL player at the real (variable) render-frame
@@ -69,9 +69,9 @@ public class MovementTimingTests
         {
             var (world, clock) = FlatWorld();
             Api.Services = new MovementTestServices(world, clock);
-            XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-            XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-            XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
             var step = new PlayerPhysicsStep(new Vector3(-16f, -16f, -24f), new Vector3(16f, 16f, 45f));
             var s = new PredictedState { Origin = new Vector3(0f, 0f, 24f), Velocity = Vector3.Zero, OnGround = true };
@@ -141,9 +141,9 @@ public class MovementTimingTests
     {
         var (world, clock) = FlatWorld();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         const float tic = 1f / 72f;
         var step = new PlayerPhysicsStep(new Vector3(-16f, -16f, -24f), new Vector3(16f, 16f, 45f));
@@ -207,9 +207,9 @@ public class MovementTimingTests
     {
         var (world, clock) = FlatWorld();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         const float tic = 1f / 72f;
         const int latency = 5; // client predicts ~5 ticks ahead of the server ack
@@ -239,9 +239,9 @@ public class MovementTimingTests
     {
         var (world, clock) = FlatWorld();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         var step = new PlayerPhysicsStep(new Vector3(-16f, -16f, -24f), new Vector3(16f, 16f, 45f));
         var s = new PredictedState { Origin = new Vector3(0f, 0f, 24f), Velocity = Vector3.Zero, OnGround = true };

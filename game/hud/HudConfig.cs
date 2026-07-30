@@ -1,9 +1,9 @@
 using System;
 using System.Reflection;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Registers the HUD cvar defaults into the shared menu/console store — the C# successor to the

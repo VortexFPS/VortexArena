@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Bsp;
+using VortexArena.Formats.Bsp;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// (§12.8) PVS-driven visibility for the spatially-split world mesh (§12.5 R5a): each frame the camera's
@@ -36,13 +36,13 @@ public sealed partial class WorldPvsCuller : Node
     {
         // Escape hatch for A/B + safety. Deliberately NOT archived (no CvarFlags.Save): a `set r_pvs_cull 0`
         // debug pin must not silently persist into the player's config.cfg.
-        XonoticGodot.Game.Menu.MenuState.Cvars.Register("r_pvs_cull", "1");
+        VortexArena.Game.Menu.MenuState.Cvars.Register("r_pvs_cull", "1");
     }
 
     public override void _Process(double delta)
     {
-        using var _prof = XonoticGodot.Game.Client.FrameProfiler.Scope("world.pvscull");
-        bool enabled = XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat("r_pvs_cull") != 0f;
+        using var _prof = VortexArena.Game.Client.FrameProfiler.Scope("world.pvscull");
+        bool enabled = VortexArena.Game.Menu.MenuState.Cvars.GetFloat("r_pvs_cull") != 0f;
         if (!enabled)
         {
             if (!_disabled)
@@ -70,7 +70,7 @@ public sealed partial class WorldPvsCuller : Node
         int cluster = _pvs.LeafCluster(_pvs.FindLeaf(quakeEye));
         _viewClusters.Clear();
         _viewClusters.Add(cluster);
-        var portalViews = XonoticGodot.Game.Client.PortalRenderer.ActiveExitViewsQuake;
+        var portalViews = VortexArena.Game.Client.PortalRenderer.ActiveExitViewsQuake;
         for (int i = 0; i < portalViews.Count; i++)
         {
             int pc = _pvs.LeafCluster(_pvs.FindLeaf(portalViews[i]));

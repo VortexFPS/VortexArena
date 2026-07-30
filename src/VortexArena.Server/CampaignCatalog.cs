@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// One campaign level as the MENU needs it — the C# successor to the menu-side <c>campaign_*</c> parallel

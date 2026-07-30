@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The server cheat system — the Godot-free essence of server/cheats.qc (<c>CheatInit</c> /
@@ -209,7 +209,7 @@ public sealed class Cheats
                 // in a plain race, or an added accumulator in qualifying) is what SetPenalty reproduces.
                 if (argv.Length == 3)
                 {
-                    if (gameType is XonoticGodot.Common.Gameplay.Race race)
+                    if (gameType is VortexArena.Common.Gameplay.Race race)
                         race.SetPenalty(p, StoF(argv[1]));
                     AddCheats(p, 1);
                     return true;
@@ -256,7 +256,7 @@ public sealed class Cheats
             if (it.IsObserver || it.IsDead) continue; // QC IS_PLAYER(it) && !IS_DEAD(it)
             if (it.Team == p.Team) continue; // QC DIFF_TEAM(it, this): a.team != b.team (FFA: all 0 -> self-nuke)
             seen++;
-            if (XonoticGodot.Common.Math.Prandom.RangeInt(0, seen) == 0)
+            if (VortexArena.Common.Math.Prandom.RangeInt(0, seen) == 0)
                 victim = it;
         }
 
@@ -268,7 +268,7 @@ public sealed class Cheats
         WeaponSplash.RadiusDamage(
             inflictor: victim, center: victim.Origin, damage: 1000f, edgeDamage: 0f, radius: 128f,
             attacker: p, deathType: 0, force: 500f, directHit: victim,
-            deathTag: XonoticGodot.Common.Gameplay.Damage.DeathTypes.Cheat);
+            deathTag: VortexArena.Common.Gameplay.Damage.DeathTypes.Cheat);
 
         Echo("404 Sportsmanship not found.");
         AddCheats(p, 1);
@@ -345,7 +345,7 @@ public sealed class Cheats
     /// gate) and adds nothing to the counters. The waypoint SPRITE half is deployed separately on the same impulse.
     /// </summary>
     public void SpeedrunInit(Player p)
-        => XonoticGodot.Common.Gameplay.Speedrun.SnapshotPersonal(p);
+        => VortexArena.Common.Gameplay.Speedrun.SnapshotPersonal(p);
 
     /// <summary>
     /// QC <c>CHIMPULSE_SPEEDRUN</c> (impulse 141, cheats.qc:188): teleport the player back to its personal
@@ -362,7 +362,7 @@ public sealed class Cheats
         if (!checkpointsAllowed && !Allowed(p, logAttempt: true, cheatName: "impulse 141"))
             return false;
 
-        bool restored = XonoticGodot.Common.Gameplay.Speedrun.RestorePersonal(p, Echo);
+        bool restored = VortexArena.Common.Gameplay.Speedrun.RestorePersonal(p, Echo);
         // QC: if(restored && !autocvar_g_allow_checkpoints) DID_CHEAT(); — count only the cheating (gated) restore.
         if (restored && !checkpointsAllowed) AddCheats(p, 1);
         return restored;
@@ -374,13 +374,13 @@ public sealed class Cheats
 
     /// <summary>
     /// QC <c>GiveItems</c> (the cheat <c>give</c> command): now routes through the shared op-aware
-    /// <see cref="XonoticGodot.Common.Gameplay.GiveItems"/> (T35) — <c>GiveItems(actor, 0, tokenize)</c> with
+    /// <see cref="VortexArena.Common.Gameplay.GiveItems"/> (T35) — <c>GiveItems(actor, 0, tokenize)</c> with
     /// <c>argv[0]=="give"</c> dropped — so <c>give all</c> / <c>give allweapons</c> / <c>give max 50 health</c> /
     /// <c>give &lt;weapon&gt;</c> all use the faithful grammar (the FALLTHROUGH aggregates, the operator prefixes)
     /// and populate BOTH weapon-ownership reps. Returns true if anything changed (QC <c>got</c> &gt; 0).
     /// </summary>
     private bool GiveItems(Player p, string[] argv)
-        => XonoticGodot.Common.Gameplay.GiveItems.Apply(p, argv, 1, argv.Length) != 0;
+        => VortexArena.Common.Gameplay.GiveItems.Apply(p, argv, 1, argv.Length) != 0;
 
     /// <summary>
     /// QC the <c>usetarget</c>/<c>killtarget</c> cheats: spawn a transient entity carrying the named target
@@ -422,7 +422,7 @@ public sealed class Cheats
     {
         Vector3 eyes = p.Origin + p.ViewOfs;
         Vector3 aim = p.ViewAngles != Vector3.Zero ? p.ViewAngles : p.Angles;
-        XonoticGodot.Common.Math.QMath.AngleVectors(aim, out Vector3 forward, out _, out _);
+        VortexArena.Common.Math.QMath.AngleVectors(aim, out Vector3 forward, out _, out _);
         Vector3 end = eyes + forward * dist;
         if (Api.Services is null) { normal = Vector3.Zero; endPos = end; fraction = 1f; surfaceFlags = 0; return false; }
         TraceResult tr = Api.Trace.Trace(eyes, Vector3.Zero, Vector3.Zero, end, MoveFilter.Normal, p);
@@ -464,10 +464,10 @@ public sealed class Cheats
         {
             // QC cheats.qc:352-353: e.angles = fixedvectoangles2(trace_plane_normal, v_forward);
             //                      e.angles = AnglesTransform_ApplyToAngles(e.angles, '-90 0 0'); // stand models up
-            XonoticGodot.Common.Math.QMath.AngleVectors(
+            VortexArena.Common.Math.QMath.AngleVectors(
                 p.ViewAngles != Vector3.Zero ? p.ViewAngles : p.Angles, out Vector3 fwd, out _, out _);
-            Vector3 a = XonoticGodot.Common.Math.QMath.FixedVecToAngles2(normal, fwd);
-            a = XonoticGodot.Common.Math.QMath.AnglesTransformApplyToAngles(a, new Vector3(-90f, 0f, 0f));
+            Vector3 a = VortexArena.Common.Math.QMath.FixedVecToAngles2(normal, fwd);
+            a = VortexArena.Common.Math.QMath.AnglesTransformApplyToAngles(a, new Vector3(-90f, 0f, 0f));
             e.Angles = a;
         }
         Breakable.BreakableSetup(e);

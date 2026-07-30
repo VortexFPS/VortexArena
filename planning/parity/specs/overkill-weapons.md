@@ -1,7 +1,7 @@
 # Overkill weapons — parity spec
 
 **Base refs:** `common/mutators/mutator/overkill/{okhmg,okmachinegun,oknex,okrpc,okshotgun}.{qc,qh}`, shared `sv_weapons.qc` / `sv_overkill.qc`, balance `bal-wep-xonotic.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Ok{Hmg,Machinegun,Nex,Rpc,Shotgun}.cs`, `OkWeapons.cs`, `Mutators/OverkillMutator.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Ok{Hmg,Machinegun,Nex,Rpc,Shotgun}.cs`, `OkWeapons.cs`, `Mutators/OverkillMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

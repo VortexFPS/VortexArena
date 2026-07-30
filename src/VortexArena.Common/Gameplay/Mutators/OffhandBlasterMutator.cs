@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Offhand Blaster mutator — port of common/mutators/mutator/offhand_blaster/sv_offhand_blaster.qc.

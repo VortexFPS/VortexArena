@@ -1,7 +1,7 @@
 # Arc — parity spec
 
 **Base refs:** `common/weapons/weapon/arc.qc` · `common/weapons/weapon/arc.qh` · `bal-wep-xonotic.cfg` (g_balance_arc_*) · shared fire math in `common/weapons/calculations.qc`, `server/weapons/tracing.qc`, `lib/math.qh` (ExponentialFalloff)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs` · `WeaponFireDriver.cs` · `WeaponFireGate.cs` · `WeaponFiring.cs` · `WeaponSplash.cs` · `EntityWeaponState.cs` · `game/client/BeamRenderer.cs` · `game/client/EffectSystem.cs` · `game/client/ProjectileCatalog.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Arc.cs` · `WeaponFireDriver.cs` · `WeaponFireGate.cs` · `WeaponFiring.cs` · `WeaponSplash.cs` · `EntityWeaponState.cs` · `game/client/BeamRenderer.cs` · `game/client/EffectSystem.cs` · `game/client/ProjectileCatalog.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

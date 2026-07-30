@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Engine.Simulation;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Create-Game "Mutators" dialog — a faithful C# port of <c>XonoticMutatorsDialog_fill</c>
@@ -15,7 +15,7 @@ namespace XonoticGodot.Game.Menu;
 /// weapons, InstaGib, NIX, No-start-weapons) plus the per-weapon custom-arena checkboxes and the two combo
 /// "slider + enable checkbox" rows (Blood loss, Low gravity).
 ///
-/// FAITHFUL UI NOW: nothing here needs a backend XonoticGodot lacks — the dialog only reads/writes cvars (the same
+/// FAITHFUL UI NOW: nothing here needs a backend VortexArena lacks — the dialog only reads/writes cvars (the same
 /// store the in-game match reads), so it is functional as-is. Two pieces are approximated rather than
 /// fabricated:
 ///   * QC <c>setDependentWeird(e, checkCompatibility_*)</c> gates a handful of widgets on a multi-cvar

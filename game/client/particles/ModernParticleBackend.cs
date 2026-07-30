@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Game.Client; // EffectInfoEmitter, EiType/EiBlend/EiOrientation, ParticleFont
+using VortexArena.Game.Client; // EffectInfoEmitter, EiType/EiBlend/EiOrientation, ParticleFont
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  ModernParticleBackend — the §B modern GPU backend node (planning/particles-dual-system.md §B). Builds a
@@ -97,8 +97,8 @@ public partial class ModernParticleBackend : Node3D
         // relativeoriginoffset/relativevelocityoffset through the makevectors-consistent angles of the emit
         // velocity). We pre-sum the rotated relatives into the flat offsets the shader receives.
         NVec3 basisDir = velocity;
-        XonoticGodot.Common.Math.QMath.AngleVectors(
-            XonoticGodot.Common.Math.QMath.FixedVecToAngles(basisDir),
+        VortexArena.Common.Math.QMath.AngleVectors(
+            VortexArena.Common.Math.QMath.FixedVecToAngles(basisDir),
             out NVec3 fwd, out NVec3 right, out NVec3 up);
 
         foreach (EffectInfoEmitter info in blocks)

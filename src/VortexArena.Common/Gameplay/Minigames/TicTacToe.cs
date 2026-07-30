@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Math;
+using VortexArena.Common.Math;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Server-side rules for Tic Tac Toe — port of common/minigames/minigame/ttt.qc (ttt_server_event,
 // ttt_move, ttt_winning_piece, ttt_valid_tile) AND the singleplayer AI (ttt_ai_choose_simple /

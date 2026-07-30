@@ -18,8 +18,8 @@ features:
     base_refs:
       - "server/ipban.qc:Ban_GetClientIP"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:GetClientIp"
-      - "src/XonoticGodot.Server/Bans.cs:ClientBanIp"
+      - "src/VortexArena.Server/Bans.cs:GetClientIp"
+      - "src/VortexArena.Server/Bans.cs:ClientBanIp"
     constants:
       - { name: "ipv4_mask_form", base: "bare prefix e.g. \"1.2.3\" (no /N)", port: "bare prefix (matches)", match: true }
       - { name: "ipv6_/56_truncation", base: "nibble-truncated \":...00::/56\"", port: "same", match: true }
@@ -46,8 +46,8 @@ features:
     base_refs:
       - "server/ipban.qc:Ban_IsClientBanned"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:IsClientBanned"
-      - "src/XonoticGodot.Server/Bans.cs:IsClientBannedBySlot"
+      - "src/VortexArena.Server/Bans.cs:IsClientBanned"
+      - "src/VortexArena.Server/Bans.cs:IsClientBannedBySlot"
     constants:
       - { name: "g_banned_list_idmode", base: "1", port: "1", match: true }
     status:
@@ -77,9 +77,9 @@ features:
       - "server/client.qc:1145"
       - "server/command/cmd.qc:1181"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:MaybeEnforceBan"
-      - "src/XonoticGodot.Server/GameWorld.cs:1297"
-      - "src/XonoticGodot.Server/Commands.cs:657"
+      - "src/VortexArena.Server/Bans.cs:MaybeEnforceBan"
+      - "src/VortexArena.Server/GameWorld.cs:1297"
+      - "src/VortexArena.Server/Commands.cs:657"
     constants:
       - { name: "g_ban_telluser", base: "1", port: "1", match: true }
     status:
@@ -104,7 +104,7 @@ features:
     base_refs:
       - "server/ipban.qc:Ban_Insert"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:Insert"
+      - "src/VortexArena.Server/Bans.cs:Insert"
     constants:
       - { name: "BAN_MAX", base: "256", port: "256", match: true }
     status:
@@ -131,8 +131,8 @@ features:
       - "server/ipban.qc:Ban_KickBanClient"
       - "server/command/banning.qc:BanCommand_kickban"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:KickBanClient"
-      - "src/XonoticGodot.Server/Commands.cs:CmdKickBan"
+      - "src/VortexArena.Server/Bans.cs:KickBanClient"
+      - "src/VortexArena.Server/Commands.cs:CmdKickBan"
     constants:
       - { name: "g_ban_default_masksize", base: "3", port: "3", match: true }
       - { name: "g_ban_default_bantime", base: "5400", port: "5400", match: true }
@@ -157,8 +157,8 @@ features:
     base_refs:
       - "server/ipban.qc:Ban_Enforce"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:Enforce"
-      - "src/XonoticGodot.Server/GameWorld.cs:1091"
+      - "src/VortexArena.Server/Bans.cs:Enforce"
+      - "src/VortexArena.Server/GameWorld.cs:1091"
     constants: []
     status:
       logic: faithful
@@ -184,10 +184,10 @@ features:
       - "server/world.qc:959"
       - "server/world.qc:2631"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:Save"
-      - "src/XonoticGodot.Server/Bans.cs:Load"
-      - "src/XonoticGodot.Server/GameWorld.cs:1094"
-      - "src/XonoticGodot.Server/GameWorld.cs:1739"
+      - "src/VortexArena.Server/Bans.cs:Save"
+      - "src/VortexArena.Server/Bans.cs:Load"
+      - "src/VortexArena.Server/GameWorld.cs:1094"
+      - "src/VortexArena.Server/GameWorld.cs:1739"
     constants:
       - { name: "g_banned_list", base: "\"\"", port: "\"\"", match: true }
       - { name: "format_version", base: "\"1\" + (ip secs)*", port: "same", match: true }
@@ -217,10 +217,10 @@ features:
       - "server/command/banning.qc:BanCommand_banlist"
       - "server/command/banning.qc:BanCommand_unban"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:View"
-      - "src/XonoticGodot.Server/Bans.cs:Delete"
-      - "src/XonoticGodot.Server/Commands.cs:CmdBanList"
-      - "src/XonoticGodot.Server/Commands.cs:CmdUnban"
+      - "src/VortexArena.Server/Bans.cs:View"
+      - "src/VortexArena.Server/Bans.cs:Delete"
+      - "src/VortexArena.Server/Commands.cs:CmdBanList"
+      - "src/VortexArena.Server/Commands.cs:CmdUnban"
     constants: []
     status:
       logic: faithful
@@ -248,13 +248,13 @@ features:
       - "server/chat.qc:255"
       - "server/client.qc:1246"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdMute"
-      - "src/XonoticGodot.Server/Commands.cs:CmdUnmute"
-      - "src/XonoticGodot.Server/Chat.cs:313"
-      - "src/XonoticGodot.Server/Bans.cs:AddToList"
-      - "src/XonoticGodot.Server/Bans.cs:PlayerInList"
-      - "src/XonoticGodot.Server/Bans.cs:IsChatBanned"
-      - "src/XonoticGodot.Server/GameWorld.cs:1311"
+      - "src/VortexArena.Server/Commands.cs:CmdMute"
+      - "src/VortexArena.Server/Commands.cs:CmdUnmute"
+      - "src/VortexArena.Server/Chat.cs:313"
+      - "src/VortexArena.Server/Bans.cs:AddToList"
+      - "src/VortexArena.Server/Bans.cs:PlayerInList"
+      - "src/VortexArena.Server/Bans.cs:IsChatBanned"
+      - "src/VortexArena.Server/GameWorld.cs:1311"
     constants:
       - { name: "g_chatban_list", base: "\"\"", port: "\"\"", match: true }
     status:
@@ -281,12 +281,12 @@ features:
       - "server/command/banning.qc:BanCommand_unplayban"
       - "server/client.qc:1243"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdPlayBan"
-      - "src/XonoticGodot.Server/Bans.cs:AddToList"
-      - "src/XonoticGodot.Server/ClientManager.cs:PutObserverInServer"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs:Part"
-      - "src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs:PlayBanned"
-      - "src/XonoticGodot.Server/GameWorld.cs:1309"
+      - "src/VortexArena.Server/Commands.cs:CmdPlayBan"
+      - "src/VortexArena.Server/Bans.cs:AddToList"
+      - "src/VortexArena.Server/ClientManager.cs:PutObserverInServer"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:Part"
+      - "src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs:PlayBanned"
+      - "src/VortexArena.Server/GameWorld.cs:1309"
     constants:
       - { name: "g_playban_list", base: "\"\"", port: "\"\"", match: true }
       - { name: "g_playban_minigames", base: "0", port: "0", match: true }
@@ -313,9 +313,9 @@ features:
       - "server/client.qc:2274"
       - "common/notifications/all.inc:CENTER_JOIN_PLAYBAN"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdJoin"
-      - "src/XonoticGodot.Server/ClientManager.cs:JoinAllowed"
-      - "src/XonoticGodot.Server/GameWorld.cs:1099"
+      - "src/VortexArena.Server/Commands.cs:CmdJoin"
+      - "src/VortexArena.Server/ClientManager.cs:JoinAllowed"
+      - "src/VortexArena.Server/GameWorld.cs:1099"
     constants: []
     status:
       logic: faithful
@@ -342,11 +342,11 @@ features:
       - "server/command/vote.qc:946"
       - "server/command/vote.qc:1219"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:838"
-      - "src/XonoticGodot.Server/Commands.cs:CmdListAdd"
-      - "src/XonoticGodot.Server/VoteController.cs:174"
-      - "src/XonoticGodot.Server/VoteController.cs:303"
-      - "src/XonoticGodot.Server/Bans.cs:PlayerInList"
+      - "src/VortexArena.Server/Commands.cs:838"
+      - "src/VortexArena.Server/Commands.cs:CmdListAdd"
+      - "src/VortexArena.Server/VoteController.cs:174"
+      - "src/VortexArena.Server/VoteController.cs:303"
+      - "src/VortexArena.Server/Bans.cs:PlayerInList"
     constants:
       - { name: "g_voteban_list", base: "\"\"", port: "\"\"", match: true }
     status:

@@ -1,13 +1,13 @@
 using System;
 
 // port: the per-player VEHICLE HUD view-state DATA block — the vehicle counterpart of WepentViewState. Like its
-// weapon sibling it physically lives under XonoticGodot.Common (the authoritative producer, VehicleViewResolver,
+// weapon sibling it physically lives under VortexArena.Common (the authoritative producer, VehicleViewResolver,
 // also lives in .Common and .Common cannot reference .Net — the dependency runs .Net -> .Common). The WIRE codec
 // (VehicleViewCodec.Write/Read, which needs BitWriter/BitReader from .Net) lives separately in the .Net assembly
-// so the two never drift. The NAMESPACE is deliberately XonoticGodot.Net (same as WepentViewState) so the .Net
+// so the two never drift. The NAMESPACE is deliberately VortexArena.Net (same as WepentViewState) so the .Net
 // codec and every render-proxy reference (Entity.VehicleView, NetEntityState.VehicleView) resolve unchanged — a
 // type's namespace is independent of the assembly it compiles into.
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The per-player vehicle HUD view-state wire block — the vehicle counterpart of <see cref="WepentViewState"/>.

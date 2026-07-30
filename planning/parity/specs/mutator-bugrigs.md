@@ -1,7 +1,7 @@
 # Bug Rigs mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/bugrigs/bugrigs.qc` (+ `bugrigs.qh`, cvar defaults in `mutators.cfg:503-517`, stat decls in `common/stats.qh:170-203`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -84,7 +84,7 @@ server's mutator strings. Activated by `g_bugrigs` (default `0`).
 ## Port mapping
 - Registration + 15 cvars + `SetVars()` → `BugrigsMutator` ctor/`Hook()`/`SetVars()` — faithful, same defaults.
 - `PM_Physics` hook → `OnPmPhysics` subscribed to `MutatorHooks.PMPhysics`, fired live from
-  `PlayerPhysics.Move` (`src/XonoticGodot.Common/Physics/PlayerPhysics.cs:278` via `CallPmPhysics`). Restores
+  `PlayerPhysics.Move` (`src/VortexArena.Common/Physics/PlayerPhysics.cs:278` via `CallPmPhysics`). Restores
   `BugrigsPrevAngles`, calls `RaceCarPhysics`, returns true. Faithful.
 - `PlayerPhysics` hook → `OnPlayerPhysics` subscribed to `MutatorHooks.PlayerPhysics`, fired live at
   `PlayerPhysics.cs:189`. Stashes `BugrigsPrevAngles`. **`disableclientprediction = 2` NOT ported** (commented
@@ -96,7 +96,7 @@ server's mutator strings. Activated by `g_bugrigs` (default `0`).
   Adds an explicit `Api.Entities.SetOrigin(self, neworigin)` in the planar branch because the port engine does
   not auto-integrate a NOCLIP entity's trace-derived origin the way DP does.
 - Activation: `[Mutator]` attribute → discovered into `Mutators.All`; `MutatorActivation.Apply()` is called on
-  the live server boot path (`src/XonoticGodot.Server/GameWorld.cs:511`) and `Add()`s every `IsEnabled` mutator,
+  the live server boot path (`src/VortexArena.Server/GameWorld.cs:511`) and `Add()`s every `IsEnabled` mutator,
   subscribing its hooks. Verified live + test-covered.
 - `ClientConnect` chase-camera hook → **NOT IMPLEMENTED** (no `ClientConnect` mutator hook chain in
   `MutatorHooks.cs`). The client-side `chase_active` machinery exists (`game/client/FirstPersonView.cs`) but the
@@ -132,9 +132,9 @@ server's mutator strings. Activated by `g_bugrigs` (default `0`).
 - Code read of `bugrigs.qc` (full) vs `BugrigsMutator.cs` (full) — drive model line-for-line.
 - Liveness traced: `[Mutator]` → `Mutators.All` → `MutatorActivation.Apply` (`GameWorld.cs:511`) →
   `MutatorHooks.PMPhysics.Add`; hook fired at `PlayerPhysics.cs:278` (`CallPmPhysics`) and `:189`.
-- Tests: `tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:191-226` (enable gate, move replacement, movetype,
+- Tests: `tests/VortexArena.Tests/MutatorBatchT51Tests.cs:191-226` (enable gate, move replacement, movetype,
   prevangles stash) — pass per the suite's green status.
-- Constants diffed against `assets/data/.../mutators.cfg:503-517` — all 15 match Base `mutators.cfg`.
+- Constants diffed against `Base/data/.../mutators.cfg:503-517` — all 15 match Base `mutators.cfg`.
 
 ## Open questions
 - Does the port's net layer produce acceptable camera/position smoothing for a bugrigs player without the

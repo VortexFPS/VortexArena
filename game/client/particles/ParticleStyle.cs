@@ -1,4 +1,4 @@
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  Routing vocabulary shared by the EffectStyleRegistry (authoring overlay) and the ParticleRouter

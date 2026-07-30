@@ -1,7 +1,7 @@
 # Rifle (Camping/Sniper Rifle) — parity spec
 
 **Base refs:** `common/weapons/weapon/rifle.qc` · `common/weapons/weapon/rifle.qh` · `server/weapons/tracing.qc` (`fireBullet_falloff`, `W_SetupShot*`, `Headshot`) · `common/weapons/calculations.qc` (`W_CalculateSpread`) · `lib/math.qh` (`ExponentialFalloff`) · `bal-wep-xonotic.cfg` (`g_balance_rifle_*`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs` · `WeaponFiring.cs` · `WeaponFireGate.cs` · `WeaponFireDriver.cs` · `src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs` · `src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs` · `game/net/NetGame.cs` (muzzle-offset registration)
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Rifle.cs` · `WeaponFiring.cs` · `WeaponFireGate.cs` · `WeaponFireDriver.cs` · `src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs` · `src/VortexArena.Common/Gameplay/Effects/EffectsList.cs` · `game/net/NetGame.cs` (muzzle-offset registration)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -135,7 +135,7 @@ hitplot, trueaim-minrange clamp) are tracked at the `WeaponFiring`/shared level,
 - Base constants read directly from `bal-wep-xonotic.cfg:587-630` (the stock Xonotic balance) and `rifle.qh` macro
   block; all 27 cvars cross-checked against `Rifle.Configure` defaults — values match.
 - Logic of `wr_think`/bullethail/burst budget verified by reading `Rifle.cs` against `rifle.qc:59-152` and confirmed
-  by `tests/XonoticGodot.Tests/RifleBulletHailTests.cs`.
+  by `tests/VortexArena.Tests/RifleBulletHailTests.cs`.
 - `fireBullet_falloff` math (spread, penetration loop, falloff, headshot, force) line-checked `WeaponFiring.FireBullet`
   vs `tracing.qc:363-537` — faithful.
 - Liveness traced: `GameWorld.cs:1182` `WeaponFireDriver.Frame(p, input)` in `WeaponThink`, reached from PlayerPreThink.

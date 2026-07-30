@@ -1,9 +1,9 @@
 using Godot;
-using XonoticGodot.Common.Gameplay;   // Weapon (Reticle / ZoomOnSecondary)
-using XonoticGodot.Common.Services;    // Api, ICvarService, CvarFlags
-using XonoticGodot.Game.Hud;           // TextureCache (VFS art resolver)
+using VortexArena.Common.Gameplay;   // Weapon (Reticle / ZoomOnSecondary)
+using VortexArena.Common.Services;    // Api, ICvarService, CvarFlags
+using VortexArena.Game.Hud;           // TextureCache (VFS art resolver)
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The zoom "scope" reticle — port of Base/.../qcsrc/client/hud/crosshair.qc <c>DrawReticle</c>. A full-screen
@@ -14,8 +14,8 @@ namespace XonoticGodot.Game.Client;
 /// as the zoom completes.
 ///
 /// <para>Like <see cref="ViewEffects"/> this is a host-fed overlay (not self-driving like
-/// <see cref="VignetteOverlay"/>): both play paths (<see cref="XonoticGodot.Game.GameDemo"/> via
-/// <see cref="XonoticGodot.Game.PlayerController"/>, and <see cref="XonoticGodot.Game.Net.NetGame"/>) own one and
+/// <see cref="VignetteOverlay"/>): both play paths (<see cref="VortexArena.Game.GameDemo"/> via
+/// <see cref="VortexArena.Game.PlayerController"/>, and <see cref="VortexArena.Game.Net.NetGame"/>) own one and
 /// call <see cref="UpdateReticle"/> each frame after the shared <see cref="FirstPersonView"/> has stepped the zoom,
 /// passing the active weapon + the live button/zoom state. It sits on its own <see cref="CanvasLayer"/> at layer 0
 /// — above the 3D world and the <see cref="ViewEffects"/> tint (layer -1), but below every crosshair (the demo HUD

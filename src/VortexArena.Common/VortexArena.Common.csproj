@@ -2,14 +2,14 @@
   <!-- Shared gameplay + framework + physics + protocol definitions + facade interfaces.
        MUST NOT reference Godot (ADR-0008): keeps gameplay headless-testable and server-portable. -->
   <PropertyGroup>
-    <TargetFramework>$(XonoticGodotTfm)</TargetFramework>
-    <RootNamespace>XonoticGodot.Common</RootNamespace>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Common</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <!-- Registry source generator (ADR-0003): emits GeneratedRegistrations.RegisterAll() into THIS
          assembly from the [Weapon]/[Item]/[Mutator]/[GameType]/[Monster]/[Turret]/[Vehicle] markers.
          Wired here (not the Godot host) because all registrable content lives in Common; wiring it into
          a project that references Common would emit a second, empty GeneratedRegistrations (CS0436). -->
-    <ProjectReference Include="..\XonoticGodot.SourceGen\XonoticGodot.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\VortexArena.SourceGen\VortexArena.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

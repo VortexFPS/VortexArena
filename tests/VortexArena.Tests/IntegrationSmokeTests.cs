@@ -1,15 +1,15 @@
 using System.Numerics;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Net;
+using VortexArena.Formats;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Md3;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Engine.Collision;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Cross-project integration smoke tests: prove the foundation + the five ported libraries

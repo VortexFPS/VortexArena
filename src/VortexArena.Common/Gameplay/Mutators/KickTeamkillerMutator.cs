@@ -1,10 +1,10 @@
 // Port of common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Kick Teamkiller mutator — port of common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc. In
@@ -20,7 +20,7 @@ namespace XonoticGodot.Common.Gameplay;
 /// <c>g_playban_list</c> cvar (cons of netaddress + crypto_idfp), exactly as the QC default case.
 ///
 /// SUBSTRATE: the force-spectate (severity 0), the severity-1 <c>dropclient_schedule</c> kick, and the
-/// severity-2 <c>Ban_KickBanClient</c> IP-ban all reach into the Server layer (XonoticGodot.Server:
+/// severity-2 <c>Ban_KickBanClient</c> IP-ban all reach into the Server layer (VortexArena.Server:
 /// ClientManager.PutObserverInServer / Bans.DropClient / Bans.KickBanClient), which Common cannot reference
 /// (Server references Common, not vice-versa). The host injects those actions via <see cref="ForceObserver"/>,
 /// <see cref="KickClient"/> and <see cref="BanClient"/> (wired in GameWorld.WireServerInfrastructure), exactly

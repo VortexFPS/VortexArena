@@ -19,9 +19,9 @@ features:
       - "common/mapobjects/misc/laser.qc:misc_laser_aim"
       - "common/mapobjects/misc/laser.qc:spawnfunc(misc_laser)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Laser.cs:LaserThink"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Laser.cs:LaserAim"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Laser.cs:LaserSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Laser.cs:LaserThink"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Laser.cs:LaserAim"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Laser.cs:LaserSetup"
     constants:
       - { name: "LASER_BEAM_MAXLENGTH", base: "32768", port: "32768", match: true }
       - { name: "LASER_BEAM_MAXWORLDSIZE", base: "1048576", port: "1048576", match: true }
@@ -84,9 +84,9 @@ features:
       - "common/mapobjects/misc/follow.qh:FOLLOW_ATTACH"
       - "lib/util.qc:attach_sameorigin"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Follow.cs:FollowInit"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Follow.cs:FollowSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Follow.cs:AttachSameOrigin"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Follow.cs:FollowInit"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Follow.cs:FollowSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Follow.cs:AttachSameOrigin"
     constants:
       - { name: "FOLLOW_ATTACH", base: "BIT(0)", port: "1<<0", match: true }
       - { name: "FOLLOW_LOCAL", base: "BIT(1)", port: "1<<1", match: true }
@@ -119,13 +119,13 @@ features:
       - "common/mapobjects/misc/dynlight.qc:dynlight_find_path"
       - "common/mapobjects/misc/dynlight.qc:dynlight_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs:DynlightSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs:FindAiment"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs:FindTarget"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs:FindPath"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs:PathNext"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs:PathWait"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs:DynlightUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs:DynlightSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs:FindAiment"
+      - "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs:FindTarget"
+      - "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs:FindPath"
+      - "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs:PathNext"
+      - "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs:PathWait"
+      - "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs:DynlightUse"
     constants:
       - { name: "light_lev default", base: "200", port: "200", match: true }
       - { name: "color default", base: "'1 1 1'", port: "(1,1,1)", match: true }
@@ -157,7 +157,7 @@ features:
       - "common/mapobjects/misc/dynlight.qc:18 (QUAKED: light_lev/color/style realtime light)"
     port_refs:
       - "game/client/DynamicLightRenderer.cs:DynamicLightRenderer"
-      - "src/XonoticGodot.Common/Gameplay/LightStyles.cs:Sample"
+      - "src/VortexArena.Common/Gameplay/LightStyles.cs:Sample"
     constants:
       - { name: "light_lev -> radius (1 qu = 1 godot u)", base: "light_lev default 200", port: "OmniRange = light_lev*styleBrightness (clamp 0..2048)", match: true }
       - { name: "color -> hue + brightness", base: "'1 1 1'..'255 255 255'", port: "LightColor = c/max(1,maxc); LightEnergy = min(8,maxc)", match: true }
@@ -188,9 +188,9 @@ features:
       - "common/mapobjects/misc/keys.qc:item_key_touch"
       - "common/mapobjects/misc/keys.qc:spawn_item_key"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:KeySetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:SpawnItemKey"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:KeyTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:KeySetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:SpawnItemKey"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:KeyTouch"
     constants:
       - { name: "default model", base: "models/keys/key.md3", port: "models/keys/key.md3", match: true }
       - { name: "GOLD/SILVER/BRONZE ids", base: "BIT(0)/BIT(1)/BIT(2)", port: "1<<0/1<<1/1<<2", match: true }
@@ -231,7 +231,7 @@ features:
       - "common/mapobjects/misc/teleport_dest.qc:spawnfunc(info_teleport_destination)"
       - "common/mapobjects/misc/teleport_dest.qc:spawnfunc(misc_teleporter_dest)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportDestSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportDestSetup"
     constants:
       - { name: "facing stored in mangle, angles cleared", base: "yes", port: "yes", match: true }
     status:
@@ -257,8 +257,8 @@ features:
       - "common/mapobjects/misc/corner.qc:spawnfunc(path_corner)"
       - "common/mapobjects/platforms.qc:set_platmovetype"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MovingBrushes.cs:PathCornerSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:SetPlatMoveType"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MovingBrushes.cs:PathCornerSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:SetPlatMoveType"
     constants:
       - { name: "platmovetype string parse -> platmovetype_start/end", base: "set_platmovetype(this, platmovetype) tokenizes up to 2 floats + optional 'force'", port: "MapMover.SetPlatMoveType(this, Platmovetype) — same tokenizer; Wave 13 changed PlatMoveStart/End int->float so fractional ease factors (0.5/1.5) are no longer truncated (matches QC .float)", match: true }
       - { name: "one-token sets both ends", base: "n==1 -> end=start", port: "PlatMoveEnd = n>1 ? argv[1] : PlatMoveStart", match: true }
@@ -288,11 +288,11 @@ features:
       - "common/mapobjects/subs.qc:SUB_CalcMove_controller_think"
       - "common/mapobjects/subs.qc:SUB_CalcAngleMove"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMove"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMoveBezier"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMoveControllerThink"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMovePause"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcAngleMove"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMove"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMoveBezier"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMoveControllerThink"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMovePause"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcAngleMove"
     constants:
       - { name: "linear cutoff", base: "traveltime < 0.15", port: "< 0.15f", match: true }
       - { name: "platmovetype_start/end DEFAULT", base: "0/0 => smoothstep ease cubic_speedfunc(0,0,t) = -2t^3+3t^2", port: "PlatMoveStart=0/PlatMoveEnd=0 (now .float, fractional ease factors preserved since Wave 13) => smoothstep ease", match: true }
@@ -358,9 +358,9 @@ features:
       - "common/mapobjects/models.qc:g_model_setcolormaptoactivator"
       - "common/mapobjects/models.qc:spawnfunc(func_wall) etc."
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs:GModelInit"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs:DropBySpawnflags"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs:SetColormapToActivator"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs:GModelInit"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs:DropBySpawnflags"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs:SetColormapToActivator"
     constants:
       - { name: "ALIGN_ORIGIN/BOTTOM spawnflags&3", base: "1/2/3", port: "1/2/3", match: true }
       - { name: "drop trace distance", base: "4096", port: "4096f", match: true }
@@ -390,8 +390,8 @@ features:
       - "common/mapobjects/models.qc:Ent_Wall_PreDraw"
       - "common/mapobjects/models.qc:g_clientmodel_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs:FadeStartDist"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs:ClientModelUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs:FadeStartDist"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs:ClientModelUse"
     constants:
       - { name: "alpha = (alpha_min + alpha_max * bound(0,(fade_end-dist)/(fade_end-fade_start),1)) / 100", base: "yes", port: "fields stored, render formula NOT applied", match: false }
       - { name: "single-distance cut (fade_end==fade_start)", base: "alpha=0 past fade_start", port: "not applied (render)", match: false }
@@ -423,9 +423,9 @@ features:
       - "common/mapobjects/func/pointparticles.qc:spawnfunc(func_sparks)"
       - "common/mapobjects/func/pointparticles.qh:PARTICLES_IMPULSE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/PointParticles.cs:PointParticlesSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/PointParticles.cs:SparksSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/PointParticles.cs:LegacyUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/PointParticles.cs:PointParticlesSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/PointParticles.cs:SparksSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/PointParticles.cs:LegacyUse"
     constants:
       - { name: "atten default", base: "ATTEN_NORM (0.5); <0 -> 0 (global)", port: "0.5f; <0 -> 0f", match: true }
       - { name: "volume/count/impulse defaults", base: "1 / 1 / 1", port: "1f / 1f / 1f", match: true }
@@ -525,10 +525,10 @@ features:
       - "common/mapobjects/misc/keys.qc:item_keys_usekey"
       - "common/mapobjects/misc/keys.qc:item_keys_keylist"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:ItemKeysKeylist"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:LowestBit"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Doors.cs:DoorCheckKeys"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs (trigger_keylock touch)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:ItemKeysKeylist"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:LowestBit"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Doors.cs:DoorCheckKeys"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs (trigger_keylock touch)"
     constants:
       - { name: "usekey semantics", base: "valid = l.itemkeys & p.itemkeys; l.itemkeys &= ~valid; matched iff valid != 0", port: "Doors.cs:519-520 / Triggers.cs:1009-1012 verbatim (all-given => 0 falls out of &= ~valid)", match: true }
       - { name: "keylist format", base: "\"the X\" / \"the X, the Y\" walking lowestbit + bitshift(keylist, -(l+1))", port: "ItemKeysKeylist: same walk, unsigned right shift (uint)keylist >> (l+1)", match: true }

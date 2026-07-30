@@ -15,7 +15,7 @@ features:
     base_refs:
       - "common/turrets/turret/mlrs.qh:MLRSTurret"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs:MlrsTurret"
+      - "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs:MlrsTurret"
     constants:
       - { name: "mins", base: "'-32 -32 0'", port: "(-32,-32,0)", match: true }
       - { name: "maxs", base: "'32 32 64'", port: "(32,32,64)", match: true }
@@ -48,9 +48,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_initialize"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "ammo_flags", base: "TFL_AMMO_ROCKETS|TFL_AMMO_RECHARGE", port: "ammo pool + recharge (flag bits not modeled)", match: true }
       - { name: "aim_flags", base: "TFL_AIM_LEAD|TFL_AIM_SHOTTIMECOMPENSATE (+SPLASH auto)", port: "lead+shotTimeCompensate+aimSplash (zPredict:false)", match: true }
@@ -81,9 +81,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_link"
       - "common/turrets/sv_turrets.qc:turret_initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:69"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:240"
-      - "src/XonoticGodot.Common/GameInit.cs"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:69"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:240"
+      - "src/VortexArena.Common/GameInit.cs"
     constants:
       - { name: "g_turrets master switch", base: "1 (default on)", port: "MasterSwitchEnabled(\"g_turrets\") default-on", match: true }
     status:
@@ -111,11 +111,11 @@ features:
       - "common/turrets/sv_turrets.qc:turret_select_target"
       - "common/turrets/sv_turrets.qc:turret_targetscore_generic"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Fire"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Fire"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs:Think"
     constants:
       - { name: "shot_refire (intra-burst)", base: "0.1", port: "0.1", match: true }
       - { name: "shot_volly", base: "6", port: "6", match: true }
@@ -156,8 +156,8 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_track"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Track"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Track"
+      - "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs:Think"
     constants:
       - { name: "aim_speed", base: "100", port: "100", match: true }
       - { name: "aim_maxrot", base: "360", port: "360", match: true }
@@ -186,7 +186,7 @@ features:
     base_refs:
       - "common/turrets/turret/mlrs.qc:11"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs:Think"
     constants:
       - { name: "frame formula", base: "bound(0, 6 - floor(0.1 + ammo/shot_dmg), 6)", port: "Bound(0, 6 - floor(0.1 + Ammo/ShotDamage), 6)", match: true }
       - { name: "frame range", base: "0..6 (300hp ammo / 50 dmg)", port: "0..6 (AmmoMax 300 / ShotDamage 50)", match: true }
@@ -215,8 +215,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_projectile_explode"
       - "common/turrets/turret.qh:tr_attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
+      - "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
     constants:
       - { name: "shot_dmg", base: "50", port: "50", match: true }
       - { name: "edge_damage", base: "0", port: "0", match: true }
@@ -254,11 +254,11 @@ features:
       - "common/turrets/sv_turrets.qc:turret_die"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Damage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Damage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "respawntime", base: "60", port: "60 (Init default)", match: true }
       - { name: "inactive/dead take no damage", base: "yes", port: "yes (Damage gate)", match: true }

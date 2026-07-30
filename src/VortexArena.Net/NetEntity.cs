@@ -51,8 +51,8 @@ public enum NetEntityFlags : ushort
 /// entity's delta; only the set fields follow on the wire, so an idle entity (mask 0) costs just its id.
 /// (Widened from 16-bit to 32-bit when <see cref="StatusEffects"/> was added — bit 16 overflowed the old
 /// <c>ushort</c>; <see cref="EntityStateCodec.WriteDelta"/>/<see cref="EntityStateCodec.ReadDelta"/> carry the
-/// mask as a 32-bit value accordingly.) Highest bit currently in use: bit 25 <see cref="Lean"/> (the 32-bit
-/// mask still has ample headroom).
+/// mask as a 32-bit value accordingly.) Highest bit currently in use: bit 27 <see cref="Lean"/> (ColormapOverride is bit 26) <see cref="ColormapOverride"/> (the
+/// 32-bit mask still has ample headroom).
 /// </summary>
 [Flags]
 public enum EntityField : uint
@@ -76,7 +76,7 @@ public enum EntityField : uint
     // [T41] client-feedback stats networked on the owning player's entity (QC owner-only STATs). These ride the
     // same delta as the rest of the owner's state; they are 0 on every non-owner entity (so they cost nothing on
     // the wire for remote players / projectiles, where the mask bit stays clear).
-    Feedback = 1 << 14, // the HitsoundDamageDealtTotal + objective-ring fractions (NadeTimer/Capture/Revive)
+    Feedback = 1 << 14, // the HitsoundDamageDealtTotal + hit/typehit/kill feedback times + objective-ring fractions
 
     // [T68] the QC entcs ARMOR slice (ent_cs.qc ENTCS_PROP_RESOURCE(ARMOR, …)). Networked alongside Health for the
     // shownames teammate status bar (Draw_ShowNames reads RES_ARMOR off the entcs entity for same-team players).
@@ -145,8 +145,11 @@ public enum EntityField : uint
     // a makevectors-space angle triple the client composes onto the body render basis (EntityNode). Kept
     // SEPARATE from Angles because the port's player Angles drive the weapon fire direction (W_SetupShot) —
     // contaminating them with lean would tilt aim. Zero (no lean) keeps the bit clear, so a stationary/
-    // disabled player costs nothing on the wire. Bit 26 (Colors=1<<25 from main’s r15 took the prior free bit 25; producers/consumers reference EntityField.Lean by name, so the shift is transparent).
-    Lean = 1 << 26,
+    // disabled player costs nothing on the wire. Bit 27. This has now moved TWICE: main's r15 Colors took bit 25, and main's ColormapOverride then took
+    // bit 26 - so the merge briefly had Lean and ColormapOverride BOTH at 1<<26, which the compiler cannot
+    // see and no test would catch: two fields sharing a wire bit corrupt each other only at runtime.
+    // Producers/consumers reference EntityField.Lean by name, so the shift is transparent to them.
+    Lean = 1 << 27,
     // [r15 #43] the QC entcs clientcolors slice (ent_cs.qc ENTCS_PROP(COLORS) → .clientcolors): a player's packed
     // 16*shirt+pants palette colors — the FFA profile color (_cl_color) or the team-forced 17*teamcode. Drives the
     // _shirt/_pants mask tint + glowmod on the player model AND their weapon models (Base: viewmodel colormap =
@@ -154,6 +157,15 @@ public enum EntityField : uint
     // this port's wire uses as the TEAM byte (shownames/radar compares) — repurposing it would break team logic.
     // 0 = colorless (bit stays clear, costs nothing; client falls back to the team path). Bit 25, verified free.
     Colors = 1 << 25,
+
+    // The FULL Entity.ColorMapOverride value for a RENDER_COLORMAPPED non-player entity (dropped-weapon loot
+    // inheriting the thrower's packed shirt/pants; colormapped props/monsters use the same seam). Networked as
+    // its OWN 16-bit field so the two QC encodings — a packed 1024+(shirt<<4)+pants colormap vs a sub-1024
+    // player-slot reference (the g_model random-colormap props) — survive the wire intact; the earlier design
+    // squeezed the low byte into Colors + a flag bit, which collapsed that distinction and overloaded a field
+    // documented as "player clientcolors". 0 = no colormap (the bit stays clear, costs nothing — the overwhelming
+    // majority of entities). Bit 26, verified free.
+    ColormapOverride = 1 << 26,
 }
 
 /// <summary>
@@ -183,6 +195,7 @@ public struct NetEntityState
     public int Effects;          // EF_* render flags bitfield
     public int Colormap;         // player colors (top/bottom) or team tint
     public int Colors;           // [r15 #43] packed 16*shirt+pants clientcolors (0 = colorless, bit stays clear)
+    public int ColorMapOverride; // full Entity.ColorMapOverride for RENDER_COLORMAPPED non-players (0 = none)
     public int Health;           // for nameplates / the owner HUD (0 when not applicable)
     public int Armor;            // [T68] QC entcs RES_ARMOR slice — the shownames teammate status bar (0 when N/A)
 
@@ -198,7 +211,17 @@ public struct NetEntityState
     public int Alpha;
     public NetEntityFlags Flags;
     public int Owner;            // owning player's entnum (view-models / nameplates / projectiles); 0 = none
-    public int Weapon;           // active/held weapon registry id (−1 = none) — renders a remote player's weapon
+    // KIND-SELECTED semantics — mirror any change at ALL THREE sites: ServerNet encode, ClientEntityView
+    // decode, AND game/net/ViewEntityRenderer.cs (which reads s.Weapon RAW for every non-ViewModel kind and
+    // is NOT kind-gated). That third reader is only safe today because ClientEntityView calls its Update for
+    // Player/ViewModel kinds only; wiring it up for Item kinds (third-person dropped-weapon models) would
+    // feed it the +1-biased value and render the NEIGHBOURING weapon. Kind-gate it there first.
+    //   Player      → the raw active/held weapon registry id (−1 = none) — renders the remote held weapon.
+    //   non-player  → a weapon PICKUP's registry id + 1 (0 = not a weapon pickup; the +1 bias exists because
+    //                 RegistryId is 0-based, so id 0 is a real weapon) — decoded to Entity.ItemWeaponId.
+    // SnapshotDeltaTests.ItemWeaponId_SurvivesDeltaRoundTrip pins the bias; deleting either the +1 or the −1
+    // otherwise leaves the whole suite green while every pickup paints with the adjacent weapon's color.
+    public int Weapon;
     public string Model;         // model name / precache path (QC .model) — the client loads the mesh by name
 
     // [T41] client-feedback stats (QC STAT(HITSOUND_DAMAGE_DEALT_TOTAL) + the HUD_Draw objective rings). Only
@@ -225,6 +248,17 @@ public struct NetEntityState
     public int NadeBonusType;
     /// <summary>QC STAT(NADE_BONUS_SCORE): 0..1 fraction toward the next nade bonus — the bonus progress bar.</summary>
     public float NadeBonusScore;
+
+    // [hitsound] QC's three hit-feedback time stats, carried in the SAME EntityField.Feedback block (appended
+    // after the nade stats). The server's EndFrame flush advances exactly ONE per frame (typehit > kill > hit);
+    // the client HitSound plays the matching feedback sound (misc/hit pitched by the damage-total diff,
+    // misc/typehit, misc/kill) on each advance. Owner-only like the rest of the block.
+    /// <summary>QC STAT(HIT_TIME): server time of the owner's last enemy-damage frame (gates the damage-total diff).</summary>
+    public float HitTime;
+    /// <summary>QC STAT(TYPEHIT_TIME): server time of the owner's last team-hit / chat-protected-hit frame.</summary>
+    public float TypeHitTime;
+    /// <summary>QC STAT(KILL_TIME): server time of the owner's last enemy-frag frame — the kill-confirm sound.</summary>
+    public float KillTime;
 
     /// <summary>
     /// [A5 #3/#7] QC <c>ENT_CLIENT_STATUSEFFECTS</c> blob — the entity's full status-effect bitmap as produced by
@@ -326,6 +360,7 @@ public struct NetEntityState
         if (baseline.Effects != current.Effects) m |= EntityField.Effects;
         if (baseline.Colormap != current.Colormap) m |= EntityField.Colormap;
         if (baseline.Colors != current.Colors) m |= EntityField.Colors;
+        if (baseline.ColorMapOverride != current.ColorMapOverride) m |= EntityField.ColormapOverride;
         if (baseline.Health != current.Health) m |= EntityField.Health;
         if (baseline.Armor != current.Armor) m |= EntityField.Armor;
         if (baseline.Alpha != current.Alpha) m |= EntityField.Alpha;
@@ -340,7 +375,10 @@ public struct NetEntityState
             || baseline.NadeDarknessTime != current.NadeDarknessTime
             || baseline.NadeBonus != current.NadeBonus
             || baseline.NadeBonusType != current.NadeBonusType
-            || baseline.NadeBonusScore != current.NadeBonusScore) m |= EntityField.Feedback;
+            || baseline.NadeBonusScore != current.NadeBonusScore
+            || baseline.HitTime != current.HitTime
+            || baseline.TypeHitTime != current.TypeHitTime
+            || baseline.KillTime != current.KillTime) m |= EntityField.Feedback;
         // The status-effect blob is a byte[]; compare by CONTENT (not reference) so the full bitmap is re-sent only
         // when it actually changes. null and empty both mean "no effects" and compare equal.
         if (!StatusBlobEqual(baseline.StatusEffects, current.StatusEffects)) m |= EntityField.StatusEffects;
@@ -403,6 +441,12 @@ public struct NetEntityState
 /// appended AFTER the existing blocks in both WriteDelta and ReadDelta or every later field desyncs. (The
 /// NadeDarknessTime/NadeBonus/NadeBonusType/NadeBonusScore nade owner-stats are appended INSIDE the Feedback(14)
 /// block after ReviveProgress, in lockstep on both sides.)
+///
+/// <para>EXCEPTION — <see cref="EntityField.ColormapOverride"/> (bit 26, protocol v17) is NOT on that tail: its
+/// two bytes are written and read MID-STREAM, between Colors(25) and Health, matching the pre-existing
+/// out-of-bit-order insertions (Colors 25, Armor 15, Alpha 17). Both sides agree, so nothing desyncs — but do
+/// not "restore" it to the tail on one side while reconciling masks with another branch. Read the actual
+/// Write/ReadDelta bodies, not this list, when merging a branch that also adds fields.</para>
 /// </summary>
 public static class EntityStateCodec
 {
@@ -429,6 +473,7 @@ public static class EntityStateCodec
         if ((mask & EntityField.Effects) != 0) w.WriteLong(current.Effects);
         if ((mask & EntityField.Colormap) != 0) w.WriteByte(current.Colormap & 0xFF);
         if ((mask & EntityField.Colors) != 0) w.WriteByte(current.Colors & 0xFF);
+        if ((mask & EntityField.ColormapOverride) != 0) w.WriteUShort((ushort)(current.ColorMapOverride & 0xFFFF));
         if ((mask & EntityField.Health) != 0) w.WriteShort(current.Health);
         if ((mask & EntityField.Armor) != 0) w.WriteShort(current.Armor);
         if ((mask & EntityField.Alpha) != 0) w.WriteByte(current.Alpha & 0xFF); // 0 = opaque; 1..254 = alpha/255; 255 = hidden (-1)
@@ -447,6 +492,10 @@ public static class EntityStateCodec
             w.WriteUShort(current.NadeBonus);
             w.WriteByte((byte)current.NadeBonusType);
             w.WriteFloat(current.NadeBonusScore);
+            // [hitsound] the hit/typehit/kill feedback times appended after the nade stats (protocol v18).
+            w.WriteFloat(current.HitTime);
+            w.WriteFloat(current.TypeHitTime);
+            w.WriteFloat(current.KillTime);
         }
         if ((mask & EntityField.StatusEffects) != 0)
         {
@@ -520,6 +569,7 @@ public static class EntityStateCodec
         if ((mask & EntityField.Effects) != 0) s.Effects = r.ReadLong();
         if ((mask & EntityField.Colormap) != 0) s.Colormap = r.ReadByte();
         if ((mask & EntityField.Colors) != 0) s.Colors = r.ReadByte();
+        if ((mask & EntityField.ColormapOverride) != 0) s.ColorMapOverride = r.ReadUShort();
         if ((mask & EntityField.Health) != 0) s.Health = r.ReadShort();
         if ((mask & EntityField.Armor) != 0) s.Armor = r.ReadShort();
         if ((mask & EntityField.Alpha) != 0) s.Alpha = r.ReadByte();
@@ -538,6 +588,10 @@ public static class EntityStateCodec
             s.NadeBonus = r.ReadUShort();
             s.NadeBonusType = r.ReadByte();
             s.NadeBonusScore = r.ReadFloat();
+            // [hitsound] the hit/typehit/kill feedback times — SAME order as WriteDelta (protocol v18).
+            s.HitTime = r.ReadFloat();
+            s.TypeHitTime = r.ReadFloat();
+            s.KillTime = r.ReadFloat();
         }
         if ((mask & EntityField.StatusEffects) != 0)
         {

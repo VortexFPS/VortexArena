@@ -13,7 +13,7 @@ features:
     base_refs:
       - "common/mutators/mutator/midair/sv_midair.qc:8 (REGISTER_MUTATOR(midair, expr_evaluate(autocvar_g_midair)))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:35 (IsEnabled)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:35 (IsEnabled)"
     constants:
       - { name: "g_midair", base: "0", port: "0 (mutators.cfg:86)", match: true }
     status:
@@ -38,8 +38,8 @@ features:
     base_refs:
       - "common/mutators/mutator/midair/sv_midair.qc:12-26 (MUTATOR_HOOKFUNCTION(midair, Damage_Calculate))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:63 (OnDamageCalculate)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs (MutatorHooks.DamageCalculate.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:63 (OnDamageCalculate)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs (MutatorHooks.DamageCalculate.Call)"
     constants:
       - { name: "player-vs-player guard", base: "IS_PLAYER(attacker) && IS_PLAYER(target)", port: "EntFlags.Client on both", match: true }
     status:
@@ -63,8 +63,8 @@ features:
     base_refs:
       - "common/mutators/mutator/midair/sv_midair.qc:22 (M_ARGV(4,float) *= autocvar_g_midair_damagemultiplier)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:25 (DamageMultiplier property)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:71 (OnDamageCalculate)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:25 (DamageMultiplier property)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:71 (OnDamageCalculate)"
     constants:
       - { name: "g_midair_damagemultiplier", base: "1", port: "1 (mutators.cfg:88, loaded); property fallback default 1", match: true }
     status:
@@ -88,8 +88,8 @@ features:
     base_refs:
       - "common/mutators/mutator/midair/sv_midair.qc:23-24 (if(autocvar_g_midair_damageforcescale) M_ARGV(6,vector) *= ...)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:29 (DamageForceScale property)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:74-76 (OnDamageCalculate)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:29 (DamageForceScale property)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:74-76 (OnDamageCalculate)"
     constants:
       - { name: "g_midair_damageforcescale", base: "1.5", port: "1.5 (mutators.cfg:89, loaded); property fallback default 0", match: true }
     status:
@@ -114,9 +114,9 @@ features:
       - "common/mutators/mutator/midair/sv_midair.qc:28-38 (MUTATOR_HOOKFUNCTION(midair, PlayerPowerups))"
       - "server/client.qc:1634 (MUTATOR_CALLHOOK(PlayerPowerups, this, items_prev))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:82 (OnPlayerPowerups)"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs (MutatorHooks.PlayerPowerups.Call)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs (EF_FULLBRIGHT=512 / EF_ADDITIVE=32)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:82 (OnPlayerPowerups)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs (MutatorHooks.PlayerPowerups.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs (EF_FULLBRIGHT=512 / EF_ADDITIVE=32)"
     constants:
       - { name: "g_midair_shieldtime", base: "0.3", port: "0.3 (mutators.cfg:87, loaded); property fallback default 0.3", match: true }
       - { name: "EF_ADDITIVE", base: "32", port: "32", match: true }
@@ -143,11 +143,11 @@ features:
       - "common/mutators/mutator/midair/sv_midair.qc:40-46 (MUTATOR_HOOKFUNCTION(midair, PlayerSpawn): if(IS_BOT_CLIENT(player)) player.bot_moveskill = 0)"
       - "server/bot/default/havocbot/havocbot.qc:1315 (skill + bot_moveskill >= bot_ai_bunnyhop_skilloffset)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:105-110 (OnPlayerSpawn -> bot.BotMoveSkill = 0)"
-      - "src/XonoticGodot.Common/Gameplay/Player/Player.cs:101 (BotMoveSkill field — separate move-skill, QC .bot_moveskill)"
-      - "src/XonoticGodot.Server/ClientManager.cs:749 (MutatorHooks.PlayerSpawn.Call)"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:153 (per-frame resync BotMoveSkill -> Nav.MoveSkill)"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:391 (Nav.MoveSkill field), :484 (bunnyhop gate Skill + MoveSkill < bot_ai_bunnyhop_skilloffset=7)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:105-110 (OnPlayerSpawn -> bot.BotMoveSkill = 0)"
+      - "src/VortexArena.Common/Gameplay/Player/Player.cs:101 (BotMoveSkill field — separate move-skill, QC .bot_moveskill)"
+      - "src/VortexArena.Server/ClientManager.cs:749 (MutatorHooks.PlayerSpawn.Call)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:153 (per-frame resync BotMoveSkill -> Nav.MoveSkill)"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:391 (Nav.MoveSkill field), :484 (bunnyhop gate Skill + MoveSkill < bot_ai_bunnyhop_skilloffset=7)"
     constants:
       - { name: "bot_moveskill", base: "0 (forced on midair spawn; separate from skill)", port: "0 (BotMoveSkill zeroed; BotSkill left intact)", match: true }
       - { name: "bunnyhop gate", base: "skill + bot_moveskill >= 7", port: "Skill + MoveSkill >= 7 (bot_ai_bunnyhop_skilloffset)", match: true }
@@ -175,13 +175,13 @@ features:
       - "server/gamelog.qc:50 (MUTATOR_CALLHOOK(BuildMutatorsString, \":gameinfo:mutators:LIST\") — machine-string consumer)"
       - "server/client.qc:1107 (MUTATOR_CALLHOOK(BuildMutatorsPrettyString, \"\") — pretty/display-string consumer)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:113 (BuildMutatorsString override -> s + \":midair\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs:116 (BuildMutatorsPrettyString override -> s + \", Midair\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108-112 (BuildMutatorsString aggregator over Added mutators)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:121-125 (BuildMutatorsPrettyString aggregator)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1112-1119 (live consumer of the machine string -> GameLog.Init, gated on sv_eventlog)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1387-1399 (SendMutatorsWelcome — LIVE consumer of the pretty string; called per-join from InfraClientConnect GameWorld.cs:1290-1291)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1128-1130 (second pretty-string consumer -> `modifications` serverinfo key)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:113 (BuildMutatorsString override -> s + \":midair\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs:116 (BuildMutatorsPrettyString override -> s + \", Midair\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108-112 (BuildMutatorsString aggregator over Added mutators)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:121-125 (BuildMutatorsPrettyString aggregator)"
+      - "src/VortexArena.Server/GameWorld.cs:1112-1119 (live consumer of the machine string -> GameLog.Init, gated on sv_eventlog)"
+      - "src/VortexArena.Server/GameWorld.cs:1387-1399 (SendMutatorsWelcome — LIVE consumer of the pretty string; called per-join from InfraClientConnect GameWorld.cs:1290-1291)"
+      - "src/VortexArena.Server/GameWorld.cs:1128-1130 (second pretty-string consumer -> `modifications` serverinfo key)"
     constants:
       - { name: "mutators-string token", base: ":midair", port: ":midair (fed to GameLog.Init via aggregator)", match: true }
       - { name: "pretty-string token", base: ", Midair", port: ", Midair (now consumed by SendMutatorsWelcome + modifications serverinfo)", match: true }

@@ -1,8 +1,8 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Net; // WepentViewState — its DATA struct lives in THIS (.Common) assembly under the
-                        // XonoticGodot.Net namespace; only the wire codec (WepentViewCodec) lives in .Net.
+using VortexArena.Common.Framework;
+using VortexArena.Net; // WepentViewState — its DATA struct lives in THIS (.Common) assembly under the
+                        // VortexArena.Net namespace; only the wire codec (WepentViewCodec) lives in .Net.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The single shared resolver of <see cref="WepentViewState"/> off an AUTHORITATIVE <see cref="Player"/>.

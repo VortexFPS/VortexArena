@@ -16,7 +16,7 @@ features:
       - "common/monsters/monster/spider.qh:CLASS(Spider)"
       - "common/monsters/monster/spider.qh:REGISTER_MONSTER(SPIDER)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:Spider"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:Spider"
     constants:
       - { name: "netname", base: "spider", port: "spider", match: true }
       - { name: "m_name", base: "Spider", port: "Spider", match: true }
@@ -47,9 +47,9 @@ features:
       - "common/monsters/monster/spider.qc:spawnfunc(monster_spider)"
       - "common/monsters/sv_monsters.qc:Monster_Spawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:30 (Spider)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:199"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnFromMap"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:30 (Spider)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:199"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnFromMap"
     constants: []
     status:
       logic: faithful
@@ -72,8 +72,8 @@ features:
     base_refs:
       - "common/monsters/monster/spider.qc:METHOD(Spider, mr_setup)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Setup"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Setup"
     constants:
       - { name: "g_monster_spider_health", base: "180", port: "180 (cvar-read)", match: true }
       - { name: "g_monster_spider_speed_walk", base: "400", port: "400", match: true }
@@ -104,8 +104,8 @@ features:
       - "common/monsters/sv_monsters.qc:Monster_Attack_Melee"
       - "common/monsters/sv_monsters.qc:Monster_Attack_Check:467 (monstersound_melee on connect)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MeleeAttack"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MeleeAttack"
     constants:
       - { name: "g_monster_spider_attack_bite_damage", base: "35", port: "35", match: true }
       - { name: "g_monster_spider_attack_bite_delay", base: "1.5", port: "1.5", match: true }
@@ -134,8 +134,8 @@ features:
       - "common/monsters/monster/spider.qc:wr_think fire&1"
       - "common/monsters/monster/spider.qc:M_Spider_Attack_Web"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:FireWeb"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:FireWeb"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnProjectile"
       - "game/client/ProjectileCatalog.cs:247 (electro_orb -> ProjectileType.Electro)"
     constants:
       - { name: "g_monster_spider_attack_web_range", base: "800", port: "800", match: true }
@@ -173,9 +173,9 @@ features:
       - "common/monsters/monster/spider.qh:REGISTER_STATUSEFFECT(Webbed)"
       - "common/mutators/mutator/status_effects/status_effects.qc:StatusEffects_apply"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:151 (FireWeb onExplode)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:Webbed/ApplyFor"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:158 (webbed register)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:151 (FireWeb onExplode)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:Webbed/ApplyFor"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:158 (webbed register)"
     constants:
       - { name: "web radius", base: "25", port: "25", match: true }
       - { name: "g_monster_spider_attack_web_damagetime", base: "7", port: "7", match: true }
@@ -204,9 +204,9 @@ features:
       - "common/monsters/monster/spider.qc:MUTATOR_HOOKFUNCTION(spiderweb, PlayerPhysics_UpdateStats)"
       - "common/monsters/monster/spider.qc:REGISTER_MUTATOR(spiderweb, true)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:SpiderWebMutator (OnPlayerPhysics)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:252 (MutatorHooks.PlayerPhysics.Call)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:283-284 (ApplyHighSpeed fold)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:SpiderWebMutator (OnPlayerPhysics)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:252 (MutatorHooks.PlayerPhysics.Call)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:283-284 (ApplyHighSpeed fold)"
     constants:
       - { name: "speed multiplier while webbed", base: "0.5", port: "0.5", match: true }
     status:
@@ -230,7 +230,7 @@ features:
     base_refs:
       - "common/monsters/monster/spider.qc:MUTATOR_HOOKFUNCTION(spiderweb, MonsterMove)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1090 (Move, Webbed slow)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1090 (Move, Webbed slow)"
     constants:
       - { name: "run/walk multiplier while webbed", base: "0.5", port: "0.5", match: true }
     status:
@@ -254,8 +254,8 @@ features:
     base_refs:
       - "common/monsters/monster/spider.qc:M_Spider_Attack_Web_Explode (Send_Effect EFFECT_ELECTRO_IMPACT)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:148 (FireWeb onExplode)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:71 (ELECTRO_IMPACT register)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:148 (FireWeb onExplode)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:71 (ELECTRO_IMPACT register)"
     constants:
       - { name: "effect", base: "EFFECT_ELECTRO_IMPACT", port: "ELECTRO_IMPACT (electro_impact)", match: true }
     status:
@@ -281,7 +281,7 @@ features:
       - "common/monsters/monster/spider.qc:M_Spider_Attack_Web (sound CH_SHOTS)"
       - "common/monsters/monster/spider.qc:wr_think (W_SetupShot_Dir SND_SpiderAttack_FIRE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:176-177"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:176-177"
     constants:
       - { name: "sound", base: "weapons/electro_fire2", port: "weapons/electro_fire2.wav", match: true }
     status:
@@ -332,8 +332,8 @@ features:
     base_refs:
       - "common/monsters/monster/spider.qc:METHOD(Spider, mr_anim)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:AnimFrame (61-73)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame (1464)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:AnimFrame (61-73)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame (1464)"
       - "game/net/ClientEntityView.cs:219 (monster -> Generic frameDriven:true)"
       - "game/client/ClientWorld.cs:1706-1707 (DpmFrameDriver.TryAttach for frame-driven DPM)"
       - "game/client/DpmFrameDriver.cs (reads Entity.Frame -> plays framegroup clip)"
@@ -368,8 +368,8 @@ features:
       - "common/monsters/monster/spider.qc:METHOD(Spider, mr_pain)"
       - "common/monsters/sv_monsters.qc:Monster_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkPain"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:PainWindow (52)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkPain"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:PainWindow (52)"
     constants:
       - { name: "pain anim", base: "random anim_pain1/pain2", port: "Pain phase + AnimVariant 7/8 (random pick)", match: true }
       - { name: "pain_finished", base: "animstate_endtime (anim length = 11 frames @ 25fps = 0.44s)", port: "Now + 11/25 (0.44s, PainWindow)", match: true }
@@ -397,8 +397,8 @@ features:
       - "common/monsters/monster/spider.qc:METHOD(Spider, mr_death)"
       - "common/monsters/sv_monsters.qc:Monster_Dead"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:AnimFrame (Death branch)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:MarkDead"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:AnimFrame (Death branch)"
     constants:
       - { name: "death anim", base: "random anim_die1/die2 (random()>0.5 ? die2 : die1)", port: "Death -> die2('2')/die1('1') via RollDeathVariant() = MonsterRandom.Next()>0.5", match: true }
       - { name: "corpse lifetime", base: "time+5", port: "Now+5", match: true }
@@ -429,9 +429,9 @@ features:
       - "common/monsters/sv_monsters.qc:Monster_Enemy_Check"
       - "common/monsters/monster/spider.qc:METHOD(Spider, mr_think)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:RunThink"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:265 (SV_RunThink)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:RunThink"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:265 (SV_RunThink)"
     constants:
       - { name: "enemy recheck interval", base: "1s", port: "1s", match: true }
       - { name: "target_range", base: "g_monsters_target_range 2000", port: "2000", match: true }
@@ -459,8 +459,8 @@ features:
       - "common/monsters/sv_monsters.qc:Monster_Dead_Fade"
       - "common/monsters/sv_monsters.qc:Monster_Dead_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:DeadThink"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:Respawn"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:DeadThink"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Respawn"
     constants:
       - { name: "g_monsters_respawn", base: "1", port: "1", match: true }
       - { name: "g_monsters_respawn_delay", base: "20", port: "20", match: true }
@@ -485,7 +485,7 @@ features:
     base_refs:
       - "common/monsters/monster/spider.qc:METHOD(Spider, describe):256"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:Describe (83-86)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:Describe (83-86)"
       - "game/menu/dialogs/DialogMonsterTools.cs:34-37 (spider tooltip)"
     constants:
       - { name: "describe prose", base: "The Spider is a large mechanically-enhanced arachnoid adept at hunting speedy enemies. To slow down its target, the Spider launches a synthetic web-like substance from its cannons. Approaching its enwebbed prey, the Spider will inflict a series of high damage bites.", port: "same prose (Spider.Describe + DialogMonsterTools spider radio tooltip)", match: true }

@@ -17,7 +17,7 @@ features:
       - "common/mutators/mutator/waypoints/all.inc:REGISTER_WAYPOINT"
       - "common/mutators/mutator/waypoints/all.qh:Waypoint"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:WaypointRegistry"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:WaypointRegistry"
     constants:
       - { name: "def_count", base: "63 (all.inc REGISTER_WAYPOINT)", port: "63 (Waypoints.cs Build) — all names present", match: true }
       - { name: "WP_FROZEN_COLOR", base: "0.25 0.9 1", port: "0.25 0.9 1", match: true }
@@ -51,12 +51,12 @@ features:
       - "common/mutators/mutator/waypoints/waypointsprites.qc:WaypointSprite_DeployFixed"
       - "common/mutators/mutator/waypoints/waypointsprites.qc:WaypointSprite_Kill"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:WaypointSprites"
-      - "src/XonoticGodot.Server/Commands.cs:WaypointDeployFixed"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:SpawnObjectiveSprite"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:RespawnCountdown"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:494"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:446"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:WaypointSprites"
+      - "src/VortexArena.Server/Commands.cs:WaypointDeployFixed"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:SpawnObjectiveSprite"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:RespawnCountdown"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:494"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:446"
     constants:
       - { name: "sv_waypointsprite_deployed_lifetime", base: "10", port: "10 (config + Cvar fallback)", match: true }
       - { name: "sv_waypointsprite_deadlifetime", base: "1", port: "1", match: true }
@@ -86,17 +86,17 @@ features:
       - "common/gamemodes/gamemode/ctf/sv_ctf.qc:ctf_FlagSetup"
       - "common/mutators/mutator/waypoints/waypointsprites.qc:WaypointSprite_SpawnFixed"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:419"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:454"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs:534"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:825"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:722"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:752"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:1344"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:875"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:607"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:1063"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs:1292"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:419"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:454"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs:534"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:825"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:722"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:752"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:1344"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:875"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:607"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:1063"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs:1292"
     constants: []
     status:
       logic: faithful
@@ -122,7 +122,7 @@ features:
       - "common/gamemodes/gamemode/ctf/sv_ctf.qc:ctf_FlagSetup"
       - "common/mutators/mutator/waypoints/all.inc:REGISTER_WAYPOINT(FlagBaseRed)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CollectWaypoints"
     constants:
       - { name: "flag radar tint (red)", base: "colormapPaletteColor(0) ~ 1 .0625 .0625", port: "1 0.0625 0.0625", match: true }
     status:
@@ -151,10 +151,10 @@ features:
       - "server/impulse.qc:IMPULSE(waypoint_here_here)"
       - "server/impulse.qc:IMPULSE(waypoint_danger_here)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdWaypointDeploy"
-      - "src/XonoticGodot.Server/Commands.cs:WaypointDeployFixed"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:74"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:DeployFixed"
+      - "src/VortexArena.Server/Commands.cs:CmdWaypointDeploy"
+      - "src/VortexArena.Server/Commands.cs:WaypointDeployFixed"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:74"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:DeployFixed"
       - "game/hud/QuickMenuPanel.cs:261"
     constants:
       - { name: "WP_Waypoint / WP_Here / WP_Danger mapping", base: "personal→WP_Waypoint, here→WP_Here, danger→WP_Danger", port: "same (CmdWaypointDeploy switch)", match: true }
@@ -186,9 +186,9 @@ features:
       - "common/mutators/mutator/waypoints/waypointsprites.qc:WaypointSprite_Attach"
       - "common/mutators/mutator/waypoints/waypointsprites.qc:WaypointSprite_HelpMePing"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:WaypointDeployHelpme"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:Attach"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:HelpMePing"
+      - "src/VortexArena.Server/Commands.cs:WaypointDeployHelpme"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:Attach"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:HelpMePing"
     constants:
       - { name: "teamplay + alive gate", base: "if(!teamplay) return; if(IS_DEAD) return;", port: "same (CmdWaypointDeploy Helpme case)", match: true }
       - { name: "FC guard", base: "Attach returns NULL if waypointsprite_attachedforcarrier (can't attach to FC)", port: "Attach refuses + pings the existing carrier marker's helpme", match: true }
@@ -218,7 +218,7 @@ features:
       - "common/mutators/mutator/powerups/sv_powerups.qc:CustomizeWaypoint"
     port_refs:
       - "game/net/ServerNet.cs:WaypointVisible"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:SpriteRule"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:SpriteRule"
     constants: []
     status:
       logic: faithful
@@ -244,8 +244,8 @@ features:
       - "common/mutators/mutator/waypoints/waypointsprites.qc:Draw_WaypointSprite"
       - "common/mutators/mutator/waypoints/waypointsprites.qc:WaypointSprite_UpdateSprites"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:SpriteFor"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:UpdateSprites"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:SpriteFor"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:UpdateSprites"
       - "game/net/ServerNet.cs:SendWaypoints"
     constants: []
     status:
@@ -368,7 +368,7 @@ features:
     port_refs:
       - "game/client/WaypointSpriteLayer.cs:CvarF"
       - "game/menu/dialogs/DialogSettingsGame.cs:228"
-      - "assets/data/xonotic-data.pk3dir/xonotic-client.cfg:502"
+      - "Base/data/xonotic-data.pk3dir/xonotic-client.cfg:502"
     constants:
       - { name: "g_waypointsprite_alpha", base: "1", port: "1 (config default, READ LIVE)", match: true }
       - { name: "g_waypointsprite_iconsize/fontsize/scale/text/uppercase/edgeoffset_*", base: "32/12/1/0/1/0.06", port: "same, READ LIVE", match: true }
@@ -428,7 +428,7 @@ features:
       - "common/t_items.qc:Item_RespawnCountdown"
       - "common/mutators/mutator/itemstime/sv_itemstime.qc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:RespawnCountdown"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:RespawnCountdown"
     constants:
       - { name: "ITEM_RESPAWN_TICKS", base: "10", port: "RespawnTicks (config)", match: true }
       - { name: "SpectatorOnly set", base: "Mega/Big Health+Armor → SPRITERULE_SPECTATOR", port: "ItemstimeMutator.IsSpectatorOnlyItem → SpriteRule.Spectator", match: true }
@@ -459,7 +459,7 @@ features:
       - "common/gamemodes/gamemode/keyhunt/sv_keyhunt.qc:kh_Key_AssignTo"
       - "common/gamemodes/gamemode/keyhunt/sv_keyhunt.qc:kh_Key_waypointsprite_visible_for_player"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CollectWaypoints"
     constants:
       - { name: "KH_KEY_WP_ZSHIFT", base: "20 (dropped-key marker)", port: "KeyWpZShift", match: true }
       - { name: "carrier head offset", base: "'0 0 64'", port: "'0 0 64'", match: true }
@@ -488,9 +488,9 @@ features:
       - "common/weapons/weapon/seeker.qc:W_Seeker_Tag_Touch"
       - "common/mutators/mutator/powerups/sv_powerups.qc:powerups_DropItem"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:CollectWaypoints"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs:494"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PowerupsMutator.cs:541"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs:494"
+      - "src/VortexArena.Common/Gameplay/Mutators/PowerupsMutator.cs:541"
     constants:
       - { name: "LMS leader offset / icon", base: "'0 0 64' / RADARICON_FLAGCARRIER", port: "'0 0 64' / RadarIcon 1", match: true }
       - { name: "Seeker tag lifetime / icon", base: "tag_tracker_lifetime / RADARICON_TAGGED", port: "Tag.TrackerLifetime / RadarIcon 1", match: true }
@@ -521,9 +521,9 @@ features:
       - "server/weapons/selection.qc:client_hasweapon"
       - "common/mutators/mutator/waypoints/all.inc:REGISTER_WAYPOINT(Weapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:Weapon_whereis"
-      - "src/XonoticGodot.Common/Gameplay/Inventory.cs:ClientHasWeapon"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:WhereisLifetime"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:Weapon_whereis"
+      - "src/VortexArena.Common/Gameplay/Inventory.cs:ClientHasWeapon"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:WhereisLifetime"
     constants:
       - { name: "g_showweaponspawns", base: "1 (1=on weapon-key when unowned, 2=incl dropped, 3=all sharing impulse)", port: "g_showweaponspawns read live; all three modes ported (showSpawns==0 guard, <2 loot skip, >=3 impulse-group loop)", match: true }
       - { name: "marker lifetime / radar", base: "-2 (instant, no fade) / RADARICON_NONE (in-world only, not on radar)", port: "WhereisLifetime 2.5 (re-spawned each press) / radarIcon 0 (RADARICON_NONE, in-world only)", match: false }
@@ -556,9 +556,9 @@ features:
       - "common/monsters/sv_monsters.qc:monster_changeteam"
       - "common/mutators/mutator/waypoints/all.inc:REGISTER_WAYPOINT(Monster)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:SpawnHealthbar"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:UpdateHealthbar"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:ChangeTeam"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:SpawnHealthbar"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:UpdateHealthbar"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:ChangeTeam"
     constants:
       - { name: "g_monsters_healthbars (spawn gate)", base: "0 (autocvar_g_monsters_healthbars)", port: "0 (Cvar(\"g_monsters_healthbars\",0) != 0 gate, MonsterAI.cs:568)", match: true }
       - { name: "WP_Monster Spawn args", base: "WaypointSprite_Spawn(WP_Monster, lifetime 0, maxdist 1024, this, '0 0 1'*(maxs.z+15), NULL, team, hideable true, RADARICON_DANGER)", port: "Spawn(\"Monster\", 0, 1024, e, (0,0,Maxs.Z+15), Origin, team, col, radarIcon 1, Default, hideable true)", match: true }

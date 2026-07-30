@@ -5,7 +5,7 @@
 // composes it with the active PoCatalog.
 using System;
 
-namespace XonoticGodot.Common.Localization;
+namespace VortexArena.Common.Localization;
 
 /// <summary>
 /// gettext-context (msgctxt) helpers — the C# successor to i18n.qh's <c>CTX</c>. A QuakeC string like

@@ -17,7 +17,7 @@ features:
     base_refs:
       - "common/turrets/turret/hk.qh:HunterKiller"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:HkTurret"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:HkTurret"
     constants:
       - { name: "mins", base: "'-32 -32 0'", port: "(-32,-32,0)", match: true }
       - { name: "maxs", base: "'32 32 64'", port: "(32,32,64)", match: true }
@@ -48,8 +48,8 @@ features:
       - "common/turrets/turret/hk.qc:24"
       - "common/turrets/sv_turrets.qc:turret_initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "aim_flags", base: "TFL_AIM_SIMPLE", port: "aimSimple=true", match: true }
       - { name: "shoot_flags", base: "TFL_SHOOT_CLEARTARGET", port: "clearTarget=true", match: true }
@@ -78,8 +78,8 @@ features:
       - "common/turrets/turret/hk.qc:9"
       - "common/turrets/sv_turrets.qc:turret_link"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Hk"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:211"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Hk"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:211"
     constants:
       - { name: "g_turrets master switch", base: "1 (default on)", port: "MasterSwitchEnabled default-on", match: true }
     status:
@@ -105,10 +105,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_firecheck"
       - "common/turrets/sv_turrets.qc:turret_fire"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:Think"
     constants:
       - { name: "shot_refire", base: "5", port: "5", match: true }
       - { name: "ammo_max", base: "240", port: "240", match: true }
@@ -146,8 +146,8 @@ features:
       - "common/turrets/turret/hk_weapon.qc:14"
       - "common/turrets/sv_turrets.qc:turret_projectile"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs:Launch"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs:Launch"
     constants:
       - { name: "launch speed", base: "shot_speed * 0.75 = 375", port: "ShotSpeed*0.75 = 375", match: true }
       - { name: "shot_dmg", base: "120", port: "120", match: true }
@@ -182,7 +182,7 @@ features:
       - "common/turrets/turret/hk_weapon.qc:47"
       - "common/turrets/turret/hk_weapon.qc:241"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs:HkThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs:HkThink"
     constants:
       - { name: "shot_speed (band floor)", base: "500", port: "500", match: true }
       - { name: "shot_speed_max", base: "1000", port: "1000", match: true }
@@ -222,9 +222,9 @@ features:
       - "common/turrets/turret/hk.qc:36"
       - "common/turrets/turret/hk.qc:23"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:AddTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:TargetTrigger"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:TargetTriggerTouch"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:AddTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:TargetTrigger"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:TargetTriggerTouch"
     constants:
       - { name: "validate flags", base: "VEHICLES|TEAMCHECK", port: "SelectVehicles|SelectTeamCheck (ValidateFlags)", match: true }
       - { name: "touch debounce", base: "this.cnt = time + 0.5", port: "self.Wait = Now + 0.5f (TargetTriggerTouch)", match: true }
@@ -250,8 +250,8 @@ features:
       - "common/turrets/turret/hk_weapon.qc:14"
       - "common/turrets/turret/hk_weapon.qh:HunterKillerAttack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HunterKillerWeapon.cs:HunterKillerWeapon"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HunterKillerWeapon.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/HunterKillerWeapon.cs:HunterKillerWeapon"
+      - "src/VortexArena.Common/Gameplay/Turrets/HunterKillerWeapon.cs:WrThink"
     constants:
       - { name: "weapon flags", base: "WEP_FLAG_HIDDEN | WEP_FLAG_SPECIALATTACK", port: "WeaponFlags.Hidden | WeaponFlags.SpecialAttack", match: true }
       - { name: "impulse", base: "9", port: "9", match: true }
@@ -278,7 +278,7 @@ features:
     verification:
       - { kind: code_read, ref: "HunterKillerWeapon.cs now carries [Weapon] (HunterKillerWeapon.cs:46) so the source-gen RegistryGenerator (WeaponAttribute -> GameRegistryAttribute) auto-registers it into Registry<Weapon>; WrThink fully ports the IS_PLAYER wr_think branch (PrepareAttack 1s + AnimtimeFor 0.5s + WeaponFiring.SetupShot + GuidedProjectile.Launch with turret_initparams GENERIC defaults 50/25/37.5/2500 + te_explosion + rocket_fire). Reachable via impulse-9 / give weapon_turret_hk through WeaponFireDriver (Registry<Weapon>.ById dispatch).", result: pass }
       - { kind: test, ref: "WeaponByIdTests (re-verified 2026-06-28, 69 turret/weapon tests pass) — IsSkipped(SpecialAttack) count == 3 (nexball ball-stealer + HK + FlacWeapon); registered HK is correctly excluded from the by-id/priority order, confirming live registration without disturbing the weapon cycle.", result: pass }
-      - { kind: build, ref: "dotnet build XonoticGodot.Common -c Debug -> 0 warn / 0 err", result: pass }
+      - { kind: build, ref: "dotnet build VortexArena.Common -c Debug -> 0 warn / 0 err", result: pass }
     confidence: high
     notes: "FIX from baseline (liveness dead -> live), re-verified 2026-06-28. The hidden player weapon WEP_HK / HunterKillerAttack is fully ported AND registered: the [Weapon] attribute is present (HunterKillerWeapon.cs:46) and the WeaponByIdTests SpecialAttack-skip contract counts the HK among the skipped (now skipped==3: ball-stealer + HK + FlacWeapon), so the impulse-9 / give weapon_turret_hk fire path has a live caller through WeaponFireDriver. (Stale prose in HkTurret.cs:22-24 still says registration is 'deferred pending a WeaponByIdTests contract update' — that comment is out of date; the attribute is in fact applied.) As a WEP_FLAG_SPECIALATTACK weapon it is (correctly) auto-skipped from the normal by-id weapon cycle — live on the special-attack/impulse path only, which matches Base (the player obtains it via impulse 9 / give, never through a default arena). Faithful identity (Hidden|SpecialAttack, impulse 9, netname turret_hk), IS_PLAYER wr_think sequence, turret_initparams GENERIC balance (50/25/37.5/2500), shared guidance band autocvars, IS_PLAYER head-kick skip, muzzle te_explosion + rocket_fire all faithful."
   - id: turret-hk.damage.lifecycle
@@ -289,10 +289,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_die"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Damage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Damage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "respawntime", base: "90", port: "90 (HkTurret.Spawn passes respawnTime=RespawnTime=90)", match: true }
       - { name: "takedamage", base: "DAMAGE_AIM", port: "DamageMode.Aim", match: true }
@@ -320,8 +320,8 @@ features:
       - "common/turrets/turret/hk.qc:15"
       - "common/turrets/turret/hk_weapon.qc:40"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:Attack"
     constants:
       - { name: "frame cycle", base: "if frame!=0: ++frame, wrap > 5 -> 0", port: "if Frame!=0: Frame+=1, Frame>5 -> 0 (HkTurret.Think:114-117)", match: true }
       - { name: "fire-time kick", base: "if tur_head.frame==0: ++tur_head.frame (hk_weapon.qc:40-42)", port: "if turret.Frame==0: Frame+=1 (HkTurret.Attack:182-183)", match: true }
@@ -346,8 +346,8 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_track"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Track"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Track"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:Think"
     constants:
       - { name: "aim_speed", base: "100", port: "100", match: true }
       - { name: "aim_maxrot", base: "360", port: "360", match: true }
@@ -376,7 +376,7 @@ features:
     base_refs:
       - "common/turrets/turret/hk.qc:51"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs:Description"
+      - "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs:Description"
     constants:
       - { name: "describe text", base: "'The %s fires a single powerful homing rocket ... similar to that of the %s.' (refs WEP_DEVASTATOR)", port: "Description const string (HkTurret.cs:86) — verbatim text with names resolved literally; no live turret-describe page system", match: false }
     status:

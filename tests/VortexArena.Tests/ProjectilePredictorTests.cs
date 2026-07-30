@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for <see cref="ProjectilePredictor"/> — the client-side projectile motion model ported from CSQC's

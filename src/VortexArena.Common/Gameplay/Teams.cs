@@ -1,7 +1,7 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Team identity (QC NUM_TEAM_* color codes, common/teams.qh). Entity.Team holds the team value.

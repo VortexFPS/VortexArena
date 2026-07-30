@@ -6,10 +6,10 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
-using XonoticGodot.SourceGen;
+using VortexArena.SourceGen;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// In-memory tests for the C3 Tier-1 <see cref="StringApiAnalyzer"/> (XG0001): it must flag the banned

@@ -15,8 +15,8 @@ features:
     base_refs:
       - "common/weapons/weapon/crylink.qh:CLASS(Crylink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:Crylink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:Configure"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:Crylink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:Configure"
     constants:
       - { name: "impulse", base: "6", port: "6", match: true }
       - { name: "ammo_type", base: "RES_CELLS", port: "Cells", match: true }
@@ -50,9 +50,9 @@ features:
       - "common/weapons/calculations.qc:W_CalculateSpreadPattern"
       - "server/weapons/tracing.qc:W_SetupProjVelocity_Explicit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpreadPattern"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpreadPattern"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
     constants:
       - { name: "primary_shots", base: "6", port: "6", match: true }
       - { name: "primary_damage", base: "10", port: "10", match: true }
@@ -88,7 +88,7 @@ features:
     base_refs:
       - "common/weapons/weapon/crylink.qc:W_Crylink_Attack2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:Attack"
     constants:
       - { name: "secondary_shots", base: "5", port: "5", match: true }
       - { name: "secondary_damage", base: "8", port: "8", match: true }
@@ -126,8 +126,8 @@ features:
       - "common/weapons/weapon/crylink.qc:W_Crylink_Touch"
       - "server/damage.qc:RadiusDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:OnTouch"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:OnTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "primary_bounces", base: "1", port: "1", match: true }
       - { name: "primary_bouncedamagefactor", base: "1", port: "1", match: true }
@@ -157,9 +157,9 @@ features:
       - "common/weapons/weapon/crylink.qc:W_Crylink_LinkJoin"
       - "common/weapons/weapon/crylink.qc:wr_think (release branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:LinkJoin"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/EntityWeaponState.cs:CrylinkLastGroup"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:LinkJoin"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/EntityWeaponState.cs:CrylinkLastGroup"
     constants:
       - { name: "primary_joinspread", base: "0.2", port: "0.2", match: true }
       - { name: "secondary_joinspread", base: "0", port: "0", match: true }
@@ -192,8 +192,8 @@ features:
       - "common/weapons/weapon/crylink.qc:W_Crylink_LinkExplode"
       - "common/weapons/weapon/crylink.qc:W_Crylink_Touch_WouldHitFriendly"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:LinkExplode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:WouldHitFriendly"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:LinkExplode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:WouldHitFriendly"
     constants:
       - { name: "primary_linkexplode", base: "0", port: "0", match: true }
       - { name: "secondary_linkexplode", base: "1", port: "1", match: true }
@@ -219,8 +219,8 @@ features:
     base_refs:
       - "common/weapons/weapon/crylink.qc:W_Crylink_LinkJoinEffect_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:ScheduleLinkJoinEffect"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:LinkJoin"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:ScheduleLinkJoinEffect"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:LinkJoin"
     constants:
       - { name: "primary_joinexplode", base: "1", port: "Primary.JoinExplode=1 (read in Configure)", match: true }
       - { name: "primary_joinexplode_damage", base: "0", port: "0", match: true }
@@ -251,9 +251,9 @@ features:
       - "common/weapons/weapon/crylink.qc:wr_checkammo1"
       - "common/weapons/weapon/crylink.qc:wr_checkammo2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:CheckAmmoSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WeaponAmmo.Check"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:CheckAmmoSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WeaponAmmo.Check"
     constants:
       - { name: "primary_ammo", base: "3", port: "3", match: true }
       - { name: "secondary_ammo", base: "3", port: "3", match: true }
@@ -280,7 +280,7 @@ features:
       - "common/weapons/weapon/crylink.qc:wr_reload"
       - "common/weapons/weapon/crylink.qc:wr_think (forced-reload branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload"
     constants:
       - { name: "reload_ammo", base: "0", port: "0 (reload disabled)", match: true }
       - { name: "reload_time", base: "2", port: "2 (via base)", match: true }
@@ -309,10 +309,10 @@ features:
       - "common/effects/all.inc:48-51 (CRYLINK_IMPACT/IMPACT2/JOINEXPLODE/MUZZLEFLASH)"
       - "client/weapons/projectile.qc (PROJECTILE_CRYLINK / _BOUNCING + TR_CRYLINKPLASMA)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:81-84"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:81-84"
       - "game/client/ProjectileCatalog.cs:91,272"
       - "game/net/NetGame.cs:2202"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:Attack"
     constants:
       - { name: "CRYLINK_IMPACT (primary)", base: "crylink_impactbig", port: "crylink_impactbig", match: true }
       - { name: "CRYLINK_IMPACT2 (secondary)", base: "crylink_impact", port: "crylink_impact", match: true }
@@ -342,9 +342,9 @@ features:
       - "common/weapons/weapon/crylink.qc:wr_suicidemessage"
       - "common/weapons/weapon/crylink.qc:wr_killmessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:351-352,1187-1188"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:51-52"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:128-129"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:351-352,1187-1188"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:51-52"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:128-129"
     constants:
       - { name: "murder notif", base: "WEAPON_CRYLINK_MURDER", port: "WEAPON_CRYLINK_MURDER", match: true }
       - { name: "suicide notif", base: "WEAPON_CRYLINK_SUICIDE", port: "WEAPON_CRYLINK_SUICIDE", match: true }
@@ -369,9 +369,9 @@ features:
     base_refs:
       - "common/weapons/weapon/crylink.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:BotWantsSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs:BotAimShotSpeed"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:447"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:BotWantsSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs:BotAimShotSpeed"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:447"
     constants:
       - { name: "primary-fire bias", base: "random() < 0.10 -> primary, else secondary", port: "ctx.Random01 >= 0.10 -> secondary (i.e. 10% primary, 90% secondary)", match: true }
       - { name: "primary lead speed", base: "bot_aim(primary_speed,...)", port: "BotAimShotSpeed => Primary.Speed", match: true }

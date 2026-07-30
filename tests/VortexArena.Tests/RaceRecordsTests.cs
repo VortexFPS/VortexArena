@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for §4.5: the persistent race/CTS record database (QC ServerProgsDB race_readTime/writeTime/setTime

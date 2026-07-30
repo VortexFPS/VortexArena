@@ -2,14 +2,14 @@ using System;
 using System.Numerics;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Unit tests for T69 — the damage-keyed whole-HUD shake (port of qcsrc/client/hud/hud.qc's
 /// <c>Hud_Dynamic_Frame</c> shake block + <c>Hud_Shake_Update</c>, ported to
 /// <c>game/hud/HudDynamicShake.cs</c>).
 ///
-/// <see cref="HudDynamicShake"/> lives in the Godot host assembly (<c>XonoticGodot.Game.Hud</c>), which this
+/// <see cref="HudDynamicShake"/> lives in the Godot host assembly (<c>VortexArena.Game.Hud</c>), which this
 /// test project does NOT reference (it links only the Godot-free <c>src/</c> libraries). So — following the
 /// established repo idiom (see <c>HudConfigEditorTests</c> / <c>ClientFeedbackTests</c>) — these tests mirror the
 /// shake's pure keyframe math (<see cref="ShakeUpdate"/> / <see cref="Bound"/>) and its stateful factor-latch

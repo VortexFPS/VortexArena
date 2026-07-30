@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Common.Framework;
+using VortexArena.Engine.Collision;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Regression cover for <see cref="CollisionWorld.QuerySwept"/> — the swept-corridor broadphase that perf 2.1

@@ -22,9 +22,9 @@
 // The few remaining niche entries (per-monster-variant centerprints, race split-times, some onslaught
 // lines) follow the identical macro forms below and can be appended the same way.
 
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Installs the notifications into <see cref="Notifications"/>. Idempotent (by typed name); call

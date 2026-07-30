@@ -8,7 +8,7 @@ summary:
     - "NEW (2026-07-02 coverage fold): the map-superweapon tail of weapon_defaultspawnfunc is unported — a map-spawned superweapon never gets superweapons_finished seeded (g_balance_superweapons_time, spawning.qc:104-106) so its pickup applies a 0s superweapon timer, and the +/-10s superweapon respawn jitter (g_pickup_respawntimejitter_superweapon) is never set on weapon items."
     - "NEW (2026-07-02 coverage fold): give/target_give POSTGIVE feedback is silent (GiveSound/GiveRot not ported); the menu Guide's Items topic lists no entries (health/armor/ammo describe() text unported); dumpitems command missing."
     - "simple items (sv_simple_items, Base default 1) STILL not ported: always renders the 3D model, never the flat _simple sprite (no _simple model resolver, no bob suppression). The only remaining ITS_* bit Item_Show doesn't honor."
-    - "2026-07-05 (playtest #29): ghost + stay-weapon COLORMOD now APPLIED — SetTreeColormod (ClientWorld) tints items via cached per-surface override variants of the shared materials (never mutates AssetSystem's cached materials); DriveItemGhostFx pushes cl_ghost_items_color, DriveItemStayFx pushes cl_weapon_stay_color. NB earlier rows misread the default: '-1 -1 -1' is a REAL negative colormod (clamps to BLACK — the dark ghost silhouette); '0 0 0' is Base's leave-unchanged sentinel (cfg description + DP only copies a non-zero colormod). Remaining: vehicle-hud item tint (cl_items_vehicle_*) — no vehicle-hud item pass exists; ShaderMaterial item surfaces stay untinted (alpha-only)."
+    - "2026-07-05 (playtest #29): ghost + stay-weapon COLORMOD now APPLIED — ApplyItemTint (ClientWorld; renamed from SetTreeColormod 2026-07-11) tints items via cached per-surface override variants of the shared materials (never mutates AssetSystem's cached materials); DriveItemGhostFx pushes cl_ghost_items_color, DriveItemStayFx pushes cl_weapon_stay_color. NB earlier rows misread the default: '-1 -1 -1' is a REAL negative colormod (clamps to BLACK — the dark ghost silhouette); '0 0 0' is Base's leave-unchanged sentinel (cfg description + DP only copies a non-zero colormod). Remaining: vehicle-hud item tint (cl_items_vehicle_*) — no vehicle-hud item pass exists; ShaderMaterial item surfaces stay untinted (alpha-only)."
     - "q3compat item-origin offset (z += -15 - mins.z) + item_armor1->ArmorSmall(shard) on Q3 maps remain DEAD: code present (StartItem) but gated on Q3CompatProvider, never wired."
     - "small-item clustering (setItemGroup / setItemGroupCount, 120qu radius -> item_group/item_group_count) still MISSING — itemstime HUD can't show a single 'xN' badge for a packed cluster. Presentation-only, low impact."
     - "RE-AUDIT 2026-06-28 (parity-port-waves Phases 1-4): this wave touched NO items-pickups code — git diff fbb18fd..HEAD shows zero changes under Gameplay/Items/* (only ClientWorld.cs gained the cosmetic add-on layer / crosshair-chase body-fade / cylindric-line pool / raptor pitch-roll, none of them item paths). All 4 remaining gaps (simple items, stay-weapon colormod + vehicle tint, q3compat origin/shard via unwired Q3CompatProvider, item_group clustering) re-verified UNCHANGED in the current port. NB: ClientWorld now applies a frozen ICE colormod to PLAYER meshes (ModelTint.SetColormod, cosmetic layer) — this does NOT contradict the 'item meshes have no per-instance colormod' claim; the colormod uniform stays player-skin-shader-only for items. Nothing closed, nothing regressed."
@@ -22,10 +22,10 @@ features:
       - "common/items/item/ammo.qh:CLASS(Ammo)"
       - "common/items/item/pickup.qh:CLASS(Pickup)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/HealthItem.cs:HealthPickup"
-      - "src/XonoticGodot.Common/Gameplay/Items/ArmorItem.cs:ArmorPickup"
-      - "src/XonoticGodot.Common/Gameplay/Items/AmmoItem.cs:AmmoPickup"
-      - "src/XonoticGodot.Common/Gameplay/Items/PickupItemDef.cs:Pickup"
+      - "src/VortexArena.Common/Gameplay/Items/HealthItem.cs:HealthPickup"
+      - "src/VortexArena.Common/Gameplay/Items/ArmorItem.cs:ArmorPickup"
+      - "src/VortexArena.Common/Gameplay/Items/AmmoItem.cs:AmmoPickup"
+      - "src/VortexArena.Common/Gameplay/Items/PickupItemDef.cs:Pickup"
     constants:
       - { name: "health models", base: "g_h1/g_h25/g_h50/g_h100.md3", port: "same", match: true }
       - { name: "armor models", base: "item_armor_small/medium/big/large.md3", port: "same", match: true }
@@ -60,9 +60,9 @@ features:
       - "common/items/item/armor.qh:item_armor*_init"
       - "common/items/item/ammo.qh:ammo_*_init"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/HealthItem.cs:ItemInit"
-      - "src/XonoticGodot.Common/Gameplay/Items/ArmorItem.cs:ItemInit"
-      - "src/XonoticGodot.Common/Gameplay/Items/AmmoItem.cs:ItemInit"
+      - "src/VortexArena.Common/Gameplay/Items/HealthItem.cs:ItemInit"
+      - "src/VortexArena.Common/Gameplay/Items/ArmorItem.cs:ItemInit"
+      - "src/VortexArena.Common/Gameplay/Items/AmmoItem.cs:ItemInit"
     constants:
       - { name: "g_pickup_health small/medium/big/mega", base: "5/25/50/100", port: "5/25/50/100", match: true }
       - { name: "g_pickup_health*_max", base: "200", port: "200", match: true }
@@ -97,8 +97,8 @@ features:
       - "server/items/items.qc:Item_GiveTo"
       - "server/items/items.qc:Item_GiveAmmoTo"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ItemGiveTo"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:GiveAmmoTo"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ItemGiveTo"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:GiveAmmoTo"
     constants:
       - { name: "7 resource gives (health/armor/shells/bullets/rockets/cells/fuel)", base: "Item_GiveAmmoTo x7", port: "GiveAmmoTo x7", match: true }
       - { name: "at-cap refusal (live item)", base: "player>=ammomax && pickup_anyway<=0 -> false", port: "same", match: true }
@@ -130,7 +130,7 @@ features:
     base_refs:
       - "server/items/items.qc:Item_GiveTo (strength/invincible/speed/invisibility/superweapons blocks)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ApplyPowerupTimers"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ApplyPowerupTimers"
     constants:
       - { name: "g_powerups_stack", base: "0", port: "reads cvar, default false", match: true }
       - { name: "stack mode", base: "t += item.*_finished", port: "total = existing + duration", match: true }
@@ -157,8 +157,8 @@ features:
     base_refs:
       - "server/items/items.qc:Item_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ItemTouch"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:FireItemTouch / FireItemTouched"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ItemTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:FireItemTouch / FireItemTouched"
     constants:
       - { name: "gate conditions", base: "FL_PICKUPITEMS && !IS_DEAD && SOLID_TRIGGER && owner!=toucher && time>=item_spawnshieldtime", port: "same", match: true }
       - { name: "loot NODROP/sky kill on touch", base: "ITEM_TOUCH_NEEDKILL -> RemoveItem (DPCONTENTS_NODROP | Q3SURFACEFLAG_SKY)", port: "LootInNoDrop (ItemPickupRules.cs:969-976) -> RemoveItem: (tr.DpHitContents & NoDropContents) | (tr.DpHitQ3SurfaceFlags & Q3SurfaceFlagSky) — BOTH halves now tested; DpHitQ3SurfaceFlags is populated by TraceService.BuildResult (l.627)", match: true }
@@ -192,10 +192,10 @@ features:
       - "server/items/items.qc:adjust_respawntime"
       - "server/items/items.qc:Item_Respawn / Item_RespawnThink / Item_RespawnCountdown"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ScheduleRespawn"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ScheduleRespawnIn"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:AdjustRespawnTime"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:Respawn / RespawnThink / RespawnCountdown"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ScheduleRespawn"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ScheduleRespawnIn"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:AdjustRespawnTime"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:Respawn / RespawnThink / RespawnCountdown"
     constants:
       - { name: "ITEM_RESPAWN_TICKS", base: "10", port: "10", match: true }
       - { name: "respawntime health s/m/b/mega", base: "15/15/20/30", port: "15/15/20/30", match: true }
@@ -230,8 +230,8 @@ features:
       - "server/items/items.qc:Item_ScheduleInitialRespawn"
       - "server/items/items.qc:Item_Reset"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ScheduleInitialRespawn"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:Item_Reset"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ScheduleInitialRespawn"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:Item_Reset"
     constants:
       - { name: "g_pickup_respawntime_initial_random", base: "1", port: "1", match: true }
       - { name: "mode 1 shared random (floor(time)+random)", base: "static float shared_random", port: "_initialRespawnSharedRandom (process-static)", match: true }
@@ -259,7 +259,7 @@ features:
     base_refs:
       - "server/items/items.qc:Item_Show"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:Show"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:Show"
     constants:
       - { name: "mode>0 available", base: "model + SOLID_TRIGGER + shield=1 + ITS_AVAILABLE", port: "same", match: true }
       - { name: "mode<0 hidden", base: "no model + SOLID_NOT", port: "same", match: true }
@@ -295,8 +295,8 @@ features:
       - "server/items/items.qc:Item_Think"
       - "server/items/spawning.qc:Item_Initialise"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:SetupLoot / SpawnLoot"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ItemThink"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:SetupLoot / SpawnLoot"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ItemThink"
     constants:
       - { name: "g_items_dropped_lifetime", base: "20", port: "20", match: true }
       - { name: "anti-instant-pick shield", base: "item_spawnshieldtime = time + 0.5", port: "Now + 0.5f", match: true }
@@ -324,8 +324,8 @@ features:
     base_refs:
       - "server/items/items.qc:Item_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ItemDamage"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:SetupLoot (GtEventDamage wiring)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ItemDamage"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:SetupLoot (GtEventDamage wiring)"
     constants:
       - { name: "ITEM_DAMAGE_NEEDKILL(deathtype) -> RemoveItem", base: "items.qc:981-985 event_damage handler", port: "ItemPickupRules.ItemDamage ll.889-895: DeathTypes.ItemDamageNeedKill -> RemoveItem", match: true }
       - { name: "NEEDKILL deathtype set", base: "DEATH_HURTTRIGGER/SLIME/LAVA/SWAMP (items.qh:123)", port: "DeathTypes.ItemDamageNeedKill: Void(HurtTrigger)/Slime/Lava/Swamp", match: true }
@@ -353,9 +353,9 @@ features:
       - "server/items/items.qc:item_use"
       - "server/items/items.qc:item_setactive"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ItemUse"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ItemSetActive"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:SetupPermanent (Use/SetActive wiring)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ItemUse"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ItemSetActive"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:SetupPermanent (Use/SetActive wiring)"
     constants:
       - { name: "item_use: spawnflags&16 -> gettouch()(this,actor); else Item_Respawn (q3compat)", base: "items.qc:987-993", port: "ItemPickupRules.ItemUse ll.912-924: spawnflags&16 -> item.Touch(item,actor); else Respawn(item)", match: true }
       - { name: "item_setactive: ACTIVE_TOGGLE/ACTIVE_ACTIVE/ACTIVE_NOT -> Item_Show(1/-1)", base: "items.qc:995-1006", port: "ItemPickupRules.ItemSetActive ll.933-944: toggle/set Active then Show(1/-1) on change", match: true }
@@ -384,8 +384,8 @@ features:
       - "server/items/items.qc:Item_FindTeam"
       - "server/items/items.qc:Item_Touch (team-respawn branch, items.qc:762-780)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:FindTeam"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ItemTouch (team-respawn branch ll.436-467)"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:FindTeam"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ItemTouch (team-respawn branch ll.436-467)"
     constants:
       - { name: "group by .team, pick one random weighted (.cnt) member to show, hide the rest", base: "items.qc:813-849 RandomSelection by it.cnt", port: "StartItem.FindTeam ll.432-496: RandomSelection over Api.Entities.All by it.Cnt; Show(-1) the rest, Item_Reset the chosen", match: true }
       - { name: "respawn re-picks a random sibling (hide all, show+schedule chosen)", base: "items.qc:762-780", port: "ItemPickupRules.ItemTouch ll.436-467: Show(-1)+scheduledrespawn=0 all teamed, RandomSelection chosen, Show(1)+ScheduleRespawn", match: true }
@@ -416,10 +416,10 @@ features:
       - "common/items/item.qh:SPAWNFUNC_ITEM"
       - "server/items/spawning.qc:Item_Initialise"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:Register"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RegisterAll"
-      - "src/XonoticGodot.Server/GameWorld.cs:SpawnMapEntities"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:Register"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RegisterAll"
+      - "src/VortexArena.Server/GameWorld.cs:SpawnMapEntities"
     constants:
       - { name: "g_pickup_items", base: "-1 (gametype dflt)", port: "Cvars seed 1; unset treated as -1", match: partial }
       - { name: "have_pickup_item gate", base: "MUTATORBLOCKED / ==0 none / weaponarena weapons+ammo", port: "same", match: true }
@@ -453,8 +453,8 @@ features:
       - "client/items/items.qc:ItemDraw"
       - "client/items/items.qc:ENT_CLIENT_ITEM (ITS transitions)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemBobAnim.cs:Sample"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemDespawnFx.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/Items/ItemBobAnim.cs:Sample"
+      - "src/VortexArena.Common/Gameplay/Items/ItemDespawnFx.cs:Tick"
       - "game/EntityNode.cs:SyncFromEntity"
       - "game/client/ClientWorld.cs:DriveItemGhostFx / DriveItemDespawnFx / DriveItemStayFx / ItemDistanceAlpha"
     constants:
@@ -467,7 +467,7 @@ features:
       - { name: "distance fade (g_items_maxdist/cl_items_fadedist)", base: "4500 / 500 (client/items/items.qc:147-158)", port: "ClientWorld.ItemDistanceAlpha reproduces the QC formula, composed as base alpha under ghost/despawn/stay (ll.1171-1206); LIVE per-frame", match: true }
       - { name: "stay-weapon alpha (cl_weapon_stay_alpha)", base: "0.75 (ItemDraw availability branch)", port: "DriveItemStayFx (ClientWorld.cs:1227-1244) applies 0.75 alpha on a weapon_* item carrying server-set EF_STARDUST (the networked weapon-stay marker); composed under distance fade — NEW in Wave 16", match: true }
       - { name: "simple items (sv_simple_items/cl_simple_items)", base: "swap to _simple sprite, no bob", port: "NOT ported (always 3D)", match: false }
-      - { name: "stay-weapon COLOR + vehicle-hud tint (cl_weapon_stay_color, cl_items_vehicle_*)", base: "colormod multiply in ItemDraw availability branch", port: "stay-weapon colormod APPLIED 2026-07-05 (playtest #29: SetTreeColormod per-surface override variants of the shared materials); vehicle-hud tint still missing (no vehicle-hud item pass)", match: false }
+      - { name: "stay-weapon COLOR + vehicle-hud tint (cl_weapon_stay_color, cl_items_vehicle_*)", base: "colormod multiply in ItemDraw availability branch", port: "stay-weapon colormod APPLIED 2026-07-05 (playtest #29; mechanism now ApplyItemTint (2026-07-11): per-surface override variants of the shared materials); vehicle-hud tint still missing (no vehicle-hud item pass)", match: false }
     status:
       logic: faithful
       values: faithful
@@ -478,7 +478,7 @@ features:
     intended_divergence: true
     divergence_rationale: "Pickup/respawn particles + ghost/despawn fades are driven from the authoritative server pickup/respawn EVENT + the client render flags rather than the CSQC ITS_AVAILABLE net transition (with its isnew/PVS guards). Documented in ItemPickupRules.EmitItemEffect as equivalent-but-guard-free: it fires only on the real gameplay event, never when an item merely streams into a client's PVS."
     gaps:
-      - "RESOLVED 2026-07-05 (playtest #29): stay-weapon COLORMOD (cl_weapon_stay_color '2 0.5 0.5') + the ghost tint (cl_ghost_items_color) are now applied via SetTreeColormod (cached per-surface override variants — never mutates the shared/cached materials). Still open: vehicle-hud item tint (cl_items_vehicle_*, no vehicle-hud item pass) and ShaderMaterial item surfaces (left untinted, alpha-only)."
+      - "RESOLVED 2026-07-05 (playtest #29): stay-weapon COLORMOD (cl_weapon_stay_color '2 0.5 0.5') + the ghost tint (cl_ghost_items_color) are now applied via ApplyItemTint (renamed from SetTreeColormod 2026-07-11; cached per-surface override variants — never mutates the shared/cached materials). Still open: vehicle-hud item tint (cl_items_vehicle_*, no vehicle-hud item pass) and ShaderMaterial item surfaces (left untinted, alpha-only)."
       - "simple items (sv_simple_items default 1 + cl_simple_items) not ported — always renders the full 3D model with bob, never the flat non-bobbing _simple sprite."
       - "distance-fade edge: ItemDistanceAlpha only runs for entities IsItemEntity accepts (ItemAnimate!=0 || expiring || !available). A non-animating, available item (e.g. spawnflag 1024 suppressing animation) skips the distance branch. Stock items animate, so this is a corner case."
     verification:
@@ -496,7 +496,7 @@ features:
       - "common/mutators/mutator/itemstime/itemstime.qc:Item_ItemsTime_UpdateTime"
       - "common/mutators/mutator/itemstime/itemstime.qc:Item_ItemsTime_Allow"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs:Recompute"
+      - "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs:Recompute"
     constants:
       - { name: "sv_itemstime", base: "1 (2 = also alive players)", port: "reads cvar; default 1", match: true }
       - { name: "timed set", base: "powerups + Mega/Big Health + Mega/Big Armor + superweapons aggregate", port: "same (TimedItemClasses + superweapon weapon-pickups)", match: true }
@@ -578,7 +578,7 @@ features:
       - "common/items/all.qh:GENERIC_COMMAND(dumpitems)"
       - "common/items/all.qc:Dump_Items"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:Register (classname-keyed def table)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:Register (classname-keyed def table)"
       - "game/hud/ItemsTimePanel.cs:l.43 (hand-ordered timed-item display list = the CSQC default_order_items consumer)"
     constants:
       - { name: "registry capacity / numeric m_id", base: "32 slots, m_id = registry index (24 usable as .items bits)", port: "no numeric item-id registry — per-class Pickup singletons keyed by classname", match: false }
@@ -606,8 +606,8 @@ features:
       - "common/items/all.qc:Item_Model"
       - "common/items/all.qc:Item_Sound"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:l.199 (models/items/ vs models/weapons/ prefix)"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:PlayPickupSound (ll.866-876, sound-registry names)"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:l.199 (models/items/ vs models/weapons/ prefix)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:PlayPickupSound (ll.866-876, sound-registry names)"
     constants:
       - { name: "model path prefix", base: "\"models/items/\" + m_model (weapons via W_Model = models/weapons/)", port: "IsWeaponPickup ? models/weapons/ : models/items/", match: true }
       - { name: "sound path prefix", base: "\"misc/\" + it_snd", port: "pickup sounds resolved by Sound-registry name (misc/*.wav mapping audited in items-pickups.def.resource_items)", match: true }
@@ -635,7 +635,7 @@ features:
       - "common/items/item/pickup.qc:METHOD(Pickup, giveTo)"
       - "common/items/inventory.qh:Inventory_pickupitem"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:ItemTouch (l.393 calls ItemGiveTo directly)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:ItemTouch (l.393 calls ItemGiveTo directly)"
       - "game/net/NetGame.cs:UpdatePickupFeed (ll.3403-3456, stat-delta inference)"
       - "game/hud/PickupPanel.cs:Push"
     constants:
@@ -666,8 +666,8 @@ features:
       - "server/weapons/spawning.qh:weapon_defaultspawnfunc / W_Apply_Weaponreplace (decls + autocvars)"
       - "server/weapons/spawning.qc:weapon_defaultspawnfunc (ll.90-113 tail)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:WeaponSpawn (ll.360-368)"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:WeaponPickup.ItemInit (ll.435-457)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:WeaponSpawn (ll.360-368)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:WeaponPickup.ItemInit (ll.435-457)"
     constants:
       - { name: "g_pickup_respawntime_weapon / _superweapon", base: "10 / 120", port: "10 / 120 (Cvars.cs:567-568 + CvarOr fallback 10)", match: true }
       - { name: "g_pickup_respawntimejitter_weapon / _superweapon", base: "0 / 10 (balance-xonotic.cfg:144-145; stamped on the item, spawning.qc:95,101)", port: "never set — weapon items keep jitter 0 (WeaponSpawn sets only ItemRespawnTime; WeaponPickup def has no RespawnTimeJitter)", match: false }
@@ -700,9 +700,9 @@ features:
       - "server/items/items.qh:GiveItems / GiveWeapon / GiveSound / GiveRot decls + PREGIVE/POSTGIVE macros"
       - "server/items/items.qc:GiveItems"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/GiveItems.cs:Apply"
-      - "src/XonoticGodot.Server/Cheats.cs:382-383 (give command)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs (target_items / target_give)"
+      - "src/VortexArena.Common/Gameplay/Items/GiveItems.cs:Apply"
+      - "src/VortexArena.Server/Cheats.cs:382-383 (give command)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs (target_items / target_give)"
     constants:
       - { name: "operator grammar", base: "val dflt 999, op dflt SET; no/max/min/plus/minus prefixes; numeric token sets val without reset", port: "same (GiveItems.cs:40-70)", match: true }
       - { name: "ALL cascade", base: "all -> allweapons -> allammo fallthrough", port: "explicit goto-case cascade", match: true }
@@ -739,7 +739,7 @@ features:
       - { name: "cl_items_fadedist", base: "500", port: "500 (ClientWorld.cs:1495, live)", match: true }
       - { name: "cl_ghost_items", base: "0.45", port: "0.45 (ClientWorld.cs:1439, live)", match: true }
       - { name: "cl_weapon_stay_alpha", base: "0.75", port: "0.75 (ClientWorld.cs:1431, live)", match: true }
-      - { name: "cl_ghost_items_color", base: "'-1 -1 -1' — a REAL negative colormod (DP clamps to BLACK = the dark ghost silhouette; '0 0 0' is the leave-unchanged sentinel per the cfg description)", port: "'-1 -1 -1' APPLIED 2026-07-05 (DriveItemGhostFx → SetTreeColormod, playtest #29)", match: true }
+      - { name: "cl_ghost_items_color", base: "'-1 -1 -1' — a REAL negative colormod (DP clamps to BLACK = the dark ghost silhouette; '0 0 0' is the leave-unchanged sentinel per the cfg description)", port: "'-1 -1 -1' APPLIED 2026-07-05 (DriveItemGhostFx → ApplyItemTint — renamed from SetTreeColormod 2026-07-11 — playtest #29; dark tints now render the DP flat silhouette via a per-entity MaterialOverride)", match: true }
       - { name: "cl_simple_items / cl_simpleitems_postfix", base: "0 / \"_simple\"", port: "menu checkbox exists (DialogSettingsGame.cs:383) but NO consumer — simple items unported", match: false }
       - { name: "cl_items_vehicle_alpha / _color", base: "0.75 / '2 0.5 0.5'", port: "not applied (no vehicle-hud item tint)", match: false }
     status:
@@ -752,7 +752,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "RESOLVED 2026-07-05 (playtest #29): cl_ghost_items_color is now applied (SetTreeColormod). NB the old row here misread the default — '-1 -1 -1' is a real negative colormod clamping to black (stock Base DOES dark-tint ghosts); '0 0 0' is the no-change sentinel."
+      - "RESOLVED 2026-07-05 (playtest #29): cl_ghost_items_color is now applied (ApplyItemTint, renamed from SetTreeColormod 2026-07-11). NB the old row here misread the default — '-1 -1 -1' is a real negative colormod clamping to black (stock Base DOES dark-tint ghosts); '0 0 0' is the no-change sentinel."
       - "cl_simple_items (+_simpleitems_postfix) and cl_items_vehicle_* are dead cvars: bound in the settings menu / declared but with no render consumer (the simple-items + colormod gaps tracked in items-pickups.show.visibility and .presentation.bob_ghost_despawn)."
     verification:
       - { kind: code_read, ref: "ClientWorld.cs live CvarF reads: animate 7 (l.1454), fadedist 500 (l.1495), ghost 0.45 (l.1439), stay_alpha 0.75 (l.1431) — all on the per-frame item pass; ghost-color/simple/vehicle have no consumer", result: pass }
@@ -766,10 +766,10 @@ features:
       - "server/items/spawning.qh:Item_Initialise / .lifetime / ITEM_IS_LOOT / ITEM_SHOULD_KEEP_POSITION / ITEM_IS_EXPIRING"
       - "server/items/spawning.qc:Item_RandomFromList"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:Spawn / SpawnLoot"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:ItemRandomFromList (l.249)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:RandomFromList (l.387)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs (permanent-replacement path)"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:Spawn / SpawnLoot"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:ItemRandomFromList (l.249)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:RandomFromList (l.387)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs (permanent-replacement path)"
     constants:
       - { name: "lifetime semantics", base: "<0 permanent, >0 overrides g_items_dropped_lifetime, 0 default loot", port: "SpawnLoot(lifetime) for loot, Spawn for permanent (callers pass QC's lifetime through)", match: true }
       - { name: "noalign | spawnflags&1 keep-position", base: "ITEM_SHOULD_KEEP_POSITION", port: "StartItem suspension branch (audited in items-pickups.spawn.driver)", match: true }

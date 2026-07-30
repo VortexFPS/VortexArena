@@ -1,7 +1,7 @@
 using System;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Shared menu construction helpers — the C# stand-ins for Xonotic's <c>makeXonoticHeaderLabel</c> /

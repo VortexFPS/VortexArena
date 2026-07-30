@@ -1,13 +1,13 @@
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the BSP Potentially-Visible-Set: parsing the Nodes/Leafs/Vis lumps, the point→leaf tree descent, the
@@ -16,7 +16,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class BspPvsTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     /// <summary>
     /// A minimal vised BSP: one splitting plane at X=0 with two leaves/clusters, where each cluster sees ONLY
@@ -195,7 +195,7 @@ public class BspPvsTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? bspPath = vfs.Find("maps/", "bsp").FirstOrDefault();
         if (bspPath is null) return;
 
@@ -224,7 +224,7 @@ public class BspPvsTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? bspPath = vfs.Find("maps/", "bsp").FirstOrDefault(p => p.Contains("finalrage"));
         if (bspPath is null) return;
 

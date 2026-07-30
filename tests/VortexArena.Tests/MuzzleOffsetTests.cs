@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Dpm;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Md3;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Formats;
+using VortexArena.Formats.Dpm;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Md3;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Verifies the per-weapon weapon-shot-origin (QC w_shotorg muzzle = <c>ent.(weaponentity).movedir</c>, the
@@ -280,7 +280,7 @@ public class MuzzleOffsetTests
 
     // ---- real-asset regression (guards the v_-vs-h_ wiring: the shot tag lives on the h_ HAND RIG) --
 
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
 
     /// <summary>
     /// The real shipped weapon HAND RIGS (h_*.iqm) carry the <c>shot</c>/<c>tag_shot</c> tag and yield a sensible

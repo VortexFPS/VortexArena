@@ -17,11 +17,11 @@
 //  * The dst.solid = SOLID_NOT line (attachment can't be solid) is mirrored exactly.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -38,9 +38,9 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
-    using XonoticGodot.Common.Framework;
+    using VortexArena.Common.Framework;
 
     /// <summary><c>misc_follow</c> — attach/follow one entity to another at spawn. Registered by <see cref="MapObjectsRegistry"/>.</summary>
     public static class Follow

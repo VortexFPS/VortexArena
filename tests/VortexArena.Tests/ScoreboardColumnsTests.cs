@@ -1,12 +1,12 @@
 using System.Collections.Generic;
-using XonoticGodot.Common.Framework;          // Entity, EntFlags
-using XonoticGodot.Common.Gameplay;           // Player, Teams
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;          // Entity, EntFlags
+using VortexArena.Common.Gameplay;           // Player, Teams
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Net;
 using Xunit;
-using GS = XonoticGodot.Common.Gameplay.Scoring.GameScores;
+using GS = VortexArena.Common.Gameplay.Scoring.GameScores;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for T9 — the score-LAYOUT networking that closes the dropped-scoreboard gap, plus the column depth.
@@ -21,6 +21,9 @@ namespace XonoticGodot.Tests;
 /// "client default state" (RegisterAll) by transitioning the SAME singleton and asserting hash equality across
 /// the transition — which is exactly what <see cref="ScoreInfoBlock.Apply"/> does on a remote client.
 /// </summary>
+// The summary above says it outright — these tests transition the SAME static singleton — so they cannot
+// run in parallel with the other GameScores classes. See the note on ScoresTests.
+[Collection("GlobalState")]
 public class ScoreboardColumnsTests
 {
     public ScoreboardColumnsTests()
@@ -174,7 +177,7 @@ public class ScoreboardColumnsTests
         a.ScoreFrags = 3; GS.AddToPlayer(a, GS.Field("CTF_CAPS")!, 2);
         b.ScoreFrags = 1; GS.AddToPlayer(b, GS.Field("CTF_CAPS")!, 1);
 
-        var rows = ScoreboardBlock.CaptureRows(new (int, XonoticGodot.Common.Framework.Entity)[] { (1, a), (2, b) });
+        var rows = ScoreboardBlock.CaptureRows(new (int, VortexArena.Common.Framework.Entity)[] { (1, a), (2, b) });
         var teams = new List<(int, int)> { (Teams.Red, 2), (Teams.Blue, 1) };
 
         var w = new BitWriter(2048);
@@ -212,7 +215,7 @@ public class ScoreboardColumnsTests
         // The ScoreboardBlock row gained the entcs name/team slice; verify it survives independently of ScoreInfo.
         var p = new Player { Team = Teams.Yellow, NetName = "^3carol", Flags = EntFlags.Client };
         p.ScoreFrags = 5;
-        var rows = ScoreboardBlock.CaptureRows(new (int, XonoticGodot.Common.Framework.Entity)[] { (7, p) });
+        var rows = ScoreboardBlock.CaptureRows(new (int, VortexArena.Common.Framework.Entity)[] { (7, p) });
 
         var w = new BitWriter(512);
         ScoreboardBlock.Serialize(w, rows, new List<(int, int)>());
@@ -224,6 +227,50 @@ public class ScoreboardColumnsTests
         Assert.Equal(7, row.NetId);
         Assert.Equal("^3carol", row.Name);
         Assert.Equal(Teams.Yellow, row.Team);
+    }
+
+    /// <summary>
+    /// The scoreboard block carries the VIEWER's item-pickup tally (QC's per-viewer <c>Inventory</c> entity,
+    /// common/items/inventory.qh) so the scoreboard can draw Base's Item stats grid
+    /// (<c>Scoreboard_ItemStats_Draw</c>). Keyed by the item def's HUD icon name (QC <c>m_icon</c>).
+    /// </summary>
+    [Fact]
+    public void ScoreboardBlock_ItemStatsTally_RoundTrips()
+    {
+        var p = new Player { NetName = "dave", Flags = EntFlags.Client };
+        var rows = ScoreboardBlock.CaptureRows(new (int, VortexArena.Common.Framework.Entity)[] { (3, p) });
+        var tally = new List<(string icon, int count)>
+        {
+            ("ammo_rockets", 4),
+            ("armor_mega", 1),
+            ("health_medium", 12),
+            ("weaponvortex", 2),
+        };
+
+        var w = new BitWriter(1024);
+        ScoreboardBlock.Serialize(w, rows, new List<(int, int)>(), null, default, tally);
+        var r = new BitReader(w.WrittenSpan.ToArray());
+        ScoreboardWire? sb = ScoreboardBlock.Deserialize(ref r);
+
+        Assert.NotNull(sb);
+        Assert.Equal(tally, sb!.ItemStats);
+    }
+
+    /// <summary>A viewer who has picked nothing up sends an empty tally (one length byte) and reads back empty —
+    /// the steady-state cost of the new trailer, and the state that hides the Item stats block entirely.</summary>
+    [Fact]
+    public void ScoreboardBlock_EmptyItemStats_RoundTripsEmpty()
+    {
+        var p = new Player { NetName = "eve", Flags = EntFlags.Client };
+        var rows = ScoreboardBlock.CaptureRows(new (int, VortexArena.Common.Framework.Entity)[] { (1, p) });
+
+        var w = new BitWriter(512);
+        ScoreboardBlock.Serialize(w, rows, new List<(int, int)>());
+        var r = new BitReader(w.WrittenSpan.ToArray());
+        ScoreboardWire? sb = ScoreboardBlock.Deserialize(ref r);
+
+        Assert.NotNull(sb);
+        Assert.Empty(sb!.ItemStats);
     }
 
     // =====================================================================================

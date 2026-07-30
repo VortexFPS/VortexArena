@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Dpm;
+namespace VortexArena.Formats.Dpm;
 
 /// <summary>
 /// Parses a DarkPlaces Model (DPM, id "DARKPLACESMODEL\0", type 2) from a raw byte buffer into

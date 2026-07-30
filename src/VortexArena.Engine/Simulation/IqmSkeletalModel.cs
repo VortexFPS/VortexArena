@@ -1,7 +1,7 @@
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Common.Math;
+using VortexArena.Formats.Iqm;
+using VortexArena.Common.Math;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// Adapts a parsed <see cref="IqmData"/> (bone hierarchy + per-frame poses) to <see cref="ISkeletalModel"/>

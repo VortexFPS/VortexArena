@@ -118,6 +118,43 @@ public sealed class DamageSystem : IDamageSystem
             ? deathType                                       // QC: specials keep the plain deathtype
             : DeathTypes.WithHitType(deathType, DeathTypes.Splash);
 
+    /// <summary>
+    /// Port of the hit-feedback stat STAMP in QC <c>EndFrame</c> (server/world.qc:2507-2518): exactly ONE of
+    /// the three feedback stats advances on <paramref name="viewer"/> — priority typehit &gt; kill &gt; hit, so
+    /// the killing blow's banked damage is eaten by the kill priority and the client plays ONLY the kill sound
+    /// that frame. The hit branch also advances the cumulative <see cref="Entity.HitsoundDamageDealtTotal"/>
+    /// by <c>ceil(dealt)</c> (QC's deliberate wire rounding: "not accurate as client code doesn't need so much
+    /// accuracy").
+    ///
+    /// <para>The accumulators are read from <paramref name="source"/>, which QC resolves as
+    /// <c>IS_SPEC(it) ? it.enemy : it</c> — a FOLLOW-SPECTATOR inherits the feedback of whoever they are
+    /// watching, which is what makes spectating a fragging player sound like Base. Clearing is deliberately
+    /// NOT done here: QC clears in a SEPARATE FOREACH_CLIENT pass (world.qc:2525-2527), because a spectator
+    /// reading their spectatee's accumulators must not consume them before the spectatee's own stamp runs.
+    /// Call <see cref="ClearHitSoundAccumulators"/> for every client once all stamps are done.</para>
+    /// </summary>
+    public static void StampHitSoundStats(Entity viewer, Entity source, float time)
+    {
+        if (source.TypeHitSoundCount > 0)
+            viewer.TypeHitTime = time;
+        else if (source.KillSoundCount > 0)
+            viewer.KillTime = time;
+        else if (source.HitSoundDamageDealt > 0f)
+        {
+            viewer.HitTime = time;
+            viewer.HitsoundDamageDealtTotal += MathF.Ceiling(source.HitSoundDamageDealt);
+        }
+    }
+
+    /// <summary>QC EndFrame's second pass (world.qc:2525-2527): drop this tick's banked feedback. Runs for
+    /// EVERY client, after every <see cref="StampHitSoundStats"/> has read them.</summary>
+    public static void ClearHitSoundAccumulators(Entity e)
+    {
+        e.TypeHitSoundCount = 0;
+        e.KillSoundCount = 0;
+        e.HitSoundDamageDealt = 0f;
+    }
+
     public float Apply(in DamageInfo info)
     {
         Entity targ = info.Target;
@@ -222,7 +259,8 @@ public sealed class DamageSystem : IDamageSystem
                                 {
                                     // virtual: the attacker only "feels" the mirror damage on the HUD; no HP lost.
                                     (float vt, float vs) = HealthArmorApplyDamage(
-                                        atk.GetResource(ResourceType.Armor), ArmorBlockPercent(deathType), mirrorDamage);
+                                        atk.GetResource(ResourceType.Health), atk.GetResource(ResourceType.Armor),
+                                        ArmorBlockPercent(deathType), mirrorDamage);
                                     atk.DmgTake += vt;
                                     atk.DmgSave += vs;
                                     atk.DmgInflictor = inflictor;
@@ -233,7 +271,8 @@ public sealed class DamageSystem : IDamageSystem
                                 if (CvarBool(CvarFriendlyFireVirtual))
                                 {
                                     (float vt, float vs) = HealthArmorApplyDamage(
-                                        targ.GetResource(ResourceType.Armor), ArmorBlockPercent(deathType), damage);
+                                        targ.GetResource(ResourceType.Health), targ.GetResource(ResourceType.Armor),
+                                        ArmorBlockPercent(deathType), damage);
                                     targ.DmgTake += vt;
                                     targ.DmgSave += vs;
                                     targ.DmgInflictor = inflictor;
@@ -278,27 +317,65 @@ public sealed class DamageSystem : IDamageSystem
             if (attacker is not null && ReferenceEquals(attacker, targ))
                 damage *= Cvar(CvarSelfDamagePercent, DefSelfDamagePercent);
 
-            // QC damage.qc ~618: same-team hit-sound and the team-kill complaint SOUND timer.
-            // When the attacker has dealt enough team-damage to trigger complainTeamDamage > 0, and the
-            // cooldown CS(attacker).teamkill_complain has elapsed, schedule a deferred complaint voice
-            // on the victim: the attacker's "teamshoot" voice plays 0.4s later via PlayerFrameLogic.
-            // QC damage.qc:654-664 (inside the "same-team hit" block):
-            //   if (!STAT(FROZEN, victim) && !(deathtype & HITTYPE_SPAM))
-            //     if (complainteamdamage > 0 && time > CS(attacker).teamkill_complain)
-            //       CS(attacker).teamkill_complain = time + 5;
-            //       CS(attacker).teamkill_soundtime = time + 0.4;
-            //       CS(attacker).teamkill_soundsource = targ;
-            if (complainTeamDamage > 0f
-                && attacker is not null && IsPlayer(attacker)
-                && !IsFrozenStat(targ)
-                && !DeathTypes.HasHitType(deathType, DeathTypes.Spam))
+            // ----- "count the damage" (QC damage.qc:611-661): the attacker's hit-feedback accumulators -----
+            // Banks the per-frame hit-confirmation accumulators on the ATTACKER entity: an enemy hit banks the
+            // post-mutator damage AMOUNT (pre-armor-split — overkill counts, exactly QC) for the pitched hit
+            // beep; a hit on a chat-protected victim, and any same-team hit, bank a typehit "dink" instead.
+            // GameWorld's end-of-frame flush turns these into the HIT_TIME/TYPEHIT_TIME/KILL_TIME stats the
+            // client HitSound plays from. Runs BEFORE the damage is applied (so `!IsDead` sees the pre-hit
+            // state and the killing blow still counts — EndFrame's kill-priority then eats it). The two buff
+            // deathtypes skip the whole block; FIRE skips only the accumulators (burn team-damage still runs
+            // the complain timers) — QC's exact two-level exclusion.
+            if (attacker is not null && !ReferenceEquals(targ, attacker)
+                && !IsDead(targ)
+                && DeathTypes.BaseOf(deathType) is not (DeathTypes.BuffInferno or DeathTypes.BuffVengeance)
+                && targ.TakeDamage == DamageMode.Aim)
             {
-                float now = Now();
-                if (now > attacker.TeamKillComplainTime)
+                // QC damage.qc:619-622: a hit on an occupied vehicle credits feedback against the pilot.
+                Entity victim = (targ.VehicleDef is not null && targ.Owner is not null) ? targ.Owner : targ;
+
+                // QC damage.qc:625-626: players, monsters, ACTIVE turrets — or a PlayHitsound mutator/gametype
+                // vote (Assault's func_assault_destructible) — give hit feedback; other geometry doesn't.
+                bool feedbackVictim = IsPlayer(victim)
+                    || (victim.Flags & EntFlags.Monster) != 0
+                    || (TurretAI.TryGetState(victim, out var turretState) && turretState.Active)
+                    || MutatorHooks.FirePlayHitsound(victim, attacker);
+
+                if (feedbackVictim)
                 {
-                    attacker.TeamKillComplainTime = now + 5f;
-                    attacker.TeamKillSoundTime    = now + 0.4f;
-                    attacker.TeamKillSoundSource  = targ;
+                    bool fireDt = DeathTypes.BaseOf(deathType) == DeathTypes.Fire;
+                    if (!WeaponAccuracyEvents.SameTeam(victim, attacker))
+                    {
+                        // QC damage.qc:630-637 (enemy): PHYS_INPUT_BUTTON_CHAT(victim) converts the beep into
+                        // the typehit "dink" (no clean damage confirm on someone who can't fight back).
+                        if (damage > 0f && !fireDt)
+                        {
+                            if (victim.ButtonChat)
+                                attacker.TypeHitSoundCount++;
+                            else
+                                attacker.HitSoundDamageDealt += damage;
+                        }
+                    }
+                    else if (IsPlayer(attacker) && !IsFrozenStat(victim)
+                             && !DeathTypes.HasHitType(deathType, DeathTypes.Spam))
+                    {
+                        // QC damage.qc:648-658 (same team): the typehit "dink", never the beep …
+                        if (!fireDt)
+                            attacker.TypeHitSoundCount++;
+                        // … plus the deferred team-kill complaint voice: once the attacker's accumulated team
+                        // damage trips complainTeamDamage > 0 and the 5s cooldown elapsed, the victim plays the
+                        // attacker's "teamshoot" complaint 0.4s later via PlayerFrameLogic.
+                        if (complainTeamDamage > 0f)
+                        {
+                            float now = Now();
+                            if (now > attacker.TeamKillComplainTime)
+                            {
+                                attacker.TeamKillComplainTime = now + 5f;
+                                attacker.TeamKillSoundTime    = now + 0.4f;
+                                attacker.TeamKillSoundSource  = targ;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -350,26 +427,10 @@ public sealed class DamageSystem : IDamageSystem
         float dh = baseHealth - MathF.Max(targ.GetResource(ResourceType.Health), 0f);
         float da = baseArmor  - MathF.Max(targ.GetResource(ResourceType.Armor), 0f);
 
-        // [T41] hit-confirmation stat (QC server/damage.qc ~618 / common/notifications: the attacker's
-        // STAT(HITSOUND_DAMAGE_DEALT_TOTAL) accumulates the (health + armor) actually removed, ONLY for a hit on
-        // another player — never on self-damage). view.qc UpdateDamage/HitSound diffs this stat on the client to
-        // fire the pitch-shifted hit sound. attackerSave is the pre-teamplay attacker (mirror re-entry passes
-        // DEATH_MIRRORDAMAGE with attacker==target, so the self guard excludes it). Non-player attackers (world /
-        // turrets) don't get a hit sound. Gated on a real removal so a fully-blocked/0-damage hit doesn't beep.
-        if (!_inMirror && (dh + da) > 0f && IsPlayer(attackerSave) && !ReferenceEquals(attackerSave, targ))
-        {
-            // QC damage.qc:631-632: the hit-sound block also runs for non-player victims when a mutator's
-            // PlayHitsound hook forces it (Assault returns true for a func_assault_destructible wall). For a
-            // non-player victim, consult the hook so the registered gametype handler actually runs (this is the
-            // live firing site for MUTATOR_CALLHOOK(PlayHitsound, victim, attacker) — QC's only consumer of it).
-            // The port's stat accrues for any non-self victim regardless (so a wall already beeps); the hook call
-            // is what makes the handler reachable and lets a future port gate the stat on the victim type as Base
-            // does. (Result deliberately unused: the accrual below is already permissive and parity-neutral.)
-            if (!IsPlayer(targ))
-                MutatorHooks.FirePlayHitsound(targ, attackerSave);
-            attackerSave!.HitsoundDamageDealtTotal += dh + da;
-        }
-
+        // (The hit-confirmation accrual lives in the "count the damage" block ABOVE, in QC's position — the
+        // per-frame HitSoundDamageDealt/TypeHitSoundCount accumulators, flushed to the networked stats by
+        // GameWorld's end-of-frame flush. The old dh+da-based direct accrual here is gone: Base banks the
+        // pre-split damage AMOUNT before application, never the removed health+armor.)
         return dh + da;
     }
 
@@ -401,7 +462,9 @@ public sealed class DamageSystem : IDamageSystem
     /// </summary>
     private void PlayerCorpseDamage(Entity targ, Entity? inflictor, Entity? attacker, string deathType, float damage)
     {
-        (float take, float save) = HealthArmorApplyDamage(
+        // QC passes INFINITY for health here: a corpse has no health ceiling, so `take` stays bounded by the
+        // incoming damage exactly as it was before upstream a7664932 added the bound.
+        (float take, float save) = HealthArmorApplyDamage(float.PositiveInfinity,
             MathF.Max(targ.GetResource(ResourceType.Armor), 0f), ArmorBlockPercent(deathType), damage);
 
         targ.TakeResource(ResourceType.Armor, save);
@@ -446,7 +509,7 @@ public sealed class DamageSystem : IDamageSystem
             if (HasSpawnShield(targ) && shieldBlock < 1f)
                 damage *= 1f - QClamp(shieldBlock, 0f, 1f);
 
-            (take, save) = HealthArmorApplyDamage(initialArmor, ArmorBlockPercent(deathType), damage);
+            (take, save) = HealthArmorApplyDamage(initialHealth, initialArmor, ArmorBlockPercent(deathType), damage);
         }
 
         // --- credited-attacker window (QC player.qc ~293 .pusher/.pushltime) ---
@@ -497,9 +560,11 @@ public sealed class DamageSystem : IDamageSystem
             take = hook.DamageTake;
             save = hook.DamageSave;
         }
+        // NB (upstream a7664932): HealthArmorApplyDamage already bounds take and save to current health and
+        // armor, so these re-clamps only exist to re-bound what a SplitHealthArmor handler wrote back — the
+        // handlers themselves need not duplicate the clamp.
         take = QClamp(take, 0f, targ.GetResource(ResourceType.Health));
         save = QClamp(save, 0f, targ.GetResource(ResourceType.Armor));
-        float excess = MathF.Max(0f, damage - take - save);
 
         // --- armor / body-impact sound (QC player.qc ~327): the hit-feedback "clink"/"thud". Gated on
         //     sound_allowed(MSG_BROADCAST, attacker). The armor sound is suppressed when the hit is fatal
@@ -595,10 +660,13 @@ public sealed class DamageSystem : IDamageSystem
         }
 
         // [T57] accuracy REAL credit + per-frame damage score columns — QC server/player.qc:432-447.
-        // realdmg = damage - excess (the part that actually removed health/armor, no overkill).
+        // realdmg = take + save (upstream a7664932): the part that actually removed health/armor. This was
+        // `damage - excess` with excess = max(0, damage - take - save) — algebraically identical whenever
+        // take + save <= damage, but it silently under-reports when a SplitHealthArmor handler inflates them
+        // past the incoming damage (excess floors at 0). The direct sum drops the intermediate and is exact.
         if ((dhRemoved != 0f || daRemoved != 0f) && !forbidLoggingDamage)
         {
-            float realdmg = damage - excess;
+            float realdmg = take + save;
             bool deathKill = DeathTypes.BaseOf(deathType) == DeathTypes.Kill;
             // QC round gate: !(round active && !round started) && time >= game_starttime. No round handler is
             // reachable from the pipeline; the game-start half uses the StartItem host seam (game_starttime).
@@ -799,14 +867,22 @@ public sealed class DamageSystem : IDamageSystem
     // ===============================================================================================
 
     /// <summary>
-    /// QC <c>healtharmor_applydamage(armor, armorblock, deathtype, damage)</c> (common/util.qc):
-    /// <c>save = bound(0, damage * armorblock, armor)</c>, <c>take = bound(0, damage - save, damage)</c>.
+    /// QC <c>healtharmor_applydamage(health, armor, armorblock, deathtype, damage)</c> (common/util.qc):
+    /// <c>save = bound(0, damage * armorblock, armor)</c>, <c>take = bound(0, damage - save, health)</c>.
     /// Drown and HITTYPE_ARMORPIERCE force armorblock to 0 (handled by <see cref="ArmorBlockPercent"/>).
+    /// <para>
+    /// Upstream a7664932 (MR !1626) added the <paramref name="health"/> bound: <c>take</c> used to clamp to
+    /// the incoming <c>damage</c>, so a 300-damage hit on a 40-health player reported 300 taken instead of
+    /// 40 and every consumer of take/save over-counted the overkill. Clamping to current health makes
+    /// take + save the amount actually absorbed, which is what the damage log and the accuracy/score
+    /// columns want. Callers with no health ceiling (a corpse) pass <see cref="float.PositiveInfinity"/>,
+    /// matching QC's <c>INFINITY</c>.
+    /// </para>
     /// </summary>
-    private static (float take, float save) HealthArmorApplyDamage(float armor, float armorBlock, float damage)
+    private static (float take, float save) HealthArmorApplyDamage(float health, float armor, float armorBlock, float damage)
     {
         float save = QClamp(damage * armorBlock, 0f, armor);
-        float take = QClamp(damage - save, 0f, damage);
+        float take = QClamp(damage - save, 0f, health);
         return (take, save);
     }
 
@@ -1115,17 +1191,18 @@ public sealed class DamageSystem : IDamageSystem
 namespace VortexArena.Common.Framework
 {
     /// <summary>
-    /// [T41] The hit-confirmation accumulator (QC <c>STAT(HITSOUND_DAMAGE_DEALT_TOTAL)</c>). Lives on the
-    /// attacker entity; the damage pipeline (<see cref="VortexArena.Common.Gameplay.Damage.DamageSystem.Apply"/>)
-    /// adds the (health + armor) actually removed from a *different* player to it on every hit. The owner
-    /// snapshot networks it (<c>NetEntityState.HitDamageDealtTotal</c>) and the client diffs it across updates to
-    /// fire the pitch-shifted hit sound (view.qc <c>UpdateDamage</c>/<c>HitSound</c>). Added on this partial in an
-    /// already-owned file rather than the shared <c>DamageEntityState.cs</c>, per the task's edit constraint.
+    /// [T41] The hit-confirmation total (QC <c>STAT(HITSOUND_DAMAGE_DEALT_TOTAL)</c>). Lives on the
+    /// attacker entity; advanced ONLY by the end-of-frame flush
+    /// (<see cref="VortexArena.Common.Gameplay.Damage.DamageSystem.EndFrameFlushHitSoundStats"/>) by
+    /// <c>ceil</c> of the frame's banked <c>HitSoundDamageDealt</c> — never directly by the damage pipeline
+    /// (QC world.qc EndFrame:2516). The owner snapshot networks it (<c>NetEntityState.HitDamageDealtTotal</c>)
+    /// and the client diffs it across updates, gated on <c>HitTime</c> advancing, to fire the pitch-shifted
+    /// hit sound (view.qc <c>UpdateDamage</c>/<c>HitSound</c>).
     /// </summary>
     public partial class Entity
     {
-        /// <summary>QC <c>STAT(HITSOUND_DAMAGE_DEALT_TOTAL)</c>: cumulative damage this entity has dealt to other
-        /// players (health + armor removed). Monotonically increasing within a life; the client diffs it.</summary>
+        /// <summary>QC <c>STAT(HITSOUND_DAMAGE_DEALT_TOTAL)</c>: cumulative (ceil-rounded, per-frame-flushed)
+        /// damage this entity has dealt to enemies. Monotonically increasing within a life; the client diffs it.</summary>
         public float HitsoundDamageDealtTotal;
 
         /// <summary>QC <c>STAT(REVIVE_PROGRESS)</c>: 0..1 Freeze-Tag thaw progress, mirrored each frame from the

@@ -15,7 +15,7 @@ features:
     base_refs:
       - "common/weapons/weapon/hook.qh:CLASS(Hook)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:Hook()"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:Hook()"
     constants:
       - { name: "ammo_type", base: "RES_FUEL", port: "ResourceType.Fuel", match: true }
       - { name: "m_color", base: "'0.471 0.817 0.392'", port: "(0.471,0.817,0.392)", match: true }
@@ -45,7 +45,7 @@ features:
     base_refs:
       - "common/weapons/weapon/hook.qc:Hook.wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:WrThink"
     constants:
       - { name: "pri.refire", base: "0.2 s", port: "0.2 s", match: true }
       - { name: "pri.ammo", base: "5 fuel", port: "5 fuel", match: true }
@@ -75,7 +75,7 @@ features:
     base_refs:
       - "common/weapons/weapon/hook.qc:Hook.wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:WrThink"
     constants:
       - { name: "pri.hooked_ammo", base: "5 fuel/s", port: "5 fuel/s", match: true }
       - { name: "pri.hooked_time_free", base: "2 s", port: "2 s", match: true }
@@ -101,7 +101,7 @@ features:
     base_refs:
       - "server/hook.qc:FireGrapplingHook"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:FireGrapplingHook"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:FireGrapplingHook"
     constants:
       - { name: "grapplehook_speed_fly", base: "1800 qu/s", port: "Bal(g_balance_grapplehook_speed_fly,1800)", match: true }
       - { name: "grapplehook_health", base: "50 hp", port: "Bal(g_balance_grapplehook_health,50)", match: true }
@@ -136,7 +136,7 @@ features:
       - "server/hook.qc:GrapplingHookTouch"
       - "server/hook.qc:GrapplingHook_Stop"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:GrapplingHookTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:GrapplingHookTouch"
     constants: []
     status:
       logic: faithful
@@ -162,7 +162,7 @@ features:
     base_refs:
       - "server/hook.qc:GrapplingHookThink"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:GrapplingHookThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:GrapplingHookThink"
     constants:
       - { name: "g_grappling_hook_tarzan", base: "2 (rubber-band, can pull players)", port: "Bal(g_grappling_hook_tarzan,2) -> tarzan branch", match: true }
       - { name: "grapplehook_speed_pull", base: "2000 qu/s", port: "Bal(...,2000)", match: true }
@@ -201,9 +201,9 @@ features:
       - "server/hook.qc:GrapplingHook_Damage"
       - "common/weapons/weapon/hook.qc:Hook.wr_resetplayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:RemoveHook"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:RemoveGrapplingHooks"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:WrResetPlayer"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:RemoveHook"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:RemoveGrapplingHooks"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:WrResetPlayer"
     constants: []
     status:
       logic: faithful
@@ -229,7 +229,7 @@ features:
     base_refs:
       - "common/weapons/weapon/hook.qc:W_Hook_Attack2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:AttackGravityBomb"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:AttackGravityBomb"
     constants:
       - { name: "sec.refire", base: "3 s", port: "3 s (via refire gate)", match: true }
       - { name: "sec.gravity", base: "5", port: "5", match: true }
@@ -263,8 +263,8 @@ features:
       - "common/weapons/weapon/hook.qc:W_Hook_Explode2"
       - "common/weapons/weapon/hook.qc:W_Hook_ExplodeThink"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:StartBlast"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:ExplodeThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:StartBlast"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:ExplodeThink"
     constants:
       - { name: "sec.damage", base: "25", port: "25", match: true }
       - { name: "sec.edgedamage", base: "5", port: "5", match: true }
@@ -296,7 +296,7 @@ features:
       - "common/mutators/mutator/hook/sv_hook.qc:REGISTER_MUTATOR(hook)"
       - "common/mutators/mutator/hook/sv_hook.qc:OFFHAND_HOOK.offhand_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs"
     constants:
       - { name: "g_grappling_hook", base: "0 (string; instahook=1)", port: "ExprEvaluate(g_grappling_hook)", match: true }
       - { name: "g_grappling_hook_useammo", base: "0", port: "read", match: true }
@@ -326,7 +326,7 @@ features:
     base_refs:
       - "common/mutators/mutator/vampirehook/sv_vampirehook.qc:MUTATOR_HOOKFUNCTION(vh, GrappleHookThink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs:OnGrappleHookThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs:OnGrappleHookThink"
     constants:
       - { name: "g_vampirehook_damagerate", base: "0.1 s (mutators.cfg 0.2)", port: "0.2 s default", match: true }
       - { name: "g_vampirehook_damage / health_steal / teamheal", base: "cvars", port: "read", match: true }

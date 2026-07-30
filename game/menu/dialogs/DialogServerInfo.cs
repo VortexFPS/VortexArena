@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Server-info popup — a faithful C# port of <c>XonoticServerInfoDialog</c>
@@ -10,7 +10,7 @@ namespace XonoticGodot.Game.Menu;
 ///
 /// The QC dialog shows the details of the server currently selected in the server browser: it is filled by
 /// <c>XonoticServerInfoDialog_loadServerInfo</c>, which reads every field from the engine's host-cache
-/// (<c>gethostcachestring</c>/<c>gethostcachenumber</c> over SLIST_FIELD_*) for the highlighted row. XonoticGodot
+/// (<c>gethostcachestring</c>/<c>gethostcachenumber</c> over SLIST_FIELD_*) for the highlighted row. VortexArena
 /// has no server browser / host-cache backend wired in yet, so there is no live "selected server" to read:
 /// the labelled detail rows are rendered with empty placeholder values plus an honest note, and the player
 /// list / ToS text are rendered empty. The layout, headers, tab split, and the Close / Join! buttons are
@@ -39,7 +39,7 @@ public partial class DialogServerInfo : MenuScreen
     {
         _serverAddress = serverAddress ?? "";
         // Read the selected row from the shared browser model (append-only lookup). This is the
-        // XonoticGodot.Net ServerEntry the LAN/master probes already filled in (PopulateFromInfo).
+        // VortexArena.Net ServerEntry the LAN/master probes already filled in (PopulateFromInfo).
         _entry = MultiplayerScreen.Browser.FindByAddress(_serverAddress);
     }
 

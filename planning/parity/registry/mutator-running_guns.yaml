@@ -15,9 +15,9 @@ features:
       - "common/mutators/mutator/running_guns/_mod.inc"
       - "mutators.cfg:522 (set g_running_guns 0)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RunningGunsMutator.cs:RunningGunsMutator"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RunningGunsMutator.cs:IsEnabled"
-      - "assets/data/xonotic-data.pk3dir/mutators.cfg:522"
+      - "src/VortexArena.Common/Gameplay/Mutators/RunningGunsMutator.cs:RunningGunsMutator"
+      - "src/VortexArena.Common/Gameplay/Mutators/RunningGunsMutator.cs:IsEnabled"
+      - "Base/data/xonotic-data.pk3dir/mutators.cfg:522"
     constants:
       - { name: "g_running_guns", base: "0", port: "0", match: true }
     status:
@@ -46,12 +46,12 @@ features:
       - "server/player.qc:540 (this.alpha = default_player_alpha on respawn/corpse)"
       - "server/weapons/weaponsystem.qc:170-175 (CL_ExteriorWeaponentity_Think: owner at default_player_alpha => default_weapon_alpha; custom fade => match; 0 => opaque)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RunningGunsMutator.cs:OnSetDefaultAlpha (sets PlayerAlpha=-1, WeaponAlpha=+1, returns true)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:854 (FireSetDefaultAlpha — fires chain, seeds g_player_alpha default w/ 0->1 fallback, caches DefaultPlayerAlpha/DefaultWeaponAlpha)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:841,844 (DefaultPlayerAlpha/DefaultWeaponAlpha public statics — read by spawn/death/render)"
-      - "src/XonoticGodot.Server/GameWorld.cs:618 (FireSetDefaultAlpha live call at worldspawn)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:640 (p.Alpha = MutatorHooks.DefaultPlayerAlpha on (re)spawn)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:687 (victim.Alpha = MutatorHooks.DefaultPlayerAlpha on corpse setup)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RunningGunsMutator.cs:OnSetDefaultAlpha (sets PlayerAlpha=-1, WeaponAlpha=+1, returns true)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:854 (FireSetDefaultAlpha — fires chain, seeds g_player_alpha default w/ 0->1 fallback, caches DefaultPlayerAlpha/DefaultWeaponAlpha)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:841,844 (DefaultPlayerAlpha/DefaultWeaponAlpha public statics — read by spawn/death/render)"
+      - "src/VortexArena.Server/GameWorld.cs:618 (FireSetDefaultAlpha live call at worldspawn)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:640 (p.Alpha = MutatorHooks.DefaultPlayerAlpha on (re)spawn)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:687 (victim.Alpha = MutatorHooks.DefaultPlayerAlpha on corpse setup)"
       - "game/net/ServerNet.cs:1830,2264 (QuantizeAlpha: -1 -> 255 hidden sentinel; networks player alpha)"
       - "game/net/ClientEntityView.cs:134-135 (decode: 255 -> -1f hidden, 0 -> opaque)"
       - "game/client/PlayerModel.cs:160,217 (ApplyAlpha: clamps -1 -> transparency 1.0 = player invisible; called live from ClientWorld.cs:969 Pose)"

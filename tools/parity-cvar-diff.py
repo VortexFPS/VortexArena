@@ -34,14 +34,49 @@ except ImportError:
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "planning" / "parity"
-# Env overrides so the tool runs from a git worktree (whose ROOT has no assets/ junction and whose
-# parent is .claude/worktrees, not the Xonotic checkout): XON_PORT_DATA / XON_BASE_DATA.
-PORT_DATA = pathlib.Path(os.environ.get("XON_PORT_DATA", ROOT / "assets" / "data" / "xonotic-data.pk3dir"))
+
+# Env overrides so the tool runs from a git worktree (whose parent is .claude/worktrees, not the
+# checkout root): XON_PORT_DATA / XON_BASE_DATA.
+#
+# PORT_DATA points at the COMMITTED port content. It used to default to `assets/data/…`, and that was
+# not merely a stale path — it silently made this entire tool a tautology. `assets/data` is a JUNCTION
+# to `Base/data`, so PORT_DATA and BASE_DATA resolved to the same directory and every comparison below
+# diffed Base against itself. A parity differ that structurally cannot find divergence reports perfect
+# parity forever, which is precisely how the port's one real config divergence (the physicsBryan preset)
+# went missing without anything going red. assert_distinct_roots() now makes that impossible.
+PORT_DATA = pathlib.Path(os.environ.get("XON_PORT_DATA", ROOT / "data" / "core.pk3dir"))
 BASE_DATA = pathlib.Path(os.environ.get("XON_BASE_DATA", ROOT.parent / "Base" / "data" / "xonotic-data.pk3dir"))
 KNOWN_FILE = OUT / "cvar-diff-known.yaml"
 
-# The port's real entry files (ConfigLoader.ServerEntry/NotificationsEntry + MenuState client boot).
-ENTRIES = ["xonotic-client.cfg", "xonotic-server.cfg", "notifications.cfg"]
+# The port's real entry files: ConfigLoader.ServerEntry / NotificationsEntry / VortexCommonEntry plus
+# the MenuState client boot. vortex-common.cfg is the Vortex divergence layer (restructure D8/§11) and
+# belongs here — it is exec'd last in the real boot chain, so leaving it out would model a boot the game
+# does not perform and would report the layer's deliberate divergence as Base-only defaults.
+ENTRIES = ["xonotic-client.cfg", "xonotic-server.cfg", "notifications.cfg", "vortex-common.cfg"]
+
+
+def assert_distinct_roots() -> None:
+    """Refuse to run when the two content roots are the same directory.
+
+    This is the guard the tool lacked. Both paths existing is not enough: a junction, a symlink or a
+    plain misconfiguration can make them the same tree, and then every section of the report is
+    vacuously empty. Empty output from this tool is supposed to mean "in parity" — it must never be able
+    to mean "compared a directory with itself".
+    """
+    for label, p in (("PORT_DATA", PORT_DATA), ("BASE_DATA", BASE_DATA)):
+        if not p.is_dir():
+            sys.exit(f"error: {label} is not a directory: {p}\n"
+                     f"       Set XON_PORT_DATA / XON_BASE_DATA, or clone the upstream reference to "
+                     f"{BASE_DATA}.")
+
+    if PORT_DATA.resolve() == BASE_DATA.resolve():
+        sys.exit(
+            f"error: PORT_DATA and BASE_DATA resolve to the SAME directory:\n"
+            f"         {PORT_DATA.resolve()}\n"
+            f"       Every diff would be empty and the report would claim perfect parity while having\n"
+            f"       compared nothing. This was the tool's real behaviour while PORT_DATA defaulted\n"
+            f"       into the assets/data junction, which points at Base/data.\n"
+            f"       Point XON_PORT_DATA at the committed port content (data/core.pk3dir).")
 
 # Mirror of ConfigInterpreter.NonCvarCommands — keep in sync with ConfigInterpreter.cs.
 NON_CVAR_COMMANDS = {
@@ -311,8 +346,11 @@ def scan_code_literals() -> tuple[dict[str, list[tuple[str, str, str]]], set[str
 
 
 def main():
-    if not BASE_DATA.is_dir():
-        sys.exit(f"Base data tree not found: {BASE_DATA}")
+    # Before anything else: prove there are two distinct trees to compare. Subsumes the old
+    # BASE_DATA.is_dir() check and adds the same-directory case, which is the one that was live.
+    assert_distinct_roots()
+    print(f"port: {PORT_DATA}\nbase: {BASE_DATA}")
+
     known_patterns: list[tuple[str, str]] = []
     if KNOWN_FILE.exists():
         for e in (yaml.safe_load(KNOWN_FILE.read_text(encoding="utf-8")) or {}).get("known") or []:

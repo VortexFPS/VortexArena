@@ -19,10 +19,10 @@ features:
       - "server/command/reg.qh:CLIENT_COMMANDS"
     port_refs:
       - "game/net/ServerNet.cs:HandleClientCommand"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:IsClientCallable"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:TryPassFlood"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:IsValidUtf8Command"
-      - "src/XonoticGodot.Server/Commands.cs:Execute"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:IsClientCallable"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:TryPassFlood"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:IsValidUtf8Command"
+      - "src/VortexArena.Server/Commands.cs:Execute"
     constants:
       - { name: "sv_clientcommand_antispam_time", base: "1", port: "1", match: true }
       - { name: "sv_clientcommand_antispam_count", base: "8", port: "8", match: true }
@@ -38,7 +38,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ClientCommandSecurityTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ClientCommandSecurityTests.cs", result: pass }
       - { kind: code, ref: "ClientCommandRegistry.cs TryPassFlood strict < semantics; minigame partial exempt; UTF-8 round-trip; ServerNet 3-gate then Commands.Execute(isServerConsole:false)", result: pass }
     confidence: high
     notes: "Unchanged. 3 pre-gates (UTF-8 round-trip, Ban_MaybeEnforceBanOnce, per-client flood strict < with minigame partial exemption) and the CLIENT/SERVER split are bit-for-bit on the live net path."
@@ -49,8 +49,8 @@ features:
     base_refs:
       - "server/command/sv_cmd.qc:GameCommand"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:Execute"
-      - "src/XonoticGodot.Server/Commands.cs:RegisterBuiltins"
+      - "src/VortexArena.Server/Commands.cs:Execute"
+      - "src/VortexArena.Server/Commands.cs:RegisterBuiltins"
     constants: []
     status:
       logic: faithful
@@ -64,7 +64,7 @@ features:
     gaps:
       - "8 SERVER_COMMANDS still unimplemented (see sv-commands-votes.debug_tools.missing row); the dispatch shell itself is faithful. (Down from ~12 — effectindexdump now implemented this re-audit, after adminmsg/delrec/printstats, after anticheat.)"
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerClientCommandsTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerClientCommandsTests.cs", result: pass }
       - { kind: code, ref: "Commands.cs Execute gate + RegisterBuiltins", result: pass }
     confidence: high
     notes: "Unchanged. Port collapses CLIENT/SERVER/COMMON/GENERIC/BAN registries into one _commands table; the QC privilege boundary is restored by ClientCommandRegistry and the isServerConsole gate in Execute."
@@ -75,7 +75,7 @@ features:
     base_refs:
       - "server/command/vote.qc:VoteCommand_call"
     port_refs:
-      - "src/XonoticGodot.Server/VoteController.cs:CmdCall"
+      - "src/VortexArena.Server/VoteController.cs:CmdCall"
     constants:
       - { name: "sv_vote_call", base: "1", port: "1 (cvar)", match: true }
       - { name: "sv_vote_timeout", base: "24", port: "24 (cvar); fallback const 24", match: true }
@@ -93,10 +93,10 @@ features:
     gaps:
       - "The networked Nagger vote HUD entity (the on-screen vote prompt) is not emitted by this core — a client-side networked-entity presentation gap. The ANNCE_VOTE_CALL announcer cue IS now played (audio fixed)."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Vote_CallAndPass_SinglePlayerAutoMajority", result: pass }
-      - { kind: code, ref: "VoteController.cs:162-228 CmdCall full guard chain (voteban, sv_vote_call, game_starttime, already-called, spectator gate, IS_CLIENT, timeout_status, wait cooldown, nasty-char, whitelist parse, caller auto-yes); AnnounceVoteCall fired at CmdCall:226-227 when tmpPlayerCount>1 && Active. src/XonoticGodot.Server/GameWorld.cs:998 Voting.AnnounceVoteCall = () => NotificationSystem.Send(MSG_ANNCE, VOTE_CALL) (the live announcer channel); :966/971/974/977/981 wires WarmupStage/IsPlayer/TimeoutActive/GameStartTime/IsClient ALL LIVE. Voting.IsClient = p => (p.Flags & EntFlags.Client) != 0 (GameWorld.cs:981) — the FL_CLIENT flag.", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_CallAndPass_SinglePlayerAutoMajority", result: pass }
+      - { kind: code, ref: "VoteController.cs:162-228 CmdCall full guard chain (voteban, sv_vote_call, game_starttime, already-called, spectator gate, IS_CLIENT, timeout_status, wait cooldown, nasty-char, whitelist parse, caller auto-yes); AnnounceVoteCall fired at CmdCall:226-227 when tmpPlayerCount>1 && Active. src/VortexArena.Server/GameWorld.cs:998 Voting.AnnounceVoteCall = () => NotificationSystem.Send(MSG_ANNCE, VOTE_CALL) (the live announcer channel); :966/971/974/977/981 wires WarmupStage/IsPlayer/TimeoutActive/GameStartTime/IsClient ALL LIVE. Voting.IsClient = p => (p.Flags & EntFlags.Client) != 0 (GameWorld.cs:981) — the FL_CLIENT flag.", result: pass }
     confidence: high
-    notes: "FIX (drift re-audit 2026-06-25): audio missing→faithful. ANNCE_VOTE_CALL is now emitted via the real NotificationSystem MSG_ANNCE channel (src/XonoticGodot.Server/GameWorld.cs:998, same path as every other server announcer cue), fired in CmdCall when >1 real player is present and the vote is still open — the baseline recorded this as broadcast-text-only. The earlier (2026-06-25 baseline) IsClient live-wiring fix is retained: Voting.IsClient is wired in GameWorld.cs:981 (p.Flags & FL_CLIENT), so the QC `caller && !IS_CLIENT(caller)` guard genuinely fires. logic fully faithful. Presentation stays partial: only the networked Nagger vote-HUD entity is still unsent. Voteban check, sv_vote_call, already-called, wait cooldown, nasty-char + whitelist parse, caller auto-yes, timeout-active guard, game_starttime guard, spectator gate all present and live; constants match Base (sv_vote_timeout 24 / wait 120 / limit 160)."
+    notes: "FIX (drift re-audit 2026-06-25): audio missing→faithful. ANNCE_VOTE_CALL is now emitted via the real NotificationSystem MSG_ANNCE channel (src/VortexArena.Server/GameWorld.cs:998, same path as every other server announcer cue), fired in CmdCall when >1 real player is present and the vote is still open — the baseline recorded this as broadcast-text-only. The earlier (2026-06-25 baseline) IsClient live-wiring fix is retained: Voting.IsClient is wired in GameWorld.cs:981 (p.Flags & FL_CLIENT), so the QC `caller && !IS_CLIENT(caller)` guard genuinely fires. logic fully faithful. Presentation stays partial: only the networked Nagger vote-HUD entity is still unsent. Voteban check, sv_vote_call, already-called, wait cooldown, nasty-char + whitelist parse, caller auto-yes, timeout-active guard, game_starttime guard, spectator gate all present and live; constants match Base (sv_vote_timeout 24 / wait 120 / limit 160)."
 
   - id: sv-commands-votes.vote.parse_whitelist
     name: "VoteCommand_parse — whitelist match, nasty-char sanitize, command rewriting"
@@ -108,11 +108,11 @@ features:
       - "server/command/vote.qc:VoteCommand_checkargs"
       - "server/command/vote.qc:ValidateMap"
     port_refs:
-      - "src/XonoticGodot.Server/VoteController.cs:Parse"
-      - "src/XonoticGodot.Server/VoteController.cs:CheckNasty"
-      - "src/XonoticGodot.Server/VoteController.cs:CheckInList"
-      - "src/XonoticGodot.Server/VoteController.cs:CheckArgs"
-      - "src/XonoticGodot.Server/VoteController.cs:ValidateMap (host-wired in GameWorld.cs:938)"
+      - "src/VortexArena.Server/VoteController.cs:Parse"
+      - "src/VortexArena.Server/VoteController.cs:CheckNasty"
+      - "src/VortexArena.Server/VoteController.cs:CheckInList"
+      - "src/VortexArena.Server/VoteController.cs:CheckArgs"
+      - "src/VortexArena.Server/VoteController.cs:ValidateMap (host-wired in GameWorld.cs:938)"
     constants:
       - { name: "nasty chars", base: "; \\n \\r $", port: "; \\n \\r $", match: true }
       - { name: "map/chmap -> gotomap normalize", base: "VoteCommand_checkreplacements", port: "ApplyReplacements", match: true }
@@ -133,7 +133,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Vote_CheckNasty_RejectsInjection / Vote_CheckInList_WholeWordAndMapNormalization", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_CheckNasty_RejectsInjection / Vote_CheckInList_WholeWordAndMapNormalization", result: pass }
       - { kind: code, ref: "VoteController.cs:538-576 CheckArgs faithful port of VoteCommand_checkargs (minargs + per-arg charlist), called at Parse:613; :651/659 map/nextmap now route through the host-wired ValidateMap delegate; GameWorld.cs:938-948 ValidateMap = MapExists + (!fromConsole && !sv_vote_override_mostrecent && MapRotation.IsRecent) recent-map block + MapSupportsGametype gate", result: pass }
     confidence: high
     notes: "FIX (since baseline, Wave 5/6): BOTH baseline-open gaps are closed. (1) map/nextmap now run ValidateMap (MapInfo_FixName-equivalent + sv_vote_override_mostrecent recent-map block + gametype-support gate), wired live in GameWorld.cs:938. (2) VoteCommand_checkargs (sv_vote_command_restriction_<cmd> minargs + charlist) is now ported as CheckArgs and applied in Parse:613. logic upgraded partial->faithful. The prior allready-warmup-gate fix and the timelimit/kick/kickban/moveto rewrites all retained."
@@ -144,7 +144,7 @@ features:
     base_refs:
       - "server/command/vote.qc:VoteCount"
     port_refs:
-      - "src/XonoticGodot.Server/VoteController.cs:Count"
+      - "src/VortexArena.Server/VoteController.cs:Count"
     constants:
       - { name: "sv_vote_majority_factor", base: "0.5 (clamp 0.5..0.999)", port: "0.5 (clamp 0.5..0.999)", match: true }
       - { name: "sv_vote_majority_factor_of_voted", base: "0.5", port: "0.5", match: true }
@@ -162,7 +162,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Vote_Reject_WhenMajorityNo", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_Reject_WhenMajorityNo", result: pass }
       - { kind: code, ref: "VoteController.cs:396 real = IsPlayer(it) || InGame(it); :424 spectator-exclusion (!SpectatorsAllowed && realPlayers>0); GameWorld.cs:928 Voting.IsPlayer = p => !p.IsObserver && p.FragsStatus != Player.FragsSpectator (now wired LIVE). InGame stays default-false (the port has no separate .ingame round flag; the real-player set is exactly the non-observers).", result: pass }
     confidence: high
     notes: "FIX (since baseline, Wave 5/6): the spectator-exclusion path is now LIVE — Voting.IsPlayer is wired in GameWorld.cs:928 (was default _ => true and unwired), so under sv_vote_nospectators 2 a spectator's ballot is now actually dropped (realPlayers != all clients). logic upgraded partial->faithful, liveness partial->live. Threshold math, 0-player auto-accept, early accept/reject, of-voted timeout, master playerlimit guard all remain faithful. (InGame remains default-false by design: no separate round-INGAME flag exists, so the IS_PLAYER||INGAME union reduces to the non-observer set.)"
@@ -177,10 +177,10 @@ features:
       - "server/command/vote.qc:VoteStop"
       - "server/command/vote.qc:VoteThink"
     port_refs:
-      - "src/XonoticGodot.Server/VoteController.cs:Accept"
-      - "src/XonoticGodot.Server/VoteController.cs:Reject"
-      - "src/XonoticGodot.Server/VoteController.cs:Stop"
-      - "src/XonoticGodot.Server/VoteController.cs:Think"
+      - "src/VortexArena.Server/VoteController.cs:Accept"
+      - "src/VortexArena.Server/VoteController.cs:Reject"
+      - "src/VortexArena.Server/VoteController.cs:Stop"
+      - "src/VortexArena.Server/VoteController.cs:Think"
     constants:
       - { name: "sv_vote_stop", base: "15", port: "15 (cvar)", match: true }
       - { name: "sv_vote_no_stops_vote", base: "1", port: "1 (cvar)", match: true }
@@ -206,9 +206,9 @@ features:
       - "server/command/vote.qc:VoteCommand_master"
       - "server/client.qc:ClientConnect (sv_vote_master_ids auto-login, client.qc:1262-1264)"
     port_refs:
-      - "src/XonoticGodot.Server/VoteController.cs:CmdMaster"
-      - "src/XonoticGodot.Server/VoteController.cs:GrantMaster"
-      - "src/XonoticGodot.Server/GameWorld.cs:InfraClientConnect (sv_vote_master_ids auto-login, :1373-1377)"
+      - "src/VortexArena.Server/VoteController.cs:CmdMaster"
+      - "src/VortexArena.Server/VoteController.cs:GrantMaster"
+      - "src/VortexArena.Server/GameWorld.cs:InfraClientConnect (sv_vote_master_ids auto-login, :1373-1377)"
     constants:
       - { name: "sv_vote_master", base: "0", port: "0 (cvar)", match: true }
       - { name: "sv_vote_master_callable", base: "0", port: "0 (cvar)", match: true }
@@ -225,7 +225,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Vote_MasterLogin_GrantsAndDoRuns", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_MasterLogin_GrantsAndDoRuns", result: pass }
       - { kind: code, ref: "VoteController.cs:248 master-vote-call timeout_status guard (if (TimeoutActive()) ...); GameWorld.cs:1036 Voting.TimeoutActive=()=>Timeout.Active wired LIVE; GameWorld.cs:1373-1377 InfraClientConnect: if PersistentId non-empty && sv_vote_master_ids contains it -> Voting.GrantMaster(p); reached on the live connect path via ClientManager.cs:251 OnClientConnect.Invoke (wired GameWorld.cs:1215). VoteController.cs:132 GrantMaster = _masters.Add(p)", result: pass }
     confidence: high
     notes: "FIX (drift re-audit 2026-06-27 2nd pass): the sv_vote_master_ids auto-login gap is CLOSED — InfraClientConnect (GameWorld.cs:1373-1377) silently grants vote-master to a connecting client whose signed idfp (port: non-empty PersistentId) is contained in sv_vote_master_ids, mirroring the QC strstrofs substring test at client.qc:1262-1264; it runs on the live OnClientConnect path. The row now has no residual gaps. (Earlier-retained fixes: master-vote-call timeout guard wired LIVE via Voting.TimeoutActive=()=>Timeout.Active, GameWorld.cs:1036; login (password), do (whitelist = commands+master_commands), call-master-vote branches all present and live; master status persists across a vote reset like QC .vote_master.)"
@@ -238,10 +238,10 @@ features:
       - "server/command/common.qc:CommonCommand_timein"
       - "server/command/common.qc:timeout_handler_think"
     port_refs:
-      - "src/XonoticGodot.Server/TimeoutController.cs:CallTimeout"
-      - "src/XonoticGodot.Server/TimeoutController.cs:CallTimein"
-      - "src/XonoticGodot.Server/TimeoutController.cs:Think"
-      - "src/XonoticGodot.Server/TimeoutController.cs:EmitCountdown"
+      - "src/VortexArena.Server/TimeoutController.cs:CallTimeout"
+      - "src/VortexArena.Server/TimeoutController.cs:CallTimein"
+      - "src/VortexArena.Server/TimeoutController.cs:Think"
+      - "src/VortexArena.Server/TimeoutController.cs:EmitCountdown"
     constants:
       - { name: "sv_timeout", base: "0", port: "0 (cvar)", match: true }
       - { name: "sv_timeout_length", base: "120", port: "120 (cvar)", match: true }
@@ -260,7 +260,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Timeout_LeadThenPauseThenResume", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Timeout_LeadThenPauseThenResume", result: pass }
       - { kind: code, ref: "GameWorld.cs:1120 Timeout.ApplySlowmo = v => Cvars.Set('slowmo', v) (wired LIVE); :1126-1129 CenterPrintBeginning/Ending = NotificationSystem.Send(MSG_CENTER, TIMEOUT_BEGINNING/ENDING, n) (real overwriting center-print with the COUNT arg); :1131-1132 AnnouncePrepare = NotificationSystem.Send(MSG_ANNCE, PREPARE); GameWorld.cs:1878 GameStopped => Intermission.Running || MatchEnded (Timeout.IsPaused REMOVED from the freeze); ServerNet reads live slowmo cvar into Simulation.TimeScale every frame; TimeoutController.cs:197/211 ApplySlowmo(SlowmoValue)/(restore), :187/205 EmitCountdown emits EVERY whole second (no throttle), :232 AnnouncePrepare at resumetime", result: pass }
     confidence: high
     notes: "FIX (drift re-audit 2026-06-25): presentation partial→faithful, audio partial→faithful. The countdown + prepare cues are now delivered through the LIVE NotificationSystem channel, not chat-broadcast lines: CENTER_TIMEOUT_BEGINNING/ENDING are real MSG_CENTER overwriting center-prints with the COUNT float arg (GameWorld.cs:1126-1129) and ANNCE_PREPARE is the real MSG_ANNCE announcer cue (GameWorld.cs:1131). EmitCountdown now fires once per WHOLE second for both BEGINNING and ENDING (TimeoutController.cs:224-234) — the baseline's ENDING-countdown throttle is gone. (Earlier Wave 5/6 fixes retained: the pause is a slowmo time-scale not a hard freeze — GameStopped no longer includes Timeout.IsPaused, ApplySlowmo drives the live slowmo cvar 0.0001 read into Simulation.TimeScale; captured-original slowmo restored on resume + match shutdown.) Guard chain, early-resume shortening, per-player allowance, all constants (length 120 / number 2 / leadtime 4 / resumetime 3) faithful."
@@ -272,8 +272,8 @@ features:
       - "server/ipban.qc:Ban_GetClientIP"
       - "server/ipban.qc:Ban_IsClientBanned"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:GetClientIp"
-      - "src/XonoticGodot.Server/Bans.cs:IsClientBanned"
+      - "src/VortexArena.Server/Bans.cs:GetClientIp"
+      - "src/VortexArena.Server/Bans.cs:IsClientBanned"
     constants:
       - { name: "IPv4 masks", base: "/8 /16 /24 /32", port: "/8 /16 /24 /32", match: true }
       - { name: "IPv6 masks", base: "/32 /48 /56 /64", port: "/32 /48 /56 /64", match: true }
@@ -289,7 +289,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Bans_GetClientIp_* / Bans_IdMode_* / Bans_CryptoIdBan_AlwaysWins", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Bans_GetClientIp_* / Bans_IdMode_* / Bans_CryptoIdBan_AlwaysWins", result: pass }
     confidence: high
     notes: "Unchanged. Crypto-id ban always wins; idmode IP-ban-only-catches-anonymous; local/bot addresses rejected. Matches QC."
 
@@ -303,12 +303,12 @@ features:
       - "server/command/banning.qc:BanCommand_ban"
       - "server/command/banning.qc:BanCommand_kickban"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:Insert"
-      - "src/XonoticGodot.Server/Bans.cs:Save"
-      - "src/XonoticGodot.Server/Bans.cs:Load"
-      - "src/XonoticGodot.Server/Bans.cs:KickBanClient"
-      - "src/XonoticGodot.Server/Commands.cs:CmdBan"
-      - "src/XonoticGodot.Server/Commands.cs:CmdKickBan"
+      - "src/VortexArena.Server/Bans.cs:Insert"
+      - "src/VortexArena.Server/Bans.cs:Save"
+      - "src/VortexArena.Server/Bans.cs:Load"
+      - "src/VortexArena.Server/Bans.cs:KickBanClient"
+      - "src/VortexArena.Server/Commands.cs:CmdBan"
+      - "src/VortexArena.Server/Commands.cs:CmdKickBan"
     constants:
       - { name: "g_ban_default_bantime", base: "5400", port: "5400 (FloatOr fallback)", match: true }
       - { name: "g_ban_default_masksize", base: "3", port: "3 (cvar)", match: true }
@@ -325,7 +325,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Bans_InsertAndCheck_ByIp / Bans_Delete_RemovesBan / Bans_SaveLoad_RoundTripsThroughCvar", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Bans_InsertAndCheck_ByIp / Bans_Delete_RemovesBan / Bans_SaveLoad_RoundTripsThroughCvar", result: pass }
     confidence: high
     notes: "Unchanged. Prolong-never-shorten, soonest-expiring eviction, v1 round-trip, unban #N index stability all faithful."
 
@@ -362,13 +362,13 @@ features:
       - "server/command/banning.qc:BanCommand_playban"
       - "server/command/banning.qc:BanCommand_voteban"
     port_refs:
-      - "src/XonoticGodot.Server/Bans.cs:PlayerInList"
-      - "src/XonoticGodot.Server/Bans.cs:AddToList"
-      - "src/XonoticGodot.Server/Bans.cs:RemoveFromList"
-      - "src/XonoticGodot.Server/Bans.cs:IsPlayBanned"
-      - "src/XonoticGodot.Server/Commands.cs:CmdMute"
-      - "src/XonoticGodot.Server/Commands.cs:CmdPlayBan"
-      - "src/XonoticGodot.Server/Commands.cs:CmdJoin"
+      - "src/VortexArena.Server/Bans.cs:PlayerInList"
+      - "src/VortexArena.Server/Bans.cs:AddToList"
+      - "src/VortexArena.Server/Bans.cs:RemoveFromList"
+      - "src/VortexArena.Server/Bans.cs:IsPlayBanned"
+      - "src/VortexArena.Server/Commands.cs:CmdMute"
+      - "src/VortexArena.Server/Commands.cs:CmdPlayBan"
+      - "src/VortexArena.Server/Commands.cs:CmdJoin"
     constants:
       - { name: "g_chatban_list/g_playban_list/g_voteban_list", base: "\"\"", port: "cvars", match: true }
     status:
@@ -382,7 +382,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Bans_PrefixList_MuteMatchesByIpAndId", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Bans_PrefixList_MuteMatchesByIpAndId", result: pass }
       - { kind: code, ref: "Commands.cs CmdPlayBan PutObserverInServer + (g_playban_minigames) Minigames.Part; CmdJoin Join_Try playban gate; GameWorld.cs:970 Clients.ForcedSpectate = Bans.IsPlayBanned", result: pass }
     confidence: high
     notes: "Unchanged (was already fixed pre-baseline). playban runs the REAL observer transition (PutObserverInServer) + parts minigame when g_playban_minigames; the Join_Try playban gate refuses a non-INGAME g_playban_list client. Prefix matching, dedup add, rebuild-on-remove, live Player.Muted, voteban consumed by VoteController all faithful."
@@ -396,11 +396,11 @@ features:
       - "server/command/common.qc:CommonCommand_records"
       - "server/command/common.qc:CommonCommand_cvar_changes"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdWho"
-      - "src/XonoticGodot.Server/Commands.cs:CmdTime"
-      - "src/XonoticGodot.Server/Commands.cs:CmdRecords"
-      - "src/XonoticGodot.Server/Commands.cs:CmdCvarChanges"
-      - "src/XonoticGodot.Server/CommandReplies.cs"
+      - "src/VortexArena.Server/Commands.cs:CmdWho"
+      - "src/VortexArena.Server/Commands.cs:CmdTime"
+      - "src/VortexArena.Server/Commands.cs:CmdRecords"
+      - "src/VortexArena.Server/Commands.cs:CmdCvarChanges"
+      - "src/VortexArena.Server/CommandReplies.cs"
     constants:
       - { name: "sv_status_privacy", base: "cvar (who hides ip/crypto)", port: "now honored: privacy = !IsServerConsole && sv_status_privacy", match: true }
     status:
@@ -425,7 +425,7 @@ features:
     base_refs:
       - "server/command/sv_cmd.qc:GameCommand_cointoss"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdCoinToss"
+      - "src/VortexArena.Server/Commands.cs:CmdCoinToss"
     constants:
       - { name: "default labels", base: "^1HEADS / ^4TAILS", port: "^1HEADS / ^4TAILS", match: true }
       - { name: "custom-option prefix", base: "^7 on argv(1)/argv(2)", port: "^7 on Arg(1)/Arg(2)", match: true }
@@ -455,11 +455,11 @@ features:
       - "server/command/sv_cmd.qc:GameCommand_shuffleteams"
       - "server/command/sv_cmd.qc:changematchtime"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdAllReady"
-      - "src/XonoticGodot.Server/Commands.cs:CmdLockTeams"
-      - "src/XonoticGodot.Server/Commands.cs:CmdMovePlayer"
-      - "src/XonoticGodot.Server/Commands.cs:CmdShuffleTeams"
-      - "src/XonoticGodot.Server/Commands.cs:ChangeMatchTime"
+      - "src/VortexArena.Server/Commands.cs:CmdAllReady"
+      - "src/VortexArena.Server/Commands.cs:CmdLockTeams"
+      - "src/VortexArena.Server/Commands.cs:CmdMovePlayer"
+      - "src/VortexArena.Server/Commands.cs:CmdShuffleTeams"
+      - "src/VortexArena.Server/Commands.cs:ChangeMatchTime"
     constants:
       - { name: "extend/reduce step", base: "timelimit_increment/decrement (default 5 min)", port: "FloatOr(timelimit_increment/decrement,5)*60s", match: true }
       - { name: "changematchtime clamp", base: "[timelimit_min,timelimit_max]*60, mi>=10, +cur offset, unlimited/min/max bails", base_alt: "sv_cmd.qc:48", port: "full QC clamp ported", match: true }
@@ -488,10 +488,10 @@ features:
       - "server/command/sv_cmd.qc:GameCommand_printstats"
       - "server/race.qc:race_deleteTime"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdAdminMsg"
-      - "src/XonoticGodot.Server/Commands.cs:CmdDelRec"
-      - "src/XonoticGodot.Server/Commands.cs:CmdPrintStats"
-      - "src/XonoticGodot.Server/Commands.cs:DumpStats"
+      - "src/VortexArena.Server/Commands.cs:CmdAdminMsg"
+      - "src/VortexArena.Server/Commands.cs:CmdDelRec"
+      - "src/VortexArena.Server/Commands.cs:CmdPrintStats"
+      - "src/VortexArena.Server/Commands.cs:DumpStats"
     constants:
       - { name: "adminmsg attribution", base: "GetCallerName(NULL) = sv_adminnick / 'SERVER ADMIN'", port: "sv_adminnick / 'SERVER ADMIN'", match: true }
       - { name: "delrec record_type", base: "CTS_RECORD under cts else RACE_RECORD", port: "RaceRecords.CtsRecord (cts) / RaceRecord", match: true }

@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Bsp;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Engine.Collision;
+namespace VortexArena.Engine.Collision;
 
 /// <summary>
 /// Builds the engine collision representation from a parsed <see cref="BspData"/> — the C# successor to DP's
@@ -318,6 +318,30 @@ public static class BspCollisionBuilder
     /// level, and gentle curves are well approximated. ~12k slabs on stormkeep at 3.</summary>
     private const int PatchCollisionSubdivisions = 3;
 
+    /// <summary>
+    /// How far the collision hull of a curved patch may sit from the surface the renderer draws, in world
+    /// units (backlog B3). Drives <see cref="BezierPatch.SubdivisionsFor"/>.
+    ///
+    /// One unit is about a sixtieth of player height and well under the step height, so a mismatch this size
+    /// cannot be seen on a resting item or felt underfoot — while a flat patch still costs one subdivision
+    /// and a gently curved one costs two, instead of every patch paying for the worst one on the map.
+    /// </summary>
+    private const float PatchCollisionTolerance = 1.0f;
+
+    /// <summary>
+    /// The tolerance a near-VERTICAL patch gets instead. You rest on floors and slide along walls, so a wall
+    /// whose hull sits a few units proud stops you slightly early and nothing else, while a floor that far
+    /// out leaves items visibly floating or sunk. Spending the subdivisions where they are felt is what keeps
+    /// a map full of curved walls from paying floor-grade accuracy for all of them.
+    /// </summary>
+    private const float PatchWallTolerance = 6.0f;
+
+    /// <summary>
+    /// How far each triangle slab's side planes are pushed outward, so adjacent slabs overlap rather than
+    /// abut exactly. Small enough to be physically invisible, large enough that no trace threads the seam.
+    /// </summary>
+    private const float PatchSlabSeamOverlap = 0.125f;
+
     /// <summary>A patch gets collision only if its (converted) contents physically block something — DP collides
     /// solid curve surfaces; a nonsolid/translucent-only/sky/fog patch contributes none.</summary>
     private const int PatchCollidableMask = SuperContents.Solid | SuperContents.PlayerClip | SuperContents.MonsterClip;
@@ -356,7 +380,14 @@ public static class BspCollisionBuilder
             if ((surfaceFlags & Q3SurfaceFlags.NonSolid) != 0)
                 continue;
 
-            BezierPatch.Tessellation? tess = BezierPatch.Tessellate(face, bsp.Vertices, PatchCollisionSubdivisions);
+            // Adaptive, not fixed (backlog B3). A constant 3 put the collision hull up to 6.5 units away from
+            // the drawn surface on stormkeep's curved patches, so an item dropped there settled visibly wrong;
+            // a constant 8 would fix that and pay ~7x the slab count for the flat patches that are exact at
+            // any level. Measuring each patch spends the subdivisions only where the curve actually bends.
+            float horizontality = BezierPatch.Horizontality(face, bsp.Vertices);
+            float tolerance = float.Lerp(PatchWallTolerance, PatchCollisionTolerance, horizontality);
+            int subdivisions = BezierPatch.SubdivisionsFor(face, bsp.Vertices, tolerance);
+            BezierPatch.Tessellation? tess = BezierPatch.Tessellate(face, bsp.Vertices, subdivisions);
             if (tess is null)
                 continue;
 
@@ -441,6 +472,11 @@ public static class BspCollisionBuilder
             sn = -sn;       // flip so 'opposite' is inside (Dot(normal,p) <= dist)
             dist = -dist;
         }
-        planes.Add(new BrushPlane(sn, dist, surfaceFlags, contents, surfaceName));
+        // Pushed OUT by a hair so neighbouring slabs overlap instead of exactly abutting. Tessellated
+        // triangles share their edges exactly, and a trace aimed along one - a point trace at a round
+        // coordinate on a patch subdivided at a power of two is a very good way to find one - can otherwise
+        // pass between two slabs that each treat the seam as their boundary. The overlap is far below any
+        // distance a player or item can perceive, so nothing physical changes; only the crack closes.
+        planes.Add(new BrushPlane(sn, dist + PatchSlabSeamOverlap, surfaceFlags, contents, surfaceName));
     }
 }

@@ -1,8 +1,8 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Net; // VehicleViewState — its DATA struct lives in THIS (.Common) assembly under the
-                        // XonoticGodot.Net namespace; only the wire codec (VehicleViewCodec) lives in .Net.
+using VortexArena.Common.Framework;
+using VortexArena.Net; // VehicleViewState — its DATA struct lives in THIS (.Common) assembly under the
+                        // VortexArena.Net namespace; only the wire codec (VehicleViewCodec) lives in .Net.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The single shared resolver of <see cref="VehicleViewState"/> off an AUTHORITATIVE seated <see cref="Player"/> —

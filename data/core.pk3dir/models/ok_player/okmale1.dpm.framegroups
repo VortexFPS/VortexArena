@@ -1,0 +1,29 @@
+/*
+Generated framegroups file for okmale1
+Used by DarkPlaces to simulate frame groups in DPM models.
+*/
+
+1 42 30 0 // okmale1 dieone
+43 56 30 0 // okmale1 dietwo
+99 11 15 1 // okmale1 draw
+110 6 10 1 // okmale1 duck
+116 17 15 1 // okmale1 duckwalk
+133 31 40 0 // okmale1 duckjump
+164 17 10 1 // okmale1 duckidle
+181 101 15 1 // okmale1 idle
+282 17 20 1 // okmale1 jump
+299 6 10 0 // okmale1 painone
+305 6 10 0 // okmale1 paintwo
+311 6 30 0 // okmale1 shoot
+317 17 15 1 // okmale1 taunt
+334 17 30 1 // okmale1 run
+351 17 30 1 // okmale1 runbackwards
+368 17 30 1 // okmale1 strafeleft
+385 17 30 1 // okmale1 straferight
+402 3 10 0 // okmale1 deadone
+405 3 10 0 // okmale1 deadtwo
+408 17 30 1 // okmale1 forwardright
+425 17 30 1 // okmale1 forwardleft
+442 17 30 1 // okmale1 backright
+459 17 30 1 // okmale1 backleft
+476 20 15 1 // okmale1 melee

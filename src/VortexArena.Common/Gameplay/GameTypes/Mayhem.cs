@@ -9,12 +9,12 @@
 // GameType attribute / Activate / Deactivate / OnDeath, MatchEnded + Leader, the TryCvar idiom) — Mayhem is
 // NOT a Deathmatch subclass and NOT routed through MatchController.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Shared Mayhem / Team Mayhem score math — the Godot-free port of <c>MayhemCalculatePlayerScore</c>

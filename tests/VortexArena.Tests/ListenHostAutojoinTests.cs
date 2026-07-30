@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Server;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Two related guards for the listen host spawning into its own match.
@@ -112,10 +112,47 @@ public class ListenHostAutojoinTests
         Player p = info.Player;
         Assert.True(p.IsObserver, "a connecting client starts as an observer");
 
+        // QC ClientCommand_join gates on joinAllowed(), which includes the MIN_SPEC_TIME observer dwell — an
+        // instant join right after connecting is DEFERRED, not granted. NetGame's host-join block retries once
+        // a second precisely because of this, so the production path converges a moment later.
+        world.Commands.Execute("join", isServerConsole: false, caller: p);
+        Assert.True(p.IsObserver, "a join inside MIN_SPEC_TIME is deferred, matching QC");
+
+        for (int i = 0; i < 200 && world.Time <= ClientManager.MinSpecTime; i++)
+            world.Frame(SimulationLoop.TicRate);
+
         world.Commands.Execute("join", isServerConsole: false, caller: p);
 
-        Assert.False(p.IsObserver, "join must spawn the host as a live player");
+        Assert.False(p.IsObserver, "join must spawn the host as a live player once the dwell has elapsed");
         Assert.True(p.Health > 0f, "a joined host has health (so the loading screen dismisses)");
+    }
+
+    /// <summary>
+    /// The gap that let the editor gametype's join gate be ignored: <c>join</c> called ClientManager.Join
+    /// directly, so it bypassed every gametype join rule while the delayed auto-join honored all of them.
+    /// QC routes both through <c>joinAllowed</c> (cmd.qc:665), and so must we.
+    /// </summary>
+    [Fact]
+    public void JoinCommand_HonorsTheGametypeJoinGate()
+    {
+        var ents = SpawnDicts(new Vector3(0f, 0f, 16f), new Vector3(128f, 0f, 16f));
+        var world = new GameWorld(FlatFloor(), ents);
+        world.Boot("dm");
+        Api.Cvars.Set("sv_spectate", "1");
+
+        ClientManager.ClientInfo info = world.Clients.ClientConnect(isBot: false, netName: "host");
+        Player p = info.Player;
+
+        for (int i = 0; i < 200 && world.Time <= ClientManager.MinSpecTime; i++)
+            world.Frame(SimulationLoop.TicRate);
+
+        world.Clients.GametypeJoinGate = _ => false;
+        world.Commands.Execute("join", isServerConsole: false, caller: p);
+        Assert.True(p.IsObserver, "a refused gate must block the join command, not just the auto-join");
+
+        world.Clients.GametypeJoinGate = _ => true;
+        world.Commands.Execute("join", isServerConsole: false, caller: p);
+        Assert.False(p.IsObserver, "and allow it once the gate opens");
     }
 
     /// <summary>The failure case that justifies NetGame retrying instead of burning a one-shot latch: a

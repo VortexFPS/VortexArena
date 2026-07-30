@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Globalization;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Console;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the RPN calculator VM (<see cref="Rpn"/>) — the port of <c>GenericCommand_rpn</c>

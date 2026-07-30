@@ -1,8 +1,8 @@
 using System.Globalization;
 using Godot;
-using XonoticGodot.Game.Console;
+using VortexArena.Game.Console;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Input settings tab — a faithful C# port of <c>XonoticInputSettingsTab_fill</c>
@@ -93,7 +93,7 @@ public partial class DialogSettingsInput : SettingsTab
         Dependent.Bind(maxRow, "m_accelerate", 0, 1);
 
         // "Disable system mouse acceleration" — QC chooses vid_dgamouse / apple_mouse_noaccel depending on
-        // which the engine exposes. XonoticGodot's cvar store has no engine-type introspection, so we bind the
+        // which the engine exposes. VortexArena's cvar store has no engine-type introspection, so we bind the
         // common one (vid_dgamouse). (Approximate.)
         box.AddChild(Widgets.CheckBox("vid_dgamouse", "Disable system mouse acceleration",
             "Make use of DGA mouse input"));
@@ -138,7 +138,7 @@ public partial class DialogSettingsInput : SettingsTab
     /// <summary>
     /// Build the scrollable list of bindable actions, each a "label: [bind]" row whose button captures the
     /// next key (reusing <see cref="KeyCaptureButton"/>), plus the QC affordances underneath. Binds are read
-    /// from / written to the CANONICAL runtime table (<see cref="XonoticGodot.Engine.Console.BindTable"/>) via
+    /// from / written to the CANONICAL runtime table (<see cref="VortexArena.Engine.Console.BindTable"/>) via
     /// <see cref="BindInput"/> — the same table binds-xonotic.cfg seeds and both gameplay input paths read —
     /// not the legacy <see cref="MenuSettings"/> store (quarantined). Captures persist through the cvar/config
     /// dump (<see cref="MenuState.SaveUserConfig"/>), mirroring DP's keybinder writing into config.cfg.
@@ -180,7 +180,7 @@ public partial class DialogSettingsInput : SettingsTab
     }
 
     /// <summary>A capture finished: bind the captured key to the action's command in the canonical
-    /// <see cref="XonoticGodot.Engine.Console.BindTable"/> (keybinder.qc <c>bind KEY "func"</c>) and persist the
+    /// <see cref="VortexArena.Engine.Console.BindTable"/> (keybinder.qc <c>bind KEY "func"</c>) and persist the
     /// table to the user config. Refreshes every row face since a re-bind may have stolen a key from another row.</summary>
     private void OnBindCaptured(string actionId, string bind)
     {
@@ -237,7 +237,7 @@ public partial class DialogSettingsInput : SettingsTab
 
     /// <summary>
     /// QC "Edit...": opens the userbind edit dialog (dialog_settings_input_userbind.qc) to author a custom
-    /// command-bind. XonoticGodot has no userbind backend (custom press/release console commands), so this is
+    /// command-bind. VortexArena has no userbind backend (custom press/release console commands), so this is
     /// inert and only logs — the standard action binds above are the functional path. (Inert.)
     /// </summary>
     private static void OpenUserbindEdit()

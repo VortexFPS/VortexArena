@@ -1,10 +1,10 @@
 using Godot;
-using XonoticGodot.Common.Framework;   // MoveFilter
-using XonoticGodot.Common.Math;        // QMath, Coords
-using XonoticGodot.Common.Services;    // Api, TraceResult, PointContents
+using VortexArena.Common.Framework;   // MoveFilter
+using VortexArena.Common.Math;        // QMath, Coords
+using VortexArena.Common.Services;    // Api, TraceResult, PointContents
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The reusable chase / event-chase pull-back trace math, extracted VERBATIM from

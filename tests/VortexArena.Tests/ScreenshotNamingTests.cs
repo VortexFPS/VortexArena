@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using XonoticGodot.Engine.Console;
+using VortexArena.Engine.Console;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the Godot-free screenshot file-naming core (<see cref="ScreenshotNamer"/>) — the port of DarkPlaces'

@@ -1,7 +1,7 @@
 # sv-mapvoting — parity spec
 
 **Base refs:** `server/mapvoting.qc` · `server/mapvoting.qh` · `client/mapvoting.qc` · `client/mapvoting.qh` · `common/constants.qh` (GTV_*, MAPVOTE_COUNT) · `common/net_linked.qh` (ENT_CLIENT_MAPVOTE, TE_CSQC_PICTURE)
-**Port refs:** `src/XonoticGodot.Server/MapVoting.cs` · `src/XonoticGodot.Server/GameWorld.cs` (DriveEndOfMatchMapFlow) · `src/XonoticGodot.Server/Commands.cs` (CmdSuggestMap, DispatchImpulse) · `game/hud/MapVotePanel.cs` · `src/XonoticGodot.Server/Cvars.cs`
+**Port refs:** `src/VortexArena.Server/MapVoting.cs` · `src/VortexArena.Server/GameWorld.cs` (DriveEndOfMatchMapFlow) · `src/VortexArena.Server/Commands.cs` (CmdSuggestMap, DispatchImpulse) · `game/hud/MapVotePanel.cs` · `src/VortexArena.Server/Cvars.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -175,9 +175,9 @@ None declared. All differences above are gaps, not deliberate port changes.
 ## Verification
 - **Static/caller trace (high confidence):** grep across `src/`+`game/` shows `CastVote`/`Abstain`/`Disqualify`
   and `MapVotePanel.SetVote`/`SetVotes`/`SetWinner` have **no callers** outside their own files; `DispatchImpulse`
-  returns early on `Intermission.Running` (`src/XonoticGodot.Server/Commands.cs`). Server lifecycle calls
+  returns early on `Intermission.Running` (`src/VortexArena.Server/Commands.cs`). Server lifecycle calls
   confirmed at `GameWorld.cs:2003/2017-2023`.
-- **cvar diff (high confidence):** `src/XonoticGodot.Server/Cvars.cs:133-135,391-396` vs
+- **cvar diff (high confidence):** `src/VortexArena.Server/Cvars.cs:133-135,391-396` vs
   `Base/.../xonotic-server.cfg:375-393`.
 - **Behavioral (unverified at runtime):** the "random next map after blank 30 s intermission" outcome is
   inferred from code, not observed in a running match.

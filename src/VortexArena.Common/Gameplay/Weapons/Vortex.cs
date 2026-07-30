@@ -1,10 +1,10 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Vortex (Nexuiz "Nex") — port of common/weapons/weapon/vortex.{qh,qc}. A hitscan rail weapon:
@@ -62,6 +62,7 @@ public sealed class Vortex : Weapon
     public Vortex()
     {
         NetName = "vortex";
+        BotPickupBaseValue = 8000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Vortex";
         Impulse = 7;

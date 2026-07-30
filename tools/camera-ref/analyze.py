@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Camera-trace drift analyzer (apparatus A2/A3 shared tool).
 
-Reads a camera-trace JSON (from the XonoticGodot `--camera-trace` mode or a Base-engine capture in the same
+Reads a camera-trace JSON (from the VortexArena `--camera-trace` mode or a Base-engine capture in the same
 schema) and reports, over the STEADY-STATE tail (after spawn/settle), the secular drift (least-squares slope of
 view/physics origin vs frame) and the max deviation from the tail mean — the signature of the reported "slow
 camera drift while stationary". Run:  python analyze.py <trace.json> [--tail 0.6]

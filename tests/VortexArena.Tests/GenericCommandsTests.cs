@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Config;
+using VortexArena.Engine.Console;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the generic command family on the SHARED console surface (<see cref="ConsoleCommands"/>) — the

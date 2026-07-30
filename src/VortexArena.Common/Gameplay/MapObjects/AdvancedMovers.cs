@@ -24,11 +24,11 @@
 
 using System.Globalization;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -41,9 +41,9 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
-    using XonoticGodot.Common.Framework;
+    using VortexArena.Common.Framework;
 
     /// <summary><c>func_fourier</c> + <c>func_vectormamamam</c> — controller-driven brush movers. Registered by <see cref="MapObjectsRegistry"/>.</summary>
     public static class AdvancedMovers

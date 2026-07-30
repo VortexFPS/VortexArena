@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Port of qcsrc/common/minigames/sv_minigames.qc — the SERVER-SIDE minigame session spine:
 // start_minigame / join_minigame / part_minigame / end_minigame / end_minigames / minigame_addplayer /
@@ -11,7 +11,7 @@ namespace XonoticGodot.Common.Gameplay;
 // and a per-client back-link (CS(player).active_minigame + player.minigame_players). The CSQC entity-network
 // layer (Net_LinkEntity + minigame_SendEntity, the MSLE read/write) is NOT modelled here — the port networks
 // a whole-session snapshot instead (game/net/MinigameNetState.cs), pushed by the host after each change. This
-// type owns ONLY the rules-side lifecycle so it can live in XonoticGodot.Common (the test assembly sees src/, not
+// type owns ONLY the rules-side lifecycle so it can live in VortexArena.Common (the test assembly sees src/, not
 // game/). It drives Pong.Tick on each session each frame.
 //
 // QC model -> C# model
@@ -58,7 +58,7 @@ public sealed class MinigameSessionManager
 
     /// <summary>Optional predicate the host wires to test play-ban list membership (QC
     /// <c>PlayerInList(player, autocvar_g_playban_list)</c>). The g_playban_list lives in the server layer
-    /// (Bans), unreachable from XonoticGodot.Common, so the host injects it (like <see cref="ObserverForcer"/>).
+    /// (Bans), unreachable from VortexArena.Common, so the host injects it (like <see cref="ObserverForcer"/>).
     /// Null = no membership backing → treated as "not banned" (faithful no-op: the <c>g_playban_minigames</c>
     /// cvar gate in <see cref="Invite"/> still applies, and that cvar ships 0 anyway).</summary>
     public Func<Player, bool>? PlayBanned { get; set; }
@@ -370,7 +370,7 @@ public sealed class MinigameSessionManager
 
     /// <summary>QC <c>PlayerInList(player, autocvar_g_playban_list)</c>: the play-ban list membership test.
     /// Delegated to the host-provided <see cref="PlayBanned"/> predicate (the list lives in the server layer,
-    /// unreachable from XonoticGodot.Common). With no predicate wired it returns false (faithful no-op); the
+    /// unreachable from VortexArena.Common). With no predicate wired it returns false (faithful no-op); the
     /// <c>g_playban_minigames</c> cvar gate at the call site still applies and ships 0.</summary>
     private bool IsPlayBanned(Player player) => PlayBanned?.Invoke(player) ?? false;
 

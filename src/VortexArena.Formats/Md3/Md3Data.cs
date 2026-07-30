@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Md3;
+namespace VortexArena.Formats.Md3;
 
 /// <summary>
 /// Engine-neutral, Godot-free representation of an MD3 (id Tech 3 "IDP3") model, parsed by

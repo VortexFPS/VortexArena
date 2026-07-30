@@ -15,7 +15,7 @@ features:
     base_refs:
       - "common/weapons/weapon/machinegun.qh:CLASS(MachineGun)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:Machinegun (ctor)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:Machinegun (ctor)"
     constants:
       - { name: "netname", base: "machinegun", port: "machinegun", match: true }
       - { name: "ammo_type", base: "RES_BULLETS", port: "ResourceType.Bullets", match: true }
@@ -46,9 +46,9 @@ features:
     base_refs:
       - "common/weapons/weapon/machinegun.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:ZoomOnSecondary"
-      - "src/XonoticGodot.Server/GameWorld.cs (WeaponFireDriver.Frame -> WrThink)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:ZoomOnSecondary"
+      - "src/VortexArena.Server/GameWorld.cs (WeaponFireDriver.Frame -> WrThink)"
     constants:
       - { name: "mode", base: "1", port: "1 (live from cfg)", match: true }
       - { name: "burst_gate", base: "(fire&2) && burst", port: "Secondary && Burst>0", match: true }
@@ -77,8 +77,8 @@ features:
     base_refs:
       - "common/weapons/weapon/machinegun.qc:W_MachineGun_Attack_Auto"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:AttackAuto"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:WrThink (MiscBulletCounter=0 reset, :123)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:AttackAuto"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:WrThink (MiscBulletCounter=0 reset, :123)"
     constants:
       - { name: "sustained_damage", base: "10", port: "10", match: true }
       - { name: "sustained_ammo", base: "1", port: "1", match: true }
@@ -110,8 +110,8 @@ features:
       - "common/weapons/weapon/machinegun.qc:W_MachineGun_Attack_Burst"
       - "common/weapons/weapon/machinegun.qc:wr_think (burst setup: to_shoot/burst_fraction/to_use)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:AttackBurst"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:WrThink (burst branch 127-164)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:AttackBurst"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:WrThink (burst branch 127-164)"
     constants:
       - { name: "burst", base: "3", port: "3", match: true }
       - { name: "burst_ammo", base: "3", port: "3", match: true }
@@ -144,9 +144,9 @@ features:
       - "common/weapons/weapon/machinegun.qc:W_MachineGun_Attack"
       - "common/weapons/weapon/machinegun.qc:W_MachineGun_Attack_Frame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:AttackSingle"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:AttackFrame (held-fire self-continuation, FIXED Wave-5)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:FireOne (deathTag = WithHitType(.., Secondary))"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:AttackSingle"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:AttackFrame (held-fire self-continuation, FIXED Wave-5)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:FireOne (deathTag = WithHitType(.., Secondary))"
     constants:
       - { name: "first_damage", base: "14", port: "14", match: true }
       - { name: "first_spread", base: "0.03", port: "0.03", match: true }
@@ -180,7 +180,7 @@ features:
     base_refs:
       - "common/weapons/weapon/machinegun.qc:MachineGun_Update_Spread"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:UpdateSpread"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:UpdateSpread"
     constants:
       - { name: "spread_min", base: "0.02", port: "0.02", match: true }
       - { name: "spread_max", base: "0.05", port: "0.05", match: true }
@@ -208,7 +208,7 @@ features:
     base_refs:
       - "common/weapons/weapon/machinegun.qc:MachineGun_Heat"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:Heat"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:Heat"
     constants:
       - { name: "spread_cold_damagemultiplier", base: "1", port: "1 (read live)", match: true }
       - { name: "spread_heat_damagemultiplier", base: "1", port: "1 (read live)", match: true }
@@ -237,10 +237,10 @@ features:
       - "common/weapons/calculations.qc:W_CalculateSpread"
       - "server/weapons/tracing.qc:W_SetupShot_Dir_ProjectileSize_Range"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpread"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:FireOne"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpread"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:FireOne"
     constants:
       - { name: "solidpenetration", base: "13.1", port: "13.1", match: true }
       - { name: "max_shot_distance", base: "32768", port: "32768", match: true }
@@ -273,7 +273,7 @@ features:
     base_refs:
       - "common/weapons/weapon/machinegun.qc:W_MachineGun_Attack_Auto (punchangle, gated on !g_norecoil)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:Recoil (409-417)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:Recoil (409-417)"
     constants:
       - { name: "punch_xy", base: "random()-0.5", port: "Prandom.Float()-0.5", match: true }
       - { name: "g_norecoil gate", base: "if (!autocvar_g_norecoil) { ... }", port: "if g_norecoil != 0 return", match: true }
@@ -300,9 +300,9 @@ features:
       - "common/weapons/weapon/machinegun.qc:wr_impacteffect (EFFECT_MACHINEGUN_IMPACT)"
       - "common/weapons/weapon/machinegun.qc:W_MachineGun_Attack_Auto/Burst (SpawnCasing, g_casings>=2)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:FireOne (BulletImpactFx / Emit MUZZLEFLASH / EjectCasing)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx / EjectCasing"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs (CASING_BULLET/CASING_SHELL register)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:FireOne (BulletImpactFx / Emit MUZZLEFLASH / EjectCasing)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx / EjectCasing"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs (CASING_BULLET/CASING_SHELL register)"
       - "game/client/EffectSystem.cs (Spawn -> SpawnCasing) ; game/client/ShellCasings.cs:Spawn"
     constants:
       - { name: "impact_effect", base: "EFFECT_MACHINEGUN_IMPACT", port: "MACHINEGUN_IMPACT -> machinegun_impact", match: true }
@@ -334,9 +334,9 @@ features:
       - "common/weapons/weapon/machinegun.qc:wr_impacteffect (sound CH_SHOTS SND_RIC_RANDOM)"
       - "common/sounds/all.inc (SND_RIC_RANDOM -> ric1/ric2/ric3)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (-> SoundSystem.PlayRic)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:FireOne (BulletImpactFx, silent gate)"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:PlayRic / SoundVariantGroups.Ric"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (-> SoundSystem.PlayRic)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:FireOne (BulletImpactFx, silent gate)"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:PlayRic / SoundVariantGroups.Ric"
     constants:
       - { name: "ric_sounds", base: "ric1/ric2/ric3 random", port: "SoundSystem.PlayRic -> RIC group ric1..3 (live caller)", match: true }
       - { name: "channel", base: "CH_SHOTS, VOL_BASE, ATTN_NORM", port: "PlayOn default channel/vol/attn", match: true }
@@ -364,9 +364,9 @@ features:
     base_refs:
       - "common/weapons/weapon/machinegun.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:BotWantsSecondary (203-212)"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary (virtual, :102) + BotAimState (:24)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs (calls BotWantsSecondary :354, routes ButtonAttack2 :403)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:BotWantsSecondary (203-212)"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary (virtual, :102) + BotAimState (:24)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs (calls BotWantsSecondary :354, routes ButtonAttack2 :403)"
     constants:
       - { name: "switch_distance", base: "3000 - bound(0,skill,10)*200", port: "3000 - QMath.Clamp(skill,0,10)*200", match: true }
       - { name: "secondary_use", base: "dist >= switch_distance -> ATCK2 burst", port: "enemyDistance >= switchDistance -> true -> ButtonAttack2", match: true }
@@ -395,9 +395,9 @@ features:
       - "common/weapons/weapon/machinegun.qc:wr_killmessage"
       - "common/weapons/weapon/machinegun.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:73 (SelectKillMessage)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:150 (SelectSuicideMessage)"
-      - "src/XonoticGodot.Server/Scores.cs (obituary wiring)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:73 (SelectKillMessage)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:150 (SelectSuicideMessage)"
+      - "src/VortexArena.Server/Scores.cs (obituary wiring)"
     constants:
       - { name: "murder_secondary", base: "HITTYPE_SECONDARY ? MURDER_SNIPE : MURDER_SPRAY", port: "sec ? SNIPE : SPRAY (HasHitType secondary)", match: true }
       - { name: "suicide", base: "WEAPON_THINKING_WITH_PORTALS", port: "WEAPON_THINKING_WITH_PORTALS", match: true }
@@ -426,11 +426,11 @@ features:
       - "common/weapons/weapon/machinegun.qc:wr_think (forced-reload top branch)"
       - "common/weapons/weapon/machinegun.qc:wr_checkammo2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:WrReload (override, misc_bulletcounter<0 mid-burst guard, :510)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:ReloadingAmmoMin (min(max(sustained,first),burst), :504)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:WrThink (forced-reload head branch, :120)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs:CheckAmmoSecondary (wr_checkammo2: zoom-suppress + burst_ammo_per_shot, :479)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload/WReload/WReloadedAndReady (shared reload pipeline, :223/239/315)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:WrReload (override, misc_bulletcounter<0 mid-burst guard, :510)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:ReloadingAmmoMin (min(max(sustained,first),burst), :504)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:WrThink (forced-reload head branch, :120)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs:CheckAmmoSecondary (wr_checkammo2: zoom-suppress + burst_ammo_per_shot, :479)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload/WReload/WReloadedAndReady (shared reload pipeline, :223/239/315)"
     constants:
       - { name: "reload_ammo", base: "0 (reload disabled in xonotic balance)", port: "0 (ReloadingAmmo() reads g_balance_machinegun_reload_ammo live, WeaponFireGate.cs:408)", match: true }
       - { name: "reload_time", base: "2", port: "2 (ReloadingTime() reads g_balance_machinegun_reload_time live, WeaponFireGate.cs:411)", match: true }

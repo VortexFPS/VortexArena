@@ -1,7 +1,7 @@
 # Dual Plasma Cannon turret — parity spec
 
 **Base refs:** `common/turrets/turret/plasma_dual.qc` · `plasma_dual.qh` · `plasma_weapon.{qc,qh}` (shared with single plasma) · `common/turrets/sv_turrets.qc` (AI core) · `turrets.cfg` (balance)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs` · `PlasmaTurret.cs` · `TurretAI.cs` · `TurretSpawn.cs` · `TurretCombat.cs` · `TurretSpawnFuncs.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs` · `PlasmaTurret.cs` · `TurretAI.cs` · `TurretSpawn.cs` · `TurretCombat.cs` · `TurretSpawnFuncs.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -98,7 +98,7 @@ Global turret cvars: `g_turrets` (master switch, default 1), `g_turrets_nofire`,
 ## Parity assessment
 
 ### Liveness — LIVE
-Full chain verified: `MapObjectsRegistry.RegisterAll()` (called from `GameInit.InstallGameplaySystems`, `GameInit.cs:21`) registers `turret_plasma_dual` → `TurretSpawnFuncs.PlasmaDual`; `src/XonoticGodot.Server/GameWorld.cs:2158` invokes `SpawnFuncs.TrySpawn(classname, e)` for every BSP entity on map load; `TurretSpawnFuncs.Spawn` resolves the `PlasmaDualTurret` descriptor from the `Turrets` source-gen registry (`[Turret]` marker), runs `Spawn` and arms a per-frame `Think`. `PlasmaDualTurret` is a registered `[Turret]`. Provided `g_turrets` is on and a map places the entity, the turret spawns and fires. This is a genuine improvement over the recurring "present-but-dead" port failure mode.
+Full chain verified: `MapObjectsRegistry.RegisterAll()` (called from `GameInit.InstallGameplaySystems`, `GameInit.cs:21`) registers `turret_plasma_dual` → `TurretSpawnFuncs.PlasmaDual`; `src/VortexArena.Server/GameWorld.cs:2158` invokes `SpawnFuncs.TrySpawn(classname, e)` for every BSP entity on map load; `TurretSpawnFuncs.Spawn` resolves the `PlasmaDualTurret` descriptor from the `Turrets` source-gen registry (`[Turret]` marker), runs `Spawn` and arms a per-frame `Think`. `PlasmaDualTurret` is a registered `[Turret]`. Provided `g_turrets` is on and a map places the entity, the turret spawns and fires. This is a genuine improvement over the recurring "present-but-dead" port failure mode.
 
 ### Gaps (concrete, player-observable)
 0a. **Headshake missing** — Base `turret_damage` jolts `tur_head.angles` by `(random-0.5)*damage` on every hit (`TFL_DMG_HEADSHAKE`, set by plasma `tr_setup`). The port's `TurretAI.Damage` does friendly-fire/retaliate/shove only — no head jitter exists anywhere in `src/.../Turrets/`. The turret head is rigid under fire. (The original draft wrongly listed this as faithful/present.)

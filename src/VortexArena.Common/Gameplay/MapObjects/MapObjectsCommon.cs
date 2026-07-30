@@ -8,7 +8,7 @@
 // destination and scheduling a think (`.nextthink`, measured against the entity's local time `.ltime`)
 // that snaps it to the exact destination and fires the follow-up. The engine's PushMove integrator does
 // the actual sweeping/blocking. This file reproduces that driver headlessly: SUB_CalcMove sets
-// Velocity + a Think over the mover's local clock; the deterministic simulation (XonoticGodot.Engine) runs the
+// Velocity + a Think over the mover's local clock; the deterministic simulation (VortexArena.Engine) runs the
 // MOVETYPE_PUSH sweep exactly as DP/QC did (specs/determinism-and-physics.md).
 //
 // QC's flat-field movers carried a pile of extra fields (.pos1/.pos2/.state/.finaldest/.think1/...).
@@ -16,13 +16,13 @@
 // without editing Entity.cs.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     /// <summary>
     /// The extra entity fields the QuakeC map-objects (mapobjects/*) stored as flat <c>.field</c>s on the
@@ -130,7 +130,7 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
     /// <summary>
     /// Shared helpers for the BSP map-object families (doors, plats, buttons, trains, triggers). The

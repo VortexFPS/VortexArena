@@ -1,7 +1,7 @@
 # Spawn Near Teammate (mutator) — parity spec
 
 **Base refs:** `common/mutators/mutator/spawn_near_teammate/{sv,cl,_,}_spawn_near_teammate.qc/.qh` · `server/spawnpoints.qc:Spawn_Score` · `server/spawnpoints.qh` (SPAWN_PRIO_*)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs` · `src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs` (SpawnScore hook seam) · `src/XonoticGodot.Server/ClientManager.cs` (PlayerSpawn call site)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs` · `src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs` (SpawnScore hook seam) · `src/VortexArena.Server/ClientManager.cs` (PlayerSpawn call site)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -138,7 +138,7 @@ the pair-wise trace/commit, closetodeath). Divergences that change observable be
 All ported constants match Base: 200/100 prio, 48u floor, the 6 offset magnitudes, 400u vertical trace,
 forward*100/-up*128 floor-ahead, sv_maxspeed+50 speed gate, regenstable health, 2.5/3s cooldowns, max 10. The
 cvar defaults are read from the cvar store (not hardcoded); the port SHIPS `mutators.cfg` (640) and
-`ruleset-overkill.cfg` under `assets/data/xonotic-data.pk3dir`, so the earlier "reads 0 if config absent"
+`ruleset-overkill.cfg` under `Base/data/xonotic-data.pk3dir`, so the earlier "reads 0 if config absent"
 concern only bites if config loading itself fails — not a real values divergence in a normal match.
 
 ### timing — faithful
@@ -186,7 +186,7 @@ implementation choice with identical semantics — not a behavioral divergence.
    only touches `player.Angles`, so the look-at and relocate facing never reach the client. Fix: have the
    mutator write `player.FixAngle = true; player.FixAngleAngles = <facing>` (both branches).
 2. RESOLVED: the port ships `mutators.cfg` (`_distance 640`) and `ruleset-overkill.cfg` under
-   `assets/data/xonotic-data.pk3dir`, so the defaults are present in a normal match. Not a values gap.
+   `Base/data/xonotic-data.pk3dir`, so the defaults are present in a normal match. Not a values gap.
 3. Still open: the port reads `cl_spawn_near_teammate` as a host-global cvar, not a per-player REPLICATEd value,
    so the `ignore_spawnpoint==2` (per-client opt-in) mode is not per-player. Overkill uses mode 1, so this is
    latent rather than active.

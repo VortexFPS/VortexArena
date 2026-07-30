@@ -1,7 +1,7 @@
 using System;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// A directory of the HUD panel configuration dialogs — the menu-reachable entry point to the per-panel

@@ -570,4 +570,4 @@ features:
     verification:
       - { kind: code, ref: "demo constants diffed 295-321 vs 457-475: match; HudPanelRegistryTests.cs:334 pins the core behaviour-cvar defaults", result: pass }
     confidence: high
-    notes: "Also anchors client/hud/panel/strafehud.qh (cvar-default surface) via the gate/zone rows; the full 100-cvar default table is pinned by tests/XonoticGodot.Tests/HudPanelRegistryTests.cs (StrafeHud_CoreBehaviourCvarDefaults_MatchBase)."
+    notes: "Also anchors client/hud/panel/strafehud.qh (cvar-default surface) via the gate/zone rows; the full 100-cvar default table is pinned by tests/VortexArena.Tests/HudPanelRegistryTests.cs (StrafeHud_CoreBehaviourCvarDefaults_MatchBase)."

@@ -2,9 +2,9 @@
 using System;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The crosshair preview — a faithful C# port of <c>XonoticCrosshairPreview</c>

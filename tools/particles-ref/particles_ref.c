@@ -14,7 +14,7 @@
  *     * VectorRandom                     (line 119)
  *     * AnglesFromVectors / AngleVectors (mathlib.c)
  *
- * It is deliberately NOT derived from the C# port (src/XonoticGodot.Engine/Particles):
+ * It is deliberately NOT derived from the C# port (src/VortexArena.Engine/Particles):
  * the whole point of a golden corpus is an *independent* implementation to A/B the
  * port against. The particle math is float (vec3_t is float in DP); lhrandom is
  * computed in double exactly as the macro does.

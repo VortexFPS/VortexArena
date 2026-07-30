@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// Anything enumerated by a registry (weapons, items, mutators, gametypes, stats, net messages…).

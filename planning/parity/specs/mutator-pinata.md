@@ -1,7 +1,7 @@
 # Piñata mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/pinata/sv_pinata.qc` · `common/mutators/mutator/pinata/pinata.qc` (MENUQC describe) · `server/weapons/throwing.qc` (`W_ThrowNewWeapon` / `W_IsWeaponThrowable`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs` · `src/XonoticGodot.Common/Gameplay/Weapons/WeaponThrowing.cs` · `src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs` (PlayerDies call site)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs` · `src/VortexArena.Common/Gameplay/Weapons/WeaponThrowing.cs` · `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs` (PlayerDies call site)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

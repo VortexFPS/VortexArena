@@ -1,4 +1,4 @@
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The client-side render-animation time scale — the port of how EVERY CSQC/engine-client animation in Base

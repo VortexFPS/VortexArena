@@ -1,7 +1,7 @@
 # Running Guns mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/running_guns/sv_running_guns.qc` (+ `_mod.inc`/`_mod.qh`), `server/world.qc:SetDefaultAlpha`, `server/client.qc` (spawn alpha apply), `server/weapons/weaponsystem.qc` (exterior-weapon alpha apply), `mutators.cfg:522`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/RunningGunsMutator.cs`, `src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:SetDefaultAlpha`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/RunningGunsMutator.cs`, `src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:SetDefaultAlpha`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -62,7 +62,7 @@ them:
 | Base feature | Port symbol | State |
 |---|---|---|
 | `REGISTER_MUTATOR(running_guns, autocvar_g_running_guns)` | `RunningGunsMutator` `[Mutator]` + `IsEnabled => Cvars.GetFloat("g_running_guns") != 0` | present, registered |
-| `g_running_guns 0` default | `assets/data/.../mutators.cfg:522` | present, faithful |
+| `g_running_guns 0` default | `Base/data/.../mutators.cfg:522` | present, faithful |
 | `MUTATOR_HOOKFUNCTION(running_guns, SetDefaultAlpha)` | `RunningGunsMutator.OnSetDefaultAlpha` → `args.PlayerAlpha=-1; args.WeaponAlpha=1; return true` | present, correct values |
 | `SetDefaultAlpha()` invoker (`world.qc:105/954/1730`) | **NOT IMPLEMENTED** — no `MutatorHooks.SetDefaultAlpha.Call(...)` anywhere | missing invoker |
 | Consume `default_player_alpha`/`default_weapon_alpha` on spawn (`client.qc:788`, `player.qc:540`, `weaponsystem.qc`) | **NOT IMPLEMENTED** — spawn hardcodes `p.Alpha = 1f` (`SpawnSystem.cs:524`, `DamageSystem.cs:581`); no `default_weapon_alpha` concept | missing consumer |

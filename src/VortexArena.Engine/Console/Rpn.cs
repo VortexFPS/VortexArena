@@ -3,11 +3,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using XonoticGodot.Common.Math; // QMath.Bound (DP-exact bound macro)
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation; // CvarService
+using VortexArena.Common.Math; // QMath.Bound (DP-exact bound macro)
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation; // CvarService
 
-namespace XonoticGodot.Engine.Console;
+namespace VortexArena.Engine.Console;
 
 /// <summary>
 /// The RPN calculator VM — the C# successor to <c>GenericCommand_rpn</c> (common/command/rpn.qc). A stack-based

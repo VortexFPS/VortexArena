@@ -158,7 +158,19 @@ public sealed partial class ClientEntityView : Node
         e.Health = s.Health;
         e.Team = s.Colormap;
         e.Colors = s.Colors; // [r15 #43] packed clientcolors → shirt/pants/glow on the body + held weapon
-        e.ActiveWeaponId = s.Weapon;
+        // RENDER_COLORMAPPED entities (dropped weapons; colormapped props/monsters): the server networks its
+        // authoritative Entity.ColorMapOverride verbatim (own delta field), so ClientWorld's item tint pass
+        // paints the DROPPER's shirt/pants on the loot model. This is the ONLY path that fills it for
+        // rendering — the listen host renders from these same decoded proxies (ClientWorld.OnEntityUpdate has
+        // no caller outside this file), so there is no shared-edict shortcut to fall back on.
+        e.ColorMapOverride = s.ColorMapOverride;
+        // A weapon PICKUP's explicit identity (non-player Weapon field = RegistryId + 1, 0 = not a weapon
+        // pickup): the render layer prefers this over matching the item model filename.
+        e.ItemWeaponId = s.Kind != NetEntityKind.Player && s.Weapon > 0 ? s.Weapon - 1 : -1;
+        // Players only: the raw held-weapon registry id. On non-player entities the wire Weapon field carries
+        // the +1-BIASED pickup id (decoded into ItemWeaponId below) — letting it leak into ActiveWeaponId
+        // would hand every raw-id consumer (Weapons.ById callers) an off-by-one weapon on item proxies.
+        e.ActiveWeaponId = s.Kind == NetEntityKind.Player ? s.Weapon : -1;
         // [W14a-anim] decode the upper-body action overlay (QC csqcmodel animdecide getupperanim) onto the proxy so a
         // future torso-overlay render (LI3) plays the server-decided SHOOT/PAIN/DRAW/TAUNT/DEAD action over the
         // velocity-derived legs. RESERVED — no server producer yet, so these are 0/idle until LI1 lands.

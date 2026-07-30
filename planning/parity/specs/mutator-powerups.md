@@ -1,7 +1,7 @@
 # Powerups mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/powerups/` (`sv_powerups.qc`, `powerups.qh`, `powerup/{strength,shield,speed,invisibility,jetpack,fuelregen}.{qc,qh}`) · `server/items/items.qc` (Item_GiveTo powerup block) · `common/mutators/mutator/status_effects/`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/PowerupsMutator.cs`, `src/XonoticGodot.Common/Gameplay/Items/PowerupItem.cs`, `src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs` (`ApplyPowerupTimers`), `src/XonoticGodot.Common/Gameplay/StatusEffects.cs`, `game/hud/PowerupsPanel.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/PowerupsMutator.cs`, `src/VortexArena.Common/Gameplay/Items/PowerupItem.cs`, `src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs` (`ApplyPowerupTimers`), `src/VortexArena.Common/Gameplay/StatusEffects.cs`, `game/hud/PowerupsPanel.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

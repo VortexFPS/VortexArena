@@ -1,7 +1,7 @@
 # Random Items mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/random_items/sv_random_items.qc` + `sv_random_items.qh` · `randomitems-xonotic.cfg` · `randomitems-overkill.cfg` · `mutators.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

@@ -1398,19 +1398,22 @@ both consumers hoisted out of the host-only block earlier) — likely fixed by t
   #43's fix-chain notes above.
 
 ### 59. Hit-sound confirmation doesn't fire for the remote client **[client-map-load]**
-- [ ] **Status:** Not started
+- [x] **Status:** Fixed (hitsound half; superseded by the hit/kill/typehit feedback parity rework,
+  parity/hitsound-feedback, protocol v16) — damagetext-numbers half still open, see below
 - **Symptom:** Landing hits as the pure client plays no hitsound (works on the host).
-- **Notes (strong hypothesis):** the hitsound is driven by diffing the owner's cumulative
-  `HitDamageDealtTotal` stat, which IS networked on the own entity slice
-  (`NetEntityState.HitDamageDealtTotal`, kept as `ClientNet.LocalState`) — but the `HitSound` consumer
-  in NetGame likely diffs the listen host's server-side stat (LocalServerPlayer), so the pure client
-  never sees the delta. Switch the feed to `LocalState.HitDamageDealtTotal` when there's no local world.
-  Adjacent sibling (same family, verify while there): the T51 damage-text layer is "fed from the
-  server-side DamagetextMutator's drained events" — that drain is listen-only too, so floating damage
-  numbers are probably also dead on a pure client. Cross-ref the `sound-system-and-two-bugs` memory
-  (hitsound file/damagetext coupling) before fixing.
-- **First look:** the `HitDamageDealtTotal` consumer in NetGame (`_hitSound` feed) + the DamageText
-  drain; route both from networked owner state on the pure client.
+- **Resolution:** the whole feedback path was rebuilt to Base's stat model: the server banks per-frame
+  `hitsound_damage_dealt`/`typehitsound`/`killsound` accumulators (damage.qc:611-661) and flushes them in
+  EndFrame to HIT/TYPEHIT/KILL_TIME stats (+ the ceil'd cumulative total) with typehit > kill > hit
+  priority (world.qc:2507). The stats ride the Feedback block (v16) and BOTH paths (host reads the live
+  Player, pure client reads `ClientNet.LocalState`) feed the same faithful `HitSoundLogic` client machine
+  (view.qc UpdateDamage/HitSound): accumulate-never-drop antispam beep, distinct `misc/kill` on frags,
+  `misc/typehit` on team/chat hits. The old damagetext-event coupling is gone.
+- **Also fixed (same branch):** the damage-number HUD over-show — the drain fed EVERY queued event to the
+  layer, so a listen host drew numbers for every bot-vs-bot hit on the map (off-screen ones pinned near the
+  crosshair by the 2D out-of-view fallback). Now gated per event by `DamagetextMutator.ShouldShowTo` — the
+  QC `write_damagetext` per-viewer tiers (sv_damagetext 2 default = your own hits only; observers see all).
+- **Still open (sibling):** the T51 damage-text layer remains fed by the server-side DamagetextMutator
+  drain — floating damage numbers are still dead on a pure client (needs its own net channel).
 
 ---
 

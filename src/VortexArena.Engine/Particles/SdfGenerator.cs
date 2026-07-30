@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Engine.Collision;
 
-namespace XonoticGodot.Engine.Particles;
+namespace VortexArena.Engine.Particles;
 
 // =====================================================================================================
 //  Chunked SDF generator — planning/particles-dual-system.md §A.3.

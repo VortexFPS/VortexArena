@@ -1,7 +1,7 @@
 # Global Forces mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/globalforces/sv_globalforces.qc` · `common/weapons/calculations.qc` (`damage_explosion_calcpush`, `explosion_calcpush_getmultiplier`) · `server/player.qc` (the `PlayerDamage_SplitHealthArmor` call) · `mutators.cfg` (cvar defaults)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs` · `src/XonoticGodot.Common/Gameplay/Mutators/GameHooks.cs` · `src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs` (hook fire site) · `src/XonoticGodot.Server/GameWorld.cs` (`MutatorActivation.Apply`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs` · `src/VortexArena.Common/Gameplay/Mutators/GameHooks.cs` · `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs` (hook fire site) · `src/VortexArena.Server/GameWorld.cs` (`MutatorActivation.Apply`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

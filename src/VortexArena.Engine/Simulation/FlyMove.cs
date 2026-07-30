@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// Shared physics context handed to the MOVETYPE integrators — the C# stand-in for the globals
@@ -66,7 +66,7 @@ public sealed class PhysicsContext
     /// <summary>
     /// Emit a server sound (DP SV_StartSound) — used by the movetype integrators for splash / land /
     /// hit-ground events. Wired to the SoundService by the loop; a no-op by default so the engine never
-    /// depends on the ambient <see cref="XonoticGodot.Common.Services.Api"/>.
+    /// depends on the ambient <see cref="VortexArena.Common.Services.Api"/>.
     /// </summary>
     public Action<Entity, SoundChannel, string> PlaySound { get; set; } = static (_, _, _) => { };
 
@@ -389,7 +389,7 @@ public sealed class PhysicsContext
                 // rotate the rider's offset by the pusher's angular delta about the pusher origin.
                 Vector3 pivot = (check.Mins + check.Maxs) * 0.5f;
                 Vector3 org = (check.Origin - pusher.Origin) + pivot;
-                XonoticGodot.Common.Math.QMath.AngleVectors(NegateAngles(moveAngle), out Vector3 fwd, out Vector3 right, out Vector3 up);
+                VortexArena.Common.Math.QMath.AngleVectors(NegateAngles(moveAngle), out Vector3 fwd, out Vector3 right, out Vector3 up);
                 // AngleVectorsFLU: forward/left/up — DP uses left = -right.
                 Vector3 left = -right;
                 Vector3 org2 = new(Vector3.Dot(org, fwd), Vector3.Dot(org, left), Vector3.Dot(org, up));
@@ -495,7 +495,7 @@ public sealed class PhysicsContext
         {
             // rotate the offset from the attach frame into the aiment's current frame.
             Vector3 attachAng = new(-ent.PunchAngle.X, ent.PunchAngle.Y, ent.PunchAngle.Z);
-            XonoticGodot.Common.Math.QMath.AngleVectors(attachAng, out Vector3 vf, out Vector3 vr, out Vector3 vu);
+            VortexArena.Common.Math.QMath.AngleVectors(attachAng, out Vector3 vf, out Vector3 vr, out Vector3 vu);
             Vector3 vo = ent.ViewOfs;
             Vector3 v = new(
                 vo.X * vf.X + vo.Y * vr.X + vo.Z * vu.X,
@@ -503,7 +503,7 @@ public sealed class PhysicsContext
                 vo.X * vf.Z + vo.Y * vr.Z + vo.Z * vu.Z);
 
             Vector3 curAng = new(-e.Angles.X, e.Angles.Y, e.Angles.Z);
-            XonoticGodot.Common.Math.QMath.AngleVectors(curAng, out vf, out vr, out vu);
+            VortexArena.Common.Math.QMath.AngleVectors(curAng, out vf, out vr, out vu);
             ent.Origin = new Vector3(
                 v.X * vf.X + v.Y * vf.Y + v.Z * vf.Z + e.Origin.X,
                 v.X * vr.X + v.Y * vr.Y + v.Z * vr.Z + e.Origin.Y,

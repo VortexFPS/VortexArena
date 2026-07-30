@@ -114,7 +114,7 @@ scale / non-jetpack MF trails / v_angle networking (the rest of the csqcmodel co
 
 ## File-by-file implementation plan
 
-### `src/XonoticGodot.Net/NetEntity.cs`
+### `src/VortexArena.Net/NetEntity.cs`
 - `EntityField`: add `AnimAction = 1 << 18`, `Wepent = 1 << 19` (uint mask, verified free).
 - `NetEntityState`: add `byte UpperAction`, `float AnimActionTime`; wepent block `int SwitchWeapon`
   (-1=none), `int SwitchingWeapon` (-1=none), `byte WepPhase` (0 ready/1 raise/2 drop),
@@ -127,7 +127,7 @@ scale / non-jetpack MF trails / v_angle networking (the rest of the csqcmodel co
 - `NetEntityFlags` (ushort, free at `1<<9`): reuse `Crouched`/`Dead` for anim DUCK/DEAD where possible;
   add `AnimDead2 = 1<<9` ONLY if die1-vs-die2 must visually differ (decide up front per Design A's risk).
 
-### `src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs`
+### `src/VortexArena.Engine/Simulation/LocomotionBlend.cs`
 - Keep `ImplicitDirection`/`SelectLegsDirectional` unchanged (faithful, live — verified 1:1 port).
 - Add `SelectTorsoAction(byte action, float actionStart, float now)` → `(FrameGroup clip, float phase)`
   implementing the priority cascade + per-anim duration window (die 2s, draw 1/3s, pain 0.5s, shoot
@@ -137,7 +137,7 @@ scale / non-jetpack MF trails / v_angle networking (the rest of the csqcmodel co
   torsoTime=0` static aim pose when no action is active. **This is the half-wired 4-pose path; test the
   fixbone re-anchor interaction.**
 
-### `src/XonoticGodot.Common/Gameplay/Player/AnimDecide.cs` (NEW)
+### `src/VortexArena.Common/Gameplay/Player/AnimDecide.cs` (NEW)
 - Godot-free port of the animdecide DECISION half: ANIM_* framegroup table + per-anim rates;
   `GetUpperAnim` priority (DEAD>ACTIVE>IDLE) + running-window expiry; `SetAction(Player, action)` latch
   (sets `AnimUpperAction` + `AnimActionStart = now`). Unit-testable against hand-traced QC cases.
@@ -176,20 +176,20 @@ scale / non-jetpack MF trails / v_angle networking (the rest of the csqcmodel co
 - `ClientNet`: consume `RandomSeed` (QW3) into a per-instance deterministic RNG; consume the
   ClientInit_misc constants (QW4) into client-side constant stores.
 
-### `src/XonoticGodot.Common/Framework/Entity.cs`
+### `src/VortexArena.Common/Framework/Entity.cs`
 - Add render-only mirror fields: `byte UpperAction`, `float AnimActionTime`, and the wepent display
   fields (`SwitchWeapon`, `SwitchingWeapon`, `WepPhase`, `WepAlpha` default 1, `ViewmodelSkin`,
   `GunAlign`). Server `Player` side adds `AnimUpperAction`/`AnimActionStart`/`GunAlign`.
 
-### `src/XonoticGodot.Server/RandomSeed.cs` (NEW) + `GameWorld.cs`
+### `src/VortexArena.Server/RandomSeed.cs` (NEW) + `GameWorld.cs`
 - `RandomSeed`: `Current` int re-rolled every 5s (matching `world.qc` reroll_period), ticked from
   `OnStartFrame`; instantiated in `Boot`.
 
-### `src/XonoticGodot.Server/ClientManager.cs` / `GameWorld.cs` (QW4)
+### `src/VortexArena.Server/ClientManager.cs` / `GameWorld.cs` (QW4)
 - In the connect/welcome path, send the ClientInit_misc constants bundle once per client (extend the
   existing `InfraClientConnect` welcome channel — it already delivers campaign/mutator/MOTD lines).
 
-### `src/XonoticGodot.Common/Math/Prandom.cs` (scoped from Design B)
+### `src/VortexArena.Common/Math/Prandom.cs` (scoped from Design B)
 - Make the RNG per-context (server-instance + client-instance) so a listen server's two RNGs don't
   corrupt each other's stream. Defer the bit-exact CRC16-vs-PCG algorithm swap unless a client effect
   consumes the seed this wave (none does today).

@@ -1,4 +1,4 @@
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  ModernPreset — the per-effect DRAW knobs of the modern GPU backend (planning/particles-dual-system.md

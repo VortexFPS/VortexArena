@@ -1,27 +1,28 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common;            // GameInit
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;   // Player (LocalServerPlayer)
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Game.Loaders;
-using XonoticGodot.Game.Client;
-using XonoticGodot.Game.Console;
-using XonoticGodot.Game.Hud;
-using XonoticGodot.Game.Menu;
-using XonoticGodot.Net;
-using XonoticGodot.Server;
-using EngineServices = XonoticGodot.Engine.Simulation.EngineServices;
+using VortexArena.Formats.Vfs;
+using VortexArena.Formats.Vmap;
+using VortexArena.Common;            // GameInit
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;   // Player (LocalServerPlayer)
+using VortexArena.Common.Math;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Console;
+using VortexArena.Game.Loaders;
+using VortexArena.Game.Client;
+using VortexArena.Game.Console;
+using VortexArena.Game.Hud;
+using VortexArena.Game.Menu;
+using VortexArena.Net;
+using VortexArena.Server;
+using EngineServices = VortexArena.Engine.Simulation.EngineServices;
 using GVec3 = Godot.Vector3;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// The networked-match node — the thing the menu (or a CLI flag) spawns to actually <b>join a server and
@@ -58,7 +59,7 @@ namespace XonoticGodot.Game.Net;
 /// </summary>
 public sealed partial class NetGame : Node3D
 {
-    /// <summary>The default XonoticGodot/Xonotic game port (DP <c>port</c> 26000).</summary>
+    /// <summary>The default VortexArena/Xonotic game port (DP <c>port</c> 26000).</summary>
     public const int DefaultPort = 26000;
 
     // --- configuration (set via the factory helpers before the node enters the tree) ---
@@ -71,10 +72,10 @@ public sealed partial class NetGame : Node3D
     private int _botSkill = -1;                 // -1 = unspecified: never write the `skill` cvar (MatchConfig.BotSkill)
     private string _campaignName = "";          // non-empty → host this listen server as a campaign level
     private int _campaignIndex;
-    private string _serverName = "XonoticGodot Listen Server";
+    private string _serverName = "VortexArena Listen Server";
     private string _playerName = "player";
     private VirtualFileSystem? _vfs;            // shared asset VFS (from the menu shell), for models/sounds/maps
-    private XonoticGodot.Engine.Simulation.CvarService? _sharedCvars;
+    private VortexArena.Engine.Simulation.CvarService? _sharedCvars;
     private System.Action<string>? _sharedCvarBridge;   // mirrors console/menu cvar writes into the server's store
 
     // --- live pieces ---
@@ -91,7 +92,7 @@ public sealed partial class NetGame : Node3D
     private DevHarness? _devHarness;            // dev capture (--fx-demo), inert unless a dev flag was passed
     // The background parse/build queue (S1): the idle player-model warm AND the live on-demand player-model
     // path (perf §9.4 Wave 1 — first sight of N bots streams one model build per frame instead of all at once).
-    private XonoticGodot.Game.Client.BackgroundAssetStreamer? _streamer;
+    private VortexArena.Game.Client.BackgroundAssetStreamer? _streamer;
     // Player-model names whose async resolve settled as NOT skeletal (non-IQM / no skeleton): the resolver
     // returns null for these so ClientWorld's MD3/static fall-through owns them — exactly the old synchronous
     // path's outcome. Per session; model files can't change mid-run.
@@ -105,6 +106,43 @@ public sealed partial class NetGame : Node3D
         new(System.StringComparer.OrdinalIgnoreCase);
     private ClientEntityView _entityView = null!;
     private Camera3D _camera = null!;
+
+    // (E3/E5) Map editor: the interaction controller, its line-overlay renderer and the orthographic view.
+    // Created with the render tree and inert until the editor gametype puts this client into free-fly.
+    private Vmap.EditorController? _editor;
+    private Vmap.EditorGizmos? _editorGizmos;
+    private Vmap.EditorOrthoView? _editorOrtho;
+    private bool _orthoPanning;
+
+    // The editor renders the world from the EDITABLE document, not the compiled BSP. Without this the textured
+    // geometry never reflects an edit: the overlay outline moves and the wall stays put.
+    private Node3D? _editorMapRoot;
+    private int _editorMapVersion = -1;
+
+    /// <summary>The editor's live light rig (design doc §10.1 rung 1); null when lighting is off.</summary>
+    private Vmap.EditorLighting? _editorLights;
+
+    /// <summary>Wall clock at bake start, for the timing line (ms since engine start).</summary>
+    private ulong _bakeClock;
+
+    /// <summary>
+    /// The document imported at load in the editor gametype — the single truth the session edits, the render
+    /// regenerates from, and collision is built from. Null outside the editor gametype.
+    /// </summary>
+    private VortexArena.Formats.Vmap.VmapDocument? _preloadedEditorDoc;
+
+    /// <summary>GeometryVersion the live collision was built from; -1 forces the first playtest rebuild check.</summary>
+    private int _editorCollisionVersion = -1;
+
+    private float _bakeUniformScale = float.NaN, _bakeUniformAmbient = float.NaN, _bakeUniformGamma = float.NaN;
+    private float _bakeUniformRange = float.NaN, _bakeUniformDeluxe = float.NaN;
+
+
+    private static float CvarOr(VortexArena.Engine.Simulation.CvarService cvars, string name, float fallback)
+    {
+        string v = cvars.GetString(name);
+        return string.IsNullOrEmpty(v) ? fallback : cvars.GetFloat(name);
+    }
     private RadarPanel _radar = null!;
     private NetHud _hud = null!;                 // crosshair + health/armor readout (the always-on lightweight HUD)
     // The full CSQC HUD panel set (weapon bar / ammo / kill-feed / centerprint / timer) on the net play path —
@@ -112,19 +150,19 @@ public sealed partial class NetGame : Node3D
     // Scoreboard panel is left UNUSED (T9's standalone _scoreboard owns the networked scoreboard). On a listen
     // server its gameplay panels (health/ammo/weapons) read the local server Player; a pure client gets the
     // player-agnostic panels (centerprint/killfeed) + the NetHud crosshair/health.
-    private XonoticGodot.Game.Hud.Hud _fullHud = null!;
-    private XonoticGodot.Game.Client.DamageTextLayer? _damageText; // [T51] floating damage numbers (cl_damagetext)
-    private XonoticGodot.Game.Client.WaypointSpriteLayer? _waypointLayer; // 3D in-world waypoint/objective markers
+    private VortexArena.Game.Hud.Hud _fullHud = null!;
+    private VortexArena.Game.Client.DamageTextLayer? _damageText; // [T51] floating damage numbers (cl_damagetext)
+    private VortexArena.Game.Client.WaypointSpriteLayer? _waypointLayer; // 3D in-world waypoint/objective markers
     private Node3D? _mapRoot;                                              // the built map scene (holds the "Portals" child)
     private Godot.Environment? _worldEnv;                                  // the WorldEnvironment's env — kept so a pure client can swap in the real map sky/fog/tint once its BSP loads
     private bool _clientMapLoaded;                                         // a pure --connect client has loaded the server's map (render + prediction collision) — one-shot
-    private XonoticGodot.Game.Client.PortalRenderer? _portalRenderer;      // see-through warpzone portal render (listen host)
-    private XonoticGodot.Game.Client.PortalDiscRenderer? _portalDiscRenderer; // warpzone portal DISC (skinned model) — listen host, reads the same AmbientManager zones
-    private XonoticGodot.Game.Client.NadeOrbRenderer? _orbRenderer;        // 3D nade orb effect models (heal/ammo/entrap/veil/darkness) — fed by the entity stream, read for the in-orb color flash
-    private XonoticGodot.Game.Client.ShowNamesLayer? _shownamesLayer; // [T68] floating player name + health/armor tags
-    private XonoticGodot.Game.Client.HitSound? _hitSound;          // client-side hit-confirmation beep (cl_hitsound modes 0-3)
-    private XonoticGodot.Game.Hud.ScoreboardPanel _scoreboard = null!; // the networked scoreboard (held while +showscores)
-    private XonoticGodot.Game.Hud.HudNotifications? _notifications; // notification router (centerprint/killfeed/announcer) on the net path
+    private VortexArena.Game.Client.PortalRenderer? _portalRenderer;      // see-through warpzone portal render (listen host)
+    private VortexArena.Game.Client.PortalDiscRenderer? _portalDiscRenderer; // warpzone portal DISC (skinned model) — listen host, reads the same AmbientManager zones
+    private VortexArena.Game.Client.NadeOrbRenderer? _orbRenderer;        // 3D nade orb effect models (heal/ammo/entrap/veil/darkness) — fed by the entity stream, read for the in-orb color flash
+    private VortexArena.Game.Client.ShowNamesLayer? _shownamesLayer; // [T68] floating player name + health/armor tags
+    private VortexArena.Game.Client.HitSound? _hitSound;          // client-side hit-confirmation beep (cl_hitsound modes 0-3)
+    private VortexArena.Game.Hud.ScoreboardPanel _scoreboard = null!; // the networked scoreboard (held while +showscores)
+    private VortexArena.Game.Hud.HudNotifications? _notifications; // notification router (centerprint/killfeed/announcer) on the net path
     private MinigameClient? _minigame;          // client-side minigame coordinator (board overlay + menu + cmd forwarding)
     private ViewEffects _viewEffects = null!;   // SEAM: T4's reusable screen-effects layer, on the net play path
     private AssetLoader? _assets;
@@ -152,7 +190,7 @@ public sealed partial class NetGame : Node3D
     // blend), used by UpdateCamera when cl_movement_smoothing_faithful is on (the default) so the rendered eye
     // matches stock Xonotic exactly. The port's adaptive stair offset + error-comp glide is the alternative
     // (faithful 0). Reset on respawn/teleport via the same path that clears the reconciler smoothing.
-    private readonly XonoticGodot.Net.FaithfulViewSmoothing _faithfulSmoothing = new();
+    private readonly VortexArena.Net.FaithfulViewSmoothing _faithfulSmoothing = new();
 
     // The zoom scope reticle overlay (QC crosshair.qc DrawReticle), fed each frame in _Process from the networked
     // active weapon (ClientNet.ActiveWeaponId) + the zoom/button state — the net-path twin of PlayerController's.
@@ -161,7 +199,7 @@ public sealed partial class NetGame : Node3D
     // The listen server's parsed map + its gametype-filtered dropped submodels, kept so SetupRender can build the
     // world render mesh from the SAME BSP + filter the collision was built from (the client renders the worldmodel
     // locally — DP VF_DRAWWORLD; the server ships no geometry). Null on a pure --connect client (no BSP yet).
-    private XonoticGodot.Formats.Bsp.BspData? _bsp;
+    private VortexArena.Formats.Bsp.BspData? _bsp;
     private System.Collections.Generic.IReadOnlySet<int>? _droppedSubmodels;
 
     // The carrier entity the prediction sim drives (the client's local player hull). Spawned into the ambient
@@ -310,11 +348,26 @@ public sealed partial class NetGame : Node3D
     /// builtin; only records the target — it's emitted (deferred) from <see cref="_Process"/> so a request made
     /// mid-tick (a clc_stringcmd <c>map</c>, or the intermission rotation) can't tear the server down under itself.
     /// </summary>
-    public void RequestMapChange(string map)
+    public void RequestMapChange(string map) => RequestMapChange(map, null);
+
+    /// <param name="gametype">
+    /// Gametype for the rebooted server, or null to keep the current one. This is what lets
+    /// <c>editor</c> drop into the map you are already playing: the changelevel machinery always carried a
+    /// gametype through to the restart, but nothing could ever ASK for a different one.
+    /// </param>
+    public void RequestMapChange(string map, string? gametype)
     {
-        if (!string.IsNullOrWhiteSpace(map))
-            _pendingMap = map;
+        if (string.IsNullOrWhiteSpace(map))
+            return;
+        _pendingMap = map;
+        _pendingGametype = string.IsNullOrWhiteSpace(gametype) ? null : gametype;
     }
+
+    /// <summary>Gametype override for the pending changelevel; null keeps the current one.</summary>
+    private string? _pendingGametype;
+
+    /// <summary>The map currently being served, for commands that re-host it.</summary>
+    public string CurrentMap => _map;
 
     // Render clock used to drive the prediction (Predict/SendInput) AND read the decaying stair/error offsets.
     // The reconciler arms those decays stamped with the SERVER time (in HandleSnapshot), so the clock we read
@@ -396,7 +449,7 @@ public sealed partial class NetGame : Node3D
     // integrate movement in fixed 1/72 s ticks (the bunnyhop-consistency fix); per-frame mode differs only in
     // sending a command per render frame (snappy aim/fire + faster backlog catch-up via the server batch path),
     // not in the movement dt.
-    private float _inputDeltaTime = XonoticGodot.Engine.Simulation.SimulationLoop.TicRate;
+    private float _inputDeltaTime = VortexArena.Engine.Simulation.SimulationLoop.TicRate;
 
     // FPS eye height (Xonotic PL_VIEW_OFS '0 0 35'). Mouse-look reads the live `sensitivity` × m_yaw/m_pitch
     // cvars (DP cl_input.c formula), so the input-settings dialog drives it and tuned m_yaw/m_pitch work.
@@ -405,6 +458,11 @@ public sealed partial class NetGame : Node3D
     // Standing player hull (Xonotic sv_player_mins/maxs), Quake units — same as PlayerController.HullMins/Maxs.
     private static readonly NVec3 HullMins = new(-16f, -16f, -24f);
     private static readonly NVec3 HullMaxs = new(16f, 16f, 45f);
+
+    // Observer hull — QC PL_CROUCH_MIN/MAX, the size PutObserverInServer gives a free-flying spectator. Must
+    // match the server's ApplyObserverHull or prediction and authority integrate different collisions.
+    private static readonly NVec3 ObserverHullMins = new(-16f, -16f, -24f);
+    private static readonly NVec3 ObserverHullMaxs = new(16f, 16f, 25f);
 
     // =====================================================================================
     //  Factory configuration (call before AddChild)
@@ -417,7 +475,7 @@ public sealed partial class NetGame : Node3D
     /// predictor reads the user's physics cvars); pass null for a standalone/CLI client.
     /// </summary>
     public void ConfigureClient(string address, string playerName = "player",
-        VirtualFileSystem? vfs = null, XonoticGodot.Engine.Simulation.CvarService? cvars = null,
+        VirtualFileSystem? vfs = null, VortexArena.Engine.Simulation.CvarService? cvars = null,
         AssetLoader? sharedAssets = null)
     {
         _isListenServer = false;
@@ -435,8 +493,8 @@ public sealed partial class NetGame : Node3D
     /// drive both the server's config + the client's rendering; pass null for a bare CLI host on a test floor.
     /// </summary>
     public void ConfigureListenServer(string map, string gametype = "dm", int botCount = 0, int botSkill = -1,
-        int port = DefaultPort, string playerName = "player", string serverName = "XonoticGodot Listen Server",
-        VirtualFileSystem? vfs = null, XonoticGodot.Engine.Simulation.CvarService? cvars = null,
+        int port = DefaultPort, string playerName = "player", string serverName = "VortexArena Listen Server",
+        VirtualFileSystem? vfs = null, VortexArena.Engine.Simulation.CvarService? cvars = null,
         string campaignName = "", int campaignIndex = 0, AssetLoader? sharedAssets = null)
     {
         _isListenServer = true;
@@ -448,7 +506,7 @@ public sealed partial class NetGame : Node3D
         _botSkill = botSkill;
         _campaignName = campaignName ?? "";
         _campaignIndex = campaignIndex;
-        _serverName = string.IsNullOrWhiteSpace(serverName) ? "XonoticGodot Listen Server" : serverName;
+        _serverName = string.IsNullOrWhiteSpace(serverName) ? "VortexArena Listen Server" : serverName;
         _playerName = string.IsNullOrWhiteSpace(playerName) ? "player" : playerName;
         _vfs = vfs;
         _sharedCvars = cvars;
@@ -607,7 +665,7 @@ public sealed partial class NetGame : Node3D
     {
         // --- collision: load the map's BSP collision if we can resolve it, else a flat test floor. ---
         CollisionWorld collision;
-        XonoticGodot.Formats.Bsp.BspData? bsp = TryLoadMapBsp(_map);
+        VortexArena.Formats.Bsp.BspData? bsp = TryLoadMapBsp(_map);
         BspCollisionBuilder.Result? built = null;
         if (bsp is not null)
         {
@@ -616,8 +674,54 @@ public sealed partial class NetGame : Node3D
             // brushes the render does — exactly like GameDemo (render + collision MUST agree, GameDemo.cs:134/181).
             _bsp = bsp;
             _droppedSubmodels = GameMapView.ComputeDroppedSubmodels(bsp, _gametype);
-            built = BspCollisionBuilder.Build(bsp, _droppedSubmodels);
-            collision = built.World;
+            if (IsEditorGametype)
+            {
+                // The editor plays the DOCUMENT, not the compiled map. Resolve it once, here, and this
+                // instance becomes the single truth for the whole session: the client edits it, the render
+                // regenerates from it, and — the part that makes PLAYTEST honest — collision is built from it
+                // too, so the level you run and jump through is the level you edited, not the .bsp it started
+                // from.
+                //
+                // A SAVED package wins over the compiled map. Importing the .bsp unconditionally would mean a
+                // mapper's own work is unreachable the moment they restart: it is on disk, and the editor
+                // reopens the original every time. The .bsp is the starting point for a map nobody has edited
+                // yet, not the thing to prefer over what they authored.
+                if (Vmap.VmapService.FindPackage(_map) is { } saved)
+                {
+                    try
+                    {
+                        _preloadedEditorDoc = VortexArena.Formats.Vmap.VmapPackage.Read(saved);
+                        VortexArena.Common.Diagnostics.Log.Info($"editor: reopened {saved}");
+                    }
+                    catch (Exception ex)
+                    {
+                        // A corrupt or half-written save must not cost the mapper the session — say so and
+                        // fall back to the compiled map rather than refusing to open anything.
+                        VortexArena.Common.Diagnostics.Log.Warn(
+                            $"editor: could not read {saved} ({ex.Message}) — starting from the compiled map");
+                        _preloadedEditorDoc = null;
+                    }
+                }
+
+                // Which source this ends up being is decided by whether the read produced a document, not by
+                // whether a file was there to try: a save that failed to parse leaves the import, and saying
+                // "saved" over it would be reporting the thing we just told the mapper did not happen.
+                bool fromSave = _preloadedEditorDoc is not null;
+                _preloadedEditorDoc ??= VortexArena.Formats.Vmap.BspToVmap.Import(
+                    bsp, _map, $"maps/{_map}.bsp", sourceHash: "", droppedSubmodels: _droppedSubmodels);
+
+                built = Vmap.EditorWorldCollision.Build(_preloadedEditorDoc, _droppedSubmodels);
+                collision = built.World;
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"editor: map is the {(fromSave ? "saved" : "imported")} document "
+                    + $"({_preloadedEditorDoc.Brushes.Count} brushes, "
+                    + $"{_preloadedEditorDoc.Patches.Count} patches; collision from the document)");
+            }
+            else
+            {
+                built = BspCollisionBuilder.Build(bsp, _droppedSubmodels);
+                collision = built.World;
+            }
         }
         else
         {
@@ -669,7 +773,7 @@ public sealed partial class NetGame : Node3D
         if (bsp is not null)
         {
             _serverWorld.MapBsp = bsp;                   // inline-model render surfaces for the getsurface* builtins
-            _serverWorld.Pvs = new XonoticGodot.Formats.Bsp.BspPvs(bsp); // checkpvs culling (bot LOS / sound / net)
+            _serverWorld.Pvs = new VortexArena.Formats.Bsp.BspPvs(bsp); // checkpvs culling (bot LOS / sound / net)
         }
         if (_vfs is not null)
             _serverWorld.ConfigReader = path => _vfs.Exists(path) ? _vfs.ReadText(path) : null;
@@ -776,7 +880,7 @@ public sealed partial class NetGame : Node3D
             // user actually changed AND the server Has, so it never clobbers a map/ruleset value they didn't set.
             // (The unified path needs none of this — its store is never reloaded out from under the user.)
             if (string.IsNullOrEmpty(_campaignName))
-                XonoticGodot.Engine.Simulation.CvarService.BackfillModified(
+                VortexArena.Engine.Simulation.CvarService.BackfillModified(
                     _sharedCvars, _serverWorld.Services.CvarsImpl, BootAuthoredCvars);
 
             _sharedCvarBridge = name =>
@@ -954,7 +1058,7 @@ public sealed partial class NetGame : Node3D
         // GameWorld.Use → TargetSpeaker.SpeakerUseActivator call chain), which owns ServerNet writes — safe.
         {
             ServerNet sv = _server!;
-            XonoticGodot.Common.Gameplay.TargetSpeaker.PlayToClientHandler =
+            VortexArena.Common.Gameplay.TargetSpeaker.PlayToClientHandler =
                 (client, emitter, ch, sample, vol, atten) =>
                 {
                     // QC IS_REAL_CLIENT guard is already applied before this seam fires (SpeakerUseActivator).
@@ -992,7 +1096,7 @@ public sealed partial class NetGame : Node3D
             _serverWorld!.Simulation.TickGate = _simGate;
             _serverThread = new ServerThread(
                 _serverWorld!, _server!,
-                static () => XonoticGodot.Engine.Simulation.SimulationLoop.TicRate);
+                static () => VortexArena.Engine.Simulation.SimulationLoop.TicRate);
             _serverThread.Start();
             GD.Print("[NetGame] sv_threaded 1 — server simulation running on a dedicated worker thread (XG-ServerSim).");
         }
@@ -1057,7 +1161,7 @@ public sealed partial class NetGame : Node3D
         // QC FOR_EACH_TAG(e) for `object_info mesh`: enumerate the object model's tag (bone) names from the
         // engine model-tag table (ModelService.ModelDef.Tags). Empty list when the model has no registered tags.
         // _serverWorld.Services.ModelsImpl is the concrete ModelService (non-null), same accessor TraceImpl uses.
-        XonoticGodot.Engine.Simulation.ModelService models = _serverWorld.Services.ModelsImpl;
+        VortexArena.Engine.Simulation.ModelService models = _serverWorld.Services.ModelsImpl;
         sandbox.MeshTagNamesProvider = model => models.TryGetModel(model, out var def)
             ? new List<string>(def.Tags.Keys)
             : (IReadOnlyList<string>)System.Array.Empty<string>();
@@ -1215,7 +1319,7 @@ public sealed partial class NetGame : Node3D
         var services = new EngineServices(BuildTestFloor(), _sharedCvars);
         GameInit.Boot(services);                 // Api.Services = services; + movement/registries
         // Seed weapon balance from whatever cvars are loaded (the menu preloaded the tree into _sharedCvars).
-        XonoticGodot.Common.Gameplay.Weapons.ConfigureAll();
+        VortexArena.Common.Gameplay.Weapons.ConfigureAll();
         // QC: REGISTER_MUTATOR(walljump, true) on CSQC — Base registers movement mutators (walljump,
         // doublejump, dodging, …) on the CLIENT unconditionally so their PlayerJump/PMPhysics hooks run
         // inside client prediction. The port's MutatorHooks.PlayerJump chain is static and shared with the
@@ -1298,8 +1402,8 @@ public sealed partial class NetGame : Node3D
         e.ViewOfs = new NVec3(0f, 0f, EyeHeight);
         // Fresh carrier = fresh input-sequence space (seqs restart per connection): reset the seq-keyed
         // predicted-warp pulse or a stale high seq from the previous match would gate it shut forever.
-        XonoticGodot.Engine.Simulation.TriggerTouch.PredictionSeq = 0;
-        XonoticGodot.Engine.Simulation.TriggerTouch.LastPredictedWarpSeq = 0;
+        VortexArena.Engine.Simulation.TriggerTouch.PredictionSeq = 0;
+        VortexArena.Engine.Simulation.TriggerTouch.LastPredictedWarpSeq = 0;
         _consumedWarpSeq = 0;
         return e;
         }
@@ -1358,7 +1462,7 @@ public sealed partial class NetGame : Node3D
             if (p.IsBot && !p.IsObserver && !p.IsDead)
             {
                 clients.Spectate(host, p);
-                XonoticGodot.Common.Diagnostics.Log.Info($"[bench] spectating bot '{p.NetName}' (slot {p.Index})");
+                VortexArena.Common.Diagnostics.Log.Info($"[bench] spectating bot '{p.NetName}' (slot {p.Index})");
                 break;
             }
         }
@@ -1392,7 +1496,7 @@ public sealed partial class NetGame : Node3D
         // The background asset streamer (S1) — created unconditionally (not just for the idle warm) because the
         // LIVE player-model resolve streams through it: parse on the thread pool, Godot build under the per-frame
         // budget. One node per NetGame; freed with the scene.
-        _streamer = new XonoticGodot.Game.Client.BackgroundAssetStreamer { Name = "AssetStreamer" };
+        _streamer = new VortexArena.Game.Client.BackgroundAssetStreamer { Name = "AssetStreamer" };
         AddChild(_streamer);
 
         // Networked projectiles draw their REAL model (rocket.md3 with its additive RocketThrust flame cone,
@@ -1427,7 +1531,7 @@ public sealed partial class NetGame : Node3D
         // play then hits a warm pipeline instead of stalling the frame. Self-frees after a few frames.
         // The map-item / pickup MD3 models render through the entity feed (PVS-culled until first-seen), so warm
         // them here too — built from the item registry + the same AssetLoader the live entity build uses.
-        XonoticGodot.Game.Client.GpuWarmPass.Run(_render, _render.Effects, _render.Projectiles, BuildItemWarmupInstances());
+        VortexArena.Game.Client.GpuWarmPass.Run(_render, _render.Effects, _render.Projectiles, BuildItemWarmupInstances());
 
         // CSQC appearance context (FORCEMODEL/FORCECOLORS need the local player + gametype): read live each frame.
         _render.AppearanceProvider = BuildAppearanceContext;
@@ -1460,6 +1564,29 @@ public sealed partial class NetGame : Node3D
             _render.EntityOriginResolver = ResolveEntityOrigin;
         }
 
+        // The editor's world-space alignment grid (E2). Added unconditionally but hidden until
+        // cl_editor_grid is set: it is a full-screen pass that costs nothing while invisible, and having it
+        // resident means the `editor_grid` bind works instantly instead of building a shader on first toggle
+        // (which would be a pipeline-compile hitch at exactly the wrong moment).
+        var editorGrid = new Vmap.EditorGrid();
+        AddChild(editorGrid);
+
+        // (E3/E5) Editor nodes. Always present but inert outside the editor gametype, so toggling into it is
+        // instant rather than paying node + shader construction at the moment the mapper asks for it.
+        _editor = new Vmap.EditorController();
+        _editor.Attach(_camera);
+        AddChild(_editor);
+
+        _editorGizmos = new Vmap.EditorGizmos();
+        _editorGizmos.Attach(_editor);
+        AddChild(_editorGizmos);
+
+        _editorOrtho = new Vmap.EditorOrthoView { Name = "EditorOrtho" };
+        _editorOrtho.Attach(_camera, _editor, _editorGizmos);
+        AddChild(_editorOrtho);
+        _editor.Ortho = _editorOrtho;
+        editorGrid.Attach(_editor);
+
         AddLight();
     }
 
@@ -1482,7 +1609,7 @@ public sealed partial class NetGame : Node3D
         AddChild(_mapRoot);
 
         // (§12.8) The render world's PVS so it DP-faithfully culls remote entities behind walls (r_pvs_cull_entities).
-        _render.Pvs = new XonoticGodot.Formats.Bsp.BspPvs(_bsp);
+        _render.Pvs = new VortexArena.Formats.Bsp.BspPvs(_bsp);
 
         // Client-side collision for the particle systems: decal splats conform to the real brush faces (DP
         // R_DecalSystem — else marks fall back to flat quads). A pure client already built the world for its
@@ -1501,7 +1628,7 @@ public sealed partial class NetGame : Node3D
         // main-thread prediction traces use. When we shared the prediction world into effects above, hand the SDF
         // lane its OWN world (a dedicated build), else reuse the fresh effects world (listen path, as before).
         if (_vfs is not null &&
-            XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat(XonoticGodot.Engine.Particles.ParticleCvars.Modern) != 0f)
+            VortexArena.Game.Menu.MenuState.Cvars.GetFloat(VortexArena.Engine.Particles.ParticleCvars.Modern) != 0f)
         {
             string bspVpath = $"maps/{_map}.bsp";
             byte[]? bspBytes = _vfs.Exists(bspVpath) ? _vfs.ReadBytes(bspVpath) : null;
@@ -1614,6 +1741,14 @@ public sealed partial class NetGame : Node3D
         _camera = new Camera3D { Name = "Camera3D", Fov = vFov, Near = 1f, Current = true };
         AddChild(_camera);
 
+        // (E3/E5) The editor nodes are constructed in SetupRender, which runs BEFORE this method — so the
+        // Attach calls there handed them a null camera, and both silently stood down every frame: the
+        // controller early-returns without a camera (no picking, so no hover highlight and no drag) and the
+        // ortho view refuses to open. Bind them to the real camera here, where it exists.
+        _editor?.Attach(_camera);
+        if (_editor is not null && _editorGizmos is not null)
+            _editorOrtho?.Attach(_camera, _editor, _editorGizmos);
+
         // First-person weapon view-model hung off the camera (CSQC viewmodel rendered at the view origin). Built
         // here because SetupRender ran first, so _render.Effects is live (ClientWorld._Ready set it synchronously
         // on AddChild). The weapon model is installed/swapped from the networked active weapon each frame in
@@ -1632,7 +1767,7 @@ public sealed partial class NetGame : Node3D
             // (QC W_MuzzleFlash_Model_Think). Static/missing models fall back to plain LoadModel.
             _viewModel.FlashModelFactory = path =>
             {
-                XonoticGodot.Formats.Md3.Md3Data? md3 = _assets.LoadMd3(path);
+                VortexArena.Formats.Md3.Md3Data? md3 = _assets.LoadMd3(path);
                 if (md3 is not null && md3.FrameCount > 1)
                     return ModelAnimator.Create(md3);
                 return _assets.LoadModel(path);
@@ -1657,10 +1792,10 @@ public sealed partial class NetGame : Node3D
         // icons draw the REAL Xonotic art instead of colored-box fallbacks (mirrors GameDemo.SetupHud).
         if (_assets is not null)
         {
-            XonoticGodot.Game.Hud.TextureCache.VfsResolver = _assets.LoadTexture;
+            VortexArena.Game.Hud.TextureCache.VfsResolver = _assets.LoadTexture;
             // Xolonium HUD font (the menu skin font), so HUD text matches Xonotic instead of Godot's fallback.
-            XonoticGodot.Game.Hud.HudPanel.HudFont = _assets.GetFont("xolonium");
-            XonoticGodot.Game.Hud.HudSkin.BoldFont = _assets.GetFont("xolonium-bold");
+            VortexArena.Game.Hud.HudPanel.HudFont = _assets.GetFont("xolonium");
+            VortexArena.Game.Hud.HudSkin.BoldFont = _assets.GetFont("xolonium-bold");
         }
 
         // The full CSQC HUD panel set on the net path (T34): weapon bar / ammo / kill-feed / centerprint / timer,
@@ -1669,7 +1804,7 @@ public sealed partial class NetGame : Node3D
         // top. Its gameplay panels read a local Player; on a listen server that is the local server Player
         // (resolved each frame in _Process as the spawn lands). Its OWN Scoreboard panel is left unfed — T9's
         // standalone _scoreboard owns the networked scoreboard, so we don't double it up.
-        _fullHud = new XonoticGodot.Game.Hud.Hud { Name = "FullHud", Layer = 4 };
+        _fullHud = new VortexArena.Game.Hud.Hud { Name = "FullHud", Layer = 4 };
         AddChild(_fullHud);
         // The full HUD's skinned Crosshair + HealthArmor panels now render on the play path (goal 1). On a listen
         // server (--host) UpdateFullHudPlayer feeds them the local server Player so they show the skinned art and
@@ -1696,17 +1831,31 @@ public sealed partial class NetGame : Node3D
         // origin — the same X Y Z space map entities use. The panel self-gates on cl_showposition/showposition
         // (debug-default-on, like FPS) and returns null until we have a live local body (handshake assigns a
         // non-zero LocalNetId), so it draws nothing in the menu / pre-spawn.
-        _fullHud.Position.PositionProvider =
-            () => _client is { LocalNetId: not 0 } c ? c.PredictedOrigin : (NVec3?)null;
+        // Both readouts come from the ACTIVE RENDERING CAMERA — the same transform the frame was drawn with.
+        //
+        // Anything else is a near-miss that looks authoritative. Reporting the player origin is an eye height
+        // out; reporting _viewAngles is the INPUT state, which a pinned camera (--observe) or any scripted
+        // override does not drive at all — so a screenshot could read "yaw 135 pitch 0" while the picture was
+        // taken at yaw 128 pitch -58. A view readout whose only job is to reproduce a view has to be measured
+        // from the thing that produced it.
+        _fullHud.Position.PositionProvider = () => ActiveViewCamera() is { } cam
+            ? Coords.ToQuake(cam.GlobalTransform.Origin)
+            : _client is { LocalNetId: not 0 } c ? c.PredictedOrigin : (NVec3?)null;
+        _fullHud.Position.AnglesProvider = () => ActiveViewCamera() is { } cam
+            ? CameraQuakeAngles(cam)
+            : (NVec3?)_viewAngles;
 
         // [T51] Floating damage-number layer (QC cl_damagetext). Full-rect overlay; fed each frame in _Process
         // from the server-side DamagetextMutator's drained events, projected via the first-person _camera.
-        _damageText = new XonoticGodot.Game.Client.DamageTextLayer { Name = "DamageText" };
+        _damageText = new VortexArena.Game.Client.DamageTextLayer { Name = "DamageText" };
         _damageText.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _fullHud.AddChild(_damageText);
 
-        // Hit-confirmation sound (QC HitSound): non-positional beep on the SFX bus, pitch varies by cl_hitsound mode.
-        _hitSound = new XonoticGodot.Game.Client.HitSound(_sharedCvars);
+        // Hit/typehit/kill feedback sounds (QC HitSound): non-positional, SFX bus. misc/hit is the pitched
+        // damage-confirm beep (cl_hitsound modes 0-3); misc/typehit the team/chat-hit dink; misc/kill the
+        // kill confirm (which the server flush prioritizes over the beep). Fed per frame from the owner's
+        // feedback stats in UpdateCrosshairFeedback.
+        _hitSound = new VortexArena.Game.Client.HitSound(_sharedCvars);
         if (_assets is not null)
             _hitSound.AudioLoader = _assets.LoadSound;
         _hitSound.Attach(_fullHud);
@@ -1731,7 +1880,7 @@ public sealed partial class NetGame : Node3D
         // Notifications (QC Local_Notification): centerprint + kill-feed + announcer voice on the net path, routed
         // into the full HUD's panels. Previously only MSG_ANNCE was handled (via a hidden host Hud); now the full
         // HUD lets HudNotifications render center/info text too. OnNotificationReceived forwards EVERY type.
-        _notifications = new XonoticGodot.Game.Hud.HudNotifications(_fullHud);
+        _notifications = new VortexArena.Game.Hud.HudNotifications(_fullHud);
         // QC client/announcer.qh autocvar_cl_announcer (voice pack dir, "default") + autocvar_cl_announcer_antispam
         // (2s same-sound dedup window). Read from the client cvar store so the user setting actually takes effect
         // (HudNotifications consumes AnnouncerVoice in the sound/announcer/<voice>/ resolve and AntiSpamInterval in
@@ -1791,7 +1940,7 @@ public sealed partial class NetGame : Node3D
         // toggled by the `quickmenu` bind (intercepted in RunBoundCommand → Toggle()); it self-blanks until opened.
         // It grabs keyboard focus on open so the 1-9/0/Esc number-key navigation works; mouse-click navigation
         // needs the cursor made visible (the gameplay path keeps it captured) — see the report's goal-8 note.
-        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.QuickMenuPanel>() is { } quick)
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { } quick)
             quick.CommandSink = line => RunCommand?.Invoke(line);
 
         _radar = new RadarPanel
@@ -1807,7 +1956,7 @@ public sealed partial class NetGame : Node3D
         // the SAME gametype string the HUD/scoreboard read (the networked ScoreInfo block sets GameScores.Gametype,
         // "ons" for Onslaught). Refreshed per-frame in _Process so a mid-match gametype change re-gates it.
         _radar.SendServerCommand = line => _client.SendStringCommand(line);
-        _radar.IsOnslaught = XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype == "ons";
+        _radar.IsOnslaught = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "ons";
         // Feed the real minimap: the map name (resolves gfx/<map>_mini.jpg inside the map pk3 via the VFS) + the
         // map's world XY bounds (QC mi_min/mi_max = the BSP worldspawn model mins/maxs) so the image + blips align.
         _radar.MapName = _map;
@@ -1824,7 +1973,7 @@ public sealed partial class NetGame : Node3D
         // crosshair + panels draw over them. Fed the live waypoint list straight from ClientNet.
         var waypointLayer = new CanvasLayer { Name = "Waypoints", Layer = 3 };
         AddChild(waypointLayer);
-        _waypointLayer = new XonoticGodot.Game.Client.WaypointSpriteLayer { Name = "WaypointSprites", Camera = _camera };
+        _waypointLayer = new VortexArena.Game.Client.WaypointSpriteLayer { Name = "WaypointSprites", Camera = _camera };
         _waypointLayer.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         if (_bsp is { Models.Length: > 0 })
         {
@@ -1843,7 +1992,7 @@ public sealed partial class NetGame : Node3D
         // surface that matches no zone all fall back to the dark-mirror placeholder. Gated by cl_portal_render.
         if (_mapRoot is not null)
         {
-            _portalRenderer = new XonoticGodot.Game.Client.PortalRenderer { Name = "PortalRenderer" };
+            _portalRenderer = new VortexArena.Game.Client.PortalRenderer { Name = "PortalRenderer" };
             AddChild(_portalRenderer);
             _portalRenderer.Setup(_mapRoot, _camera);
 
@@ -1854,7 +2003,7 @@ public sealed partial class NetGame : Node3D
             // we only construct + wire its skinned-model factory here. AssetLoader.LoadModel already supports the
             // `_N.skin` variant via its (vpath, skinIndex=0) overload; tolerate a null _assets the same way the
             // ProjectileRenderer.ModelFactory wiring (above) does.
-            _portalDiscRenderer = new XonoticGodot.Game.Client.PortalDiscRenderer { Name = "PortalDiscRenderer" };
+            _portalDiscRenderer = new VortexArena.Game.Client.PortalDiscRenderer { Name = "PortalDiscRenderer" };
             AddChild(_portalDiscRenderer);
             _portalDiscRenderer.Setup(_camera, (path, skin) => _assets?.LoadModel(path, skin));
         }
@@ -1864,7 +2013,7 @@ public sealed partial class NetGame : Node3D
         // sprites (below the HUD panels). Fed each frame in _Process from ClientNet's remote player slice + the
         // scoreboard name slice. The display NAME comes from the networked scoreboard rows (the port's faithful
         // entcs_GetName stand-in — there is no separate entcs name stream).
-        _shownamesLayer = new XonoticGodot.Game.Client.ShowNamesLayer { Name = "ShowNames", Camera = _camera, Net = _client };
+        _shownamesLayer = new VortexArena.Game.Client.ShowNamesLayer { Name = "ShowNames", Camera = _camera, Net = _client };
         _shownamesLayer.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _shownamesLayer.NameResolver = ResolveScoreboardName;
         waypointLayer.AddChild(_shownamesLayer);
@@ -1877,11 +2026,33 @@ public sealed partial class NetGame : Node3D
         // sets Ignore) — without it the Control defaults to Stop and its (centered, screen-sized) rect EATS the
         // captured mouse-look motion before it reaches _UnhandledInput, so the scoreboard "steals the mouse" while
         // it's up (QC hud_cursormode off — the HUD never eats input).
-        _scoreboard = new XonoticGodot.Game.Hud.ScoreboardPanel
+        _scoreboard = new VortexArena.Game.Hud.ScoreboardPanel
         {
             Name = "Scoreboard", Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         hudLayer.AddChild(_scoreboard);
+        // QC the interactive scoreboard's `localcmd(...)` sink (Scoreboard_InputEvent): join/spectate/tell/vcall
+        // are CLIENT commands the server must run, so a "cmd " prefix routes to the server the same way a typed
+        // `cmd join red` does; everything else (toggle, scoreboard_columns_set, commandmode) is a local console
+        // verb. On a listen host the client path still reaches the in-process server through the same seam.
+        _scoreboard.CommandSink = line =>
+        {
+            if (string.IsNullOrWhiteSpace(line)) return;
+            if (line.StartsWith("cmd ", System.StringComparison.Ordinal))
+            {
+                string verb = line[4..];
+                if (_serverWorld is not null) ExecuteHostConsoleCommand(verb);
+                else SendStringCommand(verb);
+                return;
+            }
+            MenuState.Interp?.ExecuteLine(line);
+        };
+        // DP commandmode: Shell owns the prompt; the direct hook preserves the prefill's quoting verbatim.
+        _scoreboard.OpenCommandPrompt = prefill => VortexArena.Game.Menu.MenuCommand.OpenCommandPrompt?.Invoke(prefill);
+        // Escape is owned by Shell's in-match chain (it runs in _UnhandledKeyInput, ahead of our _UnhandledInput,
+        // and marks both edges handled) — claim it from there so TAB+Escape can open the UI and Escape close it.
+        VortexArena.Game.Menu.MenuCommand.ScoreboardEscape = () =>
+            _scoreboard is not null && GodotObject.IsInstanceValid(_scoreboard) && _scoreboard.HandleEscape();
         LayoutScoreboard();
 
         // Screen-effects layer (damage red-flash + liquid tint) — the SAME reusable ViewEffects node T4 built for
@@ -1897,7 +2068,7 @@ public sealed partial class NetGame : Node3D
         // ProjectileRenderer.ModelFactory (AssetLoader.LoadModel, null-tolerant). Held in _orbRenderer so the
         // per-frame view-effects feed can read ActiveOrbs() for the in-orb color flash. The node self-advances
         // via its own _Process once in the tree (same as the ProjectileRenderer).
-        _orbRenderer = new XonoticGodot.Game.Client.NadeOrbRenderer { Name = "NadeOrbRenderer" };
+        _orbRenderer = new VortexArena.Game.Client.NadeOrbRenderer { Name = "NadeOrbRenderer" };
         AddChild(_orbRenderer);
         if (_assets is not null)
             _orbRenderer.ModelFactory = m => _assets.LoadModel(m);
@@ -1907,11 +2078,11 @@ public sealed partial class NetGame : Node3D
         // Screen-space vignette (cl_vignette_*): a soft darkened gradient framing the view edges, on its own
         // CanvasLayer above the world/ViewEffects tint but below the HUD. Self-contained — it registers its own
         // cvars, reads them live, and self-drives; no per-frame feeding needed here.
-        AddChild(new XonoticGodot.Game.Client.VignetteOverlay { Name = "Vignette" });
+        AddChild(new VortexArena.Game.Client.VignetteOverlay { Name = "Vignette" });
 
         // Zoom scope reticle (QC crosshair.qc DrawReticle): a CanvasLayer below the HUD, fed each frame in
         // _Process from the networked active weapon + zoom state (see the zoom block there).
-        _reticle = new XonoticGodot.Game.Client.ReticleOverlay { Name = "Reticle" };
+        _reticle = new VortexArena.Game.Client.ReticleOverlay { Name = "Reticle" };
         AddChild(_reticle);
 
         // The loading screen (Shell's CanvasLayer 100) covers the viewport during the handshake and the
@@ -2016,7 +2187,7 @@ public sealed partial class NetGame : Node3D
         // ChaseActive after UpdateCamera ran this frame), so the third-person death-cam doesn't show a floating gun.
         // ALSO hidden at intermission: QC FixIntermissionClient sets each weapon entity's effects = EF_NODRAW so the
         // viewmodel disappears once the match ends and the scoreboard takes over.
-        bool hidden = id < 0 || id >= XonoticGodot.Common.Gameplay.Weapons.Count
+        bool hidden = id < 0 || id >= VortexArena.Common.Gameplay.Weapons.Count
             || _client.Health <= 0 || _view.ChaseActive || _client.MatchIntermission;
 
         // [#43] Push the local profile color (_cl_color) to the server: listen host applies it directly
@@ -2072,7 +2243,7 @@ public sealed partial class NetGame : Node3D
         {
             if (_switchDropLeft < 0f)
             {
-                XonoticGodot.Common.Gameplay.Weapon outgoing = XonoticGodot.Common.Gameplay.Weapons.ById(_equippedWeaponId);
+                VortexArena.Common.Gameplay.Weapon outgoing = VortexArena.Common.Gameplay.Weapons.ById(_equippedWeaponId);
                 _switchDropLeft = outgoing?.SwitchDelayDrop() ?? 0f;
                 _viewModel.PlayHolster(); // no-op refresh if the manual keypress already started the slide
 
@@ -2086,7 +2257,7 @@ public sealed partial class NetGame : Node3D
                 if ((BindTable.AttackHeld || BindTable.Attack2Held) && outgoing is not null
                     && MenuState.Cvars.GetString("cl_unpress_attack_on_empty_switch") != "0"
                     && (LocalServerPlayer ?? _hudMirror) is { } fireActor
-                    && !XonoticGodot.Common.Gameplay.Inventory.ClientHasWeapon(fireActor, outgoing, andAmmo: true, complain: false))
+                    && !VortexArena.Common.Gameplay.Inventory.ClientHasWeapon(fireActor, outgoing, andAmmo: true, complain: false))
                 {
                     BindTable.ReleaseAttack();
                     _attackLatch = _attack2Latch = false; // pending sub-tick taps die with the release
@@ -2111,7 +2282,7 @@ public sealed partial class NetGame : Node3D
         // Base-faithful selection (CL_WeaponEntity_SetModel): full-model DPM rigs (rl/gl/crylink/electro/hagar/
         // ok_*) render the h_ HAND RIG itself; invisible-hand IQM rigs render the v_ model attached to the rig's
         // "weapon" bone. ViewModelEquip.Build is the single source of truth for first-person weapon construction.
-        XonoticGodot.Common.Gameplay.Weapon w = XonoticGodot.Common.Gameplay.Weapons.ById(id);
+        VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(id);
         // wr_viewmodel override replaces the model file (vmOverride = "v_<instrument>.md3"); else the static WorldModel.
         string vModel = string.IsNullOrEmpty(vmOverride) ? WeaponVModelPath(w) : "models/weapons/" + vmOverride;
         ViewModelEquip eq = ViewModelEquip.Build(_assets, vModel);
@@ -2119,8 +2290,8 @@ public sealed partial class NetGame : Node3D
         // QC wepent.movedir (CL_WeaponEntity_SetModel): the weapon's registered model-local tag_shot offset —
         // the SAME value the server's SetupShot fires from — so the first-person flash spawns at the real
         // muzzle point (Base movedir_aligned), not wherever the compressed-view-space render tag lands.
-        System.Numerics.Vector3 mdv = XonoticGodot.Common.Gameplay.WeaponFiring.TryGetMuzzleOffset(id, out System.Numerics.Vector3 mo)
-            ? mo : XonoticGodot.Common.Gameplay.WeaponFiring.DefaultMuzzleOffset;
+        System.Numerics.Vector3 mdv = VortexArena.Common.Gameplay.WeaponFiring.TryGetMuzzleOffset(id, out System.Numerics.Vector3 mo)
+            ? mo : VortexArena.Common.Gameplay.WeaponFiring.DefaultMuzzleOffset;
         _viewModel.MuzzleMovedir = new Vector3(mdv.X, mdv.Y, mdv.Z);
         _viewModel.Visible = true;
         // Raise the new gun into view instead of popping the model in (Xonotic viewmodel_draw raise; pairs with
@@ -2150,15 +2321,15 @@ public sealed partial class NetGame : Node3D
         int colors = LocalViewedClientColors();
         if (colors == 0)
         {
-            _viewModel.SetPlayerColors(XonoticGodot.Game.Client.ModelTint.White,
-                XonoticGodot.Game.Client.ModelTint.Black, XonoticGodot.Game.Client.ModelTint.Black, false);
+            _viewModel.SetPlayerColors(VortexArena.Game.Client.ModelTint.White,
+                VortexArena.Game.Client.ModelTint.Black, VortexArena.Game.Client.ModelTint.Black, false);
             return;
         }
 
-        float paletteTime = XonoticGodot.Common.Services.Api.Services?.Clock?.Time ?? 0f;
-        (float sr, float sg, float sb) = XonoticGodot.Engine.Simulation.CsqcModelAppearance.ColormapPaletteColor(
+        float paletteTime = VortexArena.Common.Services.Api.Services?.Clock?.Time ?? 0f;
+        (float sr, float sg, float sb) = VortexArena.Engine.Simulation.CsqcModelAppearance.ColormapPaletteColor(
             (colors >> 4) & 0x0F, isPants: false, paletteTime);
-        (float pr, float pg, float pb) = XonoticGodot.Engine.Simulation.CsqcModelAppearance.ColormapPaletteColor(
+        (float pr, float pg, float pb) = VortexArena.Engine.Simulation.CsqcModelAppearance.ColormapPaletteColor(
             colors & 0x0F, isPants: true, paletteTime);
         var shirt = new Color(sr, sg, sb);
         var pants = new Color(pr, pg, pb);
@@ -2168,9 +2339,9 @@ public sealed partial class NetGame : Node3D
         // return '0 0 0' → fall back to the pants palette color (weaponentity_glowmod's `if (!g) g = palette`).
         Color glow = pants;
         int wid = _client?.ActiveWeaponId ?? -1;
-        if (wid >= 0 && wid < XonoticGodot.Common.Gameplay.Weapons.Count)
+        if (wid >= 0 && wid < VortexArena.Common.Gameplay.Weapons.Count)
         {
-            XonoticGodot.Common.Gameplay.Weapon w = XonoticGodot.Common.Gameplay.Weapons.ById(wid);
+            VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(wid);
             string net = w?.NetName ?? "";
             if (net is "vortex" or "vaporizer" || net.Contains("nex"))
             {
@@ -2209,7 +2380,7 @@ public sealed partial class NetGame : Node3D
     /// <summary>
     /// [#43] The packed <c>clientcolors</c> of the player this client is LOOKING THROUGH (Base
     /// <c>entcs_GetClientColors(current_player)</c>): the listen host reads its live slot, a pure client /
-    /// a followed spectatee reads the watched player's networked <see cref="XonoticGodot.Net.NetEntityState.Colors"/>.
+    /// a followed spectatee reads the watched player's networked <see cref="VortexArena.Net.NetEntityState.Colors"/>.
     /// 0 = no colors resolved.
     /// </summary>
     private int LocalViewedClientColors()
@@ -2229,7 +2400,7 @@ public sealed partial class NetGame : Node3D
     /// <summary>
     /// [#43] Push the local profile color (<c>_cl_color</c>, packed <c>16*shirt+pants</c> — what the
     /// multiplayer-profile palette grids edit) to the server, Base's engine-side color userinfo: the listen
-    /// host applies it directly through <c>SV_ChangeTeam</c> (<see cref="XonoticGodot.Server.Teamplay.ChangeTeam"/>
+    /// host applies it directly through <c>SV_ChangeTeam</c> (<see cref="VortexArena.Server.Teamplay.ChangeTeam"/>
     /// — a NO-OP in teamplay, where the team owns the colors), a pure client sends the <c>color</c> client
     /// command (same server sink). Change-gated so it costs one cvar read per frame; an unset/0 cvar pushes
     /// nothing (keeps the colorless default look rather than forcing white/white).
@@ -2325,7 +2496,7 @@ public sealed partial class NetGame : Node3D
     {
         if (_viewModel is null || !GodotObject.IsInstanceValid(_viewModel))
             return;
-        XonoticGodot.Formats.Bsp.LightGridData? grid = _bsp?.LightGrid;
+        VortexArena.Formats.Bsp.LightGridData? grid = _bsp?.LightGrid;
         if (grid is null || _camera is null || !GodotObject.IsInstanceValid(_camera))
         {
             _viewModel.SetGridLight(false, Vector3.One, Vector3.Zero, Vector3.Up);
@@ -2344,7 +2515,7 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
-    /// Drive the local view-model's anim frame from the networked <see cref="XonoticGodot.Net.WepentViewState.ViewmodelFrame"/>
+    /// Drive the local view-model's anim frame from the networked <see cref="VortexArena.Net.WepentViewState.ViewmodelFrame"/>
     /// selector (Base <c>wframe</c> NET_HANDLE: 0 idle, 1 fire, 2 reload, 3 raise, 4 drop). This is the pure-client /
     /// spectatee path: a listen host derives the reload anim from <see cref="LocalServerPlayer"/> (see
     /// <see cref="UpdateViewModelReloadAnim"/>) and needs nothing here, but a remote client / a followed spectatee has
@@ -2396,7 +2567,7 @@ public sealed partial class NetGame : Node3D
     /// <see cref="EquipNetworkedWeapon"/>, <see cref="BuildWeaponWorldModel"/>, and
     /// <see cref="PrecacheWeaponModels"/> so they all hit the SAME asset-cache key.
     /// </summary>
-    internal static string WeaponVModelPath(XonoticGodot.Common.Gameplay.Weapon w)
+    internal static string WeaponVModelPath(VortexArena.Common.Gameplay.Weapon w)
         => string.IsNullOrEmpty(w.WorldModel) ? "" : "models/weapons/" + w.WorldModel;
 
     /// <summary>
@@ -2409,9 +2580,9 @@ public sealed partial class NetGame : Node3D
     /// </summary>
     private string WeaponViewModelOverride(int weaponId)
     {
-        if (weaponId < 0 || weaponId >= XonoticGodot.Common.Gameplay.Weapons.Count)
+        if (weaponId < 0 || weaponId >= VortexArena.Common.Gameplay.Weapons.Count)
             return "";
-        XonoticGodot.Common.Gameplay.Weapon w = XonoticGodot.Common.Gameplay.Weapons.ById(weaponId);
+        VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(weaponId);
         if (w?.NetName != "tuba" || LocalServerPlayer is not { } p)
             return "";
         int instrument = p.WeaponState(new WeaponSlot(0)).TubaInstrument;
@@ -2471,7 +2642,7 @@ public sealed partial class NetGame : Node3D
         // player's 3rd-person carried weapon) it paid a mid-match PIPELINE-COMPILE hitch. Same warm-by-render fix
         // as the player-model roster (PrecacheCombatSoundsAndModelsAsync) and the idle warmer (§12.6-2).
         var weaponWarmRoots = new System.Collections.Generic.List<Node3D>();
-        foreach (XonoticGodot.Common.Gameplay.Weapon w in XonoticGodot.Common.Gameplay.Weapons.All)
+        foreach (VortexArena.Common.Gameplay.Weapon w in VortexArena.Common.Gameplay.Weapons.All)
         {
             string vModel = WeaponVModelPath(w);
             if (string.IsNullOrEmpty(vModel))
@@ -2485,12 +2656,12 @@ public sealed partial class NetGame : Node3D
             System.Numerics.Vector3? shot = _assets.LoadMuzzleOffset(vModel, hModel != vModel ? hModel : null);
             if (shot is { } so)
             {
-                XonoticGodot.Common.Gameplay.WeaponFiring.RegisterMuzzleOffset(w.RegistryId, so);
+                VortexArena.Common.Gameplay.WeaponFiring.RegisterMuzzleOffset(w.RegistryId, so);
                 muzzles++;
                 // `set developer 1` to confirm the per-weapon shot origin (QC movedir) actually applied: forward
                 // (x), +left (y), up (z) from the eye. A weapon that fires from screen-CENTER would show ~(0,0,0)
                 // or be ABSENT here (fell back to the generic offset). Devastator should read ~(40.9,-9,-17).
-                XonoticGodot.Common.Diagnostics.Log.Trace(
+                VortexArena.Common.Diagnostics.Log.Trace(
                     $"[muzzle] {w.NetName}: movedir=({so.X:0.0},{so.Y:0.0},{so.Z:0.0}) fwd/left/up from eye");
             }
 
@@ -2523,7 +2694,7 @@ public sealed partial class NetGame : Node3D
         // the loading screen) — Godot compiles a pipeline on first DRAW, so an un-drawn warm model left it
         // uncompiled. Then free them; the texture/material caches persist. Mirrors the player-roster warm.
         if (weaponWarmRoots.Count > 0)
-            XonoticGodot.Game.Client.GpuWarmPass.WarmNodes(this, weaponWarmRoots, () =>
+            VortexArena.Game.Client.GpuWarmPass.WarmNodes(this, weaponWarmRoots, () =>
             {
                 foreach (Node3D r in weaponWarmRoots)
                     if (GodotObject.IsInstanceValid(r))
@@ -2546,7 +2717,7 @@ public sealed partial class NetGame : Node3D
             return;
 
         int sounds = 0, i = 0;
-        foreach (XonoticGodot.Common.Gameplay.GameSound s in XonoticGodot.Common.Gameplay.Sounds.All)
+        foreach (VortexArena.Common.Gameplay.GameSound s in VortexArena.Common.Gameplay.Sounds.All)
         {
             // Combat sounds live under sound/weapons/ (rocket_fire, rocket_impact, …) — the report's per-weapon
             // fire/impact lists. LoadSound fills _soundCache (and caches misses, so no re-probe on real play).
@@ -2613,7 +2784,7 @@ public sealed partial class NetGame : Node3D
         // WarmNodes use. Textures are shared-cached, so holding the roster's scene nodes briefly is a small,
         // bounded peak. No-op/immediate-free headless.
         if (warmRoots.Count > 0)
-            XonoticGodot.Game.Client.GpuWarmPass.WarmNodes(this, warmRoots, () =>
+            VortexArena.Game.Client.GpuWarmPass.WarmNodes(this, warmRoots, () =>
             {
                 foreach (Node3D r in warmRoots)
                     if (GodotObject.IsInstanceValid(r))
@@ -2642,11 +2813,11 @@ public sealed partial class NetGame : Node3D
         // implicated in an early gen2 GC stall). Unset/unregistered → on (only an explicit "0" disables).
         if (_sharedCvars is not null && _sharedCvars.GetString("cl_idle_warmup") == "0")
             return;
-        var warmer = new XonoticGodot.Game.Client.IdleWarmer { Name = "IdleWarmer" };
+        var warmer = new VortexArena.Game.Client.IdleWarmer { Name = "IdleWarmer" };
         AddChild(warmer);
 
         // Every registered sound (announcer/pickup/voice + the already-warm combat samples). LoadSound caches.
-        foreach (XonoticGodot.Common.Gameplay.GameSound s in XonoticGodot.Common.Gameplay.Sounds.All)
+        foreach (VortexArena.Common.Gameplay.GameSound s in VortexArena.Common.Gameplay.Sounds.All)
         {
             string sample = s.Sample;
             if (!string.IsNullOrEmpty(sample))
@@ -2672,14 +2843,14 @@ public sealed partial class NetGame : Node3D
                 // it's freed: a built-but-never-drawn model never compiled its material variants' pipelines,
                 // so the first player wearing it on screen paid the compile (`pipe +N` mid-fight).
                 parse => EnqueueStagedSkeletalBuild(loader, parse,
-                    XonoticGodot.Game.Client.BackgroundAssetStreamer.Priority.Low, $"idle-warm {m}",
+                    VortexArena.Game.Client.BackgroundAssetStreamer.Priority.Low, $"idle-warm {m}",
                     () =>
                     {
                         if (loader.BuildSkeletalModel(parse)?.Root is { } warmRoot)
-                            XonoticGodot.Game.Client.GpuWarmPass.WarmNodes(this,
+                            VortexArena.Game.Client.GpuWarmPass.WarmNodes(this,
                                 new List<Node3D> { warmRoot }, () => warmRoot.QueueFree());
                     }),
-                XonoticGodot.Game.Client.BackgroundAssetStreamer.Priority.Low,
+                VortexArena.Game.Client.BackgroundAssetStreamer.Priority.Low,
                 label: $"idle-warm {m} (parse)");
         }
     }
@@ -2701,13 +2872,13 @@ public sealed partial class NetGame : Node3D
         // warming everything. Slightly wasteful, but keeps the first-use hitch off the connecting client.
         if (!_isListenServer || _serverWorld is null)
         {
-            foreach (XonoticGodot.Common.Gameplay.Weapon w in XonoticGodot.Common.Gameplay.Weapons.All)
+            foreach (VortexArena.Common.Gameplay.Weapon w in VortexArena.Common.Gameplay.Weapons.All)
                 if (!string.IsNullOrEmpty(w.NetName))
                     set.Add(w.NetName);
             return set;
         }
 
-        XonoticGodot.Common.Services.ICvarService cv = _serverWorld.Services.Cvars;
+        VortexArena.Common.Services.ICvarService cv = _serverWorld.Services.Cvars;
 
         // --- Replacement mutators: these define the loadout outright, so the map's weapon_ pickups are
         //     gameplay-irrelevant (instagib/overkill replace the player's inventory each spawn; nix forces
@@ -2732,10 +2903,10 @@ public sealed partial class NetGame : Node3D
         if (cv.GetFloat("g_nix") != 0f)
         {
             // NIX cycles through every "normal" non-mutator-blocked weapon — see NixMutator.CanChooseWeapon.
-            foreach (XonoticGodot.Common.Gameplay.Weapon w in XonoticGodot.Common.Gameplay.Weapons.All)
+            foreach (VortexArena.Common.Gameplay.Weapon w in VortexArena.Common.Gameplay.Weapons.All)
             {
-                if ((w.SpawnFlags & XonoticGodot.Common.Gameplay.WeaponFlags.MutatorBlocked) != 0) continue;
-                if ((w.SpawnFlags & XonoticGodot.Common.Gameplay.WeaponFlags.Normal) == 0) continue;
+                if ((w.SpawnFlags & VortexArena.Common.Gameplay.WeaponFlags.MutatorBlocked) != 0) continue;
+                if ((w.SpawnFlags & VortexArena.Common.Gameplay.WeaponFlags.Normal) == 0) continue;
                 if (!string.IsNullOrEmpty(w.NetName))
                     set.Add(w.NetName);
             }
@@ -2752,8 +2923,8 @@ public sealed partial class NetGame : Node3D
             if (arena.Equals("all", System.StringComparison.OrdinalIgnoreCase)
              || arena.Equals("most", System.StringComparison.OrdinalIgnoreCase))
             {
-                foreach (XonoticGodot.Common.Gameplay.Weapon w in XonoticGodot.Common.Gameplay.Weapons.All)
-                    if ((w.SpawnFlags & XonoticGodot.Common.Gameplay.WeaponFlags.MutatorBlocked) == 0
+                foreach (VortexArena.Common.Gameplay.Weapon w in VortexArena.Common.Gameplay.Weapons.All)
+                    if ((w.SpawnFlags & VortexArena.Common.Gameplay.WeaponFlags.MutatorBlocked) == 0
                      && !string.IsNullOrEmpty(w.NetName))
                         set.Add(w.NetName);
             }
@@ -2791,7 +2962,7 @@ public sealed partial class NetGame : Node3D
     /// weapon's .qh (e.g. electro.qh:29 EFFECT_ELECTRO_MUZZLEFLASH, devastator.qh:28 EFFECT_ROCKET_MUZZLEFLASH,
     /// minelayer.qh:30 EFFECT_ROCKET_MUZZLEFLASH, vaporizer.qh:26 EFFECT_VORTEX_MUZZLEFLASH). Defaults to the
     /// blaster flash (an unregistered name simply yields no flash, never an error).</summary>
-    private static string MuzzleEffectFor(XonoticGodot.Common.Gameplay.Weapon w) => w.NetName switch
+    private static string MuzzleEffectFor(VortexArena.Common.Gameplay.Weapon w) => w.NetName switch
     {
         "vortex" or "vaporizer" => "VORTEX_MUZZLEFLASH",
         "devastator" or "minelayer" => "ROCKET_MUZZLEFLASH",
@@ -2820,7 +2991,7 @@ public sealed partial class NetGame : Node3D
     /// and attaches NO model flash (only the particle effect), so this returns <c>""</c> for them (the ViewModel
     /// skips the model spawn).
     /// </summary>
-    private static string MuzzleModelFor(XonoticGodot.Common.Gameplay.Weapon w) => w.NetName switch
+    private static string MuzzleModelFor(VortexArena.Common.Gameplay.Weapon w) => w.NetName switch
     {
         "devastator" or "minelayer" or "okrpc" => "models/flash.md3",
         "machinegun" or "shotgun" or "okhmg" or "okmachinegun" => "models/uziflash.md3",
@@ -2835,9 +3006,9 @@ public sealed partial class NetGame : Node3D
     /// </summary>
     private Node3D? BuildWeaponWorldModel(int weaponId)
     {
-        if (_assets is null || weaponId < 0 || weaponId >= XonoticGodot.Common.Gameplay.Weapons.Count)
+        if (_assets is null || weaponId < 0 || weaponId >= VortexArena.Common.Gameplay.Weapons.Count)
             return null;
-        XonoticGodot.Common.Gameplay.Weapon w = XonoticGodot.Common.Gameplay.Weapons.ById(weaponId);
+        VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(weaponId);
         string vModel = WeaponVModelPath(w);
         return string.IsNullOrEmpty(vModel) ? null : _assets.LoadModel(vModel);
     }
@@ -2849,7 +3020,7 @@ public sealed partial class NetGame : Node3D
     /// path). Returns null for an empty / inline (<c>*N</c> brush) model or a non-MD3 model (IQM/DPM handled
     /// elsewhere) → the entity falls back to the placeholder box.
     /// </summary>
-    private XonoticGodot.Formats.Md3.Md3Data? ResolveEntityModel(Entity e)
+    private VortexArena.Formats.Md3.Md3Data? ResolveEntityModel(Entity e)
     {
         if (_assets is null || string.IsNullOrEmpty(e.Model) || e.Model.StartsWith('*'))
             return null;
@@ -2900,7 +3071,11 @@ public sealed partial class NetGame : Node3D
         return list;
     }
 
-    public override void _ExitTree() => Shutdown();
+    public override void _ExitTree()
+    {
+        Vmap.EditorLightBake.Cancel();   // never tear the scene down with rays still in flight
+        Shutdown();
+    }
 
     private bool _shutDown;
 
@@ -2961,7 +3136,7 @@ public sealed partial class NetGame : Node3D
         }
         // #30: same guard for the published client render-time scale — a teardown mid-pause/slowmo must not
         // leave the menu / the next match's visuals frozen at the old factor.
-        XonoticGodot.Game.Client.ClientRenderTime.Scale = 1f;
+        VortexArena.Game.Client.ClientRenderTime.Scale = 1f;
 
         if (_client is not null)
         {
@@ -2972,6 +3147,7 @@ public sealed partial class NetGame : Node3D
             _client.PrintReceived -= OnServerPrintForMinigame;
             _client.PrintReceived -= OnServerPrintForChat;
         }
+        UnwireEditorReplication();
         if (_sharedCvarBridge is not null && _sharedCvars is not null)
         {
             _sharedCvars.Changed -= _sharedCvarBridge;   // shared store outlives this match; don't leak the hook
@@ -2983,6 +3159,9 @@ public sealed partial class NetGame : Node3D
         // Drop any unconsumed predecoded texture images (a model whose staged build never completed —
         // entity died mid-stream / map change) so decoded pixels don't outlive the session.
         _assets?.Assets.ClearPredecodedImages();
+        // Same reasoning for the editor's thumbnail grid: free its textures HERE rather than leaving them to
+        // the finalizer thread, which would race the renderer.
+        _editorThumbs?.Clear();
         _client?.Dispose();
         // S5: join the server-sim worker BEFORE disposing ServerNet/the world, so the socket + world teardown is
         // single-threaded and no in-flight tick races the Dispose (the worker holds the gate around its whole
@@ -3044,8 +3223,8 @@ public sealed partial class NetGame : Node3D
     // DP mouse pipeline (cl_input.c IN_Move → CL_Input): raw deltas accumulate per frame in _mouseDx/Dy
     // (_UnhandledInput), then FlushMouseLook applies the m_accelerate/m_filter block ONCE per render frame
     // (the accel math needs realframetime) and scales into the view angles. Params cached R11-style.
-    private readonly XonoticGodot.Common.Input.MouseAccel _mouseAccel = new();
-    private XonoticGodot.Common.Input.MouseAccelParams _mouseAccelCv = XonoticGodot.Common.Input.MouseAccelParams.DpDefaults;
+    private readonly VortexArena.Common.Input.MouseAccel _mouseAccel = new();
+    private VortexArena.Common.Input.MouseAccelParams _mouseAccelCv = VortexArena.Common.Input.MouseAccelParams.DpDefaults;
     private float _pitchMinCv = -90f;      // in_pitch_min (DP -90; quake used -70)
     private float _pitchMaxCv = 90f;       // in_pitch_max (DP 90; quake used 80)
     private float _mouseDx, _mouseDy;
@@ -3119,8 +3298,8 @@ public sealed partial class NetGame : Node3D
         // cl_netimmediatebuttons defaults ON (unset → on): treat anything but "0" as enabled.
         _immediateButtonsCv = (_sharedCvars?.GetString("cl_netimmediatebuttons") ?? "") != "0";
         // The DP mouse pipeline params (cl_input.c:401-412 registration defaults for anything unset).
-        var dp = XonoticGodot.Common.Input.MouseAccelParams.DpDefaults;
-        _mouseAccelCv = new XonoticGodot.Common.Input.MouseAccelParams
+        var dp = VortexArena.Common.Input.MouseAccelParams.DpDefaults;
+        _mouseAccelCv = new VortexArena.Common.Input.MouseAccelParams
         {
             MFilter             = CvOr("m_filter", 0f) != 0f,
             Accelerate          = CvOr("m_accelerate", dp.Accelerate),
@@ -3143,7 +3322,7 @@ public sealed partial class NetGame : Node3D
 
     public override void _Process(double delta)
     {
-        using var _ngScope = XonoticGodot.Game.Client.FrameProfiler.Scope("ng.process"); // [profiling] whole-method cost
+        using var _ngScope = VortexArena.Game.Client.FrameProfiler.Scope("ng.process"); // [profiling] whole-method cost
         // _Ready runs as a coroutine (async void) so the loading screen can animate between sub-stages —
         // until it sets _readyComplete, many of the fields touched below (the HUD, the camera, _client,
         // _server) are partly built. Just sit out _Process during this window; the LoadingScreen drives
@@ -3180,10 +3359,10 @@ public sealed partial class NetGame : Node3D
         // covers a whole frame; attributed one frame late like the other lagged counters. ~0 when unthreaded.
         if (_serverThread is not null)
         {
-            double gateWaitMs = XonoticGodot.Engine.Collision.TraceService.GateWaitTicks
+            double gateWaitMs = VortexArena.Engine.Collision.TraceService.GateWaitTicks
                 * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-            XonoticGodot.Engine.Collision.TraceService.GateWaitTicks = 0;
-            XonoticGodot.Common.Diagnostics.Prof.Mark("sv.gatewait_ms", gateWaitMs);
+            VortexArena.Engine.Collision.TraceService.GateWaitTicks = 0;
+            VortexArena.Common.Diagnostics.Prof.Mark("sv.gatewait_ms", gateWaitMs);
         }
 
         // DP CL_Input: apply the frame's accumulated mouse-look FIRST, so everything below (input sampling,
@@ -3203,12 +3382,12 @@ public sealed partial class NetGame : Node3D
         // gibs, entity/player animators, ambient emitters, faithful particles) — the port of DP scaling cl.time
         // (which ALL CSQC animation reads) by movevars_timescale, so a slowmo/paused sim slows/freezes the
         // client visuals in lockstep instead of leaving them running on wall clock.
-        XonoticGodot.Game.Client.ClientRenderTime.Scale = slowmo;
+        VortexArena.Game.Client.ClientRenderTime.Scale = slowmo;
 
         // Arm the predicted-warpzone budget: ONE predicted crossing per render frame, across every reconcile
         // replay chain this frame runs (see TriggerTouch.PredictedWarpBudget — kills the replay round-trip
         // through both paired zones that stamped a bogus entry-facing view snap).
-        XonoticGodot.Engine.Simulation.TriggerTouch.PredictedWarpBudget = 1;
+        VortexArena.Engine.Simulation.TriggerTouch.PredictedWarpBudget = 1;
 
         // Drive the listen server (if any) by real elapsed time — it runs its fixed ticks, pulls each client's
         // queued input, simulates, and broadcasts snapshots.
@@ -3223,7 +3402,7 @@ public sealed partial class NetGame : Node3D
         SyncLocalPauseSlowmo();
 
         if (_serverThread is null)
-            using (XonoticGodot.Game.Client.FrameProfiler.Scope("server.tick"))
+            using (VortexArena.Game.Client.FrameProfiler.Scope("server.tick"))
                 _server?.Tick(rawDt); // RAW wall time: the tick accumulator integrates variance harmlessly
 
         // WS1 stage 3 (2026-07-11): the S5 whole-remainder gate span is GONE. It serialised the worker's ticks
@@ -3249,7 +3428,7 @@ public sealed partial class NetGame : Node3D
         // the worker's latest sim state). Done under the gate, before the world reads below. The client's own
         // transport (_client.Poll, further down) then receives that snapshot the SAME frame.
         if (_serverThread is not null)
-            using (XonoticGodot.Game.Client.FrameProfiler.Scope("server.tick"))
+            using (VortexArena.Game.Client.FrameProfiler.Scope("server.tick"))
                 _server?.PumpTransportThreaded(rawDt); // RAW wall time (see the server Tick note above)
 
         // Demo/benchmark camera: keep the host observing a living bot (no-op unless cl_bench_spectate is set;
@@ -3268,7 +3447,7 @@ public sealed partial class NetGame : Node3D
 
         // (perf 2.0) ng.feeds: the music/announcer/host-mutator HUD-feed run — sub-scoped so the ng.process
         // residual shrinks to genuinely-unattributed work (frame-budget decomposition, perf-campaign doc).
-        using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.feeds"))
+        using (VortexArena.Game.Client.FrameProfiler.Scope("ng.feeds"))
         {
         // QC target_music_kill() at NextLevel: stop the map music at intermission (works on both the listen-server
         // and pure-client paths — the flag is networked via ClientNet.MatchIntermission). QC FixIntermissionClient
@@ -3308,26 +3487,32 @@ public sealed partial class NetGame : Node3D
             if (_damageText is not null && Mutators.ByName("damagetext") is DamagetextMutator dtm)
             {
                 _damageText.Camera = _camera;
-                Player? localPlayer = LocalServerPlayer;
                 // QC spectatee_status != -1 (playing or following a player → a meaningful view origin, so the
                 // close-range / out-of-view 2D heuristics may apply); a free-fly observer (IsObserving) always
                 // gets a world number.
                 bool canUse2d = _client is not null && !_client.IsObserving;
+                // QC write_damagetext per-viewer visibility (sv_damagetext.qc:32-37): the queue carries EVERY
+                // hit on the server; the local viewer only sees the ones the sv_damagetext tier grants them —
+                // at the shipped default 2 that's THEIR OWN hits only (an observer sees all at tier >= 1).
+                // Without this gate every bot-vs-bot hit on the map drew a number, and the off-screen ones got
+                // pinned near the crosshair by the 2D out-of-view fallback.
+                float dtTier = _serverWorld?.Services.Cvars.GetFloat("sv_damagetext") ?? 2f;
+                Player? dtViewer = LocalServerPlayer;
+                bool dtObserver = _client?.IsObserving ?? false;
                 foreach (DamageTextEvent ev in dtm.DrainPending())
                 {
-                    string wn = XonoticGodot.Common.Gameplay.Damage.DeathTypes.WeaponNetNameOf(ev.DeathType);
+                    if (!DamagetextMutator.ShouldShowTo(dtTier,
+                            viewerIsAttacker: dtViewer is not null && ReferenceEquals(ev.Attacker, dtViewer),
+                            viewerIsObserver: dtObserver))
+                        continue;
+                    string wn = VortexArena.Common.Gameplay.Damage.DeathTypes.WeaponNetNameOf(ev.DeathType);
                     int colorKey = Weapons.ByName(wn) is { } w ? w.RegistryId : -1;
                     _damageText.Add(ev, Coords.ToGodot(ev.Target.Origin), colorKey, canUse2d);
-
-                    // Hit confirmation when the LOCAL player dealt the damage (not self-damage): the hitsound
-                    // beep AND the crosshair hitmarker flash (QC HitSound + the crosshair hit indication). The
-                    // crosshair pulse is otherwise unfed — CrosshairPanel.HitFlash decays itself each frame.
-                    if (localPlayer is not null && ev.Attacker == localPlayer && ev.Target != localPlayer)
-                    {
-                        _hitSound?.OnHit(ev.Health + ev.Armor);
-                        _fullHud.Crosshair.HitFlash = 1f;
-                    }
                 }
+                // (The hitsound + crosshair hit flash no longer ride these damagetext events — QC drives them
+                // from the feedback STATS, which UpdateCrosshairFeedback now does on both paths. That decouples
+                // them from sv_damagetext, skips damagetext's own gates, stops burn-tick DoT beep trails, and
+                // lets the kill sound take its EndFrame priority over the hit beep.)
             }
             if (Mutators.ByName("itemstime") is ItemstimeMutator itm && itm.IsEnabled)
             {
@@ -3337,7 +3522,7 @@ public sealed partial class NetGame : Node3D
                 // the host as the live sv_itemstime tier (itm.Tier); spectatee_status / warmup_stage come off the
                 // local client. (Previously the panel was force-shown whenever the mutator was enabled.)
                 int panelMode = Mathf.RoundToInt(
-                    XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat("hud_panel_itemstime"));
+                    VortexArena.Game.Menu.MenuState.Cvars.GetFloat("hud_panel_itemstime"));
                 int spectatee = _client?.SpectateeStatus ?? 0;
                 bool warmup = _client?.MatchWarmup ?? false;
                 bool show = ItemsTimePanel.ShouldDraw(panelMode, spectatee, warmup, itm.Tier);
@@ -3348,8 +3533,9 @@ public sealed partial class NetGame : Node3D
 
             // [T41] objective-ring + hit-indication feed moved to UpdateCrosshairFeedback() (called
             // unconditionally below, like UpdateCrosshairWeaponRings) so it also runs on a pure remote client
-            // off the networked LocalState slice. The host damagetext hit path below still owns the host
-            // crosshair flash + hitsound; UpdateCrosshairFeedback only fires the hit cue on the remote path.
+            // off the networked LocalState slice. That same call now owns the hit/typehit/kill feedback
+            // sounds + the crosshair hit flash on BOTH paths (host reads the live Player stats, remote the
+            // networked Feedback block) — QC's stat-driven HitSound, no damagetext coupling.
 
             // (weapon-ring + vehicle-HUD feeders hoisted out of the host-only block — see the unconditional calls
             // before ProcessAnnouncerQueue below — so they also run for a pure remote client; each now picks its
@@ -3364,7 +3550,7 @@ public sealed partial class NetGame : Node3D
             // path uses (spectatee / warmup / STAT(ITEMSTIME)==2). The tier comes off the network, not a local
             // mutator. This is what makes the panel work for a pure remote/dedicated-server client.
             int panelMode = Mathf.RoundToInt(
-                XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat("hud_panel_itemstime"));
+                VortexArena.Game.Menu.MenuState.Cvars.GetFloat("hud_panel_itemstime"));
             bool show = ItemsTimePanel.ShouldDraw(
                 panelMode, _client.SpectateeStatus, _client.MatchWarmup, _client.ItemsTimeTier);
             _fullHud.ItemsTime.Visible = show;
@@ -3409,7 +3595,7 @@ public sealed partial class NetGame : Node3D
         // observed bug (the spawn-stutter was the ENet throttle) — `set cl_movement_hitch_hold 0` disables it.
         // Rationale + risks: docs/TROUBLESHOOTING.md.
         _client.RecentHitch = _hitchHoldCv && rawDt > HitchFrameSeconds; // hitch detection must see the REAL frame
-        using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.poll"))
+        using (VortexArena.Game.Client.FrameProfiler.Scope("ng.poll"))
             _client.Poll();
 
         // Advance the render clock: free-run by this frame's elapsed time with a BOUNDED RATE SLEW toward
@@ -3504,9 +3690,18 @@ public sealed partial class NetGame : Node3D
             // spawns (IsObserver flips false), then latch done. Remote clients are NOT auto-joined — they get the
             // real Base observer flow (+jump joins, +attack spectates). A campaign host that CAN'T passive-autojoin
             // at sv_spectate 1 relies on this same path (its CmdJoin succeeds on stock campaign maps).
-            // cl_bench_spectate: the host is a CAMERA — stand down so BenchSpectateThink can glue it to a bot
+            // Two independent "the host is a CAMERA, not a player" gates, both of which must hold off the join:
+            // --observe stays an OBSERVER by design (no body/viewmodel in the shot; nothing perturbs the
+            // world) — skip the host auto-join entirely while it is armed.
+            // cl_bench_spectate: same story — stand down so BenchSpectateThink can glue it to a bot
             // (without the gate the join would land once, then bench pulls it back: a one-spawn flicker on capture).
-            if (_isListenServer && !_hostJoinDone && !BenchSpectateActive && _serverWorld is { } joinWorld)
+            // The editor gametype is excluded for the same reason as the observer camera: EDIT *is* the
+            // observer state, so auto-joining the host would drop the mapper into a body at a spawn point a
+            // second after the map loads. This command path bypasses the gametype join gate (it calls
+            // ClientManager.Join directly), so the gate alone does not stop it — it has to be refused here.
+            if (_isListenServer && !_hostJoinDone && !ObserverCamera.Active && !BenchSpectateActive
+                && !IsEditorGametype
+                && _serverWorld is { } joinWorld)
             {
                 if (LocalServerPlayer is not { IsObserver: true })
                 {
@@ -3554,8 +3749,29 @@ public sealed partial class NetGame : Node3D
             // first spawn, matching the IsDead gate used for the death-cam below). PlayerPhysics.Move then bails.
             if (_carrier is not null)
             {
-                bool localDead = LocalServerPlayer is { } self ? self.IsDead : (_everAlive && _client.Health <= 0);
+                // An OBSERVER has zero health, which both of these tests read as dead — and a dead carrier makes
+                // PlayerPhysics.Move bail, so the client predicted NO movement at all while the server flew the
+                // observer around. That mismatch reconciled every single tick, which is what the free-fly camera
+                // jitter actually was. Observing is not dying.
+                bool localDead = !IsLocalObserving
+                    && (LocalServerPlayer is { } self ? self.IsDead : (_everAlive && _client.Health <= 0));
                 _carrier.DeadState = localDead ? DeadFlag.Dead : DeadFlag.No;
+
+                // Match the server's observer state so the predicted leg runs the SAME branch as authority:
+                // the fly branch is selected by movetype, and the hull/eye must agree or the two integrate
+                // different collisions. QC PutObserverInServer: crouch hull, MOVETYPE_NOCLIP for free-fly.
+                if (IsLocalObserving)
+                {
+                    _carrier.MoveType = MoveType.Noclip;
+                    _carrier.Mins = ObserverHullMins;
+                    _carrier.Maxs = ObserverHullMaxs;
+                }
+                else if (_carrier.MoveType == MoveType.Noclip)
+                {
+                    _carrier.MoveType = MoveType.Walk;
+                    _carrier.Mins = HullMins;
+                    _carrier.Maxs = HullMaxs;
+                }
 
                 // Mirror the server-resolved per-player speed multiplier (Speed powerup / speed·disability buffs /
                 // entrap nade) onto the prediction carrier so PlayerPhysics' predicted leg scales the top speed like
@@ -3669,7 +3885,7 @@ public sealed partial class NetGame : Node3D
             _client.ImmediateButtons = _immediateButtonsCv;
             // (perf 2.0) ng.input: the per-frame prediction + input transmit — the using's embedded
             // statement is the whole if/else, so both cadence paths are covered by one scope.
-            using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.input"))
+            using (VortexArena.Game.Client.FrameProfiler.Scope("ng.input"))
             if (_perFrameInput)
             {
                 // PATH A — BASE-FAITHFUL variable-dt local prediction (Xonotic Base's default, Movetype_Physics_
@@ -3703,7 +3919,7 @@ public sealed partial class NetGame : Node3D
                 // display frame rate (DeltaTime = TicRate), so the server advances this player at true wall-clock
                 // speed. Accumulate real delta and drain it in fixed quanta; cap the backlog so a hitch can't
                 // trigger a spiral-of-death.
-                const float tic = XonoticGodot.Engine.Simulation.SimulationLoop.TicRate;
+                const float tic = VortexArena.Engine.Simulation.SimulationLoop.TicRate;
                 _inputDeltaTime = tic;
                 _inputAccum += dt * slowmo; // slowmo scales the client's command cadence to match the server's tick rate
                 if (_inputAccum > MaxInputBacklog) _inputAccum = MaxInputBacklog;
@@ -3722,10 +3938,17 @@ public sealed partial class NetGame : Node3D
             }
         }
 
+        // "Client counts as spawned" — shared by the CaptureGate mark below and the loading-screen stage pick:
+        // a real spawn (Health > 0), or an armed --observe camera (which never spawns — Health stays 0).
+        // An editor client never gains health — EDIT is the observer state — so gating "loaded" on a live body
+        // would leave the loading screen up forever. A ready camera is the real readiness signal there, the
+        // same reasoning as the fixed observer camera beside it.
+        bool clientSpawned = _cameraReady && (_client.Health > 0 || ObserverCamera.Active || IsEditorGametype);
+
         // Capture readiness: a windowed --screenshot waits on this so it lands on the spawned world, not the
         // loading screen or a from-origin pre-spawn frame (CaptureGate). One-shot at first spawn, independent of
         // the loading-screen block below (which a bare CLI host may not have).
-        if (!_captureMarked && _cameraReady && _client.Health > 0)
+        if (!_captureMarked && clientSpawned)
         {
             _captureMarked = true;
             CaptureGate.MarkReady();
@@ -3738,9 +3961,9 @@ public sealed partial class NetGame : Node3D
         if (LoadingScreen is not null || _fallbackOverlay is not null)
         {
             HandshakeStage stage =
-                (_cameraReady && _client.Health > 0) ? HandshakeStage.Spawned
-                : !_client.Accepted                  ? HandshakeStage.Connecting
-                : !_cameraReady                       ? HandshakeStage.WaitingForServer
+                clientSpawned          ? HandshakeStage.Spawned
+                : !_client.Accepted    ? HandshakeStage.Connecting
+                : !_cameraReady        ? HandshakeStage.WaitingForServer
                 : HandshakeStage.Joining;
 
             if (stage != _handshakeStage)
@@ -3791,8 +4014,8 @@ public sealed partial class NetGame : Node3D
         // view zooms out on death), paused, or the console is open. Fed to the shared view, which lerps
         // current_viewzoom toward the target in UpdateView.
         bool zoomActive = !GetTree().Paused && !ConsoleState.IsOpen && _client.Accepted && _client.Health > 0;
-        XonoticGodot.Common.Gameplay.Weapon? activeWep =
-            _client.ActiveWeaponId >= 0 ? XonoticGodot.Common.Gameplay.Weapons.ById(_client.ActiveWeaponId) : null;
+        VortexArena.Common.Gameplay.Weapon? activeWep =
+            _client.ActiveWeaponId >= 0 ? VortexArena.Common.Gameplay.Weapons.ById(_client.ActiveWeaponId) : null;
         bool weaponZoom = activeWep is not null && activeWep.ZoomOnSecondary && BindTable.Attack2Held;
         _view.ZoomHeld = zoomActive && (BindTable.ZoomHeld || weaponZoom);
 
@@ -3800,9 +4023,18 @@ public sealed partial class NetGame : Node3D
         // user third-person camera (the menu Perspective radio binds chase_active 0/1, DialogSettingsGame:457,487).
         // Engage the shared view's classic chase mode when chase_active != 0; the death/frozen event-chase still
         // takes precedence inside FirstPersonView. (Negative chase_active is a DP debug split-screen; treat !=0 as on.)
-        _view.CameraMode = CvarOr(Api.Cvars, "chase_active", 0f) != 0f
+        // An observer is never in third person: chase_active is a PLAYER preference, and while free-flying the
+        // camera IS the viewpoint. Without this, returning from PLAYTEST to EDIT left the mapper looking at
+        // their own back.
+        _view.CameraMode = !IsLocalObserving && CvarOr(Api.Cvars, "chase_active", 0f) != 0f
             ? Client.FirstPersonView.ChaseMode.Chase
             : Client.FirstPersonView.ChaseMode.None;
+
+        // Eye height follows the observer/player state rather than the constant, so the free-fly camera sits at
+        // the entity origin and the client's prediction agrees with the server's observer hull.
+        _view.EyeHeight = LocalEyeHeight;
+        if (_carrier is not null)
+            _carrier.ViewOfs = new NVec3(0f, 0f, LocalEyeHeight);
 
         // Place the first-person camera at the predicted eye each frame (smooth even between snapshots, since
         // SendInput re-predicts every tick). C5: held until the first snapshot seeds the carrier — before that
@@ -3810,9 +4042,18 @@ public sealed partial class NetGame : Node3D
         // handshake. The camera is first-placed in the firstSnapshot branch above. Drives the shared view (zoom
         // lerp + camera placement + eventchase + eye-contents), so it must run BEFORE the ViewEffects feed below
         // (which reads SampleEyeContents = _view.EyeContents).
-        if (_cameraReady)
-            using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.camera"))
+        // The orthographic editor view OWNS the camera while it is open (it parks it on an axis and switches the
+        // projection). UpdateCamera would re-place it at the first-person eye every frame, which is why toggling
+        // the ortho view looked like it did nothing at all: it opened, and was overwritten before the frame drew.
+        if (_editorOrtho is { IsOpen: true })
+        {
+            _editorOrtho.Reapply();
+        }
+        else if (_cameraReady)
+        {
+            using (VortexArena.Game.Client.FrameProfiler.Scope("ng.camera"))
                 UpdateCamera(dt);
+        }
 
         // Camera-trace capture (apparatus A2): once spawned, record the rendered camera origin + predicted state
         // per frame; finish + quit when the scripted input is exhausted. Inert unless --camera-trace was passed.
@@ -3848,7 +4089,7 @@ public sealed partial class NetGame : Node3D
         // Feed the full HUD's player-bound panels (health/ammo/weapons/crosshair) the local server Player on a
         // listen server, or the networked-stats mirror on a pure client (refreshed just before, so the panels
         // read this frame's snapshot values) — the SAME skinned panel set either way. SetPlayer no-ops when same.
-        using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.hud"))
+        using (VortexArena.Game.Client.FrameProfiler.Scope("ng.hud"))
         {
             UpdateHudMirror();
             UpdateFullHudPlayer();
@@ -3859,8 +4100,8 @@ public sealed partial class NetGame : Node3D
         // [r16 #5] ng.viewfx: the equip + screen-effects + radar + shownames feed block — previously unscoped,
         // one of the stretches the profiler's "proc:other dominated / add Prof scopes" debt pointed at.
         // Explicitly disposed just before the second ng.hud block (a `using var` would swallow it + the tail).
-        XonoticGodot.Common.Diagnostics.Prof.ScopeToken _viewfxScope =
-            XonoticGodot.Game.Client.FrameProfiler.Scope("ng.viewfx");
+        VortexArena.Common.Diagnostics.Prof.ScopeToken _viewfxScope =
+            VortexArena.Game.Client.FrameProfiler.Scope("ng.viewfx");
 
         // Install / swap the first-person weapon model when the networked active weapon changes (CSQC view.qc:305
         // picks the v_ model from the active weapon, rebuilding only on a swap).
@@ -3927,7 +4168,7 @@ public sealed partial class NetGame : Node3D
             _radar.ZoomFraction = _view.ZoomFraction;
             // Keep the Onslaught gate live so the maximized radar's click-to-spawn only arms in Onslaught — the same
             // networked gametype string the HUD/scoreboard read (ScoreInfo block → GameScores.Gametype, "ons" = ONS).
-            _radar.IsOnslaught = XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype == "ons";
+            _radar.IsOnslaught = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "ons";
         }
 
         // [T68] Shownames overlay (QC Draw_ShowNames_All): feed the per-frame view context — the local client's
@@ -3952,14 +4193,14 @@ public sealed partial class NetGame : Node3D
             // shares the same static on a listen host). The layer previously derived teamplay from
             // LocalTeam != None — the #27 pants-team trap: FFA players carry a pants-derived team, so DM
             // players sharing profile colors classified as teammates (LOS skipped, names always visible).
-            _shownamesLayer.Teamplay = XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay;
+            _shownamesLayer.Teamplay = VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay;
         }
         _viewfxScope.Dispose(); // close ng.viewfx — the scoreboard/panels below are ng.hud's
 
         // Scoreboard (QC +showscores): show while the scoreboard key is held, and feed it the networked rows +
         // team totals whenever a fresh LatestScoreboard arrives (the panel only repaints on data/toggle, so this
         // is cheap). BindTable.ShowScores is the held-button state set from the +showscores bind.
-        using (XonoticGodot.Game.Client.FrameProfiler.Scope("ng.hud"))
+        using (VortexArena.Game.Client.FrameProfiler.Scope("ng.hud"))
         {
             UpdateScoreboard();
             UpdateScore();
@@ -3996,7 +4237,8 @@ public sealed partial class NetGame : Node3D
         {
             string map = _pendingMap;
             _pendingMap = null;
-            string gametype = CurrentGametype();
+            string gametype = _pendingGametype ?? CurrentGametype();
+            _pendingGametype = null;
             int bots = _serverWorld?.Clients.BotCount ?? _botCount;
             int skill = _botSkill;
             // Campaign auto-advance (win → next level): the world store carries g_campaign + the NEXT
@@ -4042,7 +4284,7 @@ public sealed partial class NetGame : Node3D
             {
                 Godot.Engine.MaxFps = _govSaved;
                 _govSaved = -1; _govApplied = 0; _govN = 0; _govI = 0; _govAccum = 0f;
-                XonoticGodot.Common.Diagnostics.Log.Info("[governor] off — restored engine cap");
+                VortexArena.Common.Diagnostics.Log.Info("[governor] off — restored engine cap");
             }
             return;
         }
@@ -4095,7 +4337,7 @@ public sealed partial class NetGame : Node3D
         {
             Godot.Engine.MaxFps = target;
             if (_govApplied != 0) // don't log the first engage at boot
-                XonoticGodot.Common.Diagnostics.Log.Info($"[governor] MaxFps -> {target}");
+                VortexArena.Common.Diagnostics.Log.Info($"[governor] MaxFps -> {target}");
             _govApplied = target;
         }
     }
@@ -4228,7 +4470,7 @@ public sealed partial class NetGame : Node3D
                 _motionTrace.Dispose();
                 _motionTrace = null;
                 _mtHave = false;
-                XonoticGodot.Common.Diagnostics.Log.Info("[motiontrace] closed");
+                VortexArena.Common.Diagnostics.Log.Info("[motiontrace] closed");
             }
             return;
         }
@@ -4245,11 +4487,11 @@ public sealed partial class NetGame : Node3D
                 _motionTrace.WriteLine(
                     "t,qpc_s,qpc_top_s,frame,dt_ms,raw_dt_ms,clock_err_ms,slew_pct,ticks," +
                     "cam_speed,cam_step,cam_step_xy,yaw_step,pred_speed,pred_err,remote_speed,maxfps,drift_ms");
-                XonoticGodot.Common.Diagnostics.Log.Info($"[motiontrace] recording -> {path}");
+                VortexArena.Common.Diagnostics.Log.Info($"[motiontrace] recording -> {path}");
             }
             catch (System.Exception ex)
             {
-                XonoticGodot.Common.Diagnostics.Log.Info($"[motiontrace] open failed: {ex.Message}");
+                VortexArena.Common.Diagnostics.Log.Info($"[motiontrace] open failed: {ex.Message}");
                 _sharedCvars?.Set("cl_motion_trace", "0");
                 return;
             }
@@ -4321,21 +4563,20 @@ public sealed partial class NetGame : Node3D
         return string.IsNullOrWhiteSpace(gt) ? _gametype : gt;
     }
 
-    // ---- crosshair objective rings + remote-client hit indication ----
-    // Remote-client hit-indication diff (QC view.qc UpdateDamage: STAT(HITSOUND_DAMAGE_DEALT_TOTAL) advances
-    // → unaccounted_damage → the crosshair hit flash + hitsound). On a pure remote client there is no local
-    // damagetext mutator, so we diff the networked cumulative-damage stat off ClientNet.LocalState instead.
-    private float _remoteHitDealtTotal;
-    private bool _remoteHitInit;
+    // ---- crosshair objective rings + hit/typehit/kill feedback ----
+    // QC view.qc UpdateDamage/HitSound run off the owner's feedback STATS (HIT/TYPEHIT/KILL_TIME + the
+    // cumulative damage total). Both paths feed the same HitSound state machine: a listen host reads the
+    // live LocalServerPlayer fields (flushed by the server's EndFrame under the sim gate), a pure client the
+    // networked LocalState slice (the EntityField.Feedback block, protocol v18).
+    private int _arcWeaponId = int.MinValue; // lazily-resolved Arc registry id (the QC have_arc check)
 
     /// <summary>
     /// Feed the crosshair panel the local player's objective-ring stats (QC view.qc HUD_Draw 1006-1022:
-    /// NADE_TIMER &gt; CAPTURE_PROGRESS &gt; REVIVE_PROGRESS) and, on the remote-client path, the hit-indication
-    /// flash (QC view.qc UpdateDamage). Runs on every path: a listen host reads the live
-    /// <see cref="LocalServerPlayer"/> (which carries STAT(NADE_TIMER)/STAT(REVIVE_PROGRESS) live); a pure
-    /// remote client reads the networked <see cref="ClientNet.LocalState"/> slice the server ships (the
-    /// EntityField.Feedback block — NadeTimer/CaptureProgress/ReviveProgress/HitDamageDealtTotal). CAPTURE has
-    /// no server producer yet, so it stays 0 and the panel hides that ring either way.
+    /// NADE_TIMER &gt; CAPTURE_PROGRESS &gt; REVIVE_PROGRESS) and drive the hit/typehit/kill feedback sounds +
+    /// the crosshair hit-indication flash (QC view.qc UpdateDamage/HitSound + crosshair.qc:387). Runs on
+    /// every path: a listen host reads the live <see cref="LocalServerPlayer"/>; a pure remote client reads
+    /// the networked <see cref="ClientNet.LocalState"/> slice the server ships. CAPTURE has no server
+    /// producer yet, so it stays 0 and the panel hides that ring either way.
     /// </summary>
     private void UpdateCrosshairFeedback()
     {
@@ -4343,10 +4584,16 @@ public sealed partial class NetGame : Node3D
             return;
         CrosshairPanel x = _fullHud.Crosshair;
 
+        // QC have_arc (view.qc:918-925): a viewmodel slot holding the Arc bypasses the beep antispam window
+        // at cl_hitsound >= 2 (the beam's pitch shift must sound continuous). _equippedWeaponId mirrors
+        // viewmodels[slot].activeweapon.
+        if (_arcWeaponId == int.MinValue)
+            _arcWeaponId = Weapons.ByName("arc") is { } arc ? arc.RegistryId : -1;
+        bool haveArc = _arcWeaponId >= 0 && _equippedWeaponId == _arcWeaponId;
+
         if (LocalServerPlayer is { } host)
         {
-            // Host / listen-server: the live local Player carries the stats. The host hit flash is driven by the
-            // damagetext drain above (so we don't diff HitDamageDealtTotal here — that would double-fire).
+            // Host / listen-server: the live local Player carries the stats.
             x.NadeTimer = host.NadeTimer;
             x.ReviveProgress = host.ReviveProgress;
             x.CaptureProgress = 0f; // no host producer yet (QC STAT(CAPTURE_PROGRESS) is gametype-set)
@@ -4358,16 +4605,39 @@ public sealed partial class NetGame : Node3D
             _fullHud.Ammo.NadeBonusTypeId = host.NadeBonusType;
             _fullHud.Ammo.NadeBonusScoreFrac = host.NadeBonusScore;
 
-            _remoteHitInit = false; // re-baseline the remote diff if we ever fall back to the client path
+            // QC UpdateDamage/HitSound off the live stats. The host CAN follow-spectate (cl_bench_spectate, the
+            // `spectate` command), and the server-side EndFrame stamp already mirrors the spectatee's feedback
+            // onto this player — so pass the real spectatee id through, or view.qc:907's "drop accumulated
+            // damage on a spectatee switch" never fires here.
+            if (_hitSound is not null
+                && _hitSound.Update(haveArc, _client?.SpectatingNetId ?? 0, host.HitTime,
+                                    host.HitsoundDamageDealtTotal, host.TypeHitTime, host.KillTime))
+                x.HitFlash = 1f;
             return;
         }
 
-        // Pure remote client: read the networked own-entity slice. No slice yet (pre-spawn) → hide the rings.
+        // Pure remote client: read the networked own-entity slice. No slice yet (pre-spawn) → hide the rings
+        // and drop the feedback baselines so the next slice re-seeds silently.
         if (_client is null || _client.LocalState is not { } ls)
         {
             x.NadeTimer = 0f; x.CaptureProgress = 0f; x.ReviveProgress = 0f;
             _fullHud.Ammo.NadeBonusCount = 0; _fullHud.Ammo.NadeBonusTypeId = 0; _fullHud.Ammo.NadeBonusScoreFrac = 0f;
-            _remoteHitInit = false;
+
+            // FOLLOW-SPECTATOR: QC stamps the spectator's own feedback stats from their spectatee
+            // (world.qc:2508 `IS_SPEC(it) ? it.enemy : it`), so watching someone frag sounds like playing.
+            // An observer has no own entity in the stream, so read the block off the WATCHED entity — the
+            // server keeps it unstripped for exactly this recipient (ServerNet.RelevantEntitiesFor).
+            int watched = _client?.SpectatingNetId ?? 0;
+            if (_hitSound is not null && watched != 0 && _client is not null
+                && _client.TryGetRemoteState(watched, out VortexArena.Net.NetEntityState spec))
+            {
+                if (_hitSound.Update(haveArc, watched, spec.HitTime, spec.HitDamageDealtTotal,
+                                     spec.TypeHitTime, spec.KillTime))
+                    x.HitFlash = 1f;
+                return;
+            }
+
+            _hitSound?.Reset();
             return;
         }
 
@@ -4380,16 +4650,12 @@ public sealed partial class NetGame : Node3D
         _fullHud.Ammo.NadeBonusTypeId = ls.NadeBonusType;
         _fullHud.Ammo.NadeBonusScoreFrac = ls.NadeBonusScore;
 
-        // QC UpdateDamage: when the cumulative dealt-damage stat advances, the crosshair flashes (and the
-        // hitsound beeps). Diff it against the last frame; skip the first sample so a non-zero baseline (joining
-        // mid-match) doesn't flash on the first snapshot.
-        if (_remoteHitInit && ls.HitDamageDealtTotal > _remoteHitDealtTotal)
-        {
+        // QC UpdateDamage/HitSound off the networked stats; the spectatee id drops accumulated damage on a
+        // spectatee switch (view.qc:907). The first slice seeds baselines silently (mid-match join).
+        if (_hitSound is not null
+            && _hitSound.Update(haveArc, _client.SpectateeStatus, ls.HitTime, ls.HitDamageDealtTotal,
+                                ls.TypeHitTime, ls.KillTime))
             x.HitFlash = 1f;
-            _hitSound?.OnHit(ls.HitDamageDealtTotal - _remoteHitDealtTotal);
-        }
-        _remoteHitDealtTotal = ls.HitDamageDealtTotal;
-        _remoteHitInit = true;
     }
 
     // ---- pickup feed (QC HUD_Pickup / STAT(LAST_PICKUP)) ----
@@ -4399,7 +4665,7 @@ public sealed partial class NetGame : Node3D
     // grant isn't reported. (Pure --connect clients have no local Player → the feed stays empty; a faithful
     // LAST_PICKUP stat would be the cross-client follow-up.)
     private bool _pickupInit;
-    private XonoticGodot.Common.Gameplay.WepSet _pickupLastOwned;
+    private VortexArena.Common.Gameplay.WepSet _pickupLastOwned;
     private float _pickupHealth, _pickupArmor, _pickupShells, _pickupBullets, _pickupRockets, _pickupCells;
 
     private void UpdatePickupFeed()
@@ -4413,7 +4679,7 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
-        XonoticGodot.Common.Gameplay.WepSet owned = p.OwnedWeaponSet;
+        VortexArena.Common.Gameplay.WepSet owned = p.OwnedWeaponSet;
         float health = p.GetResource(ResourceType.Health);
         float armor = p.GetResource(ResourceType.Armor);
         float shells = p.GetResource(ResourceType.Shells);
@@ -4423,13 +4689,13 @@ public sealed partial class NetGame : Node3D
 
         if (_pickupInit)
         {
-            XonoticGodot.Game.Hud.PickupPanel? feed = _fullHud.GetPanel<XonoticGodot.Game.Hud.PickupPanel>();
+            VortexArena.Game.Hud.PickupPanel? feed = _fullHud.GetPanel<VortexArena.Game.Hud.PickupPanel>();
             // Leading-timer feed (QC HUD_Pickup_Time reads the timer panel's clock): Push samples this ONCE per
             // pickup and freezes the string, so the readout is the match time the pickup HAPPENED — it used to
             // fall back to the panel's running "time since" counter, which visibly ticked up. Wired lazily
             // (idempotent) — the timer panel returns null until its net feed arrives, keeping the fallback.
             if (feed is not null && feed.MatchTimeProvider is null
-                && _fullHud.GetPanel<XonoticGodot.Game.Hud.TimerPanel>() is { } timerPanel)
+                && _fullHud.GetPanel<VortexArena.Game.Hud.TimerPanel>() is { } timerPanel)
                 feed.MatchTimeProvider = timerPanel.PickupTimeString;
             // (QC STAT(LAST_PICKUP) advance → pickup_crosshair_size = 1, crosshair.qc:362-379): a pickup this
             // frame also bumps the crosshair. We derive the same trigger from the client-side pickup detection
@@ -4437,11 +4703,11 @@ public sealed partial class NetGame : Node3D
             bool pickedUp = false;
             {
                 // New weapons — always a genuine pickup (never regen/spawn here, since spawn re-baselines).
-                foreach (XonoticGodot.Common.Gameplay.Weapon w in XonoticGodot.Common.Gameplay.Weapons.All)
+                foreach (VortexArena.Common.Gameplay.Weapon w in VortexArena.Common.Gameplay.Weapons.All)
                     if (owned.Has(w) && !_pickupLastOwned.Has(w))
                     {
                         feed?.Push(string.IsNullOrEmpty(w.DisplayName) ? w.NetName : w.DisplayName,
-                                   XonoticGodot.Game.Hud.WeaponHud.IconName(w.NetName));
+                                   VortexArena.Game.Hud.WeaponHud.IconName(w.NetName));
                         pickedUp = true;
                     }
 
@@ -4512,7 +4778,7 @@ public sealed partial class NetGame : Node3D
         // the same crosshair charge/clip/load/heat rings the listen host shows, now on a remote client too.
         if (p is null)
         {
-            XonoticGodot.Net.OwnerWeaponRings rings = _client?.LocalWeaponRings ?? XonoticGodot.Net.OwnerWeaponRings.None;
+            VortexArena.Net.OwnerWeaponRings rings = _client?.LocalWeaponRings ?? VortexArena.Net.OwnerWeaponRings.None;
             x.ChargeFraction = rings.VortexCharge; x.ChargePool = rings.VortexChargePool;
             x.ClipLoad = rings.ClipLoad; x.ClipSize = rings.ClipSize;
             x.HagarLoad = rings.HagarLoad; x.HagarLoadMax = rings.HagarLoadMax;
@@ -4617,7 +4883,7 @@ public sealed partial class NetGame : Node3D
     /// </summary>
     private void UpdateVehicleHud()
     {
-        XonoticGodot.Game.Hud.VehicleHud hud = _fullHud.Vehicle;
+        VortexArena.Game.Hud.VehicleHud hud = _fullHud.Vehicle;
         Player? p = LocalServerPlayer;
         Entity? veh = p?.Vehicle;
 
@@ -4646,13 +4912,13 @@ public sealed partial class NetGame : Node3D
 
         // TE_CSQC_VEHICLESETUP: select the art set from the descriptor NetName (re-shows the panel each time).
         hud.ConfigureForVehicle(isGunner
-            ? XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.BumblebeeGun
+            ? VortexArena.Game.Hud.VehicleHud.VehicleHudKind.BumblebeeGun
             : (veh.VehicleDef?.NetName) switch
             {
-                "raptor"    => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.Raptor,
-                "spiderbot" => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.Spiderbot,
-                "bumblebee" => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.Bumblebee,
-                _           => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.Racer,
+                "raptor"    => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Raptor,
+                "spiderbot" => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Spiderbot,
+                "bumblebee" => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Bumblebee,
+                _           => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Racer,
             });
 
         // Mirror the pilot/gunner-side 0..100 percentages to the panel's [0,1] (QC 0.01 * STAT(VEHICLESTAT_*)).
@@ -4729,11 +4995,11 @@ public sealed partial class NetGame : Node3D
     /// is inactive (VehKind 0 = on foot / observing) the panel exits. The lock-target world position is NOT
     /// networked, so the aux lock crosshair is cleared (host-only nicety); the reticle + bars + strength still draw.
     /// </summary>
-    private void UpdateVehicleHudRemote(XonoticGodot.Game.Hud.VehicleHud hud)
+    private void UpdateVehicleHudRemote(VortexArena.Game.Hud.VehicleHud hud)
     {
         // Pick the source VehicleViewState: the followed spectatee's (entity slice) while spectating, else the
         // local client's own-entity slice (the remote pilot). Default to None when neither is available.
-        XonoticGodot.Net.VehicleViewState v = XonoticGodot.Net.VehicleViewState.None;
+        VortexArena.Net.VehicleViewState v = VortexArena.Net.VehicleViewState.None;
         int specNet = _client?.SpectatingNetId ?? 0;
         if (specNet != 0 && _client != null && _client.TryGetRemoteState(specNet, out var rs))
             v = rs.VehicleView;
@@ -4752,11 +5018,11 @@ public sealed partial class NetGame : Node3D
         // mirrors the QC hud id: 2 raptor, 3 spiderbot, 4 bumblebee, 5 bumblebee-gun (gunner); 1/other = racer.
         hud.ConfigureForVehicle(v.VehKind switch
         {
-            2 => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.Raptor,
-            3 => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.Spiderbot,
-            4 => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.Bumblebee,
-            5 => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.BumblebeeGun,
-            _ => XonoticGodot.Game.Hud.VehicleHud.VehicleHudKind.Racer,
+            2 => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Raptor,
+            3 => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Spiderbot,
+            4 => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Bumblebee,
+            5 => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.BumblebeeGun,
+            _ => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Racer,
         });
 
         // The wire block already carries the [0,1] bars (VehicleViewState fields are pre-scaled), so mirror them
@@ -4788,7 +5054,7 @@ public sealed partial class NetGame : Node3D
     /// <see cref="FeedRaptorReticle"/>/<see cref="FeedSpiderbotReticle"/> off <c>VehKind</c> + <c>W2Mode</c>, but
     /// the live bomb-dropmark prediction (which needs the vehicle entity for tracetoss) is suppressed — only the
     /// reticle draws. <c>DropmarkPredictReady</c> is the networked "bombs ready" flag, kept for parity of intent.</summary>
-    private static void FeedRemoteReticle(XonoticGodot.Game.Hud.VehicleHud hud, in XonoticGodot.Net.VehicleViewState v)
+    private static void FeedRemoteReticle(VortexArena.Game.Hud.VehicleHud hud, in VortexArena.Net.VehicleViewState v)
     {
         // The remote path never draws the live green dropmark (tracetoss needs the server-side vehicle entity).
         hud.DropmarkActive = false;
@@ -4824,7 +5090,7 @@ public sealed partial class NetGame : Node3D
     /// SBRM_ARTILLERY → vCROSS_RAIN. No-op for the other vehicles (their reticle is left as the raptor/empty
     /// feeder set it). The spiderbot has no bomb dropmark, so this only drives the centered reticle.
     /// </summary>
-    private void FeedSpiderbotReticle(XonoticGodot.Game.Hud.VehicleHud hud, Entity veh)
+    private void FeedSpiderbotReticle(VortexArena.Game.Hud.VehicleHud hud, Entity veh)
     {
         if (veh.VehicleDef is not Spiderbot)
             return;
@@ -4846,7 +5112,7 @@ public sealed partial class NetGame : Node3D
     /// sets the bumblebee pilot's vCROSS_HEAL pointer and clears the reticle for the rest (the spiderbot's
     /// per-mode reticle is set by the FeedSpiderbotReticle pass the caller runs afterward).
     /// </summary>
-    private void FeedRaptorReticle(XonoticGodot.Game.Hud.VehicleHud hud, Entity veh, Player p)
+    private void FeedRaptorReticle(VortexArena.Game.Hud.VehicleHud hud, Entity veh, Player p)
     {
         if (veh.VehicleDef is not Raptor)
         {
@@ -4906,7 +5172,7 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Project a crewed side-gun's READY aux crosshair onto the PILOT's HUD (QC bumblebee.qc:186); clears
     /// the slot when the gun is empty/idle.</summary>
-    private void FeedPilotGunnerAux(XonoticGodot.Game.Hud.VehicleHud hud, Entity? gun, int slot)
+    private void FeedPilotGunnerAux(VortexArena.Game.Hud.VehicleHud hud, Entity? gun, int slot)
     {
         // QC bumblebee vr_setup: the pilot's aux slots 1/2 are vCROSS_BURST (gunner1/gunner2).
         if (gun is { VehGunnerHitValid: true, VehSlotPlayer: not null })
@@ -4966,7 +5232,7 @@ public sealed partial class NetGame : Node3D
         // Opt-in gate (QC server_screenshot || client_screenshot). cl_autoscreenshot is the local client cvar;
         // sv_autoscreenshot is the server cvar (readable directly on a listen server — it isn't networked, so a
         // pure remote client only honours the cl_autoscreenshot==2 unconditional branch, matching the stock 0 default).
-        XonoticGodot.Common.Services.ICvarService cv = Api.Cvars;
+        VortexArena.Common.Services.ICvarService cv = Api.Cvars;
         float cl = CvarOr(cv, "cl_autoscreenshot", 0f);
         float sv = _serverWorld is not null ? _serverWorld.Services.Cvars.GetFloat("sv_autoscreenshot") : 0f;
         bool serverShot = sv != 0f && cl != 0f;
@@ -5034,7 +5300,7 @@ public sealed partial class NetGame : Node3D
     {
         if (_fullHud is null)
             return;
-        XonoticGodot.Game.Hud.VotePanel v = _fullHud.Vote;
+        VortexArena.Game.Hud.VotePanel v = _fullHud.Vote;
         VoteController? vote = _serverWorld?.Voting;
         if (vote is null || !vote.Active)
         {
@@ -5075,7 +5341,7 @@ public sealed partial class NetGame : Node3D
     {
         if (_fullHud is null)
             return;
-        XonoticGodot.Game.Hud.MapVotePanel mv = _fullHud.MapVote;
+        VortexArena.Game.Hud.MapVotePanel mv = _fullHud.MapVote;
         // Normalize the ballot source so the SAME render runs for a listen host and a remote client. Listen host:
         // the in-process MapVoting. Remote client (no server world): the networked ballot decoded by
         // ClientNet.HandleMapVote — without this a --connect client saw no ballot at all (the panel was fed only
@@ -5144,7 +5410,7 @@ public sealed partial class NetGame : Node3D
         if (sig != _mapVoteSig)
         {
             _mapVoteSig = sig;
-            var list = new System.Collections.Generic.List<XonoticGodot.Game.Hud.MapVotePanel.Candidate>(cands.Count);
+            var list = new System.Collections.Generic.List<VortexArena.Game.Hud.MapVotePanel.Candidate>(cands.Count);
             for (int i = 0; i < cands.Count; i++)
             {
                 MvCand c = cands[i];
@@ -5155,7 +5421,7 @@ public sealed partial class NetGame : Node3D
                     // no "default" skin dir in the shipped assets (skins are luma/luminos/wickedx/xaw) — using it
                     // would always miss and fall back to the nopreview placeholder. Track the live skin (luma by
                     // default, which carries the icons), mirroring Base's per-skin path.
-                    pic = $"gfx/menu/{XonoticGodot.Game.Hud.HudSkin.SkinName}/gametype_{c.MapName}";
+                    pic = $"gfx/menu/{VortexArena.Game.Hud.HudSkin.SkinName}/gametype_{c.MapName}";
                 else
                     pic = string.IsNullOrEmpty(c.MapName) ? "" : $"maps/{c.MapName}";
                 // QC ReadGameTypeVote (client/mapvoting.qc:762-780): the gametype-vote title + description split
@@ -5170,8 +5436,8 @@ public sealed partial class NetGame : Node3D
                 string desc;
                 if (isGametypeVote)
                 {
-                    XonoticGodot.Common.Gameplay.GameType? gt =
-                        XonoticGodot.Common.Gameplay.GameTypes.ByName(c.MapName);
+                    VortexArena.Common.Gameplay.GameType? gt =
+                        VortexArena.Common.Gameplay.GameTypes.ByName(c.MapName);
                     if (gt is not null)
                     {
                         // QC MapInfo_Type_Description (client/mapvoting.qc:767): for a real built-in gametype the
@@ -5194,7 +5460,7 @@ public sealed partial class NetGame : Node3D
                     data = c.MapName;
                     desc = "";
                 }
-                list.Add(new XonoticGodot.Game.Hud.MapVotePanel.Candidate(
+                list.Add(new VortexArena.Game.Hud.MapVotePanel.Candidate(
                     c.MapName, c.Votes, pic, data, desc, c.Available, c.Suggester));
             }
             mv.SetVote(list, timeout, gametypeVote: isGametypeVote, abstain: abstainPresent);
@@ -5249,12 +5515,12 @@ public sealed partial class NetGame : Node3D
     {
         if (_fullHud is null)
             return;
-        XonoticGodot.Game.Hud.RaceTimerPanel rt = _fullHud.RaceTimer;
-        XonoticGodot.Game.Hud.CheckpointsPanel cps = _fullHud.Checkpoints;
+        VortexArena.Game.Hud.RaceTimerPanel rt = _fullHud.RaceTimer;
+        VortexArena.Game.Hud.CheckpointsPanel cps = _fullHud.Checkpoints;
         Player? me = LocalServerPlayer;
-        XonoticGodot.Common.Gameplay.GameType? gt = _serverWorld?.GameType;
-        var race = gt as XonoticGodot.Common.Gameplay.Race;
-        var cts = gt as XonoticGodot.Common.Gameplay.Cts;
+        VortexArena.Common.Gameplay.GameType? gt = _serverWorld?.GameType;
+        var race = gt as VortexArena.Common.Gameplay.Race;
+        var cts = gt as VortexArena.Common.Gameplay.Cts;
         bool active = (race is not null || cts is not null) && me is not null && !_client!.IsObserving;
         if (!active)
         {
@@ -5268,7 +5534,7 @@ public sealed partial class NetGame : Node3D
         rt.Observing = false;
         if (race is not null)
         {
-            XonoticGodot.Common.Gameplay.Race.RaceState st = race.GetState(me!);
+            VortexArena.Common.Gameplay.Race.RaceState st = race.GetState(me!);
             rt.RaceLapTime = st.LapStartTime;              // QC race_laptime: the lap-start baseline (count-up clock)
             rt.RaceNextCheckpoint = st.NextCheckpoint < 0 ? 0 : st.NextCheckpoint;
             rt.RacePenaltyAccumulator = st.PenaltyAccumulator * 10f; // panel reads tenths; RaceState keeps seconds
@@ -5343,12 +5609,12 @@ public sealed partial class NetGame : Node3D
                 && race.LastRecordTime != _lastFedRecordTime)
             {
                 _lastFedRecordTime = race.LastRecordTime;
-                XonoticGodot.Common.Gameplay.RaceRecordResult r = race.LastRecord;
+                VortexArena.Common.Gameplay.RaceRecordResult r = race.LastRecord;
                 int status = r.Kind switch
                 {
-                    XonoticGodot.Common.Gameplay.RaceRecordKind.Fail => 0,
+                    VortexArena.Common.Gameplay.RaceRecordKind.Fail => 0,
                     _ when r.IsServerRecord => 3,                                            // newpos == 1
-                    XonoticGodot.Common.Gameplay.RaceRecordKind.NewImproved => 1,            // improved own rank → new time
+                    VortexArena.Common.Gameplay.RaceRecordKind.NewImproved => 1,            // improved own rank → new time
                     _ => 2,                                                                  // NewSet / NewBroken → new rank
                 };
                 rt.RaceStatus = status;
@@ -5365,7 +5631,7 @@ public sealed partial class NetGame : Node3D
         else
         {
             // CTS: a single timed run (RunStartTime is the count-up baseline); no per-checkpoint laps.
-            XonoticGodot.Common.Gameplay.Cts.CtsState st = cts!.GetState(me!);
+            VortexArena.Common.Gameplay.Cts.CtsState st = cts!.GetState(me!);
             rt.RaceLapTime = st.RunStartTime;
             rt.RaceCheckpoint = 254;
             rt.RaceNextCheckpoint = 254;                   // 254 = none (CTS has no next-checkpoint anticipation)
@@ -5380,12 +5646,12 @@ public sealed partial class NetGame : Node3D
                 && cts.LastRecordTime != _lastFedRecordTime)
             {
                 _lastFedRecordTime = cts.LastRecordTime;
-                XonoticGodot.Common.Gameplay.RaceRecordResult r = cts.LastRecord;
+                VortexArena.Common.Gameplay.RaceRecordResult r = cts.LastRecord;
                 int status = r.Kind switch
                 {
-                    XonoticGodot.Common.Gameplay.RaceRecordKind.Fail => 0,
+                    VortexArena.Common.Gameplay.RaceRecordKind.Fail => 0,
                     _ when r.IsServerRecord => 3,                                            // newpos == 1
-                    XonoticGodot.Common.Gameplay.RaceRecordKind.NewImproved => 1,            // improved own rank → new time
+                    VortexArena.Common.Gameplay.RaceRecordKind.NewImproved => 1,            // improved own rank → new time
                     _ => 2,                                                                  // NewSet / NewBroken → new rank
                 };
                 rt.RaceStatus = status;
@@ -5448,7 +5714,7 @@ public sealed partial class NetGame : Node3D
             return;
         _hudMirror ??= new Player { NetName = _playerName };
         Player m = _hudMirror;
-        XonoticGodot.Net.OwnerInventory inv = _client.LocalInventory;
+        VortexArena.Net.OwnerInventory inv = _client.LocalInventory;
 
         m.Health = _client.Health;
         m.ArmorValue = _client.Armor;
@@ -5478,9 +5744,9 @@ public sealed partial class NetGame : Node3D
         // Predicted ground state for the physics/strafehud panels' slick / accel-max branches (else they read a
         // permanently-airborne mirror). The reconciler seeds OnGround from the owner block's onground bool.
         if (_client.PredictedOnGround)
-            m.Flags |= XonoticGodot.Common.Framework.EntFlags.OnGround;
+            m.Flags |= VortexArena.Common.Framework.EntFlags.OnGround;
         else
-            m.Flags &= ~XonoticGodot.Common.Framework.EntFlags.OnGround;
+            m.Flags &= ~VortexArena.Common.Framework.EntFlags.OnGround;
 
         // Powerup timers (strength/shield/…): the server networks every player's status-effect bitmap in the
         // entity stream — including our own entity now (v14), whose decoded slice ClientNet keeps as LocalState.
@@ -5504,7 +5770,10 @@ public sealed partial class NetGame : Node3D
         // (p == null) NetHud stays the always-on fallback.
         bool havePlayer = p is not null;
         if (_hud is not null && GodotObject.IsInstanceValid(_hud))
-            _hud.SuppressCrosshairAndHealth = havePlayer;
+            // The editor picks along the crosshair, so a free-flying mapper needs one. NetHud's lightweight
+            // vector crosshair is the right one here: the skinned HUD's is player-bound and an observer has no
+            // player, which is why aiming in the editor had nothing to aim WITH.
+            _hud.SuppressCrosshairAndHealth = havePlayer && !IsEditorFreeFly;
 
         // HealthArmorPanel reads the Player's resources, so it self-blanks with no Player (safe to leave visible).
         // CrosshairPanel, however, draws its reticle even without a Player (it doesn't gate on Player) — so on a
@@ -5519,13 +5788,16 @@ public sealed partial class NetGame : Node3D
         // strafe bar). It self-blanks without a Player, so on a pure client this leaves it null = no draw. The
         // optional WishDir/JumpHeld/OnSlick are not fed (the HUD degrades to the non-local W+A path), which keeps
         // it useful without exposing the carrier's per-tick move-values to the client HUD layer.
-        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.StrafeHudPanel>() is { } strafe)
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.StrafeHudPanel>() is { } strafe)
             strafe.Player = p;
+
+        // Editor status panel (E2). It stays blank in every non-editor session, so gate it on the gametype and
+        // let it read the local observer state: EDIT *is* the observer state, so free-flying means editing.
 
         // QC HUD_PressedKeys spectatee gate: a free-fly observer never shows the cluster, and while merely
         // playing it shows only at enable 2. Feed the live spectatee_status (translated into the QC convention:
         // ClientNet encodes free-fly as SpectateeStatus==LocalNetId, QC uses -1; following a player is >0).
-        if (_fullHud.GetPanel<XonoticGodot.Game.Hud.PressedKeysPanel>() is { } pressed)
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.PressedKeysPanel>() is { } pressed)
         {
             int qcSpectatee = 0;
             if (_client is not null)
@@ -5614,7 +5886,225 @@ public sealed partial class NetGame : Node3D
     {
         if (_fullHud is null || _client is null)
             return;
+        // (E2/E3) Editor state + panel feed. This lives on a per-frame path deliberately: the readouts it
+        // drives (hover coordinates, drag delta, undo label) change continuously, so the change-latched
+        // player-setup path is the wrong home for it.
+        bool editorFreeFly = IsEditorGametype && (_client?.IsObserving ?? true);
+        if (_editor is not null)
+        {
+            _editor.Active = editorFreeFly;
+
+            // (E7) Ctrl temporarily INVERTS grid snapping (§11.9). Polled per frame rather than latched on a
+            // key event, because it is a held modifier: an edge-triggered read would strand the editor in the
+            // inverted state whenever the release event went to a focused control instead of here.
+            _editor.SnapInverted = editorFreeFly && Input.IsKeyPressed(Key.Ctrl);
+
+            // (O1) While the ortho view owns interaction, picking and dragging run along the POINTER ray
+            // rather than the crosshair. Fed per frame because the pointer, the zoom and the axis can all
+            // change between frames, and a stale ray would pick where the mouse used to be.
+            FeedOrthoInput();
+            TickEditorAutosave(Time.GetTicksMsec() / 1000.0);
+
+            // (E6) Apply what other mappers submitted. Here, on the main thread, because this is where the
+            // document is written from — the packet thread only queues.
+            DrainEditorOps();
+
+            // Session opens with the GAMETYPE, not with the first free-fly frame: the world swap to the
+            // document happens before the player ever sees the compiled BSP, and playtest is in the
+            // document from the first spawn.
+            if (IsEditorGametype)
+                EnsureEditorSession();
+            else if (_editorOrtho is { IsOpen: true })
+                _editorOrtho.Close();   // dropping into playtest must not leave a flat wireframe camera
+
+            // Entering PLAYTEST with edits pending: rebuild collision from the document so the physics match
+            // what is on screen. Keyed on GeometryVersion, so an untouched map never pays the rebuild.
+            //
+            // BEFORE the reconcile below, and that ordering is load-bearing: this build is what mints a
+            // brush entity's "*N" model key, and the reconcile is what spawns it. The other way round, a
+            // func_door you had just authored spawned with no model for setmodel to resolve — invisible
+            // and non-solid — until some later edit happened to run the build first.
+            if (!editorFreeFly && IsEditorGametype && _editor.Document is not null
+                && _editorCollisionVersion != _editor.GeometryVersion && _serverWorld is not null)
+            {
+                _editorCollisionVersion = _editor.GeometryVersion;
+                BspCollisionBuilder.Result rebuilt =
+                    Vmap.EditorWorldCollision.Build(_editor.Document, _droppedSubmodels);
+                _serverWorld.Services.SetCollisionWorld(rebuilt.World);
+                _serverWorld.BrushModels = rebuilt.Submodels;
+                BspCollisionBuilder.RegisterSubmodels(rebuilt.Submodels, _serverWorld.Services.ModelsImpl);
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"editor: collision rebuilt from the document (v{_editor.GeometryVersion})");
+            }
+
+            // (B2) The EDIT -> PLAYTEST edge: reconcile the live entity set with the document, so what you
+            // playtest is what you just authored. Edge-triggered, not polled — a respawn every frame while
+            // playtesting would reset the map continuously.
+            if (IsEditorGametype && _wasEditing && !editorFreeFly)
+                ReconcileEntitiesForPlaytest();
+            _wasEditing = editorFreeFly;
+        }
+
+        // The editor aims along the crosshair, but an observer has no local player so the skinned crosshair is
+        // suppressed. Re-enable NetHud's lightweight one here — on the PER-FRAME path, because the player-setup
+        // path only runs when the local player REFERENCE changes and would never re-evaluate this.
+        if (_hud is not null && GodotObject.IsInstanceValid(_hud) && IsEditorGametype)
+            _hud.SuppressCrosshairAndHealth = !IsEditorFreeFly && LocalServerPlayer is not null;
+
+        // Ortho panning on the movement axes. The ortho view owns the cursor, so flying is suspended and those
+        // keys are free; this is also far more reliable than depending on the middle mouse button arriving.
+        if (_editorOrtho is { IsOpen: true } panOrtho)
+            panOrtho.PanByAxes(BindTable.Forward, BindTable.Side, (float)GetProcessDeltaTime());
+
+        RefreshEditorWorld();
+        if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights) && _camera is not null)
+        {
+            _editorLights.Update(_camera.GlobalPosition, Menu.MenuState.Cvars, (float)Time.GetTicksMsec() / 1000f);
+            // Per-frame, not once at build: the environment is owned by the WorldEnvironment NODE (_worldEnv),
+            // which may not exist yet when the first world is built, and the GI/ambient cvars are things a
+            // mapper changes mid-session. ApplyEnvironment itself no-ops when nothing changed.
+            // The background bake publishes into the retained bake; one rebuild resamples it onto the
+            // world, which is exact because the geometry has not changed underneath it.
+            // Applying the bake is SPREAD over frames: the world already on screen has the right geometry,
+            // so only its vertex colours change, a few cell meshes per frame. A full rebuild here was ~880 ms
+            // of frozen main thread the instant a bake landed — the one moment the editor should feel free.
+            if (Vmap.VmapMapBuilder.RecolorRemaining > 0)
+                Vmap.VmapMapBuilder.RecolorStep(3.0);   // ~3 ms a frame: invisible at 144 Hz, done in about a second
+
+            if (Vmap.EditorLightBake.BakeFinished)
+            {
+                Vmap.EditorLightBake.ClearFinished();
+                Vmap.EditorLightBake.End();
+                GD.Print($"[EditorLighting] bake: {Vmap.EditorLightBake.RaysTraced:N0} rays in "
+                    + $"{Time.GetTicksMsec() - _bakeClock} ms (background)");
+                GD.Print($"[EditorLighting] encode range p99={Vmap.EditorLightBake.EncodeRange:F1}, "
+                    + $"filled {Vmap.EditorLightBake.FilledSamples:N0} black samples, "
+                    + $"{_pendingTraceCount:N0} occluders");
+                GD.Print($"[EditorLighting] samples {Vmap.EditorLightBake.CapturedUnique:N0} unique of "
+                    + $"{Vmap.EditorLightBake.CapturedOffered:N0} vertices "
+                    + $"({Vmap.EditorLightBake.CpuBudget:P0} cpu budget)");
+                _bakedShadowsStale = false;
+                Vmap.VmapMapBuilder.BeginRecolor();
+            }
+
+            if (_worldEnv is not null)
+                Vmap.EditorLighting.ApplyEnvironment(_worldEnv, Menu.MenuState.Cvars);
+
+            // The baked-light controls are GLOBAL shader uniforms fed from cvars every frame, changed-gated.
+            // Their first incarnation was per-material uniforms, frozen into the material cache at build
+            // time — which is why "_scale and _ambient don't appear to do anything" was literally true.
+            if (Menu.MenuState.Cvars is { } lc)
+            {
+                // The editor's baked-light globals live with the other world globals; an editor session can
+                // reach this before anything else has caused them to be registered.
+                WorldTint.EnsureRegistered();
+                // Clamped to the range these knobs MEAN, because their meaning changed: cl_editor_light_ambient
+                // used to be a Godot environment energy (where 10 was merely strong) and is now an in-shader
+                // floor (where 10 is an opaque white wash). A value saved under the old semantics must not be
+                // able to flatten the world — clamp it rather than let a stale config outrank every default.
+                float sc2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeScale, 0.0043f), 0f, 2f);
+                float am2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarAmbient, 0.004f), 0f, 1f);
+                float gm2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarBakeGamma, 1.05f), 0.25f, 4f);
+                float dx2 = Math.Clamp(CvarOr(lc, Vmap.EditorLighting.CvarDeluxe, 1f), 0f, 1f);
+                if (dx2 != _bakeUniformDeluxe)
+                {
+                    _bakeUniformDeluxe = dx2;
+                    RenderingServer.GlobalShaderParameterSet("editor_deluxe", dx2);
+
+                }
+                if (sc2 != _bakeUniformScale || am2 != _bakeUniformAmbient || gm2 != _bakeUniformGamma)
+                {
+                    _bakeUniformScale = sc2;
+                    _bakeUniformAmbient = am2;
+                    _bakeUniformGamma = gm2;
+                    RenderingServer.GlobalShaderParameterSet("editor_bake_scale", sc2);
+                    RenderingServer.GlobalShaderParameterSet("editor_bake_ambient", am2);
+                    RenderingServer.GlobalShaderParameterSet("editor_bake_gamma", gm2);
+                }
+                if (_bakeUniformRange != Vmap.EditorLightBake.EncodeRange)
+                {
+                    _bakeUniformRange = Vmap.EditorLightBake.EncodeRange;
+                    RenderingServer.GlobalShaderParameterSet("editor_bake_range", _bakeUniformRange);
+                }
+            }
+            Vmap.EditorLighting.SuppressSceneSun(this, true);
+        }
+
+        // (E7) The editor context menu and the crosshair action readout: same feed pattern as EditorPanel.
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.EditorMenuPanel>() is { } editorMenu)
+        {
+            editorMenu.IsEditorSession = IsEditorGametype;
+            editorMenu.Controller = _editor;
+            editorMenu.OrthoOpen = _editorOrtho is { IsOpen: true };
+            editorMenu.FlySpeed = LocalServerPlayer?.SpectatorSpeed ?? 1f;
+            // Rows carry command STRINGS, so the menu drives the editor through the same vocabulary the binds
+            // and the console use rather than growing a private API of its own.
+            editorMenu.CommandSink ??= line => Menu.MenuState.Interp?.ExecuteLine(line);
+
+            // Leaving EDIT (into playtest, or out of the gametype) must not leave a modal menu holding the
+            // cursor: there would be no way to close it, because its own keys are gone with the mode.
+            if (editorMenu.IsOpen && !(IsEditorGametype && (_client?.IsObserving ?? false)))
+                editorMenu.Close();
+        }
+
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.EditorDialogPanel>() is { } editorDialog)
+        {
+            editorDialog.IsEditorSession = IsEditorGametype;
+            editorDialog.CommandSink ??= line => Menu.MenuState.Interp?.ExecuteLine(line);
+            editorDialog.Thumbnails ??= EditorThumbnails();
+
+            // Leaving EDIT must not strand a modal dialog holding the cursor, same as the context menu.
+            if (editorDialog.IsOpen && !(IsEditorGametype && (_client?.IsObserving ?? false)))
+                editorDialog.Close();
+        }
+
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.EditorActionPanel>() is { } editorAction)
+        {
+            editorAction.IsEditorSession = IsEditorGametype;
+            editorAction.IsEditing = _client?.IsObserving ?? true;
+            editorAction.Controller = _editor;
+        }
+
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.EditorPanel>() is { } editorPanel)
+        {
+            editorPanel.IsEditorSession = IsEditorGametype;
+            Hud.HudPanel.EditorSession = IsEditorGametype;
+            editorPanel.IsEditing = _client?.IsObserving ?? true;
+            editorPanel.FlySpeed = LocalServerPlayer?.SpectatorSpeed ?? 1f;
+            editorPanel.Controller = _editor;
+            editorPanel.Ortho = _editorOrtho;
+            editorPanel.Lights = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
+                ? _editorLights.TotalLightCount : -1;
+            editorPanel.Baked = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
+                && _editorLights.Baking;
+            editorPanel.ShadowsStale = _bakedShadowsStale;
+            editorPanel.BakeRunning = Vmap.EditorLightBake.BakeRunning;
+            editorPanel.BakePhase = Vmap.EditorLightBake.ProgressPhase;
+            editorPanel.ApplyRemaining = Vmap.VmapMapBuilder.RecolorRemaining;
+            editorPanel.ApplyTotal = Vmap.VmapMapBuilder.RecolorTotal;
+            // The cvar is the same switch key 0 flips, so a scripted capture and a keypress cannot disagree.
+            if (Menu.MenuState.Cvars is { } bc3)
+            {
+                bool want = !string.IsNullOrEmpty(bc3.GetString(Vmap.EditorLighting.CvarShowBsp))
+                    && bc3.GetFloat(Vmap.EditorLighting.CvarShowBsp) != 0f;
+                if (want != _editorShowBsp)
+                {
+                    _editorShowBsp = want;
+                    ApplyEditorWorldVisibility();
+                }
+            }
+            editorPanel.ShowingBsp = _editorShowBsp;
+            editorPanel.BakeProgress = Vmap.EditorLightBake.ProgressTotal > 0
+                ? (float)Vmap.EditorLightBake.Progress / Vmap.EditorLightBake.ProgressTotal
+                : 0f;
+            editorPanel.HasMapSun = _editorLights is not null && GodotObject.IsInstanceValid(_editorLights)
+                && _editorLights.HasMapSun;
+        }
+
         InfoMessagesPanel im = _fullHud.InfoMessages;
+        // In the editor, jump flies you upward and PLAYTEST is its own toggle, so the stock join hint would be
+        // pointing at the wrong key. The editor panel carries the real binding.
+        im.SuppressJoinHint = IsEditorGametype;
         im.RespawnStat = _client.RespawnTimeStat;
         im.NetServerTime = _client.LatestServerTime;
 
@@ -5634,22 +6124,22 @@ public sealed partial class NetGame : Node3D
         // spectating state from the net client, so model the CA branch directly: force the panel visible while a CA
         // spectator views the scoreboard. (In this port the manager already keeps infomessages always-on, so this
         // mainly documents intent; it stays a faithful, harmless assertion of the QC behaviour.)
-        if (XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype == "ca"
+        if (VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "ca"
             && _client.Accepted && _client.SpectateeStatus != 0
-            && XonoticGodot.Engine.Console.BindTable.ShowScores)
+            && VortexArena.Engine.Console.BindTable.ShowScores)
             im.Visible = true;
 
         // QC cl_lms DrawInfoMessages: in LMS, the local player is "out" once they hold an LMS rank (LMS_RANK > 0,
         // set on elimination). Read it from the local scoreboard row's networked LMS_RANK column.
         im.LmsNoLives = false;
-        if (XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype == "lms")
+        if (VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "lms")
         {
-            XonoticGodot.Net.ScoreboardWire? sb = _client.LatestScoreboard;
-            var rankField = XonoticGodot.Common.Gameplay.Scoring.GameScores.Field("LMS_RANK");
+            VortexArena.Net.ScoreboardWire? sb = _client.LatestScoreboard;
+            var rankField = VortexArena.Common.Gameplay.Scoring.GameScores.Field("LMS_RANK");
             if (sb is not null && rankField is not null)
             {
                 int localId = _client.LocalNetId;
-                foreach (XonoticGodot.Net.ScoreRowWire row in sb.Rows)
+                foreach (VortexArena.Net.ScoreRowWire row in sb.Rows)
                 {
                     if (row.NetId != localId) continue;
                     int rid = rankField.RegistryId;
@@ -5661,15 +6151,27 @@ public sealed partial class NetGame : Node3D
         }
     }
 
-    /// <summary>Size the scoreboard panel to a centered slab of the viewport (QC HUD_Panel_UpdatePosSize for the
-    /// scoreboard, simplified). Called once at setup; the panel reads its own rect via <c>Configure</c>.</summary>
+    /// <summary>
+    /// Resolve the standalone scoreboard's geometry + skin config against the LIVE viewport — QC
+    /// <c>Scoreboard_Draw</c>'s own <c>HUD_Panel_LoadCvars()</c> + the centered-slab override it applies right
+    /// after (scoreboard.qc:2466-2483). Must run EVERY FRAME, like Base: the previous one-shot
+    /// <c>Configure(...)</c> at NetGame setup froze the rect at whatever the viewport happened to be then, so
+    /// after the window resized (or the boot fullscreen transition landed) the board kept a rect computed for
+    /// e.g. 1024×768 and rendered jammed into the top-left of the real viewport. Going through
+    /// <see cref="VortexArena.Game.Hud.HudPanel.LoadConfig"/> ALSO gives the panel a real resolved
+    /// <c>Cfg</c> — the standalone instance is not managed by <see cref="VortexArena.Game.Hud.HudManager"/>, so
+    /// it had been drawing with the constructor-default config (<c>Bg = "0"</c>, fixed alphas/padding), which is
+    /// why it never painted the luma skin frame or honoured any <c>hud_panel_scoreboard_*</c> cvar.
+    /// </summary>
     private void LayoutScoreboard()
     {
-        if (_scoreboard is null) return;
+        if (_scoreboard is null || !GodotObject.IsInstanceValid(_scoreboard) || !_scoreboard.Visible) return;
         Vector2 vp = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1280, 720);
-        float w = Mathf.Min(vp.X * 0.8f, 1100f);
-        float h = vp.Y * 0.85f;
-        _scoreboard.Configure(new Rect2((vp.X - w) * 0.5f, vp.Y * 0.06f, w, h));
+        // 1) QC HUD_Panel_LoadCvars — resolve bg/skin/alphas/padding/fontsize from hud_panel_scoreboard_*.
+        _scoreboard.LoadConfig(vp, _fullHud?.HudFadeAlpha ?? 1f, _scoreboard.FadeAlpha);
+        // 2) QC the centered-slab override Scoreboard_Draw applies right after LoadCvars (the scoreboard is
+        //    PANEL_CONFIG_NO — its placement is derived, not taken from the generic pos/size cvars).
+        _scoreboard.Configure(_scoreboard.BaseGeometry(vp));
     }
 
     /// <summary>
@@ -5704,18 +6206,34 @@ public sealed partial class NetGame : Node3D
         // QC cl_cts.qc MUTATOR_HOOKFUNCTION(cl_cts, DrawDeathScoreboard) returns ISGAMETYPE(CTS): CTS never shows the
         // scoreboard automatically while dead (a CTS death is an instant respawn at the start line — there's nothing
         // to read). The manual +showscores hold and the intermission scoreboard are unaffected.
-        bool ctsGame = _serverWorld?.GameType is XonoticGodot.Common.Gameplay.Cts
-            || XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype == "cts";
+        bool ctsGame = _serverWorld?.GameType is VortexArena.Common.Gameplay.Cts
+            || VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "cts";
         bool deathScoreboard = deadNow && _localDeathStamp >= 0f && !ctsGame
             && (cv is null || cv.GetFloat("cl_deathscoreboard") != 0f)
             && _client.LatestServerTime - _localDeathStamp >= (cv is null ? 1f : cv.GetFloat("cl_deathscoreboard_delay"));
-        bool show = (XonoticGodot.Engine.Console.BindTable.ShowScores || intermissionShow || deathScoreboard)
+        // QC client/view.qc:1865 — the server asks for a team pick by setting `_scoreboard_team_selection`;
+        // the client opens the interactive picker and clears the flag.
+        _scoreboard.MatchIntermission = _client.MatchIntermission;
+        if (MenuState.Cvars.GetFloat("_scoreboard_team_selection") != 0f)
+        {
+            _scoreboard.UiEnable(1);
+            MenuState.Cvars.Set("_scoreboard_team_selection", "0");
+        }
+
+        // QC Scoreboard_WouldDraw's UI branch (scoreboard.qc:1766): while the interactive scoreboard is up it
+        // force-draws regardless of +showscores, and a closing one tears its state down once faded out.
+        bool uiShow = _scoreboard.UiTick();
+
+        bool show = (uiShow || VortexArena.Engine.Console.BindTable.ShowScores || intermissionShow || deathScoreboard)
             && !mapVoteShowing; // QC intermission==2 / clickable-radar suppression: mapvote owns the screen
         // QC scoreboard.qc:2411: drive the cross-fade via scoreboard_active (the Active setter ramps _fadeAlpha
         // in/out in _Process and hides the panel once fully faded out) rather than popping Visible — this is what
         // makes hud_panel_scoreboard_fadeinspeed/fadeoutspeed actually animate on the live path.
         if (_scoreboard.Active != show)
             _scoreboard.Active = show;
+        // QC Scoreboard_Draw re-runs HUD_Panel_LoadCvars + its centered-slab geometry EVERY draw — so must we,
+        // or the board keeps a rect computed for a stale viewport (see LayoutScoreboard).
+        LayoutScoreboard();
         // Drive the manager's non-scoreboard panel cross-fade (QC panel_fade_alpha) from the scoreboard's live fade
         // level. Without this ScoreboardFade sat at 0 forever, so the always-on HUD panels never faded when the
         // scoreboard came up — most visibly the top-left radar, whose bottom-right corner pokes into the centered
@@ -5748,7 +6266,7 @@ public sealed partial class NetGame : Node3D
             _scoreboard.RespawnServerTime = _client.LatestServerTime;
             // QC scoreboard.qc:2792 getcommandkey(_("jump"), "+jump"): show the actual key bound to +jump in the
             // "press X to respawn" line, falling back to the literal "jump" when nothing is bound.
-            _scoreboard.RespawnJumpKey = XonoticGodot.Engine.Console.BindTable.CommandKey("jump", "+jump");
+            _scoreboard.RespawnJumpKey = VortexArena.Engine.Console.BindTable.CommandKey("jump", "+jump");
             // QC Scoreboard_AccuracyStats_WouldDraw (scoreboard.qc:1864): suppress the accuracy block during warmup.
             _scoreboard.MatchWarmup = _client.MatchWarmup;
             // QC Scoreboard_MapStats_Draw reads STAT(MONSTERS_*)/STAT(SECRETS_*) every draw — they tick
@@ -5762,8 +6280,8 @@ public sealed partial class NetGame : Node3D
         // feed rows only when the data changed (identity by reference — ClientNet replaces the object per
         // decode). A mode-status change (T53) also re-feeds: the eliminated grey-out must track freezes/deaths
         // that don't bump a score version.
-        XonoticGodot.Net.ScoreboardWire? sb = _client.LatestScoreboard;
-        XonoticGodot.Net.GametypeStatusBlock.Decoded? ms = _client.LatestModeStatus;
+        VortexArena.Net.ScoreboardWire? sb = _client.LatestScoreboard;
+        VortexArena.Net.GametypeStatusBlock.Decoded? ms = _client.LatestModeStatus;
         if (sb is not null && (!ReferenceEquals(sb, _lastFedScoreboard) || !ReferenceEquals(ms, _lastFedModeStatus)))
         {
             _lastFedScoreboard = sb;
@@ -5777,6 +6295,11 @@ public sealed partial class NetGame : Node3D
             _scoreboard.RankingsSelfName = ResolveScoreboardName(_client.LocalNetId);
             // QC the race/CTS speed award (scoreboard.qc:2731): the round-best + all-time best planar speed + holders.
             _scoreboard.SetSpeedAward(sb.SpeedAward, sb.SpeedAwardHolder, sb.SpeedAwardBest, sb.SpeedAwardBestHolder);
+            // QC the per-viewer Inventory entity: this client's item-pickup tally, drawn by the scoreboard's
+            // Item stats grid (Scoreboard_ItemStats_Draw). Keyed by the item def's HUD icon name.
+            _itemStatsById.Clear();
+            foreach ((string icon, int count) in sb.ItemStats) _itemStatsById[icon] = count;
+            _scoreboard.SetItemStats(_itemStatsById);
             FeedScoreboardHeader();
         }
         else if (sb is null)
@@ -5785,22 +6308,22 @@ public sealed partial class NetGame : Node3D
             _scoreboard.Title = ScoreboardTitle();
         }
     }
-    private XonoticGodot.Net.ScoreboardWire? _lastFedScoreboard;
-    private XonoticGodot.Net.GametypeStatusBlock.Decoded? _lastFedModeStatus;
+    private VortexArena.Net.ScoreboardWire? _lastFedScoreboard;
+    private VortexArena.Net.GametypeStatusBlock.Decoded? _lastFedModeStatus;
     /// <summary>QC death_time stand-in: the server time at which the local player's death was first observed
     /// (STAT(RESPAWN_TIME) first non-zero), or -1 while alive; gates the cl_deathscoreboard_delay window.</summary>
     private float _localDeathStamp = -1f;
 
     /// <summary>[T68] Resolve a player net id to its display name — the port's faithful <c>entcs_GetName</c>
     /// stand-in for the shownames overlay. The port has no separate entcs name stream, so the name comes from the
-    /// networked scoreboard rows (each carries netId → name; see <see cref="XonoticGodot.Net.ScoreRowWire"/>).
+    /// networked scoreboard rows (each carries netId → name; see <see cref="VortexArena.Net.ScoreRowWire"/>).
     /// Returns "" when no row is known yet (the tag then shows only the status bar, like QC's blank entcs name).</summary>
     private string ResolveScoreboardName(int netId)
     {
-        XonoticGodot.Net.ScoreboardWire? sb = _client?.LatestScoreboard;
+        VortexArena.Net.ScoreboardWire? sb = _client?.LatestScoreboard;
         if (sb is null)
             return "";
-        foreach (XonoticGodot.Net.ScoreRowWire row in sb.Rows)
+        foreach (VortexArena.Net.ScoreRowWire row in sb.Rows)
             if (row.NetId == netId)
                 return row.Name ?? "";
         return "";
@@ -5814,10 +6337,10 @@ public sealed partial class NetGame : Node3D
     {
         if (LocalServerPlayer is { } self)
             return (int)self.Team;
-        XonoticGodot.Net.ScoreboardWire? sb = _client?.LatestScoreboard;
+        VortexArena.Net.ScoreboardWire? sb = _client?.LatestScoreboard;
         int localId = _client?.LocalNetId ?? 0;
         if (sb is not null)
-            foreach (XonoticGodot.Net.ScoreRowWire row in sb.Rows)
+            foreach (VortexArena.Net.ScoreRowWire row in sb.Rows)
                 if (row.NetId == localId)
                     return row.Team;
         return Teams.None;
@@ -5825,7 +6348,7 @@ public sealed partial class NetGame : Node3D
 
     // [Score panel] last-fed scoreboard reference, so the in-game Score overlay rebuilds only on a data change
     // (the wire object is replaced per decode — identity by reference, like UpdateScoreboard).
-    private XonoticGodot.Net.ScoreboardWire? _lastScorePanelFed;
+    private VortexArena.Net.ScoreboardWire? _lastScorePanelFed;
 
     /// <summary>
     /// Feed the in-game Score OVERLAY (#7 — the corner standing readout, distinct from the full scoreboard) from
@@ -5838,11 +6361,11 @@ public sealed partial class NetGame : Node3D
     {
         if (_fullHud is null || _client is null)
             return;
-        XonoticGodot.Game.Hud.ScorePanel? panel = _fullHud.GetPanel<XonoticGodot.Game.Hud.ScorePanel>();
+        VortexArena.Game.Hud.ScorePanel? panel = _fullHud.GetPanel<VortexArena.Game.Hud.ScorePanel>();
         if (panel is null)
             return;
 
-        XonoticGodot.Net.ScoreboardWire? sb = _client.LatestScoreboard;
+        VortexArena.Net.ScoreboardWire? sb = _client.LatestScoreboard;
         if (sb is null)
             return; // no networked scores yet → panel self-blanks
         if (ReferenceEquals(sb, _lastScorePanelFed))
@@ -5851,22 +6374,22 @@ public sealed partial class NetGame : Node3D
 
         // Primary score column index within the wire's NetworkedFields order (QC scores_primary). Default 0
         // (SP_SCORE) when no gametype refined it. The wire's Columns array is in NetworkedFields order.
-        var fields = XonoticGodot.Common.Gameplay.Scoring.GameScores.NetworkedFields;
-        XonoticGodot.Common.Gameplay.Scoring.ScoreField? primary =
-            XonoticGodot.Common.Gameplay.Scoring.GameScores.Primary;
+        var fields = VortexArena.Common.Gameplay.Scoring.GameScores.NetworkedFields;
+        VortexArena.Common.Gameplay.Scoring.ScoreField? primary =
+            VortexArena.Common.Gameplay.Scoring.GameScores.Primary;
         int primaryIdx = 0;
         if (primary is not null)
             for (int i = 0; i < fields.Count; i++)
                 if (ReferenceEquals(fields[i], primary)) { primaryIdx = i; break; }
-        XonoticGodot.Common.Gameplay.Scoring.ScoreFlags primaryFlags =
-            primary?.Flags ?? XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.None;
+        VortexArena.Common.Gameplay.Scoring.ScoreFlags primaryFlags =
+            primary?.Flags ?? VortexArena.Common.Gameplay.Scoring.ScoreFlags.None;
 
-        bool teamplay = XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay;
+        bool teamplay = VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay;
         bool spectating = _client.SpectateeStatus != 0 && _client.SpectateeStatus != _client.LocalNetId;
 
         // ---- build a sorted (primary desc) snapshot of the rows ----
-        var sorted = new System.Collections.Generic.List<XonoticGodot.Net.ScoreRowWire>(sb.Rows);
-        int PrimaryOf(XonoticGodot.Net.ScoreRowWire r) =>
+        var sorted = new System.Collections.Generic.List<VortexArena.Net.ScoreRowWire>(sb.Rows);
+        int PrimaryOf(VortexArena.Net.ScoreRowWire r) =>
             (r.Columns is not null && primaryIdx < r.Columns.Length) ? r.Columns[primaryIdx] : 0;
         sorted.Sort((a, b) => PrimaryOf(b).CompareTo(PrimaryOf(a)));
 
@@ -5884,7 +6407,7 @@ public sealed partial class NetGame : Node3D
         }
         if (haveSelf)
             panel.SetSelf(
-                XonoticGodot.Common.Gameplay.Scoring.GameScores.ScoreString(primaryFlags, selfScoreVal),
+                VortexArena.Common.Gameplay.Scoring.GameScores.ScoreString(primaryFlags, selfScoreVal),
                 selfPlace);
 
         // FFA gap to the next player above/below (QC me.scores - pl.scores): the signed gap to the nearest rival.
@@ -5900,11 +6423,11 @@ public sealed partial class NetGame : Node3D
         }
 
         // ---- rankings leaderboard rows ----
-        var rows = new System.Collections.Generic.List<XonoticGodot.Game.Hud.ScorePanel.RankRow>(sorted.Count);
-        foreach (XonoticGodot.Net.ScoreRowWire r in sorted)
+        var rows = new System.Collections.Generic.List<VortexArena.Game.Hud.ScorePanel.RankRow>(sorted.Count);
+        foreach (VortexArena.Net.ScoreRowWire r in sorted)
         {
-            string scoreStr = XonoticGodot.Common.Gameplay.Scoring.GameScores.ScoreString(primaryFlags, PrimaryOf(r));
-            rows.Add(new XonoticGodot.Game.Hud.ScorePanel.RankRow(r.Name, scoreStr, r.Team, r.NetId == localId));
+            string scoreStr = VortexArena.Common.Gameplay.Scoring.GameScores.ScoreString(primaryFlags, PrimaryOf(r));
+            rows.Add(new VortexArena.Game.Hud.ScorePanel.RankRow(r.Name, scoreStr, r.Team, r.NetId == localId));
         }
         panel.SetRankings(rows);
 
@@ -5912,16 +6435,16 @@ public sealed partial class NetGame : Node3D
         if (teamplay && sb.Teams.Count > 0)
         {
             int myTeam = LocalServerPlayer is { } lp ? (int)lp.Team : 0;
-            var teams = new System.Collections.Generic.List<XonoticGodot.Game.Hud.ScorePanel.TeamScore>(sb.Teams.Count);
+            var teams = new System.Collections.Generic.List<VortexArena.Game.Hud.ScorePanel.TeamScore>(sb.Teams.Count);
             foreach ((int team, int score) in sb.Teams)
-                teams.Add(new XonoticGodot.Game.Hud.ScorePanel.TeamScore(
+                teams.Add(new VortexArena.Game.Hud.ScorePanel.TeamScore(
                     team, score.ToString(System.Globalization.CultureInfo.InvariantCulture), team == myTeam));
             panel.SetTeamScores(teams);
-            panel.SetMode(XonoticGodot.Game.Hud.ScorePanel.ScoreMode.Team, spectating);
+            panel.SetMode(VortexArena.Game.Hud.ScorePanel.ScoreMode.Team, spectating);
         }
         else
         {
-            panel.SetMode(XonoticGodot.Game.Hud.ScorePanel.ScoreMode.FreeForAll, spectating);
+            panel.SetMode(VortexArena.Game.Hud.ScorePanel.ScoreMode.FreeForAll, spectating);
         }
     }
 
@@ -5932,7 +6455,7 @@ public sealed partial class NetGame : Node3D
         if (_fullHud is null || _client is null)
             return;
         ModIconsPanel panel = _fullHud.ModIcons;
-        XonoticGodot.Net.GametypeStatusBlock.Decoded? ms = _client.LatestModeStatus;
+        VortexArena.Net.GametypeStatusBlock.Decoded? ms = _client.LatestModeStatus;
         if (ms is null)
         {
             if (panel.Visible) panel.Visible = false;
@@ -5940,44 +6463,44 @@ public sealed partial class NetGame : Node3D
         }
         switch (ms.Mode)
         {
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.ClanArena:
+            case VortexArena.Net.GametypeStatusBlock.Kind.ClanArena:
                 panel.Mode = ModIconsPanel.ModIconsMode.ClanArena;
                 panel.SetAliveCounts(ms.Alive[0], ms.Alive[1], ms.Alive[2], ms.Alive[3]);
                 break;
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.FreezeTag:
+            case VortexArena.Net.GametypeStatusBlock.Kind.FreezeTag:
                 panel.Mode = ModIconsPanel.ModIconsMode.FreezeTag;
                 panel.SetAliveCounts(ms.Alive[0], ms.Alive[1], ms.Alive[2], ms.Alive[3]);
                 break;
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.KeyHunt:
+            case VortexArena.Net.GametypeStatusBlock.Kind.KeyHunt:
                 panel.Mode = ModIconsPanel.ModIconsMode.Keyhunt;
                 panel.ObjectiveStatus = unchecked((int)ms.KeyState);
                 break;
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.Survival:
+            case VortexArena.Net.GametypeStatusBlock.Kind.Survival:
                 panel.Mode = ModIconsPanel.ModIconsMode.Survival;
                 panel.SurvivalStatus = ms.MyStatus;
                 break;
             // [W1-mod-icons] the Wave-1 objective feeds net-server added to GametypeStatusBlock — establish the
             // client dispatch so Wave-3's per-mode render (already present for CTF/Domination, Keepaway below)
             // is fed live. CTF: the bitpacked OBJECTIVE_STATUS flag pack drives HUD_Mod_CTF.
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.Ctf:
+            case VortexArena.Net.GametypeStatusBlock.Kind.Ctf:
                 panel.Mode = ModIconsPanel.ModIconsMode.Ctf;
                 panel.ObjectiveStatus = unchecked((int)ms.ObjectiveStatus);
                 break;
             // Domination: STAT(DOM_TOTAL_PPS / DOM_PPS_*). The wire packs [0]=total, [1..4]=red,blue,yellow,pink.
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.Domination:
+            case VortexArena.Net.GametypeStatusBlock.Kind.Domination:
                 panel.Mode = ModIconsPanel.ModIconsMode.Domination;
                 panel.SetDominationPps(ms.DominationPps[1], ms.DominationPps[2], ms.DominationPps[3],
                     ms.DominationPps[4], ms.DominationPps[0]);
                 break;
             // Keepaway: the KA_CARRYING mod icon. The wire carries the carrier's net id (0 = nobody); the QC stat
             // bit means "the LOCAL player carries it", so resolve it against the local net id here.
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.Keepaway:
+            case VortexArena.Net.GametypeStatusBlock.Kind.Keepaway:
                 panel.Mode = ModIconsPanel.ModIconsMode.Keepaway;
                 panel.KeepawayCarrying = ms.CarrierNetId != 0 && ms.CarrierNetId == _client.LocalNetId;
                 break;
             // NexBall: the QC nexball_carrying mod-icon. Same shape as Keepaway — the wire carries the carrier's net
             // id (0 = nobody); resolve it against the local net id so the icon shows only while WE hold the ball.
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.NexBall:
+            case VortexArena.Net.GametypeStatusBlock.Kind.NexBall:
                 panel.Mode = ModIconsPanel.ModIconsMode.NexBall;
                 panel.NexBallCarrying = ms.CarrierNetId != 0 && ms.CarrierNetId == _client.LocalNetId;
                 // QC HUD_Mod_NexBall keys the power-meter bar off the LOCAL NB_METERSTART — show the triangle-wave
@@ -5988,13 +6511,13 @@ public sealed partial class NetGame : Node3D
                 break;
             // Team Keepaway: STAT(TKA_BALLSTATUS) — the carrying / per-team-taken / dropped bit pack is already
             // computed per-recipient on the server, so feed it straight to HUD_Mod_TeamKeepaway.
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.TeamKeepaway:
+            case VortexArena.Net.GametypeStatusBlock.Kind.TeamKeepaway:
                 panel.Mode = ModIconsPanel.ModIconsMode.TeamKeepaway;
                 panel.TkaBallStatus = ms.TkaBallStatus;
                 break;
             // LMS: the recycled REDALIVE/BLUEALIVE/OBJECTIVE_STATUS leader stats drive HUD_Mod_LMS_Draw (the
             // leader-count icon + the colored +N lives lead). The panel hides itself when the leader count is 0.
-            case XonoticGodot.Net.GametypeStatusBlock.Kind.Lms:
+            case VortexArena.Net.GametypeStatusBlock.Kind.Lms:
                 panel.Mode = ModIconsPanel.ModIconsMode.Lms;
                 panel.LmsLeaderCount = ms.LmsLeaderCount;
                 panel.LmsLivesDiff = ms.LmsLivesDiff;
@@ -6013,10 +6536,10 @@ public sealed partial class NetGame : Node3D
         // (QC "if(!(scores_flags(ps_primary) & SFL_TIME) || teamplay)").
         if (panel.Mode == ModIconsPanel.ModIconsMode.None)
         {
-            XonoticGodot.Common.Gameplay.GameType? sgt = _serverWorld?.GameType;
+            VortexArena.Common.Gameplay.GameType? sgt = _serverWorld?.GameType;
             Player? me = LocalServerPlayer;
-            var raceGt = sgt as XonoticGodot.Common.Gameplay.Race;
-            var ctsGt  = sgt as XonoticGodot.Common.Gameplay.Cts;
+            var raceGt = sgt as VortexArena.Common.Gameplay.Race;
+            var ctsGt  = sgt as VortexArena.Common.Gameplay.Cts;
             if ((raceGt is not null || ctsGt is not null) && me is not null && !_client!.IsObserving)
             {
                 // QC: only show for non-team qualifying/CTS (SFL_TIME primary and !teamplay).
@@ -6031,7 +6554,7 @@ public sealed partial class NetGame : Node3D
                     // server's per-map top-99, identified by PersistentId (UID). 0 = no personal best yet.
                     string mapName  = raceGt?.MapName ?? ctsGt!.MapName;
                     string recType  = raceGt?.RecordType ?? ctsGt!.RecordType;
-                    panel.RaceModIconPb = XonoticGodot.Common.Gameplay.RaceRecords.ReadPersonalBest(mapName, recType, me.PersistentId);
+                    panel.RaceModIconPb = VortexArena.Common.Gameplay.RaceRecords.ReadPersonalBest(mapName, recType, me.PersistentId);
 
                     // QC race_server_record (RACE_NET_SERVER_RECORD): rank-1 time for this map.
                     panel.RaceModIconServerRecord = raceGt?.ServerRecord ?? ctsGt!.ServerRecord;
@@ -6040,16 +6563,16 @@ public sealed partial class NetGame : Node3D
                     // Reuse the same stamp+player reference that UpdateRacePanels uses for the split-timer panel so
                     // both panels flash on the same event without double-counting.
                     float lastRecT = raceGt?.LastRecordTime ?? ctsGt!.LastRecordTime;
-                    XonoticGodot.Common.Gameplay.Player? lastRecP = raceGt?.LastRecordPlayer ?? ctsGt!.LastRecordPlayer;
+                    VortexArena.Common.Gameplay.Player? lastRecP = raceGt?.LastRecordPlayer ?? ctsGt!.LastRecordPlayer;
                     if (ReferenceEquals(lastRecP, me) && lastRecT > 0f && lastRecT != _lastFedModIconRecordTime)
                     {
                         _lastFedModIconRecordTime = lastRecT;
-                        XonoticGodot.Common.Gameplay.RaceRecordResult r = raceGt?.LastRecord ?? ctsGt!.LastRecord;
+                        VortexArena.Common.Gameplay.RaceRecordResult r = raceGt?.LastRecord ?? ctsGt!.LastRecord;
                         int statusMi = r.Kind switch
                         {
-                            XonoticGodot.Common.Gameplay.RaceRecordKind.Fail => 0,
+                            VortexArena.Common.Gameplay.RaceRecordKind.Fail => 0,
                             _ when r.IsServerRecord => 3,
-                            XonoticGodot.Common.Gameplay.RaceRecordKind.NewImproved => 1,
+                            VortexArena.Common.Gameplay.RaceRecordKind.NewImproved => 1,
                             _ => 2,
                         };
                         panel.RaceModIconStatus = statusMi;
@@ -6069,6 +6592,7 @@ public sealed partial class NetGame : Node3D
 
     // [T57] last-fed accuracy generation (rebuild the dictionaries only when the server's changes). -1 = none yet.
     private int _lastFedAccuracyGen = -1;
+    private readonly System.Collections.Generic.Dictionary<string, int> _itemStatsById = new();   // item icon name -> pickup count (QC Inventory.inv_items)
     private readonly System.Collections.Generic.Dictionary<int, int> _accuracyById = new();          // weapon registry id → hit% (-1 never fired)
     private readonly System.Collections.Generic.Dictionary<string, float> _accuracyByNetName = new(); // weapon NetName → hit% (0 never fired)
 
@@ -6102,13 +6626,53 @@ public sealed partial class NetGame : Node3D
         }
         _scoreboard.SetAccuracy(_accuracyById);
         _fullHud.Weapons.SetAccuracy(_accuracyByNetName);
+        FeedScoreboardWeaponSets();
     }
+
+    /// <summary>
+    /// QC <c>WepSet_GetFromStat()</c> / <c>WepSet_GetFromStat_InMap()</c> (scoreboard.qc:1808-1809): the two sets
+    /// that decide which never-fired weapons still earn a cell in the scoreboard's accuracy grid — the weapons
+    /// the local player carries, and the weapons that exist on the loaded map. Without them the grid would list
+    /// EVERY registered weapon (including the OK/turret/vehicle variants that never appear in a normal match).
+    ///
+    /// Owned comes from the local player's live WepSet (listen server: the server Player; remote client: the HUD
+    /// mirror the owner block feeds). In-map is a listen-server scan of the spawned weapon pickups; a pure
+    /// <c>--connect</c> client has no item list of its own, so it falls back to the owned set alone (a strictly
+    /// smaller grid, never a wrong one).
+    /// </summary>
+    private void FeedScoreboardWeaponSets()
+    {
+        Entity? local = LocalServerPlayer ?? _hudMirror;
+        if (local is not null)
+        {
+            _sbOwnedWeapons.Clear();
+            foreach (Weapon w in local.OwnedWeaponSet.Weapons()) _sbOwnedWeapons.Add(w.RegistryId);
+            _scoreboard.SetOwnedWeapons(_sbOwnedWeapons);
+        }
+
+        // The in-map set only changes on map load; scan once per map.
+        if (_serverWorld is not null && _sbWeaponsInMapMap != _map)
+        {
+            _sbWeaponsInMapMap = _map;
+            _sbWeaponsInMap.Clear();
+            foreach (Entity e in _serverWorld.Services.Entities.All)
+            {
+                if (e.IsFreed || e.Pickup is not { IsWeaponPickup: true }) continue;
+                foreach (Weapon w in e.OwnedWeaponSet.Weapons()) _sbWeaponsInMap.Add(w.RegistryId);
+            }
+            _scoreboard.SetWeaponsInMap(_sbWeaponsInMap);
+        }
+    }
+
+    private readonly System.Collections.Generic.List<int> _sbOwnedWeapons = new();
+    private readonly System.Collections.Generic.HashSet<int> _sbWeaponsInMap = new();
+    private string _sbWeaponsInMapMap = "";
 
     /// <summary>The scoreboard title: the active gametype's display name from the networked ScoreInfo (else the
     /// configured gametype). QC the scoreboard header gametype name.</summary>
     private string ScoreboardTitle()
     {
-        string gt = XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype;
+        string gt = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype;
         return string.IsNullOrEmpty(gt) ? "Scoreboard" : gt.ToUpperInvariant();
     }
 
@@ -6129,7 +6693,7 @@ public sealed partial class NetGame : Node3D
         _scoreboard.LeadAndFragLimit = cvars.GetFloat("leadlimit_and_fraglimit") != 0f;
         // QC gametype.m_hidelimits (mapinfo.qh:128, GAMETYPE_FLAG_HIDELIMITS; scoreboard.qc:2551): only LMS sets
         // it (lms.qh:11), suppressing the frag/lead limit terms — only the timelimit shows on that line.
-        _scoreboard.HideLimits = XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype == "lms";
+        _scoreboard.HideLimits = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "lms";
         // QC global `campaign` (scoreboard.qc:2574): a single-player campaign suppresses the "N/M players" line.
         _scoreboard.Campaign = !string.IsNullOrEmpty(_campaignName);
         FeedMapStats();
@@ -6146,23 +6710,23 @@ public sealed partial class NetGame : Node3D
         // monsters_total=inv_maxspawned / monsters_killed=inv_numkilled — the per-round SPAWNED wave counters, NOT
         // the NATURAL map-placed totals (which MonsterAI tracks and which exclude the spawned wave monsters). So in
         // ROUND Invasion publish the live wave counts; every other mode keeps the natural map-monster totals.
-        if (_serverWorld?.GameType is XonoticGodot.Common.Gameplay.Invasion inv
-            && inv.Type == XonoticGodot.Common.Gameplay.Invasion.InvasionType.Round)
+        if (_serverWorld?.GameType is VortexArena.Common.Gameplay.Invasion inv
+            && inv.Type == VortexArena.Common.Gameplay.Invasion.InvasionType.Round)
         {
             _scoreboard.MonstersTotal  = inv.Wave.MaxSpawned > 0 ? inv.Wave.MaxSpawned : -1;
             _scoreboard.MonstersKilled = inv.Wave.Killed;
         }
         else
         {
-            _scoreboard.MonstersTotal  = XonoticGodot.Common.Gameplay.MonsterAI.MonstersTotal > 0 ? XonoticGodot.Common.Gameplay.MonsterAI.MonstersTotal : -1;
-            _scoreboard.MonstersKilled = XonoticGodot.Common.Gameplay.MonsterAI.MonstersKilled;
+            _scoreboard.MonstersTotal  = VortexArena.Common.Gameplay.MonsterAI.MonstersTotal > 0 ? VortexArena.Common.Gameplay.MonsterAI.MonstersTotal : -1;
+            _scoreboard.MonstersKilled = VortexArena.Common.Gameplay.MonsterAI.MonstersKilled;
         }
 
         // QC trigger_secret: STAT(SECRETS_TOTAL)/STAT(SECRETS_FOUND), accumulated by trigger_secret spawn/touch
         // (Triggers.SecretSetup/SecretTouch → MapObjectsState). -1 hides the row when the map has no secrets.
-        int secretsTotal = XonoticGodot.Common.Gameplay.MapObjectsState.SecretsTotal;
+        int secretsTotal = VortexArena.Common.Gameplay.MapObjectsState.SecretsTotal;
         _scoreboard.SecretsTotal = secretsTotal > 0 ? secretsTotal : -1;
-        _scoreboard.SecretsFound = XonoticGodot.Common.Gameplay.MapObjectsState.SecretsFound;
+        _scoreboard.SecretsFound = VortexArena.Common.Gameplay.MapObjectsState.SecretsFound;
     }
 
     /// <summary>
@@ -6196,6 +6760,14 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
+        // (E3/E5) Map-editor interaction. Runs only while free-flying in the editor gametype, and consumes the
+        // event when it acts so a grab doesn't also register as a weapon impulse or a spectate-cycle.
+        if (!ConsoleState.IsOpen && HandleEditorInput(@event))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // Minigame menu toggle (QC the +minigamemenu bind — no default key in Base; we bind 'M'). Opens/closes
         // the in-game Create/Join/Current-Game menu. Active even during play (so you can start a game), but not
         // while the console is open. When the menu is open it captures the cursor so the player can click it.
@@ -6207,6 +6779,29 @@ public sealed partial class NetGame : Node3D
             // the new menu state), so it stays correct even when a board is still active under a closed menu.
             GetViewport().SetInputAsHandled();
             return;
+        }
+
+        // Interactive scoreboard (QC HUD_Scoreboard_InputEvent, main.qc:500). Two entry points:
+        //   * TAB held + Escape opens the navigation UI (QC main.qc:545-551 — the ESC branch checks S_TAB);
+        //   * while it is up it owns the keyboard: arrows/TAB/Enter/Ctrl-chords all go to the panel.
+        // Placed before the radar/mapvote handlers and the gameplay binds so an arrow key navigates instead of
+        // switching weapons. Console-open still wins (handled above).
+        if (!ConsoleState.IsOpen && _scoreboard is not null && GodotObject.IsInstanceValid(_scoreboard)
+            && @event is InputEventKey { Echo: false } sbKey)
+        {
+            bool shift = sbKey.ShiftPressed, ctrl = sbKey.CtrlPressed;
+            // (Escape — open and close — is claimed by Shell's Escape chain via MenuCommand.ScoreboardEscape.)
+
+            if (_scoreboard.UiMode != 0)
+            {
+                // QC acts on the PRESS and swallows the matching release, so the key never reaches gameplay.
+                if (sbKey.Pressed ? _scoreboard.UiHandleKey(sbKey.Keycode, shift, ctrl)
+                                  : _scoreboard.UiConsumesRelease(sbKey.Keycode, ctrl))
+                {
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
         }
 
         // Maximized radar mouse input (QC HUD_Radar_Mouse / hud_panel_radar_maximized): while the radar is maximized
@@ -6275,7 +6870,7 @@ public sealed partial class NetGame : Node3D
         // the prompt only consumes KEY events, so without this gate a MOUSE bind still flips latches / fires the
         // held +attack the moment the prompt closes).
         if (!ConsoleState.IsOpen && !GetTree().Paused && !MinigameMenuOpen
-            && !XonoticGodot.Game.Hud.ChatPrompt.IsOpen
+            && !VortexArena.Game.Hud.ChatPrompt.IsOpen
             && @event is InputEventKey or InputEventMouseButton)
             BindInput.HandleEvent(@event, RunBoundCommand);
 
@@ -6297,7 +6892,7 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>
     /// The per-frame half of the DP mouse pipeline (cl_input.c CL_Input:550-694): run the accumulated deltas
-    /// through the m_accelerate/m_filter block (<see cref="XonoticGodot.Common.Input.MouseAccel"/>), then apply
+    /// through the m_accelerate/m_filter block (<see cref="VortexArena.Common.Input.MouseAccel"/>), then apply
     /// — yaw -= m_yaw · dx · sensitivity · sensitivityscale; pitch += m_pitch · dy · sensitivity ·
     /// sensitivityscale (m_pitch SIGNED, negative = invert-Y; SensitivityScale = QC setsensitivityscale; Xonotic
     /// never sets cl.viewzoom, so that DP factor stays 1). Pitch clamps to in_pitch_min/max (DP ±90 — CL_AdjustAngles).
@@ -6353,7 +6948,7 @@ public sealed partial class NetGame : Node3D
     /// consumed the event. The <see cref="MapVotePanel.CastChoice"/> hook is wired lazily here so it always
     /// targets the current local server player.
     /// </summary>
-    private bool HandleMapVoteInput(XonoticGodot.Game.Hud.MapVotePanel panel, InputEvent @event)
+    private bool HandleMapVoteInput(VortexArena.Game.Hud.MapVotePanel panel, InputEvent @event)
     {
         panel.CastChoice = CastMapVote; // QC MapVote_SendChoice → localcmd("impulse N")
 
@@ -6422,7 +7017,7 @@ public sealed partial class NetGame : Node3D
         if (command.Equals("quickmenu", StringComparison.OrdinalIgnoreCase)
             || command.StartsWith("quickmenu ", StringComparison.OrdinalIgnoreCase))
         {
-            _fullHud?.GetPanel<XonoticGodot.Game.Hud.QuickMenuPanel>()?.Toggle();
+            _fullHud?.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>()?.Toggle();
             return;
         }
 
@@ -6439,6 +7034,17 @@ public sealed partial class NetGame : Node3D
         }
         if (command.Equals("-hud_panel_radar_maximized", StringComparison.OrdinalIgnoreCase))
             return; // release of a press-toggle bind — ignored (matches the quickmenu toggle semantics)
+
+        // (E2) The editor state toggle rides F9, which Base binds to the minigame HUD. Deliberately handled
+        // BEFORE the free-fly gate below and NOT restricted to EDIT: the weapon binds cannot serve this, because
+        // in PLAYTEST they go back to selecting weapons and the mapper would have no way to return to editing.
+        if (IsEditorGametype
+            && (command.Equals("cl_cmd hud minigame", StringComparison.OrdinalIgnoreCase)
+                || command.Equals("editor_toggle", StringComparison.OrdinalIgnoreCase)))
+        {
+            Menu.MenuState.Interp?.ExecuteLine("editor_playtest");
+            return;
+        }
 
         int imp = WeaponCommandToImpulse(command);
         if (imp != 0)
@@ -6460,6 +7066,3607 @@ public sealed partial class NetGame : Node3D
         // just counted (DP Cmd_ForwardToServer is not wired for the net path), so this is a no-op for them.
         RunCommand?.Invoke(command);
     }
+
+    // =============================================================================================
+    //  Map-editor interaction (E3/E5) — the input half; the logic lives in EditorController.
+    // =============================================================================================
+
+    /// <summary>
+    /// Route input to the editor while free-flying in an editor session. Returns true when the event was
+    /// consumed.
+    ///
+    /// The 3D view is crosshair-driven and keeps the mouse captured (aim, click, grab — the same motion as
+    /// aiming a weapon). The orthographic view is the exception: pan/zoom need a pointer, so opening it takes
+    /// cursor ownership through the same <c>UiOwnsCursor</c> path the maximized radar uses, which also
+    /// suspends movement input so flying doesn't fight panning.
+    /// </summary>
+    private bool HandleEditorInput(InputEvent @event)
+    {
+        if (_editor is null || !_editor.Active)
+            return false;
+
+        bool orthoOpen = _editorOrtho is { IsOpen: true };
+
+        if (@event is InputEventMouseButton mb)
+        {
+            if (orthoOpen)
+                return HandleOrthoMouse(mb);
+
+            switch (mb.ButtonIndex)
+            {
+                case MouseButton.Left when mb.Pressed:
+                    _editor.BeginDrag(addToSelection: Input.IsKeyPressed(Key.Shift));
+                    return true;
+                case MouseButton.Left:
+                    _editor.EndDrag();
+                    return true;
+                case MouseButton.Right when mb.Pressed:
+                    // Right-click still cancels an in-flight grab: that is the universal editor escape, and it
+                    // has to keep working, so the press is CONSUMED and the menu never opens mid-drag.
+                    // Otherwise the press only ARMS the menu — it opens on release, so that right-drag stays
+                    // available for anything that wants it later without fighting the menu.
+                    if (_editor.IsDragging)
+                    {
+                        _editor.CancelDrag();
+                        _rightPressArmedMenu = false;
+                    }
+                    else
+                    {
+                        _rightPressArmedMenu = true;
+                    }
+                    return true;
+
+                case MouseButton.Right:
+                    if (_rightPressArmedMenu)
+                    {
+                        _rightPressArmedMenu = false;
+                        OpenEditorMenuAtCrosshair();
+                    }
+                    return true;
+
+                // (T4) The wheel drives FLY SPEED, which is the thing a mapper adjusts constantly while
+                // moving around a room. Grid size is not — it changes a few times a session — so it moves
+                // behind a held modifier rather than owning the most reachable control on the mouse.
+                case MouseButton.WheelUp when mb.Pressed:
+                    AdjustEditorWheel(+1);
+                    return true;
+                case MouseButton.WheelDown when mb.Pressed:
+                    AdjustEditorWheel(-1);
+                    return true;
+                case MouseButton.WheelUp:
+                case MouseButton.WheelDown:
+                    return true;   // swallow the release so it cannot fall through to a weapon bind
+            }
+            return false;
+        }
+
+        if (@event is InputEventMouseMotion motion)
+        {
+            if (orthoOpen && _orthoPanning)
+            {
+                _editorOrtho!.PanByPixels(motion.Relative, GetViewport().GetVisibleRect().Size.Y);
+                return true;
+            }
+
+            // A live grab in ortho follows the pointer. Unlike the 3D view the camera is not frozen here —
+            // there is no mouse-look to freeze — so the motion simply drives the drag.
+            if (orthoOpen && _editor is { IsDragging: true })
+            {
+                _editor.ApplyDragMouse(motion.Relative);
+                return true;
+            }
+
+            // While a grab is live the pointer moves the GEOMETRY, not the view: consuming the motion here is
+            // what freezes the camera, so the mapper judges the placement against a fixed frame.
+            if (_editor.IsDragging)
+            {
+                _editor.ApplyDragMouse(motion.Relative);
+                return true;
+            }
+        }
+
+        if (@event is InputEventKey { Pressed: false, Echo: false, Keycode: Key.G })
+        {
+            bool tapped = _editorGridKeyHeld && !_editorGridKeyScrolled;
+            _editorGridKeyHeld = false;
+            if (tapped)
+                Menu.MenuState.Interp?.ExecuteLine("editor_grid");
+            return true;
+        }
+
+        if (@event is InputEventKey { Pressed: true, Echo: false } key)
+        {
+            switch (key.Keycode)
+            {
+                // (T4) G is a MODIFIER first and a toggle second. Held, it redirects the wheel to the
+                // alignment grid; tapped, it toggles the drawn grid. Deciding on RELEASE — and only when the
+                // wheel never fired — is what lets one key do both without the toggle firing every time you
+                // hold it to resize.
+                case Key.G when !key.CtrlPressed && !key.AltPressed:
+                    _editorGridKeyHeld = true;
+                    _editorGridKeyScrolled = false;
+                    return true;
+
+                case Key.Z when key.CtrlPressed && key.ShiftPressed:
+                    EditorRedo();
+                    return true;
+                case Key.Z when key.CtrlPressed:
+                    EditorUndo();
+                    return true;
+                case Key.Y when key.CtrlPressed:
+                    EditorRedo();
+                    return true;
+                case Key.Delete:
+                    _editor.DeleteSelection();
+                    return true;
+                // (E8) The clip tool commits on Enter rather than on the last click: the number of points a
+                // cut needs varies by mode, and a gesture that fires the moment you happen to place the last
+                // one gives no chance to look at the preview before committing.
+                case Key.Enter or Key.KpEnter when _editor.Tool == EditorTool.Clip:
+                    _editor.ApplyClip();
+                    RefreshEditorWorld();
+                    return true;
+                case Key.Escape when _editor.Tool == EditorTool.Clip && _editor.ClipPoints.Count > 0:
+                    _editor.ClearClipPoints();
+                    return true;
+
+                case Key.Escape when _editor.IsDragging:
+                    _editor.CancelDrag();
+                    return true;
+                case Key.Escape when orthoOpen && _editor.IsDragging:
+                    _editor.CancelDrag();
+                    return true;
+                case Key.Escape when orthoOpen:
+                    _editorOrtho!.Close();
+                    return true;
+            }
+
+            // (E7) The editor owns 0-9 outright while free-flying (§11.9). Consuming them HERE — this method
+            // runs ahead of the bind dispatch — is what makes ownership total rather than best-effort: whatever
+            // the mapper has bound to a digit stays silent for the duration of the session. The action itself
+            // is a console command, so the HUD can still resolve and display its key through the bind table.
+            int digit = EditorDigitOf(key.Keycode);
+            if (digit >= 0)
+            {
+                string cmd = Vmap.EditorBinds.CommandForDigit(digit);
+                if (cmd.Length > 0)
+                    Menu.MenuState.Interp?.ExecuteLine(cmd);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Digit 0-9 from a keycode (top row or numpad), or -1 for anything else.</summary>
+    private static int EditorDigitOf(Key key) => key switch
+    {
+        >= Key.Key0 and <= Key.Key9 => (int)(key - Key.Key0),
+        >= Key.Kp0 and <= Key.Kp9 => (int)(key - Key.Kp0),
+        _ => -1,
+    };
+
+    /// <summary>
+    /// True between a right-press and its release, when that press did not cancel a drag. The menu opens on
+    /// RELEASE (§11.9's "right click and immediate release"), so the flag is what carries the intent across
+    /// the two events.
+    /// </summary>
+    /// <summary>True while the T4 grid modifier (G) is held. See <see cref="AdjustEditorWheel"/>.</summary>
+    private bool _editorGridKeyHeld;
+
+    /// <summary>True once a held G has been used to scroll, so its release does not also toggle the grid.</summary>
+    private bool _editorGridKeyScrolled;
+
+    /// <summary>
+    /// One wheel notch in the 3D editor view (backlog T4).
+    ///
+    /// Bare, it steps FLY SPEED — the control a mapper reaches for constantly while moving through a room.
+    /// With the grid modifier held it steps the ALIGNMENT grid instead, which is the size that actually
+    /// constrains an edit; the drawn size is a reference and lives in the menu.
+    /// </summary>
+    private void AdjustEditorWheel(int direction)
+    {
+        if (_editorGridKeyHeld)
+        {
+            _editorGridKeyScrolled = true;
+            Menu.MenuState.Interp?.ExecuteLine(
+                direction > 0 ? "editor_grid_snap_size +" : "editor_grid_snap_size -");
+            return;
+        }
+
+        Menu.MenuState.Interp?.ExecuteLine(direction > 0 ? "editor_flyspeed +" : "editor_flyspeed -");
+    }
+
+    private bool _rightPressArmedMenu;
+
+    /// <summary>
+    /// Open the context menu beside the crosshair, or at the pointer when the ortho view owns a real cursor.
+    ///
+    /// The crosshair is the viewport centre in the 3D view, which is exactly where the mapper is already
+    /// looking; anchoring to the mouse there would put the menu wherever the OS cursor happened to be parked
+    /// while it was captured, which is nowhere in particular.
+    /// </summary>
+    private void OpenEditorMenuAtCrosshair()
+    {
+        if (_fullHud?.GetPanel<VortexArena.Game.Hud.EditorMenuPanel>() is not { } menu)
+            return;
+
+        Vector2 anchor = _editorOrtho is { IsOpen: true }
+            ? GetViewport().GetMousePosition()
+            : GetViewport().GetVisibleRect().Size * 0.5f;
+        menu.Toggle(anchor);
+    }
+
+    /// <summary>
+    /// Hand the editor the orthographic view’s pointer ray and screen axes, so the same tools and the same ops
+    /// work in-view (design doc §11.5).
+    ///
+    /// The axes are what make an ortho edit exactly planar: the projection axis is fixed, so a drag expressed
+    /// in screen-right and screen-up simply has no depth component to drift along. That is the whole reason 2D
+    /// views remain unbeatable for alignment work, and it falls out of the projection rather than needing a
+    /// constraint bolted on.
+    /// </summary>
+    private void FeedOrthoInput()
+    {
+        if (_editor is null)
+            return;
+
+        if (_editorOrtho is not { IsOpen: true } ortho)
+        {
+            _editor.OrthoActive = false;
+            return;
+        }
+
+        Vector2 viewport = GetViewport().GetVisibleRect().Size;
+        Vector2 pointer = GetViewport().GetMousePosition();
+        (System.Numerics.Vector3 origin, System.Numerics.Vector3 dir) = ortho.RayAt(pointer, viewport);
+        (System.Numerics.Vector3 right, System.Numerics.Vector3 up) = ortho.ScreenAxes();
+
+        _editor.OrthoActive = true;
+        _editor.OrthoRayOrigin = origin;
+        _editor.OrthoForward = dir;
+        _editor.OrthoRight = right;
+        _editor.OrthoUp = up;
+        _editor.OrthoUnitsPerPixel = viewport.Y > 0f ? ortho.Zoom / viewport.Y : 1f;
+    }
+
+    /// <summary>Mouse handling specific to the orthographic view: middle-drag pans, the wheel zooms.</summary>
+    private bool HandleOrthoMouse(InputEventMouseButton mb)
+    {
+        switch (mb.ButtonIndex)
+        {
+            case MouseButton.Middle:
+                _orthoPanning = mb.Pressed;
+                return true;
+
+            // (O1) The same two-phase gesture as the 3D view: click one selects and spawns the handles, click
+            // two grabs one. Nothing about the interaction changes between views, which is the point — a
+            // mapper should not have to learn the editor twice.
+            case MouseButton.Left when mb.Pressed:
+                _editor?.BeginDrag(addToSelection: Input.IsKeyPressed(Key.Shift));
+                return true;
+
+            case MouseButton.Left:
+                if (_editor?.EndDrag() == true)
+                    RefreshEditorWorld();
+                return true;
+
+            // The menu works in ortho too, anchored at the pointer rather than the screen centre because this
+            // view already owns a real cursor.
+            case MouseButton.Right when mb.Pressed:
+                _rightPressArmedMenu = true;
+                return true;
+            case MouseButton.Right:
+                if (_rightPressArmedMenu)
+                {
+                    _rightPressArmedMenu = false;
+                    OpenEditorMenuAtCrosshair();
+                }
+                return true;
+            case MouseButton.WheelUp when mb.Pressed:
+                // ALT moves the floor-filter slab through the map instead of zooming, so stacked floors can be
+                // stepped through without leaving the view. This was Ctrl until E7 gave Ctrl a global meaning
+                // (invert grid snap, §11.9) — one modifier cannot both suspend snapping and page the slab.
+                if (mb.AltPressed)
+                    _editorOrtho!.MoveSlab(_editor!.GridSnapSize * 4f);
+                else
+                    _editorOrtho!.ZoomBy(1f / 1.2f);
+                return true;
+            case MouseButton.WheelDown when mb.Pressed:
+                if (mb.AltPressed)
+                    _editorOrtho!.MoveSlab(-_editor!.GridSnapSize * 4f);
+                else
+                    _editorOrtho!.ZoomBy(1.2f);
+                return true;
+        }
+        return false;
+    }
+
+    // =============================================================================================
+    //  E6 — op replication (design doc §11.7)
+    // =============================================================================================
+
+    /// <summary>True once <see cref="WireEditorReplication"/> has run for the current session.</summary>
+    private bool _editorReplicationWired;
+
+    /// <summary>
+    /// True when this process owns the authoritative document — a listen host or a solo editing session.
+    ///
+    /// The distinction drives everything else in E6. A host's local apply IS the edit, so it broadcasts and
+    /// ignores anything coming back (its own echo would otherwise apply twice). A pure client's local apply is
+    /// a prediction, so it also submits the op and waits for the server's version of events.
+    /// </summary>
+    private bool IsEditorAuthority => _serverWorld is not null;
+
+    /// <summary>
+    /// Connect the editing session to the network (design doc §11.7, phase E6).
+    ///
+    /// Everything hangs off <see cref="VortexArena.Formats.Vmap.VmapEditSession.Applied"/> rather than off the
+    /// twenty individual tool call sites. A tool added next month replicates because it applies an op, not
+    /// because someone remembered to add a send next to it — which is the only version of this that stays true
+    /// as the editor grows.
+    /// </summary>
+    private void WireEditorReplication()
+    {
+        if (_editor is not { Session: { } session } editor || _editorReplicationWired)
+            return;
+        _editorReplicationWired = true;
+
+        if (IsEditorAuthority)
+        {
+            // The server-authoritative apply path shares the session, which on a listen host is the same object
+            // the local editor draws from. That sharing is the whole reason the editor can be in-process at all
+            // (it is what _preloadedEditorDoc already relies on for collision).
+            _serverWorld!.Commands.EditorOps = new VortexArena.Formats.Vmap.VmapEditServer(session);
+
+            // Every applied op goes out, whoever originated it — the host's own gesture and the drained
+            // submission from a guest take the same path out.
+            session.Applied += OnEditorOpApplied;
+
+            // Undo restores a snapshot rather than replaying an inverse gesture, so it has no op to send; what
+            // goes out is the state it put back. Without this, Ctrl+Z on the host is invisible everywhere else.
+            session.Restored += OnEditorStateRestored;
+            return;
+        }
+
+        // A guest submits and waits. Nothing is applied locally, so there is no Applied hook here: the only
+        // thing that changes this document is an op arriving from the server.
+        editor.OpSubmit = SubmitEditorOp;
+        if (_client is not null)
+            _client.EditorOpReceived += OnEditorOpReceived;
+
+        // The guest built its document by importing the same BSP, not by receiving the host's. That matches
+        // whenever the host is editing the compiled map, and does NOT when the host opened a saved .vmap — the
+        // ids would be numbered differently and every replicated op would land on the wrong brush. Said out
+        // loud because the failure is otherwise invisible until the geometry is already wrong.
+        VortexArena.Common.Diagnostics.Log.Info(
+            "editor: joined as a guest — edits are submitted to the server; "
+            + "the document is the locally imported map (no document handshake yet)");
+    }
+
+    /// <summary>
+    /// Longest op line a guest may submit.
+    ///
+    /// The submit channel is <c>clc_stringcmd</c>, whose length field is 16 bits and whose writer CASTS rather
+    /// than checks — a longer line would be received as a truncated, misaligned one. The server-&gt;client echo
+    /// is chunked and has no such limit; this direction is capped instead, because chunking a console command
+    /// would mean reassembling half-commands on the server. Refused loudly rather than sent corrupt.
+    /// </summary>
+    private const int MaxSubmittedEditorOpChars = 16000;
+
+    /// <summary>Encode a guest's op and send it to the server, which owns the geometry.</summary>
+    private bool SubmitEditorOp(VortexArena.Formats.Vmap.IVmapOp op)
+    {
+        if (_editor is not { Session: not null } editor)
+            return false;
+
+        // A paste has no verb of its own — its result is what replicates. On the host that result is captured
+        // from the document AFTER applying; a guest has applied nothing, so it sends the clipboard contents
+        // directly with ids left at zero for the server to assign. Without this a guest simply cannot paste.
+        if (op is VortexArena.Formats.Vmap.PasteOp && !editor.Clipboard.IsEmpty)
+        {
+            if (!editor.TryGetPastePoint(out NVec3 at))
+                return false;
+            op = editor.Clipboard.ToAddObjects(at);
+        }
+
+        // Serialized pre-apply, so a create carries id 0 and lets the server choose. SerializeAfterApply is the
+        // server's job; a guest has nothing applied to describe.
+        string? line = VortexArena.Formats.Vmap.VmapOpWire.Serialize(op);
+        if (line is null)
+        {
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"editor: '{op.Describe()}' cannot be sent to the server and was not applied");
+            return false;
+        }
+
+        if (line.Length > MaxSubmittedEditorOpChars)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn(
+                $"editor: '{op.Describe()}' is too large to submit ({line.Length} chars) — "
+                + "split it into smaller pieces, or make the edit on the host");
+            return false;
+        }
+
+        SendStringCommand("editor_op " + line);
+        return true;
+    }
+
+    /// <summary>Undo the wiring so a session close (or a map change) does not leave the events hanging on a
+    /// dead session — and so re-opening does not double-subscribe.</summary>
+    private void UnwireEditorReplication()
+    {
+        if (!_editorReplicationWired)
+            return;
+        _editorReplicationWired = false;
+
+        if (_editor is { } editor)
+        {
+            editor.OpSubmit = null;
+            if (editor.Session is { } session)
+            {
+                session.Applied -= OnEditorOpApplied;
+                session.Restored -= OnEditorStateRestored;
+            }
+        }
+        if (_client is not null)
+            _client.EditorOpReceived -= OnEditorOpReceived;
+        if (_serverWorld is not null)
+            _serverWorld.Commands.EditorOps = null;
+    }
+
+    /// <summary>Send an op that just changed the authoritative document out to every connected editor.</summary>
+    private void OnEditorOpApplied(VortexArena.Formats.Vmap.IVmapOp op)
+    {
+        if (_server is null || _editor?.Session is not { } session)
+            return;
+
+        string? line = VortexArena.Formats.Vmap.VmapOpWire.SerializeAfterApply(op, session.Document);
+        if (line is null)
+        {
+            // No wire form. Say so rather than letting the documents drift apart in silence, which is the
+            // failure mode that makes a co-editing session impossible to debug from the inside. Only worth
+            // saying when someone is actually connected to hear it.
+            VortexArena.Common.Diagnostics.Log.Warn(
+                $"editor: '{op.Describe()}' has no wire form and was NOT replicated");
+            return;
+        }
+
+        BroadcastEditorOpGated(line);
+    }
+
+    /// <summary>
+    /// Broadcast an op line under the sim gate.
+    ///
+    /// This runs on the MAIN thread — a mapper's drag, or the per-frame drain — while the sim worker owns the
+    /// world with sv_threaded on. <see cref="ServerNet.BroadcastEditorOp"/> fills ServerNet's shared scratch
+    /// writer and walks its peer dictionary, both of which the worker also touches on its own send paths, so
+    /// going in ungated is the same shape of bug as the cross-thread transport race: two threads in one
+    /// non-thread-safe object, intermittently, under load. Every other main-thread route into ServerNet
+    /// (the host console, the waypoint editor) takes this gate for the same reason.
+    /// </summary>
+    private void BroadcastEditorOpGated(string line)
+    {
+        if (_server is not { } server)
+            return;
+
+        object? gate = server.SimGate;
+        if (gate is null)
+            server.BroadcastEditorOp(line);
+        else
+            lock (gate)
+                server.BroadcastEditorOp(line);
+    }
+
+    /// <summary>
+    /// Send the state an undo, redo or history jump put back.
+    ///
+    /// A restore is not an op, so nothing here is replayed on the far side — the objects are simply set to
+    /// what they now are, and the ones that stopped existing are named so they can be removed.
+    /// </summary>
+    private void OnEditorStateRestored(
+        IReadOnlyList<int> brushIds, IReadOnlyList<int> patchIds, IReadOnlyList<int> entityIds,
+        IReadOnlyList<VortexArena.Formats.Vmap.VmapBlendRegion> blendRegions)
+    {
+        if (_server is null || _editor?.Session is not { } session)
+            return;
+
+        var op = VortexArena.Formats.Vmap.SetObjectsOp.Capture(
+            session.Document, brushIds, patchIds, entityIds);
+        if (!op.IsEmpty && VortexArena.Formats.Vmap.VmapOpWire.Serialize(op) is { } line)
+            BroadcastEditorOpGated(line);
+
+        // Undone PAINT replicates as the resulting texels of exactly the rectangles the step touched — the
+        // same reasoning as the geometry capture above, and small for the same reason the journal snapshots
+        // rectangles rather than whole maps.
+        var blend = VortexArena.Formats.Vmap.SetBlendRegionOp.Capture(session.Document, blendRegions);
+        if (!blend.IsEmpty && VortexArena.Formats.Vmap.VmapOpWire.Serialize(blend) is { } blendLine)
+            BroadcastEditorOpGated(blendLine);
+    }
+
+    /// <summary>
+    /// Apply an op the server has already accepted — the only thing that changes a guest's document.
+    ///
+    /// The authority never gets here: it holds the document that produced the broadcast, so applying its own
+    /// echo would run the edit twice.
+    /// </summary>
+    private void OnEditorOpReceived(string line)
+    {
+        if (IsEditorAuthority || _editor?.Session is not { } session)
+            return;
+
+        VortexArena.Formats.Vmap.IVmapOp? op =
+            VortexArena.Formats.Vmap.VmapOpWire.Deserialize(line, session.Document);
+        if (op is null)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor: could not decode a replicated op");
+            return;
+        }
+
+        // Painted texels changed but no geometry did, so the atlas needs a re-upload and the world does NOT
+        // need a rebuild — which is the whole reason a blend map beats a per-vertex weight.
+        if (op is VortexArena.Formats.Vmap.PaintBlendOp or VortexArena.Formats.Vmap.SetBlendRegionOp)
+            _editor?.BumpBlendVersion();
+
+        if (!session.Apply(op))
+        {
+            // The op landed on the server but not here: the two documents no longer agree, and every op after
+            // this one is suspect. Better to know than to keep editing a divergent copy.
+            VortexArena.Common.Diagnostics.Log.Warn(
+                "editor: a replicated op did not apply — this document has diverged from the server's");
+            return;
+        }
+
+        _editor.BumpGeometryVersion();
+        RefreshEditorWorld();
+    }
+
+    /// <summary>
+    /// Apply the ops clients have submitted, on the thread that owns the document.
+    ///
+    /// The broadcast is left to <see cref="OnEditorOpApplied"/> rather than done here: one sender for every
+    /// applied op, whoever originated it, is what stops a submitted edit going out twice.
+    /// </summary>
+    private void DrainEditorOps()
+    {
+        if (_serverWorld?.Commands.EditorOps is not { } ops || _editor is null)
+            return;
+        if (ops.Drain() == 0)
+            return;
+
+        // A guest's edit changed the geometry without going through a local tool, so nothing has bumped the
+        // version the world build and the collision rebuild are both keyed on.
+        _editor.BumpGeometryVersion();
+        RefreshEditorWorld();
+    }
+
+    /// <summary>
+    /// Open (or re-open) an editing session for the current map: an already-imported <c>.vmap</c> if one
+    /// exists, otherwise imported live from the loaded map so a mapper can start editing any level without a
+    /// separate conversion step.
+    /// </summary>
+    private void EnsureEditorSession()
+    {
+        if (_editor is null || _editor.Session is not null || _assets is null)
+            return;
+
+        try
+        {
+            string? existing = Vmap.VmapService.FindPackage(_map);
+            VortexArena.Formats.Vmap.VmapDocument doc;
+            if (_preloadedEditorDoc is not null)
+            {
+                // The listen host already imported the document at load (it is what collision was built
+                // from). The session MUST edit that same instance — a copy would let the render and the
+                // playtest collision drift apart.
+                doc = _preloadedEditorDoc;
+            }
+            else if (existing is not null)
+            {
+                doc = VortexArena.Formats.Vmap.VmapPackage.Read(existing);
+                VortexArena.Common.Diagnostics.Log.Info($"editor: opened {existing}");
+            }
+            else if (_bsp is not null)
+            {
+                doc = VortexArena.Formats.Vmap.BspToVmap.Import(
+                    _bsp, _map, $"maps/{_map}.bsp", sourceHash: "", droppedSubmodels: _droppedSubmodels);
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"editor: imported {_map} from BSP ({doc.Brushes.Count} brushes) — vmap_import to keep it");
+                LogEditorFaceHistogram(doc);
+
+            }
+            else
+            {
+                return;
+            }
+            _editor.OpenSession(doc);
+            WireEditorReplication();
+            LoadEntityDefs();
+            // The load-time collision was built from this same document, so the live collision is already
+            // current — without this seed, the first not-free-fly frame pays a pointless full rebuild.
+            _editorCollisionVersion = _editor.GeometryVersion;
+            // Default to the mode actually running, so the editor opens showing the map the player sees.
+            _editor.SetGametypeFilter(_gametype, _droppedSubmodels);
+            Menu.MenuState.Interp?.RegisterCommand("editor_gametype", CmdEditorGametype);
+            Menu.MenuState.Interp?.RegisterCommand("editor_rebake", CmdEditorRebake);
+            RegisterEditorCommands();
+        }
+        catch (Exception ex)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn($"editor: could not open a session for '{_map}': {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// True when this match is running the map-editor gametype. Several host behaviours key off it because
+    /// the editor inverts the usual assumption that observing is a transient state on the way to spawning:
+    /// here it is where the mapper LIVES, so auto-join, loading-screen completion and the weapon binds all
+    /// have to treat "observer" as a finished, playable state rather than a pending one.
+    /// </summary>
+    private bool IsEditorGametype => string.Equals(_gametype, "editor", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Diagnostic for the "floating brushes" hunt: report how many brush FACES survive the visible-surface
+    /// filter, and the material histogram of the survivors. Kept deliberately — it is the measurement that
+    /// showed the per-brush tool filter was at the wrong granularity, and it is how we tell whether a shader
+    /// family is still slipping through.
+    /// </summary>
+    /// <summary>
+    /// Rebuild the visible world from the EDITED document whenever its geometry version moves.
+    ///
+    /// The map you fly through is normally built from the compiled BSP, which the editor never touches — so an
+    /// edit moved the truth planes and the overlay, while the textured wall stayed exactly where q3map2 left
+    /// it. Once a session is open the editor swaps in geometry generated from the document, so what you see is
+    /// what you are editing.
+    ///
+    /// The whole world is rebuilt per edit rather than patched incrementally. That is honest but blunt: it
+    /// costs a visible pause on a large map. Rebuilding only the chunks a change touches is the obvious
+    /// follow-up, and the cell split in VmapMapBuilder is already the right unit for it.
+    /// </summary>
+    private void RefreshEditorWorld()
+    {
+        if (_editor is null || _assets is null)
+            return;
+
+        // The regenerated world is shown for the whole EDITOR SESSION, not just while free-flying: PLAYTEST
+        // must render the same world it collides with (the document), or the mapper runs through geometry
+        // that is not there and bounces off geometry that is.
+        bool wantEditorWorld = IsEditorGametype && _editor.Document is not null;
+
+        if (!wantEditorWorld)
+        {
+            // Left the editor: restore the compiled world.
+            if (_editorMapRoot is not null)
+            {
+                if (GodotObject.IsInstanceValid(_editorMapRoot))
+                    _editorMapRoot.QueueFree();
+                _editorMapRoot = null;
+                _editorMapVersion = -1;
+                if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
+                    _editorLights.QueueFree();
+                _editorLights = null;
+                Vmap.EditorLighting.RestoreEnvironment();
+                Vmap.EditorLighting.SuppressSceneSun(this, false);
+                if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
+                {
+                    _mapRoot.Visible = true;
+                    // Hand the warpzone windows back to the compiled world's own portal nodes.
+                    if (_portalRenderer is not null && _camera is not null)
+                        _portalRenderer.Rebind(_mapRoot, _camera);
+                }
+            }
+            return;
+        }
+
+        // The gametype filter and the tool-brush toggle change what is drawn without touching the geometry
+        // version, so both have to be part of the key or flipping them would leave the old world on screen.
+        bool lit = Vmap.EditorLighting.Enabled(Menu.MenuState.Cvars);
+        int viewKey = HashCode.Combine(
+            _editor.GeometryVersion, _editor.GametypeFilter, _editor.IncludeToolBrushes,
+            _editor.CullOccludedFaces, lit, _editor.Visibility.Version);
+        if (_editorMapVersion == viewKey)
+            return;
+
+        using var _scope = VortexArena.Game.Client.FrameProfiler.Scope("editor.world");
+
+        if (_editorMapRoot is not null && GodotObject.IsInstanceValid(_editorMapRoot))
+            _editorMapRoot.QueueFree();
+
+        // Lights FIRST: when they are baked, the mesh builder needs them to compute vertex colours, so the
+        // rig has to exist before the world it lights.
+        if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
+            _editorLights.QueueFree();
+        _editorLights = null;
+        if (lit)
+        {
+            _editorLights = Vmap.EditorLighting.Build(_editor.Document!, _assets.Assets, Menu.MenuState.Cvars);
+            AddChild(_editorLights);
+            if (_editorLights.Baking)
+            {
+                bool shadowsWanted = Menu.MenuState.Cvars is not { } sc
+                    || string.IsNullOrEmpty(sc.GetString(Vmap.EditorLighting.CvarBakeShadows))
+                    || sc.GetFloat(Vmap.EditorLighting.CvarBakeShadows) != 0f;
+                // A BAKE happens only when asked for — the first build of a session, or editor_rebake. Every
+                // other rebuild (every brush you drag) RESAMPLES the retained bake, which costs milliseconds
+                // and, more importantly, does not visibly downgrade the lighting mid-edit.
+                bool doBake = (_bakeShadowsNextBuild || !Vmap.EditorLightBake.CacheReady)
+                    && !Vmap.EditorLightBake.BakeRunning;
+                bool tracedShadows = shadowsWanted && doBake;
+                _bakeShadowsNextBuild = false;
+                _bakedShadowsStale = !doBake;
+                if (!doBake)
+                {
+                    Vmap.EditorLightBake.BeginCached();
+                    _editorLights.SuppressBakeLights();
+                    goto builtLights;
+                }
+                Vmap.EditorShadowTrace.PatchShadows =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchShadows, 1f) != 0f;
+                Vmap.EditorShadowTrace.PatchThickness = Math.Clamp(
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchThickness, 0.1f), 0.01f, 8f);
+                Vmap.EditorShadowTrace.SurfaceBias = Math.Clamp(
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarSampleOffset, 1f), 0.05f, 8f);
+                Vmap.VmapMapBuilder.PhongShading =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarBakePhong, 1f) != 0f;
+                var shadowTrace = tracedShadows
+                    ? new Vmap.EditorShadowTrace(_editor.Document!,
+                        b2 => b2.SubmodelIndex == 0 || !_editor.PickIndex.HiddenSubmodels.Contains(b2.SubmodelIndex))
+                    : null;
+                Vmap.EditorLightBake.RaysTraced = 0;
+                _bakeClock = Time.GetTicksMsec();
+                bool bounce = Menu.MenuState.Cvars is not { } bc2
+                    || string.IsNullOrEmpty(bc2.GetString(Vmap.EditorLighting.CvarBakeBounce))
+                    || bc2.GetFloat(Vmap.EditorLighting.CvarBakeBounce) != 0f;
+                Vmap.EditorLightBake.CpuBudget =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarBakeCpu, 0.75f);
+                Vmap.EditorLightBake.SampleSpacing = Math.Clamp(
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarLuxel, 24f), 16f, 256f);
+                Vmap.EditorLightBake.DirtStrength =
+                    CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarDirt, 0.8f);
+
+                int bounces = 8;
+                if (Menu.MenuState.Cvars is { } bn && !string.IsNullOrEmpty(bn.GetString(Vmap.EditorLighting.CvarBakeBounces)))
+                    bounces = (int)bn.GetFloat(Vmap.EditorLighting.CvarBakeBounces);
+                // Armed WITHOUT the occluder index for the preview pass the build itself does: the preview
+                // must cost no rays. RunBackground re-arms with the real trace below.
+                Vmap.EditorLightBake.Begin(_editorLights.BakeLights, null, false, bounces);
+                _pendingTrace = shadowTrace;
+                _pendingBounce = bounce;
+                _pendingBounces = bounces;
+
+                // The build only CAPTURES its vertices; the lighting itself runs on a worker afterwards.
+                // The world appears immediately with the previous bake resampled onto it, and the editor
+                // stays interactive for the minutes a faithful bake can take.
+                Vmap.EditorLightBake.Deferred = true;
+                Vmap.EditorLightBake.BeginCapture(1 << 20);
+                _bakePending = true;
+            }
+        }
+
+        builtLights:
+        _editorMapRoot = Vmap.VmapMapBuilder.BuildMap(_editor.Document!, _assets.Assets, new VmapSurfaceOptions
+        {
+            // Literally the same OBJECT the picker uses, so what you can click is what you can see —
+            // hide, isolate, region and group visibility all at once (backlog F8, F9).
+            HiddenSubmodels = _editor.PickIndex.HiddenSubmodels,
+            IncludeToolBrushes = _editor.IncludeToolBrushes,
+            Visibility = _editor.Visibility,
+            // Without this the editor draws the mapper's overlapping solids instead of the level's visible
+            // skin, and you end up looking at the inside of the masonry rather than at the room.
+            CullOccludedFaces = _editor.CullOccludedFaces,
+            PatchSubdivisions = (int)Math.Clamp(
+                CvarOr(Menu.MenuState.Cvars!, Vmap.EditorLighting.CvarPatchSubdiv, 8f), 2f, 24f),
+        }, lit);
+        if (_editorLights is { Baking: true })
+            GD.Print($"[EditorLighting] bake: {Vmap.EditorLightBake.RaysTraced:N0} shadow rays in "
+                + $"{Time.GetTicksMsec() - _bakeClock} ms");
+        if (_bakePending)
+        {
+            _bakePending = false;
+            Vmap.EditorLightBake.Deferred = false;
+            _bakeClock = Time.GetTicksMsec();
+            // Now arm the REAL bake — traced shadows, dirt and bounce — for the worker.
+            _pendingTraceCount = _pendingTrace?.OccluderCount ?? 0;
+            Vmap.EditorLightBake.Begin(_editorLights!.BakeLights, _pendingTrace, _pendingBounce, _pendingBounces);
+            _pendingTrace = null;
+            _ = Vmap.EditorLightBake.RunBackground();   // fire and forget; polled in the editor tick
+        }
+        else
+        {
+            Vmap.EditorLightBake.End();
+        }
+        AddChild(_editorMapRoot);
+        _editorMapVersion = viewKey;
+
+        // The regenerated world carries its own "Portals" node, so the portal renderer has to be re-pointed at
+        // it — including after every edit, since the rebuild frees the nodes it was holding.
+        if (_portalRenderer is not null && _camera is not null)
+            _portalRenderer.Rebind(_editorMapRoot, _camera);
+
+        // Hide the compiled world rather than freeing it, so leaving the editor restores it instantly —
+        // unless the mapper is holding the BSP-comparison view, which a rebuild must not silently exit.
+        ApplyEditorWorldVisibility();
+    }
+
+    /// <summary>
+    /// <c>editor_rebake</c> (bound to key 9): recompute the lighting — traced shadows, dirt, bounce, the lot.
+    ///
+    /// A full bake costs seconds (44M rays, ~9 s on stormkeep across every core), which is fine once and
+    /// intolerable on every drag of a brush. So NOTHING recomputes lighting automatically: an edit rebuilds
+    /// the geometry and RESAMPLES the retained bake onto it, the HUD says the lighting is stale, and the
+    /// mapper asks for the real thing when the geometry has settled. Recomputing a cheaper bake per edit
+    /// would be both slow and a visible downgrade — the world would flash flatter on every nudge.
+    /// </summary>
+    private void CmdEditorRebake(IReadOnlyList<string> args)
+    {
+        _ = args;
+        if (_editor is not { Active: true })
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor_rebake: no editing session");
+            return;
+        }
+        _bakeShadowsNextBuild = true;
+        _editorMapVersion = -1;      // force the next RefreshEditorWorld to rebuild
+        VortexArena.Common.Diagnostics.Log.Info("editor_rebake: recomputing lighting (traced shadows + dirt + bounce)...");
+    }
+
+    /// <summary>Seconds between autosaves. Zero disables them.</summary>
+    public const string CvarAutosave = "cl_editor_autosave";
+
+    private double _nextAutosave;
+
+    /// <summary>
+    /// Periodic autosave (design doc §11.8).
+    ///
+    /// Writes a SEPARATE file rather than over the mapper’s save, so an autosave can never destroy a
+    /// deliberate one — the whole value of the thing is that it costs nothing to have running, and a version
+    /// that could overwrite good work would not be worth its risk.
+    ///
+    /// Only fires when the session is actually dirty, so an editor left open overnight does not rewrite the
+    /// same bytes every minute.
+    /// </summary>
+    private void TickEditorAutosave(double now)
+    {
+        if (_editor is not { Session: { IsDirty: true } } ed || string.IsNullOrEmpty(_map))
+            return;
+
+        float interval = Menu.MenuState.Cvars is { } cv && cv.Has(CvarAutosave)
+            ? cv.GetFloat(CvarAutosave) : 300f;
+        if (interval <= 0f)
+            return;
+
+        if (now < _nextAutosave)
+            return;
+        _nextAutosave = now + interval;
+
+        try
+        {
+            string path = System.IO.Path.Combine(Vmap.VmapService.EditorOutputDirectory(),
+                _map + ".autosave" + VortexArena.Formats.Vmap.VmapPackage.Extension);
+            VortexArena.Formats.Vmap.VmapPackage.Write(ed.Session!.Document, path);
+            VortexArena.Common.Diagnostics.Log.Info($"editor: autosaved to {path}");
+        }
+        catch (Exception ex)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn($"editor autosave: {ex.Message}");
+        }
+    }
+
+    /// <summary>True when the next world build should trace shadows (first build, or after editor_rebake).</summary>
+    private bool _bakeShadowsNextBuild = true;
+
+    /// <summary>
+    /// Load the entity class descriptors from the game's own <c>scripts/entities.ent</c> (design doc §11.9):
+    /// 186 classes with typed keys, help text, editor colours and bounding boxes, which is what NetRadiant
+    /// drives its entity inspector from.
+    ///
+    /// A missing or broken file is NOT fatal — the parser returns an empty registry and every entity falls back
+    /// to a plain box that still draws, still picks and still has editable keys. An editor that refused to open
+    /// a map because a metadata file moved would be a far worse trade.
+    /// </summary>
+    private void LoadEntityDefs()
+    {
+        if (_editor is null || _editor.Defs is not null || _assets is null)
+            return;
+
+        try
+        {
+            if (!_assets.Vfs.Exists(VortexArena.Formats.Vmap.EntityDefs.VirtualPath))
+            {
+                VortexArena.Common.Diagnostics.Log.Warn(
+                    $"editor: {VortexArena.Formats.Vmap.EntityDefs.VirtualPath} not found — "
+                    + "entities will draw as plain boxes");
+                return;
+            }
+
+            var defs = VortexArena.Formats.Vmap.EntityDefs.Parse(
+                _assets.Vfs.ReadText(VortexArena.Formats.Vmap.EntityDefs.VirtualPath));
+            _editor.Defs = defs;
+            VortexArena.Common.Diagnostics.Log.Info($"editor: {defs.Count} entity classes loaded");
+        }
+        catch (Exception ex)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn($"editor: could not read entity definitions: {ex.Message}");
+        }
+    }
+
+    // =============================================================================================
+    //  (E7) The editor command vocabulary — §11.9
+    // =============================================================================================
+
+    /// <summary>
+    /// Register the <c>editor_*</c> commands. Everything the editor can do goes through this vocabulary: the
+    /// context menu's rows, the number keys, and anything typed at the console all take the same path.
+    ///
+    /// Routing the keys through real COMMANDS rather than a hardcoded keycode switch is what keeps §11.6's
+    /// rule alive — the HUD resolves every key it displays through the bind table, so rebinding updates the
+    /// readout and an unbound action renders as <c>--</c> instead of the panel confidently lying about which
+    /// key does what. It also makes every one of them scriptable, which a switch statement never is.
+    ///
+    /// Idempotent: <c>EnsureEditorSession</c> can run more than once per session.
+    /// </summary>
+    private void RegisterEditorCommands()
+    {
+        if (_editorCommandsRegistered || Menu.MenuState.Interp is not { } interp)
+            return;
+        _editorCommandsRegistered = true;
+
+        interp.RegisterCommand("editor_tool", CmdEditorTool);
+        interp.RegisterCommand("editor_mode", CmdEditorMode);
+        interp.RegisterCommand("editor_select", CmdEditorSelect);
+        interp.RegisterCommand("editor_menu", CmdEditorMenu);
+        interp.RegisterCommand("editor_undo", _ => EditorUndo());
+        interp.RegisterCommand("editor_redo", _ => EditorRedo());
+        interp.RegisterCommand("editor_ortho", _ => ToggleEditorOrtho());
+        interp.RegisterCommand("editor_ortho_axis", _ => _editorOrtho?.CycleAxis());
+        interp.RegisterCommand("editor_wire", _ => Vmap.EditorOrthoView.CycleWireAlpha());
+        interp.RegisterCommand("editor_show_bsp", _ => ToggleEditorBspCompare());
+        interp.RegisterCommand("editor_flyspeed", CmdEditorFlySpeed);
+        interp.RegisterCommand("editor_clip", CmdEditorClip);
+        interp.RegisterCommand("editor_entity", CmdEditorEntity);
+        interp.RegisterCommand("editor_light", CmdEditorLight);
+        interp.RegisterCommand("editor_shader", CmdEditorShader);
+        interp.RegisterCommand("editor_waypoint", CmdEditorWaypoint);
+        interp.RegisterCommand("editor_patch", CmdEditorPatch);
+        interp.RegisterCommand("editor_save", CmdEditorSave);
+        interp.RegisterCommand("editor_camera", CmdEditorCamera);
+        interp.RegisterCommand("editor_prefab", CmdEditorPrefab);
+        interp.RegisterCommand("editor_bots", CmdEditorBots);
+        interp.RegisterCommand("editor_extrude", a =>
+        {
+            float d = a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : (_editor?.GridSnapSize ?? 64f);
+            if (_editor?.ExtrudeFace(d) == true)
+                RefreshEditorWorld();
+        });
+        interp.RegisterCommand("editor_bevel", a =>
+        {
+            float sz = a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : (_editor?.GridSnapSize ?? 16f);
+            if (_editor?.BevelEdge(sz) == true)
+                RefreshEditorWorld();
+        });
+        // (T5) Geometry snapping: on/off, and a distance you can widen when you are placing something
+        // roughly and tighten when neighbours are close enough that a generous radius grabs the wrong one.
+        interp.RegisterCommand("editor_snap", a =>
+        {
+            if (Menu.MenuState.Cvars is not { } cv) return;
+            bool on = cv.GetFloat(Vmap.EditorController.CvarSnapEnabled) == 0f;
+            if (a.Count > 1 && float.TryParse(a[1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float v))
+                on = v != 0f;
+            cv.Set(Vmap.EditorController.CvarSnapEnabled, on ? "1" : "0");
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"editor: geometry snap {(on ? "ON" : "OFF")} ({cv.GetFloat(Vmap.EditorController.CvarSnapRadius):0.#}u)");
+        });
+
+        interp.RegisterCommand("editor_snap_dist", a =>
+        {
+            if (Menu.MenuState.Cvars is not { } cv) return;
+            float cur = Math.Clamp(cv.GetFloat(Vmap.EditorController.CvarSnapRadius), 1f, 256f);
+            string arg = a.Count > 1 ? a[1] : "";
+            float next = arg switch
+            {
+                "+" or "up" => VortexArena.Formats.Vmap.VmapEdit.StepGridSize(cur, +1, 1f, 256f),
+                "-" or "down" => VortexArena.Formats.Vmap.VmapEdit.StepGridSize(cur, -1, 1f, 256f),
+                _ => float.TryParse(arg, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float x)
+                    ? Math.Clamp(x, 1f, 256f)
+                    : cur,
+            };
+            cv.Set(Vmap.EditorController.CvarSnapRadius,
+                next.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+            VortexArena.Common.Diagnostics.Log.Info($"editor: snap distance {next:0.#}u");
+        });
+
+        interp.RegisterCommand("editor_snap_grid", _ =>
+        {
+            if (_editor?.SnapSelectionToGrid() == true)
+                RefreshEditorWorld();
+        });
+        interp.RegisterCommand("editor_csg", CmdEditorCsg);
+        interp.RegisterCommand("editor_paint", CmdEditorPaint);
+        interp.RegisterCommand("editor_hide", CmdEditorHide);
+        interp.RegisterCommand("editor_region", CmdEditorRegion);
+        interp.RegisterCommand("editor_group", CmdEditorGroup);
+        interp.RegisterCommand("editor_brush_create", _ =>
+        {
+            if (_editor?.CreateBrushAtCrosshair() == true)
+                RefreshEditorWorld();
+        });
+        Vmap.EditorBinds.RegisterCommands(interp);
+
+        // Stubs with an honest message rather than silence. These rows are visible-but-disabled in the menu,
+        // and a mapper who reaches one from the console deserves to be told it is E8 rather than to watch
+        // nothing happen and assume the editor is broken.
+        interp.RegisterCommand("editor_history", CmdEditorHistory);
+        interp.RegisterCommand("editor_mapinfo", CmdEditorMapInfo);
+    }
+
+    private bool _editorCommandsRegistered;
+
+    /// <summary><c>editor_tool &lt;name&gt;</c>, or bare to cycle.</summary>
+    private void CmdEditorTool(IReadOnlyList<string> args)
+    {
+        if (_editor is null)
+            return;
+
+        if (args.Count < 2)
+        {
+            _editor.CycleTool();
+            return;
+        }
+
+        if (!Enum.TryParse(args[1], ignoreCase: true, out EditorTool tool))
+        {
+            VortexArena.Common.Diagnostics.Log.Help(
+                $"editor_tool: unknown tool '{args[1]}' (try: {string.Join(", ", EditorTools.All)})");
+            return;
+        }
+
+        if (!EditorTools.IsImplemented(tool))
+        {
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"editor_tool: {EditorTools.Label(tool)} is not built yet (roadmap E8)");
+            return;
+        }
+        _editor.SetTool(tool);
+    }
+
+    /// <summary><c>editor_mode &lt;name&gt;</c>, or bare to cycle within the current tool.</summary>
+    private void CmdEditorMode(IReadOnlyList<string> args)
+    {
+        if (_editor is null)
+            return;
+
+        if (args.Count < 2)
+        {
+            _editor.CycleMode();
+            return;
+        }
+
+        if (!Enum.TryParse(args[1], ignoreCase: true, out ToolMode mode))
+        {
+            VortexArena.Common.Diagnostics.Log.Help(
+                $"editor_mode: unknown mode '{args[1]}' "
+                + $"(this tool offers: {string.Join(", ", EditorTools.ModesFor(_editor.Tool))})");
+            return;
+        }
+        _editor.SetMode(mode);
+    }
+
+    /// <summary><c>editor_select deselect|copy|paste|delete|invert|all_shader</c> — the selection ACTIONS.</summary>
+    private void CmdEditorSelect(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session })
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "";
+        switch (verb)
+        {
+            case "deselect":
+                session.Selection.Clear();
+                return;
+
+            case "copy":
+            {
+                int n = _editor.Clipboard.CopyFrom(session.Document, session.Selection);
+                VortexArena.Common.Diagnostics.Log.Info(n > 0
+                    ? $"editor: copied {_editor.Clipboard.Describe()}"
+                    : "editor: nothing to copy");
+                return;
+            }
+
+            case "paste":
+                if (_editor.Clipboard.IsEmpty)
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: clipboard is empty");
+                    return;
+                }
+                // Paste is a MODE, not an action: the ghost follows the crosshair and a left-click places it
+                // (§11.9). Entering the mode is all this command does.
+                _editor.SetMode(ToolMode.Paste);
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"editor: placing {_editor.Clipboard.Describe()} — click to place, Esc to stop");
+                return;
+
+            case "delete":
+                if (_editor.DeleteSelection())
+                    RefreshEditorWorld();
+                return;
+
+            case "invert":
+                _editor.InvertSelection();
+                return;
+
+            case "all_shader":
+                _editor.SelectAllOfShader();
+                return;
+
+            default:
+                VortexArena.Common.Diagnostics.Log.Help(
+                    "usage: editor_select deselect|copy|paste|delete|invert|all_shader");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_clip keep|apply|cancel</c>. Bare applies the pending cut, which is what the Enter key does —
+    /// registered as a command too so it can be bound and scripted like everything else.
+    /// </summary>
+    private void CmdEditorClip(IReadOnlyList<string> args)
+    {
+        if (_editor is null)
+            return;
+
+        switch (args.Count > 1 ? args[1].ToLowerInvariant() : "apply")
+        {
+            case "keep":
+                _editor.CycleClipKeep();
+                return;
+            case "cancel":
+                _editor.ClearClipPoints();
+                return;
+            case "apply":
+                if (_editor.ApplyClip())
+                    RefreshEditorWorld();
+                return;
+            default:
+                VortexArena.Common.Diagnostics.Log.Help("usage: editor_clip keep|apply|cancel");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_entity</c> — the entity tool's console surface.
+    /// <code>
+    ///   editor_entity create &lt;classname&gt;   place one at the crosshair
+    ///   editor_entity set &lt;key&gt; &lt;value&gt;    set a key on the selection (empty value clears)
+    ///   editor_entity flag &lt;NAME&gt;           toggle one spawnflag on the selection
+    ///   editor_entity assign &lt;classname&gt;    turn the selected geometry into a brush entity
+    ///   editor_entity dissolve              give a brush entity's geometry back to worldspawn
+    ///   editor_entity keys                  list the selected entity's keys and what its class allows
+    ///   editor_entity list [category]       list placeable classes
+    /// </code>
+    /// </summary>
+    private void CmdEditorEntity(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session })
+            return;
+
+        switch (args.Count > 1 ? args[1].ToLowerInvariant() : "")
+        {
+            case "create":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_entity create <classname>");
+                    return;
+                }
+                if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                    return;
+
+                var op = new VortexArena.Formats.Vmap.CreateEntityOp(args[2], at);
+                // Through the controller, not the session: on a guest the op has to be SUBMITTED rather than
+                // applied locally, and that decision lives in exactly one place (EditorController.Commit).
+                if (!_editor.CommitOp(op))
+                {
+                    VortexArena.Common.Diagnostics.Log.Warn($"editor: could not create '{args[2]}'");
+                    return;
+                }
+
+                // Select what was just made, so it can be nudged or edited without hunting for it. Skipped on
+                // a guest: nothing exists until the server's echo lands, so there is no id yet to select.
+                if (!_editor.LastOpDeferred)
+                {
+                    session.Selection.Clear();
+                    session.Selection.Add(VortexArena.Formats.Vmap.VmapSelection.OfEntity(op.CreatedEntityId));
+                }
+                _editor.BumpGeometryVersion();
+                VortexArena.Common.Diagnostics.Log.Info($"editor: placed {args[2]} at {at.X:0} {at.Y:0} {at.Z:0}");
+                return;
+            }
+
+            case "set":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_entity set <key> [value]");
+                    return;
+                }
+                List<int> ids = _editor.SelectedEntityIds();
+                if (ids.Count == 0)
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: no entity selected");
+                    return;
+                }
+
+                // Join the tail so values with spaces ("16 32 64", a message string) work without quoting.
+                string value = args.Count > 3 ? string.Join(' ', args, 3, args.Count - 3) : "";
+                int changed = 0;
+                foreach (int id in ids)
+                    if (_editor.CommitOp(new VortexArena.Formats.Vmap.SetEntityKeyOp(id, args[2], value)))
+                        changed++;
+
+                // Without this the edit is invisible. The editor world and the lighting rig only rebuild when
+                // the geometry version moves, so changing a light's `light` or `_color` key used to do nothing
+                // on screen until some unrelated edit happened to bump it.
+                if (changed > 0)
+                    _editor.BumpGeometryVersion();
+
+                VortexArena.Common.Diagnostics.Log.Info(changed > 0
+                    ? $"editor: set {args[2]} on {changed} entit{(changed == 1 ? "y" : "ies")}"
+                    : $"editor: {args[2]} unchanged");
+                return;
+            }
+
+            case "flag":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_entity flag <NAME>");
+                    return;
+                }
+                ToggleEntitySpawnflag(args[2]);
+                return;
+            }
+
+            case "assign":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_entity assign <classname>");
+                    return;
+                }
+                if (_editor.AssignSelectionToEntity(args[2]))
+                    RefreshEditorWorld();
+                return;
+            }
+
+            case "dissolve":
+                if (_editor.DissolveSelectedBrushEntities())
+                    RefreshEditorWorld();
+                return;
+
+            case "keys":
+                // Bare opens the inspector; "keys log" keeps the console listing, which is still the better
+                // form when you want to read or copy the whole set at once.
+                if (args.Count > 2 && args[2].Equals("log", StringComparison.OrdinalIgnoreCase))
+                    LogEntityKeys();
+                else
+                    OpenEntityInspector();
+                return;
+
+            case "palette":
+                OpenEntityPalette();
+                return;
+
+            case "list":
+                LogEntityClasses(args.Count > 2 ? args[2] : "");
+                return;
+
+            default:
+                VortexArena.Common.Diagnostics.Log.Help(
+                    "usage: editor_entity create <classname> | set <key> [value] | flag <NAME> "
+                    + "| assign <classname> | dissolve | keys | list [category]");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Flip one named spawnflag on the selection.
+    ///
+    /// The inspector used to show a spawnflag as the text "bit 4" next to a field you typed the whole
+    /// <c>spawnflags</c> number into — so setting NOGRIDLIGHT meant knowing that entities.ent's <c>bit=</c> is
+    /// an INDEX, computing 1&lt;&lt;4, and OR-ing it into whatever was already there by hand. The editor knows
+    /// all three of those things.
+    ///
+    /// The FIRST selected entity decides the new state and the rest follow it, which is how
+    /// <see cref="Vmap.EditorController.ToggleFaceFlag"/> already handles a mixed selection: flipping each
+    /// entity's own bit scatters a mixed set further instead of resolving it.
+    /// </summary>
+    private void ToggleEntitySpawnflag(string flagName)
+    {
+        if (_editor is not { Document: { } doc } ed)
+            return;
+
+        List<int> ids = ed.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("editor: no entity selected");
+            return;
+        }
+        if (doc.FindEntity(ids[0]) is not { } lead)
+            return;
+
+        VortexArena.Formats.Vmap.EntityClassDef def = ed.Defs?.GetOrPlaceholder(lead.ClassName)
+            ?? new VortexArena.Formats.Vmap.EntityClassDef { Name = lead.ClassName };
+
+        int bitValue = 0;
+        foreach (VortexArena.Formats.Vmap.EntityFlagDef f in def.Flags)
+            if (string.Equals(f.Name, flagName, StringComparison.OrdinalIgnoreCase))
+            {
+                bitValue = f.Value;
+                break;
+            }
+        if (bitValue == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn($"editor: {lead.ClassName} has no spawnflag '{flagName}'");
+            return;
+        }
+
+        bool turnOn = (SpawnflagsOf(lead) & bitValue) == 0;
+        int changed = 0;
+        foreach (int id in ids)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+            int next = turnOn ? SpawnflagsOf(e) | bitValue : SpawnflagsOf(e) & ~bitValue;
+            if (ed.CommitOp(new VortexArena.Formats.Vmap.SetEntityKeyOp(
+                    id, "spawnflags", next.ToString(System.Globalization.CultureInfo.InvariantCulture))))
+                changed++;
+        }
+
+        if (changed > 0)
+            ed.BumpGeometryVersion();
+        VortexArena.Common.Diagnostics.Log.Info(
+            $"editor: {flagName} {(turnOn ? "ON" : "OFF")} on {changed} entit{(changed == 1 ? "y" : "ies")}");
+    }
+
+    private static int SpawnflagsOf(VortexArena.Formats.Vmap.VmapEntity e)
+        => e.Fields.TryGetValue("spawnflags", out string? s)
+            && int.TryParse(s, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out int v)
+            ? v
+            : 0;
+
+    /// <summary>
+    /// <c>editor_light</c> — the light tool's console surface (backlog T2).
+    /// <code>
+    ///   editor_light create [intensity]   place a light at the crosshair
+    ///   editor_light set &lt;key&gt; [value]    set a key on the selected lights
+    ///   editor_light aim                  drop an info_null at the crosshair and aim the light at it
+    ///   editor_light dialog               open the light dialog (bare does the same)
+    /// </code>
+    ///
+    /// A thin layer over the entity ops rather than a parallel set of them — a light IS an entity, and giving
+    /// it private ops would mean two code paths that have to agree about undo, replication and ownership.
+    /// What it adds is the two gestures the generic inspector cannot express: creating a light with its
+    /// intensity in one go, and AIMING one, which needs two entities and a minted targetname.
+    /// </summary>
+    private void CmdEditorLight(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session } ed)
+            return;
+
+        switch (args.Count > 1 ? args[1].ToLowerInvariant() : "")
+        {
+            case "create":
+            {
+                if (!ed.TryGetPastePoint(out System.Numerics.Vector3 at))
+                    return;
+
+                float intensity = args.Count > 2 && float.TryParse(args[2],
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : 300f;
+
+                var op = new VortexArena.Formats.Vmap.CreateEntityOp("light", at);
+                if (!ed.CommitOp(op))
+                {
+                    VortexArena.Common.Diagnostics.Log.Warn("editor: could not create a light there");
+                    return;
+                }
+
+                if (!ed.LastOpDeferred)
+                {
+                    ed.CommitOp(new VortexArena.Formats.Vmap.SetEntityKeyOp(op.CreatedEntityId, "light",
+                        intensity.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)));
+                    session.Selection.Clear();
+                    session.Selection.Add(
+                        VortexArena.Formats.Vmap.VmapSelection.OfEntity(op.CreatedEntityId));
+                }
+                ed.BumpGeometryVersion();
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"editor: light {intensity:0.#} at {at.X:0} {at.Y:0} {at.Z:0}");
+                return;
+            }
+
+            case "set":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_light set <key> [value]");
+                    return;
+                }
+                // Same verb, same op, same undo step as the generic key edit — deliberately not a second one.
+                CmdEditorEntity(new[] { "editor_entity", "set" }
+                    .Concat(args.Skip(2)).ToArray());
+                return;
+            }
+
+            case "flag":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_light flag <NAME>");
+                    return;
+                }
+                ToggleEntitySpawnflag(args[2]);
+                return;
+            }
+
+            case "aim":
+                AimSelectedLight();
+                return;
+
+            case "palette":
+                VortexArena.Common.Diagnostics.Log.Info(
+                    "editor: 'editor_light create [intensity]' places one — the light tool has no palette, "
+                    + "there is only one class");
+                return;
+
+            case "":
+            case "dialog":
+                OpenLightDialog();
+                return;
+
+            default:
+                VortexArena.Common.Diagnostics.Log.Help(
+                    "usage: editor_light create [intensity] | set <key> [value] | flag <NAME> | aim | dialog");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Turn the selected light into a q3map2 SPOT: place an <c>info_null</c> where the crosshair is aimed,
+    /// give it a fresh targetname, and point the light at it.
+    ///
+    /// Two ops for one gesture, and the only practical way to author an aimed light. Doing it by hand means
+    /// creating an info_null, inventing a name that collides with nothing already in the map, typing it twice,
+    /// and getting both halves right — for something a mapper does by looking at where they want the pool of
+    /// light to land.
+    /// </summary>
+    private void AimSelectedLight()
+    {
+        if (_editor is not { Document: { } doc } ed)
+            return;
+
+        List<int> ids = ed.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("editor: select a light first");
+            return;
+        }
+        if (!ed.TryGetPastePoint(out System.Numerics.Vector3 at))
+            return;
+
+        // A name nothing already in the document answers to, so aiming a second light cannot silently
+        // re-target the first.
+        string name = "light_aim_1";
+        for (int n = 1; n < 10000; n++)
+        {
+            name = $"light_aim_{n}";
+            bool taken = false;
+            foreach (VortexArena.Formats.Vmap.VmapEntity e in doc.Entities)
+                if (e.Fields.TryGetValue("targetname", out string? t)
+                    && string.Equals(t, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    taken = true;
+                    break;
+                }
+            if (!taken)
+                break;
+        }
+
+        var mark = new VortexArena.Formats.Vmap.CreateEntityOp("info_null", at);
+        if (!ed.CommitOp(mark))
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor: could not place the aim point");
+            return;
+        }
+        if (ed.LastOpDeferred)
+        {
+            // On a guest the info_null does not exist yet, so there is no id to name. Submitting the light's
+            // target key now would point it at nothing.
+            VortexArena.Common.Diagnostics.Log.Info(
+                "editor: aim point submitted — set the light's target once it lands");
+            return;
+        }
+
+        ed.CommitOp(new VortexArena.Formats.Vmap.SetEntityKeyOp(mark.CreatedEntityId, "targetname", name));
+        foreach (int id in ids)
+            ed.CommitOp(new VortexArena.Formats.Vmap.SetEntityKeyOp(id, "target", name));
+
+        ed.BumpGeometryVersion();
+        VortexArena.Common.Diagnostics.Log.Info(
+            $"editor: {ids.Count} light(s) now aim at {name} ({at.X:0} {at.Y:0} {at.Z:0})");
+    }
+
+    /// <summary>
+    /// <c>editor_csg</c> — constructive solid geometry on the selection (backlog F5, F6).
+    /// <code>
+    ///   editor_csg subtract              carve the first selected brush out of everything it overlaps
+    ///   editor_csg hollow [thickness]    walls INSIDE the selected brushes
+    ///   editor_csg room [thickness]      walls OUTSIDE them, so the void is what you drew
+    ///   editor_csg merge                 fuse the selection into one brush, when the union is convex
+    /// </code>
+    /// Thickness defaults to the alignment grid, the same default <c>editor_extrude</c> and
+    /// <c>editor_bevel</c> take, so a gesture lands on the grid the mapper is already building against.
+    /// </summary>
+    private void CmdEditorCsg(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null } ed)
+            return;
+
+        float Thickness() => args.Count > 2 && float.TryParse(args[2],
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float v) && v > 0f
+            ? v
+            : MathF.Max(1f, ed.GridSnapSize);
+
+        bool changed = (args.Count > 1 ? args[1].ToLowerInvariant() : "") switch
+        {
+            "subtract" or "sub" or "carve" => ed.SubtractSelection(),
+            "hollow" => ed.HollowSelection(Thickness(), outward: false),
+            "room" => ed.HollowSelection(Thickness(), outward: true),
+            "merge" => ed.MergeSelection(),
+            _ => Usage(),
+        };
+
+        if (changed)
+            RefreshEditorWorld();
+
+        static bool Usage()
+        {
+            VortexArena.Common.Diagnostics.Log.Help(
+                "usage: editor_csg subtract | hollow [thickness] | room [thickness] | merge");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_hide</c> — narrow what you are looking at (backlog F9).
+    /// <code>
+    ///   editor_hide              hide the selection
+    ///   editor_hide unselected   hide everything else (isolate)
+    ///   editor_hide show         bring back everything hidden this way
+    /// </code>
+    /// Purely a VIEW change: nothing is journalled, nothing replicates, and the map on disk is untouched.
+    /// </summary>
+    private void CmdEditorHide(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null } ed)
+            return;
+
+        bool changed = (args.Count > 1 ? args[1].ToLowerInvariant() : "") switch
+        {
+            "" => ed.HideSelection(),
+            "unselected" or "isolate" or "other" => ed.IsolateSelection(),
+            "show" or "all" or "off" => ed.ShowAllHidden(),
+            _ => HideUsage(),
+        };
+
+        if (changed)
+            RefreshEditorWorld();
+
+        static bool HideUsage()
+        {
+            VortexArena.Common.Diagnostics.Log.Help("usage: editor_hide [unselected | show]");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_region</c> — clip the view to a box around the selection, or <c>off</c> to clear it
+    /// (backlog F9).
+    /// </summary>
+    private void CmdEditorRegion(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null } ed)
+            return;
+
+        bool off = args.Count > 1
+            && args[1].ToLowerInvariant() is "off" or "clear" or "0";
+        if (off ? ed.ClearRegion() : ed.SetRegionToSelection())
+            RefreshEditorWorld();
+    }
+
+    /// <summary>
+    /// <c>editor_group</c> — named object sets (backlog F8).
+    /// <code>
+    ///   editor_group &lt;name&gt;         put the selection in a group, creating or extending it
+    ///   editor_group off             take the selection out of its groups (dissolving empty ones)
+    ///   editor_group hide &lt;name&gt;    hide a group as a unit
+    ///   editor_group show &lt;name&gt;    show it again
+    ///   editor_group list            what groups the map has
+    /// </code>
+    /// Unlike <c>editor_hide</c> this IS document state: groups save with the map and replicate to co-editors,
+    /// because a group is a fact about the level rather than about one mapper's view of it.
+    /// </summary>
+    private void CmdEditorGroup(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null, Document: { } doc } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "";
+        bool changed;
+        switch (verb)
+        {
+            case "":
+                VortexArena.Common.Diagnostics.Log.Help(
+                    "usage: editor_group <name> | off | hide <name> | show <name> | list");
+                return;
+
+            case "off" or "ungroup":
+                changed = ed.UngroupSelection();
+                break;
+
+            case "hide" or "show":
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help($"usage: editor_group {verb} <name>");
+                    return;
+                }
+                changed = ed.SetGroupHidden(
+                    string.Join(' ', args, 2, args.Count - 2), hidden: verb == "hide");
+                break;
+
+            case "list":
+                if (doc.Groups.Count == 0)
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: this map has no groups");
+                    return;
+                }
+                foreach (VortexArena.Formats.Vmap.VmapGroup g in doc.Groups)
+                {
+                    int members = 0;
+                    foreach (VortexArena.Formats.Vmap.VmapBrush b in doc.Brushes)
+                        if (b.GroupId == g.Id) members++;
+                    foreach (VortexArena.Formats.Vmap.VmapPatch pa in doc.Patches)
+                        if (pa.GroupId == g.Id) members++;
+                    foreach (VortexArena.Formats.Vmap.VmapEntity e in doc.Entities)
+                        if (e.GroupId == g.Id) members++;
+                    VortexArena.Common.Diagnostics.Log.Info(
+                        $"  {g.Name} — {members} object(s){(g.Hidden ? ", hidden" : "")}");
+                }
+                return;
+
+            default:
+                // The whole tail, so a group name can have spaces without quoting.
+                changed = ed.GroupSelection(string.Join(' ', args, 1, args.Count - 1));
+                break;
+        }
+
+        if (changed)
+            RefreshEditorWorld();
+    }
+
+    /// <summary>
+    /// <c>editor_paint</c> — the paint tool's console surface (backlog F3).
+    /// <code>
+    ///   editor_paint channel &lt;0-3&gt;    which weight channel a stroke paints
+    ///   editor_paint radius &lt;f&gt;       brush size, as a fraction of the face
+    ///   editor_paint strength &lt;f&gt;     how hard one stroke pushes, 0-1
+    ///   editor_paint hardness &lt;f&gt;     where the falloff starts, 0-1
+    ///   editor_paint texel &lt;f&gt;        world units per texel for the NEXT face painted
+    /// </code>
+    /// The stroke itself is a drag, not a command — there is no useful way to type one.
+    /// </summary>
+    private void CmdEditorPaint(IReadOnlyList<string> args)
+    {
+        if (Menu.MenuState.Cvars is not { } cv || _editor is not { Session: not null } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "";
+        string? name = verb switch
+        {
+            "channel" => Vmap.EditorController.CvarPaintChannel,
+            "radius" => Vmap.EditorController.CvarPaintRadius,
+            "strength" => Vmap.EditorController.CvarPaintStrength,
+            "hardness" => Vmap.EditorController.CvarPaintHardness,
+            "texel" => Vmap.EditorController.CvarBlendTexel,
+            _ => null,
+        };
+
+        if (name is null)
+        {
+            VortexArena.Common.Diagnostics.Log.Help(
+                "usage: editor_paint channel <0-3> | radius <f> | strength <f> | hardness <f> | texel <f>");
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"editor: channel {ed.PaintChannel}, radius {ed.PaintRadius:0.###}, "
+                + $"strength {ed.PaintStrength:0.##}, hardness {ed.PaintHardness:0.##}, "
+                + $"{ed.BlendTexelSize:0.##}u per texel");
+            return;
+        }
+
+        if (args.Count > 2 && float.TryParse(args[2], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v))
+            cv.Set(name, v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+
+        VortexArena.Common.Diagnostics.Log.Info($"editor: {verb} {cv.GetFloat(name):0.###}");
+    }
+
+    /// <summary>Print the selected entity's live keys alongside what its class documents.</summary>
+    private void LogEntityKeys()
+    {
+        if (_editor?.Document is not { } doc)
+            return;
+
+        List<int> ids = _editor.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("editor: no entity selected");
+            return;
+        }
+
+        foreach (int id in ids)
+        {
+            if (doc.FindEntity(id) is not { } e)
+                continue;
+
+            VortexArena.Common.Diagnostics.Log.Info($"--- {e.ClassName} (#{e.Id}) ---");
+            foreach (KeyValuePair<string, string> kv in e.Fields)
+                VortexArena.Common.Diagnostics.Log.Info($"  {kv.Key} = {kv.Value}");
+
+            if (_editor.Defs?.Get(e.ClassName) is not { } def)
+                continue;
+            if (def.Description.Length > 0)
+                VortexArena.Common.Diagnostics.Log.Info($"  ({def.Description})");
+            foreach (VortexArena.Formats.Vmap.EntityKeyDef k in def.Keys)
+                if (!e.Fields.ContainsKey(k.Key))
+                    VortexArena.Common.Diagnostics.Log.Info($"  [unset] {k.Key} ({k.Kind}) — {k.Help}");
+        }
+    }
+
+    /// <summary>List placeable classes, optionally filtered to one category.</summary>
+    private void LogEntityClasses(string category)
+    {
+        if (_editor?.Defs is not { } defs)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("editor: no entity definitions loaded");
+            return;
+        }
+
+        if (category.Length == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"editor: {defs.Count} classes in categories: {string.Join(", ", defs.Categories())}");
+            VortexArena.Common.Diagnostics.Log.Help("editor_entity list <category>");
+            return;
+        }
+
+        foreach (VortexArena.Formats.Vmap.EntityClassDef d in defs.InCategory(category))
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"  {d.Name}{(d.IsBrushEntity ? "  (brush entity)" : "")}");
+    }
+
+    /// <summary>
+    /// <c>editor_history</c> — list the journal, travel to a step, or recover an abandoned branch.
+    /// <code>
+    ///   editor_history              list every step, marking where you are
+    ///   editor_history goto &lt;n&gt;     leave n steps applied (0 = the state the map opened in)
+    ///   editor_history branches     list abandoned redo stacks
+    ///   editor_history restore &lt;n&gt;  put branch n back on the redo stack
+    /// </code>
+    /// </summary>
+    private void CmdEditorHistory(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session })
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "";
+        switch (verb)
+        {
+            case "goto":
+            {
+                if (args.Count < 3 || !int.TryParse(args[2], out int step))
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_history goto <step>");
+                    return;
+                }
+                if (session.TravelTo(step))
+                {
+                    _editor.BumpGeometryVersion();
+                    RefreshEditorWorld();
+                    VortexArena.Common.Diagnostics.Log.Info(
+                        $"editor: at step {session.HistoryPosition}/{session.HistoryLength}");
+                }
+                return;
+            }
+
+            case "branches":
+            {
+                IReadOnlyList<string> branches = session.Branches();
+                if (branches.Count == 0)
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: no abandoned branches");
+                    return;
+                }
+                for (int i = 0; i < branches.Count; i++)
+                    VortexArena.Common.Diagnostics.Log.Info($"  {i}: {branches[i]}");
+                VortexArena.Common.Diagnostics.Log.Help("editor_history restore <n>");
+                return;
+            }
+
+            case "restore":
+            {
+                if (args.Count < 3 || !int.TryParse(args[2], out int which) || !session.RestoreBranch(which))
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_history restore <n>");
+                    return;
+                }
+                VortexArena.Common.Diagnostics.Log.Info(
+                    "editor: branch restored — travel back to where it forked, then redo");
+                return;
+            }
+
+            default:
+            {
+                IReadOnlyList<VmapEditSession.HistoryStep> steps = session.History();
+                if (steps.Count == 0)
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: nothing edited yet");
+                    return;
+                }
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"--- history ({session.HistoryPosition}/{session.HistoryLength} applied) ---");
+                VortexArena.Common.Diagnostics.Log.Info("  0: (map as opened)");
+                for (int i = 0; i < steps.Count; i++)
+                {
+                    string mark = steps[i].IsCurrent ? ">" : steps[i].IsUndone ? "~" : " ";
+                    VortexArena.Common.Diagnostics.Log.Info($" {mark}{i + 1}: {steps[i].Label}");
+                }
+                VortexArena.Common.Diagnostics.Log.Help("editor_history goto <n> | branches | restore <n>");
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_mapinfo</c> — read and edit the map's metadata.
+    /// <code>
+    ///   editor_mapinfo                     show it
+    ///   editor_mapinfo set &lt;field&gt; &lt;text&gt;  title | description | author | cdtrack
+    ///   editor_mapinfo gametype add|remove &lt;name&gt;
+    ///   editor_mapinfo save                write it back
+    /// </code>
+    /// </summary>
+    private void CmdEditorMapInfo(IReadOnlyList<string> args)
+    {
+        VortexArena.Formats.Vmap.MapInfo? info = EnsureMapInfo();
+        if (info is null)
+            return;
+
+        switch (args.Count > 1 ? args[1].ToLowerInvariant() : "")
+        {
+            case "set":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help(
+                        "usage: editor_mapinfo set title|description|author|cdtrack <text>");
+                    return;
+                }
+                string value = args.Count > 3 ? string.Join(' ', args, 3, args.Count - 3) : "";
+                switch (args[2].ToLowerInvariant())
+                {
+                    case "title": info.Title = value; break;
+                    case "description": info.Description = value; break;
+                    case "author": info.Author = value; break;
+                    case "cdtrack": info.CdTrack = value; break;
+                    default:
+                        VortexArena.Common.Diagnostics.Log.Help("fields: title description author cdtrack");
+                        return;
+                }
+                _mapInfoDirty = true;
+                VortexArena.Common.Diagnostics.Log.Info($"mapinfo: {args[2]} = {value}");
+                return;
+            }
+
+            case "gametype":
+            {
+                if (args.Count < 4)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_mapinfo gametype add|remove <name>");
+                    return;
+                }
+                bool add = args[2].Equals("add", StringComparison.OrdinalIgnoreCase);
+                bool changed = add ? info.AddGametype(args[3]) : info.RemoveGametype(args[3]);
+                _mapInfoDirty |= changed;
+                VortexArena.Common.Diagnostics.Log.Info(changed
+                    ? $"mapinfo: {(add ? "added" : "removed")} {args[3]}"
+                    : $"mapinfo: no change ({args[3]})");
+                return;
+            }
+
+            case "save":
+                SaveMapInfo(info);
+                return;
+
+            default:
+            {
+                VortexArena.Common.Diagnostics.Log.Info($"--- {_map}.mapinfo{(_mapInfoDirty ? " *" : "")} ---");
+                VortexArena.Common.Diagnostics.Log.Info($"  title       {info.Title}");
+                VortexArena.Common.Diagnostics.Log.Info($"  author      {info.Author}");
+                VortexArena.Common.Diagnostics.Log.Info($"  description {info.Description}");
+                VortexArena.Common.Diagnostics.Log.Info($"  cdtrack     {info.CdTrack}");
+                if (info.HasBounds)
+                    VortexArena.Common.Diagnostics.Log.Info(
+                        $"  bounds      {info.BoundsMin.X:0} {info.BoundsMin.Y:0} {info.BoundsMin.Z:0}"
+                        + $" .. {info.BoundsMax.X:0} {info.BoundsMax.Y:0} {info.BoundsMax.Z:0}");
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"  gametypes   {string.Join(", ", info.Gametypes.Select(g => g.Name))}");
+                if (info.Has.Count > 0)
+                    VortexArena.Common.Diagnostics.Log.Info($"  has         {string.Join(", ", info.Has)}");
+                VortexArena.Common.Diagnostics.Log.Help(
+                    "editor_mapinfo set <field> <text> | gametype add|remove <name> | save");
+                return;
+            }
+        }
+    }
+
+    private VortexArena.Formats.Vmap.MapInfo? _mapInfo;
+    private bool _mapInfoDirty;
+
+    /// <summary>Read the map's <c>.mapinfo</c> once per session, or start an empty one when it has none.</summary>
+    private VortexArena.Formats.Vmap.MapInfo? EnsureMapInfo()
+    {
+        if (_mapInfo is not null)
+            return _mapInfo;
+        if (_assets is null || string.IsNullOrEmpty(_map))
+            return null;
+
+        string vpath = $"maps/{_map}.mapinfo";
+        try
+        {
+            _mapInfo = _assets.Vfs.Exists(vpath)
+                ? VortexArena.Formats.Vmap.MapInfo.Parse(_assets.Vfs.ReadText(vpath))
+                : new VortexArena.Formats.Vmap.MapInfo { Title = _map };
+        }
+        catch (Exception ex)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn($"mapinfo: could not read {vpath}: {ex.Message}");
+            _mapInfo = new VortexArena.Formats.Vmap.MapInfo { Title = _map };
+        }
+        return _mapInfo;
+    }
+
+    /// <summary>
+    /// Write the mapinfo next to the edited map.
+    ///
+    /// Deliberately writes beside the .vmap package rather than back into the mounted asset tree: the source
+    /// data may be inside a .pk3, and an editor that reaches into the shipped game content to overwrite a file
+    /// is doing something a mapper did not ask for.
+    /// </summary>
+    private void SaveMapInfo(VortexArena.Formats.Vmap.MapInfo info)
+    {
+        try
+        {
+            string dir = Vmap.VmapService.EditorOutputDirectory();
+            System.IO.Directory.CreateDirectory(dir);
+            string path = System.IO.Path.Combine(dir, $"{_map}.mapinfo");
+            System.IO.File.WriteAllText(path, info.Write());
+            _mapInfoDirty = false;
+            VortexArena.Common.Diagnostics.Log.Info($"mapinfo: wrote {path}");
+        }
+        catch (Exception ex)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn($"mapinfo: could not save: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_shader</c> — the Surface Inspector's console surface. Operations act on the selected faces,
+    /// or on the face under the crosshair when nothing is selected: aiming is the fast path for retexturing a
+    /// wall at a time, selecting is how you do twenty at once.
+    /// <code>
+    ///   pick | apply | set &lt;material&gt; | show
+    ///   fit [u] [v] | natural [units] | axial
+    ///   shift &lt;du&gt; &lt;dv&gt; | scale &lt;su&gt; &lt;sv&gt; | rotate &lt;degrees&gt;
+    /// </code>
+    /// </summary>
+    private void CmdEditorShader(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: not null } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "show";
+
+        float Arg(int i, float fallback)
+            => args.Count > i && float.TryParse(args[i], System.Globalization.NumberStyles.Float,
+                   System.Globalization.CultureInfo.InvariantCulture, out float v)
+                ? v : fallback;
+
+        void Report(int n, string what)
+        {
+            if (n > 0)
+                RefreshEditorWorld();
+            VortexArena.Common.Diagnostics.Log.Info($"editor: {what} {n} face(s)");
+        }
+
+        switch (verb)
+        {
+            case "browse":
+                OpenShaderBrowser();
+                return;
+
+            case "flags":
+                OpenShaderFlags(ed);
+                return;
+
+            case "toggleflag":
+            {
+                if (args.Count < 4 || !int.TryParse(args[3], out int bit))
+                    return;
+                bool content = args[2].Equals("content", StringComparison.OrdinalIgnoreCase);
+                int toggled = ed.ToggleFaceFlag(bit, content);
+                if (toggled > 0)
+                    RefreshEditorWorld();
+                VortexArena.Common.Diagnostics.Log.Info($"editor: flag toggled on {toggled} face(s)");
+                return;
+            }
+
+            case "pick":
+                ed.PickShaderAtCrosshair();
+                return;
+
+            case "apply":
+                if (ed.ApplyShader())
+                    RefreshEditorWorld();
+                return;
+
+            case "set":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_shader set <material>");
+                    return;
+                }
+                int n = 0;
+                foreach ((int brushId, int faceIndex) in ed.ShaderTargets())
+                    if (ed.Session!.Apply(new VortexArena.Formats.Vmap.SetFaceMaterialOp(
+                            brushId, faceIndex, args[2])))
+                        n++;
+                if (n > 0)
+                    ed.BumpGeometryVersion();
+                Report(n, "retextured");
+                return;
+            }
+
+            case "fit":
+                Report(ed.AlignShader((p, _, w) =>
+                    VortexArena.Formats.Vmap.VmapTexAlign.Fit(p, w, Arg(2, 1f), Arg(3, 1f))), "fitted");
+                return;
+
+            case "natural":
+                Report(ed.AlignShader((p, _, _) =>
+                    VortexArena.Formats.Vmap.VmapTexAlign.Natural(p, Arg(2, 64f))), "reset to natural scale on");
+                return;
+
+            case "axial":
+                Report(ed.AlignShader((_, f, _) =>
+                    VortexArena.Formats.Vmap.VmapTexAlign.Axial(f.Plane.Normal)), "reset to axial on");
+                return;
+
+            case "shift":
+                Report(ed.AlignShader((p, _, _) =>
+                    VortexArena.Formats.Vmap.VmapTexAlign.Shift(p, Arg(2, 0f), Arg(3, 0f))), "shifted");
+                return;
+
+            case "scale":
+                Report(ed.AlignShader((p, _, w) =>
+                    VortexArena.Formats.Vmap.VmapTexAlign.Scale(
+                        p, Arg(2, 1f), Arg(3, Arg(2, 1f)), Vmap.EditorController.FaceCenter(w))), "scaled");
+                return;
+
+            case "rotate":
+                Report(ed.AlignShader((p, f, w) =>
+                    VortexArena.Formats.Vmap.VmapTexAlign.Rotate(
+                        p, f.Plane.Normal, Arg(2, 15f), Vmap.EditorController.FaceCenter(w))), "rotated");
+                return;
+
+            default:
+                LogShaderState(ed);
+                return;
+        }
+    }
+
+    /// <summary>Print what the eyedropper is holding and what an edit would land on.</summary>
+    private void LogShaderState(Vmap.EditorController ed)
+    {
+        if (ed.HasPickedShader)
+        {
+            System.Numerics.Vector2 s = VortexArena.Formats.Vmap.VmapTexAlign.ScaleOf(ed.PickedProjection);
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"picked: {ed.PickedMaterial}   scale {s.X:0.##} x {s.Y:0.##} units/repeat");
+        }
+        else
+        {
+            VortexArena.Common.Diagnostics.Log.Info("picked: (nothing — aim at a face and 'editor_shader pick')");
+        }
+
+        List<(int BrushId, int FaceIndex)> targets = ed.ShaderTargets();
+        if (targets.Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("target: (aim at a face, or select some)");
+        }
+        else if (ed.Document is { } doc && doc.FindBrush(targets[0].BrushId) is { } b
+                 && targets[0].FaceIndex < b.Faces.Count)
+        {
+            VortexArena.Formats.Vmap.VmapFace f = b.Faces[targets[0].FaceIndex];
+            System.Numerics.Vector2 s = VortexArena.Formats.Vmap.VmapTexAlign.ScaleOf(f.Projection);
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"target: {targets.Count} face(s); first is {f.Material}   scale {s.X:0.##} x {s.Y:0.##}"
+                + $"   surf 0x{f.SurfaceFlags:X}   cont 0x{f.ContentFlags:X}");
+        }
+
+        VortexArena.Common.Diagnostics.Log.Help(
+            "editor_shader pick|apply|set <mat>|fit [u v]|natural [units]|axial"
+            + "|shift <du dv>|scale <su sv>|rotate <deg>");
+    }
+
+    /// <summary>
+    /// <c>editor_waypoint</c> — the Waypoint tool, a transcription of Base's <c>wpeditor</c> verbs
+    /// (server/command/cmd.qc:341) onto the editor's free-fly crosshair.
+    /// <code>
+    ///   place [jump|crouch|support] | remove | hardwire | link
+    ///   relinkall | unreachable | list | save
+    /// </code>
+    ///
+    /// Everything here mutates the SERVER's live graph — the one bots actually path against — so it runs under
+    /// the sim gate, the same serialisation every other world-mutating console verb takes. Editing a private
+    /// copy would be editing something nothing reads.
+    /// </summary>
+    private void CmdEditorWaypoint(IReadOnlyList<string> args)
+    {
+        if (_editor is null || !_editor.Active)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor_waypoint: no editing session");
+            return;
+        }
+
+        WithWaypointNetwork(net =>
+        {
+            string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "list";
+            switch (verb)
+            {
+                case "place":
+                {
+                    if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                        return;
+
+                    VortexArena.Server.Bot.WaypointFlags flags = args.Count > 2
+                        ? args[2].ToLowerInvariant() switch
+                        {
+                            "jump" => VortexArena.Server.Bot.WaypointFlags.Jump,
+                            "crouch" => VortexArena.Server.Bot.WaypointFlags.Crouch,
+                            "support" => VortexArena.Server.Bot.WaypointFlags.Support,
+                            _ => VortexArena.Server.Bot.WaypointFlags.None,
+                        }
+                        : VortexArena.Server.Bot.WaypointFlags.None;
+
+                    VortexArena.Server.Bot.Waypoint? wp = null;
+                    _waypointJournal.Apply(net, "Place waypoint", () =>
+                    {
+                        wp = VortexArena.Server.Bot.WaypointEditor.Place(net, at, flags);
+                        return true;
+                    });
+                    if (wp is null)
+                        return;
+
+                    // A jump or support waypoint is only half a statement: Base finishes it by spawning a
+                    // second waypoint, which becomes the destination. Remember it so the next placement links.
+                    if (_pendingWaypoint is { } pending)
+                    {
+                        VortexArena.Server.Bot.WaypointEditor.LinkPending(net, pending, wp);
+                        _pendingWaypoint = null;
+                    }
+                    else if (flags is VortexArena.Server.Bot.WaypointFlags.Jump
+                             or VortexArena.Server.Bot.WaypointFlags.Support)
+                    {
+                        _pendingWaypoint = wp;
+                        VortexArena.Common.Diagnostics.Log.Info(
+                            "waypoint: now place its DESTINATION (editor_waypoint place)");
+                    }
+                    return;
+                }
+
+                case "remove":
+                {
+                    if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                        return;
+                    if (VortexArena.Server.Bot.WaypointEditor.Pick(net, at) is not { } wp)
+                    {
+                        VortexArena.Common.Diagnostics.Log.Info("waypoint: none under the crosshair");
+                        return;
+                    }
+                    _waypointJournal.Apply(net, "Remove waypoint",
+                        () => VortexArena.Server.Bot.WaypointEditor.Remove(net, wp));
+                    return;
+                }
+
+                case "hardwire":
+                case "link":
+                {
+                    if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                        return;
+                    if (VortexArena.Server.Bot.WaypointEditor.Pick(net, at) is not { } wp)
+                    {
+                        VortexArena.Common.Diagnostics.Log.Info("waypoint: none under the crosshair");
+                        return;
+                    }
+
+                    if (_pendingWaypoint is null)
+                    {
+                        _pendingWaypoint = wp;
+                        VortexArena.Common.Diagnostics.Log.Info(
+                            $"waypoint: {VortexArena.Server.Bot.WaypointEditor.Describe(wp)} is the source — "
+                            + "now aim at the destination and repeat");
+                        return;
+                    }
+
+                    VortexArena.Server.Bot.Waypoint from = _pendingWaypoint;
+                    _waypointJournal.Apply(net, verb == "hardwire" ? "Hardwire link" : "Link waypoints", () =>
+                    {
+                        if (verb == "hardwire")
+                        {
+                            VortexArena.Server.Bot.WaypointEditor.Hardwire(net, from, wp);
+                            return true;
+                        }
+                        return VortexArena.Server.Bot.WaypointEditor.LinkPending(net, from, wp);
+                    });
+                    _pendingWaypoint = null;
+                    return;
+                }
+
+                case "lock":
+                {
+                    if (!_editor.TryGetPastePoint(out System.Numerics.Vector3 lockAt))
+                        return;
+                    // Aiming at nothing UNLOCKS, which is Base\u2019s own semantics: one verb both pins a
+                    // waypoint\u2019s links on screen and lets go of them.
+                    _lockedWaypoint = VortexArena.Server.Bot.WaypointEditor.Pick(net, lockAt);
+                    VortexArena.Common.Diagnostics.Log.Info(_lockedWaypoint is null
+                        ? "waypoint: link display unlocked"
+                        : $"waypoint: locked on {VortexArena.Server.Bot.WaypointEditor.Describe(_lockedWaypoint)}");
+                    return;
+                }
+
+                case "symmetry":
+                {
+                    // Base exposes symorigin/symaxis get|set for maps whose flags are not perfectly
+                    // symmetrical. Reading a candidate origin off the selection is the half that helps here:
+                    // it is what a mapper checks a symmetric layout against.
+                    if (_editor.Document is { } symDoc
+                        && VortexArena.Formats.Vmap.VmapEdit.TryGetSelectionCenter(
+                            symDoc, _editor.Session?.SelectedBrushIds() ?? new List<int>(), out System.Numerics.Vector3 symCentre))
+                    {
+                        VortexArena.Common.Diagnostics.Log.Info(
+                            $"waypoint: selection centre {symCentre.X:0.#} {symCentre.Y:0.#} {symCentre.Z:0.#}"
+                            + "  \u2014 use it as the symmetry origin");
+                    }
+                    else
+                    {
+                        VortexArena.Common.Diagnostics.Log.Info(
+                            "waypoint: select geometry to read a symmetry origin from");
+                    }
+                    return;
+                }
+
+                case "relinkall":
+                    // Relink re-derives every link through a tracewalk, so there is no inverse to apply — only
+                    // the previous graph to restore, which is exactly what the snapshot journal is for.
+                    _waypointJournal.Apply(net, "Relink all waypoints", () =>
+                    {
+                        VortexArena.Server.Bot.WaypointEditor.RelinkAll(net);
+                        return true;
+                    });
+                    return;
+
+                case "undo":
+                    VortexArena.Common.Diagnostics.Log.Info(_waypointJournal.Undo(net)
+                        ? "waypoint: undone"
+                        : "waypoint: nothing to undo");
+                    return;
+
+                case "redo":
+                    VortexArena.Common.Diagnostics.Log.Info(_waypointJournal.Redo(net)
+                        ? "waypoint: redone"
+                        : "waypoint: nothing to redo");
+                    return;
+
+                case "unreachable":
+                {
+                    List<VortexArena.Server.Bot.Waypoint> bad =
+                        VortexArena.Server.Bot.WaypointEditor.Unreachable(net);
+                    if (bad.Count == 0)
+                    {
+                        VortexArena.Common.Diagnostics.Log.Info(
+                            $"waypoint: all {net.Nodes.Count} nodes have a way in and a way out");
+                        return;
+                    }
+                    VortexArena.Common.Diagnostics.Log.Info($"waypoint: {bad.Count} unreachable node(s):");
+                    foreach (VortexArena.Server.Bot.Waypoint wp in bad)
+                        VortexArena.Common.Diagnostics.Log.Info(
+                            $"  {VortexArena.Server.Bot.WaypointEditor.Describe(wp)}"
+                            + $" at {wp.Origin.X:0} {wp.Origin.Y:0} {wp.Origin.Z:0}");
+                    return;
+                }
+
+                case "save":
+                    SaveWaypoints(net);
+                    return;
+
+                default:
+                    VortexArena.Common.Diagnostics.Log.Info(
+                        $"waypoint: {net.Nodes.Count} nodes"
+                        + (_pendingWaypoint is null ? "" : "  (a link is half-made — aim and repeat, or 'cancel')"));
+                    VortexArena.Common.Diagnostics.Log.Help(
+                        "editor_waypoint place [jump|crouch|support] | remove | link | hardwire"
+                        + " | relinkall | unreachable | save");
+                    return;
+            }
+        });
+    }
+
+    /// <summary>
+    /// One Undo for the whole editor. The geometry journal and the waypoint journal are separate structures
+    /// for good reasons, but a mapper pressing Ctrl+Z does not know or care which of them their last edit
+    /// went into — so geometry is tried first, and the waypoint graph picks it up when there was no geometry
+    /// step to roll back.
+    /// </summary>
+    private void EditorUndo()
+    {
+        if (_editor?.Undo() == true)
+        {
+            RefreshEditorWorld();
+            return;
+        }
+        WithWaypointNetwork(net =>
+        {
+            if (_waypointJournal.Undo(net))
+                VortexArena.Common.Diagnostics.Log.Info("waypoint: undone");
+        });
+    }
+
+    private void EditorRedo()
+    {
+        if (_editor?.Redo() == true)
+        {
+            RefreshEditorWorld();
+            return;
+        }
+        WithWaypointNetwork(net =>
+        {
+            if (_waypointJournal.Redo(net))
+                VortexArena.Common.Diagnostics.Log.Info("waypoint: redone");
+        });
+    }
+
+    /// <summary>Waypoint whose links are pinned on screen, or null. Aiming at nothing releases it.</summary>
+    private VortexArena.Server.Bot.Waypoint? _lockedWaypoint;
+
+    /// <summary>The half-made link: a jump/support source, or the first end of a hardwire.</summary>
+    private VortexArena.Server.Bot.Waypoint? _pendingWaypoint;
+
+    /// <summary>
+    /// Undo/redo for the waypoint graph. Separate from the geometry journal because the graph is not in the
+    /// document — it lives on the server and saves to its own Base-compatible files — but a mapper reaching
+    /// for undo does not care which of those is true, so the editor's own Undo reaches it too.
+    /// </summary>
+    private readonly VortexArena.Server.Bot.WaypointJournal _waypointJournal = new();
+
+    /// <summary>
+    /// Run <paramref name="work"/> against the server's waypoint graph under the sim gate.
+    ///
+    /// The gate is the whole point. <c>sv_threaded</c> defaults on, so the sim worker owns the world while this
+    /// runs on the main thread; touching the graph without it is the same class of cross-thread mutation that
+    /// produced the mid-combat listen-server crashes. <see cref="ExecuteHostConsoleCommand"/> takes the same
+    /// lock for the same reason.
+    ///
+    /// The graph is also loaded LAZILY, on the first frame with bots present — and an editor session runs with
+    /// no bots, so it is null until something asks. This forces it.
+    /// </summary>
+    private void WithWaypointNetwork(Action<VortexArena.Server.Bot.WaypointNetwork> work)
+    {
+        if (_serverWorld is not { } world)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor_waypoint: waypoints need the local (listen) server");
+            return;
+        }
+
+        object? gate = _server?.SimGate;
+        if (gate is null)
+        {
+            RunWaypointWork(world, work);
+            return;
+        }
+        lock (gate)
+            RunWaypointWork(world, work);
+    }
+
+    private static void RunWaypointWork(
+        GameWorld world, Action<VortexArena.Server.Bot.WaypointNetwork> work)
+    {
+        VortexArena.Server.Bot.WaypointNetwork? net = world.Bots.EnsureWaypointNetwork();
+        if (net is null)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor_waypoint: no waypoint graph for this map");
+            return;
+        }
+        work(net);
+    }
+
+    /// <summary>
+    /// Write the three waypoint files beside the editor's other output. Base splits them deliberately — nodes,
+    /// the precomputed link cache, and the hand-authored hardwired links — and a relink regenerates the middle
+    /// one, so keeping them separate is what stops a relink eating hand-made routes.
+    /// </summary>
+    private void SaveWaypoints(VortexArena.Server.Bot.WaypointNetwork net)
+    {
+        try
+        {
+            string dir = Vmap.VmapService.EditorOutputDirectory();
+            System.IO.Directory.CreateDirectory(dir);
+
+            string stamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss",
+                System.Globalization.CultureInfo.InvariantCulture);
+
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, $"{_map}.waypoints"), net.SaveToText(stamp));
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(dir, $"{_map}.waypoints.cache"), net.SaveLinksToText(stamp));
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(dir, $"{_map}.waypoints.hardwired"), net.SaveHardwiredLinksToText());
+            _waypointJournal.MarkSaved();
+
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"waypoint: wrote {net.Nodes.Count} nodes to {dir}\\{_map}.waypoints (+ .cache, .hardwired)");
+        }
+        catch (Exception ex)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn($"waypoint: could not save: {ex.Message}");
+        }
+    }
+
+    // =============================================================================================
+    //  (E8) Editor dialogs — the entity palette, the key inspector, the shader browser
+    // =============================================================================================
+
+    private Hud.EditorDialogPanel? EditorDialog
+        => _fullHud?.GetPanel<Hud.EditorDialogPanel>();
+
+    /// <summary>
+    /// The entity CREATE palette: every placeable class from the game's own <c>entities.ent</c>, grouped by
+    /// category, with the file's description under each.
+    ///
+    /// Brush entities are listed but marked, because they are placed differently — a <c>func_door</c> has no
+    /// origin, it is made by assigning existing geometry to it — so offering them identically would promise
+    /// something the Create verb cannot do.
+    /// </summary>
+    private void OpenEntityPalette()
+    {
+        if (EditorDialog is not { } dialog || _editor?.Defs is not { } defs)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor: no entity definitions loaded");
+            return;
+        }
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        foreach (string category in defs.Categories())
+        {
+            // Lights have their own tool now (backlog T2). Leaving them here as well would undo the split the
+            // moment a mapper reached for the palette, which is the one place they were hardest to find.
+            if (category == "light")
+            {
+                rows.Add(new Hud.EditorDialogPanel.DialogRow
+                {
+                    Label = "light",
+                    Group = "light",
+                    Value = "own tool",
+                    Detail = "lights live under the Light tool — 'editor_tool Light', then 'editor_light create'",
+                    Command = "editor_tool Light",
+                });
+                continue;
+            }
+
+            foreach (VortexArena.Formats.Vmap.EntityClassDef d in defs.InCategory(category))
+            {
+                rows.Add(new Hud.EditorDialogPanel.DialogRow
+                {
+                    Label = d.Name,
+                    Group = category,
+                    Value = d.IsBrushEntity ? "needs a selection" : "",
+                    Detail = d.Description.Length > 0 ? d.Description : "(no description in entities.ent)",
+                    // A brush entity cannot be placed at a point — it IS the geometry it owns — so its row
+                    // ASSIGNS the selection instead of creating something at the crosshair. That row used to
+                    // echo an explanation of a gesture the editor did not have; it is the gesture now
+                    // (backlog F4).
+                    Command = d.IsBrushEntity
+                        ? $"editor_entity assign {d.Name}"
+                        : $"editor_entity create {d.Name}",
+                });
+            }
+        }
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, "Place entity", rows,
+            "arrows move · Enter places at the crosshair · type to filter · Esc closes");
+    }
+
+    /// <summary>
+    /// The entity key INSPECTOR: the selected entity's live keys, plus every key its class documents but that
+    /// the entity has not set, each with the help text from <c>entities.ent</c>.
+    ///
+    /// Showing the UNSET keys is most of the value. A mapper who does not already know that
+    /// <c>weapon_devastator</c> takes a <c>respawntime</c> has no way to discover it from an entity that never
+    /// set one, and hunting through the definition file by hand is exactly the job the editor should be doing.
+    /// </summary>
+    private void OpenEntityInspector()
+    {
+        if (EditorDialog is not { } dialog || _editor is not { Document: { } doc } ed)
+            return;
+
+        List<int> ids = ed.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("editor: select an entity first");
+            return;
+        }
+        if (doc.FindEntity(ids[0]) is not { } ent)
+            return;
+
+        VortexArena.Formats.Vmap.EntityClassDef def = ed.Defs?.GetOrPlaceholder(ent.ClassName)
+            ?? new VortexArena.Formats.Vmap.EntityClassDef { Name = ent.ClassName };
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+
+        foreach (KeyValuePair<string, string> kv in ent.Fields)
+        {
+            // classname is shown but not editable here: retyping it turns the entity into something else, and
+            // that is a decision for the palette rather than a slip of the keyboard in a key list.
+            bool locked = kv.Key.Equals("classname", StringComparison.OrdinalIgnoreCase);
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = kv.Key,
+                Value = kv.Value,
+                Group = "set",
+                Detail = HelpFor(def, kv.Key),
+                Editable = !locked,
+                Command = locked ? "" : $"editor_entity set {kv.Key} %v",
+            });
+        }
+
+        foreach (VortexArena.Formats.Vmap.EntityKeyDef k in def.Keys)
+        {
+            if (ent.Fields.ContainsKey(k.Key))
+                continue;
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = k.Key,
+                Value = "",
+                Group = "available",
+                Detail = $"({k.Kind}) {k.Help}",
+                Editable = true,
+                Command = $"editor_entity set {k.Key} %v",
+            });
+        }
+
+        foreach (VortexArena.Formats.Vmap.EntityFlagDef flag in def.Flags)
+        {
+            // Shown as ON/OFF and confirmed to TOGGLE. The row used to read "bit 4" beside a field you typed
+            // the whole spawnflags number into — which needed the mapper to know that entities.ent's bit= is
+            // an index, work out 1<<4, and OR it into whatever was already set. All three are the editor's job.
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = flag.Name,
+                Value = (SpawnflagsOf(ent) & flag.Value) != 0 ? "on" : "off",
+                Group = "spawnflags",
+                Detail = $"{flag.Help} (spawnflags {flag.Value})",
+                Command = $"editor_entity flag {flag.Name}",
+            });
+        }
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Properties,
+            $"{ent.ClassName} #{ent.Id}", rows,
+            "Enter edits · type the value · empty clears the key · Esc closes");
+    }
+
+    /// <summary>
+    /// The LIGHT dialog (backlog T2): the keys a light actually has, what the editor's rig does with each,
+    /// and what it will build from them.
+    ///
+    /// The generic key inspector can already edit all of these — what it cannot say is which of them MEAN
+    /// anything here. Xonotic's entities.ent documents ten keys for class <c>light</c> and this editor's rig
+    /// reads four of them; a mapper who sets <c>fade</c> and sees nothing change has no way to tell whether
+    /// the key is wrong, the value is wrong, or the editor ignores it. So the unread ones are shown, grouped
+    /// and labelled, in the same voice the tool menu marks unbuilt tools.
+    ///
+    /// The derived group is the other half: range and cone angle are computed, not typed, and seeing the
+    /// number the rig will use is what makes the intensity value mean something before you commit to it.
+    /// </summary>
+    private void OpenLightDialog()
+    {
+        if (EditorDialog is not { } dialog || _editor is not { Document: { } doc } ed)
+            return;
+
+        List<int> ids = ed.SelectedEntityIds();
+        if (ids.Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info(
+                "editor: select a light first ('editor_light create' places one)");
+            return;
+        }
+        if (doc.FindEntity(ids[0]) is not { } ent)
+            return;
+
+        VortexArena.Formats.Vmap.EntityClassDef def = ed.Defs?.GetOrPlaceholder(ent.ClassName)
+            ?? new VortexArena.Formats.Vmap.EntityClassDef { Name = ent.ClassName };
+
+        string Key(string k) => ent.Fields.TryGetValue(k, out string? v) ? v : "";
+        float KeyF(string k, float fallback)
+            => float.TryParse(Key(k), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : fallback;
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        void Row(string group, string key, string detail) => rows.Add(new Hud.EditorDialogPanel.DialogRow
+        {
+            Label = key,
+            Value = Key(key),
+            Group = group,
+            Detail = detail.Length > 0 ? detail : HelpFor(def, key),
+            Editable = true,
+            Command = $"editor_light set {key} %v",
+        });
+
+        Row("light", "light", "");
+        Row("light", "_color", "");
+        Row("spot", "target", "aim at the entity with this targetname — 'editor_light aim' does it for you");
+        Row("spot", "radius", "");
+
+        // Read by entities.ent, not by this editor's rig. Named rather than hidden: a key that silently does
+        // nothing is worse than one labelled as not wired.
+        foreach (string k in UnreadLightKeys)
+            Row("not read by the editor bake", k, $"{HelpFor(def, k)} — not read by the editor bake yet");
+
+        foreach (VortexArena.Formats.Vmap.EntityFlagDef flag in def.Flags)
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = flag.Name,
+                // 1 << Bit, because entities.ent's bit= is an INDEX. The value is what lands in spawnflags.
+                Value = (SpawnflagsOf(ent) & flag.Value) != 0 ? "on" : "off",
+                Group = "spawnflags",
+                Detail = $"{flag.Help} (spawnflags {flag.Value}) — not read by the editor bake yet",
+                Command = $"editor_light flag {flag.Name}",
+            });
+
+        float intensity = KeyF("light", 300f);
+        float range = Vmap.EditorLighting.RangeForIntensity(intensity, ed.LightRangeScale);
+        rows.Add(new Hud.EditorDialogPanel.DialogRow
+        {
+            Label = "range",
+            Value = $"{range:0}u",
+            Group = "derived",
+            Detail = "how far the omni this builds actually reaches — the ring the overlay draws",
+        });
+
+        string cone = "n/a (not aimed)";
+        if (Key("target") is { Length: > 0 } target)
+            foreach (VortexArena.Formats.Vmap.VmapEntity other in doc.Entities)
+                if (other.Fields.TryGetValue("targetname", out string? name)
+                    && string.Equals(name, target, StringComparison.OrdinalIgnoreCase))
+                {
+                    float distance = (other.Origin() - ent.Origin()).Length();
+                    cone = $"{Vmap.EditorLighting.SpotAngleFor(KeyF("radius", Vmap.EditorLighting.DefaultSpotRadius), distance):0.#}°"
+                        + $" at {distance:0}u";
+                    break;
+                }
+        rows.Add(new Hud.EditorDialogPanel.DialogRow
+        {
+            Label = "spot cone",
+            Value = cone,
+            Group = "derived",
+            Detail = "half-angle of the cone, from radius and the distance to the target",
+        });
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Properties,
+            $"{ent.ClassName} #{ent.Id}" + (ids.Count > 1 ? $" (+{ids.Count - 1} more selected)" : ""),
+            rows,
+            "Enter edits · the real-time rig follows immediately · editor_rebake re-traces the shadows · Esc closes");
+    }
+
+    /// <summary>
+    /// Keys entities.ent documents for class <c>light</c> that <c>EditorLighting</c> does not consume. Listed
+    /// so the dialog can say so, rather than offering a field that quietly does nothing.
+    /// </summary>
+    private static readonly string[] UnreadLightKeys =
+    {
+        "_anglescale", "fade", "_filterradius", "_sun", "_samples", "_deviance",
+    };
+
+    private static string HelpFor(VortexArena.Formats.Vmap.EntityClassDef def, string key)
+    {
+        foreach (VortexArena.Formats.Vmap.EntityKeyDef k in def.Keys)
+            if (string.Equals(k.Key, key, StringComparison.OrdinalIgnoreCase))
+                return $"({k.Kind}) {k.Help}";
+        return "";
+    }
+
+    /// <summary>
+    /// The shader BROWSER: every material the asset system parsed, so a mapper can retexture without knowing
+    /// the path by heart. Grouped by the first path segment, which is how Xonotic's texture sets are
+    /// organised (<c>textures/exx/…</c>, <c>textures/facility114x/…</c>).
+    /// </summary>
+    private void OpenShaderBrowser()
+    {
+        if (EditorDialog is not { } dialog || _assets is null)
+            return;
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        foreach (string name in _assets.Assets.ShaderNames())
+        {
+            // Tool shaders are compiler scaffolding rather than surfaces a mapper picks, and they would
+            // otherwise dominate a list this long.
+            if (VortexArena.Formats.Vmap.VmapBrush.IsToolMaterial(name))
+                continue;
+
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = name,
+                Group = GroupOfShader(name),
+                // A grid cell shows only the leaf of the path; the detail pane is where the full name lives.
+                Detail = name,
+                Command = $"editor_shader set {name}",
+            });
+        }
+
+        rows.Sort((a, b) =>
+        {
+            int g = string.CompareOrdinal(a.Group, b.Group);
+            return g != 0 ? g : string.CompareOrdinal(a.Label, b.Label);
+        });
+
+        // Thumbnails by default (backlog T6): nobody picks a wall texture from a list of strings. The list is
+        // still there for reading whole paths, and for the case where the art will not decode.
+        bool thumbs = Menu.MenuState.Cvars is not { } cv
+            || CvarOr(cv, Vmap.EditorController.CvarThumbnails, 1f) != 0f;
+
+        dialog.Open(
+            thumbs ? Hud.EditorDialogPanel.DialogKind.Gallery : Hud.EditorDialogPanel.DialogKind.Browser,
+            "Shaders", rows,
+            thumbs
+                ? "arrows move · Enter applies to the selection or the aimed face · type to search · Esc closes"
+                : "arrows move · Enter applies to the selection or the aimed face · type to filter · Esc closes");
+    }
+
+    /// <summary>
+    /// The surface/content flag editor: the Q3 bits a mapper actually sets, as toggles over the aimed or
+    /// selected faces. Named rather than numeric, because 0x4000 is not something anyone should have to know
+    /// by heart to make a wall non-solid.
+    /// </summary>
+    private void OpenShaderFlags(Vmap.EditorController ed)
+    {
+        if (EditorDialog is not { } dialog)
+            return;
+
+        List<(int BrushId, int FaceIndex)> targets = ed.ShaderTargets();
+        if (targets.Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("editor: aim at a face, or select some");
+            return;
+        }
+
+        int surf = 0, cont = 0;
+        if (ed.Document?.FindBrush(targets[0].BrushId) is { } b && targets[0].FaceIndex < b.Faces.Count)
+        {
+            surf = b.Faces[targets[0].FaceIndex].SurfaceFlags;
+            cont = b.Faces[targets[0].FaceIndex].ContentFlags;
+        }
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+
+        void Flag(string name, string group, int bit, bool content, string help)
+        {
+            bool on = ((content ? cont : surf) & bit) != 0;
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = name,
+                Group = group,
+                Value = on ? "on" : "off",
+                Detail = help,
+                Command = $"editor_shader toggleflag {(content ? "content" : "surface")} {bit}",
+            });
+        }
+
+        Flag("nodraw", "surface", 0x0080, false,
+            "Draws nothing. The compiler still uses the face for collision and vis.");
+        Flag("sky", "surface", 0x0004, false, "Treated as sky: the skybox shows through it.");
+        Flag("slick", "surface", 0x0002, false, "Low friction, so players slide across it.");
+        Flag("ladder", "surface", 0x0008, false, "Climbable.");
+        Flag("nonsolid", "surface", 0x4000, false, "Players and shots pass straight through.");
+        Flag("nomarks", "surface", 0x0040, false, "Decals and impact marks do not stick.");
+        Flag("detail", "content", 0x08000000, true, "Does not seal the world or take part in vis.");
+        Flag("playerclip", "content", 0x00010000, true, "Blocks players but not shots.");
+        Flag("trigger", "content", 0x40000000, true, "A trigger volume rather than a solid.");
+        Flag("water", "content", 0x00000020, true, "Swimmable volume.");
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Properties,
+            $"Surface flags \u2014 {targets.Count} face(s)", rows,
+            "Enter toggles the flag on every target face \u00b7 Esc closes");
+    }
+
+    /// <summary>Texture-set name from a shader path: <c>textures/exx/floor01</c> → <c>exx</c>.</summary>
+    private static string GroupOfShader(string name)
+    {
+        string[] parts = name.Split('/');
+        return parts.Length >= 2 ? parts[^2] : "";
+    }
+
+    /// <summary>
+    /// <c>editor_patch</c> — create a patch primitive, or apply a Modify operation to the selected one.
+    /// <code>
+    ///   editor_patch create &lt;kind&gt; [w] [h]   place a primitive
+    ///   editor_patch &lt;operation&gt;              invert | transpose | redisperserows | insertcolumns | ...
+    ///   editor_patch list                     show the primitives
+    /// </code>
+    /// </summary>
+    private void CmdEditorPatch(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "list";
+
+        if (verb == "palette")
+        {
+            OpenPatchPalette();
+            return;
+        }
+
+        if (verb == "modify")
+        {
+            OpenPatchModify();
+            return;
+        }
+
+        if (verb == "list")
+        {
+            foreach (VortexArena.Formats.Vmap.PatchPrimitive k in
+                     Enum.GetValues<VortexArena.Formats.Vmap.PatchPrimitive>())
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"  {k}: {VortexArena.Formats.Vmap.VmapPatchPrimitives.Describe(k)}");
+            VortexArena.Common.Diagnostics.Log.Help("editor_patch create <kind> [width] [height]");
+            return;
+        }
+
+        if (verb == "create")
+        {
+            if (args.Count < 3
+                || !Enum.TryParse(args[2], ignoreCase: true,
+                    out VortexArena.Formats.Vmap.PatchPrimitive kind))
+            {
+                VortexArena.Common.Diagnostics.Log.Help(
+                    "usage: editor_patch create <SimpleMesh|Bevel|EndCap|Cylinder|DenseCylinder|Cone|Sphere>");
+                return;
+            }
+
+            if (!ed.TryGetPatchBox(out System.Numerics.Vector3 mins, out System.Numerics.Vector3 maxs))
+                return;
+
+            int w = args.Count > 3 && int.TryParse(args[3], out int pw) ? pw : 3;
+            int h = args.Count > 4 && int.TryParse(args[4], out int ph) ? ph : 3;
+
+            var op = new VortexArena.Formats.Vmap.CreatePatchOp(
+                kind, mins, maxs, ed.PickedMaterial.Length > 0 ? ed.PickedMaterial : DefaultPatchMaterial, w, h);
+
+            if (!session.Apply(op))
+            {
+                VortexArena.Common.Diagnostics.Log.Warn("editor: could not create that patch here");
+                return;
+            }
+
+            session.Selection.Clear();
+            session.Selection.Add(VortexArena.Formats.Vmap.VmapSelection.OfPatch(op.CreatedPatchId));
+            ed.BumpGeometryVersion();
+            RefreshEditorWorld();
+            VortexArena.Common.Diagnostics.Log.Info($"editor: created a {kind} patch");
+            return;
+        }
+
+        // Anything else is a Modify operation on the selected patch(es).
+        if (!Enum.TryParse(verb, ignoreCase: true, out VortexArena.Formats.Vmap.PatchOperation operation))
+        {
+            VortexArena.Common.Diagnostics.Log.Help(
+                "editor_patch create <kind> | invert | transpose | redisperserows | redispersecolumns"
+                + " | insertrows | insertcolumns | removerows | removecolumns | list");
+            return;
+        }
+
+        List<int> ids = ed.SelectedPatchIds();
+        if (ids.Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("editor: select a patch first");
+            return;
+        }
+
+        int changed = 0;
+        foreach (int id in ids)
+            if (session.Apply(new VortexArena.Formats.Vmap.ModifyPatchOp(id, operation)))
+                changed++;
+
+        if (changed > 0)
+        {
+            ed.BumpGeometryVersion();
+            RefreshEditorWorld();
+        }
+        VortexArena.Common.Diagnostics.Log.Info(changed > 0
+            ? $"editor: {VortexArena.Formats.Vmap.VmapPatchEdit.Label(operation)} on {changed} patch(es)"
+            : $"editor: {VortexArena.Formats.Vmap.VmapPatchEdit.Label(operation)} was refused");
+    }
+
+    /// <summary>Material a new patch gets when the shader eyedropper is empty.</summary>
+    private const string DefaultPatchMaterial = "textures/exx/base_wall01";
+
+    /// <summary>
+    /// The patch Create dialog: the primitive set with what each is for.
+    /// </summary>
+    private void OpenPatchPalette()
+    {
+        if (EditorDialog is not { } dialog)
+            return;
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        foreach (VortexArena.Formats.Vmap.PatchPrimitive kind in
+                 Enum.GetValues<VortexArena.Formats.Vmap.PatchPrimitive>())
+        {
+            (int w, int h) = VortexArena.Formats.Vmap.VmapPatchPrimitives.DimensionsOf(kind);
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = kind.ToString(),
+                Value = $"{w}x{h}",
+                Detail = VortexArena.Formats.Vmap.VmapPatchPrimitives.Describe(kind),
+                Command = $"editor_patch create {kind}",
+            });
+        }
+
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, "Create patch", rows,
+            "built inside the selected brush's bounds, or a grid-sized box at the crosshair");
+    }
+
+    /// <summary>The patch Modify dialog: Radiant's matrix and row/column operations.</summary>
+    private void OpenPatchModify()
+    {
+        if (EditorDialog is not { } dialog || _editor is not { } ed)
+            return;
+
+        if (ed.SelectedPatchIds().Count == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Info("editor: select a patch first");
+            return;
+        }
+
+        var rows = new List<Hud.EditorDialogPanel.DialogRow>();
+        foreach (VortexArena.Formats.Vmap.PatchOperation op in
+                 Enum.GetValues<VortexArena.Formats.Vmap.PatchOperation>())
+        {
+            rows.Add(new Hud.EditorDialogPanel.DialogRow
+            {
+                Label = VortexArena.Formats.Vmap.VmapPatchEdit.Label(op),
+                Detail = VortexArena.Formats.Vmap.VmapPatchEdit.Describe(op),
+                Command = $"editor_patch {op}",
+            });
+        }
+
+        string what = ed.Document?.FindPatch(ed.SelectedPatchIds()[0]) is { } p
+            ? $"Patch #{p.Id}  ({p.Width}x{p.Height})"
+            : "Patch";
+        dialog.Open(Hud.EditorDialogPanel.DialogKind.Browser, what, rows);
+    }
+
+    /// <summary>
+    /// <c>editor_save [name]</c> — write the edited document back to a <c>.vmap</c> package.
+    ///
+    /// Writes to the editor's user directory rather than over the source: the map may have come out of a
+    /// read-only <c>.pk3</c>, and an editor that overwrites shipped game content is doing something the mapper
+    /// did not ask for. Passing a name saves under that name instead, which is how you keep the original.
+    /// </summary>
+    private void CmdEditorSave(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session } ed)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor_save: no editing session");
+            return;
+        }
+
+        string name = args.Count > 1 ? SanitizeMapName(args[1]) : _map;
+        if (name.Length == 0)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor_save: no map name");
+            return;
+        }
+
+        try
+        {
+            string dir = Vmap.VmapService.EditorOutputDirectory();
+            string path = System.IO.Path.Combine(dir, name + VortexArena.Formats.Vmap.VmapPackage.Extension);
+            ed.Save(path);
+
+            // The mapinfo is part of the map, so a save that wrote geometry and left stale metadata behind
+            // would be half a save.
+            if (_mapInfo is { } info && _mapInfoDirty)
+                SaveMapInfo(info);
+
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"editor: saved {session.Document.Brushes.Count} brushes, {session.Document.Patches.Count} patches,"
+                + $" {session.Document.Entities.Count} entities to {path}");
+        }
+        catch (Exception ex)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn($"editor_save: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_camera</c> — camera bookmarks and jumps (design doc §11.8).
+    /// <code>
+    ///   editor_camera save &lt;slot&gt;    remember where you are
+    ///   editor_camera go &lt;slot&gt;      return to it
+    ///   editor_camera frame          frame the current selection
+    ///   editor_camera goto &lt;x y z&gt;   fly to a coordinate
+    ///   editor_camera here           in ortho: put the fly camera under the pointer
+    /// </code>
+    ///
+    /// The ortho-to-3D handoff is the same mechanism as a bookmark, which is why they live together: both are
+    /// "put the camera at a world point I picked", and §11.8 calls it out as a special case rather than a
+    /// separate feature.
+    /// </summary>
+    private void CmdEditorCamera(IReadOnlyList<string> args)
+    {
+        if (_editor is null || _camera is null)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "list";
+        switch (verb)
+        {
+            case "save":
+            {
+                string slot = args.Count > 2 ? args[2] : "1";
+                _cameraBookmarks[slot] = Coords.ToQuake(_camera.GlobalTransform.Origin);
+                VortexArena.Common.Diagnostics.Log.Info($"editor: camera slot {slot} saved");
+                return;
+            }
+
+            case "go":
+            {
+                string slot = args.Count > 2 ? args[2] : "1";
+                if (!_cameraBookmarks.TryGetValue(slot, out System.Numerics.Vector3 at))
+                {
+                    VortexArena.Common.Diagnostics.Log.Info($"editor: camera slot {slot} is empty");
+                    return;
+                }
+                MoveEditorCameraTo(at);
+                return;
+            }
+
+            case "frame":
+            {
+                if (_editor.Document is not { } doc
+                    || !VortexArena.Formats.Vmap.VmapEdit.TryGetSelectionCenter(
+                        doc, _editor.Session?.SelectedBrushIds() ?? new List<int>(),
+                        out System.Numerics.Vector3 centre))
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: select something to frame");
+                    return;
+                }
+                // Stand back along the current view direction rather than snapping to a fixed angle, so
+                // framing keeps the orientation the mapper was already working from.
+                System.Numerics.Vector3 back = Coords.ToQuake(_camera.GlobalTransform.Basis.Z);
+                MoveEditorCameraTo(centre + back * 256f);
+                return;
+            }
+
+            case "goto":
+            {
+                if (args.Count < 5
+                    || !float.TryParse(args[2], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float x)
+                    || !float.TryParse(args[3], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float y)
+                    || !float.TryParse(args[4], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float z))
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_camera goto <x> <y> <z>");
+                    return;
+                }
+                MoveEditorCameraTo(new System.Numerics.Vector3(x, y, z));
+                return;
+            }
+
+            case "here":
+            {
+                if (_editorOrtho is not { IsOpen: true })
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: open the ortho view first");
+                    return;
+                }
+                // The handoff: the pointer names a world point in the view plane, and the fly camera goes
+                // there. Closing the view afterwards is the gesture completing — you picked a spot in the map
+                // and now you are standing in it.
+                if (_editor.TryGetPastePoint(out System.Numerics.Vector3 at))
+                {
+                    _editorOrtho.Close();
+                    MoveEditorCameraTo(at);
+                }
+                return;
+            }
+
+            default:
+                if (_cameraBookmarks.Count == 0)
+                    VortexArena.Common.Diagnostics.Log.Info("editor: no camera bookmarks");
+                foreach (KeyValuePair<string, System.Numerics.Vector3> kv in _cameraBookmarks)
+                    VortexArena.Common.Diagnostics.Log.Info(
+                        $"  {kv.Key}: {kv.Value.X:0} {kv.Value.Y:0} {kv.Value.Z:0}");
+                VortexArena.Common.Diagnostics.Log.Help(
+                    "editor_camera save <slot> | go <slot> | frame | goto <x y z> | here");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_prefab save &lt;name&gt; | place &lt;name&gt; | list</c> (design doc §11.8).
+    ///
+    /// A prefab is the clipboard written to disk: the same deep copy, the same id remapping on the way back in,
+    /// just persisted so a stair or a light fitting survives the session that built it. Reusing the clipboard
+    /// rather than inventing a second container is what keeps paste and place-prefab identical in behaviour.
+    /// </summary>
+    private void CmdEditorPrefab(IReadOnlyList<string> args)
+    {
+        if (_editor is not { Session: { } session } ed)
+            return;
+
+        string verb = args.Count > 1 ? args[1].ToLowerInvariant() : "list";
+        string dir = System.IO.Path.Combine(Vmap.VmapService.EditorOutputDirectory(), "prefabs");
+
+        switch (verb)
+        {
+            case "save":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_prefab save <name>");
+                    return;
+                }
+                if (session.Selection.Count == 0)
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: select something to save as a prefab");
+                    return;
+                }
+
+                var clip = new VortexArena.Formats.Vmap.VmapClipboard();
+                if (clip.CopyFrom(session.Document, session.Selection) == 0)
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: nothing in that selection to save");
+                    return;
+                }
+
+                // A prefab IS a tiny .vmap, so it round-trips through the same reader and writer the maps use
+                // rather than needing a format of its own.
+                var doc = new VortexArena.Formats.Vmap.VmapDocument();
+                doc.Manifest.Name = SanitizeMapName(args[2]);
+                foreach (VortexArena.Formats.Vmap.VmapBrush b in clip.Brushes)
+                    doc.Brushes.Add(b.Clone());
+                foreach (VortexArena.Formats.Vmap.VmapPatch pt in clip.Patches)
+                    doc.Patches.Add(pt.Clone());
+                foreach (VortexArena.Formats.Vmap.VmapEntity e in clip.Entities)
+                    doc.Entities.Add(e.Clone());
+
+                try
+                {
+                    System.IO.Directory.CreateDirectory(dir);
+                    string path = System.IO.Path.Combine(dir,
+                        SanitizeMapName(args[2]) + VortexArena.Formats.Vmap.VmapPackage.Extension);
+                    VortexArena.Formats.Vmap.VmapPackage.Write(doc, path);
+                    VortexArena.Common.Diagnostics.Log.Info($"editor: prefab saved to {path}");
+                }
+                catch (Exception ex)
+                {
+                    VortexArena.Common.Diagnostics.Log.Warn($"editor_prefab: {ex.Message}");
+                }
+                return;
+            }
+
+            case "place":
+            {
+                if (args.Count < 3)
+                {
+                    VortexArena.Common.Diagnostics.Log.Help("usage: editor_prefab place <name>");
+                    return;
+                }
+                string path = System.IO.Path.Combine(dir,
+                    SanitizeMapName(args[2]) + VortexArena.Formats.Vmap.VmapPackage.Extension);
+                // Directory too: a prefab saved before the format became one file is still a directory.
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                {
+                    VortexArena.Common.Diagnostics.Log.Warn($"editor_prefab: no prefab named {args[2]}");
+                    return;
+                }
+
+                try
+                {
+                    VortexArena.Formats.Vmap.VmapDocument loaded =
+                        VortexArena.Formats.Vmap.VmapPackage.Read(path);
+
+                    // Load it INTO the clipboard, then paste. Placement, id remapping and undo are then the
+                    // paste path exactly, rather than a second implementation that would drift from it.
+                    var sel = new List<VortexArena.Formats.Vmap.VmapSelection>();
+                    foreach (VortexArena.Formats.Vmap.VmapBrush b in loaded.Brushes)
+                        sel.Add(VortexArena.Formats.Vmap.VmapSelection.OfBrush(b.Id));
+                    foreach (VortexArena.Formats.Vmap.VmapPatch pt in loaded.Patches)
+                        sel.Add(VortexArena.Formats.Vmap.VmapSelection.OfPatch(pt.Id));
+
+                    ed.Clipboard.CopyFrom(loaded, sel);
+                    if (ed.PasteAtCrosshair())
+                        RefreshEditorWorld();
+                }
+                catch (Exception ex)
+                {
+                    VortexArena.Common.Diagnostics.Log.Warn($"editor_prefab: {ex.Message}");
+                }
+                return;
+            }
+
+            default:
+                if (!System.IO.Directory.Exists(dir))
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("editor: no prefabs saved yet");
+                    return;
+                }
+                foreach (string entry in System.IO.Directory.GetFileSystemEntries(dir))
+                    VortexArena.Common.Diagnostics.Log.Info("  " + System.IO.Path.GetFileNameWithoutExtension(entry));
+                VortexArena.Common.Diagnostics.Log.Help("editor_prefab save <name> | place <name>");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// <c>editor_bots &lt;n&gt;</c> — spawn bots while playtesting (design doc §11.8).
+    ///
+    /// The point is flow and item timing: a room that reads fine empty can be unusable once someone else is
+    /// moving through it, and that is not a thing you can judge by flying around alone. Routed through the
+    /// server’s own bot count so it behaves exactly as it would in a match.
+    /// </summary>
+    private void CmdEditorBots(IReadOnlyList<string> args)
+    {
+        if (!IsEditorGametype)
+            return;
+
+        int count = args.Count > 1 && int.TryParse(args[1], out int n) ? Math.Clamp(n, 0, 16) : 2;
+        ExecuteHostConsoleCommand($"bot_number {count}");
+        VortexArena.Common.Diagnostics.Log.Info(count > 0
+            ? $"editor: {count} bot(s) — drop into PLAYTEST to run with them"
+            : "editor: bots cleared");
+    }
+
+    /// <summary>Camera slots, by name. Session-lived: a bookmark is scaffolding for the job in hand.</summary>
+    private readonly Dictionary<string, System.Numerics.Vector3> _cameraBookmarks = new();
+
+    /// <summary>
+    /// Put the free-fly camera at a world point.
+    ///
+    /// Goes through the SERVER player’s origin rather than the Godot camera, because in EDIT the camera
+    /// follows the observer entity — moving the node directly would be overwritten by the next snapshot, which
+    /// is the same trap that made the ortho view appear to do nothing until it took ownership of the camera.
+    /// </summary>
+    private void MoveEditorCameraTo(System.Numerics.Vector3 at)
+    {
+        if (LocalServerPlayer is not { } player)
+            return;
+
+        object? gate = _server?.SimGate;
+        if (gate is null)
+            player.Origin = at;
+        else
+            lock (gate)
+                player.Origin = at;
+
+        VortexArena.Common.Diagnostics.Log.Info($"editor: camera to {at.X:0} {at.Y:0} {at.Z:0}");
+    }
+
+    /// <summary>Strip path separators from a console-supplied name so a save cannot escape its directory.</summary>
+    private static string SanitizeMapName(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return "";
+        string name = raw.Trim().Replace('\\', '/');
+        int slash = name.LastIndexOf('/');
+        if (slash >= 0)
+            name = name[(slash + 1)..];
+        foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+            name = name.Replace(c.ToString(), string.Empty);
+        return name.Trim('.');
+    }
+
+    /// <summary>
+    /// True while the local client was free-flying on the previous frame, so the EDIT to PLAYTEST edge can be
+    /// detected rather than polled.
+    /// </summary>
+    private bool _wasEditing = true;
+
+    /// <summary>
+    /// Bring the server's live entity set up to date with the edited document (design doc §11.9).
+    ///
+    /// EDIT draws the DOCUMENT's entities and PLAYTEST shows the SERVER's, so the two are reconciled at the
+    /// transition rather than kept in step edit by edit — one sync point instead of a path threaded through
+    /// every op, at the moment a rebuild is already expected because the player is being re-placed anyway.
+    ///
+    /// Runs under the sim gate: sv_threaded defaults on, so the worker owns the world while this runs on the
+    /// main thread.
+    /// </summary>
+    private void ReconcileEntitiesForPlaytest()
+    {
+        if (_editor?.Document is not { } doc || _serverWorld is not { } world)
+            return;
+
+        List<EntityDict> dicts = BuildEntityDictsFromDocument(doc);
+
+        object? gate = _server?.SimGate;
+        if (gate is null)
+            world.RespawnMapEntities(dicts);
+        else
+            lock (gate)
+                world.RespawnMapEntities(dicts);
+
+        VortexArena.Common.Diagnostics.Log.Info(
+            $"editor: playtest rebuilt {dicts.Count} map entities from the document");
+    }
+
+    /// <summary>
+    /// Convert the document's entities into the spawn dictionaries the world loads a map from.
+    ///
+    /// Straight key/value passthrough, because that is exactly what the BSP entity lump gave the world in the
+    /// first place: the document holds the same fields, and anything the editor does not understand rides
+    /// along untouched rather than being dropped on the way through.
+    /// </summary>
+    private static List<EntityDict> BuildEntityDictsFromDocument(VortexArena.Formats.Vmap.VmapDocument doc)
+    {
+        var dicts = new List<EntityDict>(doc.Entities.Count);
+        foreach (VortexArena.Formats.Vmap.VmapEntity e in doc.Entities)
+        {
+            if (string.IsNullOrEmpty(e.ClassName))
+                continue;
+
+            var dict = new EntityDict { ClassName = e.ClassName };
+            foreach (KeyValuePair<string, string> kv in e.Fields)
+                dict.Fields[kv.Key] = kv.Value;
+
+            dict.Origin = e.Origin();
+            if (e.Fields.TryGetValue("angles", out string? angles)
+                && VortexArena.Formats.Vmap.VmapEntity.TryParseVector(angles, out System.Numerics.Vector3 pyr))
+            {
+                dict.Angles = pyr;
+            }
+            else if (e.Fields.TryGetValue("angle", out string? angle)
+                     && float.TryParse(angle, System.Globalization.NumberStyles.Float,
+                         System.Globalization.CultureInfo.InvariantCulture, out float yaw))
+            {
+                // The scalar `angle` key is yaw only — pitch and roll stay zero, matching how the entity lump
+                // is read on a normal map load.
+                dict.Angles = new System.Numerics.Vector3(0f, yaw, 0f);
+            }
+
+            dicts.Add(dict);
+        }
+        return dicts;
+    }
+
+    /// <summary><c>editor_menu</c> — open or close the context menu at the crosshair.</summary>
+    private void CmdEditorMenu(IReadOnlyList<string> args)
+    {
+        _ = args;
+        OpenEditorMenuAtCrosshair();
+    }
+
+    /// <summary>
+    /// <c>editor_flyspeed + | -</c>. The speed lives on the SERVER's player entity (QC
+    /// <c>sys_phys_spectator_control</c> steps it off impulses 10/12), so this sends the impulse rather than
+    /// writing a client value that the next snapshot would overwrite.
+    /// </summary>
+    private void CmdEditorFlySpeed(IReadOnlyList<string> args)
+    {
+        string dir = args.Count > 1 ? args[1] : "+";
+        _pendingImpulse = dir == "-" ? 12 : 10;
+    }
+
+    /// <summary>Open or close the orthographic view, seeded at the current camera position.</summary>
+    private void ToggleEditorOrtho()
+    {
+        if (_editorOrtho is null || _camera is null)
+            return;
+        _editorOrtho.Toggle(Coords.ToQuake(_camera.GlobalTransform.Origin));
+    }
+
+    /// <summary>
+    /// Flip to the ORIGINAL compiled BSP and back. The ground truth is one command away, so "is this artifact
+    /// ours or the map's?" is answered by looking from the same camera rather than by relaunching into a plain
+    /// match and flying back to the spot.
+    /// </summary>
+    private void ToggleEditorBspCompare()
+    {
+        _editorShowBsp = !_editorShowBsp;
+        ApplyEditorWorldVisibility();
+        Menu.MenuState.Cvars?.Set(Vmap.EditorLighting.CvarShowBsp, _editorShowBsp ? "1" : "0");
+    }
+
+    /// <summary>
+    /// The camera the frame is actually being drawn with. Godot marks exactly one Camera3D current per
+    /// viewport, so asking the viewport is the only answer that stays right when something else takes the
+    /// view (the observe pin, an ortho pane, a demo).
+    /// </summary>
+    private Camera3D? ActiveViewCamera()
+    {
+        Camera3D? cam = GetViewport()?.GetCamera3D();
+        return cam is not null && GodotObject.IsInstanceValid(cam) ? cam : null;
+    }
+
+    /// <summary>
+    /// A camera's Quake view angles (pitch, yaw, roll), derived from its BASIS rather than from any stored
+    /// angle state — see the note in the readout wiring for why the stored state is not trustworthy here.
+    /// Full-basis conversion, never a yaw-only Euler read: those disagree in handedness.
+    /// </summary>
+    private static NVec3 CameraQuakeAngles(Camera3D cam)
+    {
+        Basis b = cam.GlobalTransform.Basis;
+        NVec3 forward = Coords.ToQuake(-b.Z);
+        NVec3 up = Coords.ToQuake(b.Y);
+        NVec3 a = VortexArena.Common.Math.QMath.VecToAngles2(forward, up);
+
+        // VecToAngles2 is vectoangles: +pitch means UP. View angles — what --observe takes and what the
+        // player's own angles hold — use +pitch means DOWN. Printing one while the flag consumes the other
+        // is a readout that reproduces the mirror image of the view it was copied from.
+        //
+        // Its atan2-derived angles also land anywhere in [0, 360): a camera 5 degrees below level reads
+        // pitch 355, which the sign flip alone would print as "-355". Wrap to (-180, 180] so the readout
+        // says 5 — the number a person copies into --observe.
+        return new NVec3(Wrap180(-a.X), Wrap180(a.Y), Wrap180(a.Z));
+    }
+
+    /// <summary>Fold an angle in degrees into (-180, 180].</summary>
+    private static float Wrap180(float deg)
+    {
+        deg %= 360f;
+        if (deg > 180f) deg -= 360f;
+        else if (deg <= -180f) deg += 360f;
+        return deg;
+    }
+
+    /// <summary>
+    /// Eye offset used by the --observe pin. Any positive value works: it is subtracted from the requested
+    /// origin and handed straight back as EyeHeightZ, so it cancels. It must be POSITIVE because the view
+    /// treats zero as "use the player's eye height instead", which is the trap this replaced.
+    /// </summary>
+    private const float PinEyeOfs = 1f;
+
+    /// <summary>Set when the current build is capturing vertices for a background bake.</summary>
+    private bool _bakePending;
+
+    /// <summary>True while the editor session is showing the ORIGINAL compiled BSP for comparison (key 0).</summary>
+    private bool _editorShowBsp;
+
+    /// <summary>
+    /// Show either the regenerated document world or the original compiled BSP, never both: they occupy the
+    /// same space, and rendering the pair z-fights everywhere. The editor light rig follows the document
+    /// world — the BSP carries its own baked lightmaps and must not receive our sun a second time.
+    /// </summary>
+    private void ApplyEditorWorldVisibility()
+    {
+        if (_mapRoot is not null && GodotObject.IsInstanceValid(_mapRoot))
+            _mapRoot.Visible = _editorShowBsp;
+        if (_editorMapRoot is not null && GodotObject.IsInstanceValid(_editorMapRoot))
+            _editorMapRoot.Visible = !_editorShowBsp;
+        if (_editorLights is not null && GodotObject.IsInstanceValid(_editorLights))
+            _editorLights.Visible = !_editorShowBsp;
+    }
+
+    private Vmap.EditorShadowTrace? _pendingTrace;
+    private int _pendingTraceCount;
+    private bool _pendingBounce;
+    private int _pendingBounces = 8;
+
+    /// <summary>True when the live lighting was built WITHOUT tracing, so its shadows are out of date.</summary>
+    private bool _bakedShadowsStale;
+
+    /// <c>editor_gametype &lt;name|all&gt;</c>: choose which gametype's geometry the editor shows. Resolves the
+    /// hidden inline-model set with the SAME rule the renderer and collision builder use, so the editor shows
+    /// exactly the map that mode would produce — and nothing is discarded, only hidden.
+    /// </summary>
+    private void CmdEditorGametype(System.Collections.Generic.IReadOnlyList<string> argv)
+    {
+        if (_editor is null || _bsp is null)
+        {
+            VortexArena.Common.Diagnostics.Log.Warn("editor_gametype: no editing session");
+            return;
+        }
+        if (argv.Count < 2)
+        {
+            VortexArena.Common.Diagnostics.Log.Help(
+                $"usage: editor_gametype <name|all>   (currently showing: {_editor.GametypeFilterLabel})");
+            return;
+        }
+
+        string want = argv[1];
+        bool showAll = string.Equals(want, "all", StringComparison.OrdinalIgnoreCase);
+        System.Collections.Generic.IReadOnlySet<int>? hidden =
+            showAll ? null : GameMapView.ComputeDroppedSubmodels(_bsp, want);
+        _editor.SetGametypeFilter(want, hidden);
+    }
+
+    private static void LogEditorFaceHistogram(VortexArena.Formats.Vmap.VmapDocument doc)
+    {
+        var hist = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int pass = 0, total = 0, toolBrushes = 0;
+        foreach (VortexArena.Formats.Vmap.VmapBrush b in doc.Brushes)
+        {
+            if (b.IsToolBrush) { toolBrushes++; continue; }
+            foreach (VortexArena.Formats.Vmap.VmapFace f in b.Faces)
+            {
+                total++;
+                if ((f.SurfaceFlags & 0x0080) != 0 || VortexArena.Formats.Vmap.VmapBrush.IsToolMaterial(f.Material))
+                    continue;
+                pass++;
+                string key = string.IsNullOrEmpty(f.Material) ? "(empty)" : f.Material;
+                hist[key] = hist.TryGetValue(key, out int n) ? n + 1 : 1;
+            }
+        }
+
+        var ranked = new List<KeyValuePair<string, int>>(hist);
+        ranked.Sort((x, y) => y.Value.CompareTo(x.Value));
+        var top = new List<string>();
+        for (int i = 0; i < ranked.Count && i < 14; i++)
+            top.Add($"{ranked[i].Value}x {ranked[i].Key}");
+
+        VortexArena.Common.Diagnostics.Log.Info(
+            $"editor: {toolBrushes} tool brushes; visible faces {pass}/{total}; {hist.Count} distinct materials");
+        VortexArena.Common.Diagnostics.Log.Info($"editor: top materials: {string.Join(" | ", top)}");
+
+    }
+
+    /// <summary>
+    /// True when the local client is free-flying as an observer. Several VIEW decisions key off this because an
+    /// observer is not a player: it has no body, no eye height above its origin, and — critically — zero health,
+    /// which every "are you dead?" test in the client would otherwise answer yes to.
+    /// </summary>
+    private bool IsLocalObserving => _client?.IsObserving ?? false;
+
+    /// <summary>
+    /// Eye offset above the entity origin for the local view. An observer's camera sits AT its origin (QC
+    /// PutObserverInServer sets <c>view_ofs = '0 0 0'</c>, so a free-flying camera cannot poke through a ceiling
+    /// it is otherwise clear of); a live player uses the standing eye height.
+    /// </summary>
+    private float LocalEyeHeight => IsLocalObserving ? 0f : EyeHeight;
+
+    /// <summary>
+    /// True while this client is free-flying (EDIT) inside an editor session — the only state in which the
+    /// weapon binds are repurposed. Playtesting is real play, so weapons behave normally there.
+    /// </summary>
+    private bool IsEditorFreeFly => IsEditorGametype && (_client?.IsObserving ?? false);
 
     /// <summary>
     /// Map a bound command STRING to its Xonotic impulse number (common/impulses/all.qh — the same numbers
@@ -6606,19 +10813,28 @@ public sealed partial class NetGame : Node3D
     /// <summary>The quick-chat menu is showing its list (it owns the cursor like the minigame menu — mouse hover +
     /// click select rows, so the cursor must be freed and gameplay look/fire suspended while open).</summary>
     private bool QuickMenuOpen
-        => _fullHud?.GetPanel<XonoticGodot.Game.Hud.QuickMenuPanel>() is { IsOpen: true };
+        => _fullHud?.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { IsOpen: true };
 
     /// <summary>Any in-world HUD UI that should free the mouse cursor + suspend look/fire (minigame board/menu, the
     /// quick-chat menu, or the maximized radar). The bind channel stays live so the toggling bind can still close the
     /// panel — the maximized radar's `m` toggle + Esc/right-click close all route through it.</summary>
-    private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || (_radar?.Maximized ?? false);
+    private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || (_radar?.Maximized ?? false)
+                                 || (_editorOrtho?.IsOpen ?? false) || EditorMenuOpen || EditorDialogOpen;
+
+    /// <summary>True while the editor's context menu is up, so it takes the cursor like any other modal HUD UI.</summary>
+    private bool EditorMenuOpen
+        => _fullHud?.GetPanel<VortexArena.Game.Hud.EditorMenuPanel>() is { IsOpen: true };
+
+    /// <summary>True while an editor dialog is up. Modal for the same reason: it owns the keyboard.</summary>
+    private bool EditorDialogOpen
+        => _fullHud?.GetPanel<VortexArena.Game.Hud.EditorDialogPanel>() is { IsOpen: true };
 
     /// <summary>Whether gameplay owns keyboard/mouse input this frame — false whenever a UI owner has it (the DP
     /// key_dest states): the pause/auto-pause, the console, the messagemode chat prompt (key_dest = message:
     /// movement/fire suspended while typing), or a cursor-owning HUD UI (minigame/quickmenu/maximized radar). The
     /// single source of truth for the input-active gate (SampleInput + the fire-feedback edge).</summary>
     private bool GameplayInputActive =>
-        !GetTree().Paused && !ConsoleState.IsOpen && !XonoticGodot.Game.Hud.ChatPrompt.IsOpen && !UiOwnsCursor;
+        !GetTree().Paused && !ConsoleState.IsOpen && !VortexArena.Game.Hud.ChatPrompt.IsOpen && !UiOwnsCursor;
 
     /// <summary>
     /// Teleporter view-snap (QC player.fixangle): after a prediction tick re-derives the carrier's .fixangle —
@@ -6643,10 +10859,10 @@ public sealed partial class NetGame : Node3D
         // CL_RotateMoves actually lives) behind the cvar for future work.
         if (_carrier is not null
             && MenuState.Cvars.GetFloat("wz_predict_apply") != 0f
-            && XonoticGodot.Engine.Simulation.TriggerTouch.LastPredictedWarpSeq > _consumedWarpSeq)
+            && VortexArena.Engine.Simulation.TriggerTouch.LastPredictedWarpSeq > _consumedWarpSeq)
         {
-            _consumedWarpSeq = XonoticGodot.Engine.Simulation.TriggerTouch.LastPredictedWarpSeq;
-            Common.Gameplay.WarpzoneTransform wt = XonoticGodot.Engine.Simulation.TriggerTouch.LastPredictedWarpTransform;
+            _consumedWarpSeq = VortexArena.Engine.Simulation.TriggerTouch.LastPredictedWarpSeq;
+            Common.Gameplay.WarpzoneTransform wt = VortexArena.Engine.Simulation.TriggerTouch.LastPredictedWarpTransform;
             _viewAngles = wt.TransformAngles(_viewAngles);
             _viewAngles.X = Mathf.Clamp(_viewAngles.X, _pitchMinCv, _pitchMaxCv);
             _client.RotatePendingMoves(a => wt.TransformAngles(a));
@@ -6796,7 +11012,7 @@ public sealed partial class NetGame : Node3D
             }
         }
         else if (a1 && !_attackHeld && !LocalDeadNow()
-                 && TryActiveRefire(XonoticGodot.Common.Gameplay.FireMode.Primary, out int widOff, out float refireOff)
+                 && TryActiveRefire(VortexArena.Common.Gameplay.FireMode.Primary, out int widOff, out float refireOff)
                  && FirePredictReady(widOff))
         {
             // cl_predictfire off: a single muzzle flash on the press edge (Phase 1; the networked sustained FX play),
@@ -6817,7 +11033,7 @@ public sealed partial class NetGame : Node3D
         {
             _attack2Latch = true;
             if (SecondaryFiresShot() && !LocalDeadNow()
-                && TryActiveRefire(XonoticGodot.Common.Gameplay.FireMode.Secondary, out int wid2, out float refire2)
+                && TryActiveRefire(VortexArena.Common.Gameplay.FireMode.Secondary, out int wid2, out float refire2)
                 && FirePredictReady(wid2))
             {
                 _hud?.PulseFire();
@@ -6844,8 +11060,8 @@ public sealed partial class NetGame : Node3D
         // (v1: phantom persisted), and Api.Cvars threw / broke the whole prediction path (v2: no flash at all). The
         // guidestop-1 config (continuous fire, no guiding) is rare and non-default; treating the Devastator as
         // always release-gated only costs a slightly under-predicted FX cadence in that rare case (cosmetic).
-        return wid >= 0 && wid < XonoticGodot.Common.Gameplay.Weapons.Count
-            && (XonoticGodot.Common.Gameplay.Weapons.ById(wid)?.NetName ?? "") == "devastator";
+        return wid >= 0 && wid < VortexArena.Common.Gameplay.Weapons.Count
+            && (VortexArena.Common.Gameplay.Weapons.ById(wid)?.NetName ?? "") == "devastator";
     }
 
     /// <summary>
@@ -6858,9 +11074,9 @@ public sealed partial class NetGame : Node3D
     private bool SecondaryFiresShot()
     {
         int wid = _client?.ActiveWeaponId ?? -1;
-        if (wid < 0 || wid >= XonoticGodot.Common.Gameplay.Weapons.Count)
+        if (wid < 0 || wid >= VortexArena.Common.Gameplay.Weapons.Count)
             return false;
-        string net = XonoticGodot.Common.Gameplay.Weapons.ById(wid)?.NetName ?? "";
+        string net = VortexArena.Common.Gameplay.Weapons.ById(wid)?.NetName ?? "";
         return net switch
         {
             "vortex" or "vaporizer" or "rifle" => false, // secondary = zoom
@@ -6885,7 +11101,7 @@ public sealed partial class NetGame : Node3D
         _viewModel?.Fire();
         if (!string.IsNullOrEmpty(fireSound) && _render is not null && _client is not null)
             _render.OnSound(fireSound, _client.PredictedOrigin, 1f, 0.5f,
-                (int)XonoticGodot.Common.Services.SoundChannel.WeaponAuto, _client.LocalNetId, 1f);
+                (int)VortexArena.Common.Services.SoundChannel.WeaponAuto, _client.LocalNetId, 1f);
     }
 
     /// <summary>The active weapon's id + primary fire sound + refire interval, or false when it can't be predicted
@@ -6899,13 +11115,13 @@ public sealed partial class NetGame : Node3D
         if (_client is null || _client.ActiveWeaponId < 0)
             return false;
         weaponId = _client.ActiveWeaponId;
-        XonoticGodot.Common.Gameplay.Weapon w = XonoticGodot.Common.Gameplay.Weapons.ById(weaponId);
+        VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(weaponId);
         if (w is null)
             return false;
         fireSound = WeaponFireSounds.PrimaryFor(w.NetName);
         if (string.IsNullOrEmpty(fireSound))
             return false;
-        refire = w.RefireFor(XonoticGodot.Common.Gameplay.FireMode.Primary);
+        refire = w.RefireFor(VortexArena.Common.Gameplay.FireMode.Primary);
         if (refire <= 0f) refire = 0.1f;
         return true;
     }
@@ -6914,14 +11130,14 @@ public sealed partial class NetGame : Node3D
     /// active weapon. Unlike <see cref="TryActivePrimaryFire"/> this needs no fire-sound entry, so it also serves
     /// weapons that aren't sound-predicted (the cl_predictfire-off press-edge flash + the secondary flash) — the
     /// refire only feeds the ready clock. Both modes key the SAME ready slot (Base ATTACK_FINISHED is per-slot).</summary>
-    private bool TryActiveRefire(XonoticGodot.Common.Gameplay.FireMode mode, out int weaponId, out float refire)
+    private bool TryActiveRefire(VortexArena.Common.Gameplay.FireMode mode, out int weaponId, out float refire)
     {
         weaponId = -1;
         refire = 0.1f;
         if (_client is null || _client.ActiveWeaponId < 0)
             return false;
         weaponId = _client.ActiveWeaponId;
-        XonoticGodot.Common.Gameplay.Weapon w = XonoticGodot.Common.Gameplay.Weapons.ById(weaponId);
+        VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(weaponId);
         if (w is null)
             return false;
         refire = w.RefireFor(mode);
@@ -6931,7 +11147,7 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Whether the persistent predicted-fire clock has elapsed for <paramref name="weaponId"/> (an unseen
     /// weapon is ready). Client mirror of the server's <c>ATTACK_FINISHED &lt;= time</c> gate
-    /// (<see cref="XonoticGodot.Common.Gameplay.Weapons.WeaponFireGate"/>) — see <see cref="_weaponReadyTime"/>.</summary>
+    /// (<see cref="VortexArena.Common.Gameplay.Weapons.WeaponFireGate"/>) — see <see cref="_weaponReadyTime"/>.</summary>
     private bool FirePredictReady(int weaponId)
         => !_weaponReadyTime.TryGetValue(weaponId, out float ready) || _fireClock >= ready;
 
@@ -6962,8 +11178,8 @@ public sealed partial class NetGame : Node3D
     {
         if (LocalServerPlayer is not { } p || _client is null || _client.ActiveWeaponId < 0)
             return true;
-        XonoticGodot.Common.Gameplay.Weapon w = XonoticGodot.Common.Gameplay.Weapons.ById(_client.ActiveWeaponId);
-        if (w is null || w.AmmoType == XonoticGodot.Common.Gameplay.ResourceType.None)
+        VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(_client.ActiveWeaponId);
+        if (w is null || w.AmmoType == VortexArena.Common.Gameplay.ResourceType.None)
             return true; // infinite-ammo weapon (e.g. blaster)
         // Unlimited ammo (QC IT_UNLIMITED_AMMO — g_weaponarena / give unlimited_ammo): the numeric count can be 0
         // yet firing is allowed, so gate on the flag first (same check as Inventory.cs HasWeapon's ammo arm).
@@ -6971,10 +11187,10 @@ public sealed partial class NetGame : Node3D
         // including the legitimate press-edge flash (#24 diagnostic: `ammo=False` was the only failing input).
         if (p.UnlimitedAmmo || (p.Items & 1) != 0) // bit 0 = QC IT_UNLIMITED_AMMO (common/items/item.qh)
             return true;
-        return XonoticGodot.Common.Gameplay.Resources.GetResource(p, w.AmmoType) > 0f;
+        return VortexArena.Common.Gameplay.Resources.GetResource(p, w.AmmoType) > 0f;
     }
 
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
     private bool _botPlayerAttached;
 
     /// <summary>
@@ -6990,7 +11206,7 @@ public sealed partial class NetGame : Node3D
             return;
         _botPlayerAttached = true;
         float skill = BotPlayerMode.Skill;
-        XonoticGodot.Server.GameWorld world = _serverWorld;
+        VortexArena.Server.GameWorld world = _serverWorld;
         _server.RunOnSimThread(() => world.Bots.AttachBotPlayer(me, skill));
         GD.Print($"[bot-player] brain attached to the LOCAL player (skill {skill}) — "
                  + "input now synthesised through the real client pipeline.");
@@ -6999,7 +11215,7 @@ public sealed partial class NetGame : Node3D
 
     private InputCommand SampleInput()
     {
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
         // Bot-player harness: synthesise this tick's command from the brain bound to the local player. Sits
         // exactly where the camera-trace scripted input sits — the command below is indistinguishable from a
         // human's, so prediction/encode/reconcile all run for real. Inert unless --bot-player was passed.
@@ -7008,7 +11224,7 @@ public sealed partial class NetGame : Node3D
             MaybeAttachBotPlayer();
             if (_botPlayerAttached && _carrier is not null && _serverWorld is not null)
             {
-                XonoticGodot.Server.Bot.BotPopulation.BotPlayerCommand bp =
+                VortexArena.Server.Bot.BotPopulation.BotPlayerCommand bp =
                     _serverWorld.Bots.BotPlayerCommandLatest;
                 InputButtons bpButtons = InputButtons.None;
                 if (bp.Attack1) bpButtons |= InputButtons.Attack;
@@ -7122,7 +11338,7 @@ public sealed partial class NetGame : Node3D
         // the console makes input inactive (movement keys are released + zeroed), but the typing FLAG itself must
         // still ride the command so the server can exempt the typist (camp-check g_campcheck_typecheck gate,
         // type-frag classification, etc.). Mirrors QC PHYS_INPUT_BUTTON_CHAT being live while the chat box is up.
-        if (ConsoleState.IsOpen || XonoticGodot.Game.Hud.ChatPrompt.IsOpen)
+        if (ConsoleState.IsOpen || VortexArena.Game.Hud.ChatPrompt.IsOpen)
             buttons |= InputButtons.Chat; // messagemode prompt ALSO raises BUTTON_CHAT (the DP key_dest != game rule) -> server chat bubble
 
         // C2S impulse (QC usercmd.impulse): consume the one-shot weapon-switch/reload number a bind set this
@@ -7214,6 +11430,29 @@ public sealed partial class NetGame : Node3D
         if (_client is null || _camera is null)
             return;
 
+        // Dev/CI --observe: pin the camera at the fixed Quake-space point/angles (ObserverCamera), ignoring
+        // the local player/prediction entirely. Velocity 0 → no bob; not dead → no event-chase.
+        //
+        // The eye offset is subtracted here and handed back through EyeHeightZ, so the two ALWAYS cancel.
+        // Subtracting the static EyeHeight and passing 0 did not: 0 means "fall back to _view.EyeHeight",
+        // which is 0 while observing, so the pin landed 35 units BELOW the requested point — every scripted
+        // capture silently framed a different place than the one being reported.
+        if (ObserverCamera.Active)
+        {
+            _view.Spectating = false;
+            _view.CameraMode = Client.FirstPersonView.ChaseMode.None;
+            var ost = new Client.FirstPersonView.ViewState
+            {
+                OriginQuake = ObserverCamera.OriginQuake - new NVec3(0f, 0f, PinEyeOfs),
+                VelocityQuake = NVec3.Zero,
+                ViewAnglesQuake = ObserverCamera.AnglesQuake,
+                IsDead = false,
+                EyeHeightZ = PinEyeOfs,   // exactly what was subtracted above, so the camera lands on the point
+            };
+            _view.UpdateView(_camera, ost, dt);
+            return;
+        }
+
         // Follow-cam: while spectating a specific player (spectatee_status > 0), render from THAT player's
         // interpolated pose + view angles, not the local predicted origin. The server glues us to the spectatee
         // (MOVETYPE_NONE + SpectateCopy) so the owner-state origin already tracks them, but the local predictor
@@ -7302,7 +11541,7 @@ public sealed partial class NetGame : Node3D
         // compensation OFF so corrections SNAP), so the rendered eye matches stock Xonotic exactly and the only
         // intentional divergence from Base is the stepheight processing. 0 = the port path (adaptive stair catch-up
         // + error-comp/knockback glide), with the accumulation bug-fix in Reconciler.SetPredictionError.
-        XonoticGodot.Common.Services.ICvarService cv = Api.Cvars;
+        VortexArena.Common.Services.ICvarService cv = Api.Cvars;
         bool faithfulSmoothing = CvarOr(cv, "cl_movement_smoothing_faithful", 1f) != 0f;
 
         // Prediction-error view smoothing, read live so the cvars (and the settings-menu checkbox) tune in-session:
@@ -7337,7 +11576,7 @@ public sealed partial class NetGame : Node3D
                 if (_carrier.LastTeleportTime > 0f)
                     teleported = true;
             }
-            XonoticGodot.Net.FaithfulViewSmoothing.Result r =
+            VortexArena.Net.FaithfulViewSmoothing.Result r =
                 _faithfulSmoothing.Apply(predicted.Z, dt, onground, eyeOfsZ, teleported);
             predicted.Z = r.StairZ;
             eyeOfsZ = r.ViewHeightZ;
@@ -7364,7 +11603,9 @@ public sealed partial class NetGame : Node3D
             // QC `vieworg += view_punchvector` (cl_player.qc:570): the origin recoil kick added to the rendered eye
             // (first-person only — FirstPersonView suppresses it while chase/death-cam is active).
             PunchOriginQuake = _client.PunchVector,
-            IsDead = localDead,
+            // An observer has zero health, which LocalDeadNow reads as dead — that engaged the death-chase
+            // camera every time the mapper dropped out of PLAYTEST. Observing is not dying.
+            IsDead = localDead && !IsLocalObserving,
             // QC STAT(FROZEN) → cl_ft WantEventchase: engage the third-person cam while Freeze-Tag frozen (host
             // path; the local Player carries the Frozen status effect). A pure remote client reads false here.
             IsFrozen = LocalServerPlayer is { } frozenSelf && StatusEffectsCatalog.Frozen is { } frozenDef2
@@ -7394,7 +11635,7 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Read a float cvar, falling back to <paramref name="fallback"/> only when it is UNSET (empty string),
     /// so a deliberately-configured 0 (e.g. <c>cl_stairsmooth_catchuptime 0</c> = adaptive off) is honoured.</summary>
-    private static float CvarOr(XonoticGodot.Common.Services.ICvarService c, string name, float fallback)
+    private static float CvarOr(VortexArena.Common.Services.ICvarService c, string name, float fallback)
     {
         string s = c.GetString(name);
         return s.Length == 0 ? fallback : c.GetFloat(name);
@@ -7502,7 +11743,7 @@ public sealed partial class NetGame : Node3D
     /// Center/info text need the full panel HUD (NetHud lacks it), so they're skipped on the net path for now.</summary>
     /// <summary>A decoded notification → drive the full HUD (T34): MSG_CENTER → centerprint, MSG_INFO →
     /// kill-feed / info line, MSG_ANNCE → announcer voice. Previously only MSG_ANNCE was handled (the net path
-    /// had no panel HUD); now the full <see cref="XonoticGodot.Game.Hud.Hud"/> lets <see cref="XonoticGodot.Game.Hud.HudNotifications"/>
+    /// had no panel HUD); now the full <see cref="VortexArena.Game.Hud.Hud"/> lets <see cref="VortexArena.Game.Hud.HudNotifications"/>
     /// render center/info text too. HudNotifications routes by type internally.</summary>
     private void OnNotificationReceived(ClientNet.NotificationEvent e)
     {
@@ -7514,12 +11755,12 @@ public sealed partial class NetGame : Node3D
     /// <summary>A decoded minigame session snapshot (QC activate/deactivate_minigame) → drive the board overlay
     /// + menu through the client coordinator, then refresh the MinigameHelp panel's active game (goal 4). The
     /// coordinator sets <see cref="MinigameClient.Active"/> from the envelope first; we read its netname (e.g.
-    /// "ttt_3") into <see cref="XonoticGodot.Game.Hud.MinigameHelpPanel.ActiveMinigame"/>, which self-blanks the
+    /// "ttt_3") into <see cref="VortexArena.Game.Hud.MinigameHelpPanel.ActiveMinigame"/>, which self-blanks the
     /// help panel when null (no active game). The help panel only enters the draw set under PanelShow.Minigame.</summary>
     private void OnMinigameStateReceived(MinigameNetState.Envelope env)
     {
         _minigame?.OnEnvelope(env);
-        if (_fullHud?.GetPanel<XonoticGodot.Game.Hud.MinigameHelpPanel>() is { } help)
+        if (_fullHud?.GetPanel<VortexArena.Game.Hud.MinigameHelpPanel>() is { } help)
             help.ActiveMinigame = _minigame?.Active?.NetName;
     }
 
@@ -7531,7 +11772,7 @@ public sealed partial class NetGame : Node3D
     /// <summary>
     /// Feed each ServerPrint line into the ChatPanel scrollback (QC HUD panel #12). The port has no dedicated chat
     /// net channel: server chat (<c>say</c>/<c>say_team</c>) is broadcast via <c>ServerNet.BroadcastPrint</c> and
-    /// arrives here on the SAME print stream. Empty lines are ignored by <see cref="XonoticGodot.Game.Hud.ChatPanel.AddLine"/>;
+    /// arrives here on the SAME print stream. Empty lines are ignored by <see cref="VortexArena.Game.Hud.ChatPanel.AddLine"/>;
     /// the panel honours <c>con_chattime</c>/<c>con_chatsize</c> and self-blanks when empty. Drops the single-token
     /// minigame session-list replies ("ttt_3") so they don't clutter the chat area.
     /// </summary>
@@ -7543,7 +11784,7 @@ public sealed partial class NetGame : Node3D
         string trimmed = line.Trim();
         if (!trimmed.Contains(' ') && _minigame is not null && trimmed.IndexOf('_') > 0)
             return;
-        _fullHud?.GetPanel<XonoticGodot.Game.Hud.ChatPanel>()?.AddLine(line);
+        _fullHud?.GetPanel<VortexArena.Game.Hud.ChatPanel>()?.AddLine(line);
     }
 
     // =====================================================================================
@@ -7607,16 +11848,52 @@ public sealed partial class NetGame : Node3D
                 // (worker pre-decodes its images, main thread only uploads), then the now-cheap assembly.
                 // The old single delivery paid ~395 ms of synchronous decode+upload in one frame.
                 EnqueueStagedSkeletalBuild(assets, box.Parse,
-                    XonoticGodot.Game.Client.BackgroundAssetStreamer.Priority.High, $"player model {model}",
+                    VortexArena.Game.Client.BackgroundAssetStreamer.Priority.High, $"player model {model}",
                     () => DeliverPlayerModel(pm, e, model, skin, box.Parse, forced));
             },
-            XonoticGodot.Game.Client.BackgroundAssetStreamer.Priority.High,
+            VortexArena.Game.Client.BackgroundAssetStreamer.Priority.High,
             label: $"player model {model} (parse)");
         return pm;
     }
 
     /// <summary>Non-null off-thread wrapper for a (possibly failed) skeletal parse — see ResolvePlayerModel.</summary>
     private sealed record SkeletalParseBox(AssetLoader.SkeletalModelParse? Parse);
+
+    /// <summary>
+    /// Non-null off-thread wrapper for a (possibly missing) editor thumbnail.
+    ///
+    /// The streamer DROPS a null off-thread result silently, so its main phase never runs. A shader with no
+    /// resolvable image would then stay pending forever: never drawn as a miss, never retried, and holding an
+    /// in-flight slot until the cap starves the whole grid. Same reason SkeletalParseBox exists.
+    /// </summary>
+    private sealed record ThumbBox(Image? Image);
+
+    private VortexArena.Game.Hud.EditorThumbnailCache? _editorThumbs;
+
+    /// <summary>
+    /// The editor's thumbnail cache, wired to the asset system and the background streamer (backlog T6).
+    /// Built once and reused: it holds GPU textures, and a fresh one per frame would rebuild them all.
+    /// </summary>
+    private VortexArena.Game.Hud.EditorThumbnailCache EditorThumbnails()
+    {
+        if (_editorThumbs is not null)
+            return _editorThumbs;
+
+        var cache = new VortexArena.Game.Hud.EditorThumbnailCache();
+        if (_assets is { } loader)
+            cache.Decode = (name, size) => loader.Assets.LoadThumbnailImage(name, size);
+        if (_streamer is { } streamer)
+            cache.Schedule = (work, done) => streamer.Request(
+                () => new ThumbBox(work()),
+                box => done(box.Image),
+                // LOW: a live player-model resolve must always beat browser art, in a co-editing session
+                // most of all.
+                VortexArena.Game.Client.BackgroundAssetStreamer.Priority.Low,
+                label: "editor thumbnail");
+
+        _editorThumbs = cache;
+        return cache;
+    }
 
     /// <summary>
     /// (§12.3-1/§12.6) Enqueue the staged main-thread half of a skeletal-model build: one streamer job per
@@ -7628,13 +11905,13 @@ public sealed partial class NetGame : Node3D
     /// streamer's budget spreads the jobs across frames; the count-down gate fires exactly once, on main.
     /// </summary>
     private void EnqueueStagedSkeletalBuild(AssetLoader loader, AssetLoader.SkeletalModelParse parse,
-        XonoticGodot.Game.Client.BackgroundAssetStreamer.Priority priority, string label, Action onAllMaterialsReady)
+        VortexArena.Game.Client.BackgroundAssetStreamer.Priority priority, string label, Action onAllMaterialsReady)
     {
         List<string> mats = AssetLoader.EffectiveMaterials(parse);
         Action finish = () =>
         {
             // Materials assemble from already-uploaded textures (cache hits) — sub-ms each.
-            using (XonoticGodot.Game.Client.FrameProfiler.Scope("iqm.materials"))
+            using (VortexArena.Game.Client.FrameProfiler.Scope("iqm.materials"))
                 foreach (string m in mats)
                     loader.Assets.ResolveMaterial(m);
             onAllMaterialsReady();
@@ -7659,7 +11936,7 @@ public sealed partial class NetGame : Node3D
                 () => { loader.Assets.PredecodeTexture(t); return t; },     // worker: VFS read + decode
                 _ =>
                 {
-                    using (XonoticGodot.Game.Client.FrameProfiler.Scope("iqm.materials"))
+                    using (VortexArena.Game.Client.FrameProfiler.Scope("iqm.materials"))
                         loader.Assets.LoadTexture(t);                       // main: ONE GPU upload (or a cheap miss)
                     if (--remaining == 0)
                         finish();
@@ -7730,7 +12007,7 @@ public sealed partial class NetGame : Node3D
         // Tint immediately (team colormap / forcecolors) — the per-frame appearance pass keeps it fresh, but
         // seeding now avoids one untinted frame, mirroring TryAttachModel's eager seed.
         _render.SeedAppearance(e);
-        XonoticGodot.Common.Diagnostics.Log.Trace(
+        VortexArena.Common.Diagnostics.Log.Trace(
             $"[stream] {(forced ? "forced " : "")}player model '{model}' (skin {skin}) built for ent {e.Index} — placeholder swapped");
     }
 
@@ -7791,7 +12068,7 @@ public sealed partial class NetGame : Node3D
         // QC cl_survival.qc colormap override (ForcePlayercolors_Skip): in Survival, once a status block has been
         // received (the local player has a role → MyStatus != 0, OR the round resolved and disclosed hunters), feed
         // the disclosed hunter set so ResolveForcedColormap repaints every known player green-prey / red-hunter.
-        if (_client.LatestModeStatus is { Mode: XonoticGodot.Net.GametypeStatusBlock.Kind.Survival } surv
+        if (_client.LatestModeStatus is { Mode: VortexArena.Net.GametypeStatusBlock.Kind.Survival } surv
             && (surv.MyStatus != 0 || surv.HunterNetIds.Count > 0))
         {
             ctx.SurvivalActive = true;
@@ -7824,7 +12101,7 @@ public sealed partial class NetGame : Node3D
     //  Map / world helpers
     // =====================================================================================
 
-    private XonoticGodot.Formats.Bsp.BspData? TryLoadMapBsp(string map)
+    private VortexArena.Formats.Bsp.BspData? TryLoadMapBsp(string map)
     {
         if (_assets is null || string.IsNullOrWhiteSpace(map))
             return null;
@@ -7832,7 +12109,7 @@ public sealed partial class NetGame : Node3D
         {
             if (!_assets.Vfs.Exists(vpath))
                 continue;
-            XonoticGodot.Formats.Bsp.BspData? bsp = _assets.ReadBsp(vpath);
+            VortexArena.Formats.Bsp.BspData? bsp = _assets.ReadBsp(vpath);
             if (bsp is not null)
                 return bsp;
         }
@@ -7846,7 +12123,7 @@ public sealed partial class NetGame : Node3D
     /// parsed into the struct's first-class fields (the world reads them there); every key (incl. origin/angles)
     /// is also kept in <see cref="EntityDict.Fields"/> for the generic spawnfunc field reads.
     /// </summary>
-    private static System.Collections.Generic.List<EntityDict> BuildEntityDicts(XonoticGodot.Formats.Bsp.BspData bsp)
+    private static System.Collections.Generic.List<EntityDict> BuildEntityDicts(VortexArena.Formats.Bsp.BspData bsp)
     {
         var list = new System.Collections.Generic.List<EntityDict>(bsp.Entities.Count);
         foreach (System.Collections.Generic.IReadOnlyDictionary<string, string> dict in bsp.Entities)
@@ -7896,7 +12173,7 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Copy a cvar from <paramref name="from"/> to <paramref name="to"/> only when it holds a non-zero
     /// numeric value (so an unset limit leaves the destination's cfg-loaded default in place).</summary>
-    private static void CopyCvarIfSet(XonoticGodot.Engine.Simulation.CvarService from, ICvarService to, string name)
+    private static void CopyCvarIfSet(VortexArena.Engine.Simulation.CvarService from, ICvarService to, string name)
     {
         if (from.Has(name) && from.GetFloat(name) > 0f)
             to.Set(name, from.GetString(name));
@@ -7929,7 +12206,7 @@ public sealed partial class NetGame : Node3D
 
         // The map's real Xonotic skybox (DP R_LoadSkyBox semantics), falling back to the procedural sky when
         // the map declares none. Same path GameDemo.AddLighting uses; gated on the BSP the client loaded.
-        Sky sky = XonoticGodot.Game.Loaders.SkyboxLoader.TryBuild(_bsp, _assets?.Assets)
+        Sky sky = VortexArena.Game.Loaders.SkyboxLoader.TryBuild(_bsp, _assets?.Assets)
                   ?? new Sky { SkyMaterial = new ProceduralSkyMaterial() };
 
         var env = new Godot.Environment
@@ -7958,11 +12235,11 @@ public sealed partial class NetGame : Node3D
         };
 
         // Map-declared fog (worldspawn "fog"), restoring the mapper's intended atmosphere + depth cue.
-        XonoticGodot.Game.MapLoader.ApplyFog(env, _bsp);
+        VortexArena.Game.MapLoader.ApplyFog(env, _bsp);
 
         // Map-declared colour tint baseline (worldspawn "_map_tint"/"_scene_tint"); identity if unset. Live cvars
-        // and the C# API can override it at runtime (XonoticGodot.Game.WorldTint).
-        XonoticGodot.Game.WorldTint.ApplyWorldspawn(_bsp);
+        // and the C# API can override it at runtime (VortexArena.Game.WorldTint).
+        VortexArena.Game.WorldTint.ApplyWorldspawn(_bsp);
 
         _worldEnv = env; // kept so a pure client can swap in the real map's sky/fog/tint once its BSP loads (ApplyMapSky)
         AddChild(new WorldEnvironment { Name = "WorldEnvironment", Environment = env });
@@ -7978,11 +12255,11 @@ public sealed partial class NetGame : Node3D
     {
         if (_worldEnv is null || _bsp is null)
             return;
-        Sky? sky = XonoticGodot.Game.Loaders.SkyboxLoader.TryBuild(_bsp, _assets?.Assets);
+        Sky? sky = VortexArena.Game.Loaders.SkyboxLoader.TryBuild(_bsp, _assets?.Assets);
         if (sky is not null)
             _worldEnv.Sky = sky;
-        XonoticGodot.Game.MapLoader.ApplyFog(_worldEnv, _bsp);
-        XonoticGodot.Game.WorldTint.ApplyWorldspawn(_bsp);
+        VortexArena.Game.MapLoader.ApplyFog(_worldEnv, _bsp);
+        VortexArena.Game.WorldTint.ApplyWorldspawn(_bsp);
     }
 
     /// <summary>
@@ -8003,7 +12280,7 @@ public sealed partial class NetGame : Node3D
         if (_clientMapLoaded || _isListenServer || string.IsNullOrWhiteSpace(mapName))
             return;
 
-        XonoticGodot.Formats.Bsp.BspData? bsp = TryLoadMapBsp(mapName);
+        VortexArena.Formats.Bsp.BspData? bsp = TryLoadMapBsp(mapName);
         if (bsp is null)
         {
             GD.PrintErr($"[NetGame] client: server map '{mapName}' not found in the VFS — staying on the flat " +
@@ -8023,10 +12300,10 @@ public sealed partial class NetGame : Node3D
         // real map collision. The ambient EngineServices keeps its entity table (the carrier lives there) + clock +
         // cvars + models; only the static brush world the trace consults changes. Safe between frames (single-thread).
         BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp, _droppedSubmodels);
-        if (Api.Services is XonoticGodot.Engine.Simulation.EngineServices es)
+        if (Api.Services is VortexArena.Engine.Simulation.EngineServices es)
         {
             es.SetCollisionWorld(built.World);
-            es.Pvs = new XonoticGodot.Formats.Bsp.BspPvs(bsp);
+            es.Pvs = new VortexArena.Formats.Bsp.BspPvs(bsp);
             // Register the inline "*N" brush models into the client model catalog. NOTE: this is FORWARD-LOOKING —
             // no client code currently mirrors snapshot entities into the ambient facade table or calls SetModel
             // on it (the only facade entity is the prediction carrier), so predicted movement still doesn't clip
@@ -8097,11 +12374,11 @@ public sealed partial class NetGame : Node3D
         //   (SetupCameraAndHud ran in _Ready; this fires from _Process on the first accept).
         if (_mapRoot is not null && _camera is not null && _portalRenderer is null)
         {
-            _portalRenderer = new XonoticGodot.Game.Client.PortalRenderer { Name = "PortalRenderer" };
+            _portalRenderer = new VortexArena.Game.Client.PortalRenderer { Name = "PortalRenderer" };
             AddChild(_portalRenderer);
             _portalRenderer.Setup(_mapRoot, _camera);
 
-            _portalDiscRenderer = new XonoticGodot.Game.Client.PortalDiscRenderer { Name = "PortalDiscRenderer" };
+            _portalDiscRenderer = new VortexArena.Game.Client.PortalDiscRenderer { Name = "PortalDiscRenderer" };
             AddChild(_portalDiscRenderer);
             _portalDiscRenderer.Setup(_camera, (path, skin) => _assets?.LoadModel(path, skin));
         }

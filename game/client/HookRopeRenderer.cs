@@ -21,13 +21,13 @@
 
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>The grappling-hook rope renderer (the Draw_GrapplingHook successor). Hosted by
 /// <see cref="ClientWorld"/>; self-driving ambient-facade scanner — draws a team-coloured line from each live

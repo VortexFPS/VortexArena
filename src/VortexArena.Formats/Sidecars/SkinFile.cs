@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Sidecars;
+namespace VortexArena.Formats.Sidecars;
 
 /// <summary>
 /// A parsed <c>.skin</c> sidecar (e.g. <c>player.iqm_0.skin</c>, <c>player.iqm_1.skin</c>). Alias/skeletal

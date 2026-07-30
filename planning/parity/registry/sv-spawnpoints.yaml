@@ -16,8 +16,8 @@ features:
     base_refs:
       - "server/spawnpoints.qc:SelectSpawnPoint"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:SelectSpawnPoint"
-      - "src/XonoticGodot.Server/ClientManager.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:SelectSpawnPoint"
+      - "src/VortexArena.Server/ClientManager.cs:Spawn"
     constants:
       - { name: "g_spawn_furthest", base: "0.5", port: "0.5", match: true }
       - { name: "near_pick (lower,upper,exponent)", base: "1,1,1", port: "1,1,1", match: true }
@@ -49,7 +49,7 @@ features:
     base_refs:
       - "server/spawnpoints.qc:Spawn_Score"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ScoreSpot"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ScoreSpot"
     constants:
       - { name: "SPAWN_PRIO_GOOD_DISTANCE", base: "10", port: "10 (PrioGoodDistance)", match: true }
       - { name: "mindist threshold", base: "100", port: "100 (SpawnMinDist)", match: true }
@@ -77,7 +77,7 @@ features:
       - "server/spawnpoints.qc:Spawn_WeightedPoint"
       - "lib/random.qc:RandomSelection_AddEnt"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:WeightedPick"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:WeightedPick"
     constants:
       - { name: "weight", base: "bound(lower,score.y,upper) ** exponent * spot.cnt", port: "pow(bound(lower,weight,upper), exponent) * cnt (cnt defaulted to 1 if 0)", match: true }
       - { name: "priority", base: "(score.y >= lower)*0.5 + score.x", port: "(weight >= lower ? 0.5 : 0) + prio", match: true }
@@ -103,9 +103,9 @@ features:
       - "server/spawnpoints.qc:SelectSpawnPoint (teamcheck ladder)"
       - "server/spawnpoints.qc:relocate_spawnpoint (have_team_spawns detection)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeTeamCheck"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:DetectTeamSpawns"
-      - "src/XonoticGodot.Server/ClientManager.cs (RequestTeamSpawns)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeTeamCheck"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:DetectTeamSpawns"
+      - "src/VortexArena.Server/ClientManager.cs (RequestTeamSpawns)"
     constants:
       - { name: "have_team_spawns tri-state", base: "0 none / -1 requested-none / 1 found", port: "same (HaveTeamSpawns)", match: true }
       - { name: "team colors NUM_TEAM_1..4", base: "4/5/6/7 (red/blue/yellow/pink)", port: "Teams.Red/Blue/Yellow/Pink", match: true }
@@ -130,8 +130,8 @@ features:
     base_refs:
       - "server/spawnpoints.qc:Spawn_Score (filters)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ScoreSpot (filters)"
-      - "src/XonoticGodot.Common/Gameplay/Player/EntitySpawnPointState.cs"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ScoreSpot (filters)"
+      - "src/VortexArena.Common/Gameplay/Player/EntitySpawnPointState.cs"
     constants:
       - { name: "restriction 1 / 2", base: "1=bots-only (real clients rejected), 2=real-clients-only (bots rejected)", port: "SpawnRestriction 1/2 (same)", match: true }
       - { name: "active gate", base: "active != ACTIVE_ACTIVE && targetcheck => reject", port: "SpawnActive != ActiveActive && targetCheck => reject", match: true }
@@ -158,12 +158,12 @@ features:
       - "common/gametypes/gametype/assault/sv_assault.qc:target_objective_spawn_evalfunc (line 28, installed :311)"
       - "server/race.qc:trigger_race_checkpoint_spawn_evalfunc (race.qc:1055-1083; race_spawns counter race.qc:1241)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:163 (SpotEvalReject field — assault veto)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:175 (RaceSpawnsActive — race_spawns target requirement)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:187 (SpotEvalScore field — race +50 additive bias)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:499/506/558-559 (ScoreSpot consults all three on targetCheck)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs:608/646 (Assault wires/clears SpotEvalReject)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:499/507-508/519-543 (Race wires RaceSpawnsActive + SpotEvalScore; const 50; RaceSpotEvalScore; cleared in Deactivate :593-595)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:163 (SpotEvalReject field — assault veto)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:175 (RaceSpawnsActive — race_spawns target requirement)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:187 (SpotEvalScore field — race +50 additive bias)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:499/506/558-559 (ScoreSpot consults all three on targetCheck)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs:608/646 (Assault wires/clears SpotEvalReject)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:499/507-508/519-543 (Race wires RaceSpawnsActive + SpotEvalScore; const 50; RaceSpotEvalScore; cleared in Deactivate :593-595)"
     constants:
       - { name: "SPAWN_PRIO_RACE_PREVIOUS_SPAWN", base: "50", port: "50 (Race.SpawnPrioRacePreviousSpawn, Race.cs:543)", match: true }
       - { name: "ASSAULT_VALUE_INACTIVE reject gate", base: "hlth < 0 || hlth >= ASSAULT_VALUE_INACTIVE => reject", port: "o.Health < 0 || o.Health >= ObjectiveInactive (Assault.cs)", match: true }
@@ -193,11 +193,11 @@ features:
       - "common/mapobjects/target/spawnpoint.qh"
       - "server/client.qc:735 (PutPlayerInServer: spawnpoint_targ = NULL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:392 (SelectSpawnPoint reads SpawnPointTarg, short-circuits)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:739 (PutPlayerInServer clears SpawnPointTarg)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:SpawnPointUse (sets SpawnPointTarg)"
-      - "src/XonoticGodot.Server/ClientManager.cs + GameWorld.cs (OnPreSpawn -> Race.ApplyRespawnSpot drives SpawnPointTarg)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/EntityMapObjectStateExtra.cs (SpawnPointTarg field)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:392 (SelectSpawnPoint reads SpawnPointTarg, short-circuits)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:739 (PutPlayerInServer clears SpawnPointTarg)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:SpawnPointUse (sets SpawnPointTarg)"
+      - "src/VortexArena.Server/ClientManager.cs + GameWorld.cs (OnPreSpawn -> Race.ApplyRespawnSpot drives SpawnPointTarg)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/EntityMapObjectStateExtra.cs (SpawnPointTarg field)"
     constants: []
     status:
       logic: faithful
@@ -223,8 +223,8 @@ features:
     base_refs:
       - "server/spawnpoints.qc:relocate_spawnpoint (move_out_of_solid branch, lines 117-148)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:RelocateSpawnOutOfSolid"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:524-534 (ScoreSpot calls it on trace_startsolid)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:RelocateSpawnOutOfSolid"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:524-534 (ScoreSpot calls it on trace_startsolid)"
     constants:
       - { name: "g_spawnpoints_auto_move_out_of_solid", base: "1 (on)", port: "1 (CvarBool default true)", match: true }
       - { name: "relocation search direction", base: "move_out_of_solid (omni-directional generic helper)", port: "straight-up step (rest-in-floor approximation)", match: false }
@@ -251,7 +251,7 @@ features:
     base_refs:
       - "server/client.qc:PutPlayerInServer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:PutPlayerInServer"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:PutPlayerInServer"
     constants:
       - { name: "g_spawnshieldtime", base: "1 s", port: "1 s (DefSpawnShieldTime, honors explicit 0)", match: true }
       - { name: "g_player_damageforcescale", base: "2", port: "2", match: true }
@@ -283,7 +283,7 @@ features:
     base_refs:
       - "server/client.qc:814-822 (PutPlayerInServer: SUB_UseTargets(spot, this, NULL), assault/race target-null hack)"
     port_refs:
-      - "src/XonoticGodot.Server/ClientManager.cs:757-761 (UseTargets on spot, suppressed for Assault/Race/Cts)"
+      - "src/VortexArena.Server/ClientManager.cs:757-761 (UseTargets on spot, suppressed for Assault/Race/Cts)"
     constants:
       - { name: "assault/race target suppression", base: "if(g_assault || g_race) spot.target = string_null (around SUB_UseTargets, restored after)", port: "suppressTarget = GameType is Assault or Race or Cts; null+restore around UseTargets", match: true }
     status:
@@ -308,9 +308,9 @@ features:
       - "server/spawnpoints.qc:SpawnEvent_Send"
       - "client/spawnpoints.qc:ENT_CLIENT_SPAWNEVENT"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:849-853 (EffectEmitter.Emit SPAWN, team-tinted)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:860-861 (SND_SPAWN via SoundSystem.PlayOn, gated on g_spawn_alloweffects bit1)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:1354 (SpawnEventTint)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:849-853 (EffectEmitter.Emit SPAWN, team-tinted)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:860-861 (SND_SPAWN via SoundSystem.PlayOn, gated on g_spawn_alloweffects bit1)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:1354 (SpawnEventTint)"
       - "game/client/EffectSystem.cs (Teleport / SPAWN class)"
     constants:
       - { name: "g_spawn_alloweffects", base: "3 (bit0 particles + bit1 sound)", port: "particle path + bit1-gated SND_SPAWN (SpawnSystem.cs:860)", match: true }
@@ -366,7 +366,7 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs"
     constants:
       - { name: "SPAWN_PRIO_NEAR_TEAMMATE_FOUND", base: "200", port: "200", match: true }
       - { name: "SPAWN_PRIO_NEAR_TEAMMATE_SAMETEAM", base: "100", port: "100", match: true }
@@ -397,7 +397,7 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_unique/sv_spawn_unique.qc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs"
     constants:
       - { name: "repeat-spot priority", base: "0.1 (extremely low, still selectable)", port: "0.1", match: true }
       - { name: "g_spawn_unique (enable)", base: "0", port: "0", match: true }
@@ -425,12 +425,12 @@ features:
       - "server/spawnpoints.qc:spawnpoint_think"
       - "server/spawnpoints.qc:spawnpoint_use / spawnpoint_setactive / spawnpoint_reset"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:637-638 (GatherSpawnPoints installs e.Use ??= SpawnPointUse, e.SetActive ??= SpawnPointSetActive)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:652-660 (SpawnPointUse: team-retag + SomeSpawnHasBeenUsed=true)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:670-680 (SpawnPointSetActive: ACTIVE_TOGGLE/set + latch)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:468 (MapMover.UseTargets fires t.Use(t,actor) on any targetname match — reaches SpawnPointUse)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:417-418 (relay_(de)activate fires trg.SetActive — reaches SpawnPointSetActive)"
-      - "src/XonoticGodot.Server/GameWorld.cs:3857 (SomeSpawnHasBeenUsed reader: the g_spawn_useallspawns count gate in WinningCondition_RanOutOfSpawns)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:637-638 (GatherSpawnPoints installs e.Use ??= SpawnPointUse, e.SetActive ??= SpawnPointSetActive)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:652-660 (SpawnPointUse: team-retag + SomeSpawnHasBeenUsed=true)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:670-680 (SpawnPointSetActive: ACTIVE_TOGGLE/set + latch)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:468 (MapMover.UseTargets fires t.Use(t,actor) on any targetname match — reaches SpawnPointUse)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:417-418 (relay_(de)activate fires trg.SetActive — reaches SpawnPointSetActive)"
+      - "src/VortexArena.Server/GameWorld.cs:3857 (SomeSpawnHasBeenUsed reader: the g_spawn_useallspawns count gate in WinningCondition_RanOutOfSpawns)"
     constants:
       - { name: "spawnpoint_think interval", base: "0.1 s (resend on move)", port: "none", match: false }
       - { name: "link nextthink jitter", base: "time + 0.5 + random()*2", port: "none", match: false }

@@ -11,7 +11,7 @@ This is a one-time/occasional validation, not part of CI (the committed JSON fix
 Re-run it whenever `movement_ref.c`'s `stock()` table or the upstream `physicsX.cfg` changes.
 
 > Scope note (Wave A2, T30): the high-value, fully-achievable deliverable was
-> `TraceResult.DpHitTextureName` (see `XonoticGodot.Engine/Collision/*` + `tests/.../BspCollisionTests.cs`).
+> `TraceResult.DpHitTextureName` (see `VortexArena.Engine/Collision/*` + `tests/.../BspCollisionTests.cs`).
 > For the golden-trace loop, the faithful increment is (1) this live-engine **config/cvar** cross-check
 > (done below — it found two benign discrepancies and proved them harmless) plus (2) a precise written
 > plan for a DP-**captured** smoke scenario. A full DP-capture pipeline is **not** committed: see
@@ -294,7 +294,7 @@ MSYS_NO_PATHCONV=1 wsl --exec bash -lc \
 # then run dedicated with the launch flags above, capturing the dumper's JSON file.
 ```
 
-**Step 4 — commit + assert.** Save as `tests/XonoticGodot.Tests/golden/dp_free_fall.json` and add a
+**Step 4 — commit + assert.** Save as `tests/VortexArena.Tests/golden/dp_free_fall.json` and add a
 `MovementParityTests` theory entry that replays it through `PlayerPhysics` with a **looser**
 DP-network/impactnudge-aware tolerance (e.g. PosTol ~1.0 qu, VelTol ~2.0 qu/s — document why: DP's
 double-precision collision + `collision_impactnudge` 0.03125 vs the analytic `TRACE_DIST_EPSILON`

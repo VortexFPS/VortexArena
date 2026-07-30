@@ -22,9 +22,9 @@ features:
       - "common/gametypes/gametype/race/sv_race.qc:race_Initialize"
       - "common/gametypes/gametype/race/race.qh:Race INIT"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:Activate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:RaceTeams"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:LapLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RaceTeams"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:LapLimit"
     constants:
       - { name: "g_race_laps_limit (default)", base: "-1 (use mapinfo); 0 = unlimited", port: "7 (DefaultLapLimit fallback)", match: false }
       - { name: "g_race_teams (default)", base: "0", port: "0; clamp 2..4 when set", match: true }
@@ -53,7 +53,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/race/sv_race.qc:race_ScoreRules"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:DeclareScoreRules"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:DeclareScoreRules"
     constants:
       - { name: "SP_RACE_FASTEST flags", base: "PRIMARY|LOWER|TIME (qualifying)", port: "LowerIsBetter|Time", match: true }
       - { name: "SP_RACE_LAPS / SP_RACE_TIME flags", base: "LAPS PRIMARY; TIME SECONDARY|LOWER|TIME", port: "LAPS primary; TIME secondary lower time", match: true }
@@ -80,9 +80,9 @@ features:
       - "server/race.qc:spawnfunc(trigger_race_checkpoint)"
       - "server/race.qc:checkpoint_touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:SpawnCheckpoint"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RaceCheckpoint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SpawnCheckpoint"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RaceCheckpoint"
     constants:
       - { name: "finish line index", base: "race_timed_checkpoint (cp 0 closed-loop; highest CP via spawnflags & 8)", port: "TimedCheckpoint = 0 default, follows highest CP when spawnflag 8 set; armed from e.SpawnFlags & 8 (GameWorld.cs:3042)", match: true }
     status:
@@ -108,8 +108,8 @@ features:
       - "server/race.qc:checkpoint_passed"
       - "server/race.qc:race_NextCheckpoint"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:CheckpointTouch"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:CrossCheckpoint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CheckpointTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CrossCheckpoint"
     constants:
       - { name: "wrong-CP kill damage (spawnflag 4)", base: "10000 (DEATH_HURTTRIGGER)", port: "10000 (DeathTypes.Void)", match: false }
     status:
@@ -135,7 +135,7 @@ features:
     base_refs:
       - "server/race.qc:race_SendTime"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:CrossCheckpoint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CrossCheckpoint"
     constants:
       - { name: "TIME_FACTOR", base: "100 (hundredths)", port: "TimeEncode hundredths", match: true }
       - { name: "lap-time source", base: ".race_movetime frame accumulator (frac+count)", port: "RaceMoveTime accumulator on live path (wall-clock fallback for harness-only paths)", match: true }
@@ -164,9 +164,9 @@ features:
       - "server/race.qc:race_writeTime"
       - "server/race.qc:race_setTime"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs:SetTime"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs:WriteTime"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs:ReadPos"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:SetTime"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:WriteTime"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:ReadPos"
     constants:
       - { name: "RANKINGS_CNT", base: "99", port: "99", match: true }
       - { name: "record key scheme", base: "strcat(map, record_type, field, pos)", port: "map+type+field+pos", match: true }
@@ -195,13 +195,13 @@ features:
       - "common/gametypes/gametype/race/sv_race.qc:PlayerDies"
       - "server/race.qc:race_AbandonRaceCheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:RecordFinishTime"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:SendRecordNotification"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:FinishRacer"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:AbandonRaceCheck"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:RACE_FINISHED"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:RACE_ABANDONED"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:RACE_NEW_MISSING_NAME"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RecordFinishTime"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SendRecordNotification"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:FinishRacer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:AbandonRaceCheck"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:RACE_FINISHED"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:RACE_ABANDONED"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:RACE_NEW_MISSING_NAME"
     constants:
       - { name: "INFO_RACE_NEW_* / FAIL_* / MISSING_UID / MISSING_NAME arg counts", base: "decl in notifications all.inc (RACE_NEW_MISSING_NAME = 1 string, 1 float, all.inc:451)", port: "all 9 calls match declared (stringCount,floatCount); RACE_NEW_MISSING_NAME = (1,1)", match: true }
     status:
@@ -228,9 +228,9 @@ features:
       - "server/race.qc:race_ImposePenaltyTime"
       - "common/gametypes/gametype/race/sv_race.qc:PlayerPhysics"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:SpawnPenaltyZone"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:SetPenalty"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SpawnPenaltyZone"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SetPenalty"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:Tick"
     constants:
       - { name: "default penalty seconds", base: "5", port: "5", match: true }
     status:
@@ -260,11 +260,11 @@ features:
       - "server/race.qc:race_StartCompleting"
       - "server/race.qc:race_AbandonRaceCheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:CheckWinningCondition"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:FinishRacer"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:StartCompleting"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:AbandonRaceCheck"
-      - "src/XonoticGodot.Server/GameWorld.cs:3421 (case Race: race.Tick(); race.CheckWinningCondition(); race.SpeedAwardFrame(...))"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CheckWinningCondition"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:FinishRacer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:StartCompleting"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:AbandonRaceCheck"
+      - "src/VortexArena.Server/GameWorld.cs:3421 (case Race: race.Tick(); race.CheckWinningCondition(); race.SpeedAwardFrame(...))"
     constants: []
     status:
       logic: faithful
@@ -290,8 +290,8 @@ features:
       - "common/gametypes/gametype/race/sv_race.qc:rc_SetLimits"
       - "server/race.qc:race_SendTime"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:RaceTeams"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:CrossCheckpoint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RaceTeams"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CrossCheckpoint"
     constants:
       - { name: "team count clamp", base: "bound(2,n,4)", port: "Clamp(n,2,4)", match: true }
     status:
@@ -316,9 +316,9 @@ features:
       - "common/gametypes/gametype/race/sv_race.qc:rc_SetLimits"
       - "server/race.qc:race_RetractPlayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:Qualifying"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:RetractPlayer"
-      - "src/XonoticGodot.Server/GameWorld.cs:2945-2978 (race.Activate + OnFinishRetract = Clients.Spawn)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:Qualifying"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RetractPlayer"
+      - "src/VortexArena.Server/GameWorld.cs:2945-2978 (race.Activate + OnFinishRetract = Clients.Spawn)"
     constants: []
     status:
       logic: partial
@@ -345,8 +345,8 @@ features:
       - "common/gametypes/gametype/race/sv_race.qc:reset_map_global"
       - "common/gametypes/gametype/race/sv_race.qc:rc_SetLimits"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:TransitionQualifyingToRace"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:SaveRaceLimits"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:TransitionQualifyingToRace"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SaveRaceLimits"
     constants: []
     status:
       logic: faithful
@@ -371,11 +371,11 @@ features:
       - "server/race.qc:spawnfunc(info_player_race)"
       - "server/race.qc:race_RetractPlayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:ApplyRespawnSpot"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:OnDeath (respawn-checkpoint resume)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:CheckpointTouch (RespawnSpot/RespawnCheckpoint update)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2953 (Clients.OnPreSpawn = p => race.ApplyRespawnSpot(p))"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:332 (consumes Player.SpawnPointTarg)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:ApplyRespawnSpot"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:OnDeath (respawn-checkpoint resume)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CheckpointTouch (RespawnSpot/RespawnCheckpoint update)"
+      - "src/VortexArena.Server/GameWorld.cs:2953 (Clients.OnPreSpawn = p => race.ApplyRespawnSpot(p))"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:332 (consumes Player.SpawnPointTarg)"
     constants: []
     status:
       logic: partial
@@ -401,9 +401,9 @@ features:
       - "common/gametypes/gametype/race/sv_race.qc:PlayerPhysics"
       - "common/gametypes/gametype/race/sv_race.qc:FixClientCvars"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:OnPlayerPhysics"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:Activate (MutatorHooks.PlayerPhysics.Add, Race.cs:491-492)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:RaceState.MoveTimeFrac/MoveTimeCount/RaceMoveTime"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:OnPlayerPhysics"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:Activate (MutatorHooks.PlayerPhysics.Add, Race.cs:491-492)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RaceState.MoveTimeFrac/MoveTimeCount/RaceMoveTime"
     constants:
       - { name: "M_SQRT1_2 diagonal snap", base: "0.70710678 (45 deg octant)", port: "0.70710678118654752440 (Race.cs:1023)", match: true }
       - { name: "off-axis snap guard", base: "x!=0 && y!=0 && x!=y", port: "ax!=0 && ay!=0 && ax!=ay (Race.cs:1004)", match: true }
@@ -493,8 +493,8 @@ features:
       - "common/gametypes/gametype/race/sv_race.qc:havocbot_role_race"
       - "common/gametypes/gametype/race/sv_race.qc:MUTATOR_HOOKFUNCTION(rc, HavocBot_ChooseRole)"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleRace"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:103 (ChooseRole \"rc\"/\"race\" => RoleRace)"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleRace"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:103 (ChooseRole \"rc\"/\"race\" => RoleRace)"
     constants:
       - { name: "checkpoint routerating", base: "navigation_routerating(this, it, 1000000, 5000)", port: "rater.Rate(..., RatingRaceCheckpoint=1000000f, 5000f) (BotObjectiveRoles.cs:33/894)", match: true }
       - { name: "checkpoint match key", base: "it.cnt == cp || cp == -1", port: "cp == -1 || it.GtCheckpointIndex == cp (BotObjectiveRoles.cs:892)", match: true }
@@ -523,7 +523,7 @@ features:
       - "server/race.qc:getrankings"
     port_refs:
       - "game/net/ServerNet.cs:2207-2233 (snapshot RaceRecords top-N → _scoreRankings; displayCnt = g_cts_send_rankings_cnt)"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs (Serialize/Deserialize rankings block)"
+      - "src/VortexArena.Net/ScoreboardBlock.cs (Serialize/Deserialize rankings block)"
       - "game/net/NetGame.cs (_scoreboard.SetRankings(sb.Rankings))"
       - "game/hud/ScoreboardPanel.cs:SetRankings / DrawRankings"
       - "game/hud/ModIconsPanel.cs:DrawRace (ModIconsMode.Race; RaceModIconPb/ServerRecord/Status + 5 s medal fade)"
@@ -556,11 +556,11 @@ features:
       - "server/race.qc:race_SpeedAwardFrame"
       - "server/race.qc:race_send_speedaward / race_send_speedaward_alltimebest"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:SpeedAwardFrame"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs:ReadSpeedAwardBest / WriteSpeedAwardBest"
-      - "src/XonoticGodot.Server/GameWorld.cs:3421 (race.SpeedAwardFrame(Clients.Players))"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SpeedAwardFrame"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:ReadSpeedAwardBest / WriteSpeedAwardBest"
+      - "src/VortexArena.Server/GameWorld.cs:3421 (race.SpeedAwardFrame(Clients.Players))"
       - "game/net/ServerNet.cs:2303 (snapshot round + all-time speed award into ScoreboardBlock)"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:56 (SpeedAward wire field)"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:56 (SpeedAward wire field)"
       - "game/hud/ScoreboardPanel.cs:DrawSpeedAward"
       - "game/net/NetGame.cs:3725 (RaceCheckpointSpeed) (RaceTimerPanel speed-at-CP readout)"
     constants:

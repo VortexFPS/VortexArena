@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Sandbox mutator — port of <c>common/mutators/mutator/sandbox/sv_sandbox.qc</c>. With
@@ -34,7 +34,7 @@ namespace XonoticGodot.Common.Gameplay;
 /// is taken via the injectable <see cref="ITraceProvider"/> (a host wires it to the real
 /// <c>crosshair_trace_plusvisibletriggers</c>); object→client CSQC networking, the <c>+button8</c> drag system,
 /// and the actual <c>sandbox/</c> file IO are host responsibilities surfaced through small delegates
-/// (<see cref="ObjectStore"/>) so this mutator stays in <c>XonoticGodot.Common</c> and unit-testable.</para>
+/// (<see cref="ObjectStore"/>) so this mutator stays in <c>VortexArena.Common</c> and unit-testable.</para>
 /// </summary>
 [Mutator]
 public sealed class SandboxMutator : MutatorBase

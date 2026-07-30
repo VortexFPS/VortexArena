@@ -16,9 +16,9 @@ features:
       - "common/mutators/mutator/bugrigs/bugrigs.qc:65-82 bugrigs_SetVars"
       - "mutators.cfg:503-517"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:89 SetVars"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:66 IsEnabled"
-      - "assets/data/xonotic-data.pk3dir/mutators.cfg:503-517"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:89 SetVars"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:66 IsEnabled"
+      - "Base/data/xonotic-data.pk3dir/mutators.cfg:503-517"
     constants:
       - { name: "g_bugrigs", base: "0", port: "0", match: true }
       - { name: "g_bugrigs_planar_movement", base: "1", port: "1", match: true }
@@ -57,9 +57,9 @@ features:
       - "common/mutators/base.qh Mutator_Add"
       - "common/mutators/mutator/bugrigs/bugrigs.qc:16 REGISTER_MUTATOR"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:72 Hook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs Apply"
-      - "src/XonoticGodot.Server/GameWorld.cs:614 MutatorActivation.Apply()"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:72 Hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs Apply"
+      - "src/VortexArena.Server/GameWorld.cs:614 MutatorActivation.Apply()"
     constants: []
     status:
       logic: faithful
@@ -82,8 +82,8 @@ features:
       - "common/mutators/mutator/bugrigs/bugrigs.qc:311-324 MUTATOR_HOOKFUNCTION(bugrigs, PM_Physics)"
       - "ecs/systems/physics.qc:108 else-if MUTATOR_CALLHOOK(PM_Physics)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:133 OnPmPhysics"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:364 (else-if CallPmPhysics)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:133 OnPmPhysics"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:364 (else-if CallPmPhysics)"
     constants: []
     status:
       logic: faithful
@@ -107,8 +107,8 @@ features:
     base_refs:
       - "common/mutators/mutator/bugrigs/bugrigs.qc:326-335 MUTATOR_HOOKFUNCTION(bugrigs, PlayerPhysics)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:150 OnPlayerPhysics"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:260 MutatorHooks.PlayerPhysics.Call"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:150 OnPlayerPhysics"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:260 MutatorHooks.PlayerPhysics.Call"
     constants:
       - { name: "disableclientprediction", base: "2", port: "not set (verified inert)", match: false }
     status:
@@ -134,8 +134,8 @@ features:
       - "common/mutators/mutator/bugrigs/bugrigs.qc:104-306 RaceCarPhysics"
       - "common/mutators/mutator/bugrigs/bugrigs.qc:86-102 racecar_angle"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:198 RaceCarPhysics"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:183 RacecarAngle"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:198 RaceCarPhysics"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:183 RacecarAngle"
     constants:
       - { name: "responsiveness f = 1/(1+(|v|/speed_ref)^speed_pow)", base: "speed_ref=400, speed_pow=2", port: "400, 2", match: true }
       - { name: "racecar_angle angle_mult = forward/(800+forward)", base: "800", port: "800", match: true }
@@ -164,8 +164,8 @@ features:
     base_refs:
       - "common/mutators/mutator/bugrigs/bugrigs.qc:339-344 MUTATOR_HOOKFUNCTION(bugrigs, ClientConnect)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:126 OnClientConnect"
-      - "src/XonoticGodot.Server/GameWorld.cs:1336 bugrigsConnect.OnClientConnect(p)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:126 OnClientConnect"
+      - "src/VortexArena.Server/GameWorld.cs:1336 bugrigsConnect.OnClientConnect(p)"
     constants:
       - { name: "chase_active", base: "1 (settemp via stuffcmd on ClientConnect)", port: "1 (Api.Cvars.Set, human-only)", match: true }
     status:
@@ -189,11 +189,11 @@ features:
       - "common/mutators/mutator/bugrigs/bugrigs.qc:346-349 MUTATOR_HOOKFUNCTION(bugrigs, BuildMutatorsString)"
       - "common/mutators/mutator/bugrigs/bugrigs.qc:351-354 MUTATOR_HOOKFUNCTION(bugrigs, BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:111 BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs:114 BuildMutatorsPrettyString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108 BuildMutatorsString chain / :121 BuildMutatorsPrettyString chain"
-      - "src/XonoticGodot.Server/GameWorld.cs:1117 MutatorActivation.BuildMutatorsString (gamelog init)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1392 SendMutatorsWelcome / :1128 modifications serverinfo (BuildMutatorsPrettyString consumers)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:111 BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs:114 BuildMutatorsPrettyString"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108 BuildMutatorsString chain / :121 BuildMutatorsPrettyString chain"
+      - "src/VortexArena.Server/GameWorld.cs:1117 MutatorActivation.BuildMutatorsString (gamelog init)"
+      - "src/VortexArena.Server/GameWorld.cs:1392 SendMutatorsWelcome / :1128 modifications serverinfo (BuildMutatorsPrettyString consumers)"
     constants:
       - { name: "machine token", base: "\":bugrigs\"", port: "\":bugrigs\"", match: true }
       - { name: "pretty token", base: "\", Bug rigs\"", port: "\", Bug rigs\"", match: true }

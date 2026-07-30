@@ -1,7 +1,7 @@
 # Rocket Flying — parity spec
 
 **Base refs:** `common/mutators/mutator/rocketflying/{rocketflying.qc,rocketflying.qh,sv_rocketflying.qc}` · `common/weapons/weapon/devastator.qc` · `common/weapons/weapon/minelayer.qc` · `mutators.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs` · `src/XonoticGodot.Common/Framework/EntityProjectileGate.cs` · `src/XonoticGodot.Common/Gameplay/Weapons/{Devastator.cs,Minelayer.cs}` · `game/menu/dialogs/DialogMutators.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs` · `src/VortexArena.Common/Framework/EntityProjectileGate.cs` · `src/VortexArena.Common/Gameplay/Weapons/{Devastator.cs,Minelayer.cs}` · `game/menu/dialogs/DialogMutators.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -113,7 +113,7 @@ with Instagib (menu dependency).
   than an intended divergence, because the underlying remote-jump system is simply absent.
 
 ## Verification
-- EditProjectile gate behavior: unit tests `tests/XonoticGodot.Tests/RocketFlyingGateTests.cs` (gate
+- EditProjectile gate behavior: unit tests `tests/VortexArena.Tests/RocketFlyingGateTests.cs` (gate
   cleared to `time` for rocket/mine, untouched for other classnames, inert when `g_rocket_flying` unset
   or `disabledelays` off, default `-1` proximity branch) and `MutatorBatchT19Tests.cs`.
 - Liveness of registration → hook → weapon callsite: traced statically (source-gen registry →

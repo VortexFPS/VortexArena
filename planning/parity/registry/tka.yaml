@@ -16,7 +16,7 @@ last_audited: "2026-06-28"
 #     ported (TeamKeepaway.cs:524 `e.Alpha = 1f`), so a ball dropped by an invisible carrier returns to full
 #     opacity. Presentation stays PARTIAL: nudgeoutofsolid_OrFallback + DropSpecialItems edge still unported.
 #   0 dimension-flips to faithful, 0 liveness changes, 0 regressions, 0 newly-unmapped Base features. Common
-#   build green (dotnet build XonoticGodot.Common, 0 warn/0 err). All other 16 rows re-confirmed unchanged vs the
+#   build green (dotnet build VortexArena.Common, 0 warn/0 err). All other 16 rows re-confirmed unchanged vs the
 #   7th-pass baseline. NOTE: this edit is uncommitted in the working tree at audit time.
 # 2026-06-27 (7th pass, post-Wave-16/17 drift re-verify): ONE fix on the 18 rows. tka.waypoints.tracking —
 #   the carrier-waypoint IS_INVISIBLE(owner) hide is now PORTED. Wave 16/17 added (git b3a9c06~1..2f0bfdb,
@@ -126,9 +126,9 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_SpawnBalls"
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_Handler_CheckBall"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:SpawnBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:SpawnForGametype"
-      - "src/XonoticGodot.Server/GameWorld.cs:775"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:SpawnBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:SpawnForGametype"
+      - "src/VortexArena.Server/GameWorld.cs:775"
     constants:
       - { name: "g_tkaball_count", base: "1", port: "1 (single ball; multi-ball loop not modeled)", match: true }
       - { name: "ball_bbox", base: "-24 -24 -24 .. 24 24 24", port: "-24 -24 -24 .. 24 24 24 (BallKind.KeepawayBall)", match: true }
@@ -162,9 +162,9 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_RespawnBall"
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_TouchEvent (NOIMPACT off-map branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:RespawnBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:Relocate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:RandomMapLocation"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:RespawnBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:Relocate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:RandomMapLocation"
     constants:
       - { name: "respawntime_cvar", base: "g_tkaball_respawntime (10)", port: "g_tkaball_respawntime (correct cvar), fallback 10", match: true }
       - { name: "respawn_velocity", base: "0 0 200", port: "0 0 200 (RespawnVelocity)", match: true }
@@ -193,9 +193,9 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_TouchEvent"
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_BallThink_Carried"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:GiveBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:BallTouchEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:AttachToCarrier"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:GiveBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:BallTouchEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:AttachToCarrier"
     constants:
       - { name: "carried_scale", base: "12/16 = 0.75", port: "none (entity scale not set while carried)", match: false }
       - { name: "self_recapture_lockout_wait", base: "0.5", port: "0.5 (BallEntity.SelfRecaptureLockout)", match: true }
@@ -230,11 +230,11 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_PlayerReset"
       - "common/gametypes/gametype/tka/sv_tka.qc:PlayerUseKey / ClientDisconnect / MakePlayerObserver / DropSpecialItems"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:DropBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnUseKey"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnPlayerRemoved"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:DropFromCarrier"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:DropBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnUseKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnPlayerRemoved"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:DropFromCarrier"
     constants:
       - { name: "drop_offset_z", base: "10", port: "10 (DropFromCarrier dropOrigin + '0 0 10')", match: true }
       - { name: "drop_velocity", base: "0 0 200 + crandom xy scatter ('0 100 0'*crandom + '100 0 0'*crandom)", port: "0 0 200 + Prandom.Signed xy scatter (DropOffsetVelocity)", match: true }
@@ -266,8 +266,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tka/sv_tka.qc:PlayerDies (GameRules_scoring_add_team SCORE, g_tka_score_killac)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:AddTeamScore"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:AddTeamScore"
     constants:
       - { name: "score_killac_cvar", base: "g_tka_score_killac (default 1)", port: "g_tka_score_killac (correct cvar), fallback 1", match: true }
     status:
@@ -295,9 +295,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/tka/sv_tka.qc:PlayerDies (team_has_ball scan + g_tka_score_team)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:TeamHasBall"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:ScoreTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:TeamHasBall"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:ScoreTeam"
     constants:
       - { name: "g_tka_score_team", base: "1", port: "g_tka_score_team (correct cvar), fallback true", match: true }
     status:
@@ -324,7 +324,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/tka/sv_tka.qc:PlayerDies (TKA_CARRIERKILLS, g_tka_score_bckill)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDeath"
     constants:
       - { name: "score_bckill_cvar", base: "g_tka_score_bckill (default 1)", port: "g_tka_score_bckill (correct cvar), fallback 1", match: true }
     status:
@@ -353,8 +353,8 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_BallThink_Carried (TKA_BCTIME)"
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_Initialize (GameRules_scoring fields)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:Activate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:Tick"
     constants:
       - { name: "bctime_sort_prio", base: "SFL_SORT_PRIO_SECONDARY", port: "SetSortKeys(Score, TKA_BCTIME)", match: true }
     status:
@@ -379,8 +379,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_BallThink_Carried (GameRules_scoring_add_team_float2int SCORE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:Tick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:ScoreTimePoints"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:ScoreTimePoints"
     constants:
       - { name: "g_tka_score_timepoints", base: "0 (off by default)", port: "g_tka_score_timepoints (correct cvar), fallback 0", match: true }
     status:
@@ -407,8 +407,8 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:GiveFragsForKill"
       - "common/gametypes/gametype/tka/sv_tka.qc:reset_map_global"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnGiveFragsForKill"
-      - "src/XonoticGodot.Server/Scores.cs"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnGiveFragsForKill"
+      - "src/VortexArena.Server/Scores.cs"
     constants:
       - { name: "frag_delta", base: "0 (GiveFragsForKill sets M_ARGV(2)=0)", port: "0 (OnGiveFragsForKill sets FragScore=0, returns true)", match: true }
     status:
@@ -434,10 +434,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/tka/sv_tka.qc:Damage_Calculate"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:DamageScale"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:DamageForceScale"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:264"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:DamageScale"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:DamageForceScale"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:264"
     constants:
       - { name: "ballcarrier_damage_cvar", base: "g_tka_ballcarrier_damage (vector 1 1 1)", port: "g_tka_ballcarrier_damage parsed as a vector, fallback 1", match: true }
       - { name: "ballcarrier_force", base: "g_tka_ballcarrier_force (vector 1 1 1)", port: "g_tka_ballcarrier_force (DamageForceScale getter), fallback 1", match: true }
@@ -467,9 +467,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/tka/sv_tka.qc:PlayerPhysics_UpdateStats"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnPlayerPhysics"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:BallCarrierHighspeed"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:261"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:OnPlayerPhysics"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:BallCarrierHighspeed"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:261"
     constants:
       - { name: "g_tka_ballcarrier_highspeed", base: "1", port: "g_tka_ballcarrier_highspeed (correct cvar), fallback 1", match: true }
     status:
@@ -497,9 +497,9 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qh:GameRules_limit_score / GameRules_limit_lead"
       - "common/gametypes/gametype/tka/tka.qh:gametype_init pointlimit=50 leadlimit=0"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:CheckPointLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:3397"
-      - "src/XonoticGodot.Server/GameWorld.cs:4215"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:CheckPointLimit"
+      - "src/VortexArena.Server/GameWorld.cs:3397"
+      - "src/VortexArena.Server/GameWorld.cs:4215"
     constants:
       - { name: "pointlimit_default", base: "50 (mapinfo; g_tka_point_limit=-1->mapinfo)", port: "50 (DefaultPointLimit)", match: true }
       - { name: "leadlimit_default", base: "0 (g_tka_point_leadlimit -> mapinfo 0)", port: "0 (LeadLimit; modeled in CheckPointLimit)", match: true }
@@ -530,9 +530,9 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_Initialize (tka_teams clamp 2..4)"
       - "common/gametypes/gametype/tka/tka.qh:gametype_init GAMETYPE_FLAG_TEAMPLAY teams=2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:TeamCount"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:RequestsTeamSpawns"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:ReportsTie"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:TeamCount"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:RequestsTeamSpawns"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:ReportsTie"
     constants:
       - { name: "teamplay", base: "true (GAMETYPE_FLAG_TEAMPLAY)", port: "TeamGame=true", match: true }
       - { name: "teams_default", base: "2 (clamp 2..4; g_tka_teams_override>=2 else g_tka_teams)", port: "2 (clamp 2..4; same override logic)", match: true }
@@ -561,8 +561,8 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:PlayerPreThink (STAT(TKA_BALLSTATUS) bits)"
       - "common/gametypes/gametype/tka/sv_tka.qc:SpectateCopy"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:BallStatusFor"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:124"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:BallStatusFor"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:124"
       - "game/net/NetGame.cs:3772"
       - "game/hud/ModIconsPanel.cs:DrawTeamKeepaway"
     constants:
@@ -598,8 +598,8 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_TouchEvent (WP_TkaBallCarrier{Red,Blue,Yellow,Pink})"
       - "common/gametypes/gametype/tka/sv_tka.qc:tka_RespawnBall / tka_DropEvent (WP_KaBall)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:CollectWaypoints"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:WaypointRegistry"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:WaypointRegistry"
       - "game/net/ServerNet.cs:1107"
       - "game/client/WaypointSpriteLayer.cs"
     constants:
@@ -639,11 +639,11 @@ features:
       - "common/gametypes/gametype/tka/sv_tka.qc:havocbot_goalrating_tkaball"
       - "common/gametypes/gametype/tka/sv_tka.qc:Bot_ForbidAttack"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleKeepaway"
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:FindBall"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:99"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:ForbidBotAttack"
-      - "src/XonoticGodot.Server/GameWorld.cs:2881"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleKeepaway"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:FindBall"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:99"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:ForbidBotAttack"
+      - "src/VortexArena.Server/GameWorld.cs:2881"
     constants:
       - { name: "ball_goalrating_scale", base: "8000 (enemy) / 4000 (sameteam) ratingscale, distance 2000", port: "RatingBall 8000 / RatingBallSameTeam 4000, distance 2000 (TeamGame-gated sameteam split)", match: true }
       - { name: "ball_class", base: "new(keepawayball) -> classname keepawayball", port: "FindBall queries 'keepawayball' (matches BallEntity.cs:105)", match: true }
@@ -676,7 +676,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/tka/sv_tka.qc:MUTATOR_HOOKFUNCTION(tka, PreferPlayerScore_Clear)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ClearPlayerOnJoin"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ClearPlayerOnJoin"
     constants:
       - { name: "prefer_clear_return", base: "true (TKA always prefers to KEEP player score, so with g_score_resetonjoin -1 the score is NOT wiped on rejoin)", port: "true (OnPreferPlayerScoreClear returns true, subscribed to MutatorHooks.PreferPlayerScore_Clear in Activate)", match: true }
     status:

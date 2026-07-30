@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Radar" panel config dialog — a faithful C# port of <c>XonoticHUDRadarDialog_fill</c>
@@ -13,7 +13,7 @@ namespace XonoticGodot.Game.Menu;
 /// i.e. they grey out when the radar is fully transparent.
 ///
 /// FAITHFUL UI NOW: every binding writes the real shared <c>hud_panel_radar*</c> cvars the in-game radar
-/// reads. XonoticGodot has no live HUD editor/preview yet, so nothing previews here; the controls just edit cvars.
+/// reads. VortexArena has no live HUD editor/preview yet, so nothing previews here; the controls just edit cvars.
 /// </summary>
 public partial class DialogHudPanelRadar : MenuScreen
 {

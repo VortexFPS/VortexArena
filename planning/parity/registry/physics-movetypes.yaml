@@ -19,8 +19,8 @@ features:
       - "common/physics/movetypes/movetypes.qc:Movetype_Physics_NoMatchTicrate"
       - "server/world.qc:Physics_Frame"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:RunEntity"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:Tick"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:RunEntity"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:Tick"
     constants:
       - { name: "tickrate (PHYS_INPUT_TIMELENGTH)", base: "1/sys_frametime = 1/72 s", port: "TicRate (1/72)", match: true }
       - { name: "delayprojectiles (spawn-frame move skip)", base: "newly-spawned ents move next frame (sv_gameplayfix_delayprojectiles 0 default)", port: "SimulationLoop.Tick snapshots count before integrate loop (SimulationLoop.cs:236)", match: true }
@@ -45,7 +45,7 @@ features:
     base_refs:
       - "common/physics/movetypes/movetypes.qc:_Movetype_FlyMove"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:Run"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:Run"
     constants:
       - { name: "MAX_CLIP_PLANES", base: "5", port: "5 (FlyMove.cs:540)", match: true }
       - { name: "floor normal.z threshold", base: "0.7", port: "0.7 (FlyMove.FloorNormalZ:541)", match: true }
@@ -76,7 +76,7 @@ features:
     base_refs:
       - "common/physics/movetypes/movetypes.qc:_Movetype_ClipVelocity"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/ClipVelocity.cs:ClipVelocity"
+      - "src/VortexArena.Engine/Simulation/ClipVelocity.cs:ClipVelocity"
     constants:
       - { name: "STOP_EPSILON", base: "0.1", port: "0.1 (StopEpsilon)", match: true }
       - { name: "overbounce f", base: "1 slide / 1+bouncefactor bounce", port: "overbounce param", match: true }
@@ -101,7 +101,7 @@ features:
     base_refs:
       - "common/physics/movetypes/toss.qc:_Movetype_Physics_Toss"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:PhysicsToss"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:PhysicsToss"
     constants:
       - { name: "upwardvelocityclearsongroundflag", base: "1 (vel.z >= 1/32 clears ONGROUND, toss.qc:7)", port: "vel.z >= 1/32 clears ONGROUND (MoveTypePhysics.cs:111-114)", match: true }
       - { name: "noairborncorpse", base: "1 (Xonotic)", port: "NoAirborneCorpse=true (MoveTypePhysics.cs:102)", match: true }
@@ -131,8 +131,8 @@ features:
     base_refs:
       - "common/physics/movetypes/toss.qc:_Movetype_Physics_Toss"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:PhysicsToss"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/EntityWeaponState.cs:46"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:PhysicsToss"
+      - "src/VortexArena.Common/Gameplay/Weapons/EntityWeaponState.cs:46"
     constants:
       - { name: "bouncefactor (BOUNCE)", base: "(!this.bouncefactor)?0.5:this.bouncefactor (toss.qc:99)", port: "ent.BounceFactor==0 ? 0.5 : ent.BounceFactor (MoveTypePhysics.cs:202)", match: true }
       - { name: "bouncefactor (BOUNCEMISSILE)", base: "(!this.bouncefactor)?1.0:this.bouncefactor (toss.qc:91)", port: "ent.BounceFactor==0 ? 1.0 : ent.BounceFactor (MoveTypePhysics.cs:193)", match: true }
@@ -167,9 +167,9 @@ features:
     base_refs:
       - "common/physics/movetypes/step.qc:_Movetype_Physics_Step"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:RunEntity"
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:WalkMove"
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:PhysicsStep"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:RunEntity"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:WalkMove"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:PhysicsStep"
     constants:
       - { name: "step->walk alias", base: "_Movetype_Physics_Step => _Movetype_Physics_Walk (step.qc:5, full slide+stair)", port: "STEP routes through WalkMove (RunEntity MoveTypePhysics.cs:59-71)", match: true }
       - { name: "step gravity gate", base: "applygravity for `WALK || STEP` (walk.qc:12)", port: "WalkMove applyGravity == (MoveType.Walk || MoveType.Step) (MoveTypePhysics.cs:372) — STEP included", match: true }
@@ -194,7 +194,7 @@ features:
     base_refs:
       - "common/physics/movetypes/walk.qc:_Movetype_Physics_Walk"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:WalkMove"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:WalkMove"
     constants:
       - { name: "sv_stepheight", base: "31 (physicsX.cfg, the default preset)", port: "31 (MoveTypePhysics.StepHeight:20)", match: true }
       - { name: "sv_jumpstep", base: "1 (xonotic-server.cfg:119)", port: "JumpStep=true (MoveTypePhysics.cs:358)", match: true }
@@ -229,7 +229,7 @@ features:
     base_refs:
       - "common/physics/movetypes/push.qc:_Movetype_Physics_Push"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:PhysicsPusher"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:PhysicsPusher"
     constants:
       - { name: "advance on ltime up to nextthink", base: "movetime = min(dt, nextthink-ltime), clamped >=0", port: "same (FlyMove.cs:282-290)", match: true }
       - { name: "inline think on ltime cross", base: "getthink(this)(this) when nextthink in (oldltime, ltime]", port: "ent.Think?.Invoke inline, same gate (FlyMove.cs:295-299)", match: true }
@@ -254,7 +254,7 @@ features:
     base_refs:
       - "common/physics/movetypes/push.qc:_Movetype_PushMove"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:PushMove"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:PushMove"
     constants:
       - { name: "SOLID_NOT/TRIGGER pusher", base: "translate+rotate, no riders, angle-wrap", port: "same (FlyMove.cs:318-326)", match: true }
       - { name: "skip movetypes", base: "NONE/PUSH/FOLLOW/NOCLIP/FLY_WORLDONLY", port: "same set (FlyMove.cs:362-368)", match: true }
@@ -284,7 +284,7 @@ features:
     base_refs:
       - "common/physics/movetypes/follow.qc:_Movetype_Physics_Follow"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:PhysicsFollow"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:PhysicsFollow"
     constants:
       - { name: "fast path (no relative rot)", base: "origin = aiment.origin + view_ofs when aiment.angles==punchangle", port: "same (FlyMove.cs:489-493)", match: true }
       - { name: "rotated path", base: "rotate view_ofs from (-punchangle.x,y,z) frame into (-aiment.angles.x,y,z) frame", port: "same (FlyMove.cs:496-511, QMath.AngleVectors, -x flips)", match: true }
@@ -340,8 +340,8 @@ features:
       - "common/physics/movetypes/movetypes.qc:_Movetype_CheckWater"
       - "common/physics/movetypes/movetypes.qc:_Movetype_CheckWaterTransition"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:CheckWater"
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:CheckWaterTransition"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:CheckWater"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:CheckWaterTransition"
     constants:
       - { name: "waterlevel probe points", base: "feet (mins.z+1) / waist / eyes (view_ofs) (movetypes.qc:337,355,359)", port: "same 3-point hull probe (MoveTypePhysics.cs:513,528,532)", match: true }
       - { name: "CheckWater return value", base: "waterlevel > 1 (>= SWIMMING) (movetypes.qc:365)", port: "WaterLevel > 1 (MoveTypePhysics.cs:538)", match: true }
@@ -371,9 +371,9 @@ features:
       - "common/physics/movetypes/movetypes.qc:_Movetype_Impact"
       - "common/physics/movetypes/movetypes.qc:_Movetype_NudgeOutOfSolid_PivotIsKnownGood"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:PushEntity"
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:Impact"
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:TryNudgeOutOfSolid"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:PushEntity"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:Impact"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:TryNudgeOutOfSolid"
     constants:
       - { name: "movefilter select", base: "FLYMISSILE->MISSILE, FLY_WORLDONLY->WORLDONLY, trigger/not->NOMONSTERS, else NORMAL (movetypes.qc:654-663)", port: "same (MoveFilterFor FlyMove.cs:179-185)", match: true }
       - { name: "worldstartsolid retry", base: "retry with MOVE_WORLDONLY (movetypes.qc:673-684)", port: "Nudge + retry; abort on world startsolid (FlyMove.cs:138-150)", match: true }

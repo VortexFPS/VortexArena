@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Additional gameplay hook chains used by the ported mutators — the C# successor to the QuakeC
@@ -133,7 +133,7 @@ public static class MutatorHooks
     /// <summary>
     /// EV_SV_StartFrame (server/mutators/events.qh) — fired once per server frame from QC <c>StartFrame()</c>
     /// (server/main.qc), after the bot/anticheat frame and before the per-client PostThink pass. The Godot-free
-    /// gameplay layer can't reach the server-core <c>ServerHooks.SvStartFrame</c> (it lives in XonoticGodot.Server,
+    /// gameplay layer can't reach the server-core <c>ServerHooks.SvStartFrame</c> (it lives in VortexArena.Server,
     /// which references Common, not the other way round), so per-frame mutators that live in Common — random_gravity
     /// here — subscribe to THIS chain instead. The server's per-frame loop (<c>GameWorld.StartFrame</c> /
     /// <c>ServerHooks.FireStartFrame</c>) must also pump this chain so the handlers actually tick (see the T19
@@ -652,11 +652,9 @@ public static class MutatorHooks
     /// returns true for a <c>func_assault_destructible</c> victim to ensure audible feedback when shelling walls.
     /// Slot0 the damage victim, slot1 the attacker.
     ///
-    /// NOTE: the port has no live firing site — its hitsound stat (<c>HitsoundDamageDealtTotal</c>,
-    /// DamageSystem.Apply) already accumulates for any non-self target a player attacker hits, so a
-    /// func_assault_destructible already plays the hitsound without this hook. The hook is modeled for
-    /// registry-coverage parity (it would only become load-bearing if the port ever gated the stat on the
-    /// victim type, as Base does).
+    /// Live firing site: DamageSystem.Apply's "count the damage" block — the port now gates hit feedback on
+    /// the victim type exactly like Base (players / monsters / active turrets give feedback; other geometry
+    /// only when a handler on this chain votes yes), so Assault's destructible-wall handler is load-bearing.
     /// </summary>
     public struct PlayHitsoundArgs
     {

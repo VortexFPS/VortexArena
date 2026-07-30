@@ -1,7 +1,7 @@
 # Machinegun Turret — parity spec
 
 **Base refs:** `common/turrets/turret/machinegun.qc` · `machinegun.qh` · `machinegun_weapon.qc` · `machinegun_weapon.qh` · shared engine in `common/turrets/sv_turrets.qc` · `turret.qh` · balance in `turrets.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/MachinegunTurret.cs` · `TurretAI.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretCombat.cs` · `TurretMath.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/MachinegunTurret.cs` · `TurretAI.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretCombat.cs` · `TurretMath.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

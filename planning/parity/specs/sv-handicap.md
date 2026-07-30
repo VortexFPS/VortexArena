@@ -1,7 +1,7 @@
 # sv-handicap — parity spec
 
 **Base refs:** `server/handicap.qc` · `server/handicap.qh` · consumers: `server/player.qc:PlayerDamage`, `server/client.qc:PlayerFrame`, `common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc`, `common/ent_cs.qc:ENTCS_PROP(HANDICAP_LEVEL)`, `client/hud/panel/scoreboard.qc:Scoreboard_GetName`, `common/playerstats.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs` · `src/XonoticGodot.Common/Gameplay/Damage/DamageEntityState.cs` · `src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs` · `src/XonoticGodot.Server/PlayerStats.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs` · `src/VortexArena.Common/Gameplay/Damage/DamageEntityState.cs` · `src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs` · `src/VortexArena.Server/PlayerStats.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -77,7 +77,7 @@ Self-damage is NOT divided by the attacker's give (the `this != attacker` guard)
 - **Voluntary handicap (`cl_handicap*`):** NOT IMPLEMENTED. No cvar read, no replication, no bound(1,…,10), no `cl_handicap` vector compat shim. Entity fields stay at their `1f` default unless the dynamic mutator overwrites them.
 - **`Handicap_Initialize`:** NOT IMPLEMENTED as such; the fields simply default to `1f` at entity construction. Functionally equivalent for the disabled case but there's no explicit per-spawn reset to 1.
 - **`handicap_level`:** NOT IMPLEMENTED. Never computed, no `map_bound_ranges`-based level, not an ENTCS/network property.
-- **Scoreboard `player_handicap` icon:** NOT IMPLEMENTED. `game/hud/ScoreboardPanel.cs` / `src/XonoticGodot.Net/ScoreboardBlock.cs` contain no handicap reference (no extra-icon row at all).
+- **Scoreboard `player_handicap` icon:** NOT IMPLEMENTED. `game/hud/ScoreboardPanel.cs` / `src/VortexArena.Net/ScoreboardBlock.cs` contain no handicap reference (no extra-icon row at all).
 - **Xonstat avg sums:** `PlayerStats.cs` registers the `handicapgiven`/`handicaptaken` event keys but never accumulates `handicap_avg_*_sum` (no `score_frame_dmg * total()` weighting); the values are never populated.
 - **`HANDICAP_DISABLED()` (CTS/Race gate):** NOT IMPLEMENTED in the mutator (`IsEnabled` only checks `g_dynamic_handicap`; comment explicitly treats the gate as absent). Damage-side gate also absent, but moot since the fields default to 1.
 
@@ -100,7 +100,7 @@ Self-damage is NOT divided by the attacker's give (the `this != attacker` guard)
 ## Verification
 - Base behavior: read in full from `server/handicap.qc/.qh`, `server/player.qc:234-250`, `server/client.qc:2863-2874`, `common/ent_cs.qc:180`, `client/hud/panel/scoreboard.qc:1003-1009`, `common/playerstats.qc:264-265`, `common/mutators/.../sv_dynamic_handicap.qc`, `lib/math.qh:377`, `mutators.cfg:527-531`, `xonotic-client.cfg:816-820`.
 - Port: grep across `src/**` + `game/**` for `handicap`; read `DamageSystem.cs` (HandicapTotal + PlayerDamage), `DamageEntityState.cs`, `DynamicHandicapMutator.cs`, `PlayerStats.cs`. Confirmed scoreboard files contain no handicap reference. Confirmed damage path liveness via weapon `ApplyDamage`/`RadiusDamage` callers and `MutatorActivation.Apply`/`MutatorHooks.PlayerSpawn.Call`/`PlayerDies.Call`.
-- Cvar defaults: confirmed `assets/data/xonotic-data.pk3dir/mutators.cfg` matches Base (scale 0.2 etc.); the C# field initializers (Scale=1f) are overwritten by cvar reads in `Hook()`.
+- Cvar defaults: confirmed `Base/data/xonotic-data.pk3dir/mutators.cfg` matches Base (scale 0.2 etc.); the C# field initializers (Scale=1f) are overwritten by cvar reads in `Hook()`.
 - Not runtime-verified: no in-game test of dynamic handicap actually changing damage, and no test confirming the recompute-cadence difference is observable.
 
 ## Open questions

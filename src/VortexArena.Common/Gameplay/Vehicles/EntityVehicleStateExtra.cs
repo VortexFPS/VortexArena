@@ -12,9 +12,9 @@
 // constraints (no existing file is modified). Same pattern as Gameplay/Items/EntityResources.cs.
 
 using System.Numerics;
-using XonoticGodot.Common.Physics;
+using VortexArena.Common.Physics;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {

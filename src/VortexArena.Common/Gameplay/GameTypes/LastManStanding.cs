@@ -1,9 +1,9 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
-using GS = XonoticGodot.Common.Gameplay.Scoring.GameScores; // T7: alias the static score table for the per-mode ScoreRules
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
+using GS = VortexArena.Common.Gameplay.Scoring.GameScores; // T7: alias the static score table for the per-mode ScoreRules
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Last Man Standing (LMS) gametype — port of <c>CLASS(LastManStanding, Gametype)</c>
@@ -849,7 +849,7 @@ public sealed class LastManStanding : GameType
 
         LeadersVisible = leaders != 0 && now > _visibleLeadersTime && now < _visibleLeadersTime + leaderTime;
         if (leaders == 0 || (prev && !LeadersVisible))
-            _visibleLeadersTime = now + leaderInterval + XonoticGodot.Common.Math.Prandom.Float() * jitter;
+            _visibleLeadersTime = now + leaderInterval + VortexArena.Common.Math.Prandom.Float() * jitter;
 
         // QC: on the !prev && visible rising edge, centerprint every in-game player (leader vs other variant).
         if (!prev && LeadersVisible)

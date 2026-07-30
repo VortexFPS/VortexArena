@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Quick Menu" panel config dialog — a faithful C# port of <c>XonoticHUDQuickMenuDialog_fill</c>
@@ -9,7 +9,7 @@ namespace XonoticGodot.Game.Menu;
 /// Enable row suppressed — only the Background group. Then the quickmenu-specific rows: text alignment radio
 /// set and the translate-commands / use-server-quickmenu checkboxes.
 ///
-/// FAITHFUL UI NOW: the quick-menu panel is drawn by the HUD backend XonoticGodot hasn't wired up; all cvar
+/// FAITHFUL UI NOW: the quick-menu panel is drawn by the HUD backend VortexArena hasn't wired up; all cvar
 /// bindings are real (they write the shared store the game reads).
 /// </summary>
 public partial class DialogHudPanelQuickMenu : MenuScreen

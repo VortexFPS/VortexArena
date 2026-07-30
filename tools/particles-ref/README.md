@@ -2,7 +2,7 @@
 
 `particles_ref.c` is an **independent** C reference for the Darkplaces/Xonotic client CPU particle
 simulation, used to generate the golden-trace corpus that
-`tests/XonoticGodot.Tests/ParticleParityTests.cs` checks the C# port (`ParticleSim`) against
+`tests/VortexArena.Tests/ParticleParityTests.cs` checks the C# port (`ParticleSim`) against
 (planning/particles-dual-system.md §C, §C.5).
 
 ## Why a separate C reference?
@@ -53,13 +53,13 @@ both sides and the test isolates the particle maths.
 Requires the WSL toolchain (gcc; see the repo's `wsl-*.sh`). From the repo root:
 
 ```bash
-wsl -e bash -lc 'cd /mnt/c/Users/Bryan/Projects/Xonotic/XonoticGodot/.claude/worktrees/trusting-borg-0c888d/tools/particles-ref \
+wsl -e bash -lc 'cd /mnt/c/Users/Bryan/Projects/Xonotic/VortexArena/.claude/worktrees/trusting-borg-0c888d/tools/particles-ref \
   && gcc -O2 -std=c11 -o particles_ref particles_ref.c -lm \
-  && ./particles_ref ../../tests/XonoticGodot.Tests/golden/particles'
+  && ./particles_ref ../../tests/VortexArena.Tests/golden/particles'
 ```
 
 (adjust the worktree path as needed). Then run `dotnet test --filter ParticleParityTests`. The JSON
-fixtures in `tests/XonoticGodot.Tests/golden/particles/` are committed, so the tests run without the C
+fixtures in `tests/VortexArena.Tests/golden/particles/` are committed, so the tests run without the C
 toolchain; regenerate only when the reference or scenarios change.
 
 ## Scenarios

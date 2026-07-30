@@ -1,7 +1,7 @@
 # SV client lifecycle — parity spec
 
 **Base refs:** `server/client.qc` (ClientConnect / ClientDisconnect / PutClientInServer / PutPlayerInServer / PutObserverInServer / Join / PlayerPreThink / PlayerPostThink / PlayerThink / ObserverOrSpectatorThink / PlayerFrame / player_regen / DrownPlayer / GetPressedKeys / ShowRespawnCountdown / calculate_player_respawn_time / FixClientCvars / SendWelcomeMessage / ClientInit_*)
-**Port refs:** `src/XonoticGodot.Server/ClientManager.cs`, `src/XonoticGodot.Server/PlayerFrameLogic.cs`, `src/XonoticGodot.Server/GameWorld.cs`, `src/XonoticGodot.Server/ServerPlayerState.cs`, `src/XonoticGodot.Common/Gameplay/Player/RespawnTiming.cs`, `src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs`, `game/net/ServerNet.cs`
+**Port refs:** `src/VortexArena.Server/ClientManager.cs`, `src/VortexArena.Server/PlayerFrameLogic.cs`, `src/VortexArena.Server/GameWorld.cs`, `src/VortexArena.Server/ServerPlayerState.cs`, `src/VortexArena.Common/Gameplay/Player/RespawnTiming.cs`, `src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs`, `game/net/ServerNet.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

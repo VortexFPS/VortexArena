@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace XonoticGodot.Formats.Materials;
+namespace VortexArena.Formats.Materials;
 
 /// <summary>
 /// Shared GDShader (GLSL) source emitters for Quake 3 stage directives — the <c>tcMod</c> stack,

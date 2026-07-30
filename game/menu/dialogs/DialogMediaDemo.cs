@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Demos tab — a faithful C# port of <c>XonoticDemoBrowserTab_fill</c>
@@ -8,7 +8,7 @@ namespace XonoticGodot.Game.Menu;
 /// <c>XonoticDemoList</c> (engine-enumerated *.dem files) with "Auto record demos"
 /// (<c>cl_autodemo</c>), Refresh, Timedemo and Play buttons.
 ///
-/// FAITHFUL UI NOW: XonoticGodot has no demo playback / demo-file enumeration backend, so the demo
+/// FAITHFUL UI NOW: VortexArena has no demo playback / demo-file enumeration backend, so the demo
 /// list is rendered as an empty <see cref="ItemList"/> with an honest note; the filter, Refresh,
 /// Timedemo and Play actions are present but inert (routed through <see cref="MenuCommand"/> with
 /// the representative DP console commands <c>playdemo</c>/<c>timedemo</c>, logged as having no

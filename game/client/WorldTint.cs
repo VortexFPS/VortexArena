@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Game.Menu;
+using VortexArena.Formats.Bsp;
+using VortexArena.Game.Menu;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// A dynamic, whole-map colour tint — the engine-wide colormod for world geometry, plus a separate, usually
@@ -99,6 +99,22 @@ public static class WorldTint
             EntityTintUniform, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
         RenderingServer.GlobalShaderParameterAdd(
             Loaders.PlayerSkinShader.ModelLightGammaUniform, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        // Real-time dynamic lights on world surfaces (DP r_shadow_realtime_dlight). Registered here because it
+        // rides the same one-call-repaints-the-world mechanism as the tints.
+        RenderingServer.GlobalShaderParameterAdd(
+            WorldDlightUniform, RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // The editor's live baked-light controls (EditorWorldShader). Registered here with the other world
+        // globals; the editor updates them per frame from its cvars.
+        RenderingServer.GlobalShaderParameterAdd(
+            "editor_bake_scale", RenderingServer.GlobalShaderParameterType.Float, 0.0043f);
+        RenderingServer.GlobalShaderParameterAdd(
+            "editor_bake_ambient", RenderingServer.GlobalShaderParameterType.Float, 0.004f);
+        RenderingServer.GlobalShaderParameterAdd(
+            "editor_bake_gamma", RenderingServer.GlobalShaderParameterType.Float, 1.05f);
+        RenderingServer.GlobalShaderParameterAdd(
+            "editor_bake_range", RenderingServer.GlobalShaderParameterType.Float, 48f);
+        RenderingServer.GlobalShaderParameterAdd(
+            "editor_deluxe", RenderingServer.GlobalShaderParameterType.Float, 1.0f);
         _mapApplied = _entityApplied = Vector3.One;
         _gammaApplied = 0f;
     }
@@ -109,6 +125,20 @@ public static class WorldTint
     /// (in which case it becomes the value restored when the override is switched off). This is the public C# API
     /// for code-driven tints and the sink for a map's <c>worldspawn</c> keys.
     /// </summary>
+    /// <summary>The world shader's dynamic-light strength uniform (see <see cref="SetWorldDlight"/>).</summary>
+    public static readonly StringName WorldDlightUniform = "world_dlight";
+
+    /// <summary>
+    /// Strength of real-time point lights on WORLD surfaces — muzzle flashes, explosions, mapper dlights.
+    /// 1 is the DP-like default; 0 restores the pre-dlight look exactly, because the baked lightmap lives in
+    /// the shader's EMISSION and is untouched either way.
+    /// </summary>
+    public static void SetWorldDlight(float scale)
+    {
+        EnsureRegistered();
+        RenderingServer.GlobalShaderParameterSet(WorldDlightUniform, Mathf.Max(0f, scale));
+    }
+
     public static void SetMapTint(Color color, float strength)
     {
         _mapBaseline = Effective(color, strength);

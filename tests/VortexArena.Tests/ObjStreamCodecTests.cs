@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// [objstream] Round-trips the two new entity-delta wire groups through <see cref="EntityStateCodec"/> — the

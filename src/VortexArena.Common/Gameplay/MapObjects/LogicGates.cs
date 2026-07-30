@@ -17,11 +17,11 @@
 // `trigger` param is dropped at the .use boundary. SUB_UseTargets only forwards `trigger` as the `trigger`
 // arg of the downstream .use, which none of the ported targets read — so passing null here is faithful.
 
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The logic-gate / activator-relay trigger entities (flipflop / monoflop / multivibrator / disablerelay /
@@ -489,7 +489,7 @@ public static class LogicGates
 
     // ===================================================================
     //  trigger_magicear (magicear.qc) — chat pattern match -> SUB_UseTargets / text replace
-    //  LIVE: the server Chat.Say pipeline (XonoticGodot.Server/Chat.cs) calls MagicEarProcessAllEars on every
+    //  LIVE: the server Chat.Say pipeline (VortexArena.Server/Chat.cs) calls MagicEarProcessAllEars on every
     //  non-empty player say (chat.qc:75-76), so registered ears now see messages on the live path. The TUBA
     //  melody branch is out of scope (W_Tuba_HasPlayed). The magicears list is linked via Enemy and walked
     //  exactly like QC's trigger_magicear_processmessage_forallears.

@@ -20,7 +20,7 @@
 // It also carries the small ToInput() shim that materialises the boxed IMovementInput the server hands back
 // each tick into the concrete MovementInput struct the descriptors read off Entity.VehInput.
 //
-// NAMESPACE NOTE: flat `XonoticGodot.Common.Gameplay` (NOT a nested .Vehicles) — same reason VehicleCommon.cs
+// NAMESPACE NOTE: flat `VortexArena.Common.Gameplay` (NOT a nested .Vehicles) — same reason VehicleCommon.cs
 // documents: a nested namespace would collide with the `Vehicles` catalog type in EntityClasses.cs.
 //
 // SCOPE (documented partials, faithful to the SHIPPED default config g_vehicles_enter=1 / radius 250):
@@ -34,11 +34,11 @@
 //   * Client-side seated prediction (disableclientprediction=1) is out of scope — the server is authoritative
 //     and fully testable headlessly.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The server-authoritative vehicle boarding / exit / impulse seam — the C# successor to the QC functions that

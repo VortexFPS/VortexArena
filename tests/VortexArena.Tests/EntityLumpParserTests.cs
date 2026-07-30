@@ -1,8 +1,8 @@
 using System.Linq;
-using XonoticGodot.Formats.Bsp;
+using VortexArena.Formats.Bsp;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — first direct coverage for <see cref="EntityLumpParser"/> (the BSP lump-0 text parser, mirror of

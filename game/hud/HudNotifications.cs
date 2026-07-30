@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The client-side notification router — the Godot successor to CSQC's <c>Local_Notification</c> /
@@ -171,7 +171,7 @@ public sealed class HudNotifications
     /// <see cref="NotifTokens.KeyBindSentinelSuffix"/>, carrying the bare token name) with the display name of
     /// the key currently bound to that command — the C# successor to QC resolving <c>pass_key</c>/<c>nade_key</c>/
     /// <c>join_key</c> CSQC-side via <c>getcommandkey</c> (notifications/all.qh). The lookup uses the client's live
-    /// <see cref="XonoticGodot.Engine.Console.BindTable"/> (the same table NetGame reads for the respawn-jump hint);
+    /// <see cref="VortexArena.Engine.Console.BindTable"/> (the same table NetGame reads for the respawn-jump hint);
     /// an unbound command falls back to QC's human-readable descriptive name.
     /// </summary>
     private static string SubstituteKeyBinds(string text)
@@ -197,14 +197,14 @@ public sealed class HudNotifications
     /// <c>+use</c> (CTF flag-pass request / vehicle enter / onslaught teleport, key <c>f</c>), <c>weapon_drop</c>
     /// (the drop-weapon bind that primes/throws the nade, keys <c>g</c>/<c>BACKSPACE</c>) and <c>+jump</c>
     /// (spectator join, <c>SPACE</c>). When no key is bound,
-    /// <see cref="XonoticGodot.Engine.Console.BindTable.CommandKey"/> returns the descriptive fallback (Base's
+    /// <see cref="VortexArena.Engine.Console.BindTable.CommandKey"/> returns the descriptive fallback (Base's
     /// <c>_("drop flag")</c>/<c>_("throw nade")</c>/<c>_("jump")</c>).
     /// </summary>
     private static string ResolveKeyBind(string token) => token switch
     {
-        "pass_key" => XonoticGodot.Engine.Console.BindTable.CommandKey("drop flag", "+use"),
-        "nade_key" => XonoticGodot.Engine.Console.BindTable.CommandKey("throw nade", "weapon_drop"),
-        "join_key" => XonoticGodot.Engine.Console.BindTable.CommandKey("jump", "+jump"),
+        "pass_key" => VortexArena.Engine.Console.BindTable.CommandKey("drop flag", "+use"),
+        "nade_key" => VortexArena.Engine.Console.BindTable.CommandKey("throw nade", "weapon_drop"),
+        "join_key" => VortexArena.Engine.Console.BindTable.CommandKey("jump", "+jump"),
         _ => "",
     };
 
@@ -275,9 +275,9 @@ public sealed class HudNotifications
         if (string.Equals(token, "item_centime", StringComparison.Ordinal))
         {
             // QC ftos(autocvar_notification_item_centerprinttime); read the cvar if present, else the 1.5 default.
-            if (XonoticGodot.Common.Services.Api.Services is not null)
+            if (VortexArena.Common.Services.Api.Services is not null)
             {
-                float v = XonoticGodot.Common.Services.Api.Cvars.GetFloat("notification_item_centerprinttime");
+                float v = VortexArena.Common.Services.Api.Cvars.GetFloat("notification_item_centerprinttime");
                 if (v != 0f) return v;
             }
             return ItemCenterprintTime;

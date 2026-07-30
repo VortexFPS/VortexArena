@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
 
-namespace XonoticGodot.Formats.Iqm;
+namespace VortexArena.Formats.Iqm;
 
 /// <summary>
 /// Parses an IQM ("INTERQUAKEMODEL", version 1 or 2) skeletal model from a raw byte buffer into

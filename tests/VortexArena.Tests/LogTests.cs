@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Server;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the <see cref="Log"/> facade (the C# successor to Xonotic's <c>lib/log.qh</c>): the per-level

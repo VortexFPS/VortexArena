@@ -17,8 +17,8 @@ features:
       - "common/mutators/mutator/status_effects/all.qh:REGISTRY(StatusEffects,32)"
       - "common/mutators/mutator/status_effects/all.qh:CLASS(StatusEffect)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.RegisterAll"
-      - "src/XonoticGodot.Common/GameInit.cs:26"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.RegisterAll"
+      - "src/VortexArena.Common/GameInit.cs:26"
     constants:
       - { name: "REGISTRY size", base: "32", port: "Registry<StatusEffectDef> (unbounded; sized by count)", match: true }
       - { name: "m_lifetime default", base: "30", port: "0 on def (HUD falls back to StatusEffectLifetime=30)", match: true }
@@ -51,8 +51,8 @@ features:
       - "common/mutators/mutator/status_effects/all.qh:20"
       - "common/mutators/mutator/status_effects/all.qh:26"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:StatusEffectFlags"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:StatusEffectRemoval"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:StatusEffectFlags"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:StatusEffectRemoval"
     constants:
       - { name: "FLAG_ACTIVE", base: "BIT(0)", port: "1<<0", match: true }
       - { name: "FLAG_PERSISTENT", base: "BIT(1)", port: "1<<1", match: true }
@@ -80,7 +80,7 @@ features:
       - "common/mutators/mutator/status_effects/sv_status_effects.qc:m_apply"
       - "common/mutators/mutator/status_effects/status_effect/frozen.qc:m_apply"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.Apply"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.Apply"
     constants:
       - { name: "guard eff_time<=time => no-op", base: "yes", port: "yes for duration>0 (now+duration<=now early-return); duration<=0 stays the deliberate 'permanent' convention", match: true }
       - { name: "auto-set ACTIVE flag", base: "yes", port: "yes (Flags|=Active)", match: true }
@@ -108,7 +108,7 @@ features:
     base_refs:
       - "common/mutators/mutator/status_effects/sv_status_effects.qc:m_remove"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.Remove (3-arg with StatusEffectRemoval)"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.Remove (3-arg with StatusEffectRemoval)"
     constants:
       - { name: "per-effect m_remove override runs before SUPER on every removal_type", base: "yes (spawnshield/stunned clear EF bits, burning clears EF_FLAME, frozen removes ice)", port: "yes: def.OnRemove?.Invoke(e,s) before the sound/removal (StatusEffects.cs:577); spawnshield/stunned/burning wired, frozen ice-teardown not", match: true }
       - { name: "play m_sound_rm on NORMAL removal", base: "yes", port: "yes (NORMAL + active + !persistent + RemovalSound set); all 3 sounds resolve", match: true }
@@ -138,8 +138,8 @@ features:
       - "common/mutators/mutator/status_effects/sv_status_effects.qc:m_tick"
       - "common/mutators/mutator/status_effects/sv_status_effects.qc:SV_StartFrame hook"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.Tick"
-      - "src/XonoticGodot.Server/GameWorld.cs:2393"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.Tick"
+      - "src/VortexArena.Server/GameWorld.cs:2393"
     constants:
       - { name: "tick scope", base: "all g_damagedbycontents ents with .statuseffects, not MOVETYPE_NOCLIP", port: "live, non-observer, non-dead players only (per-player Tick in GameWorld:2393); monsters tick burning via MonsterFramework", match: false }
       - { name: "PERSISTENT recompute per tick (BITSET via m_persistent)", base: "yes", port: "yes: def.PersistentCheck(e) -> set/clear Persistent flag, dirty-mark on change", match: true }
@@ -169,7 +169,7 @@ features:
     base_refs:
       - "common/mutators/mutator/status_effects/status_effects.qc:StatusEffects_gettime"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.GetTime"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.GetTime"
     constants:
       - { name: "eff_time<time => return time (still active this frame)", base: "yes", port: "yes: (ExpireTime>0 && ExpireTime>=now) ? ExpireTime : now", match: true }
     status:
@@ -196,9 +196,9 @@ features:
       - "common/mutators/mutator/status_effects/status_effect/burning.qc:m_persistent"
       - "common/mutators/mutator/status_effects/status_effect/superweapons.qc:m_persistent"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:Tick (PersistentCheck BITSET)"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:BurningPersistent / SuperweaponPersistent"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:SetPersistent (explicit setter, still no caller)"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:Tick (PersistentCheck BITSET)"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:BurningPersistent / SuperweaponPersistent"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:SetPersistent (explicit setter, still no caller)"
     constants:
       - { name: "burning m_persistent (lava + g_balance_contents_playerdamage_lava_burn)", base: "yes (default cvar 0)", port: "BurningPersistent: cvar && WaterLevel!=0 && WaterType==Lava", match: true }
       - { name: "superweapon m_persistent (IT_UNLIMITED_SUPERWEAPONS)", base: "yes", port: "SuperweaponPersistent: (Items & UnlimitedSuperweapons)!=0", match: true }
@@ -230,10 +230,10 @@ features:
       - "common/mutators/mutator/status_effects/sv_status_effects.qc:PutClientInServer"
       - "common/mutators/mutator/status_effects/sv_status_effects.qc:SpectateCopy"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:RemoveAll / ClearAll"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:665 (PlayerDies/MonsterDies -> RemoveAll NORMAL)"
-      - "src/XonoticGodot.Server/ClientManager.cs:526/714/786 (observe/respawn/disconnect -> RemoveAll+ClearAll)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4478 (reset_map_global -> RemoveAll NORMAL)"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:RemoveAll / ClearAll"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:665 (PlayerDies/MonsterDies -> RemoveAll NORMAL)"
+      - "src/VortexArena.Server/ClientManager.cs:526/714/786 (observe/respawn/disconnect -> RemoveAll+ClearAll)"
+      - "src/VortexArena.Server/GameWorld.cs:4478 (reset_map_global -> RemoveAll NORMAL)"
     constants:
       - { name: "RemoveAll runs per-effect m_remove + removal sound", base: "yes (NORMAL)", port: "yes: RemoveAll snapshots ids then Remove(e,def,NORMAL) each (runs OnRemove + plays the resolved removal sound)", match: true }
       - { name: "ClearAll wipes with no mechanics", base: "yes (CLEAR)", port: "yes: ClearAll clears the list + dirty-marks", match: true }
@@ -261,8 +261,8 @@ features:
       - "common/mutators/mutator/status_effects/status_effects.qh:NET_HANDLE(ENT_CLIENT_STATUSEFFECTS)"
       - "common/mutators/mutator/status_effects/status_effects.qh:StatusEffects_customize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.Write/Read/Flush"
-      - "src/XonoticGodot.Net/NetEntity.cs:82"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:StatusEffectsCatalog.Write/Read/Flush"
+      - "src/VortexArena.Net/NetEntity.cs:82"
       - "game/net/ServerNet.cs:1930 (Flush per player)"
     constants:
       - { name: "groups_minor", base: "8", port: "8 (GroupsMinor)", match: true }
@@ -324,8 +324,8 @@ features:
       - "server/damage.qc:Fire_AddDamage"
       - "server/damage.qc:Fire_ApplyDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:FireAddDamage / FireApplyDamage / BurningTick / BurningRemove / BurningPersistent"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:337,499 (FireAddDamage ignite)"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:FireAddDamage / FireApplyDamage / BurningTick / BurningRemove / BurningPersistent"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:337,499 (FireAddDamage ignite)"
       - "game/client/ClientWorld.cs (EF_FLAME rendered from the networked .effects bit via CsqcModelEffects)"
     constants:
       - { name: "m_hidden / m_lifetime", base: "true / 10", port: "Hidden=true / Lifetime=10", match: true }
@@ -363,8 +363,8 @@ features:
       - "common/mutators/mutator/status_effects/status_effect/frozen.qc:m_remove"
       - "common/mutators/mutator/status_effects/status_effect/frozen.qc:m_tick(SVQC extinguish + CSQC drawfill)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:frozen def (OnApply=Hook.RemoveGrapplingHooks)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:ApplyFrozen"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:frozen def (OnApply=Hook.RemoveGrapplingHooks)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:ApplyFrozen"
       - "game/client/ClientWorld.cs:1104 (frozen colormod tint)"
     constants:
       - { name: "m_color", base: "'0 0.62 1'", port: "Color=(0,0.62,1) on def; ClientWorld uses FrozenColormod per-model tint", match: false }
@@ -398,13 +398,13 @@ features:
       - "common/mutators/mutator/status_effects/status_effect/superweapons.qc:m_persistent"
       - "server/client.qc (superweapon play_countdown SND_POWEROFF)"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:SuperweaponPass / PlayCountdown"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:SuperweaponPersistent / StunnedTick / StunnedRemove / SpawnShieldTick / SpawnShieldRemove"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:836 (HasSpawnShield reads Entity.SpawnShieldExpire — authoritative damage-block timer)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:867 (player spawnshield status effect mirrored from SpawnShieldExpire at spawn)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2386 (per-tick lockstep: apply/remove the SpawnShield effect to track SpawnShieldExpire)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:320 (monster spawnshield via MonsterFramework.ApplyFor -> SpawnShield status effect)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs:678 (stunned via disability buff)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:SuperweaponPass / PlayCountdown"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:SuperweaponPersistent / StunnedTick / StunnedRemove / SpawnShieldTick / SpawnShieldRemove"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:836 (HasSpawnShield reads Entity.SpawnShieldExpire — authoritative damage-block timer)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:867 (player spawnshield status effect mirrored from SpawnShieldExpire at spawn)"
+      - "src/VortexArena.Server/GameWorld.cs:2386 (per-tick lockstep: apply/remove the SpawnShield effect to track SpawnShieldExpire)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:320 (monster spawnshield via MonsterFramework.ApplyFor -> SpawnShield status effect)"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:678 (stunned via disability buff)"
     constants:
       - { name: "spawnshield m_lifetime", base: "10", port: "10 (def Lifetime)", match: true }
       - { name: "stunned m_lifetime", base: "10", port: "10 (def Lifetime)", match: true }

@@ -4,7 +4,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The damage-text number formatting + size mapping — the testable, Godot-free core of the CSQC

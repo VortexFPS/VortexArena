@@ -21,8 +21,8 @@ features:
       - "common/vehicles/vehicle/bumblebee.qc:740 (spawnfunc(vehicle_bumblebee))"
       - "common/vehicles/vehicle/bumblebee.qh:27 (REGISTER_VEHICLE BUMBLEBEE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:60 (Bumblebee)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:236 (SpawnFuncs.Register vehicle_bumblebee)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:60 (Bumblebee)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:236 (SpawnFuncs.Register vehicle_bumblebee)"
     constants:
       - { name: "g_vehicle_bumblebee", base: "true (1)", port: "MasterSwitchEnabled: unset/!=0 -> on", match: true }
     status:
@@ -46,7 +46,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/bumblebee.qc:853 (METHOD Bumblebee vr_spawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:95 (Spawn)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:95 (Spawn)"
     constants:
       - { name: "health", base: "1000", port: "1000 (StartHealth)", match: true }
       - { name: "shield", base: "400", port: "400 (MaxShield)", match: true }
@@ -77,8 +77,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/bumblebee.qc:920 (vr_spawn: if (!swim) dphitcontentsmask |= DPCONTENTS_LIQUIDSMASK)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:139 (g_vehicle_bumblebee_swim==0 -> DpHitContentsMask |= SuperContentsLiquidsMask)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:154 (SuperContentsLiquidsMask = WATER|SLIME|LAVA bits)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:139 (g_vehicle_bumblebee_swim==0 -> DpHitContentsMask |= SuperContentsLiquidsMask)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:154 (SuperContentsLiquidsMask = WATER|SLIME|LAVA bits)"
     constants:
       - { name: "swim", base: "true (default)", port: "Cvar g_vehicle_bumblebee_swim default 1", match: true }
       - { name: "DPCONTENTS_LIQUIDSMASK", base: "WATER|SLIME|LAVA (0x10|0x20|0x40)", port: "0x10|0x20|0x40 (SuperContentsLiquidsMask)", match: true }
@@ -103,7 +103,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/bumblebee.qc:933 (METHOD Bumblebee vr_setup SVQC)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:128 (Spawn flag block)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:128 (Spawn flag block)"
     constants:
       - { name: "respawntime", base: "60", port: "60 (RespawnTime)", match: true }
       - { name: "max_health", base: "1000 (= health)", port: "1000 (MaxHealth)", match: true }
@@ -128,9 +128,9 @@ features:
     base_refs:
       - "common/vehicles/vehicle/bumblebee.qc:427 (bumblebee_pilot_frame)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:281 (Frame)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:205 (Think dispatcher)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1097 (seated-drive gate feeds VehInput)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:281 (Frame)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:205 (Think dispatcher)"
+      - "src/VortexArena.Server/GameWorld.cs:1097 (seated-drive gate feeds VehInput)"
       - "game/net/ServerNet.cs:1256 / :1362 (+use rising edge -> VehicleBoarding.UseKey)"
     constants:
       - { name: "speed_forward/strafe/up/down", base: "350", port: "350", match: true }
@@ -160,8 +160,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/bumblebee.qc:518 (heal lock + raygun fire block)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:620 (FireRay)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:362 (heal lock in Frame)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:620 (FireRay)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:362 (heal lock in Frame)"
     constants:
       - { name: "raygun", base: "false (heal mode)", port: "false (RaygunDamage)", match: true }
       - { name: "raygun_range", base: "2048", port: "2048", match: true }
@@ -200,7 +200,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/bumblebee.qc:77 (bumblebee_gunner_frame)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:495 (GunnerFrame)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:495 (GunnerFrame)"
     constants:
       - { name: "cannon_lock", base: "1", port: "1", match: true }
       - { name: "cannon_turnspeed", base: "260", port: "260", match: true }
@@ -236,8 +236,8 @@ features:
       - "common/vehicles/vehicle/bumblebee_weapons.qc:9 (bumblebee_fire_cannon)"
       - "common/vehicles/vehicle/bumblebee_weapons.qh:6 (cannon cvars)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:591 (FireCannon)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:509 (SpawnProjectile)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:591 (FireCannon)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:509 (SpawnProjectile)"
     constants:
       - { name: "cannon_damage", base: "60", port: "60", match: true }
       - { name: "cannon_radius", base: "225", port: "225", match: true }
@@ -269,8 +269,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/bumblebee.qc:407 (bumblebee_regen)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:259 (Regen)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:358 (Regen/RegenResource)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:259 (Regen)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:358 (Regen/RegenResource)"
     constants:
       - { name: "cannon_ammo", base: "100", port: "100", match: true }
       - { name: "cannon_ammo_regen", base: "100", port: "100", match: true }
@@ -305,9 +305,9 @@ features:
       - "common/vehicles/vehicle/bumblebee.qc:761 (vr_gunner_enter)"
       - "common/vehicles/vehicle/bumblebee.qc:775 (vr_think gunner promote)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:423 (GunnerEnter)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:151 (Touch)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:157 (Enter MULTISLOT branch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:423 (GunnerEnter)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:151 (Touch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:157 (Enter MULTISLOT branch)"
       - "game/net/ServerNet.cs:1256 / :1362 (+use rising edge -> UseKey)"
     constants:
       - { name: "gunner_reentry_phase_s", base: "5", port: "5", match: true }
@@ -337,10 +337,10 @@ features:
       - "common/vehicles/vehicle/bumblebee.qc:656 (bumblebee_exit)"
       - "common/vehicles/vehicle/bumblebee.qc:641 (bumblebee_land)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:457 (GunnerExit)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:172 (Exit)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:357 (Land)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:242 (Exit dispatcher)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:457 (GunnerExit)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:172 (Exit)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:357 (Land)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:242 (Exit dispatcher)"
     constants:
       - { name: "pilot_reentry_delay_s", base: "2", port: "2", match: true }
       - { name: "exit_speed", base: "200", port: "200", match: true }
@@ -369,10 +369,10 @@ features:
       - "server/client.qc (PlayerUseKey ~2620)"
       - "common/vehicles/sv_vehicles.qc (vehicles_enter/vehicles_exit guards)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:74 (UseKey)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:74 (UseKey)"
       - "game/net/ServerNet.cs:1256 (ProvideInput +use rising edge -> UseKey)"
       - "game/net/ServerNet.cs:1362 (ProvideInputPerFrame +use rising edge -> UseKey)"
-      - "src/XonoticGodot.Server/Commands.cs:1381 (impulse 21 -> WeaponImpulses.Handle -> UseHandle -> UseKey)"
+      - "src/VortexArena.Server/Commands.cs:1381 (impulse 21 -> WeaponImpulses.Handle -> UseHandle -> UseKey)"
     constants:
       - { name: "g_vehicles_enter", base: "1", port: "1 (default)", match: true }
       - { name: "g_vehicles_enter_radius", base: "250", port: "250", match: true }
@@ -401,10 +401,10 @@ features:
       - "common/vehicles/vehicle/bumblebee.qc:698 (bumblebee_blowup)"
       - "common/vehicles/vehicle/bumblebee.qc:726 (bumblebee_diethink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:410 (Death)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:472 (DamageVehicle)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:367 (SpawnVehicle: vehic.GtEventDamage = EventDamage)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:331 (EventDamage routes non-player edict to GtEventDamage)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:410 (Death)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:472 (DamageVehicle)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:367 (SpawnVehicle: vehic.GtEventDamage = EventDamage)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:331 (EventDamage routes non-player edict to GtEventDamage)"
     constants:
       - { name: "blowup_coredamage", base: "500", port: "500", match: true }
       - { name: "blowup_edgedamage", base: "100", port: "100", match: true }
@@ -438,9 +438,9 @@ features:
     base_refs:
       - "common/vehicles/vehicle/bumblebee.qc:750 (METHOD Bumblebee vr_impact)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs (Impact(Entity) override -> VehicleCommon.Impact(vehicle, 1, 100, 200))"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs (Touch chains VehicleCommon.Touch -> vr_impact dispatch)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs (Think snapshots vehicle.OldVelocity = Velocity)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs (Impact(Entity) override -> VehicleCommon.Impact(vehicle, 1, 100, 200))"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs (Touch chains VehicleCommon.Touch -> vr_impact dispatch)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs (Think snapshots vehicle.OldVelocity = Velocity)"
     constants:
       - { name: "bouncepain", base: "'1 100 200'", port: "1/100/200 (VehicleCommon.Impact minspeed/speedfac/maxpain)", match: true }
     status:
@@ -471,9 +471,9 @@ features:
     port_refs:
       - "game/net/NetGame.cs:2949 (UpdateVehicleHud — pilot in-vehicle HUD % bars + aux lock crosshair; called live at NetGame.cs:2323)"
       - "game/hud/VehicleHud.cs:62 (ConfigureForVehicle: Bumblebee art set) + :133 (SetAuxiliaryXhairLock)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:395 (pilot stat-mirror) + :377 (VehLockTarget/VehLockStrength feed)"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs:649 (EffectEmitter beam placeholder)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:158 (BUMBLEBEE_HEAL_MUZZLEFLASH/IMPACT registered)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:395 (pilot stat-mirror) + :377 (VehLockTarget/VehLockStrength feed)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:649 (EffectEmitter beam placeholder)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:158 (BUMBLEBEE_HEAL_MUZZLEFLASH/IMPACT registered)"
     constants: []
     status:
       logic: partial

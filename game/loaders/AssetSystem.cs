@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Materials;
+using VortexArena.Formats.Vfs;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The central asset facade: it turns Quake 3 shader names and texture base names into ready-to-use
@@ -23,7 +23,7 @@ namespace XonoticGodot.Game.Loaders;
 /// </list>
 ///
 /// <para>Everything here lives on the Godot/render side; the parsed POCOs and the VFS come from the
-/// Godot-free <c>XonoticGodot.Formats</c> library. Conversions between the two are explicit. Materials and
+/// Godot-free <c>VortexArena.Formats</c> library. Conversions between the two are explicit. Materials and
 /// textures are cached and shared, so callers must treat returned resources as read-only.</para>
 /// </summary>
 public sealed class AssetSystem
@@ -64,6 +64,12 @@ public sealed class AssetSystem
 
     /// <summary>Number of shaders parsed at construction (diagnostics).</summary>
     public int ShaderCount => _shaders.Count;
+
+    /// <summary>
+    /// Every parsed shader name, for the editor's shader browser. The keys are the shader paths as the
+    /// <c>.shader</c> files declare them, which is exactly what a face's <c>Material</c> holds.
+    /// </summary>
+    public IEnumerable<string> ShaderNames() => _shaders.Keys;
 
     // -------------------------------------------------------------------------------------------------
     //  Shader dictionary
@@ -401,7 +407,7 @@ public sealed class AssetSystem
             Image? img = LoadImage("cubemaps/default/sky" + s);
             if (img is null)
             {
-                XonoticGodot.Common.Diagnostics.Log.Info("[AssetSystem] cubemaps/default/sky*: face missing — weapon reflection falls back to the mild sheen.");
+                VortexArena.Common.Diagnostics.Log.Info("[AssetSystem] cubemaps/default/sky*: face missing — weapon reflection falls back to the mild sheen.");
                 return null;
             }
             // All layers of a layered texture must share one format/size; the shipped faces are uniform PNGs,
@@ -577,6 +583,52 @@ public sealed class AssetSystem
         return vpath == null ? null : LoadImageFromVpath(vpath);
     }
 
+    /// <summary>
+    /// OFF-THREAD-SAFE. A small preview image for a material — the editor's texture browser (backlog T6).
+    /// Its <c>qer_editorimage</c>, else its diffuse stage, else its name (see
+    /// <see cref="ShaderPreview.ImageName"/>), decoded, decompressed and scaled to
+    /// <paramref name="size"/>² RGBA8. NOT cached and NOT uploaded — the caller owns both.
+    ///
+    /// Deliberately not <see cref="LoadTexture"/>: that is the WORLD's texture cache and it never evicts, so
+    /// browsing a ~2000-entry shader list through it would permanently retain every diffuse in the game —
+    /// 512²-1024² apiece, gigabytes — plus a multi-second synchronous decode on the frame the dialog opens.
+    /// Deliberately not <see cref="PredecodeTexture"/> either: that parks a FULL-resolution image that only a
+    /// matching <see cref="LoadTexture"/> drains, so a browse would leak one per thumbnail.
+    ///
+    /// Off-thread safety is the chain <see cref="PredecodeTexture"/> already runs on a worker: a
+    /// concurrent-dictionary VFS resolve, a <c>[ThreadStatic]</c>-scratch decode, and pure-CPU image work.
+    /// </summary>
+    public Image? LoadThumbnailImage(string materialName, int size)
+    {
+        string? name = ShaderPreview.ImageName(materialName, GetShader(materialName));
+        if (string.IsNullOrEmpty(name) || size < 1)
+            return null;
+
+        Image? img = LoadImage(name);
+        if (img is null || img.IsEmpty())
+            return null;
+
+        try
+        {
+            // A full-chain DXT .dds passes through this loader still COMPRESSED, and Image.Resize refuses a
+            // compressed format — so decompress, and drop the mip chain that came with it, before scaling.
+            if (img.IsCompressed() && img.Decompress() != Error.Ok)
+                return null;
+            if (img.HasMipmaps())
+                img.ClearMipmaps();
+            if (img.GetWidth() != size || img.GetHeight() != size)
+                img.Resize(size, size, Image.Interpolation.Bilinear);
+            if (img.GetFormat() != Image.Format.Rgba8)
+                img.Convert(Image.Format.Rgba8);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[AssetSystem] thumbnail for '{materialName}' failed: {ex.Message}");
+            return null;
+        }
+        return img;
+    }
+
     // -------------------------------------------------------------------------------------------------
     //  (§12.3-1) Decoded-image handoff — the off-thread half of a texture load. A model build's dominant
     //  cost was the SYNCHRONOUS texture pipeline (VFS read + TGA/DDS decode + GPU upload, ~395 ms of a
@@ -602,7 +654,7 @@ public sealed class AssetSystem
         // (perf 2026-07-03) Named scope: the worker-side read+decode was the biggest UNATTRIBUTED allocator in
         // the profiler (a 190 MB join-window frame carried no top-alloc scope) — per-thread Prof accumulators
         // make worker scopes cheap, and the alloc column now names this path in hitch trees.
-        using var _ = XonoticGodot.Common.Diagnostics.Prof.Sample("stream.predecode");
+        using var _ = VortexArena.Common.Diagnostics.Prof.Sample("stream.predecode");
         string? vpath = _vfs.ResolveImage(baseNameNoExt);   // ConcurrentDictionary-cached (thread-safe)
         if (vpath is null || _predecodedImages.ContainsKey(vpath))
             return;

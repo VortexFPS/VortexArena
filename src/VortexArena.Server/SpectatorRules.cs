@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The spectator targeting rules — the C# successor to QuakeC's <c>SpectateSet</c>/<c>SpectateNext</c>/
@@ -72,7 +72,7 @@ public static class SpectatorRules
             int idx = start + (forward ? step : -step);
             idx = ((idx % n) + n) % n; // wrap
             Player cand = players[idx];
-            if (cand.DeadState != XonoticGodot.Common.Framework.DeadFlag.No) continue; // only living players are spectatable
+            if (cand.DeadState != VortexArena.Common.Framework.DeadFlag.No) continue; // only living players are spectatable
             if (CanSpectate(spectator, cand, spectatorInGame, mode, teamGame))
                 return cand;
         }

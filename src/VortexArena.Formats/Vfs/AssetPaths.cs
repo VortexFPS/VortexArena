@@ -1,6 +1,6 @@
 using System;
 
-namespace XonoticGodot.Formats.Vfs;
+namespace VortexArena.Formats.Vfs;
 
 /// <summary>
 /// Pure-string helpers for Quake/Darkplaces virtual paths ("qpaths").

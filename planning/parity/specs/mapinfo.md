@@ -1,7 +1,7 @@
 # MapInfo subsystem — parity spec
 
 **Base refs:** `common/mapinfo.qc` (1678 ln) + `common/mapinfo.qh` (237 ln)
-**Port refs:** `src/XonoticGodot.Common/Menu/MapInfoBackend.cs` · `game/menu/CreateGameScreen.cs` (MapInfoCache + RefilterMaps) · `game/menu/dialogs/DialogCreateGameMapInfo.cs` · `game/menu/MapList.cs` · `src/XonoticGodot.Server/MapRotation.cs` (predicate seams) · `src/XonoticGodot.Server/GameWorld.cs` (boot / ApplyWorldspawn / ValidateMap) · `game/net/NetGame.cs` (SetupMusic) · `src/XonoticGodot.Server/SettempCvars.cs`
+**Port refs:** `src/VortexArena.Common/Menu/MapInfoBackend.cs` · `game/menu/CreateGameScreen.cs` (MapInfoCache + RefilterMaps) · `game/menu/dialogs/DialogCreateGameMapInfo.cs` · `game/menu/MapList.cs` · `src/VortexArena.Server/MapRotation.cs` (predicate seams) · `src/VortexArena.Server/GameWorld.cs` (boot / ApplyWorldspawn / ValidateMap) · `game/net/NetGame.cs` (SetupMusic) · `src/VortexArena.Server/SettempCvars.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-07-02
 
 ## Overview

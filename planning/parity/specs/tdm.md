@@ -1,7 +1,7 @@
 # Team Deathmatch (TDM) — parity spec
 
 **Base refs:** `common/gametypes/gametype/tdm/{tdm.qh,tdm.qc,sv_tdm.qc,sv_tdm.qh}` · `common/gametypes/sv_rules.qc` (`GameRules_teams`/`GameRules_limit_score`/`GameRules_limit_lead`/`GameRules_spawning_teams`) · the team slice of `server/damage.qc` (`GiveFrags` → `GameRules_scoring_add_team` → `PlayerTeamScore_Add`) · `server/teamplay.qc` (`TeamBalance_JoinBestTeam`/`TeamBalance_FindBestTeam`) · `server/world.qc` (`WinningCondition_Scores`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs` · `src/XonoticGodot.Server/Teamplay.cs` (live team-balance) · `src/XonoticGodot.Server/GameWorld.cs` (`ActivateGameType`, `DriveGametypeFrame`, `MatchEnded`, `TeamCountFor`) · `src/XonoticGodot.Server/Scores.cs` (aux columns, `TeamScoreSource`) · `src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs` · `src/VortexArena.Server/Teamplay.cs` (live team-balance) · `src/VortexArena.Server/GameWorld.cs` (`ActivateGameType`, `DriveGametypeFrame`, `MatchEnded`, `TeamCountFor`) · `src/VortexArena.Server/Scores.cs` (aux columns, `TeamScoreSource`) · `src/VortexArena.Common/Gameplay/Scoring/GameScores.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

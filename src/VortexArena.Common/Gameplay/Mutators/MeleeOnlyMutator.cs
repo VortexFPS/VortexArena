@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Melee Only mutator — port of common/mutators/mutator/melee_only/sv_melee_only.qc. Everyone spawns

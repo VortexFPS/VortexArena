@@ -39,3 +39,27 @@ from C# cleanly today. Textures/sounds/fonts (.tga/.jpg/.png, .ogg/.wav, .ttf/.o
 - **GDExtension (C++/Rust) parsers consumed by C#:** rejected — no clean C#↔GDExtension interop today.
 - **Re-author all assets natively in Godot:** rejected for v1 — defeats "load existing assets"; revisit per
   [OPEN-QUESTIONS](../OPEN-QUESTIONS.md) Q10.
+
+---
+
+## Amendment — 2026-07-30 (repo restructure)
+
+The **offline-first** half of this decision is now partly built, as a **TGA to PNG** conversion rather
+than as conversion to Godot resources.
+
+`tools/data/convert-tga.py` converted the shipped TGA set to PNG before its first commit — the ordering
+mattered, because git keeps every blob, so converting after committing would have left ~2.21 GB of dead
+TGA blobs in history permanently (see [ADR-0016](ADR-0016-content-ownership.md)). Verification is
+per-file: pixel hashes compared both ways, **plus a hand-read of the 18-byte TGA header**, because ffmpeg
+misreported one Xonotic page as `300x216 pal8` when its header said `256x512 24bpp` — a decoder that
+misparses produces output matching its own wrong decode, so comparing two decodes from the same tool
+proves nothing.
+
+The same conversion runs on q3map2's external lightmap pages in the VortexMaps pipeline
+(`build/lightmaps-to-png.py`): PNG is 37% smaller than the raw TGA even after the `.pk3`'s own deflate,
+because PNG filters each scanline against its neighbour and lighting gradients predict well. Lossless is
+mandatory there — odd pages are **deluxemaps** holding packed light *directions*, not colours, so lossy
+coding tilts the shading in a way that still looks like lighting.
+
+What this ADR specified and is still **not** built: conversion to `.res`/`.tres` Godot resources. The
+runtime loaders remain the only path, and the VFS mounts `.pk3`/`.pk3dir` directly.

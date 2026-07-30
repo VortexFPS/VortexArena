@@ -8,13 +8,13 @@
 //
 // The test assembly references only src/* (game/ is the Godot host assembly), so the shader sources are
 // pinned by READING THE SOURCE FILES from the repo tree — located by walking up from the test bin dir, and
-// self-skipping when the tree isn't found (mirrors the real-data classes' assets/data skip).
+// self-skipping when the tree isn't found (mirrors the real-data classes' map-content skip).
 
 using System;
 using System.IO;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Pins the viewmodel short-depth-range parity mechanism so a shader/helper edit can't silently drop it:

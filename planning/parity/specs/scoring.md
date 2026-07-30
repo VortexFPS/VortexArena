@@ -1,7 +1,7 @@
 # Scoring — parity spec
 
 **Base refs:** `server/scores.qc` · `server/scores_rules.qc` · `common/scores.qh` · `common/playerstats.qc` · `common/gametypes/sv_rules.{qh,qc}` · `common/util.qc:ScoreString` · `server/world.qc:WinningCondition_Scores/GetWinningCode` · `ctfscoring-*.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Scoring/{GameScores,ScoreField,EntityScoreState}.cs` · `src/XonoticGodot.Server/{Scores,PlayerStats}.cs` · `src/XonoticGodot.Net/{ScoreInfoBlock,ScoreboardBlock}.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Scoring/{GameScores,ScoreField,EntityScoreState}.cs` · `src/VortexArena.Server/{Scores,PlayerStats}.cs` · `src/VortexArena.Net/{ScoreInfoBlock,ScoreboardBlock}.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

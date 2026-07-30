@@ -1,7 +1,7 @@
 # Blaster — parity spec
 
 **Base refs:** `common/weapons/weapon/blaster.qc` · `common/weapons/weapon/blaster.qh` · `server/weapons/tracing.qc` (W_SetupShot_Dir / W_SetupProjVelocity_Explicit) · `server/damage.qc` (RadiusDamageForSource) · `bal-wep-xonotic.cfg` (g_balance_blaster_*)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs` · `WeaponFiring.cs` · `WeaponSplash.cs` · `WeaponFireGate.cs` · `WeaponFireDriver.cs` · `Projectiles.cs` · `Mutators/OffhandBlasterMutator.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Blaster.cs` · `WeaponFiring.cs` · `WeaponSplash.cs` · `WeaponFireGate.cs` · `WeaponFireDriver.cs` · `Projectiles.cs` · `Mutators/OffhandBlasterMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

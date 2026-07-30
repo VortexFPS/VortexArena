@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Audio settings tab — a faithful C# port of <c>XonoticAudioSettingsTab_fill</c>

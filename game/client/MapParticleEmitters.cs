@@ -22,12 +22,12 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>Persistent func_pointparticles/func_sparks emitters. Hosted by <see cref="ClientWorld"/>.</summary>
 public partial class MapParticleEmitters : Node3D
@@ -73,7 +73,7 @@ public partial class MapParticleEmitters : Node3D
             // #30 slowmo/pause: ambient map emitters are Godot self-processing particle nodes (they ignore the
             // scaled deltas the CPU-side drivers use), so drive their SpeedScale from the shared factor — frozen
             // mid-air at slowmo 0, slow drift at fractional slowmo. Nothing else sets SpeedScale (default 1).
-            em.Particles.SpeedScale = XonoticGodot.Game.Client.ClientRenderTime.Scale;
+            em.Particles.SpeedScale = VortexArena.Game.Client.ClientRenderTime.Scale;
 
             bool active = e.Active == MapMover.ActiveActive;
             if (em.ImpulseMode)
@@ -165,7 +165,7 @@ public partial class MapParticleEmitters : Node3D
         if (e.MoveDir != NVec3.Zero && Api.Services is not null)
         {
             TraceResult tr = Api.Trace.Trace(qCenter, NVec3.Zero, NVec3.Zero,
-                qCenter + XonoticGodot.Common.Math.QMath.Normalize(e.MoveDir) * 4096f, MoveFilter.Normal, e);
+                qCenter + VortexArena.Common.Math.QMath.Normalize(e.MoveDir) * 4096f, MoveFilter.Normal, e);
             if (tr.Fraction < 1f)
             {
                 qCenter = tr.EndPos;

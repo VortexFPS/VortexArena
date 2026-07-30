@@ -69,8 +69,8 @@ if ($pm) {
 
 if ($SkipReport) { exit 0 }
 
-# -- newest motion trace from XonData (respect XONOTIC_USERDIR override)
-$userDir = $env:XONOTIC_USERDIR
+# -- newest motion trace from XonData (respect VORTEX_USERDIR override)
+$userDir = $env:VORTEX_USERDIR
 if (-not $userDir) { $userDir = Join-Path $env:USERPROFILE "XonData" }
 $trace = Get-ChildItem (Join-Path $userDir "motion_trace_*.csv") -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1

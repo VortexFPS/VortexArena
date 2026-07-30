@@ -104,6 +104,9 @@ public sealed class ServerNet : IDisposable
     // --- snapshot delta-compression + movevar replication + teleport detection ---
     private ushort _snapshotSeq;                                     // global snapshot sequence (clients ack it)
     private readonly Dictionary<int, NetEntityState> _entityScratch = new(); // reused per-tick entity set
+    // Set during BuildEntitySet when any player carries owner-private Feedback-block state; forces the
+    // per-recipient pass in RelevantEntitiesFor to run so that state is stripped from other players' copies.
+    private bool _scratchHasOwnerPrivate;
     // (§12.8) DP-faithful per-client PVS entity culling (sv_cullentities_pvs). _entityBounds holds each networked
     // entity's world-space bounds (filled in BuildEntitySet); _relevantScratch is the per-recipient filtered view
     // of _entityScratch fed to EncodeSnapshot — the delta encoder then turns "no longer relevant" into a removal
@@ -271,6 +274,10 @@ public sealed class ServerNet : IDisposable
         /// visibility), so each peer gates on the hash of ITS OWN serialized block, resending only when the
         /// bytes change.</summary>
         public uint LastModeStatusHash;
+
+        /// <summary>Hash of the item-pickup tally last sent to this peer inside the scoreboard block (QC's
+        /// Inventory entity is per-viewer, so the tally can change without any score changing).</summary>
+        public uint LastItemStatsHash;
 
         /// <summary>The accuracy-change generation last sent to this client (T57, QC ENT_CLIENT_ACCURACY's
         /// per-weapon SendFlags change detection): the owner's per-weapon accuracy byte array is re-sent only
@@ -1140,6 +1147,44 @@ public sealed class ServerNet : IDisposable
                 SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
+    /// <summary>
+    /// Broadcast one applied map-editor op to every accepted client (design doc §11.7, phase E6).
+    ///
+    /// The line is the op as it was APPLIED, so a create carries the id the server assigned rather than a
+    /// request for one — that is what keeps every peer's document numbered identically. Sent to the sender too:
+    /// a remote editor does not apply optimistically, it waits for its own op to come back, which is what makes
+    /// a refused edit simply not happen rather than something to roll back.
+    /// </summary>
+    public void BroadcastEditorOp(string wireLine)
+    {
+        if (string.IsNullOrEmpty(wireLine))
+            return;
+
+        // Sent in pieces, because an op line has no useful upper bound and WriteString's length field does:
+        // it is a ushort, and WriteUShort CASTS rather than checks, so a longer string writes a truncated
+        // length and every byte after it in the packet is read as something else. A paste of ~65 brushes is
+        // already past that, which is an ordinary thing to do in a map editor. The channel is reliable and
+        // ordered, so the pieces arrive in the order they were sent and the receiver just concatenates.
+        for (int at = 0; at < wireLine.Length; at += EditorOpChunkChars)
+        {
+            int len = Math.Min(EditorOpChunkChars, wireLine.Length - at);
+            _scratchWriter.Reset();
+            _scratchWriter.WriteByte((byte)NetControl.EditorOp);
+            _scratchWriter.WriteByte(at + len < wireLine.Length ? (byte)1 : (byte)0);   // more to come
+            _scratchWriter.WriteString(wireLine.Substring(at, len));
+            foreach (PeerState st in _peers.Values)
+                if (st.Accepted)
+                    SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+        }
+    }
+
+    /// <summary>
+    /// Characters per <see cref="NetControl.EditorOp"/> piece. Counted in CHARS against a byte-sized limit on
+    /// purpose: a char can encode to four UTF-8 bytes, so 8k chars can never exceed 32k bytes and stays well
+    /// inside the 65535 the length field can express.
+    /// </summary>
+    private const int EditorOpChunkChars = 8192;
+
     // =============================================================================================
     // [T46] chat delivery — per-player sprint + team/private routing with ignore filtering. The chat engine
     // (Chat.Say) does the routing/ignore/flood logic over ClientManager.Players; these are the net send paths.
@@ -1278,7 +1323,11 @@ public sealed class ServerNet : IDisposable
     private void SendMatchState()
     {
         float gameStart = _world.GameStartTime;
-        float timeLimitSec = _world.Services.Cvars.GetFloat("timelimit") * 60f;
+        // A mode with no match clock reports NO limit, whatever the cvar happens to say — that is what makes
+        // the HUD timer count up (TimerPanel: countUp = increment || timelimit <= 0).
+        float timeLimitSec = _world.GameType is { HasTimeLimit: false }
+            ? 0f
+            : _world.Services.Cvars.GetFloat("timelimit") * 60f;
         bool warmup = _world.Warmup.WarmupStage;
         float warmupLimit = _world.Warmup.WarmupLimit;
         bool intermission = _world.Intermission.Running;
@@ -2245,13 +2294,18 @@ public sealed class ServerNet : IDisposable
                 st.SentScoreInfo = true;
             }
 
-            // scoreboard: send the block only when a score changed since this client last got it (one bool otherwise).
-            bool sendScores = st.LastScoreVersion != _scoreVersion;
+            // scoreboard: send the block only when a score changed since this client last got it (one bool
+            // otherwise). The block also carries THIS viewer's item-pickup tally (QC's per-viewer Inventory
+            // entity), which changes independently of any score — so the gate covers both.
+            CollectItemStats(owner, _itemStatsScratch, out uint itemStatsHash);
+            bool sendScores = st.LastScoreVersion != _scoreVersion || st.LastItemStatsHash != itemStatsHash;
             _snapshotWriter.WriteBool(sendScores);
             if (sendScores)
             {
-                VortexArena.Net.ScoreboardBlock.Serialize(_snapshotWriter, _scoreRows, _scoreTeams, _scoreRankings, _scoreSpeedAward);
+                VortexArena.Net.ScoreboardBlock.Serialize(_snapshotWriter, _scoreRows, _scoreTeams, _scoreRankings,
+                    _scoreSpeedAward, _itemStatsScratch);
                 st.LastScoreVersion = _scoreVersion;
+                st.LastItemStatsHash = itemStatsHash;
             }
 
             // Gametype status (T53): the per-mode round/objective HUD stats — QC STAT(REDALIVE..PINKALIVE)
@@ -2326,6 +2380,7 @@ public sealed class ServerNet : IDisposable
     {
         _entityScratch.Clear();
         _entityBounds.Clear();
+        _scratchHasOwnerPrivate = false;
 
         // QC world.qc:EndFrame records antilag history at `altime` (time + frametime*(1+g_antilag_nudge)), NOT at
         // the bare current time — so the ring aligns with the time the client will see this frame. Compute it once.
@@ -2450,6 +2505,12 @@ public sealed class ServerNet : IDisposable
                 NadeBonus = p.NadeBonus,
                 NadeBonusType = p.NadeBonusType,
                 NadeBonusScore = p.NadeBonusScore,
+                // [hitsound] QC STAT(HIT_TIME)/STAT(TYPEHIT_TIME)/STAT(KILL_TIME): the EndFrame-flushed hit-feedback
+                // times (exactly one advances per frame, typehit > kill > hit). The client HitSound plays the
+                // matching sound per advance; HitDamageDealtTotal above carries the pitch-driving damage diff.
+                HitTime = p.HitTime,
+                TypeHitTime = p.TypeHitTime,
+                KillTime = p.KillTime,
                 // [W14b LI1] the animdecide upper-body action overlay (SHOOT this wave) + its start time. The server
                 // latches the action at the weapon-fire commit (WeaponFireGate) and networks the expiry-resolved id
                 // (resolvedAction above): the client plays it as a torso overlay over the velocity-derived legs (LI3).
@@ -2512,6 +2573,15 @@ public sealed class ServerNet : IDisposable
             if (flushed is not null)
                 _statusBlob[p] = NormalizeStatusBlob(flushed);
             s.StatusEffects = _statusBlob.TryGetValue(p, out byte[]? cachedBlob) ? cachedBlob : null;
+
+            // Does this player carry OWNER-PRIVATE Feedback-block state? If any player does, the per-recipient
+            // pass below MUST run to strip it from everyone else's copy — so the "no filtering needed" fast
+            // paths in RelevantEntitiesFor have to know. (Cheap: one bool per snapshot, not per recipient.)
+            if (s.HitTime != 0f || s.TypeHitTime != 0f || s.KillTime != 0f || s.HitDamageDealtTotal != 0f
+                || s.NadeDarknessTime != 0f || s.NadeBonus != 0f || s.NadeBonusScore != 0f)
+            {
+                _scratchHasOwnerPrivate = true;
+            }
 
             _entityScratch[netId] = s;
             _entityBounds[netId] = RelevanceBounds(p.Origin, p.Mins, p.Maxs);
@@ -2580,6 +2650,10 @@ public sealed class ServerNet : IDisposable
                 // stays clear (a non-player entity costs nothing for the wepent group on the wire).
                 SwitchWeapon = -1,
                 SwitchingWeapon = -1,
+                // A weapon PICKUP's explicit identity: the weapon RegistryId + 1 (0 = not a weapon pickup, the
+                // baseline default — costs nothing for other items). The client paints/classifies the pickup
+                // from this id instead of guessing from the model filename (which a mapper can override).
+                Weapon = e.Pickup is VortexArena.Common.Gameplay.WeaponPickup wpk ? wpk.Weapon.RegistryId + 1 : 0,
                 Model = netModel,                  // QC .model (or, for a projectile, its catalog key) — resolved by name
                 Frame = (int)e.Frame,
                 Skin = (int)e.Skin,
@@ -2588,6 +2662,13 @@ public sealed class ServerNet : IDisposable
                 Velocity = e.Velocity,             // static entities keep 0 → the delta never sends it
                 Effects = e.Effects,
                 Colormap = (int)e.Team,
+                // RENDER_COLORMAPPED entities (a thrown/death-dropped weapon inheriting the thrower's packed
+                // shirt/pants — WeaponThrowing.ThrowerColormap — plus colormapped props/monsters): ship the
+                // FULL authoritative colormap in its own delta field (protocol v17), so the client repaints
+                // the loot in the DROPPER's colors (frozen at throw time — the server never rewrites a loot
+                // colormap after spawn) and both QC encodings (packed 1024+ vs a sub-1024 slot reference)
+                // survive the wire. 0 on the overwhelming majority of entities → the delta bit stays clear.
+                ColorMapOverride = e.ColorMapOverride & 0xFFFF,
                 Health = (int)e.Health,
                 Alpha = QuantizeAlpha(e.Alpha), // [W1-alpha-net] per-entity render transparency (e.g. Cloaked items)
                 Owner = (e.Owner is Player op && _byPlayer.TryGetValue(op, out PeerState? ops)) ? ops.PeerId : 0,
@@ -2738,7 +2819,7 @@ public sealed class ServerNet : IDisposable
         bool havePvsCull = cullPvs && _world.Pvs is { HasVis: true } && !owner.IsDead && !owner.IsObserver;
 
         // Fast path: neither filter narrows the set → send the shared scratch as-is.
-        if (!havePvsCull && !applyPrivacy)
+        if (!havePvsCull && !applyPrivacy && !_scratchHasOwnerPrivate)
             return _entityScratch;
 
         int viewerCluster = -1;
@@ -2777,10 +2858,15 @@ public sealed class ServerNet : IDisposable
         }
 
         // Privacy still applies even with PVS culling off, so if neither now narrows the set, take the fast path.
-        if (!havePvsCull && !applyPrivacy)
+        if (!havePvsCull && !applyPrivacy && !_scratchHasOwnerPrivate)
             return _entityScratch;
 
         int ownerTeam = (int)owner.Team;
+        // QC EndFrame stamps a follow-spectator's feedback stats from `it.enemy` (the spectatee), so a
+        // spectator legitimately receives the watched player's hit/kill feedback — it becomes their own STAT
+        // in Base. An observer has no networked entity of their own here, so the client reads it off the
+        // spectatee's entity instead; keep the block on that ONE entity for this recipient only.
+        int spectateeNetId = owner.Spectatee is { } sp ? NetIdFor(sp) : 0;
 
         _relevantScratch.Clear();
         foreach (KeyValuePair<int, NetEntityState> kv in _entityScratch)
@@ -2827,6 +2913,24 @@ public sealed class ServerNet : IDisposable
                 && !state.VehicleView.Equals(VortexArena.Net.VehicleViewState.None))
             {
                 state.VehicleView = VortexArena.Net.VehicleViewState.None;
+            }
+
+            // OWNER-PRIVATE Feedback block. In QC these are per-client STATs (STAT(HIT_TIME) etc.) — they are
+            // not entity data at all, so no recipient but the owner ever sees them. The port carries them on
+            // the player entity delta, which means they must be stripped here or every client learns the exact
+            // frame any visible enemy landed a hit or scored a frag, and pays the delta bytes for it.
+            // Deliberately NOT gated on applyPrivacy: that flag is off for spectators and in
+            // radar-show-enemies modes, neither of which should hand out another player's private stats.
+            if (!isOwn && kv.Key != spectateeNetId && state.Kind == NetEntityKind.Player)
+            {
+                state.HitTime = 0f;
+                state.TypeHitTime = 0f;
+                state.KillTime = 0f;
+                state.HitDamageDealtTotal = 0f;
+                state.NadeDarknessTime = 0f;
+                state.NadeBonus = 0;
+                state.NadeBonusType = 0;
+                state.NadeBonusScore = 0f;
             }
 
             _relevantScratch[kv.Key] = state;
@@ -3176,6 +3280,37 @@ public sealed class ServerNet : IDisposable
     /// <c>mineCounter</c> delegate to <see cref="VortexArena.Common.Gameplay.WepentResolver.Resolve"/>)
     /// reuse the same authoritative count.
     /// </summary>
+    /// <summary>Scratch for the per-viewer item-pickup tally written into the scoreboard block.</summary>
+    private readonly List<(string icon, int count)> _itemStatsScratch = new();
+
+    /// <summary>
+    /// QC the per-viewer <c>Inventory</c> entity (common/items/inventory.qh <c>Inventory_Send</c>, customized to
+    /// its owner + spectators): collect <paramref name="viewer"/>'s item-pickup tally into
+    /// <paramref name="into"/> and hash it so the snapshot can gate the resend. A spectator inherits the tally of
+    /// whoever they are following (QC <c>Inventory_customize</c> "sends to spectators too").
+    /// </summary>
+    private static void CollectItemStats(Player? viewer, List<(string icon, int count)> into, out uint hash)
+    {
+        into.Clear();
+        hash = 2166136261u;
+        Entity? src = viewer;
+        if (viewer?.Spectatee is { } tgt && !tgt.IsObserver) src = tgt;
+        if (src?.ItemPickupCounts is not { Count: > 0 } counts) return;
+
+        foreach (var kv in counts)
+        {
+            if (kv.Value <= 0 || string.IsNullOrEmpty(kv.Key)) continue;
+            into.Add((kv.Key, kv.Value));
+        }
+        // Stable order so the hash (and the drawn grid) don't churn with dictionary iteration order.
+        into.Sort(static (a, b) => string.CompareOrdinal(a.icon, b.icon));
+        foreach ((string icon, int count) in into)
+        {
+            foreach (char c in icon) hash = (hash ^ c) * 16777619u;
+            hash = (hash ^ (uint)count) * 16777619u;
+        }
+    }
+
     private int CountLiveMines(Player p)
     {
         int n = 0;
@@ -3193,8 +3328,16 @@ public sealed class ServerNet : IDisposable
         w.WriteVector(p.Origin, VortexArena.Net.NetPrecision.Float);
         w.WriteVector(p.Velocity, VortexArena.Net.NetPrecision.Float);
         w.WriteBool(p.OnGround);
-        w.WriteShort((int)p.Health);
-        w.WriteShort((int)p.ArmorValue);
+        // Health/armor ride a SIGNED 16-bit field, and WriteShort casts (silently truncating) — so a value
+        // outside ±32767 wraps and can flip sign. A player's health goes hugely negative on death: QC
+        // ClientKill_Now suicides with Damage(…, 100000, DEATH_KILL, …), whose overkill excess is passed on to
+        // PlayerCorpseDamage, which subtracts it from the corpse UNCLAMPED (Base does the same — but Base
+        // networks health as a full 32-bit stat). At ~-65000 the truncation produced a POSITIVE health on the
+        // client, so `hidden` in EquipNetworkedWeapon (Health <= 0) stayed false and the first-person weapon
+        // model kept drawing through the whole death — but only after a /kill, since a normal frag leaves health
+        // only slightly negative and round-trips fine. Clamp (preserving sign) instead of truncating.
+        w.WriteShort(System.Math.Clamp((int)p.Health, short.MinValue, short.MaxValue));
+        w.WriteShort(System.Math.Clamp((int)p.ArmorValue, short.MinValue, short.MaxValue));
         w.WriteShort(p.ActiveWeaponId); // QC wepent m_weapon — drives the local first-person viewmodel
 
         // QC STAT(RESPAWN_TIME) (server/client.qc:2419-2436): the dead-player respawn countdown / "press fire"

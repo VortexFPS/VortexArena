@@ -14,11 +14,11 @@ features:
       - "common/gametypes/gametype/duel/duel.qh:INIT(Duel)"
       - "common/gametypes/gametype/duel/duel.qh:REGISTER_GAMETYPE(DUEL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:Duel (ctor)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:80:OnInit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:106:SeedTimeLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:555:ResolveGameType"
-      - "src/XonoticGodot.Server/GameWorld.cs:556:GameType.OnInit dispatch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:Duel (ctor)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:80:OnInit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:106:SeedTimeLimit"
+      - "src/VortexArena.Server/GameWorld.cs:555:ResolveGameType"
+      - "src/VortexArena.Server/GameWorld.cs:556:GameType.OnInit dispatch"
     constants:
       - { name: "netname", base: "duel", port: "duel", match: true }
       - { name: "flags", base: "USEPOINTS|1V1", port: "TeamGame=false; 1v1 via netname", match: true }
@@ -50,12 +50,12 @@ features:
       - "server/client.qc:2192:nJoinAllowed (free_slots = max(0, player_limit - currentlyPlaying))"
       - "server/client.qc:1105:status advert; server/bot bot_fixcount uses GetPlayerLimit()"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:59:PlayerLimit (const 2)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1264:GetPlayerLimit"
-      - "src/XonoticGodot.Server/GameWorld.cs:1272:GametypeHasFreeSlot"
-      - "src/XonoticGodot.Server/GameWorld.cs:1250:Clients.GametypeJoinGate wiring"
-      - "src/XonoticGodot.Server/ClientManager.cs:356:JoinAllowed (GametypeJoinGate consume)"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:282:FixCount playerLimit feed (Duel.PlayerLimit, not g_maxplayers)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:59:PlayerLimit (const 2)"
+      - "src/VortexArena.Server/GameWorld.cs:1264:GetPlayerLimit"
+      - "src/VortexArena.Server/GameWorld.cs:1272:GametypeHasFreeSlot"
+      - "src/VortexArena.Server/GameWorld.cs:1250:Clients.GametypeJoinGate wiring"
+      - "src/VortexArena.Server/ClientManager.cs:356:JoinAllowed (GametypeJoinGate consume)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:282:FixCount playerLimit feed (Duel.PlayerLimit, not g_maxplayers)"
     constants:
       - { name: "player_limit", base: "2", port: "2 (Duel.PlayerLimit, enforced)", match: true }
     status:
@@ -79,10 +79,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/duel/sv_duel.qc:MUTATOR_HOOKFUNCTION(duel, FilterItemDefinition)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:128:OnFilterItemDefinition"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:118:WithPowerups"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:152:Activate"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:FilterItemDefinition.Call"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:128:OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:118:WithPowerups"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:152:Activate"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:FilterItemDefinition.Call"
     constants:
       - { name: "g_duel_with_powerups", base: "0", port: "0 (read via WithPowerups, live)", match: true }
     status:
@@ -108,8 +108,8 @@ features:
       - "common/gametypes/gametype/deathmatch/deathmatch.qh"
       - "server/damage.qc:Obituary"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:189:OnDeath"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:189:OnDeath"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType"
     constants:
       - { name: "enemy_frag", base: "+1", port: "+1", match: true }
       - { name: "suicide", base: "-1", port: "-1", match: true }
@@ -136,12 +136,12 @@ features:
       - "common/gametypes/gametype/duel/sv_duel.qc:MUTATOR_HOOKFUNCTION(duel, Scores_CountFragsRemaining)"
       - "server/scores.qc:WinningConditionHelper"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:67:MatchEnded"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:141:FragLimit"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:238:RecomputeLeader"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:264:CountFragsRemaining"
-      - "src/XonoticGodot.Server/GameWorld.cs:3427:DriveGametypeFrame (Duel RecomputeLeader case)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4237:MatchHasEnded (Duel case)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:67:MatchEnded"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:141:FragLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:238:RecomputeLeader"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:264:CountFragsRemaining"
+      - "src/VortexArena.Server/GameWorld.cs:3427:DriveGametypeFrame (Duel RecomputeLeader case)"
+      - "src/VortexArena.Server/GameWorld.cs:4237:MatchHasEnded (Duel case)"
     constants:
       - { name: "default_fraglimit", base: "0 (pointlimit=0, unlimited)", port: "0", match: true }
     status:
@@ -166,8 +166,8 @@ features:
       - "server/client.qc:calculate_player_respawn_time"
       - "server/client.qh:GAMETYPE_DEFAULTED_SETTING"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:211:ScheduleRespawn"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:217:RespawnDelay"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:211:ScheduleRespawn"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:217:RespawnDelay"
     constants:
       - { name: "g_duel_respawn_delay_small", base: "0 (=> falls back to g_respawn_delay_small)", port: "not read; uses generic", match: true }
       - { name: "g_respawn_delay_small (effective)", base: "2 (s)", port: "2 (s)", match: true }
@@ -196,9 +196,9 @@ features:
       - "client/announcer.qc:Announcer_Duel"
       - "client/hud/panel/centerprint.qc:centerprint_SetDuelTitle"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:2696:BroadcastCountdownTitle (Duel branch)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2674:BroadcastCountdownTitle() live call (countdown path)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:250:SendCenterDuelTitle"
+      - "src/VortexArena.Server/GameWorld.cs:2696:BroadcastCountdownTitle (Duel branch)"
+      - "src/VortexArena.Server/GameWorld.cs:2674:BroadcastCountdownTitle() live call (countdown path)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:250:SendCenterDuelTitle"
       - "game/hud/HudNotifications.cs:148:MsgType.CenterDuelTitle route"
       - "game/hud/CenterPrintPanel.cs:174:SetDuelTitle"
       - "game/hud/CenterPrintPanel.cs:670:ShortenColored (textShortenToWidth)"
@@ -227,7 +227,7 @@ features:
       - "client/csqcmodel_hooks.qc:244"
       - "client/csqcmodel_hooks.qc:309"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:161:ForcePlayerColorsEnabled"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:161:ForcePlayerColorsEnabled"
       - "game/client/ClientWorld.cs:1453:ForcePlayerColorsEnabled call"
       - "game/net/NetGame.cs:5777:Is1v1 (netname==duel); also 5788 (serverinfo gametype==duel)"
     constants:
@@ -255,11 +255,11 @@ features:
       - "common/gametypes/gametype/duel/duel.qh:m_isAlwaysSupported"
       - "common/gametypes/gametype/duel/duel.qh:m_isForcedSupported"
     port_refs:
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:145:ApplyForcedGametypes"
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:121:Get (calls ApplyForcedGametypes)"
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:88:ForceDuelOnDmMaps"
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:60:MapInfo.Diameter (parsed, not yet gated on)"
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:226:Parse (size case -> Diameter)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:145:ApplyForcedGametypes"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:121:Get (calls ApplyForcedGametypes)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:88:ForceDuelOnDmMaps"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:60:MapInfo.Diameter (parsed, not yet gated on)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:226:Parse (size case -> Diameter)"
       - "game/menu/CreateGameScreen.cs:590:forceDuelOnDm (g_duel_not_dm_maps wiring)"
       - "game/menu/dialogs/DialogCreateGameMapInfo.cs:50:ForceDuelOnDmMaps (g_duel_not_dm_maps wiring)"
     constants:

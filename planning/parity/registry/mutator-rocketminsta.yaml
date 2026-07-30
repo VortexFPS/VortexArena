@@ -16,9 +16,9 @@ features:
       - "common/mutators/mutator/rocketminsta/sv_rocketminsta.qc:11 (if(!autocvar_g_rm) return)"
       - "mutators.cfg:441 (set g_rm 0)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketMinstaMutator.cs:32 (IsEnabled)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketMinstaMutator.cs:53 (RmActive)"
-      - "src/XonoticGodot.Server/GameWorld.cs:602 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketMinstaMutator.cs:32 (IsEnabled)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketMinstaMutator.cs:53 (RmActive)"
+      - "src/VortexArena.Server/GameWorld.cs:602 (MutatorActivation.Apply)"
     constants:
       - { name: "g_rm default", base: "0 (disabled)", port: "0 via mutators.cfg:441", match: true }
       - { name: "enable predicate", base: "REGISTER_MUTATOR cond autocvar_g_instagib", port: "GetFloat(\"g_instagib\") != 0f", match: true }
@@ -44,9 +44,9 @@ features:
     base_refs:
       - "common/mutators/mutator/rocketminsta/sv_rocketminsta.qc:18-20 (MUTATOR_HOOKFUNCTION rm Damage_Calculate, WEP_DEVASTATOR branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketMinstaMutator.cs:63-67 (OnDamageCalculate devastator branch)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:264 (DamageCalculate.Call with string deathType)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:302-323 (explosion passes deathTag=FromWeapon(\"devastator\"))"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketMinstaMutator.cs:63-67 (OnDamageCalculate devastator branch)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:264 (DamageCalculate.Call with string deathType)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:302-323 (explosion passes deathTag=FromWeapon(\"devastator\"))"
     constants:
       - { name: "match weapon", base: "DEATH_ISWEAPON(WEP_DEVASTATOR)", port: "WeaponNetNameOf == \"devastator\"", match: true }
       - { name: "condition", base: "attacker==target || target.classname==\"nade\"", port: "ReferenceEquals(attacker,target) || target.ClassName==\"nade\"", match: true }
@@ -72,9 +72,9 @@ features:
     base_refs:
       - "common/mutators/mutator/rocketminsta/sv_rocketminsta.qc:22-25 (WEP_ELECTRO branch, g_rm_laser gate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketMinstaMutator.cs:71-75 (OnDamageCalculate electro branch)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:264"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:363-364 (laser deathType = electro.RegistryId)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketMinstaMutator.cs:71-75 (OnDamageCalculate electro branch)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:264"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:363-364 (laser deathType = electro.RegistryId)"
     constants:
       - { name: "gate", base: "autocvar_g_rm_laser", port: "GetFloat(\"g_rm_laser\") != 0f", match: true }
       - { name: "match weapon", base: "DEATH_ISWEAPON(WEP_ELECTRO)", port: "WeaponNetNameOf == \"electro\"", match: true }
@@ -102,8 +102,8 @@ features:
     base_refs:
       - "common/mutators/mutator/rocketminsta/sv_rocketminsta.qc:37-38 (MUTATOR_HOOKFUNCTION rm PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketMinstaMutator.cs:81-90 (OnPlayerDies)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:652 (PlayerDies.Call with string deathType)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketMinstaMutator.cs:81-90 (OnPlayerDies)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:652 (PlayerDies.Call with string deathType)"
     constants:
       - { name: "match weapons", base: "WEP_DEVASTATOR || WEP_ELECTRO", port: "\"devastator\" || \"electro\"", match: true }
       - { name: "forced corpse damage", base: "M_ARGV(4) = 1000", port: "args.Damage = 1000f", match: true }
@@ -130,9 +130,9 @@ features:
       - "common/weapons/weapon/vaporizer.qc:169-171 (W_Vaporizer_Attack g_rm + surface-flag gate)"
       - "mutators.cfg:442-445"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:302-323 (RocketMinstaExplosion)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:234-236 (Attack g_rm + surface-flag gate)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:321-322 (ROCKET_EXPLODE effect + rocket_impact.wav)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:302-323 (RocketMinstaExplosion)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:234-236 (Attack g_rm + surface-flag gate)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:321-322 (ROCKET_EXPLODE effect + rocket_impact.wav)"
     constants:
       - { name: "g_rm_damage", base: "70", port: "cvar (cfg 70); C# fallback 70", match: true }
       - { name: "g_rm_edgedamage", base: "38", port: "cvar (cfg 38); C# fallback 38", match: true }
@@ -166,8 +166,8 @@ features:
       - "common/weapons/weapon/vaporizer.qc:286-355 (wr_think laser branch + rapid ramp)"
       - "mutators.cfg:446-460"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:338-446 (RocketMinstaLaserBarrage)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:78-163 (WrThink primaryFallback + secondary + rapid-ramp branch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:338-446 (RocketMinstaLaserBarrage)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:78-163 (WrThink primaryFallback + secondary + rapid-ramp branch)"
     constants:
       - { name: "g_rm_laser_count", base: "3", port: "cvar (cfg 3); C# fallback 3", match: true }
       - { name: "g_rm_laser_damage (÷count)", base: "80", port: "cvar (cfg 80); fallback 80", match: true }
@@ -214,14 +214,14 @@ features:
       - "client/weapons/projectile.qc:504-506 (colormod = team palette when colormap>0)"
       - "common/effects/all.inc (EFFECT_ROCKETMINSTA_LASER rocketminsta_laser_neutral)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:381 (proj.NetName=\"rocketminsta\")"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:386 (proj.Team=actor.Team)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:381 (proj.NetName=\"rocketminsta\")"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:386 (proj.Team=actor.Team)"
       - "game/net/ServerNet.cs:1736 (Projectile networked via ProjectileCatalogKey, Colormap=(int)Team)"
       - "game/client/ProjectileCatalog.cs:222-224 (RocketMinstaLaser Desc: elaser model + ROCKETMINSTA_LASER trail + red glow + light)"
       - "game/client/ProjectileCatalog.cs:263 (Classify netname 'rocketminsta' -> RocketMinstaLaser)"
       - "game/client/ProjectileRenderer.cs:127-128 (ApplyTeamColormod for RocketMinstaLaser)"
       - "game/client/ClientWorld.cs:319 (ProjectileRenderer instantiated)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:258 (ROCKETMINSTA_LASER trail registered)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:258 (ROCKETMINSTA_LASER trail registered)"
     constants:
       - { name: "projectile id", base: "PROJECTILE_ROCKETMINSTA_LASER", port: "RocketMinstaLaser (ProjectileCatalog) via netname 'rocketminsta'; networked as NetEntityKind.Projectile", match: true }
       - { name: "model", base: "models/elaser.mdl", port: "ModelPath=\"models/elaser.mdl\" (ProjectileCatalog.cs:213), GlowSprite fallback when unmounted", match: true }
@@ -250,10 +250,10 @@ features:
       - "common/weapons/weapon/vaporizer.qc:194-199 (W_RocketMinsta_Laser_Explode -> ANNCE_ACHIEVEMENT_ELECTROBITCH)"
       - "common/weapons/weapon/vaporizer.qc:207-218 (Laser_Explode_use / Laser_Touch — touch vs timeout split)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:452-464 (RocketMinstaLaserExplode + Electrobitch guard)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:415-433 (Touch=direct damage / Think=timeout explode split)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:147 (ACHIEVEMENT_ELECTROBITCH registered)"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs:292 (electrobitch announcer sound)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:452-464 (RocketMinstaLaserExplode + Electrobitch guard)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:415-433 (Touch=direct damage / Think=timeout explode split)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:147 (ACHIEVEMENT_ELECTROBITCH registered)"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs:292 (electrobitch announcer sound)"
     constants:
       - { name: "trigger guard", base: "directhitentity.takedamage==DAMAGE_AIM && IS_PLAYER && DIFF_TEAM(realowner,dhe) && !IS_DEAD && IsFlying -> ANNCE_ACHIEVEMENT_ELECTROBITCH to realowner", port: "directHit.TakeDamage==Aim && (Flags&Client) && !SameTeam && !ReferenceEquals && DeadState==No && IsFlying -> NotificationSystem.Announce(owner,\"ACHIEVEMENT_ELECTROBITCH\")", match: true }
       - { name: "touch vs timeout split", base: "W_RocketMinsta_Laser_Touch -> Damage only (no achievement); timeout .use -> W_RocketMinsta_Laser_Explode (guard runs, but adaptor passes NULL directhitentity so guard never fires in practice)", port: "Touch=RadiusDamage only; Think=RocketMinstaLaserExplode(directHit:null) — guard present but NULL directHit means it never fires (faithful to Base)", match: true }
@@ -278,9 +278,9 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:79-92 (instagib_ammocheck g_rm&&g_rm_laser branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:346 (rocketMinsta predicate)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:352-357 (rocketMinsta downgrade branch)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1734 (PlayerPreThink.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:346 (rocketMinsta predicate)"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:352-357 (rocketMinsta downgrade branch)"
+      - "src/VortexArena.Server/GameWorld.cs:1734 (PlayerPreThink.Call)"
     constants:
       - { name: "branch predicate", base: "autocvar_g_rm && autocvar_g_rm_laser", port: "GetFloat(\"g_rm\")!=0 && GetFloat(\"g_rm_laser\")!=0", match: true }
       - { name: "behavior", base: "skip countdown; CENTER_INSTAGIB_DOWNGRADE once (instagib_needammo); keep fighting with laser", port: "no Countdown; NotificationSystem.Center(\"INSTAGIB_DOWNGRADE\") gated on !InstagibNeedAmmo", match: true }

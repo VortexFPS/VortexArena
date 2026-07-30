@@ -1,0 +1,7 @@
+# This directory is consumed by the game's own VFS (raw byte reads), not Godot's
+# resource importer. Tell the editor to skip it so it doesn't try to import the
+# ~17k pk3dir .png/.ogg/.ttf files (and choke on Xonotic's tiny 1x1 textures).
+#
+# Tracked deliberately: a fresh checkout must be protected BEFORE the editor is
+# first opened, or Godot generates an .import sidecar for every file in the tree.
+# See planning/repo-restructure-2026-07-29.md gotchas G3 and G4.

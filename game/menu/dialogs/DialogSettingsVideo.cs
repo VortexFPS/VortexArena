@@ -1,7 +1,7 @@
 using System.Globalization;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Video settings tab — a faithful C# port of <c>XonoticVideoSettingsTab_fill</c>

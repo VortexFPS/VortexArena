@@ -1,0 +1,9 @@
+/*
+Generated framegroups file for h_ok_hmg
+Used by DarkPlaces to simulate frame groups in DPM models.
+*/
+
+1 11 120 0 // h_ok_hmg fire
+12 11 120 0 // h_ok_hmg fire
+23 52 2 1 // h_ok_hmg idle
+75 11 30 0 // h_ok_hmg fire

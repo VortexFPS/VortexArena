@@ -8,14 +8,14 @@
 // blast frame exactly as QC's WarpZone_FindRadius does. The CLIENT portal SubViewport render is OUT OF SCOPE
 // (see TraceServiceWarpzoneExt header).
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-// NOTE: deliberately placed in the existing warpzone namespace (XonoticGodot.Common.Gameplay), NOT a nested
+// NOTE: deliberately placed in the existing warpzone namespace (VortexArena.Common.Gameplay), NOT a nested
 // "...Gameplay.Warpzone" namespace, because the TYPE `Warpzone` already lives there — a `...Gameplay.Warpzone`
 // namespace would collide with the class name. The file still lives under the Gameplay/Warpzone/ folder per the
 // task scoping; folder layout and namespace are decoupled here on purpose.
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// An accumulated chain of warpzone transforms — the C# successor to QC's <c>WarpZone_Accumulator</c>

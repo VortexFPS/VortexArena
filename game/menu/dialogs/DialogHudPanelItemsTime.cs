@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Items Time" panel config dialog — a faithful C# port of <c>XonoticHUDItemsTimeDialog_fill</c>
@@ -10,7 +10,7 @@ namespace XonoticGodot.Game.Menu;
 /// with its own Enable row suppressed. Then the items-time-specific rows: text/icon ratio, icon alignment,
 /// status bar (+reduced), and the hide-spawned / hide-big / dynamic-size checkboxes.
 ///
-/// FAITHFUL UI NOW: the items-time panel is drawn by the HUD backend XonoticGodot hasn't wired up; all cvar
+/// FAITHFUL UI NOW: the items-time panel is drawn by the HUD backend VortexArena hasn't wired up; all cvar
 /// bindings are real (they write the shared store the game reads).
 /// </summary>
 public partial class DialogHudPanelItemsTime : MenuScreen

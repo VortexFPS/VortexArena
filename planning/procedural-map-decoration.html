@@ -1,0 +1,1907 @@
+<title>Procedural Map Decoration &amp; In-Game Map Editor — Design</title>
+<style>
+/*
+  Design doc: procedural map decoration + in-game editor.
+  Same family as the planning/reference docs (self-contained, dark), but with a
+  warm "torchlit stone" palette to suit the subject.
+
+  ground   #100c08
+  surface  #1a140d
+  border   #2c2317
+  code     #e0a458   (torch amber)
+  moss     #7ba05b
+  hot      #c95d3c
+  text1    #d8cdbd
+  text2    #8a7c68
+  text3    #55493a
+*/
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  background: #100c08;
+  color: #d8cdbd;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+body { max-width: 980px; margin: 0 auto; padding: 0 24px 120px; }
+
+.page-head {
+  position: relative;
+  padding: 52px 0 40px;
+  border-bottom: 1px solid #2c2317;
+  margin-bottom: 48px;
+  overflow: hidden;
+}
+.page-head::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(#2c2317 1px, transparent 1px),
+    linear-gradient(90deg, #2c2317 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.5) 40%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.5) 40%, transparent 100%);
+  pointer-events: none;
+}
+.head-inner { position: relative; }
+.doc-kicker {
+  font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+  color: #8a7c68; margin-bottom: 10px;
+}
+h1 { font-size: 30px; line-height: 1.25; font-weight: 650; color: #f0e6d4; }
+.doc-meta { margin-top: 14px; font-size: 13px; color: #8a7c68; }
+.doc-meta code { font-size: 12px; }
+
+h2 {
+  font-size: 21px; font-weight: 650; color: #f0e6d4;
+  margin: 64px 0 18px; padding-top: 18px;
+  border-top: 1px solid #2c2317;
+}
+h2 .secno { color: #e0a458; margin-right: 10px; font-weight: 700; }
+h3 { font-size: 16.5px; font-weight: 650; color: #e8ddc9; margin: 34px 0 10px; }
+h3 .secno { color: #b98a45; margin-right: 8px; }
+h4 { font-size: 14.5px; font-weight: 650; color: #cbbfa9; margin: 24px 0 8px; }
+
+p { margin: 0 0 14px; }
+ul, ol { margin: 0 0 16px 24px; }
+li { margin-bottom: 7px; }
+li > ul, li > ol { margin-top: 7px; margin-bottom: 4px; }
+
+code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 13px; color: #e0a458;
+  background: #1a140d; border: 1px solid #2c2317;
+  padding: 1px 5px; border-radius: 4px;
+}
+pre {
+  background: #1a140d; border: 1px solid #2c2317; border-radius: 8px;
+  padding: 14px 16px; margin: 0 0 16px; overflow-x: auto;
+  font-size: 12.5px; line-height: 1.55;
+}
+pre code { background: none; border: none; padding: 0; color: #cbb894; }
+pre .cm { color: #6b5e4b; }
+pre .k  { color: #c95d3c; }
+pre .s  { color: #7ba05b; }
+
+table {
+  width: 100%; border-collapse: collapse; margin: 0 0 18px;
+  font-size: 13.5px;
+}
+th {
+  text-align: left; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+  color: #8a7c68; font-weight: 650;
+  border-bottom: 1px solid #3d3222; padding: 6px 10px 6px 0;
+}
+td { border-bottom: 1px solid #221b11; padding: 8px 10px 8px 0; vertical-align: top; }
+td:first-child, th:first-child { padding-left: 0; }
+tr:last-child td { border-bottom: none; }
+
+.callout {
+  border: 1px solid #2c2317; border-left: 3px solid #e0a458;
+  background: #1a140d; border-radius: 0 8px 8px 0;
+  padding: 12px 16px; margin: 0 0 18px; font-size: 14px;
+}
+.callout.moss { border-left-color: #7ba05b; }
+.callout.hot  { border-left-color: #c95d3c; }
+.callout .lbl {
+  display: block; font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: #8a7c68; margin-bottom: 4px; font-weight: 700;
+}
+
+.pill {
+  display: inline-block; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  border-radius: 999px; padding: 1px 9px; margin-right: 6px;
+  border: 1px solid #3d3222; color: #cbbfa9;
+}
+.pill.rec  { border-color: #7ba05b; color: #9dc07e; }
+.pill.alt  { border-color: #55493a; color: #8a7c68; }
+.pill.hard { border-color: #c95d3c; color: #d98a6d; }
+
+.toc {
+  background: #1a140d; border: 1px solid #2c2317; border-radius: 10px;
+  padding: 18px 22px; margin-bottom: 8px; font-size: 14px;
+  columns: 2; column-gap: 40px;
+}
+.toc a { display: block; color: #cbbfa9; text-decoration: none; padding: 2.5px 0; break-inside: avoid; }
+.toc a:hover { color: #e0a458; }
+.toc .t1 { font-weight: 650; }
+.toc .t2 { padding-left: 18px; color: #8a7c68; font-size: 13px; }
+a { color: #e0a458; }
+
+.flow {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 0 0 18px; font-size: 13px;
+}
+.flow .node {
+  background: #1a140d; border: 1px solid #3d3222; border-radius: 8px;
+  padding: 8px 13px; color: #e8ddc9;
+}
+.flow .node small { display: block; color: #8a7c68; font-size: 11.5px; }
+.flow .arr { color: #55493a; font-size: 16px; }
+</style>
+
+<div class="page-head"><div class="head-inner">
+  <div class="doc-kicker">Vortex Arena · design doc · draft v1</div>
+  <h1>Procedural Map Decoration &amp; the In-Game Map Editor</h1>
+  <div class="doc-meta">
+    2026-07-27 · branch <code>claude/procedural-map-decoration-addcaf</code> · status: <b>ideas &amp; options</b> — nothing here is implemented yet.<br>
+    <b>v1 revision:</b> reprioritized <b>editor-first</b> — <code>.vmap</code> format → .map/.bsp importers → in-game
+    editor game mode (specced in §11.3–11.6, incl. ortho views &amp; render-mode toggles) come first; procedural
+    decoration follows. Roadmap (§13) resequenced.<br>
+    <b>v1.2:</b> added skybox generation + dynamic weather (§10.2–10.3, elevated within the additions) and
+    terrain/vista geometry + reactive foliage (§8.5–8.6, lower priority); roadmap rows D6–D8.<br>
+    <b>v1.3:</b> real-time / previewable lighting answered (§10.1 ladder — progressive GPU lightmapper elevated),
+    spawn-point presence pads (§8.7), and the gameplay layer (§12): deterministic item placement, player-count-aware
+    map selection, demo heatmaps.<br>
+    <b>Status 2026-07-27</b> on <code>feature/map-editor</code> (pushed). <b>E0–E2 fully implemented</b>: the
+    <code>.vmap</code> container + brush CSG kernel, the <code>.bsp</code> and <code>.map</code> importers, the
+    editor gametype with the EDIT/PLAYTEST toggle, the world-space alignment grid.
+    <b>E3–E5 implemented</b> (60 tests): the op model with snapshot undo/redo, ray picking, the convex
+    plane-refit behind vertex/edge drags, rotation, geometry snapping, box creation and the clipper — plus the
+    crosshair-driven interaction layer, the line-overlay gizmos and the orthographic viewport, all on the
+    game's own HUD/bind/cursor systems. <b>E6 op replication is built end to end</b>: the wire format covers
+    every replicable op, creates carry a server-assigned id, undo replicates as the state it restored, and the
+    whole thing rides a new <code>NetControl.EditorOp</code> channel (protocol v20). Marked
+    <span class="pill rec">built</span> below where shipped.<br>
+    <b>v1.4 (2026-07-28):</b> added <b>§11.9 tool selection &amp; usage</b> — the interaction model E3–E5 left
+    implicit: a right-click context menu, the tool/mode/action split, two-phase handle grabbing so a transform
+    targets one axis, an action readout saying what you are about to do to what, and the editor taking keys 0–9
+    outright instead of borrowing weapon binds. Adds the Select, Clip, Measure, Shader, Entity and Waypoint tools;
+    roadmap rows E7 (rails) and E8 (tool build-out). Corrects §13's E5 row: <code>CreateBoxBrushOp</code> and
+    <code>ClipBrushOp</code> are implemented but no tool reaches them.<br>
+    <b>v1.5 (2026-07-28):</b> <b>E6 op replication built.</b> §11.7 gains the four things the sketch did not
+    anticipate — an id-carrying handshake for ops that mint ids, a paste that replicates as its result rather
+    than as the gesture, an undo that replicates as the state it restored, and one replication choke point
+    instead of a send beside each tool. New channel <code>NetControl.EditorOp</code>, protocol v20. The open
+    piece is now the document handshake, not the op channel.<br>
+    <b>v1.6 (2026-07-29):</b> branch review. Ten defects fixed (a remote out-of-memory in the op codec, packets
+    corrupted by any sizeable paste, a guest that could not paste at all, a phantom brush id 0 from patch and
+    entity selections, shift-multiselect deselecting instead of adding, every playtest toggle orphaning the
+    entities spawnfuncs derive, an ungated main-thread broadcast into ServerNet, a non-atomic save, A* indexing
+    at -1 on a deleted waypoint, and the editor never reopening a saved <code>.vmap</code>); patches gained a
+    delete. New <b>§13.1</b> audits what is left to be feature-complete — the pipeline is the gap that makes the
+    others secondary.<br>
+    Companion screenshots: the current renderer's output of the courtyard map vs. the decorated concept of the same shot (referenced throughout as <b>CURRENT</b> and <b>CONCEPT</b>).
+  </div>
+</div></div>
+
+<div class="toc">
+  <a class="t1" href="#goals">1 · Goals &amp; non-goals</a>
+  <a class="t1" href="#casestudy">2 · Case study: CURRENT → CONCEPT</a>
+  <a class="t1" href="#today">3 · What exists today (and what DP/NetRadiant can't do)</a>
+  <a class="t1" href="#anatomizer">4 · The map anatomizer (feature fields)</a>
+  <a class="t1" href="#blending">5 · Multi-layer texture blending</a>
+  <a class="t2" href="#blend-storage">5.1 Where masks live</a>
+  <a class="t2" href="#blend-shader">5.2 The layered shader</a>
+  <a class="t2" href="#blend-auto">5.3 Automatic texturing / alignment</a>
+  <a class="t1" href="#weathering">6 · Procedural weathering generators</a>
+  <a class="t1" href="#manual">7 · Manual painting &amp; overrides</a>
+  <a class="t1" href="#props">8 · Detail geometry, props, terrain &amp; foliage</a>
+  <a class="t2" href="#terrain">8.5 Terrain &amp; outside-the-map geometry</a>
+  <a class="t2" href="#foliage">8.6 Reactive foliage</a>
+  <a class="t2" href="#spawnpads">8.7 Spawn-point presence pads</a>
+  <a class="t1" href="#amplify">9 · Lattice detection &amp; detail amplification</a>
+  <a class="t1" href="#lighting">10 · Lighting, atmosphere, skyboxes &amp; weather</a>
+  <a class="t2" href="#skybox">10.2 Skybox generation</a>
+  <a class="t2" href="#weather">10.3 Dynamic weather</a>
+  <a class="t1" href="#format">11 · Map format &amp; the in-game editor (priority track)</a>
+  <a class="t2" href="#format-import">11.1 Import: .bsp / .map → base geometry</a>
+  <a class="t2" href="#format-vmap">11.2 The <code>.vmap</code> file</a>
+  <a class="t2" href="#editor-mode">11.3 Editor game mode &amp; player states</a>
+  <a class="t2" href="#editor-tools">11.4 First-person geometry tools</a>
+  <a class="t2" href="#editor-ortho">11.5 Ortho views &amp; render modes</a>
+  <a class="t2" href="#editor-hud">11.6 Editor HUD</a>
+  <a class="t2" href="#format-editor">11.7 Ops, networking &amp; bake</a>
+  <a class="t2" href="#editor-qol">11.8 QoL backlog</a>
+  <a class="t2" href="#editor-ux">11.9 Tool selection &amp; usage</a>
+  <a class="t1" href="#gameplay">12 · Gameplay-layer systems</a>
+  <a class="t2" href="#itemplace">12.1 Dynamic item placement</a>
+  <a class="t2" href="#mapselect">12.2 Player-count-aware selection</a>
+  <a class="t2" href="#heatmaps">12.3 Demo heatmaps</a>
+  <a class="t1" href="#roadmap">13 · Roadmap (editor-first)</a>
+  <a class="t2" href="#editor-gap">13.1 What is left to be feature-complete</a>
+  <a class="t1" href="#risks">14 · Risks &amp; open questions</a>
+  <a class="t1" href="#appendix">A · DP/NetRadiant capability comparison</a>
+</div>
+
+<!-- ══════════════════════════ 1 · GOALS ══════════════════════════ -->
+<h2 id="goals"><span class="secno">1</span>Goals &amp; non-goals</h2>
+
+<p><b>The pitch:</b> take the <i>basic geometry</i> of any existing map (a compiled <code>.bsp</code> or an authored
+<code>.map</code>) and procedurally decorate it into something like the CONCEPT shot — weathered layered materials,
+moss and grime placed where physics says they belong, torches that are actually lit, detail geometry where the
+silhouette deserves it — while keeping every knob hand-editable <i>in the running game</i>.</p>
+
+<ul>
+  <li><b>G1 — Multi-layer texture blending</b> in the renderer: several full material layers (albedo/normal/roughness/height)
+      crossfading per-pixel on one surface. This is the core renderer feature the whole doc hangs off; the
+      DarkPlaces/NetRadiant stack effectively does not have it (<a href="#appendix">Appendix A</a>).</li>
+  <li><b>G2 — Procedural mask generation</b>: dirt, moss, burn/scorch, rain streaks, edge wear, sun bleach — computed
+      from the map's own geometry (occlusion, corners, height on wall, sky exposure), with per-zone and per-surface-class
+      parameter overrides (top of wall vs. bottom, corners vs. flats), and smooth continuation across adjacent surfaces.</li>
+  <li><b>G3 — Procedural detail geometry</b>: rule-driven prop placement (torches, trims, debris, banners), decal
+      projection, floor relief.</li>
+  <li><b>G4 — Decoration-geometry amplification</b>: detect lattice/ornament brushwork (the spike crowns in the
+      screenshots) and regenerate it at higher fidelity.</li>
+  <li><b>G5 — In-game, real-time editing</b>: an editor <i>game mode</i> with two player states (free-fly <b>EDIT</b> /
+      instant <b>PLAYTEST</b>), first-person geometry manipulation — grabbable verts/edges/faces, move &amp; rotation
+      handles, grid + geometry snapping with HUD readouts (§11.3–11.4) — orthographic top/front/side views with
+      exact wireframe lines and axis-locked editing, quick render-mode toggles (§11.5), plus decoration editing with
+      manual painting layered non-destructively on the procedural output. Server may bake heavy passes (lighting,
+      mask bakes) and stream results to clients.</li>
+  <li><b>G6 — A native map format</b> where the editable representation <i>is</i> the shipping representation, with a
+      regenerable bake cache for runtime efficiency (the ".map vs .bsp" split collapsed into one package).</li>
+  <li><b>G7 — World dressing beyond the brushwork</b> <i>(v1.2)</i>: generated skyboxes with selectable art styles
+      (painted daylight, golden hour, overcast, deep space) and a dynamic weather system with falling rain
+      (§10.2–10.3) — plus, at lower priority, generated terrain / outside-the-map vista geometry (§8.5) and
+      paintable foliage with style variation that reacts to wind and explosions (§8.6).</li>
+  <li><b>G8 — Live lighting &amp; the gameplay layer</b> <i>(v1.3)</i>: lighting previewable in real time while
+      editing, with baking made progressive rather than batch (§10.1) — and, lower priority, deterministic
+      balance-driven item placement, player-count-aware map selection, demo-mined heatmaps (§12), and auto-detected
+      spawn-point presence pads (§8.7).</li>
+</ul>
+
+<p><b>Non-goals (for this doc):</b> a full Radiant replacement — first-person tools (§11.4) plus single-pane ortho
+views (§11.5) cover geometry editing, and the clipper (plane split) makes the cut, but boolean CSG ops
+(subtract / hollow) and a docked quad-view desktop UI stay out until the loop is proven; replacing q3map2 for
+classic-map compatibility; PBR-ifying the DP-faithful renderer for <i>existing</i> stock maps (decorated maps are a
+deliberate fork-forward feature; the Q3-stage material path stays intact for parity).</p>
+
+<div class="callout hot"><span class="lbl">v1 priority — editor first</span>
+Build order: the <code>.vmap</code> format (§11.2) → the .bsp/.map importers (§11.1) → the editor game mode with
+first-person tools, ortho views &amp; render modes (§11.3–11.6) come <b>first</b>; procedural decoration (§4–§10) follows once the format +
+editor loop exists. The decoration sections remain in this doc as the target the format must not design itself away
+from — and decoration's editing UX gets <i>cheaper</i> for the reordering, since it lands on the editor's
+op/undo/HUD/replication rails instead of bespoke transient plumbing. Resequenced roadmap in <a href="#roadmap">§13</a>.
+</div>
+
+<div class="callout"><span class="lbl">Design stance</span>
+Everything is <b>rules → fields → masks → layers</b>, with manual edits stored as <i>deltas at each stage</i> rather
+than baked-over results. Re-running the procedural pass never destroys hand work; hand work never blocks re-tuning the
+rules. This one invariant drives the format (<a href="#format">§11</a>), the editor, and the networking.</div>
+
+<!-- ══════════════════════════ 2 · CASE STUDY ══════════════════════════ -->
+<h2 id="casestudy"><span class="secno">2</span>Case study: CURRENT → CONCEPT</h2>
+
+<p>The two screenshots are the same camera on the same courtyard (same brush geometry, same banners, statues, throne,
+spike crowns, HUD). Every visible difference decomposes into a technique this doc specifies. This is effectively the
+acceptance test for the whole system: <i>run the pipeline on the CURRENT map and land within sight of CONCEPT.</i></p>
+
+<table>
+  <tr><th style="width:30%">Delta (CURRENT → CONCEPT)</th><th style="width:44%">What produces it</th><th>Section</th></tr>
+  <tr>
+    <td>Flat overcast light → warm low-sun golden hour, long shadows, glow</td>
+    <td>Directional light + baked GI + tonemap/bloom/color-grade environment pass</td>
+    <td><a href="#lighting">§10</a></td>
+  </tr>
+  <tr>
+    <td>Unlit wall sconces → burning torches + standing braziers with fire, smoke plumes, local warm light pools</td>
+    <td>Prop rule "torch" (placement + swap candle→torch model + brazier scatter), auto-spawned flickering omni lights (<code>LightStyles</code> already exists), faithful-particle fire/smoke effects</td>
+    <td><a href="#props">§8</a>, <a href="#lighting">§10</a></td>
+  </tr>
+  <tr>
+    <td>Uniform tiled stone → per-stone tonal variation, cracked plaster, chipped block edges</td>
+    <td>Layered material: base stone + variation layer via triplanar macro-noise; edge-wear mask from convex-edge distance (curvature)</td>
+    <td><a href="#blending">§5</a>, <a href="#weathering">§6</a></td>
+  </tr>
+  <tr>
+    <td>Clean walls → moss at arch feet, damp staining in concave corners, grime streaks under ledges</td>
+    <td>Moss generator (height-above-floor + concavity + low sky exposure), streak generator (directional gravity flow from horizontal-edge seeds)</td>
+    <td><a href="#weathering">§6</a></td>
+  </tr>
+  <tr>
+    <td>Flat floor texture → individually readable cobbles with depth, dirt in the gaps</td>
+    <td>Height-aware blending (dirt settles in cobble-height crevices) + parallax occlusion relief on floor class</td>
+    <td><a href="#blending">§5.2</a>, <a href="#props">§8.4</a></td>
+  </tr>
+  <tr>
+    <td>Flat-shaded banners → saturated cloth with folds, wind motion, crisp emblem</td>
+    <td>Decor-surface detection (thin quad + banner texture family) → substitution with cloth mesh (baked folds, vertex-anim sway)</td>
+    <td><a href="#amplify">§9</a></td>
+  </tr>
+  <tr>
+    <td>Simple spike crowns → ornate curved spikes with bevels catching rim light</td>
+    <td>Lattice detection (thin, repeated, detail-content brushes) → profile re-extrusion / library substitution, instanced</td>
+    <td><a href="#amplify">§9</a></td>
+  </tr>
+  <tr>
+    <td>Bare scene → smoke haze, atmospheric depth, mountains reading through warm fog</td>
+    <td>Environment fog + (optional) volumetric fog volumes near fire sources; vista ring geometry for the mountains</td>
+    <td><a href="#lighting">§10</a>, <a href="#terrain">§8.5</a></td>
+  </tr>
+  <tr>
+    <td>Flat pale sky → warm cloud-streaked sunset sky that the whole scene's light agrees with</td>
+    <td>Parametric skybox (golden-hour preset), sun position unified with the directional light + sun-bleach generator</td>
+    <td><a href="#skybox">§10.2</a></td>
+  </tr>
+</table>
+
+<p>Two observations worth pinning. First, <b>most of the delta is materials and lighting, not geometry</b> — G1+G2+G5
+alone (blending, weathering, lighting) get maybe 70% of the way to CONCEPT on unchanged brushes. That ordering shapes
+the decoration phases of the <a href="#roadmap">roadmap</a>. Second, everything in CONCEPT is <i>explainable by local rules</i> — moss is where
+moisture would sit, wear is where feet and hands go, soot is above flames. That's what makes procedural generation
+credible here: the concept artist was already applying an algorithm.</p>
+
+<!-- ══════════════════════════ 3 · TODAY ══════════════════════════ -->
+<h2 id="today"><span class="secno">3</span>What exists today (and what DP/NetRadiant can't do)</h2>
+
+<h3><span class="secno">3.1</span>Our current pipeline — the hooks we build on</h3>
+<table>
+  <tr><th style="width:38%">Component</th><th>Why it matters here</th></tr>
+  <tr><td><code>src/XonoticGodot.Formats/Bsp/BspReader.cs</code> + <code>BspData</code></td>
+      <td>Full IBSP v46 parse: faces, brushes (with content flags — detail-brush detection hook for <a href="#amplify">§9</a>), lightmap pages, lightgrid, PVS, entity lump.</td></tr>
+  <tr><td><code>game/MapLoader.cs</code></td>
+      <td>Builds render meshes bucketed by texture+lightmap, packs a <b>gutter-padded lightmap atlas with UV2 charts for every lit face</b> — a ready-made unique-texel parameterization we can reuse for weathering masks (<a href="#blend-storage">§5.1</a>). Bezier patch tessellation. Vertex-lit COLOR path already exists.</td></tr>
+  <tr><td><code>Q3ShaderParser</code> / <code>ShaderDef</code> / <code>Q3StageGlsl</code> / <code>AutospriteShaderGen</code></td>
+      <td>We already <b>generate Godot shaders</b> from parsed Q3 materials (incl. <code>rgbGen/alphaGen vertex</code>, deforms, the CUSTOM0/1 vertex-attribute recipe from the autosprite work). The layered material is an extension of this generator, not a new system.</td></tr>
+  <tr><td><code>BspCollisionBuilder</code> / <code>TraceService</code></td>
+      <td>CPU ray/box tracing against the world — the occlusion / sky-exposure / clearance bakes in <a href="#anatomizer">§4</a> are "just" many traces. (Client-world TraceService exists per the particle-collision work.)</td></tr>
+  <tr><td><code>DecalSplats</code> (game/client/particles)</td>
+      <td>Already does Sutherland–Hodgman clipping of decal quads against brush faces — exactly the mechanism static weathering decals (cracks, stains) need, minus the lifetime management.</td></tr>
+  <tr><td><code>LightStyles</code>, dual particle system, effectinfo</td>
+      <td>Torch flicker curves and fire/smoke effects exist; prop rules only need to <i>reference</i> them.</td></tr>
+  <tr><td>Bot waypoint/navigation data</td>
+      <td>A free "foot traffic" field: floor wear along travel routes (<a href="#weathering">§6</a>).</td></tr>
+  <tr><td><code>Base/netradiant</code> checkout</td>
+      <td>q3map2 source on disk — reference for .map parsing, <code>q3map_alphaMod</code> semantics, lightmap chart math.</td></tr>
+</table>
+
+<h3><span class="secno">3.2</span>Where the DarkPlaces/NetRadiant stack stops</h3>
+<p>The classic stack's <i>only</i> per-pixel-variation mechanism is <b>per-vertex alpha</b>: q3map2 seeds vertex alpha
+via <code>q3map_alphaMod volume</code> brushes (or <code>dotProduct2</code>-style terrain shaders), and a two-stage
+shader crossfades layer B over layer A with <code>alphaGen vertex</code> / <code>alphaFunc</code>. That gives you the
+famous Q3 terrain blends — and nothing more:</p>
+<ul>
+  <li><b>Resolution = tessellation.</b> The blend can only change where vertices exist. On a big flat wall brush there
+      are 4 vertices; no gradient detail without manually chopping geometry.</li>
+  <li><b>Practically 2 layers.</b> Every extra layer is another full multiply/blend render pass over the surface.</li>
+  <li><b>Diffuse-only.</b> No normal/roughness/height participation, so blends look painted-on, not material-vs-material.</li>
+  <li><b>No authoring UI.</b> NetRadiant has no vertex painting; artists sculpt invisible alphaMod brushes and recompile
+      to see results. Nothing is editable at runtime, ever — the pipeline is author → q3map2 → restart.</li>
+  <li><b>No procedural placement.</b> Nothing computes occlusion/curvature/exposure; every weathering decision is a
+      hand-placed decal or a bespoke texture variant (<code>wall_mossy_bottom_02.tga</code> multiplication — the reason
+      idTech-era texture sets balloon).</li>
+</ul>
+<p>So G1 is not "catch up to modern engines" as a nicety — it removes the single bottleneck that forced the entire
+texture-variant workflow the original assets are built around. Full comparison table in <a href="#appendix">Appendix A</a>.</p>
+
+<!-- ══════════════════════════ 4 · ANATOMIZER ══════════════════════════ -->
+<h2 id="anatomizer"><span class="secno">4</span>The map anatomizer — feature fields everything else consumes</h2>
+
+<p>One analysis pass runs over the base geometry and produces <b>feature fields</b> — scalar/vector data per surface
+point that answer "what is this spot?" Every downstream system (weathering generators §6, prop rules §8, amplification
+§9) reads these fields instead of doing its own geometry queries. This is the piece that makes rules composable and the
+piece with the most reuse, so it's worth building well.</p>
+
+<div class="flow">
+  <div class="node">.bsp / .map<small>base geometry</small></div><div class="arr">→</div>
+  <div class="node">Anatomizer<small>classify · adjacency · bakes</small></div><div class="arr">→</div>
+  <div class="node">Feature fields<small>per-texel in chart space</small></div><div class="arr">→</div>
+  <div class="node">Generators §6 · Rules §8<small>masks &amp; placements</small></div><div class="arr">→</div>
+  <div class="node">Layered render §5<small>+ props, lights</small></div>
+</div>
+
+<table>
+  <tr><th style="width:24%">Field</th><th style="width:44%">Computation</th><th>Drives</th></tr>
+  <tr><td><b>Surface class</b></td>
+      <td>Normal direction (floor / wall / ceiling / slope) × material family from the Q3 shader name (stone, metal, wood, trim, banner…). Cheap, exact.</td>
+      <td>Which rules apply at all; per-class parameter sets ("walls get streaks, floors get puddles")</td></tr>
+  <tr><td><b>Adjacency graph + edge classes</b></td>
+      <td>Weld coplanar/coincident face edges (from brush faces, not the tessellated mesh); label each edge <i>convex</i> (outside corner), <i>concave</i> (inside corner), or <i>coplanar seam</i>. Distance-to-nearest-edge transforms per texel.</td>
+      <td>Edge wear (convex), dirt/moss accumulation (concave), <b>cross-surface mask smoothing</b> — the requirement that blends continue over adjacent faces</td></tr>
+  <tr><td><b>Ambient occlusion / cavity</b></td>
+      <td>Hemisphere ray bake per texel against the collision world (TraceService), cosine-weighted. Medium cost, embarrassingly parallel.</td>
+      <td>Dirt, dust, grime pooling; also feeds the render AO term for free</td></tr>
+  <tr><td><b>Sky exposure ("openness")</b></td>
+      <td>Rays toward the upper hemisphere terminating on sky surfaces (<code>surfaceparm sky</code> faces are known from the shader defs).</td>
+      <td>Rain wetness/streaks, sun bleach, snow/dust settling, "sheltered" moss bias</td></tr>
+  <tr><td><b>Height above local floor</b></td>
+      <td>Downward trace per texel to the nearest walkable floor (not absolute Z — a wall base on a balcony counts as "bottom of wall" there).</td>
+      <td>The wall-bottom vs. wall-top split the brief calls out: moss/damp low, weathering/soot bands high</td></tr>
+  <tr><td><b>Gravity flow</b></td>
+      <td>Project gravity onto the surface tangent plane → per-texel 2D flow direction; integrate short flow lines from "drip seeds" (underside of horizontal edges, sill lips).</td>
+      <td>Rain streaks, rust runs, wax drips under torches — anything that reads as "gravity happened here"</td></tr>
+  <tr><td><b>Entity / gameplay proximity</b></td>
+      <td>Distance fields to tagged entities (flame props → scorch above + soot cone; item spawns; doors) and to the bot navigation network (edge usage ≈ foot traffic).</td>
+      <td>Scorch/soot around fire, floor polish along travelled routes, wear around pickups</td></tr>
+  <tr><td><b>Zones</b></td>
+      <td>Author-placed volumes (or room detection from the PVS cluster graph as a starting suggestion) carrying parameter overrides.</td>
+      <td>"This courtyard is mossier", "this wing burned" — regional art direction without touching rules</td></tr>
+</table>
+
+<div class="callout moss"><span class="lbl">Key property — world-space evaluation, chart-space storage</span>
+All fields are <i>evaluated</i> in world space (traces, distances, flows don't care about face boundaries) and then
+<i>sampled into</i> per-face chart texels (§5.1). Because two faces meeting at an edge sample the same world-space
+field, masks agree across the seam by construction — the "blending/smoothing around adjacent surfaces" requirement
+falls out for free, with only a small seam-dilation pass needed to hide chart-boundary filtering.</div>
+
+<p><b>Cost &amp; caching:</b> the anatomizer is a bake, not a per-frame system. For editing it must be incremental —
+fields are stored in tiles keyed by a hash of (geometry region, parameters), and a geometry edit dirties only
+intersecting tiles. Budget target: full first bake on a stock map in tens of seconds on the server; incremental
+re-bakes sub-second for a local edit. (Per house rules, any runtime portion gets a <code>Prof.Sample</code> scope.)</p>
+
+<!-- ══════════════════════════ 5 · BLENDING ══════════════════════════ -->
+<h2 id="blending"><span class="secno">5</span>Multi-layer texture blending — the renderer feature</h2>
+
+<p>The contract: a decorated surface renders <b>base material + up to N weather/variation layers</b>, each a full
+material (albedo, normal, roughness, height), blended per-pixel by mask values, with <b>height-aware</b> blend edges
+(moss grows <i>between</i> cobbles before it covers them — the single biggest "looks real vs. looks painted" factor).</p>
+
+<h3 id="blend-storage"><span class="secno">5.1</span>Where masks live — three options</h3>
+<table>
+  <tr><th style="width:20%">Option</th><th style="width:42%">How</th><th>Verdict</th></tr>
+  <tr>
+    <td><span class="pill alt">alt</span>Per-vertex channels</td>
+    <td>Masks in COLOR/CUSTOM vertex attrs; optionally subdivide faces for resolution.</td>
+    <td>The Q3 approach with the Q3 problem: resolution tied to tessellation. Fine as a <i>fallback tier</i> for low
+        graphics settings; not the primary store.</td>
+  </tr>
+  <tr>
+    <td><span class="pill rec">recommended</span>Chart-space mask atlas ("weather atlas")</td>
+    <td>Reuse the existing lightmap UV2 charts (<code>MapLoader</code> already builds the atlas + gutters) at a
+        <b>higher, per-face-scalable density</b> (e.g. 4–16× lightmap texel density, denser where masks have detail).
+        Masks are RGBA tiles in one atlas texture; the same charts later host our own baked lighting (§10).</td>
+    <td>Unique texels on every surface, resolution decoupled from geometry, trivially paintable, streams in tiles.
+        The unwrap problem — normally the hard part — is already solved for lit faces; unlit/vertex-lit faces need a
+        chart allocation pass (simple planar projection per face is enough; these are brush faces, not organic meshes).</td>
+  </tr>
+  <tr>
+    <td><span class="pill alt">alt / later</span>World-space sparse 3D masks</td>
+    <td>Clipmap or sparse-brick 3D texture sampled by world position — no UVs at all, perfectly seamless.</td>
+    <td>Elegant (seams impossible, volumetric effects like "burned region" trivial) but memory-hungry and overkill for
+        v1. Worth keeping as the possible v2 store; the shader interface below doesn't preclude it.</td>
+  </tr>
+</table>
+
+<p><b>Layer count per texel:</b> RGBA8 gives 4 weather channels; a second atlas page doubles it. If maps want many
+layers, switch to <i>indexed splatting</i> (per-texel: 2–3 layer indices + weights, UE-landscape style) — but start
+with fixed channels; the weathering set (moss/dirt/soot/wear + wet in a second page) fits.</p>
+
+<h3 id="blend-shader"><span class="secno">5.2</span>The layered shader</h3>
+<p>Extend the existing generated-shader pipeline (<code>Q3StageGlsl</code>) with a "layered" material mode. Weather
+layer textures live in <code>Texture2DArray</code>s (one array each for albedo/normal/rough-height packs) shared by
+every decorated material — one texture bind set for the whole map, layer choice is an index.</p>
+
+<pre><code><span class="cm">// sketch — decorated-surface fragment stage</span>
+uniform sampler2DArray wx_albedo : source_color, filter_linear_mipmap;
+uniform sampler2DArray wx_nrh;            <span class="cm">// normal.xy, roughness, height packed</span>
+uniform sampler2D      wx_mask;           <span class="cm">// weather atlas tile (chart space, UV2-family)</span>
+uniform float          wx_layer[4];       <span class="cm">// which array layers this material's channels map to</span>
+uniform float          wx_scale[4];       <span class="cm">// world-space tiling per layer</span>
+
+vec4 m = texture(wx_mask, uv_chart);                       <span class="cm">// moss, dirt, soot, wear</span>
+vec3 base = /* existing Q3-stage or PBR base result */;
+float base_h = /* base layer height, from its own pack */;
+
+for (int i = 0; i &lt; 4; i++) {
+    vec3 wa = triplanar(wx_albedo, wpos * wx_scale[i], wx_layer[i], wnormal);
+    vec4 nrh = triplanar(wx_nrh,  wpos * wx_scale[i], wx_layer[i], wnormal);
+    <span class="cm">// height-aware blend: mask biased by layer-vs-base height contest → crisp organic edges</span>
+    float w = height_blend(m[i], nrh.a, base_h, wx_sharp);
+    base = mix(base, wa, w);
+    <span class="cm">// (normal & roughness mixed the same way; wear channel instead *reveals* — subtracts toward substrate)</span>
+}
+</code></pre>
+
+<ul>
+  <li><b>Triplanar world projection for weather layers</b> — no UVs to author or align, seamless across faces, correct
+      on slopes. (Base layers keep their existing Q3 UVs.) Cost note: naïve triplanar = 3 samples/layer; use the
+      dominant-axis single-sample variant with a small blend band on edge texels.</li>
+  <li><b>Channel semantics differ:</b> moss/dirt/soot are <i>cover</i> layers (mix toward the layer); <b>wear</b> is a
+      <i>reveal</i> layer (mix toward a substrate — bare stone under plaster, bright metal under paint — defined per
+      base material); <b>wet</b> modifies roughness/darkens albedo rather than adding a layer.</li>
+  <li><b>Uniform mechanics:</b> the mask tile and layer-index table vary per surface-chunk material. Remember the
+      instance-uniform trap (vertex-stage instance uniforms are inert → per-material duplicates); mask sampling is
+      fragment-stage so instance uniforms are usable, but per-chunk ShaderMaterial duplicates with a shared shader are
+      the safe default we already use elsewhere.</li>
+  <li><b>Perf discipline:</b> new generated shader variants must register with <code>GpuWarmPass</code> (pipeline-compile
+      hitches), ship with <code>Prof.Sample</code> scopes, and pass <code>tools/perf-smoke.ps1</code>. Provide a cvar tier:
+      full (height-aware, per-pixel), reduced (no height contest, dominant-axis triplanar), off (masks collapse to the
+      vertex-tier fallback → still <i>roughly</i> right on low-end).</li>
+</ul>
+
+<h3 id="blend-auto"><span class="secno">5.3</span>Automatic texturing &amp; alignment for bare geometry</h3>
+<p>For the "hand it bare geometry" case (a greybox .map, or replacing a surface's material wholesale), the same
+world-projection machinery assigns base textures without manual alignment:</p>
+<ul>
+  <li><b>Box/triplanar mapping by surface class</b> — floors and ceilings get XY-planar projection, walls get the
+      dominant wall axis, at a world-units-per-tile scale from the material definition. This is what "auto-align" means
+      in practice: world-anchored UVs are always aligned, by construction, including across brush cuts (where Radiant's
+      per-face offsets constantly drift).</li>
+  <li><b>Trim detection</b> — narrow faces adjacent to large faces (sills, ledges, doorframes, steps) get the material's
+      <i>trim</i> variant fitted along the face's long axis (classic trim-sheet fitting: pick the trim strip whose
+      height matches the face, stretch along length).</li>
+  <li><b>Material grammar per zone</b> — a zone's palette ("sandstone set: wall=block, floor=cobble, trim=carved
+      band") lets one click re-dress a whole greybox area; the weathering pass then makes it non-uniform.</li>
+</ul>
+
+<!-- ══════════════════════════ 6 · WEATHERING ══════════════════════════ -->
+<h2 id="weathering"><span class="secno">6</span>Procedural weathering generators</h2>
+
+<p>Each generator is a pure function <code>fields × params → mask-channel contribution</code>, run over chart texels.
+They compose by writing into the shared mask channels; ordering only matters for reveal-type layers. All parameters are
+per-<i>rule-instance</i>, overridable per zone and per surface class — that's the "different settings for corners vs.
+top vs. bottom of walls" requirement, expressed once, uniformly.</p>
+
+<table>
+  <tr><th style="width:14%">Generator</th><th style="width:48%">Field recipe (defaults)</th><th>Notes</th></tr>
+  <tr><td><b>Dirt / dust</b></td>
+      <td>AO<sup>k</sup> × concave-edge proximity × (1 − sky exposure), floor bias; extra in cobble crevices via the layer height contest.</td>
+      <td>The universal grime everyone reads as "lived-in". Usually the first channel to enable.</td></tr>
+  <tr><td><b>Moss / damp</b></td>
+      <td>low height-above-floor falloff × concavity × sheltered-but-not-dry sky exposure band × material porosity (stone yes, metal no). Damp = same recipe, wider, feeds the <i>wet</i> modifier at low strength.</td>
+      <td>Matches CONCEPT: arch feet, wall bases, shaded corners. Noise-break the edges (world-space FBM) so bands never read as level curves.</td></tr>
+  <tr><td><b>Edge wear / chipping</b></td>
+      <td>convex-edge distance falloff × traffic/hand-height boost (waist-height band on walls near walkways, from the nav field) → <i>reveal</i> channel.</td>
+      <td>With a normal-map contribution at the reveal boundary this sells "geometry damage" with zero geometry.</td></tr>
+  <tr><td><b>Rain streaks</b></td>
+      <td>gravity-flow line integration from drip seeds (undersides of sky-exposed horizontal edges), length/decay params × sky exposure of the seed.</td>
+      <td>The distinctive vertical grime under ledges in CONCEPT. Streak texture advected along the flow field, not just a vertical gradient.</td></tr>
+  <tr><td><b>Burn / scorch</b></td>
+      <td>proximity cone above flame entities (soot rises: bias along −gravity) + <b>author-painted burn volumes</b> for "this wing burned"; darkens albedo, kills roughness variation, optional ember-glow emissive at high intensity.</td>
+      <td>Explicitly dynamic-editable in the brief: painting a burn volume in-game re-runs just this generator in the dirtied tiles — sub-second loop (§11.7).</td></tr>
+  <tr><td><b>Sun bleach</b></td>
+      <td>sky exposure × alignment with the map's sun direction → subtle desaturate/brighten of base albedo.</td>
+      <td>Cheap; makes outdoor tops read distinct from sheltered bottoms, reinforcing the vertical story.</td></tr>
+  <tr><td><b>Traffic wear</b></td>
+      <td>bot-nav edge usage splatted onto floors → polish (roughness down) + dirt <i>removal</i> along path centers, accumulation at edges.</td>
+      <td>Free art direction from data we already have; also subtly telegraphs routes to players.</td></tr>
+</table>
+
+<p><b>Determinism:</b> generators are seeded and pure — same inputs, same masks, on any machine. That keeps
+server-bake vs. client-regen interchangeable (§11.7) and makes bakes content-addressable.</p>
+
+<!-- ══════════════════════════ 7 · MANUAL ══════════════════════════ -->
+<h2 id="manual"><span class="secno">7</span>Manual painting &amp; overrides</h2>
+
+<p>Procedural output is the base coat; humans art-direct on top. The non-destructive rule from §1 concretely:</p>
+
+<ul>
+  <li><b>Mask painting</b> — in-game brush (radius/strength/falloff/noise) painting directly into mask channels,
+      projected onto surfaces from the camera ray. Strokes are stored as a <b>sparse delta tile set</b> (chart-space
+      tiles containing only painted texels + blend op: add/subtract/set/scale-procedural). Final mask =
+      <code>procedural ⊕ deltas</code>. Re-running the procedural pass (after a rule tweak or geometry edit) replays
+      deltas on top — hand work survives.</li>
+  <li><b>Parameter overrides</b> — every rule parameter editable at three scopes: global → zone → surface selection.
+      Live sliders re-run affected generators incrementally (this is the fun demo: drag "moss amount" and watch the
+      courtyard green up in real time).</li>
+  <li><b>Locks &amp; freezes</b> — a surface/zone can freeze its procedural result (turn current masks into a delta
+      baseline) so later rule edits elsewhere can't disturb an approved area.</li>
+  <li><b>Prop overrides</b> — §8 placements are suggestions until accepted; each instance can be moved/deleted/swapped,
+      recorded as instance-level deltas against the rule's output (rule re-runs keep the overrides by stable placement
+      IDs: rule id + surface id + sequence).</li>
+</ul>
+
+<!-- ══════════════════════════ 8 · PROPS ══════════════════════════ -->
+<h2 id="props"><span class="secno">8</span>Detail geometry, props, terrain &amp; foliage</h2>
+
+<h3><span class="secno">8.1</span>Rule-based placement</h3>
+<p>Declarative rules over anatomizer fields, evaluated to concrete placements (then hand-adjustable per §7):</p>
+<pre><code><span class="cm"># decor-rules sketch (lives in the .vmap decor section, §11.2)</span>
+<span class="k">rule</span> torch_sconce:
+  <span class="k">on</span>: walls(material: stone, indoor_or_sheltered)
+  <span class="k">place</span>: every 320..448u along walkable frontage, height 96u,
+         clearance(front: 64u), not_near(door, 96u)
+  <span class="k">prop</span>: props/torch_wall_a   <span class="cm"># carries light + fire-effect + soot-source tags (§6, §10)</span>
+<span class="k">rule</span> debris_scatter:
+  <span class="k">on</span>: floors(concave_corner_dist &lt; 48u)
+  <span class="k">place</span>: poisson(r: 24u, density_from: dirt_mask)
+  <span class="k">prop</span>: pick[rubble_a, rubble_b, pot_broken] align_to_surface jitter(yaw)
+</code></pre>
+<ul>
+  <li><b>Placement families:</b> interval-along-wall (torches, banners, pilasters), poisson-scatter weighted by a mask
+      channel (debris where dirt is, grass tufts where moss is), edge-following (trim/molding along convex edges,
+      cobweb wedges in concave ceiling corners), and point-replacement (upgrade existing map entities — the CURRENT
+      map's candle sconces → CONCEPT's torches).</li>
+  <li><b>Props are entities, not merged geometry</b> — instanced via MultiMesh where dense, so they replicate, LOD, and
+      delete cleanly. Props carry tags that feed back into §6 (a placed torch becomes a scorch/soot source) — the
+      pipeline loops once: place props → re-run proximity generators.</li>
+</ul>
+
+<h3><span class="secno">8.2</span>Decals</h3>
+<p>Cracks, stain blotches, posters, painted symbols: projected quads clipped to brush faces —
+<code>DecalSplats</code>' clipping path, minus fade-out, plus serialization. Cheap wins where a mask channel would be
+overkill (a single distinctive crack vs. a whole "cracked" layer).</p>
+
+<h3><span class="secno">8.3</span>Banners &amp; cloth</h3>
+<p>Detected by texture family + thin-quad shape (or explicitly tagged): replace with a cloth mesh — baked-fold static
+mesh with a cheap vertex-shader sway (deformVertexes-style, we already implement wave deforms) as v1; actual cloth sim
+is not needed for the CONCEPT look.</p>
+
+<h3><span class="secno">8.4</span>Floor relief</h3>
+<p>Parallax occlusion mapping on floor-class materials (height already in the layer pack) gives CONCEPT's cobble depth
+at pixel cost only; true displacement (subdivide + displace at bake) is the fidelity-tier upgrade later. POM first —
+it needs zero geometry pipeline work.</p>
+
+<h3 id="terrain"><span class="secno">8.5</span>Terrain &amp; outside-the-map geometry <span class="pill alt">v1.2 · lower priority</span></h3>
+<p>Two related jobs: (a) playable terrain patches (ground, hills, courtyard dirt), and (b) <b>vista geometry beyond
+the playable hull</b> — the mountains behind CONCEPT's walls — where today an imported map just ends at the skybox.</p>
+<ul>
+  <li><b>Heightfield generation</b> — FBM + ridged noise with domain warping, optional cheap hydraulic-erosion pass
+      for believable gullies; chunked LOD mesh. The layered material system (§5) <i>is</i> terrain splatting —
+      slope/altitude rules drive the layer masks (rock on steep, grass on flat, scree at the transition) through the
+      same generator machinery as §6, so terrain costs almost no new material tech.</li>
+  <li><b>Vista ring generation</b> — a render-only low-poly ring of mountains/dunes/ruins generated around the map,
+      style-matched to the skybox horizon (shared palette + haze so the mesh fades <i>into</i> the sky, §10.2);
+      parameters: silhouette roughness, distance, height band relative to the map's own skyline. Render-only exactly
+      like amplified geometry (§9) — never collidable, never PVS-relevant.</li>
+  <li><b>Editing</b> — raise/lower/smooth/flatten height brushes: the same brush-stroke op + tile model as mask
+      painting (§7), writing height texels instead of mask texels. Terrain lives in truth as heightfield + seed
+      params; the bake produces the chunked meshes.</li>
+  <li><b>Import synergy</b> — the sky-exposure analysis (§4) already tells us where a map opens to sky, i.e. exactly
+      which sightlines vista generation needs to fill.</li>
+</ul>
+
+<h3 id="foliage"><span class="secno">8.6</span>Foliage — paintable, generatable, reactive <span class="pill alt">v1.2 · lower priority</span></h3>
+<ul>
+  <li><b>Placement, dual-source like everything else</b> — generators seed per-species density from fields (moss mask
+      → grass tufts and ivy; terrain slope/altitude bands; weeds in concave corners) and a foliage paint brush writes
+      the same density masks by hand — §7's infrastructure verbatim, foliage is just more mask channels. Poisson
+      scatter per species with per-instance style variation: hue shift, scale, bend phase via instance custom data;
+      per-zone species palettes ("dead scrub in the burned wing, lush ivy in the courtyard") through the §6 zone
+      mechanism.</li>
+  <li><b>Rendering</b> — MultiMesh chunks per species, distance fade to billboards/imposters, no collision.</li>
+  <li><b>Wind</b> — one global wind state (direction, strength, gust FBM over time) sampled in the foliage vertex
+      shader for sway, with stiffness hierarchy (trunk vs. blade) baked as vertex-color weights. The <i>same</i> wind
+      state feeds weather particles (§10.3) so rain slant and grass lean always agree.</li>
+  <li><b>Explosions &amp; gameplay reaction</b> — a small ring buffer of recent impulse events (position, radius,
+      strength, timestamp — pushed as per-chunk uniforms) adds a decaying radial bend in the vertex shader: a rocket
+      flattens the grass, it springs back over ~a second; a player wading through bends it at the feet. Optional
+      escalation: destruction — a big explosion clears the density mask locally and hands the spot to the scorch
+      generator (§6), so a rocket fight visibly chews up a meadow.</li>
+  <li><b>Perf discipline</b> — all reaction is vertex-stage (zero per-instance CPU); chunk updates get a
+      <code>Prof.Sample</code> scope; quality tiers full-react → wind-only → static → off; perf-smoke on the release
+      export before merge (house rules).</li>
+</ul>
+
+<h3 id="spawnpads"><span class="secno">8.7</span>Spawn-point presence — auto-detected pads <span class="pill alt">v1.3</span></h3>
+<p>Item and player spawn points on classic maps are often bare entities floating over plain floor. Detect, and dress
+only where needed:</p>
+<ul>
+  <li><b>Detection</b> — for each item/player spawn entity, probe beneath and around it (short down-trace + small
+      radius query, §4 machinery): is there purpose-built presence — a pedestal/pad brush distinct from the
+      surrounding floor plane, or a decoration prop within radius? Maps that already dress their spawns (pedestals,
+      alcoves, glowing floors) are left alone.</li>
+  <li><b>Auto-pad where absent</b> — a low ground "bump" pad mesh (a few smoothed-profile variants, material-matched
+      to the floor via the §5 layer system so it reads as built-in rather than pasted on), an optional slow particle
+      ring, and an optional <b>energy cone</b>: a translucent additive cone shader with scrolling energy noise
+      beaming up from pad to item — team-colorable, intensity scaled by item tier (mega &gt; armor &gt; ammo &gt;
+      player spawn). The additive-shader recipes from the bolt/autosprite work apply directly (blend-add with
+      ALPHA=1, the documented LIT-additive traps).</li>
+  <li><b>Editable like everything else</b> — the pad is a rule-placed prop (§8.1): per-instance override, swap, or
+      delete; style per zone or per map. The point is gameplay legibility: spawns read at a glance on every map, old
+      or new — and it composes with the dynamic item solver (§12.1), which can light cones only under markers that
+      currently hold an item.</li>
+</ul>
+
+<!-- ══════════════════════════ 9 · AMPLIFY ══════════════════════════ -->
+<h2 id="amplify"><span class="secno">9</span>Lattice detection &amp; detail amplification</h2>
+
+<p>The spike crowns in the screenshots are the canonical case: brushwork that exists only for silhouette/ornament,
+built from a few lo-fi brushes because Radiant makes curves painful. The system should find such geometry and
+regenerate it at higher fidelity — without touching gameplay-relevant collision.</p>
+
+<h3><span class="secno">9.1</span>Detection heuristics (scored, then confirmed by a human once per map)</h3>
+<ul>
+  <li><b>Detail content flag</b> — Q3 brushes marked <code>detail</code> (in BSP brush contents) are by definition
+      non-structural. Strongest single signal, already parsed by <code>BspReader</code>.</li>
+  <li><b>Thinness &amp; silhouette</b> — high surface-area-to-volume, thin in ≥1 axis, high perimeter/area profile;
+      sky behind it (spike crowns literally silhouette against <code>sky</code> faces).</li>
+  <li><b>Repetition</b> — canonical-form hashing of brush groups (sort planes, quantize, hash) finds repeated
+      instances + their transforms → both a detection signal and the instancing win for free.</li>
+  <li><b>Non-load-bearing</b> — removing the group doesn't unseal the hull / isn't referenced by gameplay (movers,
+      clips); players never collide with it in typical traces (or it sits above the playable volume).</li>
+</ul>
+
+<h3><span class="secno">9.2</span>Amplification strategies (in escalating fidelity)</h3>
+<table>
+  <tr><th style="width:26%">Strategy</th><th>What it does</th></tr>
+  <tr><td><span class="pill rec">v1</span><b>Bevel + subdivide</b></td>
+      <td>Chamfer hard edges (2–3 segments), optional curvature-preserving subdivision. Rounded edges catch rim light —
+          a shocking share of CONCEPT's "ornate" read is just this plus warm lighting.</td></tr>
+  <tr><td><span class="pill rec">v1</span><b>Instance consolidation</b></td>
+      <td>Repeated groups → one amplified mesh, MultiMesh-instanced at all found transforms. Pays for itself in perf
+          even before fidelity.</td></tr>
+  <tr><td><span class="pill alt">v2</span><b>Profile re-extrusion</b></td>
+      <td>Slice the group perpendicular to its long axis → fit a 2D profile + sweep path → re-extrude with a
+          high-res profile (taper, curve smoothing, ornament presets: finial tips, twists, collars). Turns 6-brush
+          spikes into the CONCEPT's curved horns while <i>preserving the original's proportions and placement</i>.</td></tr>
+  <tr><td><span class="pill alt">v2</span><b>Library substitution</b></td>
+      <td>Shape-match (dimensions + profile class) against an authored high-detail prop library; scale-fit and swap.
+          Best fidelity ceiling; needs the library to exist. The rule records the match for hand-override (§7).</td></tr>
+</table>
+<p><b>Invariant:</b> amplified meshes are render-only. Original brushes remain the collision and PVS truth — projectiles,
+movement, and visibility behave identically on decorated and undecorated versions of a map. (Same discipline as the
+render-only lean/viewmodel work: presentation never leaks into simulation.)</p>
+
+<!-- ══════════════════════════ 10 · LIGHTING ══════════════════════════ -->
+<h2 id="lighting"><span class="secno">10</span>Lighting, atmosphere, skyboxes &amp; weather</h2>
+
+<h3><span class="secno">10.1</span>Lights, GI &amp; post</h3>
+<ul>
+  <li><b>Prop-driven lights</b> — torch/brazier props auto-spawn omni lights with <code>LightStyles</code> flicker and
+      faithful-particle fire + smoke (effects already exist; the prop just references an effectinfo entry). This alone
+      transforms CURRENT's dead sconces.</li>
+  <li><b>Sun &amp; environment</b> — per-map (per-zone-overridable) directional light + sky settings; tonemap, glow,
+      color grade via the Environment (WorldTint is the existing hook into it). CONCEPT's golden hour is 90%
+      environment settings, 10% everything else.</li>
+  <li><b>Fog</b> — distance fog for the atmospheric depth on the mountains; optional small volumetric fog volumes near
+      fire for the smoke-haze light shafts. Volumetrics are a quality-tier setting, off by default (perf memory:
+      graphics settings need real wiring, not stubs).</li>
+  <li><b>Baked GI &amp; the real-time question</b> <i>(v1.3, revised 2026-07-27 with measured findings — the
+    ladder below replaces the earlier one, whose bridge rung turns out not to exist)</i>.
+
+    <p><b>The precondition nobody can skip.</b> The world is drawn by a shader declared
+    <code>render_mode unshaded</code> (<code>game/loaders/LightmapShader.cs</code>): it samples the BSP's
+    precomputed lightmap atlas through UV2 and <i>receives no Godot light at all</i>. Godot lights exist in
+    this project, but only for effects (muzzle flashes, explosions) on model materials. So <b>no GI option
+    below changes a single world pixel until the world has a lit material path.</b> That work is shared by
+    every option and is the first item whichever destination we pick.</p>
+
+    <p>Second precondition, specific to the editor: geometry regenerated from the <code>.vmap</code> document
+    carries <b>no UV2 at all</b> — which is why the editor world currently draws fullbright. Anything baked
+    needs a chart parameterization first.</p>
+
+    <p><b>Measured API facts</b> (compile-tested against this project's Godot build, not recalled):</p>
+    <ul>
+      <li><code>LightmapGI.Bake(...)</code> <b>does not exist</b> in the C# API. Godot's lightmapper is an
+        <i>editor-only</i> tool driven by the editor plugin; it cannot be invoked from a running game. This
+        kills the previously-planned "LightmapGI batch bake as the bridge" rung for anything in-game.</li>
+      <li><code>LightmapGI.LightData</code> is settable and <code>RenderingServer.LightmapCreate()</code>
+        exists, so a lightmap baked <i>elsewhere</i> can still be applied at runtime.</li>
+      <li><code>ArrayMesh.LightmapUnwrap(Transform3D, float)</code> <b>is</b> callable at runtime — Godot's
+        xatlas unwrapper. This is the missing precondition for any in-editor bake: charts can be generated
+        for regenerated geometry without an offline step.</li>
+      <li><code>VoxelGI.Bake(Node, bool)</code> <b>is</b> callable at runtime.</li>
+      <li><code>Environment.SdfgiEnabled</code> / <code>SdfgiCascades</code> exist — fully runtime, no bake.</li>
+    </ul>
+
+    <p><b>How Unreal and Unity solve this</b>, since the ask was to line up with them. Both converged on the
+    same two-track answer, and neither uses a baked lightmap for the editing loop:</p>
+    <ul>
+      <li><b>Unreal 5</b> — <i>Lumen</i> is the default: fully dynamic GI and reflections, no bake, with a
+        software ray-tracing path (screen traces + mesh distance fields) for hardware without RT. Baked
+        lightmaps remain for the low-end tier via <i>GPU Lightmass</i>, which is path-traced, GPU-driven and
+        <i>progressive</i> — you watch it converge in the viewport while you work.</li>
+      <li><b>Unity</b> — the <i>Progressive Lightmapper</i> (CPU and GPU variants) is path-traced and
+        progressive, prioritizing texels near the scene view so the area you are looking at resolves first.
+        The dynamic side has moved to probe-based GI (<i>Adaptive Probe Volumes</i>); the old realtime-GI
+        solution (Enlighten) is deprecated.</li>
+    </ul>
+    <p>The shared shape: <b>dynamic GI for the editing loop, progressive path-traced bake for shipped quality,
+    view-prioritized so it converges where you are looking.</b> Our ladder should be that shape — the earlier
+    draft already was; only its bridge rung was wrong.</p>
+
+    <table>
+      <tr><th>Option</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+      <tr>
+        <td><b>0. Fullbright</b><br><i>(what the editor does today)</i></td>
+        <td>Zero cost, zero latency, never wrong while geometry moves. Radiant's own answer.</td>
+        <td>No shape reading — you cannot judge a room's mood or contrast, or whether a corner is too dark.</td>
+        <td>Keep as a render mode, not as the only mode.</td>
+      </tr>
+      <tr>
+        <td><b>1. Dynamic Godot lights</b><br>sun + the map's own light entities, real shadows, no GI</td>
+        <td>Instant and always correct — move a brush or a torch and it is simply right. No bake, no charts,
+            no UV2. Uses light entities the map already carries. Affordable on old hardware with shadows
+            tiered down.</td>
+        <td>Direct light only: no bounce, so interiors read flat and dark next to a q3map2 bake. Many
+            simultaneous shadow-casting lights is the classic cost.</td>
+        <td><b>Do this first.</b> Shared precondition, and alone it delivers "real-time lighting in the
+            editor".</td>
+      </tr>
+      <tr>
+        <td><b>2. SDFGI</b><br>runtime cascaded GI on top of 1</td>
+        <td>Real bounce with no bake and no charts; survives geometry edits by design. The closest thing Godot
+            has to Lumen's software path. One environment flag once the world is lit.</td>
+        <td>Heavy — a quality tier, not a default, on a game that already fights for frames. Cascade artefacts
+            at the fine detail scale Q3 maps are full of. Costs frames continuously rather than once.</td>
+        <td>Ship as the "high" editing preset. Not the shipped-map answer.</td>
+      </tr>
+      <tr>
+        <td><b>3. VoxelGI runtime bake</b></td>
+        <td>Bakeable from C# in seconds; bounce without a chart atlas; re-bakeable after an edit.</td>
+        <td>Coarse and leaky at Q3 detail scale; bounded volume, so several are needed to cover a map; still a
+            per-frame lookup cost.</td>
+        <td>Cheap fallback where SDFGI is too heavy. Not a destination.</td>
+      </tr>
+      <tr>
+        <td><b>4. Progressive GPU lightmapper into our own chart atlas</b></td>
+        <td>Exactly what GPU Lightmass and Unity's progressive lightmapper do. Produces a real artefact we can
+            ship in the <code>.vmap</code> bake cache, feed to the existing unshaded parity shader, and stream
+            tile-by-tile to clients over the op channel. The dirty-tile model is <i>identical</i> to the
+            decoration masks (§5.1) — the chart-space architecture pays for itself twice. View-prioritized
+            convergence resolves the room you are standing in within seconds. Costs nothing at runtime once
+            baked, which is precisely why old hardware can run these maps.</td>
+        <td>By far the most code: chart packing, a path tracer, tile scheduling, atlas residency. Needs
+            <code>LightmapUnwrap</code> charts for regenerated geometry (available — see above).</td>
+        <td><b>The destination.</b> Everything else is scaffolding toward it.</td>
+      </tr>
+      <tr>
+        <td><b>5. Godot LightmapGI batch bake</b></td>
+        <td>Least code, good quality, already written.</td>
+        <td><b>Not callable from a running game at all</b> — editor-only (measured). Also wants to own UV2,
+            and cannot ingest the precomputed Q3 pages the parity path uses.</td>
+        <td><b>Dropped as the bridge.</b> Viable only as an offline step inside the Godot editor.</td>
+      </tr>
+      <tr>
+        <td><b>6. q3map2 <code>-light</code></b></td>
+        <td>Exact parity for untouched classic maps; already how every shipped map is lit.</td>
+        <td>External tool, whole-map only, cannot run incrementally, cannot see props or amplified geometry.</td>
+        <td>Stays for classic BSPs. Not part of the editing loop.</td>
+      </tr>
+    </table>
+
+    <p><b>Recommendation.</b> A ladder, in this order, each rung independently useful:</p>
+    <ol>
+      <li><span class="pill rec">first · BUILT</span> <b>Light the editor world</b> — give the regenerated world a lit
+        material, spawn the map's <code>light</code> entities as real Godot lights, add the sun and tiered
+        shadows. Precondition for 2–4, and by itself it answers "real-time lighting while editing" and retires
+        the fullbright compromise.
+        <br><i>Built 2026-07-27:</i> <code>EditorLighting</code> spawns the map's <code>light</code>
+        entities as omnis (119 on stormkeep) with a camera-nearest shadow budget, plus a directional sun
+        recovered from the sky shader's <code>q3map_sun</code>; surfaces carrying
+        <code>q3map_surfaceLight</code> are emissive. Both directives are newly parsed — compile-time keys
+        the shipped renderer never needed. <code>cl_editor_lighting 0</code> returns to fullbright.</li>
+      <li><span class="pill alt">preset · BUILT</span> <b>SDFGI behind a quality tier</b> for live bounce, with VoxelGI
+        as the cheaper fallback. This is what UE does for the editing loop.
+        <br><i>Built 2026-07-27:</i> SDFGI on <code>cl_editor_gi</code>, and it does gather from the map's own
+        point lights — measured on stormkeep with the ambient floor at zero, GI adds +2.47 mean brightness
+        with the map's lights and +0.07 with them zeroed, so essentially all the bounce comes from the level's
+        own fixtures. VoxelGI was implemented as the fallback and REMOVED: it rendered black (0.01 mean) and a
+        cvar value that blanks the screen is worse than no fallback. <b>Measurement caution:</b> the first pass
+        concluded SDFGI did nothing, from a crop that was sampling the HUD panel rather than geometry — crop
+        geometry, never the overlay.</li>
+      <li><span class="pill rec">destination</span> <b>The progressive GPU lightmapper</b>, converging into the
+        chart atlas while the map sits still, view-prioritized, dirty-tile-scheduled, shipped in the bake
+        cache — the rung that matches GPU Lightmass and Unity's progressive lightmapper, and the only one that
+        produces something a low-end machine renders for free.</li>
+    </ol>
+    <p>What changed from the previous draft: rung 3 was "LightmapGI batch bake as the stopgap". It is not
+    available in-game, so the stopgap between (1) and (3) becomes SDFGI/VoxelGI — dynamic rather than baked —
+    which is also what both reference engines actually do.</p>
+  </li>
+</ul>
+
+<h3 id="skybox"><span class="secno">10.2</span>Skybox generation <span class="pill rec">v1.2 · elevated</span></h3>
+<p>Skies today are imported six-face cubemaps (classic Q3). Add a <b>parametric sky system</b> as an alternative
+source, edited live in-game like everything else — its parameters live in the environment section of the
+<code>.vmap</code> manifest:</p>
+<ul>
+  <li><b>Layered sky shader</b> — composable layers, each with its own parameters: atmosphere gradient (tint driven
+      by sun elevation), sun/moon discs + halos, 2–3 cloud layers (FBM noise domains scrolling at different speeds,
+      from wispy cirrus to full overcast), starfield (density/twinkle) — and the <b>space style</b>: colored FBM
+      nebulae, planets/moons with correct lit phases, galaxy bands, covering the arena-classic space-map look.
+      Art styles (painted daylight, golden hour, overcast, dusk, deep space, alien) are <i>presets = parameter
+      sets</i> — style variety is data, not code.</li>
+  <li><b>Bake or live</b> — a static sky bakes to a cubemap at edit time (zero per-frame cost, indistinguishable from
+      an imported sky downstream); a dynamic sky (drifting clouds, weather transitions, day-night if a map wants it)
+      runs the shader live as the Godot sky material. Per-map choice, toggleable in the editor.</li>
+  <li><b>One sun, one truth</b> — the sky's sun elevation/azimuth/color <i>is</i> the map's directional light and the
+      input to the sun-bleach generator (§6): move the sun in the sky editor and the map re-lights (and on rebake,
+      re-weathers) to match. The classic mismatched-sun-and-skybox artifact becomes unrepresentable.</li>
+  <li><b>Vista handshake</b> — horizon haze color/height shared with the vista ring (§8.5), so generated mountains
+      sit <i>in</i> the sky rather than pasted in front of it.</li>
+</ul>
+
+<h3 id="weather"><span class="secno">10.3</span>Dynamic weather <span class="pill rec">v1.2 · elevated</span></h3>
+<ul>
+  <li><b>Weather is server-authoritative state</b> — a small state machine (clear → overcast → rain → storm, with
+      transition durations), scheduled or scripted per map, replicated as seed + timeline so every client renders the
+      same sky at the same moment. Editable live: drag the rain slider in the editor and it starts raining for
+      everyone in the session.</li>
+  <li><b>Precipitation that respects the map</b> — rain/snow as GPU particle volumes spawned only where the
+      sky-exposure field (§4) says sky is visible: no rain indoors, correct drip lines at overhang edges. Splash
+      impacts reuse the client-world particle-collision machinery already built for faithful particles.</li>
+  <li><b>Weather feeds the material system</b> — rain ramps the <i>wet</i> modifier (§5.2) on sky-exposed texels
+      (darkened albedo, low roughness, puddles growing in AO hollows via the height contest); snow is a white cover
+      layer accumulating on upward-facing exposed surfaces. Both are §6 generators run with a live weather input
+      instead of a baked one — the mask pipeline gains a cheap dynamic term, not a new system.</li>
+  <li><b>Sound &amp; light</b> — rain loop ducked indoors by the same exposure field; thunder + lightning as
+      LightStyles-style flicker on sun/ambient; wind audio tied to the shared wind state (§8.6).</li>
+  <li><b>Fairness first</b> — weather defaults to <i>presentation-only</i>: no visibility-relevant fog changes, no
+      movement effects, plus a client reduce/disable toggle and a server enforce-off for competitive modes. An arena
+      shooter can't let weather decide fights unless a mode explicitly opts in.</li>
+</ul>
+
+<!-- ══════════════════════════ 11 · FORMAT ══════════════════════════ -->
+<h2 id="format"><span class="secno">11</span>Map format &amp; the in-game editor — the priority track</h2>
+
+<h3 id="format-import"><span class="secno">11.1</span>Import: .bsp / .map → base geometry</h3>
+<table>
+  <tr><th style="width:14%">Input</th><th>What we get</th><th style="width:34%">Work needed</th></tr>
+  <tr><td><b>.bsp</b></td>
+      <td>Render faces (tessellated), brushes + content flags, entities, lightmaps, PVS. Already fully parsed.</td>
+      <td>Reconstruction pass: merge coplanar tessellated faces back into logical surfaces, rebuild the face-adjacency
+          graph from brush geometry. No new parser.</td></tr>
+  <tr><td><b>.map</b></td>
+      <td>True CSG source: brush planes, patch defs, entity keys, texture alignment, func_group/detail structure —
+          the authoring truth, ideal for editing and for detection heuristics.</td>
+      <td>New parser (NetRadiant map syntax; q3map2 source in <code>Base/netradiant</code> is the reference — moderate,
+          well-understood work). CSG evaluation to windings for faces (q3map2's brush code shows the way).</td></tr>
+</table>
+<p>Support both: .bsp import unlocks decorating <i>every existing compiled map</i> immediately; .map import gives new
+maps a cleaner base. Both converge on the same in-memory base-geometry model: <b>brushes + patches as truth, derived
+welded render surfaces + adjacency</b> — which is exactly what the anatomizer wants.</p>
+
+<h3 id="format-vmap"><span class="secno">11.2</span>The <code>.vmap</code> file — editable format = shipping format</h3>
+<p><b>Revised 2026-07-29 after measuring the first design.</b> A <code>.vmap</code> is <b>one UTF-8 text file</b>,
+sitting in <code>maps/</code> where the <code>.bsp</code> sits today. It is still both the edited and the shipped
+form; what changed is that it stopped being a container of its own.</p>
+
+<p>The first design made it a container — a directory of JSON sections while editing, a zip of the same when
+shipping. Two things were wrong with that, and both only became visible with real maps in it:</p>
+
+<ul>
+  <li><b>The container duplicated one the game already has.</b> A <code>.pk3dir</code> IS the loose-files layout
+      and a <code>.pk3</code> IS the packed one — that is what <code>FS_AddGameDirectory</code> parity buys. So a map
+      ended up at <code>stormkeep.pk3dir/maps/stormkeep.vmap/geometry.json</code>: one container inside another,
+      doing the same job.</li>
+  <li><b>JSON did not fit the data.</b> Measured on the shipped maps, <code>geometry.json</code> was 22 MB for
+      stormkeep and <b>476 MB for catharsis</b> — past what GitHub accepts in a single file, so the format's own
+      stated goal (deterministic bytes "so <code>.vmap</code>s merge in git") was unreachable for the section that
+      dominated it. The overhead was SCAFFOLDING, not precision: every float on its own indented line, 454 bytes
+      per face for about 70 bytes of digits.</li>
+</ul>
+
+<table>
+  <tr><th>map</th><th>faces</th><th>JSON sections</th><th>one text file</th><th>bytes/face</th></tr>
+  <tr><td>fuse</td><td>19,348</td><td>9.76 MB</td><td><b>1.41 MB</b></td><td>76</td></tr>
+  <tr><td>stormkeep</td><td>48,762</td><td>22.13 MB</td><td><b>2.66 MB</b></td><td>57</td></tr>
+  <tr><td>afterslime</td><td>30,326</td><td>17.36 MB</td><td><b>3.01 MB</b></td><td>104</td></tr>
+  <tr><td>catharsis</td><td>1,085,397</td><td>476.07 MB</td><td><b>~56 MB</b></td><td>—</td></tr>
+</table>
+
+<p>Packed binary was measured too and was <i>larger</i> than the text — 2.76 MB against 2.36 MB on stormkeep's
+geometry — because most values are short (<code>0</code>, <code>-1</code>, small integers) while binary spends four
+bytes on each regardless. It would have cost readability and bought nothing.</p>
+
+<p>The grammar is line-oriented and prefix-coded, and sub-records follow their parent exactly as a
+<code>.map</code> brush is followed by its faces:</p>
+
+<pre><code>// vmap 3
+// demo
+
+map "name" "demo"
+map "title" "A Demo Room"
+
+mat 0 "textures/exx/base_wall01"          <span class="cm">— material table, referenced by index</span>
+mat 1 "textures/exx/moss"
+
+grp 1 0 "north wing"                      <span class="cm">— group: id, hidden, name</span>
+
+b 1 0 1 0 0 0                             <span class="cm">— brush: id, detail, contents, submodel, tool, group</span>
+f 0 0 1 478.76584 0 0 0 0  0.015625 0 0  0 -0.015625 0  0 0
+l 1 1 0  0.015625 0 0  0 -0.015625 0  0 0    <span class="cm">— a layer above the face below it</span>
+
+e 1 0 "info_player_deathmatch"
+k "origin" "32 32 24"
+
+e 2 0 "func_door"
+k "speed" "100"
+eb 1                                      <span class="cm">— the brushes this entity owns</span>
+
+x 1 128 128 4  …                          <span class="cm">— blend map: id, size, units/texel, projection</span>
+d eJztwTEBAAAAwqD1T20ND6AAAAAA…           <span class="cm">— its texels, deflated then base64, split per line</span>
+</code></pre>
+
+<ul>
+  <li><b>Paint is in the file.</b> Deflated then base64'd, which keeps a painted face around a kilobyte rather than
+      the eighty-five raw base64 would cost. It is SOURCE data — the mapper painted it — so it belongs with the
+      geometry, not in a cache that can be deleted.</li>
+  <li><b>Deterministic.</b> Invariant culture, round-trip floats, fixed field order, entity keys sorted ordinal, and
+      the material table in first-encounter order — appending rather than re-sorting, so adding a material does not
+      renumber every face that referenced the ones before it. Two saves of unchanged data are byte-identical, and
+      now at a size a diff viewer will actually open.</li>
+  <li><b>Older saves still load.</b> The reader sniffs by CONTENT, not extension — all three forms are called
+      <code>.vmap</code> — so a JSON directory or zip written before this change opens unchanged. Nothing writes
+      them any more.</li>
+  <li><b>The bake cache is still separate</b> and still derived (backlog P6): content-addressed by a hash of the
+      file, regenerable, and never shipped as the only artifact.</li>
+</ul>
+
+<h3 id="editor-mode"><span class="secno">11.3</span>The editor game mode &amp; player states</h3>
+
+<p>The editor is a <b>game mode</b>, not a separate application: a server runs mode <code>editor</code> on a map
+inside the normal NetGame loop — same renderer, same physics, same netcode. That one decision buys instant
+playtesting (it's the same world), multi-user co-editing (it's already a server), and no editor-only render path to
+maintain. Each connected player is in one of two states, swapped with a single toggle key:</p>
+
+<table>
+  <tr><th style="width:14%">State</th><th>Behavior</th></tr>
+  <tr><td><b>EDIT</b></td>
+      <td>Free-fly, reusing the spectator fly branch verbatim: no gravity, noclip (toggleable — fly through walls vs.
+          collide, default through), <b>Space/Jump = up, Shift/Crouch = down</b>, spectator speed ladder (impulse
+          speed steps) plus optional scroll-wheel speed. Gameplay input is repurposed for tools via an editor
+          <i>bind layer</i> pushed over the normal binds (BindTable is already the single chokepoint): attack =
+          tool primary (grab/drag), attack2 = context/alt-constraint, use = cycle tool — all rebindable, live binds
+          shown in the HUD (§11.6).
+          <br><b>The editor reuses the WEAPON binds</b> while free-flying: you cannot shoot and edit at the same
+          time, so keys 1–9 and the mousewheel are dead weight in EDIT and become the editor's controls. This
+          means the editor inherits whatever keys the mapper already has in muscle memory instead of demanding a
+          second bind set — and PLAYTEST is real play, so weapons behave normally there. Shipped in E2: wheel
+          steps the grid size, 1 toggles the grid, 2 toggles EDIT/PLAYTEST; 3–9 are held for the E3 tools.</td></tr>
+  <tr><td><b>PLAYTEST</b></td>
+      <td>A real player entity spawned at the camera position with full movement physics — run, jump, bhop the space
+          you just edited; weapons optional by cvar. Toggling back returns to EDIT at the exit position. The swap is
+          the same transmute machinery as spectator↔player transitions, permitted freely in this mode and preserving
+          position + view angles — instant, no respawn ceremony. (Spawning inside solid nudges out or refuses with a
+          HUD hint.)</td></tr>
+</table>
+
+<div class="callout moss"><span class="lbl">Verified 2026-07-27 — spectator vertical fly already works</span>
+The brief's spectator request (Jump = up, Crouch = down in free-fly) is <b>already implemented</b>:
+<code>BindTable</code> maps <code>+jump/+moveup</code> and <code>+crouch/+movedown</code> onto one up axis
+(<code>BindTable.cs:178</code>, <code>Up = jump − crouch</code>), and the fly branch consumes it as world-vertical
+wish velocity (<code>PlayerPhysics.FlyBranch</code>: <code>wishvel = fwd·x + right·y + (0,0,1)·z</code>). The EDIT
+state inherits this by reusing the same branch; no spectator-side change is needed.</div>
+
+<p><b>Permissions:</b> the mode gates who may edit (host by default; grantable via vote/rcon); everyone else joins as
+playtester or spectator. Cvar naming follows the authority convention: mode/permission cvars are server-side
+(<code>g_editor_*</code>); tool preferences (grid size, snap radius, handle scale) are client-side
+(<code>editor_*</code>) since they only shape the ops a client <i>proposes</i>.</p>
+
+<h3 id="editor-tools"><span class="secno">11.4</span>First-person geometry tools</h3>
+
+<p>Design goal: manipulate geometry <i>from inside the world</i>, first-person — no 2D orthographic views in v1. All
+picking runs against the truth geometry (brushes/patches, §11.2), and every manipulation emits an op (§11.7), which is
+what makes undo, replication, and saving one mechanism. <b>How you reach these tools, and how you aim a transform at
+one axis, is §11.9</b> — this section is the vocabulary, that one is the interaction model. The same tools also operate in the ortho views (§11.5) —
+they're view-agnostic ops; only the picking and axis constraints differ per view.</p>
+
+<ul>
+  <li><b>Pick &amp; selection</b> — camera-ray pick with sub-object resolution: <b>face</b> (plane), <b>edge</b>, or
+      <b>vertex</b> (point), chosen by proximity of the hit to the feature (with a screen-space grab radius so distant
+      vertices are still clickable). Hover highlight before commit; click selects, shift-click multi-selects, whole-brush
+      and whole-entity selection by double-click. Selection references are stable IDs into truth geometry
+      (brush id + face/edge/vert index) so ops replay and replicate deterministically.</li>
+  <li><b>Move mode</b> — grab handles at the selection center: three axis arrows + three plane pads (world/local
+      orientation toggle); dragging a face body directly slides it along its own plane normal by default (the classic
+      "push the wall out" gesture), modifier for in-plane sliding. While dragging, movement quantizes to the grid
+      (when on) and to geometry snaps (below), whichever binds tighter.</li>
+  <li><b>Rotate mode</b> — three grabbable rotation rings around the selection center; click a ring, drag to rotate
+      about that axis; angle snapping (5°/15° steps) obeys the same snap toggle; live angle readout at the cursor.
+      Numeric entry (type an angle/distance mid-drag) is a cheap, high-value add.</li>
+  <li><b>Grid &amp; align</b> <span class="pill rec">built — E2</span> — a grid fixed in <b>world space that
+      geometry receives</b>: every surface shows the lines where the global grid planes cut through it, so a wall,
+      a slope and a stair display one continuous lattice you can align across the whole map. Power-of-two steps
+      (1u–1024u, Radiant convention), toggleable, fading with distance so it doesn't wallpaper the level; state
+      (on/off · size · keybind) always in the HUD. An <i>align-to-grid</i> action snaps the selection (E3).
+      <br><b>How</b>: deliberately not a projected texture (which would move with the surface and scale with its
+      UVs) and not a screen overlay (which would float in front of the level instead of lying on it). It is one
+      full-screen pass that reads the depth buffer, reconstructs each pixel's world position and lights pixels
+      near a grid plane — so every visible surface is covered automatically, brushes and props and player models
+      alike, with no per-material work and no second copy of the geometry. Line width comes from screen-space
+      derivatives (<code>fwidth</code>) of that reconstructed position, which is what keeps lines ~1px on a
+      distant floor and on a wall seen edge-on rather than aliasing into shimmer.</li>
+  <li><b>Geometry-to-geometry snapping</b> — while dragging, candidate targets within a threshold pull the drag:
+      vertex→vertex, vertex→edge, edge→edge, and face-plane→face-plane coplanar snap. The active snap is visualized
+      (target highlight + tick). Toggleable with its own keybind (shown in the HUD with the on/off state), threshold a
+      client cvar. Precedence: geometry snap wins inside its radius, else grid.</li>
+  <li><b>Coordinate readout</b> — the HUD shows the selection center, the live coordinates of the dragged
+      vertex/edge/cursor point during a drag, the delta from drag start, and the dimensions of the selected face/brush.
+      Quake units, Quake coordinate conventions (COORDINATE_CONVENTIONS.md — the same "HUD coords are Quake" rule as
+      the PVS debug work).</li>
+  <li><b>Entities &amp; props</b> — item spawns, lights, and decoration props (§8) use the same move/rotate handles;
+      point entities get a bounding-box gizmo. This makes the decoration phases' prop-override UX (§7) a free rider on
+      the editor tools.</li>
+  <li><b>Brush creation</b> <span class="pill alt">E5</span> — drag-out box creation on a grid plane (most natural in
+      an ortho view, §11.5; in first person: drag a footprint on a surface, then pull height), then reshape with the
+      tools above. Without creation the editor only remixes; with it, you greybox from nothing.</li>
+  <li><b>Clipper</b> <span class="pill alt">E5</span> — plane-split of a brush (two/three clicked points, or "cut
+      along current view plane"): the single most-used Radiant power tool, and <i>convexity-safe by construction</i> —
+      both halves of a convex solid are convex, so it sidesteps the trap below entirely. Keep both halves or discard
+      one.</li>
+</ul>
+
+<div class="callout"><span class="lbl">The hard part — convexity</span>
+Dragging verts/edges/faces on brushes is constraint-solving, not free deformation: brushes must stay convex, so a
+vertex drag re-derives the containing planes (Radiant vertex-mode semantics) and the op must <i>validate</i> —
+clamping to the nearest valid position (slide-to-valid) instead of producing degenerate or concave solids, with the
+constraint telegraphed in the UI (handle turns red, snaps back). This is the highest-unknown piece of the editor and
+gets prototyped first in E3 (§13), on ugly real-world stock-map brushes.</div>
+
+<p><b>Derived data while editing:</b> a geometry edit dirties collision, PVS, render meshes, and any baked decoration
+fields it touches — the same tile-hash dirty model as §11.2's bake cache. Collision refits immediately (PLAYTEST must
+be honest about the edit you just made); PVS degrades to conservative visibility until an async recompute lands.</p>
+
+<h3 id="editor-ortho"><span class="secno">11.5</span>Ortho views &amp; render modes</h3>
+
+<h4>Orthographic top / front / side views — precision editing</h4>
+<p>A <b>single-pane orthographic view</b> toggled from EDIT (one big view at a time, cycling top → front → side —
+deliberately not a docked quad layout; this stays an in-game tool, not a desktop app). Orthographic camera, drag to
+pan, wheel zoom-to-cursor, grid always visible and screen-stable. The view renders <b>truth geometry as wireframe</b> —
+brush windings drawn as line lists, <i>not</i> the tessellated/decorated render mesh — which is what makes the lines
+perfectly straight and the drawing exact: selection fills faces translucently, entities draw as boxes with names at
+sufficient zoom. A scrollable near/far clip slab ("floor filter") moves through the map so stacked floors don't draw
+over each other — the classic tall-map ortho problem, solved the classic way.</p>
+<ul>
+  <li><b>Editing in ortho</b> — the same tools, the same ops: pick verts/edges/faces against the projected windings,
+      move with drags that are <b>axis-locked by construction</b> (top view moves XY only; side views XZ/YZ), rotate
+      about the view axis, drag-out box creation, clipper by two clicked points. Because the projection axis is
+      fixed, every manipulation is exactly planar — no accidental depth drift, which is why 2D views remain unbeatable
+      for alignment work.</li>
+  <li><b>Synced with the world</b> — it's a viewport over the same live world: selection is shared with the 3D view,
+      the fly camera's position + frustum draw in the ortho view, clicking a spot can teleport the fly camera there,
+      and co-editors' edits appear live (they're just ops).</li>
+  <li><b>Implementation sketch</b> — a second Godot viewport with an orthographic <code>Camera3D</code> over dedicated
+      line-mesh layers (chunked line lists rebuilt only from dirtied brushes), plus a UI overlay for handles/text. The
+      same line set doubles as the 3D wireframe overlay below — one system, two consumers.</li>
+</ul>
+
+<h4>Quick render-mode toggles</h4>
+<p>One keybind cycles the base mode; overlays toggle independently; all client-local cvars
+(<code>editor_view_*</code>), with state + binds in the HUD (§11.6):</p>
+<table>
+  <tr><th style="width:24%">Mode / overlay</th><th>Shows</th></tr>
+  <tr><td><b>Decorated</b></td><td>The full result — layers, props, amplified meshes, lighting. The shipped look.</td></tr>
+  <tr><td><b>Base</b></td><td>Truth geometry with base textures only — no weather layers, props, or amplification.
+      The "what am I actually editing" view (and the honest view of a fresh import).</td></tr>
+  <tr><td><b>Flat</b></td><td>Fullbright flat color per surface class or per brush — structure with zero material
+      noise.</td></tr>
+  <tr><td>Wireframe <i>(overlay)</i></td><td>Brush-winding edges over any base mode (the ortho line set, reused).</td></tr>
+  <tr><td>Vertices <i>(overlay)</i></td><td>Vertex points at screen-constant size; grabbable when the vert tool is
+      active.</td></tr>
+  <tr><td>Collision <i>(overlay)</i></td><td>Collision brush volumes — makes render-vs-collision divergence visible,
+      which matters the moment amplification (§9) makes them differ.</td></tr>
+  <tr><td>Debug channels <i>(later)</i></td><td>Add-ons, each landing with its feature: mask-channel heatmaps
+      (moss/dirt/wear), lightmap-only, PVS cluster coloring, bot-nav overlay, demo-derived player/shot/damage
+      heatmaps with a time scrubber (§12.3).</td></tr>
+</table>
+
+<h3 id="editor-hud"><span class="secno">11.6</span>Editor HUD</h3>
+
+<p>Per the brief: every toggle shows its state <i>and the live keybind that serves it</i> (read from the bind table,
+never hardcoded — rebinding updates the HUD). HudManager-owned panels, following the existing show-mode gating
+conventions. One compact corner panel:</p>
+
+<pre><code>┌───────────────────────────────┐
+│ EDIT  ·  [Tab] playtest       │   <span class="cm">state banner + toggle bind</span>
+│ Tool: Move   [1/2/3] tools    │   <span class="cm">active tool (move/rotate/select)</span>
+│ View: Base  [V] · Ortho [O]   │   <span class="cm">render mode cycle + ortho view toggle (§11.5)</span>
+│ Grid: ON  8u   [G] · [ [ ] ]  │   <span class="cm">grid on/off · size · toggle + size binds</span>
+│ Snap: ON  4u   [N]            │   <span class="cm">geometry snap on/off · radius · bind</span>
+│ Sel: 3 verts  brush #142      │   <span class="cm">selection type + count + owner</span>
+│ ctr  (512, −256, 128)         │   <span class="cm">selection center (Quake units)</span>
+│ cur  (516, −252, 128) Δ+4,+4  │   <span class="cm">live drag coords + delta (only while dragging)</span>
+│ Fly ×2.5                      │   <span class="cm">fly-speed ladder</span>
+└───────────────────────────────┘</code></pre>
+
+<p>(Key choices above are placeholders — concrete defaults are an open question in §14; the HUD reading live binds is
+the design point.) In PLAYTEST the panel collapses to the state banner + toggle bind only.</p>
+
+<p><b>Superseded by §11.9.</b> The key table above is resolved there: keys 0–9 become the editor's outright, routed
+through registered <code>editor_*</code> commands so the live-bind rule this section is built around still holds.
+§11.9 also adds the two lines this sketch is missing — the action line saying what you are about to do to what, and
+a contextual tips block for the held modifiers.</p>
+
+<h3 id="format-editor"><span class="secno">11.7</span>Ops, networking &amp; bake</h3>
+<div class="flow">
+  <div class="node">Client editor UI<small>paint strokes · sliders · gizmos</small></div><div class="arr">→</div>
+  <div class="node">Edit ops<small>small, ordered, undoable</small></div><div class="arr">→</div>
+  <div class="node">Server (authoritative)<small>applies to truth · dirties tiles</small></div><div class="arr">→</div>
+  <div class="node">Incremental bake<small>async, prioritized by view</small></div><div class="arr">→</div>
+  <div class="node">All clients<small>op echo + baked-tile stream</small></div>
+</div>
+<ul>
+  <li><b>Everything is an op</b> — geometry: <code>TransformSelection{sel, xform}</code>,
+      <code>DragSubObject{brush, verts, delta}</code> (validated plane-refit, §11.4); decoration:
+      <code>PaintStroke{channel, tile-deltas}</code>, <code>SetRuleParam{rule, scope, value}</code>,
+      <code>MoveProp{id, xform}</code>, <code>PlaceZone{volume, overrides}</code>… Ops are the undo log, the network
+      protocol, and the save-file diff, in one. Server-authoritative like everything else in the game (and multi-user
+      co-editing falls out for free — two people decorating one map in the same session).</li>
+  <li><b>Two sync paths, both valid per op class:</b> cheap deterministic ops (rule param change) → clients re-generate
+      locally from the op; expensive ops (lighting, big geometry edits) → server bakes and streams result tiles.
+      Start with server-bakes-everything (simplest, matches the brief's "bake on the server and serve it"), add
+      client-side regen for the interactive channels (paint, burn volumes, moss slider) where sub-100ms feedback matters.</li>
+  <li><b>Live editing loop targets:</b> paint stroke visible locally &lt;50ms (write the local mask tile immediately,
+      reconcile with server echo); rule-param change over a courtyard &lt;1s (incremental generator run on dirtied
+      tiles); full lighting re-bake asynchronous with progressive display.</li>
+  <li><b>Wire/protocol:</b> tile streaming is bulk reliable data — same family of problem as map/asset download, not the
+      snapshot path; keep it off the unreliable input/snapshot channels (ENet throttle lessons). New protocol rev needed
+      for the op channel; bake artifacts can piggyback the content-download path.</li>
+</ul>
+
+<h4>What op replication actually turned out to need <span class="pill rec">built</span></h4>
+
+<p>The op channel is built (<code>VmapOpWire</code>, <code>VmapEditServer</code>,
+<code>NetControl.EditorOp</code>, protocol v20). Four things were not obvious from the sketch above, and each is
+the difference between co-editing working and two mappers quietly editing different maps.</p>
+
+<ul>
+  <li><b>An op that mints an id has to carry it.</b> Create, clip, extrude and paste all allocate ids during apply,
+      and two machines allocating independently diverge the moment either creates anything. The id therefore travels
+      IN the line: a client sends <code>0</code> ("you choose"), the server assigns and applies, and the echo is
+      re-encoded from the applied op with the real id. Every peer replays that. One field, and the whole class of
+      id divergence disappears — including on redo, since replaying the same op object reuses the same id.</li>
+  <li><b>A paste replicates as its result, not as the gesture.</b> "Run my clipboard against your document" needs
+      both sides to hold the same clipboard AND remap ids identically. Sending the objects instead —
+      <code>AddObjectsOp</code>: these solids, these control grids, these spawn keys, these ids — needs neither.
+      Entity ownership travels as INDICES into the op's own arrays, so it means the same thing before and after id
+      assignment.</li>
+  <li><b>Undo is not an op.</b> It restores a snapshot, so there is no gesture to replay; without something the
+      session diverges the first time anyone presses Ctrl+Z, which in a map editor is within the first minute.
+      What crosses the wire is the state that was put back (<code>SetObjectsOp</code>: these ids now hold this,
+      these ids are gone). Redo and history-travel are the same shape, so one op covers all three.</li>
+  <li><b>One choke point, not twenty send calls.</b> Replication hangs off
+      <code>VmapEditSession.Applied</code>/<code>Restored</code> rather than off each tool. A tool written next
+      month replicates because it applies an op — not because someone remembered to add a send beside it.</li>
+</ul>
+
+<p><b>Threading and authority.</b> A submitted op arrives on whichever thread reads packets while the document is
+owned by the editor on the main thread, so <code>editor_op</code> QUEUES rather than applying; the host drains on
+the main thread. That is the same second-writer hazard the cross-thread transport race was. A guest does not apply
+optimistically: it submits and waits for the echo, so an op the server refuses simply never happened rather than
+being something to roll back. The listen host ignores its own echo arriving back through its loopback client.</p>
+
+<p><b>Still open:</b> a joining guest imports the map itself rather than receiving the host's document, so a host
+editing a saved <code>.vmap</code> and a guest importing the BSP would number brushes differently and every
+replicated op would land on the wrong solid. The guest says so on join rather than diverging in silence, but the
+document handshake itself — send the truth on connect — is the next piece. Async server bake and tile streaming
+are also untouched.</p>
+
+<h3 id="editor-qol"><span class="secno">11.8</span>QoL backlog — small things that make it feel professional</h3>
+<p>None of these gate a phase; each is small once the op/HUD/view rails exist. Kept here so they don't get invented
+ad-hoc later:</p>
+<ul>
+  <li><b>Camera bookmarks &amp; jumps</b> — save/recall camera slots, "frame selection", "go to coordinates"; the
+      ortho↔3D camera handoff (§11.5) is a special case of the same mechanism.</li>
+  <li><b>Autosave for free</b> — the op journal (§11.7) <i>is</i> the autosave: append-only log replayed after a
+      crash, with periodic truth snapshots to bound replay length.</li>
+  <li><b>Diff-friendly serialization</b> — truth sections serialize deterministically (stable ordering,
+      shortest-round-trip floats, grid-snapped coords stored as integers) so <code>.vmap</code>s diff and merge in
+      git. Matters the moment two people edit one map <i>outside</i> a shared session.</li>
+  <li><b>Entity inspector</b> — key/value panel for classic entity work (spawnflags, targets), with
+      targetname→target links drawn as arrows in both the 3D and ortho views.</li>
+  <li><b>Prefabs</b> — save selection as a prefab, instance it elsewhere; pairs naturally with §9's
+      repetition-detection (a detected repeated brush group is a prefab candidate, and a placed prefab is a known
+      instance for amplification).</li>
+  <li><b>Measure tool with movement-aware reachability</b> — distance/angle between clicked points, plus the twist
+      Radiant can never have: color a measured gap by whether a walk / jump / crouch-jump / bhop actually clears it,
+      computed with the real movement physics. Same engine, same numbers — in-game editing's unfair advantage.</li>
+  <li><b>Bots in PLAYTEST</b> — spawn bots while playtesting to feel flow and item timing; the bot-nav debug overlay
+      (§11.5) shows what they can path, closing the loop with the traffic-wear generator (§6).</li>
+</ul>
+
+<h3 id="editor-ux"><span class="secno">11.9</span>Tool selection &amp; usage — the interaction model</h3>
+
+<p>§11.4 says what the tools <i>do</i>. This says how you reach them, how you know what you are about to do, and how
+you aim a transform at one axis instead of three. It supersedes the placeholder key table in §11.6 and the
+"cycle with a key" scheme E2 shipped.</p>
+
+<p>The problem it fixes is concrete. Today the tool is a cycle on one key, the manipulator is a cycle on another,
+neither has a menu, the digits are borrowed weapon binds, and a drag grabs the <i>object</i> — so the mouse moves the
+selection along two screen axes at once and there is no way to say "only Z". None of that is discoverable and the
+last part is not usable for alignment work.</p>
+
+<h4>Three orthogonal layers</h4>
+<table>
+  <tr><th style="width:16%">Layer</th><th style="width:22%">Answers</th><th>Lives in</th></tr>
+  <tr><td><b>Tool</b></td><td>What a click <i>resolves to</i></td>
+      <td>Brush, face, edge, vertex, patch, entity, waypoint, shader, decal. Drives <code>VmapPicking</code>'s
+          selection kind and nothing else.</td></tr>
+  <tr><td><b>Mode</b></td><td>What a handle drag <i>does</i></td>
+      <td>Move, rotate, scale, extrude, clip, create, paste. Per-tool: the Mode submenu only ever lists modes the
+          current tool can actually perform, so there are no dead rows.</td></tr>
+  <tr><td><b>Action</b></td><td>What fires <i>once</i>, now</td>
+      <td>Copy, delete, deselect, multiselect toggle, undo. These have no ongoing state, so they are <i>not</i>
+          modes — a "copy mode" you are sitting in does nothing. Paste is the one exception and it is genuinely a
+          mode (ghost follows the crosshair, left-click places, Esc exits).</td></tr>
+</table>
+
+<p>The split matters because it removes the repetition the first draft of this menu had: Copy and Paste appeared under
+all seven tools. They appear once, on Selection, and act on whatever the current tool selected.</p>
+
+<h4>Tool roster</h4>
+<table>
+  <tr><th style="width:14%">Tool</th><th style="width:34%">Modes</th><th>Notes</th></tr>
+  <tr><td><span class="pill rec">built</span><b>None</b></td><td>(none — Mode row hides)</td>
+      <td>No picking, no hover outline, no pick cost. Exists so you can judge <i>lighting</i>: the hover highlight is
+          drawn over the very surfaces you are trying to read.</td></tr>
+  <tr><td><b>Select</b></td><td>Object · Face</td>
+      <td>The tool a session opens in. Picks at object granularity, transforms nothing. Safe to click anything.
+          Clicking a patch here (or under Brush/Face/Edge/Vertex) switches to the Patch tool; clicking a brush
+          under Patch switches back.</td></tr>
+  <tr><td><span class="pill rec">built</span><b>Brush</b></td><td>Move · Rotate · Scale · Clip · Create · Paste</td>
+      <td>Whole-solid selection. Clip and Create both exist as ops already (<code>ClipBrushOp</code>,
+          <code>CreateBoxBrushOp</code>) and are wired to nothing.</td></tr>
+  <tr><td><span class="pill rec">built</span><b>Face</b></td><td>Move · Rotate · Extrude · Clip · Create · Paste</td>
+      <td>No Scale: a face has no size of its own, its outline is wherever the neighbouring planes cut it. What
+          "scale a face" would mean is a brush scale about the face centroid, which lives under Brush. Extrude is the
+          high-value addition (winding → prism → new brush).</td></tr>
+  <tr><td><span class="pill rec">built</span><b>Edge</b></td><td>Move · Bevel (clip)</td>
+      <td>Rotate and scale on a single edge are ill-defined; "split an edge" is inserting a bevel plane, which is the
+          clipper again.</td></tr>
+  <tr><td><span class="pill rec">built</span><b>Vertex</b></td><td>Move · Snap to grid</td>
+      <td>Kept as its own tool rather than folded into Edge. It is not a variant of Face: a face drag pushes one plane
+          along its normal and preserves topology, while a vertex drag moves a corner and re-derives <i>every</i>
+          plane meeting there through a least-squares fit. Turning a box into a wedge is a vertex operation and Face
+          can never produce it.</td></tr>
+  <tr><td><b>Patch</b></td><td>Move · Rotate · Scale · Control points · Modify… · Create… · Paste</td>
+      <td>Rotate and scale are the cheap ones here: a patch is a control-point list with no convexity constraint, so
+          both are "transform each control point about the patch centre". Control-point editing is the mode that
+          makes patches worth having.</td></tr>
+  <tr><td><b>Shader</b></td><td>Pick · Apply · Browse… · Fit / Natural / Axial · Shift · Scale UV · Rotate UV · Flags</td>
+      <td>The target is Radiant's Surface Inspector, not a texture picker. <code>SetFaceMaterialOp</code> exists; the
+          projection edits need a new <code>SetFaceProjectionOp</code> over <code>VmapTexProjection</code>, which
+          already stores the full affine map.</td></tr>
+  <tr><td><b>Entity</b></td><td>Move · Rotate · Scale · Create… · Properties… · Paste</td>
+      <td>Weapons, items, spawns, gametype objectives, teleporters, jumppads, lights, triggers, brush entities.
+          The single biggest chunk of new work; see the authority note below.</td></tr>
+  <tr><td><b>Waypoint</b></td><td>Place · Place jump · Place crouch · Place support · Remove · Hardwire · Lock · Unreachable · Relink all · Symmetry…</td>
+      <td>New UI over a finished backend: <code>WaypointNetwork</code> and the <code>.waypoints</code> / links /
+          hardwired writers are all ported. Base's <code>wpeditor</code> is not.</td></tr>
+  <tr><td><b>Clip</b></td><td>Two-point · Three-point · View plane · Keep both / keep front / keep back</td>
+      <td>Promoted from a per-tool mode to a tool because it is Radiant's most-used power tool and it is
+          convexity-safe by construction: both halves of a convex solid are convex, so it sidesteps §11.4's hard
+          part entirely. <code>ClipBrushOp</code> already implements all of it including keep-both.</td></tr>
+  <tr><td><b>Measure</b></td><td>Distance · Angle · Reachability</td>
+      <td>§11.8's entry, promoted. Reachability is the mode Radiant cannot have: colour the measured gap by whether a
+          walk / jump / crouch-jump / bhop actually clears it, run through the real movement physics.</td></tr>
+  <tr><td><span class="pill alt">later</span><b>Decal</b></td><td>Place · Move · Rotate · Scale · Delete</td>
+      <td>Deferred to the D-track (§8.2) — it needs the decal system to exist first. Listed here so the menu has a
+          slot reserved rather than being restructured later.</td></tr>
+</table>
+
+<h4>The context menu</h4>
+<p>Right-click and release opens a menu anchored to the right of the crosshair (at the pointer in ortho, which
+already owns a cursor). Right-click <i>during a drag</i> keeps its current meaning and cancels the drag, so the
+gesture never fires the menu when you meant to abort. The tool cycle that right-click used to do is retired — the
+menu replaces it.</p>
+<ul>
+  <li><b>Cursor</b> — opening takes cursor ownership through the same <code>UiOwnsCursor</code> path the maximized
+      radar and the QuickMenu use, which also suspends fly input so you don't drift while reading. Number keys stay
+      live alongside the pointer: 1–9 pick a row, 0 pages forward, exactly the QuickMenu model. Both paths reach the
+      same rows.</li>
+  <li><b>Submenus replace, they don't cascade</b> — descending swaps the row list in place with <code>← back</code>
+      at the top. No second panel to the right, no hover-to-open timing, and it survives being driven by number keys.</li>
+  <li><b>Tool → Mode chaining</b> — picking a tool from Tools descends straight into that tool's Mode list rather
+      than closing, because "switch tool" is almost always followed by "and do this with it".</li>
+</ul>
+
+<p>Root rows:</p>
+<table>
+  <tr><th style="width:20%">Row</th><th>Contents</th></tr>
+  <tr><td><b>Tools [<i>current</i>]</b></td><td>The roster above; the active tool is named on the row itself.</td></tr>
+  <tr><td><b>Mode [<i>current</i>]</b></td><td>Only the current tool's modes. Hidden entirely when the tool is None.</td></tr>
+  <tr><td><b>Selection</b></td><td>Deselect · Copy · Paste · Delete · Select all of this shader · Invert · Multiselect on/off.
+      All actions except Paste, which enters Paste mode.</td></tr>
+  <tr><td><b>Undo [<i>label</i>]</b></td><td>Names the step it will undo, from <code>VmapEditSession.UndoLabel</code>.
+      Ctrl+Z does the same thing.</td></tr>
+  <tr><td><b>History…</b></td><td>Dialog: the journal as a list, click any entry to travel to that state, plus redo.
+      <b>Abandoned branches are kept, not discarded</b> — editing after undoing files the old redo stack as a named
+      row ("abandoned, 5 steps") you can restore from. Strictly better than warning that the redo history is about to
+      be lost, and it means no modal popup in a mouse-captured view.</td></tr>
+  <tr><td><b>View</b></td><td>Switch to Ortho / Free-fly · Grid (size, opacity, major interval, on/off) ·
+      Free-fly (camera speed, FOV, acceleration) · Ortho (axis, floor-filter slab, wire alpha, and a stubbed layout
+      picker for the multi-pane views §11.5 does not have yet).</td></tr>
+  <tr><td><b>Lighting</b></td><td>Recompute lightmaps · bake quality ladder · shadows / bounce / dirt / deluxe toggles ·
+      live-vs-baked · sun scale. These are all existing <code>cl_editor_light_*</code> cvars with no UI.</td></tr>
+  <tr><td><b>MapInfo…</b></td><td>Dialog: name, title, author, description, supported gametypes and their per-mode
+      limits. <b>The port has no <code>.mapinfo</code> reader at all</b>, so this is a parser and writer from scratch,
+      not a UI over existing plumbing.</td></tr>
+  <tr><td><b>Playtest [F9]</b></td><td>The existing toggle, surfaced.</td></tr>
+</table>
+
+<h4>Handles: two-phase, one axis</h4>
+<p>The manipulator becomes a <i>target</i> rather than a mode you drag the object under. Click one selects and spawns
+the handles at the selection centre; click two must land on a handle:</p>
+<ul>
+  <li><b>Move</b> — three axis arrows + three plane pads (the pads give you controlled two-axis motion when you want
+      it, which is different from getting it by accident).</li>
+  <li><b>Rotate</b> — three rings, snapped to <code>AngleSnapDegrees</code> (15°, already defined).</li>
+  <li><b>Scale</b> — six box handles on the selection bounds for per-axis stretch, plus a centre handle for uniform
+      scale. <b>No scale op exists today</b>: <code>ManipulatorMode.Scale</code> is in the enum and drawn in the HUD,
+      and <code>EndDrag</code> handles only rotate and the translate family, so the mode currently does nothing on
+      release. Note the maths — a non-uniform scale transforms brush plane <i>normals</i> by the inverse-transpose,
+      not by the scale itself.</li>
+</ul>
+<p>Dragging the object body no longer transforms anything; it selects. That is the whole point: an axis you picked
+beats an axis inferred from which way the mouse happened to travel. Handles are ray-picked at screen-constant size
+and win ties against geometry, so a handle in front of a wall is grabbable without flying around it.</p>
+
+<h4>Status: what am I about to do, to what</h4>
+<p>Two readouts, deliberately different in density.</p>
+<ul>
+  <li><b>Main panel</b> (<code>EditorPanel</code>, top right) gains an <b>action line</b> and a <b>tips</b> block.
+      The action line reads <code>Tool &gt; Mode: subject</code> and carries the clipboard: <code>Select &gt; Copy:
+      Brush #412, Devastator (#88)</code>, <code>Brush &gt; Paste: copy of Brush #412</code>, <code>Entity &gt;
+      Create: Devastator</code>, <code>Patch &gt; Create: bevel</code>. Tips is a headerless list of what the
+      modifiers would do <i>right now</i>: hold Shift to multiselect, hold Ctrl to invert grid snap. Tips are
+      contextual, not a static legend.</li>
+  <li><b>Crosshair panel</b> (new <code>EditorActionPanel</code>, below the crosshair) is the same action line and
+      nothing else, so the thing you need in peripheral vision is where your eyes already are. Auto-registered like
+      any other <code>HudPanel</code>, so it inherits the HUD editor's drag/resize and can be turned off.</li>
+</ul>
+
+<h4>Modifiers &amp; keys</h4>
+<ul>
+  <li><b>Shift</b> — temporary multiselect. Already implemented (<code>BeginDrag(addToSelection:)</code>); only the
+      tip line is missing.</li>
+  <li><b>Ctrl</b> — temporarily <i>inverts</i> grid snap (snap off → snapped, snap on → free). This collides with
+      Ctrl+wheel, which currently moves the ortho floor-filter slab, so the slab moves to Alt+wheel.</li>
+  <li><b>0–9 are the editor's</b>, exclusively. The weapon-bind reuse is retired: it was a good trade when the editor
+      had four toggles, and it stops paying the moment the digits mean tools. <code>HandleEditorInput</code> already
+      runs ahead of the bind dispatch, so ownership is an intercept, not a bind-table fight. But the digits route
+      through registered <code>editor_*</code> commands with an editor bind layer rather than a hardcoded keycode
+      switch, so §11.6's rule survives: the HUD keeps resolving every key through the bind table, a rebind updates
+      the panel, and an unbound action still renders as <code>--</code> instead of lying.</li>
+  <li>While the context menu is open the digits pick rows instead. Two meanings, unambiguous, and it is what the
+      QuickMenu already does.</li>
+</ul>
+
+<h4>Dialogs</h4>
+<ul>
+  <li><b>Patch create</b> — the NetRadiant primitive set, each with a one-line description of what it is for:
+      simple mesh (<i>n</i>×<i>m</i>), bevel, end cap, inverted bevel, inverted end cap, cylinder (plus dense and
+      very dense), square cylinder, cone, sphere, and exact rows/columns.</li>
+  <li><b>Patch modify</b> — tabs mirroring Radiant's operations: Matrix (invert, transpose, redisperse),
+      Rows/Columns (insert, remove), Thicken, Cap selection, Texture (natural, fit, CAP, cycle).</li>
+  <li><b>Entity create / properties</b> — <b>driven from
+      <code>Base/data/xonotic-maps.pk3dir/scripts/entities.ent</code></b>, which ships 186 classes as XML with typed
+      keys, per-key help text, editor colours, bounding boxes and <code>modeldisabled=</code> model paths. That is the
+      palette, the category tree <i>and</i> the inspector schema, already written and already shipped with the game.
+      Hand-authoring an entity list would be duplicating it worse. Categories come from classname prefix
+      (<code>item_</code>, <code>weapon_</code>, <code>info_</code>, <code>func_</code>, <code>trigger_</code>,
+      <code>target_</code>, <code>misc_</code>, lights) with a curated "Common" group pinned at the top.</li>
+  <li><b>Shader browse</b> — the parsed <code>.shader</code> set (<code>Q3ShaderParser</code> exists), filtered,
+      with the surface/content flags of the hovered face shown alongside.</li>
+</ul>
+
+<h4>Entity authority — the one architectural fork</h4>
+<p>There are two entity representations and they are not the same object. <code>VmapDocument.Entities</code> is
+imported from the BSP entity lump and is what gets <i>saved</i>; the items you see floating in an editor session are
+the <i>server's</i> live entities, spawned by the ordinary game path. The editor world builder renders brushes and
+patches only, so nothing in the editor currently draws or picks the document's entities at all.</p>
+<p><b>The document is truth, and the two states show different sets.</b> EDIT draws the <i>document's</i> entities;
+PLAYTEST shows the <i>server's</i> live ones. That falls straight out of what each state is for: EDIT is where you
+author the map, so it should show what will be saved, and PLAYTEST is a real player in the real world, so it must
+show what the game actually spawned. It also removes the double-vision the naive version has, where an editor
+gizmo and a live pickup occupy the same spot and you cannot tell which one your click meant.</p>
+<p>Reconciliation therefore happens at the <b>EDIT → PLAYTEST transition</b>, not per-op: entering playtest rebuilds
+the live entity set from the document. One sync point instead of a sync path threaded through every op, and it is
+the moment where a rebuild is already expected because the player is being re-placed anyway. Editing stays cheap
+(ops touch only the document) and playtesting stays honest (what you test is what you just authored).</p>
+<p>The alternative — manipulate live entities and scrape them back into the document on save — needs no sync at all
+but silently drops anything with no live counterpart, and there are plenty: compiler-only classes
+(<code>_skybox</code>, <code>_decal</code>) never spawn, and the 186 classes in <code>entities.ent</code> do not map
+one-to-one onto the port's registered spawn functions. Silent data loss on every save is the worse trade.</p>
+<p>Point entities need what they have never had here: an EDIT-only render pass (box or <code>modeldisabled</code>
+model, coloured per <code>entities.ent</code>), a pick path in <code>VmapPicking</code>, and ops for create / move /
+rotate / delete / set-key. The render pass hides itself in PLAYTEST, which is the same show-mode gating every HUD
+panel already does.</p>
+
+<h4>Waypoints in a free-fly editor</h4>
+<p>Base's <code>wpeditor spawn</code> and <code>remove</code> require <code>IS_PLAYER</code>, because a waypoint goes
+at the player's feet with real physics. In EDIT you are a free-flying observer, so the crosshair-on-floor variant
+(Base's <code>spawn crosshair</code>) is the <i>primary</i> gesture here and the feet-relative ones only make sense
+after dropping into PLAYTEST. Everything else transcribes directly: jump / crouch / support waypoint kinds, hardwired
+link origin and destination, link-display lock, the unreachable-waypoint sweep, relink-all, and symmetry
+origin/axis get-and-set. Links draw as arrows in both the 3D and ortho views, which is the same overlay the entity
+inspector's targetname→target arrows use (§11.8).</p>
+
+<h4>New ops this section requires</h4>
+<table>
+  <tr><th style="width:34%">Op</th><th>Status</th></tr>
+  <tr><td><code>ClipBrushOp</code></td><td><span class="pill rec">exists</span>Fully implemented including keep-both-halves; referenced by nothing.</td></tr>
+  <tr><td><code>CreateBoxBrushOp</code>, <code>SetFaceMaterialOp</code></td><td><span class="pill rec">exists</span>Implemented, unwired.</td></tr>
+  <tr><td><code>ScaleSelectionOp</code></td><td><span class="pill hard">new</span>Brushes (inverse-transpose on normals), patches, entity bounds.</td></tr>
+  <tr><td><code>ExtrudeFaceOp</code></td><td><span class="pill hard">new</span>Winding → prism → new brush.</td></tr>
+  <tr><td><code>RotateFaceOp</code></td><td><span class="pill hard">new</span>Rotate the plane about the face centroid; validate like the vertex path.</td></tr>
+  <tr><td><code>RotatePatchesOp</code>, <code>ScalePatchesOp</code>, <code>MovePatchControlsOp</code></td>
+      <td><span class="pill hard">new</span>Trivial by comparison: control points, no convexity constraint.</td></tr>
+  <tr><td><code>SetFaceProjectionOp</code></td><td><span class="pill hard">new</span>Shift / scale / rotate / fit UV over <code>VmapTexProjection</code>.</td></tr>
+  <tr><td><code>CreateEntityOp</code>, <code>MoveEntitiesOp</code>, <code>RotateEntitiesOp</code>,
+          <code>DeleteEntitiesOp</code>, <code>SetEntityKeyOp</code></td>
+      <td><span class="pill hard">new</span>Each carries the live-world reconciliation described above.</td></tr>
+  <tr><td>Clipboard ops (copy is not an op; paste is)</td>
+      <td><span class="pill hard">new</span><code>PasteOp</code> deep-copies brushes, patches, entities and their
+          ownership links, re-keying ids. One op, so one undo step.</td></tr>
+</table>
+
+<h4>Order of work</h4>
+<p><b>Rails first.</b> The context menu shell, the two status readouts, digit ownership through
+<code>editor_*</code> commands, two-phase handles, and the scale op. Nothing is user-visible until the shell lands,
+but after it every tool is a menu row plus an op — and Clip is nearly free, since its op is already written. The
+alternative (ship Brush end-to-end, then Patch, then Entity) is playtestable sooner but rewrites the menu, handle and
+status code two or three times as later tools reveal what they needed.</p>
+<p><b>Ordering note (settled in E6):</b> the tools above are client-local, but the op channel they feed is now built,
+and wiring it answered the question this note was raised about. Replication hangs off
+<code>VmapEditSession.Applied</code> and <code>Restored</code>, not off the tools, so a tool added later replicates
+because it applies an op — no per-tool send to remember. The clipboard did need the second look: a paste's result is
+an arbitrary pile of geometry, so it replicates as <code>AddObjectsOp</code> (the objects and their ids) rather than
+as a re-run of the sender's clipboard against a document that may not match. Undo needed one too, for the same
+reason in reverse: it restores a snapshot rather than replaying a gesture, so it replicates as
+<code>SetObjectsOp</code>. Entity reconciliation is unaffected — it runs on the EDIT→PLAYTEST edge against the local
+document, whichever machine that document was edited from.</p>
+
+<!-- ══════════════════════════ 12 · GAMEPLAY LAYER ══════════════════════════ -->
+<h2 id="gameplay"><span class="secno">12</span>Gameplay-layer systems <span class="pill alt">v1.3 · lower priority</span></h2>
+
+<p>Systems that generate or consume <i>gameplay</i> rather than visuals. They reuse the doc's core mechanics —
+determinism by seed, fields as inputs, §7-style override deltas — but operate at the game layer.</p>
+
+<h3 id="itemplace"><span class="secno">12.1</span>Dynamic item placement</h3>
+<p>The mapper stops hand-picking every ammo box: they place <b>generic markers</b> ("an item could go here",
+optionally constrained by class hints, size, or mode tags), and a <b>placement solver</b> decides what actually
+spawns at each marker — if anything — from balance parameters:</p>
+<ul>
+  <li><b>Inputs</b> — the marker set; the nav graph (bot waypoints — travel <i>time</i> between markers, not
+      euclidean distance); room/zone structure (§4); gamemode + expected player count (§12.2 metadata); a balance
+      parameter set (weapon coverage per map-minute, ammo-to-weapon pairing radius, major-item spacing floors,
+      contested-vs-safe placement bias); optionally heatmap data (§12.3) as a demand signal.</li>
+  <li><b>Solver sketch</b> — majors first (mega/armor placed to maximize pairwise nav-distance subject to spacing
+      floors — the classic control triangle emerges naturally), then weapons for coverage (every zone within T
+      seconds of a weapon), then ammo paired to the weapons that consume it, then health filler. Greedy with
+      local-swap refinement is enough — it's dozens of markers, not thousands.</li>
+  <li><b>Deterministic by construction</b> — seeded by (map hash, balance-params hash, mode, player-count bucket):
+      same settings on the same map ⇒ the identical layout on every server, every restart. Different modes get
+      different solutions, stored per mode in the <code>.vmap</code>. Retune one balance parameter and every map's
+      layout follows — the whole rotation rebalances from one knob.</li>
+  <li><b>Manual override, as always</b> — pin an item to a marker, ban a class from a marker, or hand-place outright;
+      overrides are §7-style deltas the solver must respect. <b>Importing a classic map turns its existing item
+      entities into pinned placements — nothing changes until you ask.</b> Pads/cones (§8.7) light only under markers
+      that currently hold an item.</li>
+</ul>
+
+<h3 id="mapselect"><span class="secno">12.2</span>Player-count-aware map selection</h3>
+<ul>
+  <li><b>Metadata lives in the map</b> — the <code>.vmap</code> manifest (a sidecar for classic BSPs) carries
+      per-mode <b>suggested player ranges</b> (min / sweet spot / max) plus a size class. Seeded automatically from
+      measurable proxies — playable area, route lengths, spawn and item counts — then mapper-overridable, and
+      refinable from §12.3 telemetry (a map that empties the server at 12 players tells on itself).</li>
+  <li><b>Selection honors it</b> — the vote screen sorts and badges candidates by fit to the <i>current</i> player
+      count, with a cvar to restrict to fitting maps outright; auto-rotation draws from the fitting set with recency
+      damping. Playlists may declare per-entry bounds overriding the map's own.</li>
+</ul>
+
+<h3 id="heatmaps"><span class="secno">12.3</span>Demo-driven heatmaps</h3>
+<p>Demos (the streaming <code>.xgd</code> format) already record what's needed: positions every snapshot, shots,
+damage events. Mine them:</p>
+<ul>
+  <li><b>Extraction</b> — an offline pass over one demo accumulates per-map grids: player presence (time-weighted
+      position density), shots fired (origins + directions), damage dealt (impact position, amount, weapon).</li>
+  <li><b>Aggregation</b> — grids sum trivially across demos: per map, per mode, per server, per date range — a server
+      can fold in every demo it has ever recorded. Stored as tile files keyed by map hash, so geometry edits don't
+      silently mix incompatible data.</li>
+  <li><b>Display</b> — editor debug channels (§11.5): presence / shots / damage overlays painted onto the world in
+      chart space, with a time-range scrubber.</li>
+  <li><b>Four customers, one data source</b> — mappers (dead zones, chokepoints, unused routes); the item solver
+      (§12.1 demand signal); the traffic-wear generator (§6 — <i>real</i> player traffic replacing the bot-nav
+      estimate); metadata refinement (§12.2).</li>
+</ul>
+
+<!-- ══════════════════════════ 13 · ROADMAP ══════════════════════════ -->
+<h2 id="roadmap"><span class="secno">13</span>Roadmap — editor-first, decoration after</h2>
+
+<p>v1 resequencing: the <b>E-track</b> (format → importers → editor) runs first; the <b>D-track</b> (decoration)
+follows on the rails E builds. E1 and E2 are independent of each other (the editor shell only needs the .bsp path)
+and can proceed in parallel.</p>
+
+<table>
+  <tr><th style="width:8%">Phase</th><th style="width:38%">Deliverable</th><th>Proves / unlocks</th><th style="width:12%">Size</th></tr>
+  <tr><td><b>E0</b> <span class="pill rec">built</span></td>
+      <td><b><code>.vmap</code> package core + .bsp importer</b> (§11.1–11.2): container read/write (dir + zip), truth
+          sections for geometry/entities/materials, bake regeneration through the existing MapLoader machinery,
+          <code>vmap_import &lt;map&gt;</code> console command, engine loads a <code>.vmap</code> end-to-end.</td>
+      <td>The format exists and round-trips; every later phase writes into it. Any stock BSP becomes editable input.</td>
+      <td>~1–2 wk</td></tr>
+  <tr><td><b>E1</b> <span class="pill rec">built</span></td>
+      <td><b>.map importer</b> (§11.1): NetRadiant map syntax parser, CSG plane→winding evaluation, detail/func_group
+          structure, patch defs (q3map2 source in <code>Base/netradiant</code> as reference).</td>
+      <td>Clean authoring-truth input for new maps; better detection signals for amplification later.</td>
+      <td>~1–1.5 wk</td></tr>
+  <tr><td><b>E2</b> <span class="pill rec">built</span></td>
+      <td><b>Editor game mode shell</b> (§11.3): <code>editor</code> mode, EDIT free-fly (reused spectator fly branch,
+          speed ladder) ↔ PLAYTEST transmute toggle preserving position/angles, editor bind layer, HUD frame with
+          state banner + live keybinds, and the first render-mode toggles (§11.5: Base / Flat + wireframe &amp; vertex
+          overlays — they pay off through every later phase).</td>
+      <td>Fly around any imported map, flip render modes, and instantly playtest — already a useful tool before any
+          editing lands.</td>
+      <td>~1–2 wk</td></tr>
+  <tr><td><b>E3</b> <span class="pill rec">built</span></td>
+      <td><b>Selection &amp; move</b> (§11.4): ray pick (face/edge/vert) with hover highlight, move handles + face
+          drag, <b>convex plane-refit with validation</b>, grid + align-to-grid, coordinate readouts, op log with
+          undo/redo, save to <code>.vmap</code>.</td>
+      <td>The editor thesis — and it front-loads the convexity risk, the one genuinely unknown-shaped piece.</td>
+      <td>~2–3 wk</td></tr>
+  <tr><td><b>E4</b> <span class="pill rec">built</span></td>
+      <td><b>Rotation + snapping</b> (§11.4): rotation rings + angle snap, geometry-to-geometry snapping with
+          visualization + HUD state, entity/prop gizmos, immediate incremental collision refit.</td>
+      <td>Full manipulation vocabulary; PLAYTEST honest after every edit.</td>
+      <td>~1–2 wk</td></tr>
+  <tr><td><b>E5</b> <span class="pill rec">built</span></td>
+      <td><b>Ortho views + creation + clipper</b> (§11.4–11.5): single-pane top/front/side wireframe views with
+          pan/zoom + floor-filter slab, axis-locked editing in-view, drag-out box brush creation, plane clipper.
+          <i>Caveat:</i> <code>CreateBoxBrushOp</code> and <code>ClipBrushOp</code> are both fully implemented but
+          referenced by nothing — they have no tool or menu reaching them, which E7/E8 supplies.</td>
+      <td>Precision alignment work and greyboxing from nothing — the "perfectly straight lines" workflow.</td>
+      <td>~2 wk</td></tr>
+  <tr><td><b>E6</b> <span class="pill rec">op replication built</span></td>
+      <td><b>Networked co-editing</b> (§11.7): server-authoritative op protocol, multi-client editing with selection
+          locks, async server bake + tile streaming groundwork.<br>
+          <i>Built:</i> the wire format covers every replicable op; ops that mint ids (create, clip, extrude,
+          paste) carry the id in the line, so the server assigns and every peer replays the same numbering.
+          A paste replicates as its RESULT (<code>AddObjectsOp</code>) rather than as "run my clipboard
+          against your document", and undo/redo/history-travel replicate as the state they restored
+          (<code>SetObjectsOp</code>) — without that a session diverges the first time anyone presses Ctrl+Z.
+          Replication hangs off <code>VmapEditSession.Applied</code>/<code>Restored</code>, one choke point, so
+          a tool added later replicates because it applies an op. A guest submits over
+          <code>clc_stringcmd</code> and does not apply optimistically; an incoming op is queued and applied on
+          the thread that owns the document. Channel: <code>NetControl.EditorOp</code> (protocol v20).<br>
+          <i>Not built:</i> a DOCUMENT handshake — a joining guest imports the map itself rather than receiving
+          the host's document, so a host editing a saved <code>.vmap</code> and a guest importing the BSP would
+          number brushes differently. The guest logs this on join rather than diverging silently. Also open:
+          async server bake and tile streaming.</td>
+      <td>Editor becomes a product feature; two people decorating one map in one session.</td>
+      <td>~2–3 wk</td></tr>
+  <tr><td><b>E7</b></td>
+      <td><b>Interaction rails</b> (§11.9): context menu shell with in-place submenus and cursor ownership; the action
+          line + tips block on <code>EditorPanel</code> and the new crosshair readout; keys 0–9 taken over through
+          registered <code>editor_*</code> commands and an editor bind layer; two-phase handle grabbing (select, then
+          grab an axis arrow / ring / box handle); the missing scale op.</td>
+      <td>Every tool after this is a menu row plus an op instead of a bespoke keybind and a cycle. Fixes the two
+          things that make the current editor unusable for alignment work: nothing is discoverable, and a drag moves
+          the selection on two screen axes at once.</td>
+      <td>~2 wk</td></tr>
+  <tr><td><b>E8</b></td>
+      <td><b>Tool build-out</b> (§11.9): Select and Clip (the clip op is already written), face extrude and rotate,
+          patch rotate / scale / control points and the create + modify dialogs, the Shader tool as a Surface
+          Inspector, the Entity tool driven from <code>entities.ent</code> with live-world reconciliation, the
+          Waypoint tool over the ported network, Measure with movement-aware reachability, History with retained
+          abandoned branches, and the MapInfo reader/writer.</td>
+      <td>The editor stops being a brush pusher. Entity work is the long pole — nothing renders or picks point
+          entities today, so it carries a render pass, a pick path and five ops of its own.</td>
+      <td>~4–6 wk</td></tr>
+  <tr><td colspan="4" style="padding:10px 0 4px; color:#8a7c68; font-size:12px; letter-spacing:.08em; text-transform:uppercase;">Decoration track (on the E rails)</td></tr>
+  <tr><td><b>D1</b></td>
+      <td><b>Layered shader MVP</b> (§5): chart-space mask atlas over the lightmap UV2, triplanar weather layers,
+          height-aware blend, hand masks on one stock map; quality tiers, warm-pass + perf-smoke.</td>
+      <td>The visual thesis for decoration.</td>
+      <td>~1–2 wk</td></tr>
+  <tr><td><b>D2</b></td>
+      <td><b>Anatomizer + weathering generators</b> (§4, §6): fields → dirt/moss/wear/streak masks, zone volumes.</td>
+      <td>CURRENT→CONCEPT materials on any imported map automatically — the money demo.</td>
+      <td>~2–3 wk</td></tr>
+  <tr><td><b>D3</b></td>
+      <td><b>Decoration editing in-game</b> (§7): mask paint brush, rule-param sliders, zone placement — as ops on the
+          E3/E6 infrastructure (cheaper than the pre-v1 plan's bespoke transient system).</td>
+      <td>The live art-direction loop: drag "moss" and watch the courtyard green up.</td>
+      <td>~1–2 wk</td></tr>
+  <tr><td><b>D4</b></td>
+      <td><b>Props + lighting</b> (§8, §10): torch/brazier rules with lights + fire particles, decals, banner swap,
+          spawn-point presence pads (§8.7), environment/sun grading, the realtime-preview lighting ladder +
+          LightmapGI server bake into the bake cache (§10.1; progressive GPU lightmapper as the planned
+          follow-on).</td>
+      <td>The full CONCEPT look including golden hour; first shippable decorated map.</td>
+      <td>~2–3 wk</td></tr>
+  <tr><td><b>D5</b></td>
+      <td><b>Amplification</b> (§9): detection + bevel/instancing v1, then profile re-extrusion; POM→displacement.</td>
+      <td>The spike crowns; silhouette fidelity. Last — highest novelty, lowest blocking value.</td>
+      <td>~2 wk v1</td></tr>
+  <tr><td colspan="4" style="padding:10px 0 4px; color:#8a7c68; font-size:12px; letter-spacing:.08em; text-transform:uppercase;">World dressing (v1.2 — skybox elevated; terrain &amp; foliage lower priority)</td></tr>
+  <tr><td><b>D6</b></td>
+      <td><b>Skybox generation + dynamic weather</b> (§10.2–10.3): parametric sky shader with style presets (incl.
+          deep space), bake-to-cubemap option, sun↔lighting unification, weather state machine with rain first
+          (sky-exposure-gated particles + live wet-layer hook).</td>
+      <td>Completes the atmosphere story. No dependency on D5 — can be pulled forward next to D4, with which it
+          shares the environment work.</td>
+      <td>~2–3 wk</td></tr>
+  <tr><td><b>D7</b></td>
+      <td><b>Terrain &amp; vista geometry</b> (§8.5): heightfield generation + chunked LOD mesh with §5 splat
+          materials, raise/lower/smooth height brushes, render-only vista ring matched to the skybox horizon.</td>
+      <td>Maps stop ending at the wall; outdoor spaces become authorable in-engine.</td>
+      <td>~2–3 wk</td></tr>
+  <tr><td><b>D8</b></td>
+      <td><b>Reactive foliage</b> (§8.6): painted/generated density masks, instanced species rendering with
+          per-instance variation, shared wind state, explosion impulse bending (+ optional destruction → scorch
+          handoff).</td>
+      <td>The living-world layer — and the most visible payoff of the shared mask/brush infrastructure.</td>
+      <td>~2 wk</td></tr>
+  <tr><td colspan="4" style="padding:10px 0 4px; color:#8a7c68; font-size:12px; letter-spacing:.08em; text-transform:uppercase;">Gameplay layer (v1.3 — lower priority)</td></tr>
+  <tr><td><b>M1</b></td>
+      <td><b>Dynamic item placement</b> (§12.1): classic-map import as pinned placements, marker + solver with
+          balance parameter sets, per-mode solutions, §7-style override deltas.</td>
+      <td>Balance iteration without touching maps — retune one knob, the whole rotation follows, deterministically.</td>
+      <td>~2 wk</td></tr>
+  <tr><td><b>M2</b></td>
+      <td><b>Map metadata + fit-aware selection</b> (§12.2): suggested-player metadata (computed + mapper override),
+          vote-screen sorting/badging + restriction cvar, rotation from the fitting set.</td>
+      <td>Servers stop three-player-ing a sixteen-player map.</td>
+      <td>~1 wk</td></tr>
+  <tr><td><b>M3</b></td>
+      <td><b>Demo heatmaps</b> (§12.3): extraction pass over <code>.xgd</code> demos, server-wide aggregation,
+          editor overlay channels + time scrubber.</td>
+      <td>Real usage data for mappers, the item solver, traffic wear, and metadata refinement.</td>
+      <td>~1–2 wk</td></tr>
+</table>
+
+<p><b>Gates:</b> E0–E2 is the first gate (a <code>.vmap</code> loads, you fly it, you toggle playtest — cheap to reach,
+independently useful). E3 is the editor-thesis gate (convexity risk retired or the tools approach gets rethought).
+D1–D2 is the decoration-thesis gate, unchanged from v0.</p>
+
+<h3 id="editor-gap">13.1 What is left to be feature-complete for map editing <span class="pill alt">audit 2026-07-29</span></h3>
+
+<p><b>Tracked with IDs in <code>planning/map-editor-backlog.md</code></b> (P· pipeline, F· format &amp; core
+operations, T· tools, B· bugs, C· co-editing, V· verification). This section is the reasoning; that file is
+the list.</p>
+
+<p>E0–E8 built the editor as a thing you can <i>use</i>. This is what stands between that and a mapper being able
+to make a Vortex Arena map with it and nothing else. Ordered by what blocks what, not by size.</p>
+
+<h4>The pipeline — nothing authored here can leave the editor</h4>
+
+<p>This is the gap that makes every other one secondary. The importers run one way: <code>.bsp</code> and
+<code>.map</code> go IN (<code>BspToVmap</code>, <code>MapSourceReader</code>) and nothing comes out. There is no
+<code>.vmap</code> to <code>.bsp</code> compiler and no <code>.map</code> writer, so an edited map is playable only
+inside the editor gametype, on the machine holding the package.</p>
+
+<p>Two routes, and they are not alternatives so much as different amounts of ambition:</p>
+
+<ul>
+  <li><b>Write <code>.map</code> and let q3map2 compile it.</b> Cheapest by a wide margin and the obvious first
+      move: a brush is already a plane set and a patch is already a control grid, so both are near-direct writes
+      into a format q3map2 and NetRadiant already read. It buys the whole existing toolchain — vis, lightmaps,
+      lightgrid, bot navigation — plus interoperability with every Xonotic mapper alive. The editor stops being a
+      closed loop the moment this exists.</li>
+  <li><b>Make <code>.vmap</code> playable in this engine directly.</b> Collision already builds from a document
+      (<code>VmapCollisionBuilder</code>), so the missing pieces are visibility and light: <code>BspPvs</code> is
+      the only PVS source and <code>BspData.LightGrid</code> the only lightgrid, and a document has neither. The
+      editor's own vertex bake (<code>EditorLightBake</code>) is a preview, not a shippable lightmap. Bigger, and
+      the payoff is a format that does not need a compile step at all.</li>
+</ul>
+
+<p><b>Measured 2026-07-29</b> (<code>VmapVsBspLoadBench</code>): staying uncompiled costs LOAD time and not
+frame time. Godot owns culling and draw submission, both paths build per-cell <code>MeshInstance3D</code> nodes
+on the same 1024-unit grid, and the document path produces <i>fewer</i> draw batches than the BSP path (43 vs
+50 on stormkeep, 93 vs 103 on fuse, 70 vs 105 on catharsis) because a BSP splits batches by lightmap page
+while the document batches purely by material. The delta is roughly +0.4–0.7 s of build at load on a normal
+map. So what a compile buys is not recomputing deterministic derivations of the document — which is a
+<b>cache</b>, not a format, and the backlog's P6 is that cache. It carries two tiers: cheap derivations
+(surfaces, collision) that rebuild silently on a miss, and expensive baked artifacts (lightmaps, visibility)
+that ship with the map and degrade rather than rebuild. Degrading is already the behaviour —
+<code>CheckPvs</code> returns true on an unvised map, so every gameplay caller treats it as a conservative
+pre-filter, and the editor already renders <i>fuse</i> with no PVS at all.</p>
+
+<h4>Editing operations a mapper would expect and will not find</h4>
+
+<ul>
+  <li><b>Brush entities cannot be CREATED.</b> They import and their keys edit, but nothing turns a selection into
+      a <code>func_door</code>. Every dynamic element in a Xonotic map — doors, platforms, movers, triggers — is a
+      brush entity, so the editor can currently author only static geometry and point entities. This is the
+      largest single hole after the pipeline, and it is small: an op that assigns selected brush and patch ids to
+      a new entity, which the ownership plumbing already supports everywhere else.</li>
+  <li><b>No CSG.</b> Subtract, merge and hollow/room are Radiant's carving workflow and none of the three exist.
+      The clipper covers some of the same ground by hand; subtract in particular does not have a workaround.</li>
+  <li><b>No texture lock.</b> <code>TranslateBrushesOp</code> moves the planes and leaves the texture projection
+      alone, so a moved brush slides its texture across itself and alignment work is lost on every move. Paste
+      already does the right thing (it offsets the projection with the geometry), so the behaviour is currently
+      inconsistent as well as wrong for the common case. Wants a cvar, because Radiant treats it as a preference
+      — but the default should be ON, which is the modern NetRadiant default and what preserves work.</li>
+  <li><b>No grouping, layers, region or hide/isolate.</b> On the 2666-brush import of <i>fuse</i> there is no way
+      to narrow what you are working on. Region is the one that matters most: it also bounds what gets rebuilt.</li>
+</ul>
+
+<h4>Workflow and finish</h4>
+
+<ul>
+  <li><b>The texture browser is a name list.</b> Grouped by path segment and searchable, but no thumbnails — and
+      picking a wall texture from a list of strings is not how anyone works.</li>
+  <li><b>No document handshake for a co-editing guest</b> (§11.7): a guest imports the map itself rather than
+      receiving the host's document, so a host editing a saved <code>.vmap</code> and a guest importing the
+      <code>.bsp</code> would number brushes differently. It says so on join instead of diverging in silence.</li>
+  <li><b>A guest has no undo of its own.</b> Undo is the host's journal; a guest submits and watches. Fine for
+      one authoritative mapper plus helpers, wrong for two peers.</li>
+  <li><b>Nothing here has been driven by hand.</b> Every op and both replication directions are under test, and
+      the interaction layer — menus, handle grabbing, drag feel, the readouts — has been built and never once
+      operated by a human. That is the cheapest remaining source of surprises, and no amount of unit testing
+      substitutes for it.</li>
+</ul>
+
+<!-- ══════════════════════════ 13 · RISKS ══════════════════════════ -->
+<h2 id="risks"><span class="secno">14</span>Risks &amp; open questions</h2>
+
+<ul>
+  <li><b>Perf ceiling</b> — 4 extra material layers with triplanar + height blending is real fragment cost on a game
+      that fights for frames (steady-state FPS work says render-submission CPU is the current gap; this adds GPU).
+      Mitigations: quality tiers from day one, single-sample triplanar, mask-driven early-out (most texels have ≤1
+      active layer), measure on the release export per house rules. <b>Open:</b> budget — how many ms is decoration
+      allowed to cost at "high"?</li>
+  <li><b>Texture art dependency</b> — layer packs (moss/dirt/soot/wear/wet with height) must come from somewhere.
+      CC0 PBR libraries (ambientCG et al.) cover v1; a curated, license-clean set needs choosing and shipping
+      (asset-repo question, cf. the voice-audit precedent for asset governance). <b>Open:</b> who curates, target
+      resolution/memory (Texture2DArray forces uniform size)?</li>
+  <li><b>Two material worlds</b> — Q3-stage parity materials vs. layered decorated materials must coexist per-surface
+      (a decorated map still has parity shaders on liquids, autosprites, skies). The generated-shader system needs a
+      clean "base provider" seam so a layered material can wrap either a Q3 stage result or a PBR base without
+      combinatorial explosion. <b>Open:</b> do decorated maps eventually want a PBR base path for stock textures
+      (normal-map generation from diffuse?), or stay Q3-base + layers indefinitely?</li>
+  <li><b>UV2 double-booking</b> — masks and lightmaps both want chart space. Same charts at different densities is the
+      plan (§5.1/§10). <b>Answered 2026-07-27:</b> the question is moot for the in-game path — <code>LightmapGI.Bake</code> does not exist in the C# API at all (compile-tested), so LightmapGI never gets to own UV2 in a running game. Runtime chart generation via <code>ArrayMesh.LightmapUnwrap</code> <i>is</i> available, so our own charts stay the single parameterization for both masks and lightmaps. <b>Open:</b> chart density — one atlas at mask density with lightmaps sampled at a coarser mip, or two atlases sharing a layout?</li>
+  <li><b>Bake-cache size &amp; distribution</b> — weather atlas + lightmaps + amplified meshes could be tens of MB per
+      map; fine on disk, needs care on the wire (content download path, delta by tile hash). <b>Open:</b> compressed
+      tile format (BC7 at rest?) and the download-resume story.</li>
+  <li><b>Editor scope creep</b> — "in-game editor" is a product-sized phrase. The line that keeps v1 shippable:
+      first-person tools + single-pane ortho views + clipper — <i>no docked quad-view desktop UI, no boolean CSG ops
+      (subtract/hollow), no bezier-patch authoring</i> until the E-track loop is proven in real mapping sessions.
+      <b>Open:</b> concrete default keybinds for state toggle / tools / grid / snap / view modes (HUD reads live
+      binds either way, §11.6).</li>
+  <li><b>Convex-brush editing UX</b> — vertex/edge drags on convex solids are constraint-solving (§11.4): a drag can
+      demand a non-convex result or collapse faces to slivers, and the plane-refit op must clamp to valid rather than
+      corrupt geometry. Front-loaded into E3 deliberately; prototype on ugly stock-map brushes, not clean test cubes.
+      <b>Open:</b> allow per-object escape to general (non-brush) mesh geometry in truth, or stay brushes-only?</li>
+  <li><b>Derived-data invalidation while editing</b> — one geometry drag dirties collision, PVS, render meshes, and
+      overlapping baked fields. Collision must refit immediately (PLAYTEST honesty); PVS may degrade to conservative
+      visibility until an async recompute lands. The dirty-tracking granularity (brush → tile) is shared
+      infrastructure with the decoration bake — design it once, in E0.</li>
+  <li><b>Live-world systems cost &amp; sync</b> <i>(v1.2)</i> — weather, wind, and reactive foliage are this doc's
+      first <i>continuously animated</i> decoration (everything else is bake-static). Each is a per-frame system
+      (<code>Prof.Sample</code> + perf-smoke per house rules) with a hard off-switch and quality tiers, weather is
+      presentation-only by default (§10.3 fairness rule), and weather/wind state is new replicated state.
+      <b>Open:</b> does weather ride the settemp/cvar replication path or the entity path?</li>
+  <li><b>Determinism drift</b> — client-side regen (§11.7) requires bit-stable generators across platforms (float
+      traces!). Mitigation: fixed-point field quantization before mask math, or simply keep server-bakes-everything
+      until proven painful. <b>Open:</b> is client regen ever actually needed beyond paint preview?</li>
+</ul>
+
+<!-- ══════════════════════════ APPENDIX ══════════════════════════ -->
+<h2 id="appendix"><span class="secno">A</span>Appendix — capability comparison</h2>
+
+<table>
+  <tr><th style="width:30%">Capability</th><th style="width:35%">DarkPlaces / NetRadiant / q3map2</th><th>This proposal</th></tr>
+  <tr><td>Per-pixel multi-material blending</td>
+      <td>No. Per-<i>vertex</i> alpha crossfade (<code>alphaGen vertex</code>, seeded by <code>q3map_alphaMod</code>
+          brushes), ~2 layers, diffuse-only, resolution = tessellation</td>
+      <td>N full layers (albedo/normal/rough/height), mask texels independent of geometry, height-aware edges</td></tr>
+  <tr><td>Blend authoring</td>
+      <td>Invisible alphaMod brushes + recompile to view; no painting UI</td>
+      <td>In-game painting + procedural generators, live preview</td></tr>
+  <tr><td>Procedural weathering</td>
+      <td>None — hand-placed decals / bespoke texture variants per situation</td>
+      <td>Field-driven generators (AO, curvature, sky exposure, height-on-wall, flow, traffic), zone-overridable</td></tr>
+  <tr><td>Texture placement</td>
+      <td>Per-face manual offsets/rotates (drifts across cuts); no trim fitting</td>
+      <td>World-anchored triplanar/box projection by surface class + trim detection; per-face override remains possible</td></tr>
+  <tr><td>Runtime editability</td>
+      <td>None — author → q3map2 compile → restart</td>
+      <td>Everything live; heavy passes bake async server-side, stream to clients</td></tr>
+  <tr><td>Map format</td>
+      <td>.map (editable) vs .bsp (shipped) — one-way compile, decompile lossy</td>
+      <td>One <code>.vmap</code> package: truth sections + regenerable content-addressed bake cache</td></tr>
+  <tr><td>Detail-geometry fidelity</td>
+      <td>What you brush is what you get; curves painful, so ornament stays lo-fi</td>
+      <td>Detection + amplification (bevel/instancing → profile re-extrusion → library swap), render-only, collision untouched</td></tr>
+  <tr><td>Lighting</td>
+      <td>q3map2 offline lightmaps + DP rtlights; no incremental rebake</td>
+      <td>Prop-driven dynamic lights + server GI bake into shared chart atlas; incremental per-tile rebake (endgame)</td></tr>
+</table>
+
+<p style="margin-top:40px; color:#8a7c68; font-size:13px;">
+Next steps when picking this up: prototype the <code>.vmap</code> container + .bsp import round-trip (E0), then the
+convex plane-refit drag on real stock-map brushes (the E3 unknown). Decoration next-steps (test map choice,
+weather-layer texture set, chart-density bump on <code>MapLoader</code>'s atlas) queue behind the editor track.
+</p>

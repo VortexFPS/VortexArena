@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// Additional per-player movement state the full PM_ port keeps between ticks — the C# successor to the

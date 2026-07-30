@@ -1,7 +1,7 @@
 # sv-ipban — parity spec
 
 **Base refs:** `server/ipban.qc`, `server/ipban.qh`, `server/command/banning.qc`, `server/command/banning.qh`, `lib/urllib.qh`
-**Port refs:** `src/XonoticGodot.Server/Bans.cs`, `src/XonoticGodot.Server/Commands.cs`, `src/XonoticGodot.Server/GameWorld.cs`, `src/XonoticGodot.Server/Cvars.cs`, `src/XonoticGodot.Server/Chat.cs`, `src/XonoticGodot.Server/VoteController.cs`, `src/XonoticGodot.Common/Gameplay/Minigames/MinigameSessionManager.cs`
+**Port refs:** `src/VortexArena.Server/Bans.cs`, `src/VortexArena.Server/Commands.cs`, `src/VortexArena.Server/GameWorld.cs`, `src/VortexArena.Server/Cvars.cs`, `src/VortexArena.Server/Chat.cs`, `src/VortexArena.Server/VoteController.cs`, `src/VortexArena.Common/Gameplay/Minigames/MinigameSessionManager.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -171,7 +171,7 @@ A second, optional feature is the **online ban-list sync**: an HTTP cross-server
 - `Bans_GetClientIp_IPv4_DerivesMasks`, `Bans_GetClientIp_RejectsLocalAndBot`, `Bans_InsertAndCheck_ByIp`,
   `Bans_IdMode_IpBanOnlyCatchesAnonymous`, `Bans_CryptoIdBan_AlwaysWins`, `Bans_Delete_RemovesBan`,
   `Bans_SaveLoad_RoundTripsThroughCvar`, `Bans_PrefixList_MuteMatchesByIpAndId`
-  (`tests/XonoticGodot.Tests/ServerInfraTests.cs`).
+  (`tests/VortexArena.Tests/ServerInfraTests.cs`).
 - Liveness traced: `GameWorld.cs:660` (`Bans.Load`), `:724` (`MaybeEnforceBan` on connect), Commands.cs:520-529
   (command registration), Chat.cs:313 (mute consumed), VoteController.cs:120/227 (voteban consumed),
   GameWorld.cs:609 (playban-minigames).

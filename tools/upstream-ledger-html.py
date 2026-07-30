@@ -21,7 +21,7 @@ YAML_PATH = ROOT / 'planning' / 'upstream-watch' / 'LEDGER.yaml'
 HTML_PATH = ROOT / 'planning' / 'upstream-watch' / 'LEDGER.html'
 # Deep-dive docs are markdown; link them to the GitHub blob view (renders md) so the links
 # work from the Pages site and from a locally-opened LEDGER.html alike.
-GITHUB_BLOB = 'https://github.com/bryankruman/VortexArena/blob/main/planning/upstream-watch/'
+GITHUB_BLOB = 'https://github.com/VortexFPS/VortexArena/blob/main/planning/upstream-watch/'
 
 REL = {'high': ('🟢', 'High'), 'medium': ('🟡', 'Medium'), 'low': ('🟠', 'Low'), 'none': ('🔴', 'None')}
 DEC = {'pending': ('⏳', 'Pending'), 'port': ('✅', 'Port'), 'adapt': ('🔧', 'Adapt'),

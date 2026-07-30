@@ -1,7 +1,7 @@
-using XonoticGodot.Formats.Sidecars;
+using VortexArena.Formats.Sidecars;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — first coverage for <see cref="SkinFile"/> (port of Darkplaces <c>Mod_LoadSkinFiles</c>,

@@ -7,7 +7,7 @@
 // deferred it — T14), so this new partial adds it, mirroring how MonsterSpawnFuncs added .monster_skill
 // (ADR-0007, entity-model.md: extend the partial Entity in a NEW file, never edit Framework/Entity.cs).
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {

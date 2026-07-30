@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using XonoticGodot.Formats.Bsp;
+using VortexArena.Formats.Bsp;
 
-namespace XonoticGodot.Engine.Collision;
+namespace VortexArena.Engine.Collision;
 
 /// <summary>
 /// Per-gametype filtering of the map's brush entities — the Godot-free port of DP's

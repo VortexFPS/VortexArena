@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using Godot;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The Darkplaces particle-texture atlas (<c>particles/particlefont.tga</c> + <c>particlefont.txt</c>) — the

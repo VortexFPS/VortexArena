@@ -2,11 +2,11 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Particles;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Particles;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the chunked SDF generator (planning/particles-dual-system.md §A.3) and the .psdf reader/writer (§A.2):

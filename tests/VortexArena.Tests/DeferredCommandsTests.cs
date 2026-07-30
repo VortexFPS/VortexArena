@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using XonoticGodot.Server;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for <see cref="DeferredCommands"/> — the sim-clock command queue (DP <c>Cbuf_Execute_Deferred</c> /

@@ -8,11 +8,11 @@
 // marker and supplies the shot-down DestroyDamage (which hurts the owner).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The spawn nade detonation — port of <c>nade_spawn_boom</c> + its DestroyDamage.</summary>
 public sealed class NadeSpawnBoom : INadeBoom, INadeDestroyDamage

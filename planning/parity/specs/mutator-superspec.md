@@ -90,19 +90,19 @@ Adds client `cmd`s (only for non-players, i.e. spectators/observers):
 
 ## Port mapping
 **Nothing in this unit is implemented in the port.** There is no `SuperSpecMutator.cs` (or equivalent) in
-`src/XonoticGodot.Common/Gameplay/Mutators/`, no `g_superspectate` cvar, no `autospec`/`superspec`/
+`src/VortexArena.Common/Gameplay/Mutators/`, no `g_superspectate` cvar, no `autospec`/`superspec`/
 `followpowerup`/`followstrength`/`followshield`/`superspec_itemfilter` client command, and the mutator
 hook points it depends on (`ItemTouch`, `SV_ParseClientCommand`, `PlayerDies` spectator pass,
 `ClientConnect`/`ClientDisconnect` options I/O, `BuildMutatorsString`) carry no superspec handler.
 
 The single port artifact is the **registered-but-unfired** notification string
 `Notifications.Info("SUPERSPEC_MISSING_UID", ...)` in
-`src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:636` — a faithful text port of the
+`src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:636` — a faithful text port of the
 Base notification, but it has **no caller** anywhere in the port (no `superspec_hello` equivalent), so it
 can never fire.
 
 The port's only spectate primitive is the core `"spectate"` client command
-(`src/XonoticGodot.Server/ClientCommandRegistry.cs:57`); none of superspec's commands or auto-switch logic
+(`src/VortexArena.Server/ClientCommandRegistry.cs:57`); none of superspec's commands or auto-switch logic
 build on it.
 
 `../../TODO.md` lists superspec as an **explicit deferral** ("admin/niche P3"), confirming the omission is

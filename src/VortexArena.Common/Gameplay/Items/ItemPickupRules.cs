@@ -10,12 +10,12 @@
 // through Resources.cs; weapon gives populate BOTH Entity.OwnedWeaponSet (Inventory) AND Player.OwnedWeapons
 // (the NetName set — dual-rep).
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The item pickup + respawn rules (QC server/items/items.qc). Static, stateless apart from the shared
@@ -204,9 +204,26 @@ public static class ItemPickupRules
         if (worldItem.Pickup is null) worldItem.Pickup = pickup;
         bool pickedUp = ItemGiveTo(worldItem, player);
         if (!pickedUp) return false;
+        InventoryPickupItem(pickup, player); // QC Pickup.giveTo: if (b) Inventory_pickupitem(this, player)
         PlayPickupSound(worldItem, player);
         ScheduleRespawnAfterPickup(worldItem);
         return true;
+    }
+
+    /// <summary>
+    /// QC <c>Inventory_pickupitem</c> (common/items/inventory.qh:161): <c>++inventory.inv_items[def.m_id]</c> —
+    /// the per-player tally of everything picked up this match, which feeds the scoreboard's Item stats grid.
+    /// Keyed by the def's HUD icon name (QC <c>m_icon</c>) since that is exactly what the grid draws.
+    /// </summary>
+    public static void InventoryPickupItem(Pickup? def, Entity player)
+    {
+        if (def is null || player is null) return;
+        string icon = def.Icon;
+        if (string.IsNullOrEmpty(icon)) return;
+        player.ItemPickupCounts ??= new System.Collections.Generic.Dictionary<string, int>();
+        player.ItemPickupCounts.TryGetValue(icon, out int n);
+        player.ItemPickupCounts[icon] = n + 1;
+        player.LastPickupTime = Now; // QC STAT(LAST_PICKUP, player) = time
     }
 
     // QC Item_GiveAmmoTo (items.qc:485): give a resource toward a cap, honouring the live/stay marker +
@@ -290,6 +307,12 @@ public static class ItemPickupRules
         return true;
     }
 
+    // Upstream 916d46a6 hardened the five QC pickup sites to `t = max(time, StatusEffects_gettime(...))`,
+    // because gettime could hand back a lapsed end time and the pickup would then arm a window that had
+    // already closed (with g_spawnshieldtime 0 a picked-up superweapon vanished instantly). This port is
+    // structurally immune: it works in REMAINING DURATION rather than absolute end time, and the max(0, …)
+    // below is exactly that floor — Apply() re-adds `now`, so max(0, expire-now) + duration is identical to
+    // QC's max(now, expire) + duration. Kept as a duration deliberately; do not "simplify" the floor away.
     private static float ExistingRemaining(Entity player, StatusEffectDef def)
     {
         foreach (var s in player.StatusEffects)
@@ -404,6 +427,10 @@ public static class ItemPickupRules
             }
             return;
         }
+
+        // QC common/items/item/pickup.qc:12-14 — `bool b = Item_GiveTo(item, player); if (b)
+        // Inventory_pickupitem(this, player);`: tally the pickup for the scoreboard's Item stats grid.
+        InventoryPickupItem(item.Pickup, toucher);
 
         // ----- the give+respawn tail (LABEL pickup) -----
 

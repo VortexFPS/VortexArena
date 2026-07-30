@@ -1,8 +1,8 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Net;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// Serializes a <see cref="MinigameSession"/> for the wire — the C# successor to the minigame entity
@@ -202,7 +202,7 @@ public static class MinigameNetState
     // by an empty netname (the client then hides the board), mirroring activate/deactivate_minigame.
 
     /// <summary>
-    /// Write a per-peer session snapshot envelope (the S2C <see cref="XonoticGodot.Game.Net.NetControl.MinigameState"/>
+    /// Write a per-peer session snapshot envelope (the S2C <see cref="VortexArena.Game.Net.NetControl.MinigameState"/>
     /// body): the session netname, this peer's team in it, then the full session via <see cref="Encode"/>. Pass a
     /// null <paramref name="session"/> to signal "you are no longer in a minigame" (an empty netname → the client
     /// hides the board). <paramref name="localTeam"/> is the receiving peer's team

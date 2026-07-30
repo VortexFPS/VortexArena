@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Race timer panel — port of Base/.../qcsrc/client/hud/panel/racetimer.qc (HUD panel #8). The QC version is

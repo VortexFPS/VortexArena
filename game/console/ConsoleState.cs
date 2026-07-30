@@ -1,13 +1,13 @@
 using System;
 
-namespace XonoticGodot.Game.Console;
+namespace VortexArena.Game.Console;
 
 /// <summary>
 /// One global flag: is the in-game console open? The C# stand-in for DP's <c>key_dest == key_console</c>
 /// gate that suppresses gameplay input while the console has focus.
 ///
 /// <para>Why a static flag and not just <c>SetInputAsHandled()</c>: the play path
-/// (<see cref="XonoticGodot.Game.Net.NetGame"/>) samples movement by <em>polling</em>
+/// (<see cref="VortexArena.Game.Net.NetGame"/>) samples movement by <em>polling</em>
 /// (<c>Input.IsPhysicalKeyPressed</c>), and polled OS key state is NOT suppressed by consuming an
 /// <c>InputEvent</c>. So WASD/fire would keep firing under the open console unless the sampler explicitly
 /// checks this flag. It also lets the bind layer drop all held buttons (DP <c>in_releaseall</c>) the instant

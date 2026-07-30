@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The client-impulse → weapon-selection router — the C# successor to the weapon half of QuakeC's
@@ -178,7 +178,7 @@ public static class WeaponImpulses
     /// </summary>
     private static void DropHandle(Entity actor)
     {
-        XonoticGodot.Common.Math.QMath.AngleVectors(actor.Angles, out System.Numerics.Vector3 forward, out _, out _);
+        VortexArena.Common.Math.QMath.AngleVectors(actor.Angles, out System.Numerics.Vector3 forward, out _, out _);
         // QC W_WeaponSpeedFactor: g_weaponspeedfactor (default 1) — the only live term of
         // W_CalculateProjectileVelocity with newton_style 0.
         float factor = 1f;

@@ -8,7 +8,7 @@
 
 using System;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// Pure helpers for the CSQC player-model appearance hook: which force-color mode is active for the current
@@ -248,7 +248,7 @@ public static class CsqcModelAppearance
 
     /// <summary>
     /// A per-player presentation override the Wave-3 client/HUD layer fills and the per-frame effects pass
-    /// (<see cref="XonoticGodot.Engine.Simulation"/> consumers / <c>CsqcModelEffects.Apply</c>) consumes. It carries
+    /// (<see cref="VortexArena.Engine.Simulation"/> consumers / <c>CsqcModelEffects.Apply</c>) consumes. It carries
     /// the EXTRA <see cref="CsqcModelEffectFlags"/> EF_* bits to OR onto a model's networked effect field
     /// (role-glow / powerup / flame visuals — Base sets these server-side; the port re-derives them client-side
     /// from the player's role until they're networked), the locally-classified MF_* model flags (so MF trails +

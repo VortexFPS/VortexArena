@@ -16,10 +16,10 @@ features:
       - "common/turrets/turret/plasma.qc:spawnfunc(turret_plasma)"
       - "common/turrets/sv_turrets.qc:turret_initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Plasma"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:206"
-      - "src/XonoticGodot.Server/GameWorld.cs:2158"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Plasma"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:206"
+      - "src/VortexArena.Server/GameWorld.cs:2158"
     constants:
       - { name: "g_turrets master switch default", base: "1", port: "1 (MasterSwitchEnabled: unset→on)", match: true }
       - { name: "team when no teamplay", base: "FLOAT_MAX", port: "float.MaxValue", match: true }
@@ -45,8 +45,8 @@ features:
       - "common/turrets/turret/plasma.qh:PlasmaTurret"
       - "common/turrets/turret/plasma_dual.qh:DualPlasmaTurret"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:PlasmaTurret"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:PlasmaDualTurret"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:PlasmaTurret"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:PlasmaDualTurret"
     constants:
       - { name: "mins/maxs", base: "'-32 -32 0' / '32 32 64'", port: "(-32,-32,0)/(32,32,64)", match: true }
       - { name: "body model", base: "models/turrets/base.md3", port: "models/turrets/base.md3", match: true }
@@ -77,9 +77,9 @@ features:
       - "common/turrets/sv_turrets.qc:load_unit_settings"
       - "common/turrets/sv_turrets.qc:turret_initparams"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:ShotDamage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:MakeParams"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:ShotDamage"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:MakeParams"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
     constants:
       - { name: "shot_dmg", base: "80", port: "80", match: true }
       - { name: "shot_refire (plasma/dual)", base: "0.6 / 0.35", port: "0.6 / 0.35", match: true }
@@ -119,8 +119,8 @@ features:
     base_refs:
       - "common/turrets/turret/plasma.qc:PlasmaTurret.tr_setup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:MakeParams"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:MakeParams"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Spawn"
     constants:
       - { name: "aim_flags", base: "LEAD | SHOTTIMECOMPENSATE | SPLASH", port: "lead+shotTimeCompensate+aimSplash (zPredict:false)", match: true }
       - { name: "ammo_flags", base: "ENERGY|RECHARGE|RECIEVE", port: "energyAmmo:true + ammo regen always on", match: true }
@@ -148,10 +148,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_think"
       - "common/turrets/sv_turrets.qc:turret_firecheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Fire"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:47"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Fire"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:47"
     constants:
       - { name: "targetscan_mindelay", base: "0.1", port: "Cvar g_turrets_targetscan_mindelay (default 0.1)", match: true }
       - { name: "targetscan_maxdelay", base: "1", port: "Cvar g_turrets_targetscan_maxdelay (default 1)", match: true }
@@ -181,9 +181,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_targetscore_generic"
       - "common/turrets/sv_turrets.qc:turret_select_target"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ValidTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ValidTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
     constants:
       - { name: "alpha cloak cull", base: "alpha != 0 && alpha <= 0.3", port: "same", match: true }
       - { name: "out-of-range score collapse", base: "score *= 0.001", port: "score *= 0.001f", match: true }
@@ -200,7 +200,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TurretTargetingTests.cs (ValidTarget gates, bias formula, sticky enemy, range/LOS)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TurretTargetingTests.cs (ValidTarget gates, bias formula, sticky enemy, range/LOS)", result: pass }
       - { kind: code, ref: "ScoreTarget formula matches turret_targetscore_generic; per-unit biases fed in; ValidTarget LOS gate uses p.FireToleranceDist", result: pass }
     confidence: high
     notes: "Best-covered turret feature; formula faithful and fed the real per-unit biases. Unchanged this audit."
@@ -211,7 +211,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_aim_generic"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
     constants:
       - { name: "lead time", base: "max(attack_finished-time,0)+sys_frametime", port: "max(AttackFinished-now,0)+frameTime", match: true }
       - { name: "impact_time", base: "vlen(target-shotorg)/shot_speed", port: "same", match: true }
@@ -228,7 +228,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TurretAimTrackTests.cs (aim/track)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TurretAimTrackTests.cs (aim/track)", result: pass }
       - { kind: code, ref: "AimPoint z-predict branch gated by p.ZPredict (plasma false); lead + traveltime + splash downtrace faithful", result: pass }
     confidence: high
     notes: "Lead + traveltime + splash + (no) z-predict all faithful. Unchanged this audit."
@@ -239,7 +239,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_track"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Track"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Track"
     constants:
       - { name: "track_type", base: "3 (FLUIDINERTIA)", port: "TrackFluidInertia (3)", match: true }
       - { name: "track_accel_pitch/rot", base: "0.5 / 0.7", port: "0.5 / 0.7 (passed via MakeParams/Think)", match: true }
@@ -269,9 +269,9 @@ features:
       - "common/turrets/turret/plasma_weapon.qc:PlasmaAttack.wr_think"
       - "common/turrets/sv_turrets.qc:turret_projectile"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
     constants:
       - { name: "projectile movetype", base: "MOVETYPE_FLYMISSILE", port: "MoveType.FlyMissile", match: true }
       - { name: "lifetime", base: "nextthink = time + 9", port: "+9", match: true }
@@ -300,9 +300,9 @@ features:
     base_refs:
       - "common/turrets/turret/plasma.qc:PlasmaTurret.tr_attack (MUTATOR_IS_ENABLED mutator_instagib)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack (InstagibEnabled branch)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:FireInstagibBeam"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack (InstagibEnabled branch)"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:FireInstagibBeam"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
     constants:
       - { name: "rail damage", base: "10000000000 (1e10)", port: "10000000000 (InstagibRailDamage)", match: true }
       - { name: "rail force", base: "800", port: "800 (InstagibRailForce)", match: true }
@@ -336,10 +336,10 @@ features:
       - "common/turrets/turret/plasma_dual.qc:DualPlasmaTurret.tr_think"
       - "common/turrets/turret/plasma_dual.qc:DualPlasmaTurret.tr_attack (++frame)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack"
     constants:
       - { name: "single frame cycle", base: "if frame!=0 ++frame; if frame>5 frame=0; attack sets frame=1 if 0", port: "same (PlasmaTurret.Think/Attack on e.Frame)", match: true }
       - { name: "dual frame cycle", base: "if frame!=0 && frame!=3 ++frame; if frame>6 frame=0; attack does ++frame after if/else", port: "same (PlasmaDualTurret.Think/Attack on e.Frame)", match: true }
@@ -365,10 +365,10 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Damage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init (e.GtEventDamage = TurretAI.EventDamage)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:331 (EventDamage routes non-player GtEventDamage)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Damage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init (e.GtEventDamage = TurretAI.EventDamage)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:331 (EventDamage routes non-player GtEventDamage)"
     constants:
       - { name: "dead/inactive reject", base: "deadflag==DEAD or !active => return (no dmg)", port: "same (Damage returns 0)", match: true }
       - { name: "friendly fire scale", base: "*g_friendlyfire (0 => no dmg)", port: "*g_friendlyfire (<=0 => return 0)", match: true }
@@ -388,7 +388,7 @@ features:
       - "PRESENTATION (tracked under track/headspin presentation rows): the headshake jitter perturbs the server-only TurretState.HeadAngles but is never networked/rendered, so the head-recoil flinch is not visible client-side."
     verification:
       - { kind: code, ref: "Base turret_damage has NO this.enemy=attacker; port Damage does not retaliate. TurretSpawn.Init sets e.GtEventDamage=TurretAI.EventDamage; DamageSystem.EventDamage routes non-player edicts with GtEventDamage; EventDamage gates via Damage(), TakeResource(Health), headshake jitter, fires Combat.Death when health<=0", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TurretLifecycleTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TurretLifecycleTests.cs", result: pass }
     confidence: high
     notes: "Inactive invuln, FF scaling, MOVE shove, no-retaliate, HEADSHAKE jitter all faithful and LIVE via GtEventDamage. Only the client render of head jitter is absent (presentation, tracked under headspin). Unchanged this audit."
 
@@ -400,9 +400,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_respawn"
       - "common/turrets/cl_turrets.qc:turret_die (gibs)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:OnAnyDeath"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:OnAnyDeath"
     constants:
       - { name: "respawntime", base: "60", port: "60", match: true }
       - { name: "death blast", base: "COMMENTED OUT (no blast, sv_turrets.qc:182)", port: "no blast (RadiusDamage removed)", match: true }
@@ -420,6 +420,6 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "Base turret_die RadiusDamage commented (sv_turrets.qc:182); port Die has no blast — matches. Die Emits ROCKET_EXPLODE + plays weapons/rocket_impact.wav (TurretAI.cs:1104-1105) on EVERY death (respawning + permanent), matching cl_turrets.qc turret_die, then calls TossDeathGibs (TurretAI.cs:1199): 50/50 base-gib2-4 fade OR base-gib1 explode, always a head_model gib (plasma.md3/plasmad.md3 from Turrets.ByName(NetName).HeadModel) carrying head angles+spin, GibBoom spawns head-gib1..4 sub-chunks. Death flows live via EventDamage -> Combat.Death -> OnAnyDeath -> Die; respawn via NextThink", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TurretLifecycleTests.cs Die/Respawn", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TurretLifecycleTests.cs Die/Respawn", result: pass }
     confidence: high
     notes: "FIX (Wave 8e 412ca19 + Wave 17 2f0bfdb): death ROCKET_EXPLODE + rocket_impact (W8e) AND the full base-gib + head_model gib toss (TossDeathGibs/TossGib/GibBoom, server-spawned physics gibs rendered via the entity feed like vehicle wreckage) are now live. Wave 17 added HeadModel=plasma.md3/plasmad.md3 to the ctors so the head gib actually tosses (was silently skipped on an empty model). presentation partial->faithful. Logic/values/no-blast/audio faithful. Server-side gib spawn (not a CSQC turret edict) but visible to every viewer — functionally equivalent to Base's client turret_die toss."

@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Engine.Particles;
+namespace VortexArena.Engine.Particles;
 
 // =====================================================================================================
 //  RNG contract for the faithful particle simulation — the parity-critical seam.

@@ -14,10 +14,10 @@ features:
       - "common/mutators/mutator/globalforces/sv_globalforces.qc:7 (REGISTER_MUTATOR(mutator_globalforces, autocvar_g_globalforces))"
       - "common/mutators/mutator/globalforces/sv_globalforces.qc:3 (AUTOCVAR(g_globalforces, float, false))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:39 (IsEnabled => Cvars.GetFloat(\"g_globalforces\") != 0)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:44 (Hook)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:80 (Apply loop: IsEnabled -> Add -> Hook)"
-      - "src/XonoticGodot.Server/GameWorld.cs:614 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:39 (IsEnabled => Cvars.GetFloat(\"g_globalforces\") != 0)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:44 (Hook)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:80 (Apply loop: IsEnabled -> Add -> Hook)"
+      - "src/VortexArena.Server/GameWorld.cs:614 (MutatorActivation.Apply)"
     constants:
       - { name: "g_globalforces", base: "0 (off; doubles as force scale, mutators.cfg:495)", port: "0 default; Scale read from g_globalforces cvar (GlobalForcesMutator.cs:51)", match: true }
     status:
@@ -45,11 +45,11 @@ features:
       - "server/utils.qh:9 (IS_PLAYER(v) := (v).classname == STR_PLAYER — server-side, classname-only, NO dead test)"
       - "server/mutators/events.qh (EV_PlayerDamage_SplitHealthArmor argv: force = M_ARGV(3))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:80 (OnPlayerDamage)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:76 (IsPlayer = Client flag ONLY, no DeadState test)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:97-99 (FindByClass(\"player\") minus target, gated on IsPlayer)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:468 (PlayerDamageSplitHealthArmor.Call with force)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GameHooks.cs:41 (PlayerDamageArgs.Force = M_ARGV(3))"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:80 (OnPlayerDamage)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:76 (IsPlayer = Client flag ONLY, no DeadState test)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:97-99 (FindByClass(\"player\") minus target, gated on IsPlayer)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:468 (PlayerDamageSplitHealthArmor.Call with force)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GameHooks.cs:41 (PlayerDamageArgs.Force = M_ARGV(3))"
     constants:
       - { name: "damage_force = M_ARGV(3) * g_globalforces", base: "force * autocvar_g_globalforces", port: "args.Force * Scale (GlobalForcesMutator.cs:91)", match: true }
       - { name: "loop_set", base: "FOREACH_CLIENT(IS_PLAYER(it) && it != frag_target) [server IS_PLAYER = classname=='player', NO dead test]", port: "FindByClass(\"player\") minus target, gated on IsPlayer (Client flag only)", match: true }
@@ -77,7 +77,7 @@ features:
       - "common/mutators/mutator/globalforces/sv_globalforces.qc:20 (if (autocvar_g_globalforces_noself && frag_target == frag_attacker) return)"
       - "common/mutators/mutator/globalforces/sv_globalforces.qc:4 (AUTOCVAR(g_globalforces_noself, bool, true))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:88 (if (NoSelf && ReferenceEquals(target, attacker)) return false)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:88 (if (NoSelf && ReferenceEquals(target, attacker)) return false)"
     constants:
       - { name: "g_globalforces_noself", base: "1 / true (sv_globalforces.qc:4 AUTOCVAR default)", port: "true (NoSelf default; ReadBool)", match: true }
     status:
@@ -102,7 +102,7 @@ features:
       - "common/mutators/mutator/globalforces/sv_globalforces.qc:23-26 (if (range) if (vdist(it.origin - frag_target.origin, >, range)) continue)"
       - "common/mutators/mutator/globalforces/sv_globalforces.qc:6 (AUTOCVAR(g_globalforces_range, float, 1000))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:102 (Range != 0 && Vector3.Distance(it.Origin, target.Origin) > Range)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:102 (Range != 0 && Vector3.Distance(it.Origin, target.Origin) > Range)"
     constants:
       - { name: "g_globalforces_range", base: "1000 qu (0 = unlimited, sv_globalforces.qc:6 AUTOCVAR default)", port: "1000 (Range default; 0 = unlimited)", match: true }
       - { name: "range_center", base: "frag_target.origin", port: "target.Origin", match: true }
@@ -131,10 +131,10 @@ features:
       - "common/weapons/calculations.qc:39 (damage_explosion_calcpush)"
       - "common/weapons/calculations.qc:7 (explosion_calcpush_getmultiplier)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:105-107 (f selfscale, it.Velocity += DamageExplosionCalcPush)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:117 (DamageExplosionCalcPush)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:127 (ExplosionCalcPushGetMultiplier)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:709 (player DamageForceScale = g_player_damageforcescale default 2)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:105-107 (f selfscale, it.Velocity += DamageExplosionCalcPush)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:117 (DamageExplosionCalcPush)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:127 (ExplosionCalcPushGetMultiplier)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:709 (player DamageForceScale = g_player_damageforcescale default 2)"
     constants:
       - { name: "g_globalforces_self", base: "1 (attacker-only scale, sv_globalforces.qc:5 AUTOCVAR default)", port: "1 (SelfScale default; read via ReadFloat honoring explicit 0)", match: true }
       - { name: "g_balance_damagepush_speedfactor", base: "2.5 (balance-xonotic.cfg:215; 0 on balance-nexuiz25.cfg:119)", port: "read live from cvar each hit (GlobalForcesMutator.cs:94)", match: true }
@@ -164,13 +164,13 @@ features:
       - "common/mutators/mutator/globalforces/sv_globalforces.qc:9-11 (MUTATOR_HOOKFUNCTION(mutator_globalforces, BuildMutatorsString) -> strcat ':GlobalForces')"
       - "common/mutators/mutator/globalforces/sv_globalforces.qc:13-15 (MUTATOR_HOOKFUNCTION(mutator_globalforces, BuildMutatorsPrettyString) -> strcat ', Global forces')"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:68 (BuildMutatorsString override => s + \":GlobalForces\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs:71 (BuildMutatorsPrettyString override => s + \", Global forces\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108 (BuildMutatorsString chain over active mutators)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:121 (BuildMutatorsPrettyString chain over active mutators)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1117 (GameLogInit calls MutatorActivation.BuildMutatorsString — LIVE caller for the machine token, gated on sv_eventlog)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1128 (match-start: BuildMutatorsPrettyString -> 'modifications' serverinfo key — LIVE)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1392 (SendMutatorsWelcome -> BuildMutatorsPrettyString, called per-join from ClientConnect GameWorld.cs:1291 — LIVE)"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:68 (BuildMutatorsString override => s + \":GlobalForces\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs:71 (BuildMutatorsPrettyString override => s + \", Global forces\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108 (BuildMutatorsString chain over active mutators)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:121 (BuildMutatorsPrettyString chain over active mutators)"
+      - "src/VortexArena.Server/GameWorld.cs:1117 (GameLogInit calls MutatorActivation.BuildMutatorsString — LIVE caller for the machine token, gated on sv_eventlog)"
+      - "src/VortexArena.Server/GameWorld.cs:1128 (match-start: BuildMutatorsPrettyString -> 'modifications' serverinfo key — LIVE)"
+      - "src/VortexArena.Server/GameWorld.cs:1392 (SendMutatorsWelcome -> BuildMutatorsPrettyString, called per-join from ClientConnect GameWorld.cs:1291 — LIVE)"
     constants:
       - { name: "mutator_tag (machine)", base: "':GlobalForces' (string)", port: "':GlobalForces' (GlobalForcesMutator.cs:68)", match: true }
       - { name: "mutator_tag (pretty)", base: "', Global forces' (pretty)", port: "', Global forces' (GlobalForcesMutator.cs:71)", match: true }

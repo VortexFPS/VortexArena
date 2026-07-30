@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Iqm;
+namespace VortexArena.Formats.Iqm;
 
 /// <summary>
 /// Engine-neutral, Godot-free representation of an IQM ("INTERQUAKEMODEL", version 1 or 2) skeletal

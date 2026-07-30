@@ -14,8 +14,8 @@ features:
       - "common/mutators/mutator/rocketflying/sv_rocketflying.qc:3"
       - "common/mutators/mutator/rocketflying/sv_rocketflying.qc:5"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs:38"
-      - "src/XonoticGodot.Server/GameWorld.cs:563"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs:38"
+      - "src/VortexArena.Server/GameWorld.cs:563"
     constants:
       - { name: "g_rocket_flying (default)", base: "0 (string, expr_evaluate truthy → enable)", port: "0 (ExprEvaluate(GetString))", match: true }
     status:
@@ -41,10 +41,10 @@ features:
       - "common/weapons/weapon/devastator.qc:145"
       - "common/weapons/weapon/minelayer.qc:316"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs:74"
-      - "src/XonoticGodot.Common/Framework/EntityProjectileGate.cs:36"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:332"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs:426"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs:74"
+      - "src/VortexArena.Common/Framework/EntityProjectileGate.cs:36"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:332"
+      - "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs:426"
     constants:
       - { name: "g_rocket_flying_disabledelays (default)", base: "1 (true)", port: "true", match: true }
       - { name: "classname filter", base: "rocket || mine", port: "\"rocket\" || \"mine\"", match: true }
@@ -62,7 +62,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: unit, ref: "tests/XonoticGodot.Tests/RocketFlyingGateTests.cs (gate cleared to time for rocket/mine; untouched for other classes; inert when g_rocket_flying unset or disabledelays off; default -1)", result: pass }
+      - { kind: unit, ref: "tests/VortexArena.Tests/RocketFlyingGateTests.cs (gate cleared to time for rocket/mine; untouched for other classes; inert when g_rocket_flying unset or disabledelays off; default -1)", result: pass }
       - { kind: code, ref: "MutatorHooks.EditProjectile fired at launch by Devastator / Minelayer; gate read by Devastator.RemoteExplode (Devastator.cs:332,336) / Minelayer.RemoteExplode (Minelayer.cs:426). Both weapons seed (Devastator.cs:196 / Minelayer.cs:173) and read the SAME Entity.ProjectileDetonateTime field (EntityProjectileGate.cs:36) the mutator writes. Re-audited 2026-06-25 (line drift only).", result: pass }
     confidence: high
     notes: "Core gameplay effect; fully live and faithful. Gate is the Entity.ProjectileDetonateTime both weapons read, defaulting to the safe proximity branch (-1)."
@@ -74,9 +74,9 @@ features:
       - "common/weapons/weapon/devastator.qc:74"
       - "common/weapons/weapon/devastator.qc:78"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs:61"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:794"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:346"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs:61"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:794"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:346"
     constants:
       - { name: "remote_jump (forced)", base: "true (overrides g_balance_devastator_remote_jump=0)", port: "args.Allow = true (OnAllowRocketJumping)", match: true }
       - { name: "g_balance_devastator_remote_jump_damage", base: "70", port: "70 (Cvars.RemoteJumpDamage)", match: true }
@@ -105,12 +105,12 @@ features:
       - "common/mutators/mutator/rocketflying/sv_rocketflying.qc:28"   # BuildMutatorsPrettyString -> ', Rocket Flying'
       - "common/util.qc:299"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs:68"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs:71"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:121"
-      - "src/XonoticGodot.Server/GameWorld.cs:1068"
-      - "src/XonoticGodot.Server/GameWorld.cs:1079"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs:68"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs:71"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:121"
+      - "src/VortexArena.Server/GameWorld.cs:1068"
+      - "src/VortexArena.Server/GameWorld.cs:1079"
     constants:
       - { name: "machine token", base: "strcat(s, ':RocketFlying')", port: "s + ':RocketFlying'", match: true }
       - { name: "pretty token", base: "strcat(s, ', Rocket Flying')", port: "s + ', Rocket Flying'", match: true }

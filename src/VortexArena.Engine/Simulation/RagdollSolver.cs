@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>The world contact a <see cref="RagdollTraceFn"/> reports: where the swept particle stopped and
 /// the surface normal there. <see cref="Hit"/> false = the full move was clear.</summary>

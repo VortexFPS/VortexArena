@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Loaders.Models;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Loaders.Models;
 using SN = System.Numerics;
-using L = XonoticGodot.Engine.Simulation.LocomotionBlend.DirLocomotion;
+using L = VortexArena.Engine.Simulation.LocomotionBlend.DirLocomotion;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// A networked player's rendered model: the IQM <see cref="Skeleton3D"/> scene (built by

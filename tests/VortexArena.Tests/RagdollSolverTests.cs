@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Math;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the corpse-ragdoll pieces: the pure Verlet <see cref="RagdollSolver"/> (sticks hold, floors stop,
@@ -18,7 +18,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class RagdollSolverTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\VortexArena\assets\data";
 
     private static RagdollTraceHit NoHit(Vector3 s, Vector3 e, float r) => new(e, Vector3.Zero, false);
 

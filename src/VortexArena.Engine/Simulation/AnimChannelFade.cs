@@ -1,6 +1,6 @@
-using XonoticGodot.Formats.Sidecars;
+using VortexArena.Formats.Sidecars;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// One animation channel's crossfade history — the port of Base csqcmodel's per-channel previous framegroup

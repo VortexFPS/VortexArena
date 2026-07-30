@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Math;
+using VortexArena.Common.Math;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// Maps a player skeleton onto the 15-particle corpse ragdoll and drives the bones back from the solved

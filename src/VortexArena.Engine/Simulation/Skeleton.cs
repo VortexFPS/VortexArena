@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Math;
+using VortexArena.Common.Math;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// The bone hierarchy + animation-frame source a <see cref="Skeleton"/> poses against — the C# stand-in for

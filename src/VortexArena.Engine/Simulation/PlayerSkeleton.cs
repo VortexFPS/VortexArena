@@ -1,7 +1,7 @@
 using System.Numerics;
-using XonoticGodot.Common.Math;
+using VortexArena.Common.Math;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// The per-model skeletal split/aim parameters (Xonotic <c>get_model_parameters</c> / the model's
@@ -17,13 +17,13 @@ public sealed class PlayerSkeletonConfig
     public List<(int bone, float weight)> AimBones { get; } = new(); // spine/head bones bent by v_angle.x
 
     /// <summary>
-    /// Resolve a parsed <see cref="XonoticGodot.Formats.Sidecars.ModelInfo"/> to a config for skeleton
+    /// Resolve a parsed <see cref="VortexArena.Formats.Sidecars.ModelInfo"/> to a config for skeleton
     /// <paramref name="skel"/>, mapping bone NAMES → 1-based bone numbers via
     /// <see cref="SkeletonManager.FindBone"/> (against the model's raw joint names). Unresolvable bones drop
     /// out (0/skipped), matching the QC's <c>gettagindex</c>-returns-0 behaviour. The weapon bone falls back
     /// to the engine defaults <c>weapon</c>/<c>tag_weapon</c>/<c>bip01 r hand</c> like <c>skeleton_loadinfo</c>.
     /// </summary>
-    public static PlayerSkeletonConfig FromModelInfo(XonoticGodot.Formats.Sidecars.ModelInfo info, SkeletonManager mgr, int skel)
+    public static PlayerSkeletonConfig FromModelInfo(VortexArena.Formats.Sidecars.ModelInfo info, SkeletonManager mgr, int skel)
     {
         var cfg = new PlayerSkeletonConfig
         {

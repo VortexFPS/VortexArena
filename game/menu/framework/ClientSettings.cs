@@ -1,9 +1,9 @@
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Particles;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Particles;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Pushes the relevant cvars from the shared <see cref="MenuState.Cvars"/> store into the live Godot engine —
@@ -392,7 +392,7 @@ public static class ClientSettings
         };
         // Log the REQUESTED vs ACTUAL vsync mode — drivers can silently reject a mode (esp. Mailbox in windowed
         // mode), and the FrameProfiler env banner reads the mode BEFORE this runs, so this is the authoritative line.
-        XonoticGodot.Common.Diagnostics.Log.Info(
+        VortexArena.Common.Diagnostics.Log.Info(
             $"[video] vid_vsync {mode} → requested {vsync}, actual {DisplayServer.WindowGetVsyncMode()} ({meaning})");
     }
 
@@ -413,7 +413,7 @@ public static class ClientSettings
             ? System.Math.Max(144, (int)DisplayServer.ScreenGetRefreshRate())
             : maxFps;
         Godot.Engine.MaxFps = appliedFps;
-        XonoticGodot.Common.Diagnostics.Log.Info(
+        VortexArena.Common.Diagnostics.Log.Info(
             $"[video] cl_maxfps {maxFps} -> Engine.MaxFps {appliedFps} (refresh {DisplayServer.ScreenGetRefreshRate():0}Hz)");
     }
 
@@ -452,7 +452,7 @@ public static class ClientSettings
         double jf = c.GetFloat("cl_engine_jitterfix");
         if (jf < 0d) jf = 0d;
         Godot.Engine.PhysicsJitterFix = jf;
-        XonoticGodot.Common.Diagnostics.Log.Info(
+        VortexArena.Common.Diagnostics.Log.Info(
             $"[video] cl_engine_jitterfix {jf:0.###} -> Engine.PhysicsJitterFix {Godot.Engine.PhysicsJitterFix:0.###} "
             + $"(physics {Godot.Engine.PhysicsTicksPerSecond} Hz, max steps/frame "
             + $"{Godot.Engine.MaxPhysicsStepsPerFrame}; 0 = report the measured delta)");
@@ -549,14 +549,14 @@ public static class ClientSettings
             // state in the common cases (already-AboveNormal, or sys_priority_boost 0 → Normal-and-unchanged),
             // so a config that pinned the boost off read as silence — indistinguishable from "boost on". This
             // line now makes "is the boost on?" answerable straight from the boot log.
-            XonoticGodot.Common.Diagnostics.Log.Info(
+            VortexArena.Common.Diagnostics.Log.Info(
                 $"[video] process priority {proc.PriorityClass} (sys_priority_boost {boost})");
         }
         catch (Exception ex)
         {
             // Sandboxed / job-object-restricted environments can deny the change — run at stock priority,
             // but say so (an invisible no-op here would read as "the boost is on" when it isn't).
-            XonoticGodot.Common.Diagnostics.Log.Info($"[video] process priority boost unavailable: {ex.Message}");
+            VortexArena.Common.Diagnostics.Log.Info($"[video] process priority boost unavailable: {ex.Message}");
         }
     }
 

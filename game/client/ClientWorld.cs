@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Md3;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Loaders;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The client-side rendering hub — the Godot successor to CSQC's <c>CSQC_Ent_Update</c> /
@@ -42,7 +42,7 @@ public partial class ClientWorld : Node3D
     public ProjectileRenderer Projectiles { get; private set; } = null!;
 
     /// <summary>Networked nade-orb (heal/ammo/entrap/veil/darkness) effect renderer. Created and owned by
-    /// <see cref="XonoticGodot.Game.Net.NetGame"/> (next to the ProjectileRenderer) and assigned here, so the
+    /// <see cref="VortexArena.Game.Net.NetGame"/> (next to the ProjectileRenderer) and assigned here, so the
     /// entity-stream consumer (<c>ClientEntityView</c>) and the per-frame view-effects feed share the one
     /// instance. Null until NetGame wires it.</summary>
     public NadeOrbRenderer NadeOrbs { get; set; } = null!;
@@ -84,7 +84,7 @@ public partial class ClientWorld : Node3D
     /// is on, the in-process effect mirror drops effects flagged <c>Except = </c> this player (their own muzzle
     /// flash), so it isn't doubled with the locally-predicted one — remotes already get it via the server's
     /// per-peer except pass. Null on a pure client (no in-process emission to mirror).</summary>
-    public XonoticGodot.Common.Gameplay.Player? LocalHostPlayer { get; set; }
+    public VortexArena.Common.Gameplay.Player? LocalHostPlayer { get; set; }
 
     /// <summary>cl_predictfire: when true, suppress the local host player's own in-process fire effects (they are
     /// predicted locally). False = render them (the host sees the networked copy, e.g. cl_predictfire 0).</summary>
@@ -97,16 +97,16 @@ public partial class ClientWorld : Node3D
     /// scene → entity PVS culling is inert). Drives <see cref="DriveEntityNodes"/>: DP-faithful render culling
     /// of remote entities whose bounds fall outside the camera's potentially-visible set. When the cvar is off,
     /// the same loop simply marks every node visible each frame (no separate disable-reset bookkeeping needed).</summary>
-    public XonoticGodot.Formats.Bsp.BspPvs? Pvs { get; set; }
+    public VortexArena.Formats.Bsp.BspPvs? Pvs { get; set; }
 
     /// <summary>The client-world tracer for corpse ragdolls (worldspawn brushes, no entities, no gate — the
     /// same pattern as the particle tracer; NEVER the ambient Api.Trace, which on a listen host is the SERVER
     /// world under the tick lock). Wired by the host from the same collision build the particles use.</summary>
-    public XonoticGodot.Engine.Collision.TraceService? RagdollTrace { get; private set; }
+    public VortexArena.Engine.Collision.TraceService? RagdollTrace { get; private set; }
 
     /// <summary>Hand the client-side collision world to the systems that trace against it client-only.</summary>
-    public void SetClientCollision(XonoticGodot.Engine.Collision.CollisionWorld world)
-        => RagdollTrace = new XonoticGodot.Engine.Collision.TraceService(world);
+    public void SetClientCollision(VortexArena.Engine.Collision.CollisionWorld world)
+        => RagdollTrace = new VortexArena.Engine.Collision.TraceService(world);
 
     /// <summary>True on a --headless host (dummy renderer): visual-only CPU work like ragdolls must skip.</summary>
     private static readonly bool HeadlessHost = DisplayServer.GetName() == "headless";
@@ -756,7 +756,7 @@ public partial class ClientWorld : Node3D
     }
 
     /// <summary>Resolve a model for a networked entity via the host's <see cref="ModelResolver"/> (or null).</summary>
-    public XonoticGodot.Formats.Md3.Md3Data? ResolveModel(Entity e) => ModelResolver?.Invoke(e);
+    public VortexArena.Formats.Md3.Md3Data? ResolveModel(Entity e) => ModelResolver?.Invoke(e);
 
     /// <summary>The node networked render children (e.g. weapon view-entities) parent under when unattached.</summary>
     public Node3D RenderRoot => this;
@@ -1151,7 +1151,7 @@ public partial class ClientWorld : Node3D
         // never render in the portal view. While any portal is actively rendering, pose everyone (portals are
         // occasional; the cost reverts to the pre-cull baseline only while one is on screen).
         bool poseCull = CvarF("cl_pose_cull", 0f) != 0f
-            && XonoticGodot.Game.Client.PortalRenderer.ActiveExitViewsQuake.Count == 0;
+            && VortexArena.Game.Client.PortalRenderer.ActiveExitViewsQuake.Count == 0;
         float cullDist = CvarF("cl_pose_cull_distance", 1500f);
         float cullDistSq = poseCull ? cullDist * cullDist : 0f;
         // Base csqcmodel's clip-switch crossfade window (cl_lerpanim_maxdelta_framegroups, cl_model.qc:29,
@@ -1222,7 +1222,7 @@ public partial class ClientWorld : Node3D
         using (FrameProfiler.Scope("cw.vehicles")) DriveVehicles(dtAnim);
         // Live-poll the dynamic map/scene tint cvars so a console `set r_map_tint*` re-tints instantly (the
         // testing path); when the strength cvars are 0 this is a couple of cheap reads and leaves the map/code
-        // baseline in place. See XonoticGodot.Game.WorldTint.
+        // baseline in place. See VortexArena.Game.WorldTint.
         WorldTint.PollCvars();
         // Live-poll the projectile client-side prediction toggle so a console `set cl_projectile_prediction 0`
         // flips back to the old ease (A/B feel-testing) at once. Default on = CSQC-style snap+extrapolate.
@@ -1339,7 +1339,7 @@ public partial class ClientWorld : Node3D
         // node from EVERY viewport sharing the World3D, so an entity standing at a portal's exit must stay
         // visible while that portal renders — union its cluster in, exactly like WorldPvsCuller's cell pass.
         _entityPvsExtraClusters.Clear();
-        var portalViews = XonoticGodot.Game.Client.PortalRenderer.ActiveExitViewsQuake;
+        var portalViews = VortexArena.Game.Client.PortalRenderer.ActiveExitViewsQuake;
         for (int i = 0; i < portalViews.Count; i++)
         {
             int pc = Pvs!.LeafCluster(Pvs.FindLeaf(portalViews[i]));
@@ -1865,7 +1865,7 @@ public partial class ClientWorld : Node3D
     /// <summary>
     /// QC <c>csqcmodel_isdead</c> for the death-fade. Base derives it from <c>IS_DEAD_FRAME(frame)</c> =
     /// <c>(frame==0||frame==1)</c> (csqcmodel_hooks.qc:374/408) — the MD3 death-anim frame convention. The
-    /// XonoticGodot wire does NOT carry that 0/1 death frame for players (the server animates players client-side via
+    /// VortexArena wire does NOT carry that 0/1 death frame for players (the server animates players client-side via
     /// <see cref="PlayerModel"/>/<see cref="SelectClipFromMovement"/>, and <see cref="Entity.Frame"/> is 0 for a
     /// LIVING idle player), so a literal <c>frame==0||frame==1</c> port would false-positive living players as
     /// dead. We instead use the networked DeadState / Health&lt;=0-with-real-MaxHealth, which captures the same
@@ -1976,7 +1976,7 @@ public partial class ClientWorld : Node3D
             // bumblebee read flat).
             if (e.Angles.X != 0f || e.Angles.Z != 0f)
             {
-                XonoticGodot.Common.Math.QMath.AngleVectors(e.Angles, out NVec3 fwd, out NVec3 right, out NVec3 up);
+                VortexArena.Common.Math.QMath.AngleVectors(e.Angles, out NVec3 fwd, out NVec3 right, out NVec3 up);
                 vis.Basis = new Basis(Coords.ToGodot(fwd), Coords.ToGodot(up), Coords.ToGodot(right));
             }
             else
@@ -2238,7 +2238,7 @@ public partial class ClientWorld : Node3D
     /// <summary>
     /// True when this networked entity is a CTF flag (its resolved model lives under models/ctf/flag*). Its banner
     /// texture (banner.tga) carries a <c>banner_shirt.tga</c> companion, so AssetSystem auto-compiles it to the
-    /// team-colorable <see cref="XonoticGodot.Game.Loaders.PlayerSkinShader"/> — the flag just needs the team
+    /// team-colorable <see cref="VortexArena.Game.Loaders.PlayerSkinShader"/> — the flag just needs the team
     /// colormap driven onto it like a player (playtest-bugs #8).
     /// </summary>
     private static bool IsCtfFlagModel(Entity e) =>
@@ -2246,7 +2246,7 @@ public partial class ClientWorld : Node3D
 
     /// <summary>
     /// Normalize a networked colormap / <see cref="Entity.Team"/> for <see cref="ModelTint"/>: it holds Xonotic's
-    /// NUM_TEAM_* color CODE (<see cref="XonoticGodot.Common.Gameplay.Teams"/>: Red=4/Blue=13/Yellow=12/Pink=9),
+    /// NUM_TEAM_* color CODE (<see cref="VortexArena.Common.Gameplay.Teams"/>: Red=4/Blue=13/Yellow=12/Pink=9),
     /// but <c>ModelTint.ColormapColors</c>/<c>TeamColor</c> were written for the colormap LOW NIBBLE (1=red..4=pink).
     /// Map the four team codes to their nibble so a team entity (player OR flag) tints the RIGHT team color; leave
     /// everything else unchanged — 0 (FFA/none) and a packed FORCECOLORS value (&gt;=1024) both flow through as-is.
@@ -2258,10 +2258,10 @@ public partial class ClientWorld : Node3D
     /// (playtest r9: the raw BLUE code 13 is no valid nibble → the first-person gun never team-tinted).</summary>
     public static int NormalizeTeamColormap(int cm) => cm switch
     {
-        XonoticGodot.Common.Gameplay.Teams.Red => 1,    // 4  → 1 red
-        XonoticGodot.Common.Gameplay.Teams.Blue => 2,   // 13 → 2 blue
-        XonoticGodot.Common.Gameplay.Teams.Yellow => 3, // 12 → 3 yellow
-        XonoticGodot.Common.Gameplay.Teams.Pink => 4,   // 9  → 4 pink
+        VortexArena.Common.Gameplay.Teams.Red => 1,    // 4  → 1 red
+        VortexArena.Common.Gameplay.Teams.Blue => 2,   // 13 → 2 blue
+        VortexArena.Common.Gameplay.Teams.Yellow => 3, // 12 → 3 yellow
+        VortexArena.Common.Gameplay.Teams.Pink => 4,   // 9  → 4 pink
         _ => cm,
     };
 

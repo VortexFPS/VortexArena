@@ -19,7 +19,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, GiveFragsForKill)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnDeath"
     constants: []
     status:
       logic: faithful
@@ -43,9 +43,9 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, GiveFragsForKill)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, CalculateRespawnTime)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnDeath"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:ApplyRespawnTiming"
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink (ApplyRespawnTiming at line 3492)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:ApplyRespawnTiming"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink (ApplyRespawnTiming at line 3492)"
     constants: []
     status:
       logic: faithful
@@ -70,10 +70,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:WinningCondition_LMS"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:CheckWinningCondition (line 595)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:ReportsTie (line 575) / TopTwoLivesEqual / TimeLimitCancelled / WinSurvivor"
-      - "src/XonoticGodot.Server/GameWorld.cs:RunCheckRulesWorld (ReportsTie at line 3636) → OverTimeManager"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame (line 3330)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:CheckWinningCondition (line 595)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:ReportsTie (line 575) / TopTwoLivesEqual / TimeLimitCancelled / WinSurvivor"
+      - "src/VortexArena.Server/GameWorld.cs:RunCheckRulesWorld (ReportsTie at line 3636) → OverTimeManager"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame (line 3330)"
     constants:
       - { name: "g_lms_forfeit_min_match_time", base: "0 (cvar, default 0)", port: "read (Cvar g_lms_forfeit_min_match_time, default 0)", match: true }
     status:
@@ -99,8 +99,8 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, CalculateRespawnTime)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, ReadLevelCvars)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (case LastManStanding lms: lms.Activate(); break;) (line 2881)"
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink → ApplyRespawnTiming (line 3492)"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (case LastManStanding lms: lms.Activate(); break;) (line 2881)"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink → ApplyRespawnTiming (line 3492)"
     constants: []
     status:
       logic: faithful
@@ -126,7 +126,7 @@ features:
       - "common/gametypes/gametype/lms/lms.qh:ATTRIB m_legacydefaults \"9 20 0\""
       - "common/gametypes/gametype/lms/sv_lms.qc:LMS_NewPlayerLives (bound(1, lms_lowest_lives, fl))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:StartingLives"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:StartingLives"
     constants:
       - { name: "default_lives", base: "5 (mapinfo lives=5)", port: "5 (DefaultLives const)", match: true }
       - { name: "legacy_defaults", base: "9 20 0 (lives=9 legacy)", port: "not modeled", match: false }
@@ -157,11 +157,11 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, PutClientInServer)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, ForbidSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:NewPlayerLives (line 151)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:CanJoin (line 382)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:AddPlayer (line 363)"
-      - "src/XonoticGodot.Server/GameWorld.cs (Clients.GametypeJoinGate / GametypeOnJoin)"
-      - "src/XonoticGodot.Server/ClientManager.cs:JoinAllowed + GametypeOnJoin"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:NewPlayerLives (line 151)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:CanJoin (line 382)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:AddPlayer (line 363)"
+      - "src/VortexArena.Server/GameWorld.cs (Clients.GametypeJoinGate / GametypeOnJoin)"
+      - "src/VortexArena.Server/ClientManager.cs:JoinAllowed + GametypeOnJoin"
     constants:
       - { name: "g_lms_join_anytime", base: "1", port: "read", match: true }
       - { name: "g_lms_last_join", base: "3", port: "read", match: true }
@@ -188,9 +188,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, CalculateRespawnTime)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:RespawnDelayFor"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:ApplyRespawnTiming"
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink (line 3492)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:RespawnDelayFor"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:ApplyRespawnTiming"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink (line 3492)"
     constants:
       - { name: "g_lms_dynamic_respawn_delay", base: "1", port: "read", match: true }
       - { name: "g_lms_dynamic_respawn_delay_base", base: "2", port: "2", match: true }
@@ -218,11 +218,11 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, SetStartItems)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, PlayerSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnSetStartItems"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnPlayerSpawn (line 1001, least-healthy late-join clone)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems (SetStartItems.Call)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ApplyStartLoadout (called from PutPlayer)"
-      - "src/XonoticGodot.Server/ClientManager.cs:749 (MutatorHooks.PlayerSpawn.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnPlayerSpawn (line 1001, least-healthy late-join clone)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems (SetStartItems.Call)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ApplyStartLoadout (called from PutPlayer)"
+      - "src/VortexArena.Server/ClientManager.cs:749 (MutatorHooks.PlayerSpawn.Call)"
     constants:
       - { name: "g_lms_start_health", base: "200 (balance-xonotic.cfg)", port: "200", match: true }
       - { name: "g_lms_start_armor", base: "200", port: "200", match: true }
@@ -253,8 +253,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, SetWeaponArena)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnSetWeaponArena"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems (SetWeaponArena.Call) + ExpandWeaponArena"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnSetWeaponArena"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems (SetWeaponArena.Call) + ExpandWeaponArena"
     constants:
       - { name: "g_lms_weaponarena", base: "most_available", port: "most_available", match: true }
     status:
@@ -279,8 +279,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, PlayerRegen)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnPlayerRegen"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs (MutatorHooks.PlayerRegen.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnPlayerRegen"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs (MutatorHooks.PlayerRegen.Call)"
     constants:
       - { name: "g_lms_regenerate", base: "0", port: "0", match: true }
       - { name: "g_lms_rot", base: "0", port: "0", match: true }
@@ -306,8 +306,8 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, FilterItemDefinition)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, FilterItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnFilterItemDefinition"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs (MutatorHooks.FilterItemDefinition.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs (MutatorHooks.FilterItemDefinition.Call)"
     constants:
       - { name: "g_lms_items", base: "0", port: "0", match: true }
       - { name: "g_pickup_items", base: "-1", port: "-1 (read)", match: true }
@@ -334,8 +334,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:lms_UpdateLeaders"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:UpdateLeaders (line 756)"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame (line 3325)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:UpdateLeaders (line 756)"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame (line 3325)"
     constants:
       - { name: "g_lms_leader_lives_diff", base: "2", port: "2", match: true }
       - { name: "g_lms_leader_minpercent", base: "0.5", port: "0.5", match: true }
@@ -362,8 +362,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, PlayerPowerups)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnPlayerPowerups (line 908)"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs (MutatorHooks.PlayerPowerups.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnPlayerPowerups (line 908)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs (MutatorHooks.PlayerPowerups.Call)"
     constants: []
     status:
       logic: faithful
@@ -388,9 +388,9 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, SV_StartFrame)"
       - "common/gametypes/gametype/lms/sv_lms.qc:lms_waypointsprite_visible_for_player"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:DriveLeaderVisibility (line 791, timing state machine)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:CollectWaypoints (line 836, emits the LmsLeader sprite)"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:145 (Add(\"LmsLeader\", ...) registration)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:DriveLeaderVisibility (line 791, timing state machine)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:CollectWaypoints (line 836, emits the LmsLeader sprite)"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:145 (Add(\"LmsLeader\", ...) registration)"
       - "game/net/ServerNet.cs:1056 (SendWaypoints → GameType.CollectWaypoints, per-tick live pull)"
       - "game/client/WaypointSpriteLayer.cs (client render)"
     constants:
@@ -420,9 +420,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, SV_StartFrame)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:DriveLeaderVisibility (line 791)"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame (line 3329)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs (LMS_VISIBLE_LEADER / LMS_VISIBLE_OTHER)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:DriveLeaderVisibility (line 791)"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame (line 3329)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs (LMS_VISIBLE_LEADER / LMS_VISIBLE_OTHER)"
     constants: []
     status:
       logic: faithful
@@ -448,7 +448,7 @@ features:
     port_refs:
       - "game/hud/ModIconsPanel.cs:DrawLms (line 813)"
       - "game/hud/ModIconsPanel.cs:212 (ModIconsMode.Lms dispatch)"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:128 (Capture Kind.Lms) + 361-365 (Deserialize)"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:128 (Capture Kind.Lms) + 361-365 (Deserialize)"
       - "game/net/NetGame.cs:4272-4276 (Mode + LmsLeaderCount/LmsLivesDiff/LmsLeadersVisible)"
     constants: []
     status:
@@ -498,8 +498,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs (MutatorHooks.DamageCalculate.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs (MutatorHooks.DamageCalculate.Call)"
     constants:
       - { name: "g_lms_dynamic_vampire", base: "1", port: "1 (default)", match: true }
       - { name: "g_lms_dynamic_vampire_factor_base", base: "0.1", port: "0.1", match: true }
@@ -529,10 +529,10 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, ItemTouch)"
       - "common/gametypes/gametype/lms/sv_lms.qc:lms_replace_with_extralife"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnFilterItemDefinition (in-place HealthMega->item_extralife replacement)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnItemTouch (MutatorHooks.ItemTouch subscriber)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:GiveExtraLife"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs (MutatorHooks.FireItemTouch)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnFilterItemDefinition (in-place HealthMega->item_extralife replacement)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnItemTouch (MutatorHooks.ItemTouch subscriber)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:GiveExtraLife"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs (MutatorHooks.FireItemTouch)"
     constants:
       - { name: "g_lms_extra_lives", base: "0", port: "read", match: true }
     status:
@@ -559,9 +559,9 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qh:GameRules_scoring (SP_LMS_LIVES 'lives', SP_LMS_RANK 'rank')"
       - "common/gametypes/gametype/lms/sv_lms.qc:lms_AddPlayer (GameRules_scoring_add LMS_LIVES seed)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:Activate (DeclareColumn/SetSortKeys)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:SyncColumns"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:AddPlayer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:Activate (DeclareColumn/SetSortKeys)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:SyncColumns"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:AddPlayer"
       - "game/hud/ScoreboardPanel.cs (+lms/lives +lms/rank)"
     constants: []
     status:
@@ -588,10 +588,10 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, ClientDisconnect)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, MakePlayerObserver)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:RemovePlayer (line 420)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnMakePlayerObserver (line 969, subscribed Activate line 331)"
-      - "src/XonoticGodot.Server/GameWorld.cs:InfraClientDisconnect (voluntary:true)"
-      - "src/XonoticGodot.Server/ClientManager.cs:PutObserverInServer (MakePlayerObserver.Call, line 542)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:RemovePlayer (line 420)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnMakePlayerObserver (line 969, subscribed Activate line 331)"
+      - "src/VortexArena.Server/GameWorld.cs:InfraClientDisconnect (voluntary:true)"
+      - "src/VortexArena.Server/ClientManager.cs:PutObserverInServer (MakePlayerObserver.Call, line 542)"
     constants: []
     status:
       logic: faithful
@@ -617,9 +617,9 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, ForbidThrowCurrentWeapon)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, ClientCommand_Spectate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:OnForbidThrowCurrentWeapon (line 938)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponThrowing.cs (ForbidThrowCurrentWeapon.Call)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdSpectate (line 1555-1560, registered live line 808)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:OnForbidThrowCurrentWeapon (line 938)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponThrowing.cs (ForbidThrowCurrentWeapon.Call)"
+      - "src/VortexArena.Server/Commands.cs:CmdSpectate (line 1555-1560, registered live line 808)"
     constants: []
     status:
       logic: faithful
@@ -644,8 +644,8 @@ features:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, reset_map_players)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, reset_map_global)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:ResetMapPlayers (line 479)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ResetMap (line 4447)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:ResetMapPlayers (line 479)"
+      - "src/VortexArena.Server/GameWorld.cs:ResetMap (line 4447)"
     constants: []
     status:
       logic: faithful
@@ -669,7 +669,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, Bot_FixCount, CBC_ORDER_EXCLUSIVE)"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:FixCount (lines 249-267, lms-aware activerealplayers count)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:FixCount (lines 249-267, lms-aware activerealplayers count)"
     constants: []
     status:
       logic: faithful
@@ -692,8 +692,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, PlayerPreThink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:ApplyRespawnTiming (RespawnFlag.Force, line 225)"
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink (case DeadFlag.Dying with forced=true, line 3537)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:ApplyRespawnTiming (RespawnFlag.Force, line 225)"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink (case DeadFlag.Dying with forced=true, line 3537)"
     constants: []
     status:
       logic: faithful
@@ -717,8 +717,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, AddPlayerScore)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:SyncColumns (uses GameScores.SetPlayer, lines 344-349)"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:SetPlayer (lines 446-452, unconditional — no GameStopped gate)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:SyncColumns (uses GameScores.SetPlayer, lines 344-349)"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:SetPlayer (lines 446-452, unconditional — no GameStopped gate)"
     constants: []
     status:
       logic: faithful

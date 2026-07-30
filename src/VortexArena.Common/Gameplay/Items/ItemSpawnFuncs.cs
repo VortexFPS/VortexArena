@@ -7,10 +7,10 @@
 // items wrap the Weapon registry entry in a synthetic WeaponPickup (QC wpn.m_pickup) that seeds the world
 // item's weapon set + pickup ammo. Registered into SpawnFuncs by MapObjectsRegistry via Register().
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Installs the item_*/weapon_* classname spawnfuncs into <see cref="SpawnFuncs"/> (QC SPAWNFUNC_ITEM +
@@ -411,6 +411,14 @@ public static class ItemSpawnFuncs
 public sealed class WeaponPickup : Pickup
 {
     private readonly Weapon _weapon;
+
+    /// <summary>The weapon this pickup grants — the item's explicit identity (networked as RegistryId+1 so a
+    /// client can paint/classify a weapon pickup without guessing from the model filename).</summary>
+    public Weapon Weapon => _weapon;
+
+    /// <summary>QC a weapon pickup's <c>m_icon</c> is the WEAPON's HUD icon (<c>weapon&lt;name&gt;</c>), not the
+    /// bare netname — the scoreboard's Item stats grid draws the gun's silhouette for it.</summary>
+    public override string Icon => "weapon" + _weapon.NetName;
 
     public WeaponPickup(Weapon w)
     {

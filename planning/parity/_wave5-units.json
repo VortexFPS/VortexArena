@@ -202,7 +202,7 @@
 {
 "unit": "mutator-itemstime",
 "notes": [
-"[DEAD] mutator-itemstime.net.csqc_sync \u2014 CSQC itemstime net message (per-client respawn-time sync): No itemstime net message exists in XonoticGodot.Net (REGISTER_NET_TEMP(itemstime) / IT_Write / NET_HANDLE not ported). Item times are fed directly from the local server mutator to the local HUD in NetGame.cs:2282-2285, guarded by `if (_server is not null)` (NetGame.cs:2260). A pu"
+"[DEAD] mutator-itemstime.net.csqc_sync \u2014 CSQC itemstime net message (per-client respawn-time sync): No itemstime net message exists in VortexArena.Net (REGISTER_NET_TEMP(itemstime) / IT_Write / NET_HANDLE not ported). Item times are fed directly from the local server mutator to the local HUD in NetGame.cs:2282-2285, guarded by `if (_server is not null)` (NetGame.cs:2260). A pu"
 ]
 },
 {

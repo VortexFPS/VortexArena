@@ -35,11 +35,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>Persistent dynlight realtime-light renderer (the DP engine-driven light DynamicLight.cs lacked). Hosted by <see cref="ClientWorld"/>.</summary>
 public partial class DynamicLightRenderer : Node3D
@@ -143,7 +143,7 @@ public partial class DynamicLightRenderer : Node3D
         // table): a styled light samples its style string at 10 fps ('a'=dark .. 'm'=normal .. 'z'=double) and
         // modulates its radius by that brightness. Style 0 / an out-of-table index samples 1.0 (steady). Time
         // base is the engine clock so the animation is wall-clock-paced like Base's engine-driven lightmap anim.
-        float styleBrightness = XonoticGodot.Common.Gameplay.LightStyles.Sample(
+        float styleBrightness = VortexArena.Common.Gameplay.LightStyles.Sample(
             e.LightStyle, (float)Time.GetTicksMsec() / 1000f);
         ln.Light.OmniRange = Math.Clamp(e.LightLev * styleBrightness, 0f, MaxRange);
         if (ln.Light.OmniRange <= 0f)

@@ -1,8 +1,8 @@
 using System;
 using Godot;
-using XonoticGodot.Formats.Mdl;
+using VortexArena.Formats.Mdl;
 
-namespace XonoticGodot.Game.Loaders.Models;
+namespace VortexArena.Game.Loaders.Models;
 
 /// <summary>
 /// Turns a parsed <see cref="MdlData"/> (the Godot-free Quake1 "IDPO" importer output) into a Godot scene

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Regression coverage for the legacy input-queue bound (<see cref="InputQueuePolicy"/>, DP

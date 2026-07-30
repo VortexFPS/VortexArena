@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// Shared reusable decode scratch for the image decoders (<see cref="TgaDecoder"/> / <see cref="DdsDecoder"/>).

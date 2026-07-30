@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server.Bot;
+namespace VortexArena.Server.Bot;
 
 /// <summary>
 /// A scored goal candidate produced during goal-rating (QC navigation_routerating's running best). The
@@ -153,6 +153,7 @@ public static class BotRoles
             "assault" or "as" => BotObjectiveRoles.RoleAssault,        // havocbot_role_ass_*
             "cts" => BotObjectiveRoles.RoleCts,                        // havocbot_role_cts (run the course)
             "rc" or "race" => BotObjectiveRoles.RoleRace,              // havocbot_role_race (run the track)
+            "inv" or "invasion" => BotObjectiveRoles.RoleInvasion,     // hunt the monster waves (port improvement)
             _ => RoleGeneric,
         };
     }
@@ -164,7 +165,10 @@ public static class BotRoles
     public static void RoleGeneric(BotBrain brain, GoalRater rater)
     {
         var bot = brain.Bot;
-        rater.Start();
+        // QC havocbot_role_generic (roles.qc:219): rate only when the goal-rating clock expired; the role
+        // itself runs every token hold (the brain re-stamps the clock after a rating pass).
+        if (!brain.GoalRatingTimedOut) return;
+        brain.BeginGoalRating(rater);
         GoalrateItems(brain, rater, bot.Origin, 10000f);
         GoalrateEnemyPlayers(brain, rater, bot.Origin, 10000f);
         GoalrateRoamWaypoints(brain, rater, bot.Origin, 3000f);
@@ -191,6 +195,11 @@ public static class BotRoles
         bool timeItems = Cvars.Bool("bot_ai_timeitems");
         float minRespawnDelay = System.Math.Max(11f, Cvars.FloatOr("bot_ai_timeitems_minrespawndelay", 11f));
 
+        // Per-pass arsenal snapshot (lazy): the bot's owned-weapon set can't change mid-pass, so the
+        // Weapons.All walk ItemValue needs (arsenal value + owned-ammo-types) runs at most once per
+        // GoalrateItems call instead of once per rated item.
+        ArsenalCache arsenal = default;
+
         // Fill the rater's reused scratch (alloc-free) instead of allocating a findradius iterator each call.
         // The body only reads/rates (no spawn/free), so index-iterating the snapshot directly is safe.
         Api.Entities.FindInRadius(org, radius, rater.Scratch);
@@ -199,6 +208,16 @@ public static class BotRoles
             Entity it = rater.Scratch[si];
             if (it.IsFreed || ReferenceEquals(it, bot)) continue;
             if ((it.Flags & EntFlags.Item) == 0) continue;
+            // EntFlags.Item is ALSO the port's FL_PROJECTILE marker (every weapon sets `Flags = EntFlags.Item`
+            // with a weapon NetName), so a live rocket/mine passes the flag test and then matches the weapon
+            // branch of ItemValue — an in-flight devastator rocket rated ~8000 and won the goal outright, i.e.
+            // bots pathed INTO incoming rockets and treated a laid mine as a permanent attractor. Harmless
+            // before this branch only because item values were ≤ 1 and always lost.
+            // QC iterates IL_EACH(g_items, it.bot_pickup, …) — a list projectiles are not on. The port's
+            // equivalent discriminator is Owner: a real pickup is explicitly ownerless ("anyone can pick it
+            // up", StartItem.cs:228), while a projectile always carries its firer. Dropped loot is owned only
+            // for its 0.5 s anti-instant-pick shield, during which it genuinely isn't available to others.
+            if (it.Owner is not null) continue;
 
             if (it.Solid == Solid.Not)
             {
@@ -223,8 +242,37 @@ public static class BotRoles
             var pos = (it.AbsMin + it.AbsMax) * 0.5f;
             if (pos == Vector3.Zero) pos = it.Origin;
 
-            float value = ItemValue(brain, it);
+            float value = ItemValue(brain, it, ref arsenal);
             rater.Rate(org, it, pos, value * ratingScale, 2000f);
+        }
+    }
+
+    /// <summary>
+    /// Lazy per-rating-pass snapshot of the bot's weapon inventory, filled by <see cref="EnsureArsenal"/> on
+    /// first use: the summed <c>bot_pickupbasevalue</c> of owned weapons (QC weapon_pickupevalfunc's arsenal
+    /// discount) and which ammo types an owned weapon feeds on (indexed like <see cref="AmmoResources"/>).
+    /// </summary>
+    private struct ArsenalCache
+    {
+        public bool Computed;
+        public float Value;
+        public byte OwnedAmmoMask; // bit i = bot owns a weapon whose AmmoType == AmmoResources[i]
+    }
+
+    private static void EnsureArsenal(Entity bot, ref ArsenalCache cache)
+    {
+        if (cache.Computed) return;
+        cache.Computed = true;
+        foreach (Weapon w in Weapons.All)
+        {
+            if (!Inventory.HasWeapon(bot, w)) continue;
+            cache.Value += w.BotPickupBaseValue;
+            for (int i = 0; i < AmmoResources.Length; i++)
+                if (w.AmmoType == AmmoResources[i])
+                {
+                    cache.OwnedAmmoMask |= (byte)(1 << i);
+                    break;
+                }
         }
     }
 
@@ -245,6 +293,9 @@ public static class BotRoles
         float radius2 = radius * radius;
         float maxSpeed2 = Cvars.MaxSpeed * 2f;
         maxSpeed2 *= maxSpeed2;
+        float now = Api.Services is not null ? Api.Clock.Time : 0f;
+        StatusEffectDef? strength = StatusEffectsCatalog.ByName("strength");
+        StatusEffectDef? shield = StatusEffectsCatalog.ByName("shield");
         foreach (var e in brain.Players())
         {
             if (!BotBrain.ShouldAttack(bot, e)) continue;
@@ -257,10 +308,23 @@ public static class BotRoles
             // health/armor advantage and low skill both increase aggression (QC t factor)
             float advantage = (bot.Health - e.Health) / 150f;
             float t = System.Math.Clamp(1f + advantage, 0f, 3f);
+            // QC skill>3: fold in live Strength/Shield timers (StatusEffects_gettime, roles.qc:203-210) —
+            // press the advantage while OUR powerup has >1s left; back off a powered-up enemy. The -1 keeps
+            // a bot from committing to a chase its powerup won't survive.
+            if (brain.Skill > 3f)
+            {
+                if (strength is not null)
+                {
+                    if (now < StatusEffectsCatalog.GetTime(bot, strength, now) - 1f) t += 0.5f;
+                    if (now < StatusEffectsCatalog.GetTime(e, strength, now) - 1f) t -= 0.5f;
+                }
+                if (shield is not null)
+                {
+                    if (now < StatusEffectsCatalog.GetTime(bot, shield, now) - 1f) t += 0.2f;
+                    if (now < StatusEffectsCatalog.GetTime(e, shield, now) - 1f) t -= 0.4f;
+                }
+            }
             t += System.Math.Max(0f, 8f - brain.Skill) * 0.05f;
-            // NOTE: QC skill>3 also nudges t by the bot's/enemy's Strength/Shield powerup timers
-            // (StatusEffects_gettime); the port has no entity-side status-effect expiry accessor yet, so that
-            // refinement is deferred (see todos) — the base advantage+skill aggression is preserved here.
             rater.Rate(org, e, e.Origin, ratingScale * t * RatingEnemy, 2000f);
         }
     }
@@ -315,68 +379,133 @@ public static class BotRoles
     }
 
     /// <summary>
-    /// Need-based item value — the C# essence of each item's QC <c>bot_pickupevalfunc</c> (the health/armor
-    /// pickups rate higher the more the bot lacks that resource; ammo rates higher when low; an unowned
-    /// weapon rates high; powerups always pull). Reads the item's classname/NetName + the resource amount it
-    /// grants (carried on the world item's resource fields) against the bot's current resources via
-    /// <see cref="Resources"/>, so the value falls to ~0 once the bot is topped up (QC: don't path to an item
-    /// you can't use).
+    /// Need-based item value — the port of QC's <c>bot_pickupevalfunc</c> family (server/items/items.qc:885-979).
+    /// CRITICAL SCALE CONTRACT: these return values on the QC <c>BOT_PICKUP_RATING</c> scale (LOW 2500 /
+    /// MID 5000 / HIGH 10000, health+armor up to 2× their 5000 base by need), NOT 0..1. The role's ratingscale
+    /// (10000-80000) × 0.0001 then lands item goals in the same few-thousand band as enemy goals (2500·t) and
+    /// below hard objectives (flags/CPs at 10000+) — exactly the QC priority ladder.
+    /// [parity 2026-07-11: the old 0..1 values made every item ~4 orders of magnitude too weak, so bots never
+    /// detoured for health/armor/weapons in ANY mode — a root cause of "bots feed and ignore pickups".]
     /// </summary>
-    private static float ItemValue(BotBrain brain, Entity item)
+    private static float ItemValue(BotBrain brain, Entity item, ref ArsenalCache arsenal)
     {
         var bot = brain.Bot;
         string name = string.IsNullOrEmpty(item.NetName) ? item.ClassName : item.NetName;
 
-        // Health: want proportional to the missing fraction (QC commodity_pickupevalfunc for health).
+        // Health / armor (QC healtharmor_pickupevalfunc): rating = m_botvalue (5000 for all sizes) × min(2, c),
+        // where c measures how much the pickup would matter right now. Size is expressed through c (a mega is
+        // 100 HP → c is huge at low health), not through the base value.
         float itemHealth = item.GetResource(ResourceType.Health);
-        if (itemHealth > 0f || Mentions(name, "health"))
-        {
-            float missing = 1f - bot.Health / System.Math.Max(1f, bot.MaxHealth);
-            return System.Math.Max(0f, missing) + 0.25f;
-        }
-
-        // Armor: want proportional to the headroom under the armor cap.
         float itemArmor = item.GetResource(ResourceType.Armor);
-        if (itemArmor > 0f || Mentions(name, "armor"))
+        if (itemHealth > 0f || itemArmor > 0f || Mentions(name, "health") || Mentions(name, "armor"))
         {
-            float cap = System.Math.Max(1f, Resources.GetResourceLimit(bot, ResourceType.Armor));
-            float missing = 1f - bot.GetResource(ResourceType.Armor) / cap;
-            return System.Math.Max(0f, missing) * 0.9f + 0.1f;
+            const float baseValue = 5000f; // QC ATTRIB(Health/Armor, m_botvalue, 5000)
+            float c = 0f;
+            float health = System.MathF.Max(0f, bot.Health);
+            float armor = bot.GetResource(ResourceType.Armor);
+            // QC gates each resource on the item's own pickup cap (item.max_armorvalue / item.max_health);
+            // the port items don't carry those, so gate on the bot's resource limits (equal for the common
+            // items; only mega-overheal differs, and its huge c at low health dominates anyway).
+            if (itemArmor > 0f && armor < Resources.GetResourceLimit(bot, ResourceType.Armor))
+                c = itemArmor / System.MathF.Max(1f, armor * (2f / 3f) + health * (1f / 3f));
+            // Gate on the RESOURCE LIMIT (200), not Player.MaxHealth. QC compares against the ITEM's own
+            // max_health, which is 200 for every stock health item (balance-xonotic.cfg), while MaxHealth is
+            // the 100 spawn value — so this read `health < 100` and a topped-up bot rated EVERY health item 0
+            // (GoalRater.Rate early-returns on <= 0, so mega health was not even a candidate). The armor arm
+            // above already used the limit; this is the asymmetry, not a deliberate choice.
+            if (itemHealth > 0f && health < Resources.GetResourceLimit(bot, ResourceType.Health))
+                c = itemHealth / System.MathF.Max(1f, health);
+            if (c <= 0f && itemHealth <= 0f && itemArmor <= 0f)
+                c = 0.5f; // name-matched but resource-less item entity: modest fallback pull
+            float value = baseValue * System.MathF.Min(2f, c);
+            // [PORT IMPROVEMENT — Duel item denial; Base bots only rate items they need] In Duel, controlling
+            // the big stack items (mega health / big+mega armor, ≥50) IS the game: taking them when topped up
+            // denies the opponent the resource. High-skill duel bots keep a LOW-rating floor on them so they
+            // sweep the majors between fights (rangebias 2000 keeps it to nearby ones) without outranking real
+            // needs, enemies, or a genuine low-health detour.
+            if (brain.GameType is Duel && brain.Skill >= 7f && (itemHealth >= 50f || itemArmor >= 50f))
+                value = System.MathF.Max(value, 2500f); // BOT_PICKUP_RATING_LOW
+            return value;
         }
 
-        // Weapon pickup: want strongly if not yet owned, mildly otherwise (for its ammo).
-        if (!string.IsNullOrEmpty(item.NetName) && Weapons.ByName(item.NetName) is not null)
-            return bot.HasWeapon(item.NetName) ? 0.25f : 0.9f;
-
-        // Ammo: want proportional to how empty the matching pool is.
-        foreach (ResourceType ammo in AmmoResources)
+        // Weapon pickup (QC weapon_pickupevalfunc, items.qc:887-907): an unowned weapon returns its own
+        // bot_pickupbasevalue (per-weapon "rating" ATTRIB, 0-10000) discounted by how stacked the bot's
+        // arsenal already is (c = 1 - bound(0, Σowned/20000, 1)·0.5); an owned one is only worth its ammo
+        // (QC falls through to ammo_pickupevalfunc).
+        if (!string.IsNullOrEmpty(item.NetName) && Weapons.ByName(item.NetName) is Weapon wpn)
         {
+            if (!bot.HasWeapon(item.NetName))
+            {
+                EnsureArsenal(bot, ref arsenal);
+                float c = 1f - System.Math.Clamp(arsenal.Value / 20000f, 0f, 1f) * 0.5f;
+                return wpn.BotPickupBaseValue * c;
+            }
+            // Owned (QC ammo_pickupevalfunc, weapon-pickup branch): the weapon's ammo value scaled by need,
+            // plus 10% of the weapon's own base. An ammoless weapon (RES_NONE → no ammo item) rates 0.
+            if (wpn.AmmoType == ResourceType.None)
+                return 0f;
+            float ammoCap = Resources.GetResourceLimit(bot, wpn.AmmoType);
+            float botAmmo = bot.GetResource(wpn.AmmoType);
+            float itemAmmo = item.GetResource(wpn.AmmoType);
+            float need = (itemAmmo > 0f && botAmmo < ammoCap)
+                ? itemAmmo / System.MathF.Max(0.5f, botAmmo) // QC noammorating = 0.5
+                : 0f;
+            return AmmoBotValue(wpn.AmmoType) * System.MathF.Min(need, 2f) + wpn.BotPickupBaseValue * 0.1f;
+        }
+
+        // Ammo box (QC ammo_pickupevalfunc, plain-ammo branch): rated only when the bot OWNS a weapon that
+        // feeds on this resource (QC: item_resource stays NULL otherwise → rating 0), then the ammo def's
+        // m_botvalue × a 0..2 need factor.
+        for (int i = 0; i < AmmoResources.Length; i++)
+        {
+            ResourceType ammo = AmmoResources[i];
             float amt = item.GetResource(ammo);
             if (amt <= 0f) continue;
-            float cap = System.Math.Max(1f, Resources.GetResourceLimit(bot, ammo));
-            float missing = 1f - bot.GetResource(ammo) / cap;
-            return System.Math.Max(0.1f, missing * 0.6f);
+            EnsureArsenal(bot, ref arsenal);
+            if ((arsenal.OwnedAmmoMask & (1 << i)) == 0)
+                return 0f;
+            float cap = Resources.GetResourceLimit(bot, ammo);
+            float botAmt = bot.GetResource(ammo);
+            float c = (botAmt < cap) ? amt / System.MathF.Max(0.5f, botAmt) : 0f;
+            return AmmoBotValue(ammo) * System.MathF.Min(c, 2f);
         }
 
-        // Powerup / unknown pickup: use the item def's m_botvalue when available (QC generic_pickupevalfunc
-        // returns bot_pickupbasevalue directly; see powerups.qh CLASS(Powerup) m_botvalue = 11000, and the
-        // jetpack/fuelregen.qh overrides m_botvalue = 3000). Normalized against 11000 (the powerup ceiling)
-        // so the result lives in the same 0..1 range as the other branches above.
+        // Powerup / generic pickup (QC generic_pickupevalfunc): m_botvalue directly — Powerup 11000,
+        // Jetpack/FuelRegen 3000.
         int botValue = item.Pickup?.ItemDef.BotValue ?? 0;
         if (botValue > 0)
-            return System.Math.Clamp(botValue / 11000f, 0f, 1f);
+            return botValue;
 
-        // Legacy name-match fallback for items not yet carrying a Pickup ref (pre-existing behavior):
-        // the four glowing powerups rate at 1.0 (highest); everything else at 0.3.
+        // Legacy name-match fallback for items not yet carrying a Pickup ref: the glowing powerups rate at
+        // the QC powerup value. BUFFS are NOT powerups — QC sv_buffs.qc:459-461 gives a buff relic
+        // generic_pickupevalfunc with bot_pickupbasevalue 1000, so rating it 11000 made bots abandon a needed
+        // mega health to chase every relic.
         if (Mentions(name, "powerup") || Mentions(name, "strength") || Mentions(name, "shield")
-            || Mentions(name, "invincible") || Mentions(name, "buff"))
-            return 1.0f;
-        return 0.3f;
+            || Mentions(name, "invincible"))
+            return 11000f;
+        if (Mentions(name, "buff"))
+            return 1000f;
+        // QC generic_pickupevalfunc returns bot_pickupbasevalue, which is 0 for anything without an explicit
+        // m_botvalue — NOT a LOW floor. A blanket 2500 gave every unrecognized entity that happens to carry
+        // EntFlags.Item (objective flags/keys, the keepaway ball) a phantom item-goal pull.
+        return 0f;
     }
 
     private static readonly ResourceType[] AmmoResources =
     {
         ResourceType.Shells, ResourceType.Bullets, ResourceType.Rockets, ResourceType.Cells, ResourceType.Fuel,
+    };
+
+    /// <summary>QC the ammo item defs' <c>m_botvalue</c> ATTRIBs (common/items/item/ammo.qh: Shells 1000,
+    /// Bullets/Rockets/Cells 1500, Fuel 2000).</summary>
+    private static float AmmoBotValue(ResourceType res) => res switch
+    {
+        ResourceType.Shells => 1000f,
+        ResourceType.Bullets => 1500f,
+        ResourceType.Rockets => 1500f,
+        ResourceType.Cells => 1500f,
+        ResourceType.Fuel => 2000f,
+        _ => 0f,
     };
 
     private static bool Mentions(string s, string token)
@@ -390,9 +519,11 @@ public static class BotRoles
     /// </summary>
     private static bool IsPowerup(Entity item)
     {
+        // NOT buffs: QC gates the respawn-camp lead and the jitter exemption on itemdef.instanceOfPowerup,
+        // which is false for a buff relic (its own itemdef family). See ItemValue's buff arm.
         string name = string.IsNullOrEmpty(item.NetName) ? item.ClassName : item.NetName;
         return Mentions(name, "powerup") || Mentions(name, "strength") || Mentions(name, "shield")
-            || Mentions(name, "invincible") || Mentions(name, "buff");
+            || Mentions(name, "invincible");
     }
 }
 
@@ -412,4 +543,31 @@ public enum KhBotRole
     Defense,       // QC havocbot_role_kh_defense     (timeout 20-30 s, then → freelancer)
     Offense,       // QC havocbot_role_kh_offense     (timeout 20-30 s, then → freelancer)
     Carrier,       // QC havocbot_role_kh_carrier     (no timeout — stays carrier until key is dropped)
+}
+
+/// <summary>
+/// QC <c>HAVOCBOT_CTF_ROLE_*</c> (sv_ctf.qh): the six CTF bot sub-roles the QC state machine cycles through
+/// (values kept for log familiarity). <see cref="None"/> triggers the QC reset_role position balancing on
+/// the first <see cref="BotObjectiveRoles.RoleCtf"/> invocation.
+/// </summary>
+public enum CtfBotRole
+{
+    None      = 0,
+    Defense   = 2,  // havocbot_role_ctf_defense   — guard our base (timeout 30 s → reset)
+    Middle    = 4,  // havocbot_role_ctf_middle    — hold the map middle (timeout 10 s → reset)
+    Offense   = 8,  // havocbot_role_ctf_offense   — push the enemy base (timeout 120 s → reset)
+    Carrier   = 16, // havocbot_role_ctf_carrier   — bring the enemy flag home (no timeout)
+    Retriever = 32, // havocbot_role_ctf_retriever — TEMPORARY: return our stolen flag (timeout ~10-20 s → previous)
+    Escort    = 64, // havocbot_role_ctf_escort    — TEMPORARY: follow our flag carrier (timeout 30-90 s → previous)
+}
+
+/// <summary>
+/// QC Freeze Tag bot roles (sv_freezetag.qc havocbot_role_ft_offense / havocbot_role_ft_freeing): the two
+/// roles alternate on 20-30 s timeouts; offense also flips to freeing when it is the last unfrozen teammate.
+/// </summary>
+public enum FtBotRole
+{
+    None = 0, // unassigned → first call picks randomly (QC HavocBot_ChooseRole ft)
+    Offense,  // fight (items 12000 / enemies 10000 / free 9000)
+    Freeing,  // thaw teammates (free 20000 / items 10000 / enemies 5000)
 }

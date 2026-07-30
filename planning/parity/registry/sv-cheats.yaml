@@ -18,9 +18,9 @@ features:
       - "server/cheats.qc:CheatsAllowed"
       - "server/cheats.qc:CheatInit"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Allowed"
-      - "src/XonoticGodot.Server/Cheats.cs:Refuse"
-      - "src/XonoticGodot.Server/Cheats.cs:Init"
+      - "src/VortexArena.Server/Cheats.cs:Allowed"
+      - "src/VortexArena.Server/Cheats.cs:Refuse"
+      - "src/VortexArena.Server/Cheats.cs:Init"
     constants:
       - { name: "sv_cheats (default)", base: "0", port: "0", match: true }
       - { name: "gamestart_sv_cheats snapshot at init", base: "yes", port: "yes (GameStartCheats)", match: true }
@@ -36,7 +36,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:Cheats_GatedBySvCheats", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Cheats_GatedBySvCheats", result: pass }
       - { kind: code, ref: "Cheats.cs:68-98 (Allowed+Refuse) vs server/cheats.qc:59-90 — gate order matches; dead/observer guards refuse SILENTLY (return false) and only the final sv_cheats==0 fall-through logs, matching Base. The sv_clones clone-allowance branch is NOW present (Cheats.cs:79: cloneImpulse && p.Lip < sv_clones -> return true). Re-verified 2026-06-25.", result: pass }
     confidence: high
     notes: "Core gate (snapshot AND live cvar, dead block, observer<2 block, maycheat override) is faithful and live. Init/Log wired live in GameWorld.cs:818-820 (Cheats instance GameWorld.cs:173, Log->ChatBroadcast). Refusal-attempt logging fires ONLY on the final sv_cheats==0 fall-through (dead/observer guards refuse silently as in Base). Base passes playername(netname, team, false) with team_colorize=false (bare netname), so the port's p.NetName is faithful. The clone-allowance branch (cloneImpulse param threaded through Allowed) is NOW present — moot until the CLONE impulses exist but the gate logic is complete, so logic upgraded partial->faithful and the gap cleared."
@@ -48,10 +48,10 @@ features:
       - "server/cheats.qc:ADD_CHEATS"
       - "server/campaign.qc:CampaignPreIntermission"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:AddCheats"
-      - "src/XonoticGodot.Server/Cheats.cs:CheatCountTotal"
-      - "src/XonoticGodot.Server/Campaign.cs:PreIntermission"
-      - "src/XonoticGodot.Server/GameWorld.cs:2509"
+      - "src/VortexArena.Server/Cheats.cs:AddCheats"
+      - "src/VortexArena.Server/Cheats.cs:CheatCountTotal"
+      - "src/VortexArena.Server/Campaign.cs:PreIntermission"
+      - "src/VortexArena.Server/GameWorld.cs:2509"
     constants:
       - { name: "campaign save gate", base: "campaign_won && cheatcount_total==0", port: "Won!=0 && cheatCount==0", match: true }
     status:
@@ -76,10 +76,10 @@ features:
     base_refs:
       - "server/cheats.qc:CheatCommand (case god)"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (case god)"
-      - "src/XonoticGodot.Server/Commands.cs:649 (Register god -> CmdCheat)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:99 (allowlist)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:426"
+      - "src/VortexArena.Server/Cheats.cs:Command (case god)"
+      - "src/VortexArena.Server/Commands.cs:649 (Register god -> CmdCheat)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:99 (allowlist)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:426"
     constants: []
     status:
       logic: faithful
@@ -103,10 +103,10 @@ features:
     base_refs:
       - "server/cheats.qc:CheatCommand (case notarget)"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (case notarget)"
-      - "src/XonoticGodot.Server/Commands.cs:650 (Register notarget)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:552"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:204"
+      - "src/VortexArena.Server/Cheats.cs:Command (case notarget)"
+      - "src/VortexArena.Server/Commands.cs:650 (Register notarget)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:552"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:204"
     constants: []
     status:
       logic: faithful
@@ -130,8 +130,8 @@ features:
     base_refs:
       - "server/cheats.qc:CheatCommand (case noclip)"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (case noclip)"
-      - "src/XonoticGodot.Server/Commands.cs:651 (Register noclip)"
+      - "src/VortexArena.Server/Cheats.cs:Command (case noclip)"
+      - "src/VortexArena.Server/Commands.cs:651 (Register noclip)"
     constants: []
     status:
       logic: faithful
@@ -154,8 +154,8 @@ features:
     base_refs:
       - "server/cheats.qc:CheatCommand (case fly)"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (case fly)"
-      - "src/XonoticGodot.Server/Commands.cs:652 (Register fly)"
+      - "src/VortexArena.Server/Cheats.cs:Command (case fly)"
+      - "src/VortexArena.Server/Commands.cs:652 (Register fly)"
     constants: []
     status:
       logic: faithful
@@ -179,9 +179,9 @@ features:
       - "server/cheats.qc:CheatCommand (case give)"
       - "server/items/items.qc:GiveItems"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (case give)"
-      - "src/XonoticGodot.Server/Commands.cs:653 (Register give)"
-      - "src/XonoticGodot.Common/Gameplay/Items/GiveItems.cs:Apply"
+      - "src/VortexArena.Server/Cheats.cs:Command (case give)"
+      - "src/VortexArena.Server/Commands.cs:653 (Register give)"
+      - "src/VortexArena.Common/Gameplay/Items/GiveItems.cs:Apply"
     constants: []
     status:
       logic: faithful
@@ -204,11 +204,11 @@ features:
     base_refs:
       - "server/cheats.qc:CheatCommand (case usetarget)"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (case usetarget)"
-      - "src/XonoticGodot.Server/Cheats.cs:FireNamedTarget"
-      - "src/XonoticGodot.Server/Commands.cs:654 (Register usetarget -> CmdCheat)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:99 (allowlist)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:MapMover.UseTargets"
+      - "src/VortexArena.Server/Cheats.cs:Command (case usetarget)"
+      - "src/VortexArena.Server/Cheats.cs:FireNamedTarget"
+      - "src/VortexArena.Server/Commands.cs:654 (Register usetarget -> CmdCheat)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:99 (allowlist)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:MapMover.UseTargets"
     constants: []
     status:
       logic: faithful
@@ -233,11 +233,11 @@ features:
     base_refs:
       - "server/cheats.qc:CheatCommand (case killtarget)"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (case killtarget)"
-      - "src/XonoticGodot.Server/Cheats.cs:FireNamedTarget"
-      - "src/XonoticGodot.Server/Commands.cs:655 (Register killtarget -> CmdCheat)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:99 (allowlist)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:MapMover.UseTargets"
+      - "src/VortexArena.Server/Cheats.cs:Command (case killtarget)"
+      - "src/VortexArena.Server/Cheats.cs:FireNamedTarget"
+      - "src/VortexArena.Server/Commands.cs:655 (Register killtarget -> CmdCheat)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:99 (allowlist)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:MapMover.UseTargets"
     constants: []
     status:
       logic: faithful
@@ -263,9 +263,9 @@ features:
       - "server/cheats.qc:CheatImpulse (case CHIMPULSE_GIVE_ALL)"
       - "common/impulses/all.qh:156"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:GiveAll"
-      - "src/XonoticGodot.Server/Commands.cs:2054 (DispatchImpulse: if (imp == 99) Cheats.GiveAll)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:70 (impulse allowlisted)"
+      - "src/VortexArena.Server/Cheats.cs:GiveAll"
+      - "src/VortexArena.Server/Commands.cs:2054 (DispatchImpulse: if (imp == 99) Cheats.GiveAll)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:70 (impulse allowlisted)"
     constants:
       - { name: "impulse number", base: "99", port: "99 (DispatchImpulse routes imp==99)", match: true }
     status:
@@ -318,11 +318,11 @@ features:
       - "server/cheats.qc:CheatImpulse (CHIMPULSE_SPEEDRUN_INIT / SPEEDRUN)"
       - "common/impulses/all.qh:155,158"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:SpeedrunInit"
-      - "src/XonoticGodot.Server/Cheats.cs:Speedrun"
-      - "src/XonoticGodot.Common/Gameplay/Player/Speedrun.cs:SnapshotPersonal / RestorePersonal"
-      - "src/XonoticGodot.Server/Commands.cs:2118 (DispatchImpulse imp==141 -> Cheats.Speedrun)"
-      - "src/XonoticGodot.Server/Commands.cs:2138 (DispatchImpulse case 30 -> Cheats.SpeedrunInit, then deploy personal waypoint)"
+      - "src/VortexArena.Server/Cheats.cs:SpeedrunInit"
+      - "src/VortexArena.Server/Cheats.cs:Speedrun"
+      - "src/VortexArena.Common/Gameplay/Player/Speedrun.cs:SnapshotPersonal / RestorePersonal"
+      - "src/VortexArena.Server/Commands.cs:2118 (DispatchImpulse imp==141 -> Cheats.Speedrun)"
+      - "src/VortexArena.Server/Commands.cs:2138 (DispatchImpulse case 30 -> Cheats.SpeedrunInit, then deploy personal waypoint)"
     constants:
       - { name: "impulse numbers", base: "30 / 141", port: "30 / 141 (DispatchImpulse case 30 + imp==141)", match: true }
       - { name: "g_allow_checkpoints gates cheat", base: "yes (default 0)", port: "yes (Cvars.cs:398 default 0; Cheats.Speedrun gates IS_CHEAT + DID_CHEAT on !g_allow_checkpoints)", match: true }
@@ -350,10 +350,10 @@ features:
       - "server/cheats.qc:CheatImpulse (CHIMPULSE_TELEPORT)"
       - "common/impulses/all.qh:160"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Teleport"
-      - "src/XonoticGodot.Server/Commands.cs:2069 (DispatchImpulse: if (imp == 143) Cheats.Teleport)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:70 (impulse allowlisted)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/BallEntity.cs:RandomMapLocation"
+      - "src/VortexArena.Server/Cheats.cs:Teleport"
+      - "src/VortexArena.Server/Commands.cs:2069 (DispatchImpulse: if (imp == 143) Cheats.Teleport)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:70 (impulse allowlisted)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/BallEntity.cs:RandomMapLocation"
     constants:
       - { name: "impulse number", base: "143", port: "143 (DispatchImpulse routes imp==143)", match: true }
       - { name: "MoveToRandomMapLocation attempts", base: "100 (sv_cheats<2) / 100000", port: "none (uses a spawnpoint-sampling fallback, no attempt-count tuning)", match: false }
@@ -382,10 +382,10 @@ features:
       - "server/cheats.qc:CheatImpulse (CHIMPULSE_R00T)"
       - "common/impulses/all.qh:161"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:R00t"
-      - "src/XonoticGodot.Server/Commands.cs:2062 (DispatchImpulse: if (imp == 148) Cheats.R00t)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:70 (impulse allowlisted)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs:110 (Cheat = 'cheat')"
+      - "src/VortexArena.Server/Cheats.cs:R00t"
+      - "src/VortexArena.Server/Commands.cs:2062 (DispatchImpulse: if (imp == 148) Cheats.R00t)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:70 (impulse allowlisted)"
+      - "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs:110 (Cheat = 'cheat')"
     constants:
       - { name: "impulse number", base: "148", port: "148 (DispatchImpulse routes imp==148)", match: true }
       - { name: "RadiusDamage dmg/edge/radius/force", base: "1000 / 0 / 128 / 500", port: "1000 / 0 / 128 / 500", match: true }
@@ -412,11 +412,11 @@ features:
     base_refs:
       - "server/cheats.qc:CheatCommand (case teleporttotarget)"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (case teleporttotarget)"
-      - "src/XonoticGodot.Server/Cheats.cs:TeleportToTarget"
-      - "src/XonoticGodot.Server/Commands.cs:701 (Register teleporttotarget -> CmdCheat)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:99 (allowlist)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportToTarget"
+      - "src/VortexArena.Server/Cheats.cs:Command (case teleporttotarget)"
+      - "src/VortexArena.Server/Cheats.cs:TeleportToTarget"
+      - "src/VortexArena.Server/Commands.cs:701 (Register teleporttotarget -> CmdCheat)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:99 (allowlist)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportToTarget"
     constants: []
     status:
       logic: faithful
@@ -440,14 +440,14 @@ features:
     base_refs:
       - "server/cheats.qc:CheatCommand (cases pointparticles, trailparticles, make, penalty)"
     port_refs:
-      - "src/XonoticGodot.Server/Cheats.cs:Command (cases pointparticles/trailparticles/make/penalty)"
-      - "src/XonoticGodot.Server/Cheats.cs:Make"
-      - "src/XonoticGodot.Server/Cheats.cs:AimTrace"
-      - "src/XonoticGodot.Server/Commands.cs:715-718 (Register pointparticles/trailparticles/make/penalty -> CmdCheat)"
-      - "src/XonoticGodot.Server/ClientCommandRegistry.cs:101 (allowlist)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:EmitByEffectInfoName / EmitTrail"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Breakable.cs:BreakableSetup"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:SetPenalty"
+      - "src/VortexArena.Server/Cheats.cs:Command (cases pointparticles/trailparticles/make/penalty)"
+      - "src/VortexArena.Server/Cheats.cs:Make"
+      - "src/VortexArena.Server/Cheats.cs:AimTrace"
+      - "src/VortexArena.Server/Commands.cs:715-718 (Register pointparticles/trailparticles/make/penalty -> CmdCheat)"
+      - "src/VortexArena.Server/ClientCommandRegistry.cs:101 (allowlist)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:EmitByEffectInfoName / EmitTrail"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Breakable.cs:BreakableSetup"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SetPenalty"
     constants:
       - { name: "make func_breakable health", base: "1000", port: "1000 (Cheats.cs Make: e.Health = 1000f)", match: true }
       - { name: "make traceline distance", base: "2048", port: "2048 (Cheats.cs Make: AimTrace(p, 2048f, ...))", match: true }
@@ -508,10 +508,10 @@ features:
       - "server/cheats.qc:spawnfunc(info_autoscreenshot)"
       - "server/cheats.qc:info_autoscreenshot_findtarget"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/InfoAutoScreenshot.cs:Setup / RunDeferredInit / ResetForMap"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:94 (SpawnFuncs.Register info_autoscreenshot)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:343 (RunDeferredInit in the post-spawn pass)"
-      - "src/XonoticGodot.Server/GameWorld.cs:712 (ResetForMap per map load)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/InfoAutoScreenshot.cs:Setup / RunDeferredInit / ResetForMap"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:94 (SpawnFuncs.Register info_autoscreenshot)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:343 (RunDeferredInit in the post-spawn pass)"
+      - "src/VortexArena.Server/GameWorld.cs:712 (ResetForMap per map load)"
     constants:
       - { name: "g_max_info_autoscreenshot", base: "3 (xonotic-server.cfg:643)", port: "3 (Cvars.cs:396; READ by InfoAutoScreenshot.Setup as the spawn cap)", match: true }
       - { name: "PL_CROUCH_MIN/MAX startsolid test box", base: "PL_CROUCH_MIN_CONST / PL_CROUCH_MAX_CONST", port: "(-16,-16,-24)/(16,16,25) (InfoAutoScreenshot.cs:30-31)", match: true }
@@ -538,7 +538,7 @@ features:
     base_refs:
       - "server/campaign.qc:CampaignPreInit"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:239 (PreInit sv_cheats bailout)"
+      - "src/VortexArena.Server/Campaign.cs:239 (PreInit sv_cheats bailout)"
     constants:
       - { name: "behavior when sv_cheats!=0 at campaign PreInit", base: "Unload + CampaignBailout ('JOLLY CHEATS...')", port: "Unload + Bailout ('cheats are enabled')", match: true }
     status:

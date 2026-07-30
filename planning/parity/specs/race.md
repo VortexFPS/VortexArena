@@ -1,7 +1,7 @@
 # Race — parity spec
 
 **Base refs:** `common/gametypes/gametype/race/{race.qh,race.qc,sv_race.qc,sv_race.qh,cl_race.qc,cl_race.qh}` · `server/race.qc` · `server/race.qh` · `client/main.qc` (`TE_CSQC_RACE` handler) · `client/hud/panel/racetimer.qc` · `client/hud/panel/checkpoints.qc` · `common/net_linked.qh` (RACE_NET enum)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs` · `src/XonoticGodot.Common/Gameplay/GameTypes/RaceRecords.cs` · `src/XonoticGodot.Server/GameWorld.cs` (wiring) · `game/hud/RaceTimerPanel.cs` · `game/hud/CheckpointsPanel.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Race.cs` · `src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs` · `src/VortexArena.Server/GameWorld.cs` (wiring) · `game/hud/RaceTimerPanel.cs` · `game/hud/CheckpointsPanel.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -191,9 +191,9 @@ None declared. The seconds-vs-hundredths storage in the port (vs QC TIME_ENCODE)
 choice that preserves observable precision, not a behavioral divergence.
 
 ## Verification
-- `tests/XonoticGodot.Tests/RaceOvertimePenaltyTests.cs` — penalty freeze/release, qualifying accumulate,
+- `tests/VortexArena.Tests/RaceOvertimePenaltyTests.cs` — penalty freeze/release, qualifying accumulate,
   sudden-death run-on, team-lap add-up (all green per memory; logic/values for those paths verified).
-- `tests/XonoticGodot.Tests/RaceRecordsTests.cs` — record DB read/pos/write/setTime classification.
+- `tests/VortexArena.Tests/RaceRecordsTests.cs` — record DB read/pos/write/setTime classification.
 - Liveness of presentation: established by code search — no assignment to `RaceTimerPanel.Race*` properties and
   no call to `CheckpointsPanel.SetSplits/StoreSplit` anywhere in `src/` or `game/`; no `TE_CSQC_RACE` handler.
 - Notification firing: `RACE_FINISHED`/`RACE_ABANDONED` declared in `NotificationsList.cs` but no server caller;

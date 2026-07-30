@@ -15,24 +15,23 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Godot Project", "Godot Proj
 		nuget.config = nuget.config
 		global.json = global.json
 		Directory.Build.props = Directory.Build.props
-		download-assets.sh = download-assets.sh
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot.Common", "src\XonoticGodot.Common\XonoticGodot.Common.csproj", "{6F356C0E-DF6D-4A4B-8596-D97E4BC0250D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VortexArena.Common", "src\VortexArena.Common\VortexArena.Common.csproj", "{6F356C0E-DF6D-4A4B-8596-D97E4BC0250D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot.Engine", "src\XonoticGodot.Engine\XonoticGodot.Engine.csproj", "{165E6D92-08C4-4E54-8592-B8D6D79BC7AC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VortexArena.Engine", "src\VortexArena.Engine\VortexArena.Engine.csproj", "{165E6D92-08C4-4E54-8592-B8D6D79BC7AC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot.Net", "src\XonoticGodot.Net\XonoticGodot.Net.csproj", "{7487D34C-497C-4439-9262-5E891B8570CF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VortexArena.Net", "src\VortexArena.Net\VortexArena.Net.csproj", "{7487D34C-497C-4439-9262-5E891B8570CF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot.Formats", "src\XonoticGodot.Formats\XonoticGodot.Formats.csproj", "{EADF89E0-3671-4660-8FCB-CE8D6DDCCB97}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VortexArena.Formats", "src\VortexArena.Formats\VortexArena.Formats.csproj", "{EADF89E0-3671-4660-8FCB-CE8D6DDCCB97}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot.SourceGen", "src\XonoticGodot.SourceGen\XonoticGodot.SourceGen.csproj", "{BA50B2BE-608F-4D94-AF72-67A36B81C0D3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VortexArena.SourceGen", "src\VortexArena.SourceGen\VortexArena.SourceGen.csproj", "{BA50B2BE-608F-4D94-AF72-67A36B81C0D3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot.Tests", "tests\XonoticGodot.Tests\XonoticGodot.Tests.csproj", "{8255AECC-42DB-487F-980B-9DC2D3D35A63}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VortexArena.Tests", "tests\VortexArena.Tests\VortexArena.Tests.csproj", "{8255AECC-42DB-487F-980B-9DC2D3D35A63}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot", "XonoticGodot.csproj", "{D61B2D1F-5FBF-4363-A001-E57CE7C89D00}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VortexArena", "VortexArena.csproj", "{D61B2D1F-5FBF-4363-A001-E57CE7C89D00}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XonoticGodot.Server", "src\XonoticGodot.Server\XonoticGodot.Server.csproj", "{363B4B09-E102-4FC0-BA37-5B0D4718D720}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VortexArena.Server", "src\VortexArena.Server\VortexArena.Server.csproj", "{363B4B09-E102-4FC0-BA37-5B0D4718D720}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

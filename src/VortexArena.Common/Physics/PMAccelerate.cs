@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
 
-namespace XonoticGodot.Common.Physics;
+namespace VortexArena.Common.Physics;
 
 /// <summary>
 /// The Xonotic player-acceleration math, ported verbatim from <c>qcsrc/common/physics/player.qc</c>

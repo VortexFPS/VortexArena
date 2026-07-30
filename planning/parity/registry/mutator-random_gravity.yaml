@@ -14,13 +14,13 @@ features:
       - "common/mutators/mutator/random_gravity/sv_random_gravity.qc:15 REGISTER_MUTATOR(random_gravity, cvar(\"g_random_gravity\"))"
       - "common/mutators/mutator/random_gravity/sv_random_gravity.qc:17-20 MUTATOR_ONADD cvar_settemp(\"sv_gravity\", cvar_string(\"sv_gravity\"))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs:33 IsEnabled (Api.Cvars.GetFloat(\"g_random_gravity\") != 0)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs:41-52 Hook (subscribes _onStartFrame + MutatorActivation.SettempCvar(\"sv_gravity\", ...))"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:38 SettempCvar -> SettempCvarHandler"
-      - "src/XonoticGodot.Server/GameWorld.cs:630 MutatorActivation.SettempCvarHandler = (n,v) => SettempCvars.Set(n,v)"
-      - "src/XonoticGodot.Server/GameWorld.cs:631 MutatorActivation.Apply()"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs:33 IsEnabled (Api.Cvars.GetFloat(\"g_random_gravity\") != 0)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs:41-52 Hook (subscribes _onStartFrame + MutatorActivation.SettempCvar(\"sv_gravity\", ...))"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:38 SettempCvar -> SettempCvarHandler"
+      - "src/VortexArena.Server/GameWorld.cs:630 MutatorActivation.SettempCvarHandler = (n,v) => SettempCvars.Set(n,v)"
+      - "src/VortexArena.Server/GameWorld.cs:631 MutatorActivation.Apply()"
     constants:
-      - { name: "g_random_gravity", base: "0 (mutators.cfg:184)", port: "0 (assets/data/xonotic-data.pk3dir/mutators.cfg:184)", match: true }
+      - { name: "g_random_gravity", base: "0 (mutators.cfg:184)", port: "0 (Base/data/xonotic-data.pk3dir/mutators.cfg:184)", match: true }
     status:
       logic: faithful
       values: faithful
@@ -34,7 +34,7 @@ features:
     verification:
       - { kind: code-read, ref: "IsEnabled reads g_random_gravity (RandomGravityMutator.cs:33); MutatorActivation.Apply (MutatorActivation.cs:82, called from GameWorld.cs:631) walks Mutators.All and calls Add->Hook for each enabled mutator on the live server-boot path", result: pass }
       - { kind: code-read, ref: "MUTATOR_ONADD cvar_settemp IS modelled. Hook() (RandomGravityMutator.cs:50-51) calls MutatorActivation.SettempCvar(\"sv_gravity\", Api.Cvars.GetString(\"sv_gravity\")); the host wires SettempCvarHandler = SettempCvars.Set at GameWorld.cs:630 (BEFORE Apply() at :631), so the original gravity is pushed onto the server's settemp restore stack and reverted at match end. Headless (unwired) falls back to a plain cvar set (MutatorActivation.cs:40-43) — no restore target exists there anyway, matching QC's no-op.", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs:RandomGravity_SetsSvGravityWithinBounds + ByName(\"random_gravity\") not-null (booted with g_random_gravity=1)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT19Tests.cs:RandomGravity_SetsSvGravityWithinBounds + ByName(\"random_gravity\") not-null (booted with g_random_gravity=1)", result: pass }
     confidence: high
     notes: "Faithful + live. The cvar_settemp restore is modelled via the MutatorActivation.SettempCvar seam wired to the server's SettempCvars stack. Enable predicate + live activation are 1:1. Random Gravity has no IsEnabled mode-exclusion in Base, so the instagib/ok/arena exclusion (a gap noted for NIX) is not applicable here. Re-verified 2026-06-27 (Wave 16/17 re-audit): SettempCvarHandler + Apply re-confirmed live; port-ref line numbers refreshed to GameWorld.cs:630/631 (code drift since last audit's 625/626, no behavior change)."
 
@@ -44,8 +44,8 @@ features:
     base_refs:
       - "common/mutators/mutator/random_gravity/sv_random_gravity.qc:25-40 MUTATOR_HOOKFUNCTION(random_gravity, SV_StartFrame)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs:60-102 OnStartFrame"
-      - "src/XonoticGodot.Server/GameWorld.cs MutatorHooks.FireStartFrame(Time) per server frame"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs:60-102 OnStartFrame"
+      - "src/VortexArena.Server/GameWorld.cs MutatorHooks.FireStartFrame(Time) per server frame"
     constants:
       - { name: "g_random_gravity_delay", base: "3 (mutators.cfg:185)", port: "3 (mutators.cfg:185, read live via GetFloat)", match: true }
       - { name: "g_random_gravity_negative_chance", base: "0.5 (mutators.cfg:186)", port: "0.5 (mutators.cfg:186)", match: true }
@@ -69,7 +69,7 @@ features:
       - { kind: code-read, ref: "OnStartFrame (RandomGravityMutator.cs:84-95): two-branch formula + QMath.Bound clamp + _gravityDelay=time+delay vs sv_random_gravity.qc:32-37; byte-for-byte equivalent incl. the `* -negative` sign flip (C# `*` binds before unary `-`, matching QC). Two Prandom.Float() draws in QC order in branch1. game_stopped guard via VehicleCommon.GameStopped (RandomGravityMutator.cs:65).", result: pass }
       - { kind: code-read, ref: "Prandom.Float() (Math/Prandom.cs) is the seeded random() facade ([0,1) via (Next()>>8)*(1/2^24))", result: pass }
       - { kind: code-read, ref: "OnStartFrame is subscribed to MutatorHooks.SvStartFrame (Hook(), RandomGravityMutator.cs:44) and pumped every server frame by GameWorld's FireStartFrame loop", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs:RandomGravity_SetsSvGravityWithinBounds (rolls all in [min,max]) + RandomGravity_RespectsDelay (no re-roll inside the delay window)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT19Tests.cs:RandomGravity_SetsSvGravityWithinBounds (rolls all in [min,max]) + RandomGravity_RespectsDelay (no re-roll inside the delay window)", result: pass }
     confidence: high
     notes: "1:1 roll, unchanged. Branch naming in Base is counter-intuitive (both branches normally yield non-negative gravity at stock defaults; gravity only goes negative if min<0 forces the lower clamp) — ported faithfully as written. LOG_TRACE at sv_random_gravity.qc:39 is a dev trace only, no behavior, intentionally not a separate row."
 
@@ -79,9 +79,9 @@ features:
     base_refs:
       - "common/mutators/mutator/random_gravity/sv_random_gravity.qc:29 if(time < game_starttime) return false"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs:72 if (time < (StartItem.GameStartTimeProvider?.Invoke() ?? 0f)) return false;"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:40 GameStartTimeProvider"
-      - "src/XonoticGodot.Server/GameWorld.cs:656 StartItem.GameStartTimeProvider = () => GameStartTime"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs:72 if (time < (StartItem.GameStartTimeProvider?.Invoke() ?? 0f)) return false;"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:40 GameStartTimeProvider"
+      - "src/VortexArena.Server/GameWorld.cs:656 StartItem.GameStartTimeProvider = () => GameStartTime"
     constants: []
     status:
       logic: faithful
@@ -106,10 +106,10 @@ features:
     base_refs:
       - "common/mutators/mutator/random_gravity/sv_random_gravity.qc:30 if(round_handler_IsActive() && !round_handler_IsRoundStarted()) return false"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs:77 if (RoundHandler.RoundGateBlocks()) return false;"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs:41 RoundNotStartedProvider"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs:48 RoundGateBlocks() => RoundNotStartedProvider?.Invoke() ?? false"
-      - "src/XonoticGodot.Server/GameWorld.cs:1645 RoundHandler.RoundNotStartedProvider = () => Rounds is { IsRoundStarted: false } (in EnableRounds; cleared to null at :2776)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs:77 if (RoundHandler.RoundGateBlocks()) return false;"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs:41 RoundNotStartedProvider"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs:48 RoundGateBlocks() => RoundNotStartedProvider?.Invoke() ?? false"
+      - "src/VortexArena.Server/GameWorld.cs:1645 RoundHandler.RoundNotStartedProvider = () => Rounds is { IsRoundStarted: false } (in EnableRounds; cleared to null at :2776)"
     constants: []
     status:
       logic: faithful
@@ -125,7 +125,7 @@ features:
     verification:
       - { kind: code-read, ref: "OnStartFrame (RandomGravityMutator.cs:73-77) performs the round-handler check via RoundHandler.RoundGateBlocks(), ordered after the game_starttime gate exactly as sv_random_gravity.qc:29-30.", result: pass }
       - { kind: code-read, ref: "RoundHandler.RoundGateBlocks() (RoundHandler.cs:48) delegates to the static RoundNotStartedProvider (RoundHandler.cs:41); the host wires it in EnableRounds (GameWorld.cs:1645) to () => Rounds is { IsRoundStarted: false } and nulls it on teardown (GameWorld.cs:2776). Rounds != NULL == round_handler_IsActive(); IsRoundStarted == round_handler_IsRoundStarted().", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs sets RoundHandler.RoundNotStartedProvider inert so the random_gravity roll tests aren't suppressed by the gate — confirms the seam is the consumed path.", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT19Tests.cs sets RoundHandler.RoundNotStartedProvider inert so the random_gravity roll tests aren't suppressed by the gate — confirms the seam is the consumed path.", result: pass }
     confidence: high
     notes: "Faithful + mode-scoped live. The global round-state seam (RoundHandler.RoundNotStartedProvider / RoundGateBlocks()) is wired live per round-based match in GameWorld.EnableRounds. Gravity no longer rolls in the inter-round pre-start window in round modes. Liveness stays `partial` (mode-scoped by design, not a defect — inert in non-round modes exactly as QC's round_handler_IsActive() is false there). Re-verified 2026-06-27 (Wave 16/17 re-audit): RoundGateBlocks delegation + EnableRounds wire/teardown re-confirmed; port-ref lines refreshed (GameWorld.cs:1625/2713 -> 1645/2776, code drift)."
 
@@ -136,9 +136,9 @@ features:
       - "common/mutators/mutator/random_gravity/sv_random_gravity.qc:33-35 cvar_set(\"sv_gravity\", ftos(...))"
       - "common/physics/player.qc (gravity read from sv_gravity per move via PHYS_GRAVITY)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs:97 Api.Cvars.Set(\"sv_gravity\", Ftos(gravity))"
-      - "src/XonoticGodot.Common/Physics/MovementParameters.cs:190 p.Gravity = Cvar(N(prefix,\"gravity\"), p.Gravity)  [prefix defaults \"sv_\"]"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:132 MovementParameters.Resolve(player, input.Predicted)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs:97 Api.Cvars.Set(\"sv_gravity\", Ftos(gravity))"
+      - "src/VortexArena.Common/Physics/MovementParameters.cs:190 p.Gravity = Cvar(N(prefix,\"gravity\"), p.Gravity)  [prefix defaults \"sv_\"]"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:132 MovementParameters.Resolve(player, input.Predicted)"
     constants:
       - { name: "sv_gravity_stock", base: "800", port: "800 (MovementParameters Gravity default, MovementParameters.cs:66)", match: true }
     status:
@@ -154,7 +154,7 @@ features:
     verification:
       - { kind: code-read, ref: "FromCvars(prefix=\"sv_\") reads sv_gravity live each Resolve (MovementParameters.cs:143,190), called per player move at PlayerPhysics.cs:132, so a mid-match Set takes effect next tick — matches Base's per-move PHYS_GRAVITY read.", result: pass }
       - { kind: code-read, ref: "Ftos (RandomGravityMutator.cs:105) serialises with InvariantCulture so the value round-trips through the cvar store", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs:RandomGravity_SetsSvGravityWithinBounds asserts the sv_gravity cvar after each roll", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT19Tests.cs:RandomGravity_SetsSvGravityWithinBounds asserts the sv_gravity cvar after each roll", result: pass }
     confidence: high
     notes: "The mutator's effect channel is the sv_gravity cvar, re-read live per move (MovementParameters.cs:190). Faithful, unchanged."
 
@@ -165,11 +165,11 @@ features:
       - "common/mutators/mutator/random_gravity/sv_random_gravity.qc:42-45 BuildMutatorsString -> strcat(..., \":RandomGravity\")"
       - "common/mutators/mutator/random_gravity/sv_random_gravity.qc:47-50 BuildMutatorsPrettyString -> strcat(..., \", Random gravity\")"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs:109 BuildMutatorsString(s) => s + \":RandomGravity\""
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs:113 BuildMutatorsPrettyString(s) => s + \", Random gravity\""
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108 BuildMutatorsString chain / :121 BuildMutatorsPrettyString chain"
-      - "src/XonoticGodot.Server/GameWorld.cs:1161 MutatorActivation.BuildMutatorsString(\"\") (live, sv_eventlog-gated gamelog init)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1453 MutatorActivation.BuildMutatorsPrettyString(\"\") (live, welcome-message modifications line)"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs:109 BuildMutatorsString(s) => s + \":RandomGravity\""
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs:113 BuildMutatorsPrettyString(s) => s + \", Random gravity\""
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108 BuildMutatorsString chain / :121 BuildMutatorsPrettyString chain"
+      - "src/VortexArena.Server/GameWorld.cs:1161 MutatorActivation.BuildMutatorsString(\"\") (live, sv_eventlog-gated gamelog init)"
+      - "src/VortexArena.Server/GameWorld.cs:1453 MutatorActivation.BuildMutatorsPrettyString(\"\") (live, welcome-message modifications line)"
       - "game/net/ServerNet.cs:613 MutatorActivation.BuildMutatorsPrettyString(\"\") (live, server-browser infostring \"modifications\" key in BuildServerInfo @:608, wired to master-server GetInfoRequested at :567/:582)"
     constants:
       - { name: "mutator_tag / pretty", base: ":RandomGravity / \", Random gravity\"", port: ":RandomGravity / \", Random gravity\"", match: true }

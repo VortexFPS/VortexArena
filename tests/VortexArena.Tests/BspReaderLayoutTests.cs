@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — first DIRECT coverage for <see cref="BspReader"/> (port of the Darkplaces IBSP loaders,
@@ -21,7 +21,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class BspReaderLayoutTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private const int LumpCount = 17;
     private const int HeaderSize = 8 + LumpCount * 8; // 144
@@ -199,7 +199,7 @@ public class BspReaderLayoutTests
     {
         if (!Directory.Exists(DataDir)) return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return null;
+        if (!vfs.MountContentRoot(DataDir)) return null;
         var maps = vfs.Find("maps/", "bsp").ToList();
         if (maps.Count == 0) return null;
         // prefer a real gameplay map (the _init/_hudsetup specials have no worldspawn entity)

@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
 
-namespace XonoticGodot.Formats.Dpm;
+namespace VortexArena.Formats.Dpm;
 
 /// <summary>
 /// Big-endian read helpers over a <see cref="ReadOnlySpan{T}"/> of bytes, for the DarkPlaces Model

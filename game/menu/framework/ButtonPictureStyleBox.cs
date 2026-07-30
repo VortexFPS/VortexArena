@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// A <see cref="StyleBox"/> that draws a Xonotic "button picture" exactly like the engine's

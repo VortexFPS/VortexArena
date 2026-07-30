@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Godot;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Idle-time asset warm queue (planning/PERFORMANCE_REPORT.md §5 S3). After the loading screen drops, the eager precache

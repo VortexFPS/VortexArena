@@ -1,7 +1,7 @@
 # Crylink — parity spec
 
 **Base refs:** `common/weapons/weapon/crylink.qc` · `common/weapons/weapon/crylink.qh` · balance in `bal-wep-xonotic.cfg` (g_balance_crylink_*) · shared fire math in `common/weapons/calculations.qc` + `server/weapons/tracing.qc` · effects in `common/effects/all.inc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs` · shared: `WeaponFiring.cs`, `WeaponSplash.cs`, `WeaponFireGate.cs`, `WeaponFireDriver.cs` · presentation: `game/client/ProjectileCatalog.cs`, `game/client/EffectSystem.cs`, `game/net/NetGame.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Crylink.cs` · shared: `WeaponFiring.cs`, `WeaponSplash.cs`, `WeaponFireGate.cs`, `WeaponFireDriver.cs` · presentation: `game/client/ProjectileCatalog.cs`, `game/client/EffectSystem.cs`, `game/net/NetGame.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22 (adversarial verify pass)
 
 ## Overview

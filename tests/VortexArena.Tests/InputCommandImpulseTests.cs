@@ -1,9 +1,9 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Covers T34's two new surfaces that live in the Godot-free libraries:
@@ -11,7 +11,7 @@ namespace XonoticGodot.Tests;
 ///   <item>the C2S <see cref="InputCommand.Impulse"/> wire byte (QC usercmd.impulse) — serialize/deserialize
 ///         round-trip incl. the boundary values + that adding it didn't disturb the other fields;</item>
 ///   <item>the shared first-person view's FOV math (the *0.75 4:3 aspect-normalization + the zoom ratio) — the
-///         pure formula <c>XonoticGodot.Game.Client.FirstPersonView.ComputeVerticalFov</c> uses. That type lives in the
+///         pure formula <c>VortexArena.Game.Client.FirstPersonView.ComputeVerticalFov</c> uses. That type lives in the
 ///         Godot game assembly (it takes a <c>Camera3D</c>), which this Godot-free test project doesn't reference,
 ///         so the math is re-derived here with <see cref="MathF"/> and pinned to the reference values the port
 ///         must produce (fov 100 → ~83.6° vertical; full zoom shrinks the frustum by exactly the zoom factor).</item>
@@ -87,7 +87,7 @@ public class InputCommandImpulseTests
     }
 
     // ----------------------------------------------------------------------------------------------------
-    //  FirstPersonView FOV math (mirrors XonoticGodot.Game.Client.FirstPersonView.ComputeVerticalFov)
+    //  FirstPersonView FOV math (mirrors VortexArena.Game.Client.FirstPersonView.ComputeVerticalFov)
     // ----------------------------------------------------------------------------------------------------
 
     /// <summary>The exact formula the shared view uses: Xonotic `fov` is HORIZONTAL at a 4:3 reference, Godot's

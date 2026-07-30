@@ -18,8 +18,8 @@ features:
       - "common/weapons/weapon/hagar.qc:W_Hagar_Attack"
       - "common/weapons/weapon/hagar.qc:W_Hagar_Attack_Auto"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:WrThink"
     constants:
       - { name: "primary_damage", base: "25", port: "25", match: true }
       - { name: "primary_edgedamage", base: "12.5", port: "12.5", match: true }
@@ -54,8 +54,8 @@ features:
       - "common/weapons/weapon/hagar.qc:W_Hagar_Attack2"
       - "common/weapons/weapon/hagar.qc:W_Hagar_Touch2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:AttackBounce"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:BounceTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:AttackBounce"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:BounceTouch"
     constants:
       - { name: "secondary_damage", base: "35", port: "35", match: true }
       - { name: "secondary_edgedamage", base: "17.5", port: "17.5", match: true }
@@ -88,8 +88,8 @@ features:
     base_refs:
       - "common/weapons/weapon/hagar.qc:W_Hagar_Attack2_Load_Release"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:AttackLoadRelease"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpreadPattern"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:AttackLoadRelease"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpreadPattern"
     constants:
       - { name: "secondary_load_max", base: "4", port: "4", match: true }
       - { name: "secondary_load_spread", base: "0.075", port: "0.075", match: true }
@@ -121,8 +121,8 @@ features:
     base_refs:
       - "common/weapons/weapon/hagar.qc:W_Hagar_Attack2_Load"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:AttackLoad"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:AttackLoad"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:WrThink"
     constants:
       - { name: "secondary_load_speed", base: "0.5", port: "0.5 (Secondary.LoadSpeed)", match: true }
       - { name: "secondary_load_hold", base: "4", port: "4 (Secondary.LoadHold)", match: true }
@@ -153,7 +153,7 @@ features:
     base_refs:
       - "common/weapons/weapon/hagar.qc:W_Hagar_Attack2_Load"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:AttackLoad"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:AttackLoad"
     constants: []
     status:
       logic: faithful
@@ -176,9 +176,9 @@ features:
     base_refs:
       - "common/weapons/weapon/hagar.qc:W_Hagar_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:CheckProjectileDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:CheckProjectileDamage"
     constants:
       - { name: "primary_health", base: "15", port: "15 (set on rocket)", match: true }
       - { name: "g_projectiles_damage (stock)", base: "-2", port: "read live via CheckProjectileDamage", match: true }
@@ -211,8 +211,8 @@ features:
       - "common/weapons/weapon/hagar.qc:W_Hagar_Explode"
       - "common/weapons/weapon/hagar.qc:W_Hagar_Explode2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "primary_radius", base: "65", port: "65", match: true }
       - { name: "secondary_radius", base: "80", port: "80", match: true }
@@ -242,10 +242,10 @@ features:
       - "common/weapons/weapon/hagar.qc:W_Hagar_Touch2 (EFFECT_HAGAR_BOUNCE)"
       - "common/effects/all.inc:HAGAR_MUZZLEFLASH/HAGAR_EXPLODE/HAGAR_ROCKET/HAGAR_BOUNCE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:BounceTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:BounceTouch"
       - "game/client/ProjectileCatalog.cs:Hagar"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:110"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:110"
     constants:
       - { name: "rocket_model_scale", base: "0.75", port: "0.75", match: true }
     status:
@@ -295,7 +295,7 @@ features:
     base_refs:
       - "common/weapons/weapon/hagar.qh:CLASS(Hagar)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs"
     constants:
       - { name: "impulse", base: "8", port: "8", match: true }
       - { name: "ammo_type", base: "RES_ROCKETS", port: "Rockets", match: true }
@@ -327,9 +327,9 @@ features:
       - "common/weapons/weapon/hagar.qc:wr_killmessage"
       - "common/weapons/weapon/hagar.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectKillMessage"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectSuicideMessage"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectKillMessage"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectSuicideMessage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:Explode"
     constants: []
     status:
       logic: faithful
@@ -356,14 +356,14 @@ features:
       - "common/weapons/weapon/hagar.qc:wr_resetplayer"
       - "common/weapons/weapon/hagar.qc:wr_setup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:WrSetup"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:WrGoneThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:WrPlayerDeath"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs:WrResetPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:250 (WrGoneThink on switch-drop)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:284 (WrSetup on switch-in)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:614 (WrPlayerDeath on death)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:814 (WrResetPlayer on respawn)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:WrSetup"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:WrGoneThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:WrPlayerDeath"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs:WrResetPlayer"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:250 (WrGoneThink on switch-drop)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:284 (WrSetup on switch-in)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:614 (WrPlayerDeath on death)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:814 (WrResetPlayer on respawn)"
     constants:
       - { name: "secondary_load_releasedeath", base: "0", port: "0 (Bal default, read in WrPlayerDeath)", match: true }
     status:

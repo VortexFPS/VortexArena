@@ -1,7 +1,7 @@
 # Monster framework — parity spec
 
 **Base refs:** `common/monsters/sv_monsters.qc`, `common/monsters/sv_monsters.qh`, `common/monsters/monster.qh`, `common/monsters/all.{qc,qh}`, `common/monsters/sv_spawn.qc`, `common/monsters/sv_spawner.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Monsters/{MonsterAI,MonsterFramework,MonsterSpawnFuncs,EntityMonsterReset}.cs` · `src/XonoticGodot.Common/Gameplay/EntityClasses.cs` (Monster base + `Monsters` catalog) · `src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs` (spawnfunc wiring)
+**Port refs:** `src/VortexArena.Common/Gameplay/Monsters/{MonsterAI,MonsterFramework,MonsterSpawnFuncs,EntityMonsterReset}.cs` · `src/VortexArena.Common/Gameplay/EntityClasses.cs` (Monster base + `Monsters` catalog) · `src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs` (spawnfunc wiring)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -239,7 +239,7 @@ present-but-dead port.
   `SimulationLoop.RunThink` (lines 276-303) fires `ent.Think` when `0 < NextThink ≤ time+frametime`. Verified by
   code.
 - **Damage seam** — `MonsterAI.Setup` installs `e.GtEventDamage = MonsterEventDamage`; routed by
-  `DamageSystem.EventDamage`. Tests: `tests/XonoticGodot.Tests/MonsterDamageDeathTests.cs`,
+  `DamageSystem.EventDamage`. Tests: `tests/VortexArena.Tests/MonsterDamageDeathTests.cs`,
   `InvasionMonsterSpawnTests.cs`, `MonsterTurretVehicleObituaryTests.cs`.
 - **Stats networking** — `NetGame.cs:2960-2963` reads `MonsterAI.MonstersTotal/Killed` into the scoreboard.
   Verified by code.

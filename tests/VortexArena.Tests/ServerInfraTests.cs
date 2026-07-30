@@ -1,15 +1,15 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Server;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for §5 (server infrastructure): bans, cheats, anticheat, the vote system, the event log, the
@@ -181,7 +181,7 @@ public class ServerInfraTests
         // provenance survives the port.
         var cvars = new CvarService();
         const string cfg = "seta crosshair_enabled 1\nset sv_spectate 1\n";
-        XonoticGodot.Common.Config.ConfigLoader.Load(cvars, p => p == "boot.cfg" ? cfg : null,
+        VortexArena.Common.Config.ConfigLoader.Load(cvars, p => p == "boot.cfg" ? cfg : null,
             name => cvars.MarkArchived(name), "boot.cfg");
         cvars.LockDefaults();
 

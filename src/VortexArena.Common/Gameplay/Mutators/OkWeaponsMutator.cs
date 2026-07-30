@@ -1,9 +1,9 @@
 // Port of common/mutators/mutator/overkill/sv_weapons.qc REGISTER_MUTATOR(ok_weapons, ...)
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Overkill-weapons availability mutator — port of common/mutators/mutator/overkill/sv_weapons.qc's

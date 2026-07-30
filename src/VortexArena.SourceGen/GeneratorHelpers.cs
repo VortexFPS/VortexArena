@@ -1,18 +1,18 @@
-// Shared logic for the XonoticGodot registry source generator (ADR-0003).
+// Shared logic for the VortexArena registry source generator (ADR-0003).
 //
-// This file is part of the netstandard2.0 analyzer assembly `XonoticGodot.SourceGen`. It deliberately
-// references ONLY Microsoft.CodeAnalysis types and cannot project-reference XonoticGodot.Common
+// This file is part of the netstandard2.0 analyzer assembly `VortexArena.SourceGen`. It deliberately
+// references ONLY Microsoft.CodeAnalysis types and cannot project-reference VortexArena.Common
 // (net8.0 lib vs netstandard2.0 analyzer). Marker attributes are therefore matched BY NAME via the
 // semantic model rather than by symbol identity. ImplicitUsings is OFF, so every using is explicit.
 
 using System;
 using Microsoft.CodeAnalysis;
 
-namespace XonoticGodot.SourceGen
+namespace VortexArena.SourceGen
 {
     /// <summary>
     /// The registry categories the generator understands. Mirrors the attribute set in
-    /// <c>XonoticGodot.Common.Framework.Registry</c> that has a corresponding <c>Registry&lt;T&gt;</c> catalog.
+    /// <c>VortexArena.Common.Framework.Registry</c> that has a corresponding <c>Registry&lt;T&gt;</c> catalog.
     /// </summary>
     internal enum RegistryCategory
     {
@@ -33,7 +33,7 @@ namespace XonoticGodot.SourceGen
     /// </summary>
     internal readonly struct RegisteredType : IEquatable<RegisteredType>
     {
-        /// <summary>Fully-qualified type name without the <c>global::</c> prefix, e.g. <c>XonoticGodot.Common.Gameplay.Blaster</c>.</summary>
+        /// <summary>Fully-qualified type name without the <c>global::</c> prefix, e.g. <c>VortexArena.Common.Gameplay.Blaster</c>.</summary>
         public readonly string FullyQualifiedName;
 
         /// <summary>Which registry catalog this type enrolls into.</summary>
@@ -66,26 +66,26 @@ namespace XonoticGodot.SourceGen
     internal static class GeneratorHelpers
     {
         /// <summary>Target namespace and partial class the generated registration lives in.</summary>
-        public const string TargetNamespace = "XonoticGodot.Common.Gameplay";
+        public const string TargetNamespace = "VortexArena.Common.Gameplay";
 
         public const string GeneratedClassName = "GeneratedRegistrations";
 
         public const string HintName = "GeneratedRegistrations.g.cs";
 
         /// <summary>Open generic registry type in Common; consumers reference Common by full name.</summary>
-        private const string RegistryOpenType = "global::XonoticGodot.Common.Framework.Registry";
+        private const string RegistryOpenType = "global::VortexArena.Common.Framework.Registry";
 
         // Fully-qualified metadata names of the marker attributes (used by ForAttributeWithMetadataName).
         // Weapon/Item/Mutator/GameType/Monster live in Framework (Framework/Registry.cs); Turret and Vehicle
         // were declared later, next to their descriptor bases, in the Gameplay namespace
         // (Gameplay/Turrets/TurretAI.cs, Gameplay/Vehicles/VehicleCommon.cs).
-        public const string WeaponAttributeName = "XonoticGodot.Common.Framework.WeaponAttribute";
-        public const string ItemAttributeName = "XonoticGodot.Common.Framework.ItemAttribute";
-        public const string MutatorAttributeName = "XonoticGodot.Common.Framework.MutatorAttribute";
-        public const string GameTypeAttributeName = "XonoticGodot.Common.Framework.GameTypeAttribute";
-        public const string MonsterAttributeName = "XonoticGodot.Common.Framework.MonsterAttribute";
-        public const string TurretAttributeName = "XonoticGodot.Common.Gameplay.TurretAttribute";
-        public const string VehicleAttributeName = "XonoticGodot.Common.Gameplay.VehicleAttribute";
+        public const string WeaponAttributeName = "VortexArena.Common.Framework.WeaponAttribute";
+        public const string ItemAttributeName = "VortexArena.Common.Framework.ItemAttribute";
+        public const string MutatorAttributeName = "VortexArena.Common.Framework.MutatorAttribute";
+        public const string GameTypeAttributeName = "VortexArena.Common.Framework.GameTypeAttribute";
+        public const string MonsterAttributeName = "VortexArena.Common.Framework.MonsterAttribute";
+        public const string TurretAttributeName = "VortexArena.Common.Gameplay.TurretAttribute";
+        public const string VehicleAttributeName = "VortexArena.Common.Gameplay.VehicleAttribute";
 
         public const string GameRegistryAttributeSimpleName = "GameRegistryAttribute";
 
@@ -101,7 +101,7 @@ namespace XonoticGodot.SourceGen
 
         /// <summary>
         /// Infers the registry category from a marker attribute's type symbol, matching BY NAME so no
-        /// reference to XonoticGodot.Common is required. Recognises the concrete attribute names and, as a
+        /// reference to VortexArena.Common is required. Recognises the concrete attribute names and, as a
         /// fallback, anything whose base type chain includes <c>GameRegistryAttribute</c>.
         /// Returns <see cref="RegistryCategory.None"/> for unrecognised attributes.
         /// </summary>
@@ -156,13 +156,13 @@ namespace XonoticGodot.SourceGen
         /// <summary>The base catalog type argument for a category (Weapon/Pickup/MutatorBase/GameType/Monster/Turret/Vehicle).</summary>
         public static string CatalogElementType(RegistryCategory category) => category switch
         {
-            RegistryCategory.Weapon => "global::XonoticGodot.Common.Gameplay.Weapon",
-            RegistryCategory.Item => "global::XonoticGodot.Common.Gameplay.Pickup",
-            RegistryCategory.Mutator => "global::XonoticGodot.Common.Gameplay.MutatorBase",
-            RegistryCategory.GameType => "global::XonoticGodot.Common.Gameplay.GameType",
-            RegistryCategory.Monster => "global::XonoticGodot.Common.Gameplay.Monster",
-            RegistryCategory.Turret => "global::XonoticGodot.Common.Gameplay.Turret",
-            RegistryCategory.Vehicle => "global::XonoticGodot.Common.Gameplay.Vehicle",
+            RegistryCategory.Weapon => "global::VortexArena.Common.Gameplay.Weapon",
+            RegistryCategory.Item => "global::VortexArena.Common.Gameplay.Pickup",
+            RegistryCategory.Mutator => "global::VortexArena.Common.Gameplay.MutatorBase",
+            RegistryCategory.GameType => "global::VortexArena.Common.Gameplay.GameType",
+            RegistryCategory.Monster => "global::VortexArena.Common.Gameplay.Monster",
+            RegistryCategory.Turret => "global::VortexArena.Common.Gameplay.Turret",
+            RegistryCategory.Vehicle => "global::VortexArena.Common.Gameplay.Vehicle",
             _ => string.Empty,
         };
 
@@ -185,7 +185,7 @@ namespace XonoticGodot.SourceGen
                 return false;
             if (type.IsUnboundGenericType)
                 return false;
-            // Must be reachable from the generated code in XonoticGodot.Common.Gameplay.
+            // Must be reachable from the generated code in VortexArena.Common.Gameplay.
             if (type.DeclaredAccessibility != Accessibility.Public
                 && type.DeclaredAccessibility != Accessibility.Internal)
                 return false;

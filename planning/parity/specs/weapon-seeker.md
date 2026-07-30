@@ -3,7 +3,7 @@
 **Base refs:** `common/weapons/weapon/seeker.qc` · `common/weapons/weapon/seeker.qh` · shared fire math in
 `server/weapons/tracing.qh` (`W_SetupProjVelocity_*`, `W_SetupShot_ProjectileSize`) · balance in
 `bal-wep-xonotic.cfg` (`g_balance_seeker_*`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs` · shared:
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Seeker.cs` · shared:
 `Weapons/WeaponFiring.cs` (`ProjectileVelocity`, `SetupShot`), `Weapons/WeaponSplash.cs` (`RadiusDamage`,
 `ImpactSound`), `Weapons/WeaponFireDriver.cs` + `Weapons/WeaponFireGate.cs` (`PrepareAttack`) · presentation:
 `game/client/ProjectileCatalog.cs`, `game/net/NetGame.cs` (muzzleflash map), `game/client/WeaponFireSounds.cs`

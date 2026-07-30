@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The in-vehicle HUD overlay — the port of <c>Vehicles_drawHUD</c> / <c>Vehicles_drawCrosshair</c> /

@@ -248,7 +248,7 @@ features:
     port_refs:
       - "game/menu/framework/CvarControls.cs"
       - "game/menu/framework/MenuSkin.cs (skin themed styles)"
-      - "src/XonoticGodot.Common/Menu/DataSource.cs (datasource.qc)"
+      - "src/VortexArena.Common/Menu/DataSource.cs (datasource.qc)"
     constants: []
     status:
       logic: na
@@ -518,7 +518,7 @@ features:
       - "Keyboard shortcuts absent: Enter=connect works, but Space/MOUSE2=server info popup and INS/MOUSE3=toggle favorite are not bound."
     verification:
       - { kind: code, ref: "Refresh(): favorites → LAN sweep → master getservers; sort-click flips order on same column (QC setSortOrder); double-click joins (ItemActivated→OnConnect); Bookmark toggles + persists", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs (master protocol encode/parse)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs (master protocol encode/parse)", result: pass }
     confidence: high
     notes: "The transport is a real reimplementation of the DP OOB protocol rather than the engine host-cache builtins — behavior-level equivalent. Server-info dialog itself (dialog_multiplayer_join_serverinfo.qc) belongs to menu-dialogs; the port DialogServerInfo is pushed from OnInfo here."
 
@@ -617,7 +617,7 @@ features:
       - "Legacy-alias migration (replace_bind dropweapon→weapon_drop etc.) not ported."
     verification:
       - { kind: code, ref: "KeyCaptureButton capture flow writes through BindInput to the canonical BindTable (binds-xonotic.cfg-seeded); Reset all live", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/Input/BindsTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/Input/BindsTests.cs", result: pass }
     confidence: high
     notes: "Capture-mode global guard (KeyCaptureButton.Capturing) prevents the F12 screenshot hotkey from eating a capture — a port-specific fix in the same spirit as QC's keyGrabber."
 
@@ -722,7 +722,7 @@ features:
       - "menu/xonotic/dialog_media_screenshot_viewer.qc"
     port_refs:
       - "game/menu/dialogs/DialogMediaScreenshot.cs"
-      - "src/XonoticGodot.Common/Menu/DataSource.cs:ScreenshotSource"
+      - "src/VortexArena.Common/Menu/DataSource.cs:ScreenshotSource"
     constants:
       - { name: "cl_autoscreenshot flag checkbox", base: "cl_autoscreenshot bit", port: "live", match: true }
     status:
@@ -738,7 +738,7 @@ features:
       - "The viewer pane is missing: no image preview, no zoom −/+/reset, no Previous/Next, no slideshow (screenshotimage.qc + viewer dialog) — the transport buttons render but are inert."
     verification:
       - { kind: code, ref: "ScreenshotSource enumerates screenshots/*.{jpg,tga,png} via VFS, strips/decolorizes/sorts (QC getScreenshots + buf_sort); filter live", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MenuDataSourceTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MenuDataSourceTests.cs", result: pass }
     confidence: high
     notes: "Port screenshots are saved by ScreenshotService to the user dir; the browser scans the VFS — verify the two roots agree when the viewer lands."
 
@@ -751,7 +751,7 @@ features:
       - "menu/xonotic/playlist.qc"
     port_refs:
       - "game/menu/dialogs/DialogMediaMusicPlayer.cs"
-      - "src/XonoticGodot.Common/Menu/DataSource.cs:SoundSource/CvarStringSource"
+      - "src/VortexArena.Common/Menu/DataSource.cs:SoundSource/CvarStringSource"
     constants:
       - { name: "playlist cvar", base: "music_playlist_list0 (space-separated)", port: "same, re-tokenized per refresh", match: true }
       - { name: "random order", base: "music_playlist_random0 checkbox", port: "same cvar bound", match: true }
@@ -839,7 +839,7 @@ features:
       - "menu/xonotic/languagelist.qc:XonoticLanguageList_setLanguage (205)"
     port_refs:
       - "game/menu/framework/Localization.cs:SetLanguage/LoadLanguages"
-      - "src/XonoticGodot.Common/Localization/LanguagesTxt.cs"
+      - "src/VortexArena.Common/Localization/LanguagesTxt.cs"
       - "game/menu/dialogs/DialogSettingsUser.cs (language picker)"
       - "game/menu/framework/MenuCommand.cs:prvm_language + menu_restart handlers"
     constants:
@@ -951,7 +951,7 @@ features:
       - "Model selector: Base reads models/player/*.txt metadata (get_model_parameters: title/skin/sex, hidden-model filter, sorted by title); the port's roster source + hidden filter not verified equal."
       - "crosshair_dot overlay in the picker cells (drawn at crosshair_dot_size) not verified."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MenuPickerLogicTests.cs (cell↔crosshair/charmap math)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MenuPickerLogicTests.cs (cell↔crosshair/charmap math)", result: pass }
       - { kind: code, ref: "DialogMultiplayerProfile hosts name preview + HSL picker + charmap typing into _cl_name box (QC layout)", result: pass }
     confidence: medium
     notes: "The hosting Profile dialog is dialog_multiplayer_profile.qc = menu-dialogs unit; these widget files are owned here. The crosshair picker is hosted by dialog_settings_game_crosshair (menu-dialogs)."

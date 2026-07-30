@@ -1,0 +1,27 @@
+Licensing for the game content in this directory tree
+=====================================================
+
+Vortex Arena redistributes the Xonotic content set directly (it is committed to the
+game repository rather than downloaded at build time). These are the licence documents
+that content arrives under, copied unmodified from the upstream Xonotic distribution:
+
+  COPYING.xonotic   Team Xonotic's licensing document, verbatim. It grants GPL version 3
+                    or any later version for all source files in its scope, which covers
+                    official Xonotic releases and Team Xonotic-owned branches of
+                    git://git.xonotic.org/xonotic/ — the origin of this content.
+  GPL-3             GPL version 3. The licence the grant above points at.
+  GPL-2             GPL version 2. Included because COPYING.xonotic states both texts are
+                    "provided in the files GPL-2 and GPL-3 in this package", and because
+                    the "or any later version" clause makes the v2 text part of the grant.
+
+Attribution for the contributors who authored this content is carried in the game's
+credits screen (game/menu/CreditsScreen.cs), a verbatim port of upstream's
+qcsrc/menu/xonotic/credits.qc.
+
+The licence for Vortex Arena's own source code is a separate matter — see COPYING at
+the repository root.
+
+Why this directory exists: before the repo restructure the content was fetched by
+download-assets.sh and never committed, so the licence texts stayed in the upstream
+checkout and travelled with nothing. Now that we redistribute the content, the licence
+has to travel with it. See planning/repo-restructure-2026-07-29.md D1/D2 and section 10.

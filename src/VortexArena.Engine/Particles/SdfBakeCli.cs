@@ -1,14 +1,14 @@
 using System;
 using System.IO;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Formats.Bsp;
+using VortexArena.Engine.Collision;
+using VortexArena.Formats.Bsp;
 
-namespace XonoticGodot.Engine.Particles;
+namespace VortexArena.Engine.Particles;
 
 // =====================================================================================================
 //  SdfBakeCli — the `--bake-sdf` command-line SDF baker (planning/particles-dual-system.md §A.7).
 //
-//    XonoticGodot --bake-sdf <map.bsp> [-o out.psdf]
+//    VortexArena --bake-sdf <map.bsp> [-o out.psdf]
 //
 //  This is the CANONICAL compiler-time SDF generation path: mappers add it as a post-q3map2 build step and
 //  the resulting `maps/<map>.psdf` ships inside the pk3 (§A.2 search order picks it up at load). It is

@@ -7,10 +7,10 @@
 // port (unlike Base where ONADD/ONREMOVE toggle ITEM_FLAG_MUTATORBLOCKED; the port's FilterItemDefinition hook
 // already gates their presence for non-instagib matches). Their spawnfuncs are registered in ItemSpawnFuncs.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// VaporizerCells — the instagib ammo item (<c>item_vaporizer_cells</c>, alias <c>item_minst_cells</c>).

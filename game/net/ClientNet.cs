@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Net;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// The client's network driver — connects to a <see cref="ServerNet"/>, streams the local player's
@@ -128,7 +128,7 @@ public sealed class ClientNet : IDisposable
     /// IT_UNLIMITED_AMMO + the STAT_ITEMS flag bits) — feeds the full HUD's ammo/weapons/powerups panels on a
     /// pure remote client (NetGame's HUD mirror player). One struct, read in lockstep with the server's
     /// <c>OwnerInventory.Write</c>.</summary>
-    public XonoticGodot.Net.OwnerInventory LocalInventory { get; private set; } = XonoticGodot.Net.OwnerInventory.None;
+    public VortexArena.Net.OwnerInventory LocalInventory { get; private set; } = VortexArena.Net.OwnerInventory.None;
 
     /// <summary>Whether the PREDICTED local player is on the ground this frame (the reconciler's live predicted
     /// state, seeded from the owner block's onground bool) — feeds the HUD mirror's OnGround flag so the
@@ -186,17 +186,17 @@ public sealed class ClientNet : IDisposable
     public int ActiveWeaponId { get; private set; } = -1;
 
     /// <summary>The last networked scoreboard (per-player columns + team totals), for the client scoreboard HUD. Null until first received.</summary>
-    public XonoticGodot.Net.ScoreboardWire? LatestScoreboard { get; private set; }
+    public VortexArena.Net.ScoreboardWire? LatestScoreboard { get; private set; }
 
     /// <summary>The last received score LAYOUT (QC ENT_CLIENT_SCORES_INFO): the active gametype/teamplay + the
     /// applied per-mode label/flag set, for the client scoreboard HUD's per-mode columns. Null until first received.
-    /// Already applied to the shared <see cref="XonoticGodot.Common.Gameplay.Scoring.GameScores"/> when set.</summary>
-    public XonoticGodot.Net.ScoreInfoBlock.Decoded? LatestScoreInfo { get; private set; }
+    /// Already applied to the shared <see cref="VortexArena.Common.Gameplay.Scoring.GameScores"/> when set.</summary>
+    public VortexArena.Net.ScoreInfoBlock.Decoded? LatestScoreInfo { get; private set; }
 
     /// <summary>The latest per-mode round/objective HUD status (T53): the CA/FT alive counts + eliminated ids,
     /// the KH OBJECTIVE_STATUS key pack, the Survival role + disclosed hunter ids. Null until a tracked mode
     /// sends one. Consumers: NetGame.UpdateModIcons (ModIconsPanel) + UpdateScoreboard (eliminated grey-out).</summary>
-    public XonoticGodot.Net.GametypeStatusBlock.Decoded? LatestModeStatus { get; private set; }
+    public VortexArena.Net.GametypeStatusBlock.Decoded? LatestModeStatus { get; private set; }
 
     /// <summary>[T57] The local player's own per-weapon accuracy bytes (QC ENT_CLIENT_ACCURACY, owner-only):
     /// one QC accuracy_byte per Registry&lt;Weapon&gt; id (0 = never fired, 1..101 = pct+1, 255 = &gt;100%).
@@ -215,7 +215,7 @@ public sealed class ClientNet : IDisposable
     /// owner block. <see cref="NetGame.UpdateCrosshairWeaponRings"/> feeds these to the crosshair on a pure
     /// remote / dedicated-server client (a listen host reads the same values off its LocalServerPlayer instead).
     /// Defaults to the panel's "no data" sentinels until the first snapshot.</summary>
-    public XonoticGodot.Net.OwnerWeaponRings LocalWeaponRings { get; private set; } = XonoticGodot.Net.OwnerWeaponRings.None;
+    public VortexArena.Net.OwnerWeaponRings LocalWeaponRings { get; private set; } = VortexArena.Net.OwnerWeaponRings.None;
 
     /// <summary>QC STAT(PRESSED_KEYS): the view-player's held-key bitset (KEY_FORWARD..KEY_ATCK2, bits 0..7),
     /// replicated on the owner block — the local player's own keys while playing, the spectatee's keys while
@@ -307,7 +307,7 @@ public sealed class ClientNet : IDisposable
     }
 
     /// <summary>A decoded positional sound (the client-side counterpart of the engine's <c>SoundEvent</c>). Kept
-    /// distinct from <c>XonoticGodot.Engine.Simulation.SoundEvent</c> so the client net layer doesn't depend on the
+    /// distinct from <c>VortexArena.Engine.Simulation.SoundEvent</c> so the client net layer doesn't depend on the
     /// engine record (mirrors <see cref="EffectEvent"/> vs <c>EffectRequest</c>). <see cref="SourceNetId"/> +
     /// <see cref="Loop"/>/<see cref="Stop"/> carry DP's entity+channel looping-sound model.</summary>
     public readonly struct SoundEvent
@@ -592,19 +592,20 @@ public sealed class ClientNet : IDisposable
             case NetControl.RadarLinks: HandleRadarLinks(ref r); break;
             case NetControl.ClientInit: HandleClientInit(ref r); break;
             case NetControl.MapVote: HandleMapVote(ref r); break;
+            case NetControl.EditorOp: HandleEditorOp(ref r); break;
             default: break;
         }
     }
 
     /// <summary>Raised with a decoded minigame-session envelope (the S2C <see cref="NetControl.MinigameState"/>
     /// push) — the host drives the minigame board overlay + menu from it. A null
-    /// <see cref="XonoticGodot.Game.Net.MinigameNetState.Envelope.Session"/> means the local player left / has no
+    /// <see cref="VortexArena.Game.Net.MinigameNetState.Envelope.Session"/> means the local player left / has no
     /// active minigame. The C# stand-in for CSQC <c>activate_minigame</c>/<c>deactivate_minigame</c>.</summary>
-    public event Action<XonoticGodot.Game.Net.MinigameNetState.Envelope>? MinigameStateReceived;
+    public event Action<VortexArena.Game.Net.MinigameNetState.Envelope>? MinigameStateReceived;
 
     private void HandleMinigameState(ref BitReader r)
     {
-        XonoticGodot.Game.Net.MinigameNetState.Envelope env = XonoticGodot.Game.Net.MinigameNetState.DecodeEnvelope(ref r);
+        VortexArena.Game.Net.MinigameNetState.Envelope env = VortexArena.Game.Net.MinigameNetState.DecodeEnvelope(ref r);
         if (r.BadRead)
             return;
         MinigameStateReceived?.Invoke(env);
@@ -646,9 +647,9 @@ public sealed class ClientNet : IDisposable
     public int RandomSeed { get; private set; }
 
     /// <summary>[W14a] The client's per-instance deterministic RNG (QC psrandom), reseeded from the networked
-    /// <see cref="RandomSeed"/>. Per-instance (NOT the static <see cref="XonoticGodot.Common.Math.Prandom"/> default)
+    /// <see cref="RandomSeed"/>. Per-instance (NOT the static <see cref="VortexArena.Common.Math.Prandom"/> default)
     /// so on a listen server the client's draws never corrupt the server world's stream. RESERVED — no consumer yet.</summary>
-    public XonoticGodot.Common.Math.PrandomContext RandomRng { get; } = new();
+    public VortexArena.Common.Math.PrandomContext RandomRng { get; } = new();
 
     private void HandleMatchState(ref BitReader r)
     {
@@ -792,12 +793,12 @@ public sealed class ClientNet : IDisposable
 
     // ---- waypoint sprites (S2C NetControl.Waypoints; QC the networked ENT_CLIENT_WAYPOINT entities) ----
 
-    private readonly List<XonoticGodot.Common.Gameplay.Waypoints.WaypointNet> _waypoints = new();
+    private readonly List<VortexArena.Common.Gameplay.Waypoints.WaypointNet> _waypoints = new();
 
     /// <summary>The live waypoint sprites for this client (gametype objectives + player pings), already
     /// team/rule-filtered by the server. Drives the 3D in-world sprite layer + the radar icons. Replaced
     /// wholesale each <see cref="NetControl.Waypoints"/> message; empty in waypoint-less modes (plain DM).</summary>
-    public IReadOnlyList<XonoticGodot.Common.Gameplay.Waypoints.WaypointNet> Waypoints => _waypoints;
+    public IReadOnlyList<VortexArena.Common.Gameplay.Waypoints.WaypointNet> Waypoints => _waypoints;
 
     /// <summary>Per-waypoint-id radar ping timestamps (server time of the last ping) — the C# analogue of QC's
     /// per-icon <c>teamradar_times</c> array. The radar draws an expanding gfx/teamradar_ping ring for ~1s after
@@ -844,7 +845,7 @@ public sealed class ClientNet : IDisposable
     {
         int count = r.ReadByte();
         // Decode into a temp so a truncated packet never leaves a half-updated list on screen.
-        var tmp = new List<XonoticGodot.Common.Gameplay.Waypoints.WaypointNet>(count);
+        var tmp = new List<VortexArena.Common.Gameplay.Waypoints.WaypointNet>(count);
         for (int i = 0; i < count; i++)
         {
             int id = r.ReadLong();
@@ -868,7 +869,7 @@ public sealed class ClientNet : IDisposable
             float helpme = r.ReadByte();
             float maxDist = r.ReadFloat();
             bool hideable = r.ReadBool();
-            tmp.Add(new XonoticGodot.Common.Gameplay.Waypoints.WaypointNet(
+            tmp.Add(new VortexArena.Common.Gameplay.Waypoints.WaypointNet(
                 id, new NVec3(x, y, z), team, sprite, radarIcon, new NVec3(cr, cg, cb),
                 health, fade, helpme, maxDist, hideable));
         }
@@ -944,6 +945,50 @@ public sealed class ClientNet : IDisposable
         if (r.BadRead)
             return;
         PrintReceived?.Invoke(text);
+    }
+
+    /// <summary>
+    /// Raised with one applied map-editor op, as a <see cref="VortexArena.Formats.Vmap.VmapOpWire"/> line
+    /// (design doc §11.7). The host decodes and applies it to its editing session — the server has already
+    /// validated it, so a line arriving here is an edit that HAPPENED, not one being proposed.
+    /// </summary>
+    public event Action<string>? EditorOpReceived;
+
+    /// <summary>
+    /// Longest op line we will reassemble. An op that large is not something a mapper produced, and without a
+    /// ceiling a hostile server could grow this buffer for as long as it liked by never clearing the
+    /// more-to-come flag.
+    /// </summary>
+    private const int MaxEditorOpChars = 8 * 1024 * 1024;
+
+    private readonly System.Text.StringBuilder _editorOp = new();
+
+    private void HandleEditorOp(ref BitReader r)
+    {
+        // Arrives in pieces (see ServerNet.BroadcastEditorOp) because the string length field is 16-bit and an
+        // op line is not bounded. Reliable + ordered, so concatenating in arrival order rebuilds the line.
+        bool more = r.ReadByte() != 0;
+        string chunk = r.ReadString();
+        if (r.BadRead)
+        {
+            _editorOp.Clear();
+            return;
+        }
+
+        if (_editorOp.Length + chunk.Length > MaxEditorOpChars)
+        {
+            _editorOp.Clear();
+            VortexArena.Common.Diagnostics.Log.Warn("editor: dropped an oversized replicated op");
+            return;
+        }
+
+        _editorOp.Append(chunk);
+        if (more)
+            return;
+
+        string line = _editorOp.ToString();
+        _editorOp.Clear();
+        EditorOpReceived?.Invoke(line);
     }
 
     private void HandleAccept(ref BitReader r)
@@ -1105,7 +1150,7 @@ public sealed class ClientNet : IDisposable
     {
         // [r16 #5] cn.snapshot: the snapshot decode+apply is the heavy slice of ng.poll (4-5ms spikes at
         // 150+ entities were landing in ng.process "(other)"); scoped so the census names it.
-        using var _snapScope = XonoticGodot.Common.Diagnostics.Prof.Sample("cn.snapshot");
+        using var _snapScope = VortexArena.Common.Diagnostics.Prof.Sample("cn.snapshot");
         float serverTime = r.ReadFloat();
         uint ackedSeq = r.ReadULong();
 
@@ -1164,13 +1209,13 @@ public sealed class ClientNet : IDisposable
         // crosshair charge/clip/load/heat rings on a PURE remote / dedicated-server client (the listen host reads
         // the same values straight off LocalServerPlayer). ALWAYS consumes the 9 floats so the owner block stays
         // aligned for the movevars/scores/entity sections that follow — the server writes them unconditionally.
-        LocalWeaponRings = XonoticGodot.Net.OwnerWeaponRings.Read(ref r);
+        LocalWeaponRings = VortexArena.Net.OwnerWeaponRings.Read(ref r);
 
         // Owner inventory (appended after the ring floats — the struct's Write/Read pair owns the layout): ammo
         // pools + owned-weapon bitset + unlimited-ammo + the STAT_ITEMS flag bits. Feeds the full HUD's
         // ammo/weapons/powerups panels on a pure remote client via NetGame's HUD mirror player. ALWAYS consumes
         // the fixed layout so the owner block stays aligned for the movevars/scores/entity sections that follow.
-        LocalInventory = XonoticGodot.Net.OwnerInventory.Read(ref r);
+        LocalInventory = VortexArena.Net.OwnerInventory.Read(ref r);
 
         // movevars: when the server's physics changed, stamp the replicated values into our cvar store so the
         // predictor's MovementParameters.FromCvars() matches authority (mid-match physics/mutator changes), then
@@ -1227,10 +1272,10 @@ public sealed class ClientNet : IDisposable
         {
             // ALWAYS deserialize to consume the bytes (keeps the stream aligned for the scoreboard + entity
             // sections below) even when there's no engine to apply into — mirrors the movevars block above.
-            XonoticGodot.Net.ScoreInfoBlock.Decoded? si = XonoticGodot.Net.ScoreInfoBlock.Deserialize(ref r);
+            VortexArena.Net.ScoreInfoBlock.Decoded? si = VortexArena.Net.ScoreInfoBlock.Deserialize(ref r);
             if (si is not null && Api.Services is not null)
             {
-                XonoticGodot.Net.ScoreInfoBlock.Apply(si);
+                VortexArena.Net.ScoreInfoBlock.Apply(si);
                 LatestScoreInfo = si;
             }
         }
@@ -1240,7 +1285,7 @@ public sealed class ClientNet : IDisposable
         // section, so it must be read here to stay frame-aligned.
         if (r.ReadBool())
         {
-            XonoticGodot.Net.ScoreboardWire? sb = XonoticGodot.Net.ScoreboardBlock.Deserialize(ref r);
+            VortexArena.Net.ScoreboardWire? sb = VortexArena.Net.ScoreboardBlock.Deserialize(ref r);
             if (sb is not null)
                 LatestScoreboard = sb;
         }
@@ -1250,7 +1295,7 @@ public sealed class ClientNet : IDisposable
         // no consumer wired (the ScoreInfo comment above documents the alignment contract).
         if (r.ReadBool())
         {
-            XonoticGodot.Net.GametypeStatusBlock.Decoded? ms = XonoticGodot.Net.GametypeStatusBlock.Deserialize(ref r);
+            VortexArena.Net.GametypeStatusBlock.Decoded? ms = VortexArena.Net.GametypeStatusBlock.Deserialize(ref r);
             if (ms is not null && !r.BadRead)
                 LatestModeStatus = ms;
         }
@@ -1522,7 +1567,7 @@ public sealed class ClientNet : IDisposable
     }
 
     /// <summary>
-    /// Decode a <see cref="NetControl.SoundBundle"/> via the shared <see cref="XonoticGodot.Net.SoundWire"/> codec
+    /// Decode a <see cref="NetControl.SoundBundle"/> via the shared <see cref="VortexArena.Net.SoundWire"/> codec
     /// (the inverse of <c>ServerNet.WriteSound</c>) and raise <see cref="SoundReceived"/> per record — sample,
     /// origin, volume, attenuation, channel, the source entity net id, and the loop/stop flags.
     /// <see cref="BitReader.BadRead"/> guards a truncated/oversized record — bail like <see cref="DecodeEffect"/>.
@@ -1532,7 +1577,7 @@ public sealed class ClientNet : IDisposable
         int count = r.ReadUShort();
         for (int i = 0; i < count; i++)
         {
-            XonoticGodot.Net.SoundWire rec = XonoticGodot.Net.SoundWire.Read(ref r);
+            VortexArena.Net.SoundWire rec = VortexArena.Net.SoundWire.Read(ref r);
             if (r.BadRead)
                 return;
             SoundReceived?.Invoke(new SoundEvent(rec.Sample, rec.Origin, rec.Volume, rec.Attenuation,

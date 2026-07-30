@@ -11,7 +11,7 @@
 #   decision   pending | port | adapt | ported | defer | reject | n/a   (Bryan's call)
 #   source     dedup key: data@<sha> / dp@<sha> (commit) or repo:branch@<tip> (branch/MR)
 #
-# 101 entries; 17 translation rows dropped.
+# 124 entries; 42 translation rows dropped.
 
 - uw: UW-0002
   title: ''
@@ -2100,3 +2100,418 @@
   - vid_shared.c:in_setmouse
   - input.h:in_setmouse
   deep_dive: null
+- uw: UW-0119
+  title: ''
+  headline: 'UW-0044 (k9er/warpzone-interactions) LANDED on master: 30 commits generalising warpzone-aware projectile/trace interactions across weapons, plus turret and W_SetupShot fixes.'
+  summary: 'Merge of k9er/warpzone-interactions (30 commits, 53 files, +815/-816). Warpzone half: every subsystem that traced or seeked through a portal now goes through the shared helpers instead of ad-hoc per-weapon code — cheats (teleport/spawn), movement mutators, sandbox, Nexball safe-passing, CTF flag pass, okrpc, Fireball firemine heat-up, NEXWHOOSH, Shotgun melee, Crylink RefSys setup, Devastator, and a remade Fireball BFG. WarpZone_FindRadius loses its needlineofsight parameter and WarpZone_RefSys_SpawnSameRefSys becomes _Copy. New shared code lands in server/weapons/common.qc (+136) — a generalised damage-over-time helper that electro.qc, fireball.qc and hook.qc now call instead of each carrying its own burn loop (electro.qh/fireball.qh/hook.qh each lose a field). Non-warpzone half: turret Phaser no longer breaks other turret weapons, eWheel stops drifting in CSQC after halting, FireImoBeam trace bug fixed, and W_SetupShot post-calculation offsets are corrected (tracing.qc +144/-... ). Base symbols: qcsrc/lib/warpzone/common.{qc,qh}, qcsrc/server/weapons/{common.qc,common.qh,tracing.qc,tracing.qh}, qcsrc/common/weapons/weapon/{crylink,devastator,electro,fireball,hook,minelayer,seeker,shotgun}.qc, qcsrc/common/turrets/{util.qc,turret/walker.qc}, qcsrc/server/{cheats,client,damage,hook}.qc, qcsrc/server/items/items.qc.'
+  recommendation: 'This is the merged form of the branch already triaged as UW-0044 (relevance high, still pending) — decide the two together, and prefer THIS sha as the port reference since it is the reviewed, landed version. Two parts are separable and should be split: (1) the W_SetupShot offset fix + turret fixes are small, self-contained correctness wins worth taking early; (2) the warpzone interaction generalisation is L-sized and lands directly on top of our own warpzone work — read the warpzone-angle-resolution postmortem before touching it, since our per-chain warp budget and view-smoothing fixes are divergences the upstream refactor does not know about. The generalised damage-over-time helper is a clean consolidation that our Electro/Fireball/Hook ports could adopt independently of the warpzone half. NOTE the overlap with UW-0065 (k9er/wep-turret-monster-fixes) and UW-0132 (k9er/seeker, which still carries the same three turret/weapon commits unlanded).'
+  relevance: high
+  decision: pending
+  kind: qc-gameplay
+  effort: L
+  repo: data
+  source: data@dbce14c31935
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/dbce14c31935
+  base_symbols:
+  - qcsrc/lib/warpzone/common.qc
+  - qcsrc/lib/warpzone/common.qh
+  - qcsrc/server/weapons/common.qc
+  - qcsrc/server/weapons/common.qh
+  - qcsrc/server/weapons/tracing.qc
+  - qcsrc/server/weapons/tracing.qh
+  - qcsrc/common/weapons/weapon/crylink.qc
+  - qcsrc/common/weapons/weapon/devastator.qc
+  - qcsrc/common/weapons/weapon/electro.qc
+  - qcsrc/common/weapons/weapon/fireball.qc
+  - qcsrc/common/weapons/weapon/hook.qc
+  - qcsrc/common/weapons/weapon/seeker.qc
+  - qcsrc/common/weapons/weapon/shotgun.qc
+  - qcsrc/common/turrets/util.qc
+  - qcsrc/common/turrets/turret/walker.qc
+  - qcsrc/server/cheats.qc
+  - qcsrc/server/client.qc
+  - qcsrc/server/damage.qc
+  - qcsrc/server/hook.qc
+  - qcsrc/server/items/items.qc
+- uw: UW-0120
+  title: ''
+  headline: 'UW-0040 (k9er/warpzone-findradius) LANDED on master: 15 commits of warpzone-library optimisation, plus an antilag trace-API refactor that reaches beyond the warpzone lib.'
+  summary: 'Merge of the warpzone lib optimisation series (15 commits, 33 files, +711/-675). Core: a new WarpZone_SearchInRadius callback API replaces open-coded recursion, _WarpZone_FindRadius_Recurse is optimised with hash changes, simple_findradius flips its chain order, WarpZone_TraceBox_ThroughZone is optimised and a WarpZone_TraceLine_ThroughZone added, forwarding functions become macros, garbage collection is replaced by an ONREMOVE overload, unused fields are commented out, and nomonsters becomes settable per search. Cross-cutting: `vlen(a) > b` comparisons are rewritten as `vlen2(a) > b*b` (and `vlen/vlen` as `sqrt(vlen2/vlen2)`) across weapons, turrets, vehicles and bot waypoints — the same class of square-root elimination our own broadphase work did. Beyond the lib, server/antilag.{qc,qh} is refactored: tracebox_antilag_force_wz gains a WarpZone_trace_callback_t and a bool wz, and traceline_antilag_force / WarpZone_traceline_antilag_force collapse into macros over it; server/damage.qc is reworked by 321 lines on top of that. Base symbols: qcsrc/lib/warpzone/common.{qc,qh}, qcsrc/server/{antilag.qc,antilag.qh,damage.qc,client.qc,portals.qc,race.qc}, qcsrc/server/weapons/tracing.{qc,qh}, qcsrc/common/weapons/{calculations.qc,weapon/*.qc}, qcsrc/server/bot/default/waypoints.qc.'
+  recommendation: 'UW-0040 was already decided `port`; this is its landed form and should be the port reference. Two caveats the branch-time triage could not see. (1) The antilag API change is netcode-adjacent, not a pure optimisation: our hit-registration path is a reimplementation, so treat the callback/macro collapse as a signature change to mirror deliberately rather than transcribe. (2) The vlen2 rewrites are the cheapest part and overlap work we have already done — audit rather than port wholesale, since porting a squared-comparison into a place we already squared risks a double-square bug. The WarpZone_SearchInRadius callback API is the piece with real value for us: it is the shape our ServerEntityService queries want, and it pairs with the FindInBox work (see the findbox-entity-queries memory). Cross-check the warpzone-angle-resolution postmortem before touching WarpZone_TraceBox_ThroughZone.'
+  relevance: high
+  decision: pending
+  kind: qc-gameplay
+  effort: M
+  repo: data
+  source: data@910f6ad66fbf
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/910f6ad66fbf
+  base_symbols:
+  - qcsrc/lib/warpzone/common.qc
+  - qcsrc/lib/warpzone/common.qh
+  - qcsrc/server/antilag.qc
+  - qcsrc/server/antilag.qh
+  - qcsrc/server/damage.qc
+  - qcsrc/server/client.qc
+  - qcsrc/server/portals.qc
+  - qcsrc/server/race.qc
+  - qcsrc/server/weapons/tracing.qc
+  - qcsrc/common/weapons/calculations.qc
+  - qcsrc/server/bot/default/waypoints.qc
+- uw: UW-0121
+  title: ''
+  headline: 'UW-0039 (telefrag findbox optimisation) LANDED on master — and we already have it.'
+  summary: 'The TDEATHLOOP macro in qcsrc/common/mapobjects/teleporters.qh drops the findradius(o, deathradius) + boxesoverlap(...) pair for a single findbox_OrFallback(deathmin, deathmax), removing both the max(vlen(deathmin), vlen(deathmax)) radius computation and the per-candidate box test (the engine query is already exact). The macro parameter is renamed o -> org for readability. Net -1 line.'
+  recommendation: 'Already ported. src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs (the two TDEATHLOOP call sites) cites upstream b6e02fe3 — the same commit that this merge landed — and EngineServices.cs documents that FindInBox performs the precise AABB test inside the query so no follow-up box filter is needed. Marked `ported`; no action. Recorded so the ledger reflects that our effective baseline for the telefrag unit is now past this commit rather than at the pin.'
+  relevance: medium
+  decision: ported
+  kind: qc-gameplay
+  effort: S
+  repo: data
+  source: data@c46c79f235e1
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/c46c79f235e1
+  base_symbols:
+  - qcsrc/common/mapobjects/teleporters.qh
+- uw: UW-0122
+  title: ''
+  headline: 'Damage accounting fix: healtharmor_applydamage() now clamps `take` to the victims CURRENT HEALTH instead of to the incoming damage, so overkill damage stops being counted as damage dealt.'
+  summary: 'bones_was_here/robust_damage (MR !1626, 1 commit, 11 files). healtharmor_applydamage() gains a leading `h` (health) parameter: `take = bound(0, damage - save, h)` replaces `bound(0, damage - save, damage)`. Call sites updated — PlayerDamage passes the live RES_HEALTH; PlayerCorpseDamage passes INFINITY (a corpse has no health ceiling); the g_mirrordamage_virtual and g_friendlyfire_virtual branches in server/damage.qc pass the attackers and targets RES_HEALTH. Consequences: PlayerDamage no longer needs the pre-hook `excess` variable at all (it is now computed only inside the death branch), and the damage-log figure changes from `realdmg = damage - excess` to `realdmg = take + save`, i.e. the amount actually absorbed. A comment records the new contract: healtharmor_applydamage() bounds take and save to current health and armour so PlayerDamage_SplitHealthArmor hooks need not duplicate that. Separately, the instakill path in Damage() drops its `SetResourceExplicit(targ, RES_ARMOR, 0)` (armour is no longer zeroed before the infinite-damage kill). Simplification knock-on in the CA / Mayhem / Team Mayhem damage-accumulation gametypes and the vampire buff/mutator, which each stop re-deriving the same clamp.'
+  recommendation: 'PORTED 2026-07-27 on parity/port-recent-fixes. Correction to the branch-time triage above: the impact was OVERSTATED. Our PlayerDamage already re-clamped take to current health AFTER the SplitHealthArmor hook (DamageSystem.cs:550), so the victim''s end-state resources and the accuracy/score figure were never wrong. What was actually wrong, and is what the port fixes: (1) every PlayerDamage_SplitHealthArmor handler (ClanArena damage2score, Mayhem accrual, vampire) received the UNBOUNDED take — upstream''s own comment on the fix is that hooks need not duplicate the clamp; (2) the g_mirrordamage_virtual and g_friendlyfire_virtual paths add their split straight onto dmg_take/dmg_save with NO later clamp, so a virtual friendly-fire hit showed the victim a HUD number far larger than they could have lost. Also took `realdmg = take + save` (identical to `damage - excess` unless a hook inflates the split past the incoming damage) and dropped the now-redundant pre-hook `excess`. The port is mechanical: add the `h` parameter, pass initialHealth at the PlayerDamage call site (DamageSystem.cs:454) and float.PositiveInfinity at the PlayerCorpseDamage site (DamageSystem.cs:454 region), pass the attacker/target health at the two virtual-damage sites (DamageSystem.cs:261,272), and switch the damage-log figure to take+save. Check our equivalent of the instakill armour zeroing before dropping it. Worth a regression test pinning "overkill damage is not counted" — it is the kind of accounting bug that silently skews any stats work later.'
+  relevance: high
+  decision: ported
+  kind: qc-gameplay
+  effort: S
+  repo: data
+  source: data@a7664932015a
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/a7664932015a
+  base_symbols:
+  - qcsrc/common/util.qc
+  - qcsrc/common/util.qh
+  - qcsrc/server/damage.qc
+  - qcsrc/server/player.qc
+  - qcsrc/common/gametypes/gametype/clanarena/sv_clanarena.qc
+  - qcsrc/common/gametypes/gametype/mayhem/sv_mayhem.qc
+  - qcsrc/common/gametypes/gametype/tmayhem/sv_tmayhem.qc
+  - qcsrc/common/mutators/mutator/buffs/buff/vampire.qc
+  - qcsrc/common/mutators/mutator/vampire/sv_vampire.qc
+  - qcsrc/common/monsters/sv_monsters.qc
+- uw: UW-0123
+  title: ''
+  headline: 'Status-effect timer fix: StatusEffects_gettime() stops reporting a stale "still active this frame" time, fixing superweapons/powerups being lost the instant they are picked up when g_spawnshieldtime is 0.'
+  summary: 'StatusEffects_gettime() previously returned `eff_time < time ? time : eff_time` — deliberately reporting the current time for an effect whose end time had passed but whose m_tick had not yet removed it. That made an expired timer read as "expires now", so a pickup that did `t = gettime(...); apply(t + duration)` could compute a start point in the PAST. The function now returns 0 unless StatusEffects_active() says the effect is live, and the five powerup pickups in server/items/items.qc (Strength, Shield, Speed, Invisibility, Superweapon) wrap it in `max(time, ...)` so the new duration always accrues from now. All the m_tick methods (strength, shield, speed, invisibility, burning, frozen, spawnshield, stunned, and the ammo/inferno/magnet/medic/resistance buffs) are reordered to call SUPER().m_tick FIRST and then bail if the effect is no longer active, so a tick never runs effects/sounds for an expired effect. The dead `#if 0` m_persistent stub and a commented-out Shock_ApplyDamage call are removed from stunned.qc, and stunned.qh loses three lines. Concrete bug fixed: with `g_spawnshieldtime 0`, picking up a superweapon (e.g. Fireball) lost it instantly; the same applied to powerups under `g_powerups_stack 1`.'
+  recommendation: 'PORTED 2026-07-27 on parity/port-recent-fixes. Findings from the port: the PICKUP half was already correct here — ItemPickupRules.ExistingRemaining works in remaining DURATION with a max(0, expire-now) floor, which is algebraically identical to upstream''s new max(time, gettime(...)), so the instant-loss bug never existed in this port. What did land: the GetTime contract (returns 0 when inactive, raw stored end time otherwise; the port''s ExpireTime<=0 permanent convention keeps returning `now`), a max(0, …) floor on the burn-stacking minTime that the new contract would otherwise drive negative, and the tick reorder (timeout removal before the per-effect body). The reorder is fidelity-only for us: FireApplyDamage self-guards on remaining time, so the extra body run the old order allowed was already a no-op. Two things make this worth doing properly rather than transcribing: (a) the fix is really a contract change (gettime returns 0 when inactive) and every caller must be re-read against that, and (b) the SUPER-first tick reordering is the part that actually prevents a one-frame effect flash, and it is easy to miss. Note the branch-form of the same fix is triaged separately as UW-0137 (Mario/superweapon_timer_fix) — that one is the earlier, items.qc-only version and is superseded by this.'
+  relevance: high
+  decision: ported
+  kind: qc-gameplay
+  effort: S
+  repo: data
+  source: data@916d46a6c07b
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/916d46a6c07b
+  base_symbols:
+  - qcsrc/common/mutators/mutator/status_effects/status_effects.qc
+  - qcsrc/common/mutators/mutator/status_effects/status_effects.qh
+  - qcsrc/common/mutators/mutator/status_effects/status_effect/stunned.qc
+  - qcsrc/common/mutators/mutator/status_effects/status_effect/burning.qc
+  - qcsrc/common/mutators/mutator/status_effects/status_effect/frozen.qc
+  - qcsrc/common/mutators/mutator/status_effects/status_effect/spawnshield.qc
+  - qcsrc/common/mutators/mutator/powerups/powerup/strength.qc
+  - qcsrc/common/mutators/mutator/powerups/powerup/shield.qc
+  - qcsrc/common/mutators/mutator/powerups/powerup/speed.qc
+  - qcsrc/common/mutators/mutator/powerups/powerup/invisibility.qc
+  - qcsrc/server/items/items.qc
+- uw: UW-0124
+  title: ''
+  headline: 'Weapon-arena sets renamed and extended: "most" becomes "standard", a new "extended" set (everything except hidden and superweapons) is added, and Freeze Tag / LMS / Mayhem / Team Mayhem switch their defaults to "extended_available".'
+  summary: 'bones_was_here/most_available (MR !1622, 2 commits). weapons_most() is renamed weapons_standard(); a new weapons_extended() returns every weapon without WEP_FLAG_HIDDEN or WEP_FLAG_SUPERWEAPON — i.e. it includes the "new toys" (Arc, Shockwave) that "standard" leaves out. The three near-identical weaponarena_available_*_update() functions collapse into one weaponarena_available_update() that intersects weaponsInMapAll with whatever g_weaponarena_weapons already holds, with the no-weapons-on-map fallback becoming implicit. readplayerstartcvars() is refactored from an if/else-if chain to a switch and now defaults g_weaponarena to 1, with the "0"/""/"off" cases turning it back off. Config surface: g_ca_weaponarena "most" -> "standard"; g_freezetag_weaponarena, g_lms_weaponarena, g_mayhem_weaponarena and g_tmayhem_weaponarena all "most_available" -> "extended_available"; the g_weaponarena help string enumerates the new names; cvar_changes_init()s BADPRESUFFIXVALUE server-browser whitelist gains standard/standard_available/extended/extended_available.'
+  recommendation: 'Adapt rather than port verbatim — this is a rename that breaks existing configs, and we own our own cfg surface. Two independent decisions. (1) The rename "most" -> "standard": worth taking for clarity, but it is a user-visible cvar VALUE change, so it needs the same treatment as any other config break on our side (and note the mutators-dialog branch UW-0134 already carries a follow-up commit fixing a Transifex regression this rename caused upstream — the string churn is real). (2) The behaviour change: FT/LMS/Mayhem/TMayhem defaulting to a set that INCLUDES Arc and Shockwave is a balance change, not a refactor. That is a playtest call, not a mechanical port. The weaponarena_available_update() consolidation is good and can be adopted regardless. Supersedes the branch-form entry UW-0041.'
+  relevance: medium
+  decision: pending
+  kind: data-cfg
+  effort: M
+  repo: data
+  source: data@0ccb90537353
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/0ccb90537353
+  base_symbols:
+  - qcsrc/server/world.qc
+  - gametypes-server.cfg
+  - xonotic-server.cfg
+  - qcsrc/common/gametypes/gametype/clanarena/sv_clanarena.qh
+  - qcsrc/common/gametypes/gametype/freezetag/sv_freezetag.qh
+  - qcsrc/common/gametypes/gametype/lms/sv_lms.qh
+- uw: UW-0125
+  title: ''
+  headline: 'Rename VM_TEMPSTRING_MAXSIZE to VM_TEMPSTRING_MAXLEN — the 16383 constant is a strlen bound, not a buffer size.'
+  summary: 'bones_was_here, 3 files, 5 lines. qcsrc/lib/string.qh renames the #define and rewrites its comment ("one byte is reserved for the \0 terminator" -> "strlen() excludes the \0 terminator"); the two guards in cvar_changes_init() (server/world.qc) and the registry digest-chunking guard in lib/registry.qh follow the rename. Pure naming/comment correction, no behaviour change.'
+  recommendation: 'Low priority but not worthless: the underlying fact — that the QC 16383 limit is a STRING LENGTH bound, off-by-one from the 16KiB buffer — is the kind of thing that matters if we ever mirror the registry digest chunking or the cvar_changes server-browser string. We have no VM tempstring limit (C# strings), so there is nothing to port mechanically; take it as a comment correction if our registry/cvar-changes port cites the constant, otherwise close as n/a. Flagged `pending` rather than `n/a` only so the registry-hash chunking gets one look — if our Registry_send equivalent does not chunk by this bound, it is n/a.'
+  relevance: low
+  decision: pending
+  kind: qc-gameplay
+  effort: S
+  repo: data
+  source: data@2f8cceb2b56f
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/2f8cceb2b56f
+  base_symbols:
+  - qcsrc/lib/string.qh
+  - qcsrc/lib/registry.qh
+  - qcsrc/server/world.qc
+- uw: UW-0126
+  title: ''
+  headline: 'Notification wording: "spectate or observe" becomes just "spectate", since upstream uses "spectate" to cover both.'
+  summary: 'terencehill, 1 file, 2 lines in qcsrc/common/notifications/all.inc. Terminology-only change to a player-facing notification string.'
+  recommendation: 'Cosmetic string change. It touches the notification catalogue we do mirror, so it is a one-line follow-the-upstream-wording decision rather than a feature. Note that Vortex Arena owns its own player-facing copy (see docs/REBRANDING.md — .po keys and upstream comments are frozen, but display strings are ours), so this is worth taking only if we are otherwise tracking upstream notification wording verbatim. Cheap either way.'
+  relevance: low
+  decision: pending
+  kind: data-cfg
+  effort: S
+  repo: data
+  source: data@9b9996dc7bd4
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/9b9996dc7bd4
+  base_symbols:
+  - qcsrc/common/notifications/all.inc
+- uw: UW-0127
+  title: ''
+  headline: 'Campaign: add en_AU and en_GB translations (3 files).'
+  summary: 'otta8634. Localisation data for the singleplayer campaign in Australian and British English. Slipped past the harvesters translation filter because the subject says "Add ... translations" rather than the Transifex-autosync phrasings the filter matches.'
+  recommendation: 'n/a — i18n content, and our locale story is separate (the .po key namespace is frozen per docs/REBRANDING.md while display copy is ours). Recorded only so the row exists and the sha is deduped on future runs. Worth widening the harvesters TRANSLATION_RE to also catch "add ... translations" so rows like this stop consuming a UW id.'
+  relevance: none
+  decision: n/a
+  kind: build/i18n/ci
+  effort: S
+  repo: data
+  source: data@1d06d83687ba
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/commit/1d06d83687ba
+  base_symbols: []
+- uw: UW-0128
+  title: ''
+  headline: 'Fix upstream regression #3035 — the fallback crosshair flashes briefly when changing weapons.'
+  summary: 'terencehill, 1 commit, 2 lines in qcsrc/server/weapons/weaponsystem.qc, pushed 2026-07-27 with no MR yet. Repairs a regression introduced by upstream c1dcdce5 in which the generic fallback crosshair is drawn for a frame or two during a weapon switch instead of the incoming weapons own crosshair.'
+  recommendation: 'Worth a look but check applicability first: the regression it fixes was introduced by an upstream commit (c1dcdce5) that may be after our pin, in which case we never inherited the bug and this is n/a for us. If we DID pick up c1dcdce5, this is a two-line fix and should follow it. Related context on our side: the client fire-prediction model memory covers our per-weapon ready clock, which is the nearest analogue to the state this touches. Brand new and un-MRd, so expect churn.'
+  relevance: medium
+  decision: pending
+  kind: qc-gameplay
+  effort: S
+  repo: data
+  source: data:terencehill/weapon_switch_regressions_fixes@750c0a3e5850
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/tree/terencehill/weapon_switch_regressions_fixes
+  base_symbols:
+  - qcsrc/server/weapons/weaponsystem.qc
+- uw: UW-0129
+  title: ''
+  headline: 'MR !1632: replace 7 teamshoot voice clips across 6 player models to remove outdated slang — upstream converging on the same content cleanup we already did.'
+  summary: 'terencehill, 1 commit, 7 .ogg replacements: carni-lycan/teamshoot3, marine/teamshoot2, marine/teamshoot3, marine/teamshoot4, pyria-skadi/teamshoot2, robot/teamshoot3, specop/teamshoot2. Each clip is re-recorded/re-cut rather than deleted, so the counted-variant numbering is untouched (file sizes change, count does not).'
+  recommendation: 'Directly overlaps our own player-voice audit (see the player-voice-audit memory), which removed 4 slur clips from the separate asset repo and left the profanity taunts pending a decision. Two things to settle: (1) whether upstreams replacement clips cover any of the 4 we removed — if so, taking their audio restores a variant slot we currently have renumbered, and the counted-variant .sounds contract (delete + renumber + decrement N) means that is NOT a drop-in; (2) whether we want upstreams re-cut audio at all, given the asset repo is ours. Replacement-in-place is the better shape than our delete+renumber if we adopt it, because it leaves the .sounds counts alone. High relevance because it interacts with a decision already half-made on our side, not because the clips themselves are urgent.'
+  relevance: high
+  decision: pending
+  kind: asset
+  effort: S
+  repo: data
+  source: data:terencehill/teamshoot_cleanup@211d342ba42c
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/merge_requests/1632
+  base_symbols:
+  - sound/player/carni-lycan/coms/teamshoot3.ogg
+  - sound/player/marine/coms/teamshoot2.ogg
+  - sound/player/marine/coms/teamshoot3.ogg
+  - sound/player/marine/coms/teamshoot4.ogg
+  - sound/player/pyria-skadi/coms/teamshoot2.ogg
+  - sound/player/robot/coms/teamshoot3.ogg
+  - sound/player/specop/coms/teamshoot2.ogg
+- uw: UW-0130
+  title: ''
+  headline: 'MR !1579 (ilikephysics4) force-pushed and grown to 21 commits — the movement-physics rewrite now adds Q3 crouching, Q3/CPMA step-up, predicted skimming, a water-physics rewrite and a rewritten unsticking pass.'
+  summary: 'bones_was_here, 21 commits ahead of master, tip moved 582a369000d7 -> 91d517e6e97e (the branch was rebased, so the previously triaged tip is no longer reachable and a true delta cannot be computed). Nine commits are newer than the UW-0051 triage: CPMA double jumps (step up, ramp, headbang, teleport) WITH PREDICTION; Q3 and CPMA step-up behaviours plus an improved default; predicted Q3 skimming; Q3 crouching behaviour with customisable speed; removal of legacy/unused step-up code; a rewritten unsticking pass; a rewritten water physics pass (acceleration, friction, water jumping); the Q3 acceleration penalty while holding +jump/+crouch; and a pipeline hash bump. The older twelve remain: id-tech-3 velocity clipping, corner step-up clipping, Q3-derived anti-stick, rewritten ground detection with frametime-independent jumping, sloping-ground-plane handling, sv_doublejump/sv_jumpspeedcap_max_disable_on_ramps optimisation, slick-surface detection + XDF mode + slick gravity fix, footstep surface detection, and func_plat/func_button fixes. MR description resolves 15 upstream issues (#2162, #2181, #2237, #2341, #2394, #2450, #2570, #2596, #2626, #2694, #2818, #2819, #2821, #3010, #3011) and states the commits are interdependent and must be tested together.'
+  recommendation: 'Still the single highest-impact open upstream item for us, and now materially bigger than when UW-0051/UW-0062 were triaged. Do NOT port piecemeal — bones says explicitly the commits interlock, and our movement layer already carries hard-won divergences that a partial port would silently undo: the GAMEPLAYFIX_Q2AIRACCELERATE strafe-parity fix, the WalkMove downtrace jump-grant fix (JumpGrantReproTests pins it), and the fixed-timestep bunnyhop work. Read strafe-parity-investigation, bhop-crippled-jump-downtrace-grant and camera-drift-render-smoothing before any of it. The prediction-carrying commits (skimming, double jumps, frametime-independent jumping) are the ones that matter most for us and also the ones most likely to collide with the physics_jitter_fix / cl_smoothdt findings in the rubberband postmortem — decide the frame-timing story first, then this. Recommend treating it as its own feature-build with a playtest gate rather than a port task. Supersedes UW-0051; overlaps UW-0062 (morosophos/server-ilikephysics4, which bundles this with CTS strafe stats).'
+  relevance: high
+  decision: pending
+  kind: qc-gameplay
+  effort: L
+  repo: data
+  source: data:bones_was_here/ilikephysics4@91d517e6e97e
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/merge_requests/1579
+  base_symbols:
+  - qcsrc/common/physics/player.qc
+  - qcsrc/common/physics/movetypes/movetypes.qc
+  - qcsrc/common/mapobjects/func/plat.qc
+  - qcsrc/common/mapobjects/func/button.qc
+- uw: UW-0131
+  title: ''
+  headline: 'MR !1630: silence two classes of spammy mapinfo warning — indented comments, and "assignment to world" when fog is set.'
+  summary: 'bones_was_here, 2 commits, 2 files (+28/-19). (1) mapinfo.qc stops warning about comment lines that are indented rather than starting at column 0. (2) server/world.qc is restructured so setting fog no longer trips QC "assignment to world" warnings — 43 lines reworked, i.e. a real control-flow change rather than a warning suppression.'
+  recommendation: 'Low value for us directly: our mapinfo parser is a reimplementation and does not emit QC warnings. The one thing worth extracting is the INPUT contract — that indented comment lines are legal in .mapinfo files — since a stricter parser on our side would reject maps upstream accepts. Check our mapinfo reader tolerates leading whitespace before the comment marker; if it does, close as n/a. The fog/world.qc half is QC-warning housekeeping with no port surface.'
+  relevance: low
+  decision: pending
+  kind: qc-gameplay
+  effort: S
+  repo: data
+  source: data:bones_was_here/mapinfo_fixes@0ba9b6cc2e76
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/merge_requests/1630
+  base_symbols:
+  - qcsrc/common/mapinfo.qc
+  - qcsrc/server/world.qc
+- uw: UW-0132
+  title: ''
+  headline: 'k9er/seeker force-pushed and grown to 37 commits — the Seeker rework now also renames "T.A.G. Seeker" to "Seeker", lets the tag deal damage, and still carries three turret/weapon fixes that already landed on master.'
+  summary: 'Author of record otta8634, 37 commits ahead of master, 67 files, +1404/-1061. Tip moved f66037d92985 -> 7c3db71510e7 (rebased; the previously triaged tip is unreachable, so no true delta). Newest work: allow firing missiles while holding a tracker; improved W_Seeker_Missile_Think logic; fire fewer missiles when the tag did not travel far; a cleanup/fix of the weapon-guide DPS menu code; the tag itself now deals damage; laser-guidable Seeker tag with Devastator code improvements; and a rename of the weapon from "T.A.G. Seeker" to "Seeker". The branch also still contains the three commits that have since landed on master via UW-0119 (turret Phaser breaking other turret weapons, eWheel CSQC drift, W_SetupShot post-calculation offsets), so it is partially merged upstream.'
+  recommendation: 'Supersedes UW-0047. Wait for it to land rather than porting from the branch: it is 37 commits, it has been rebased at least once since we triaged it, and three of its commits have already been split off and merged separately — porting now means porting a moving target and re-doing the overlap with UW-0119. Two parts deserve separate decisions when it does land: the weapon RENAME (user-facing, and we control our own weapon naming — see docs/REBRANDING.md) and the tag-deals-damage / guidable-tag balance changes, which are a design change to a weapon we have already ported (UW-0033, decided `port`, covers the g_projectiles_interact fix on the same weapon). The DPS-menu cleanup is independently useful.'
+  relevance: high
+  decision: pending
+  kind: qc-gameplay
+  effort: L
+  repo: data
+  source: data:k9er/seeker@7c3db71510e7
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/tree/k9er/seeker
+  base_symbols:
+  - qcsrc/common/weapons/weapon/seeker.qc
+  - qcsrc/common/weapons/weapon/devastator.qc
+  - qcsrc/server/weapons/tracing.qc
+  - qcsrc/server/weapons/csqcprojectile.qc
+  - qcsrc/common/turrets/turret/phaser_weapon.qc
+  - qcsrc/common/turrets/turret/ewheel.qc
+- uw: UW-0133
+  title: ''
+  headline: 'MR !1627: upstream CI benchmark switches from stormkeep to finalrage.'
+  summary: 'bones_was_here, 1 commit, 4 files (.gitignore, .gitlab-ci.yml, qcsrc/tools/sv_game-hashtest.sh, serverbench.cfg). Changes which map the upstream GitLab pipeline uses for its server benchmark / hash test.'
+  recommendation: 'n/a — upstream CI configuration. Our gate is ci/ci.sh and tools/perf-smoke.ps1 against our own maps. Recorded for dedup only. (Tangentially: if we ever want a comparable upstream-vs-port benchmark number, finalrage is now the map upstream measures on — worth remembering when choosing a perf-smoke map, but not a port.)'
+  relevance: none
+  decision: n/a
+  kind: build/i18n/ci
+  effort: S
+  repo: data
+  source: data:bones_was_here/pipeline_erbium@f88abb6d43c8
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/merge_requests/1627
+  base_symbols:
+  - .gitlab-ci.yml
+  - serverbench.cfg
+  - qcsrc/tools/sv_game-hashtest.sh
+- uw: UW-0134
+  title: ''
+  headline: 'MR !1532 (Remake Mutators dialog) updated to 5 commits / 102 files, and now carries a fix for the weaponarena Transifex regression caused by the "most" -> "standard" rename.'
+  summary: 'otta8634, 5 commits, 102 files, +2241/-472. Tip moved 2accdf057be4 -> e26795267645 (rebased). Beyond the registry-driven dialog rebuild already triaged as UW-0048: a Settings > Game menu code cleanup, improved conditions for enabling mutators, a new "Buffs replace powerups" string, and a fix for the weaponarena string regression introduced by !1622 (see UW-0124). qcsrc/menu/xonotic/weaponarenacheckbox.qh is deleted; server/mutators/events.qh gains 6 lines and server/world.qc 37.'
+  recommendation: 'Supersedes UW-0048. Note the new coupling: this branch now DEPENDS on the weaponarena rename in UW-0124, so the two must be decided together — taking the dialog without the rename (or vice versa) leaves the mutator checkbox strings wrong. Our menu is a Godot reimplementation, so this is `adapt` territory at best: the portable part is the registry-driven data model (which mutators exist, what gates each one), not the dialog layout. Relevant trap on our side: all 24 menu checkboxes follow QC value-pair semantics (see the view-bobfall-idle-sway memory) — a registry-driven rebuild has to preserve that or checkboxes silently invert.'
+  relevance: high
+  decision: pending
+  kind: qc-gameplay
+  effort: L
+  repo: data
+  source: data:k9er/new-mutator-dialog@e26795267645
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/merge_requests/1532
+  base_symbols:
+  - qcsrc/menu/xonotic/dialog_multiplayer_create_mutators.qc
+  - qcsrc/menu/xonotic/weaponarenacheckbox.qh
+  - qcsrc/server/mutators/events.qh
+  - qcsrc/server/world.qc
+  - xonotic-client.cfg
+- uw: UW-0135
+  title: ''
+  headline: 'MR !1615 (Q3 map entities) grown from 21 to 25 commits — adds target_speaker wait/random keys and Q3-compatible toggled looping, func_bobbing angle handling, the "model2" key, and map/match reset support for trigger delay.'
+  summary: 'bones_was_here, 25 commits ahead, 44 files, +589/-422. Tip moved 898b323857e3 -> ac08c36476cf (rebased). New since the UW-0042 triage: triggers support map/match resets for the .delay field; func_bobbing ignores angles on Q3 maps; target_speaker gains a Q3-compatible model-specific "*" feature, wait+random keys, a reduced default ambient attenuation, toggled looping and an ACTIVATOR spawnflag fix; func_bobbing and func_pendulum kill blockers on Q3 maps; func_plat implements the Q3 CRUSH spawnflag (with a door damage-frequency fix); func_door/func_plat blocked-func refactor; the Q3 mover "model2" key; and func_door awarding kill/damage credit for door-based traps.'
+  recommendation: 'Supersedes UW-0042. Still high value — Q3 map-entity compatibility is what makes third-party map libraries load correctly, and this is the most complete single source for it. The new target_speaker work is the standout for us because ambient/looping sound entities are a place our reimplementation is most likely to diverge silently (see the sound-system-and-two-bugs memory for the faithful DP sound model we built). func_door kill/damage credit touches the deathtype plumbing — remember deathtype is a STRING on our side while damage APIs take an int weapon id (dual-deathtype-int-string memory), so trap kills need deathTag:. Recommend porting per-entity with a real Q3 map as the test fixture rather than as one batch.'
+  relevance: high
+  decision: pending
+  kind: qc-gameplay
+  effort: L
+  repo: data
+  source: data:bones_was_here/q3_mapents@ac08c36476cf
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/merge_requests/1615
+  base_symbols:
+  - qcsrc/common/mapobjects/target/speaker.qc
+  - qcsrc/common/mapobjects/func/bobbing.qc
+  - qcsrc/common/mapobjects/func/pendulum.qc
+  - qcsrc/common/mapobjects/func/plat.qc
+  - qcsrc/common/mapobjects/func/door.qc
+  - qcsrc/common/mapobjects/triggers.qc
+  - qcsrc/server/compat/quake3.qh
+  - qcsrc/server/main.qc
+- uw: UW-0136
+  title: ''
+  headline: 'MR !1629: decouple minigame activation from player joining to fix crashes, and fix minigame invite icons.'
+  summary: 'Mario, 1 commit, 15 files, +201/-164. Minigame activation no longer rides on the player-join path — minigames.qc/qh and sv_minigames.qc/qh gain the separation (sv_minigames.qh +10, minigames.qh +6) — which upstream reports as fixing crashes. Also fixes invite icons and reworks ttt.qc (tic-tac-toe, 48 lines) and ps.qc (peg solitaire). One line in common/notifications/all.qc.'
+  recommendation: 'Worth taking if we carry the same coupling. Our minigame port exists (src/XonoticGodot.Common/Gameplay/Minigames/) and a crash class tied to join/activation ordering is exactly the sort of thing that shows up late and looks like a netcode bug. Check first whether our activation path is already decoupled — if minigame start is driven from our own lifecycle rather than the QC join hook, this may already be n/a and only the invite-icon fix applies. Medium rather than high because minigames are peripheral to the current roadmap.'
+  relevance: medium
+  decision: pending
+  kind: qc-gameplay
+  effort: M
+  repo: data
+  source: data:Mario/minigame_fixes@40130b9c7323
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/merge_requests/1629
+  base_symbols:
+  - qcsrc/common/minigames/minigames.qc
+  - qcsrc/common/minigames/minigames.qh
+  - qcsrc/common/minigames/sv_minigames.qc
+  - qcsrc/common/minigames/sv_minigames.qh
+  - qcsrc/common/minigames/minigame/ttt.qc
+  - qcsrc/common/minigames/minigame/ps.qc
+  - qcsrc/common/notifications/all.qc
+- uw: UW-0137
+  title: ''
+  headline: 'Superseded: the early items.qc-only form of the powerup instant-loss fix that landed (in a fuller form) as UW-0123.'
+  summary: 'Mario, 1 commit, 5 lines in qcsrc/server/items/items.qc — wraps the five powerup pickup timers in max(time, StatusEffects_gettime(...)). The version that reached master (data@916d46a6c07b, UW-0123) contains this same items.qc change PLUS the root-cause fix in StatusEffects_gettime() and the m_tick reordering across every status effect.'
+  recommendation: 'n/a — superseded. Port UW-0123 instead: this branch treats the symptom at the five call sites while UW-0123 fixes the contract in StatusEffects_gettime() itself, so taking this one would leave every other gettime caller still reading a stale "expires now" value. Recorded so the branch tip is deduped and the relationship is on the record.'
+  relevance: low
+  decision: n/a
+  kind: qc-gameplay
+  effort: S
+  repo: data
+  source: data:Mario/superweapon_timer_fix@4eeec45fc1e2
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/tree/Mario/superweapon_timer_fix
+  base_symbols:
+  - qcsrc/server/items/items.qc
+- uw: UW-0138
+  title: ''
+  headline: 'hit_indicator_v3 rebased to 4 commits — the directional hit indicator now covers Arc beam and Shotgun melee, and drops a duplicated Damage_DamageInfo call on nade explosions.'
+  summary: 'terencehill, 4 commits, 20 files, +314/-106. Tip moved 7d028f705fe8 -> aefe7a609a23 (rebased). The base commit implements a 2D directional hit indicator drawn around the screen centre pointing at the damage source; the three follow-ups add Arc beam support, Shotgun melee support, and remove a duplicated Damage_DamageInfo call on nade explosion. Adds 13 lines of cvars to xonotic-client.cfg and touches server/damage.qh plus server/weapons/tracing.{qc,qh}.'
+  recommendation: 'Supersedes UW-0056 (and relates to UW-0063, the v2 draft MR !1262). Good fit for us: we already have the server->client damage feedback plumbing this needs — the hit/typehit/kill feedback parity work (protocol v16, per-frame accumulators flushed in EndFrame) and the decoupled damagetext path, both covered in the sound-system-and-two-bugs memory. That makes this mostly a CSQC/HUD-side build on an existing wire, rather than new networking. Two notes: the duplicated-Damage_DamageInfo removal is a correctness fix worth taking independently of the HUD feature, and our HUD panel visibility is owned by HudManager for cvar-gated panels (hud-panel-show-mode-gating memory) — a new indicator must register there or it will not fade correctly.'
+  relevance: high
+  decision: pending
+  kind: qc-gameplay
+  effort: M
+  repo: data
+  source: data:terencehill/hit_indicator_v3@aefe7a609a23
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/tree/terencehill/hit_indicator_v3
+  base_symbols:
+  - qcsrc/client/hud/panel/damagetext.qc
+  - qcsrc/server/damage.qh
+  - qcsrc/server/weapons/tracing.qc
+  - qcsrc/server/weapons/tracing.qh
+  - xonotic-client.cfg
+- uw: UW-0139
+  title: ''
+  headline: 'Remove broken debugging code from the QuakeC compiler wrapper script.'
+  summary: 'Juhu, 1 commit, qcsrc/tools/qcc.sh (+3/-14). Deletes dead environment-variable debugging code from the gmqcc wrapper.'
+  recommendation: 'n/a — upstream QuakeC build tooling. We compile C# with dotnet; there is no gmqcc in our pipeline. Dedup row only.'
+  relevance: none
+  decision: n/a
+  kind: build/i18n/ci
+  effort: S
+  repo: data
+  source: data:Juhu/qcc_sh_broken_envvars@994eedbbe1e4
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/tree/Juhu/qcc_sh_broken_envvars
+  base_symbols:
+  - qcsrc/tools/qcc.sh
+- uw: UW-0140
+  title: ''
+  headline: 'Draft MR !1170: a shell tool for packaging progs compiled from dev branches into distributable pk3s.'
+  summary: 'drjaska, 7 commits, last touched 2024-08-24, still a draft after ~2 years. Adds git-progs-pk3packager.sh for distributing QuakeC progs built from development branches.'
+  recommendation: 'n/a — upstream distribution tooling for QuakeC progs, which we do not produce. Our equivalent problem (shipping builds to players) is the launcher/updater track: Avalonia + Velopack with a split payload and latest.json, on feature/launcher-updater. Nothing to take. Dedup row only.'
+  relevance: none
+  decision: n/a
+  kind: build/i18n/ci
+  effort: M
+  repo: data
+  source: data:drjaska/git-progs-pk3packager@6cb5eeadd57e
+  url: https://gitlab.com/xonotic/xonotic-data.pk3dir/-/merge_requests/1170
+  base_symbols:
+  - misc/tools/git-progs-pk3packager.sh
+- uw: UW-0141
+  title: ''
+  headline: 'DarkPlaces GLES2 rendering-backend work (4 commits, last touched 2024-08) — the older sibling of the already-triaged uis/gles2-again.'
+  summary: 'uis, 4 commits ahead of darkplaces master, last commit 2024-08-03, no open MR. GLES2 backend changes to the DarkPlaces renderer. Closely related to UW-0107 (dp:uis/gles2-again, triaged `defer`, relevance low), which is the draft-MR continuation of the same effort.'
+  recommendation: 'n/a — Godot owns our rendering backend entirely, so DarkPlaces GL/GLES backend work has no port surface (the dp-engine exceptions are protocol, physics, collision, asset formats and parser/security fixes, none of which this touches). Surfaced only because it is ahead of master and within the branch recency window at triage time; the sibling branch was already deferred for the same reason.'
+  relevance: none
+  decision: n/a
+  kind: dp-engine
+  effort: M
+  repo: dp
+  source: dp:uis/gles2@5c287aa7a730
+  url: https://gitlab.com/xonotic/darkplaces/-/tree/uis/gles2
+  base_symbols:
+  - vid_sdl.c
+  - gl_backend.c

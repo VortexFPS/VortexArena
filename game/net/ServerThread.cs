@@ -2,10 +2,10 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Server;
+using VortexArena.Common.Services;
+using VortexArena.Server;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// S5 (sv_threaded — DEFAULT ON since the 2026-07-11 WS1 rework) — the dedicated server-simulation worker

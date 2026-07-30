@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The render-state side of Darkplaces' <c>RENDER_VIEWMODEL</c> for the first-person weapon — everything the

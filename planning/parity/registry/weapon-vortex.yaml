@@ -20,10 +20,10 @@ features:
       - "common/weapons/weapon/vortex.qc:W_Vortex_Charge"
       - "common/weapons/weapon/vortex.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:Charge"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:ChargeAlwaysRegen"
-      - "src/XonoticGodot.Server/GameWorld.cs:2490-2495"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:Charge"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:ChargeAlwaysRegen"
+      - "src/VortexArena.Server/GameWorld.cs:2490-2495"
     constants:
       - { name: "g_balance_vortex_charge_rate", base: "0.6", port: "0.6", match: true }
       - { name: "g_balance_vortex_charge_limit", base: "1", port: "1", match: true }
@@ -52,7 +52,7 @@ features:
     base_refs:
       - "common/weapons/weapon/vortex.qc:MUTATOR_HOOKFUNCTION(vortex_charge, GetPressedKeys)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:WrThink"
     constants:
       - { name: "g_balance_vortex_charge_velocity_rate", base: "0", port: "0", match: true }
       - { name: "g_balance_vortex_charge_minspeed", base: "400", port: "400", match: true }
@@ -78,7 +78,7 @@ features:
     base_refs:
       - "common/weapons/weapon/vortex.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:WrThink"
     constants:
       - { name: "g_balance_vortex_charge_rot_pause", base: "0", port: "0", match: true }
       - { name: "g_balance_vortex_secondary_chargepool", base: "0", port: "0", match: true }
@@ -106,7 +106,7 @@ features:
     base_refs:
       - "common/weapons/weapon/vortex.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:WrThink"
     constants:
       - { name: "g_balance_vortex_secondary_chargepool_regen", base: "0.15", port: "0.15", match: true }
       - { name: "g_balance_vortex_secondary_chargepool_pause_regen", base: "1", port: "1", match: true }
@@ -131,7 +131,7 @@ features:
     base_refs:
       - "common/weapons/weapon/vortex.qc:W_Vortex_Attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:Attack"
     constants:
       - { name: "g_balance_vortex_primary_damage", base: "80", port: "80", match: true }
       - { name: "g_balance_vortex_primary_force", base: "200", port: "200", match: true }
@@ -162,8 +162,8 @@ features:
       - "server/weapons/tracing.qc:FireRailgunBullet"
       - "lib/math.qh:ExponentialFalloff"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireRailgunBullet"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ExponentialFalloff"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireRailgunBullet"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ExponentialFalloff"
     constants:
       - { name: "g_balance_vortex_primary_damagefalloff_mindist", base: "0", port: "0", match: true }
       - { name: "g_balance_vortex_primary_damagefalloff_maxdist", base: "0", port: "0", match: true }
@@ -191,7 +191,7 @@ features:
     base_refs:
       - "common/weapons/weapon/vortex.qc:W_Vortex_Attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:Attack"
     constants:
       - { name: "g_balance_vortex_charge_animlimit", base: "0.5", port: "0.5", match: true }
       - { name: "overcharge volume ramp", base: "VOL_BASE * (charge - 0.5*animlimit)/(1 - 0.5*animlimit)", port: "0.7f * (charge - 0.5*animlimit)/(1 - 0.5*animlimit)", match: true }
@@ -219,8 +219,8 @@ features:
       - "common/weapons/weapon/vortex.qc:NET_HANDLE(TE_CSQC_VORTEXBEAMPARTICLE)"
       - "common/weapons/weapon/vortex.qc:vortex_glowcolor"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:VORTEX_BEAM"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:VORTEX_BEAM"
     constants:
       - { name: "beam alpha/spacing scale", base: "sqrt(charge)", port: "none (constant)", match: false }
       - { name: "cl_tracers_teamcolor tint", base: "vortex_glowcolor(colors, charge)", port: "vortex_glowcolor(actor.Team, max(0.25, sqrt(charge)))", match: true }
@@ -282,8 +282,8 @@ features:
       - "common/weapons/weapon/vortex.qc:wr_impacteffect"
       - "common/weapons/weapon/vortex.qc:W_Vortex_Attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:VORTEX_IMPACT"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:VORTEX_IMPACT"
     constants:
       - { name: "EFFECT_VORTEX_IMPACT", base: "boxparticles, no inherited velocity", port: "VORTEX_IMPACT at hit", match: true }
       - { name: "EFFECT_VORTEX_MUZZLEFLASH", base: "models/nexflash.md3 + effect", port: "VORTEX_MUZZLEFLASH at muzzle", match: true }
@@ -338,7 +338,7 @@ features:
       - "common/weapons/weapon/vortex.qc:wr_zoomdir"
       - "common/weapons/weapon/vortex.qh:w_reticle"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:ZoomOnSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:ZoomOnSecondary"
       - "game/net/NetGame.cs:2381"
       - "game/net/NetGame.cs:2420"
     constants:
@@ -368,10 +368,10 @@ features:
       - "common/weapons/weapon/vortex.qc:wr_resetplayer"
       - "common/weapons/weapon/vortex.qc:wr_reload"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:CheckAmmoSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:ForcedReload"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:WrSetup"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:CheckAmmoSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:ForcedReload"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:WrSetup"
     constants:
       - { name: "g_balance_vortex_primary_ammo", base: "6", port: "6", match: true }
       - { name: "g_balance_vortex_pickup_ammo", base: "30", port: "30 (registry)", match: true }
@@ -399,10 +399,10 @@ features:
       - "common/weapons/weapon/vortex.qc:W_Vortex_Attack"
       - "server/damage.qc:646-651 (yoda/impressive_hits set in the Damage path)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:Announce"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:IsFlying"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:86-87 (ACHIEVEMENT_IMPRESSIVE/YODA)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:Announce"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:IsFlying"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:86-87 (ACHIEVEMENT_IMPRESSIVE/YODA)"
     constants:
       - { name: "yoda gate (shooter flying)", base: "if (yoda && flying)", port: "impressiveHit && flying && victim player && IsFlying(victim)", match: true }
       - { name: "impressive every-other gate", base: "if (impressive_hits && actor.vortex_lasthit) announce; then actor.vortex_lasthit = impressive_hits", port: "same via GetLastHit/SetLastHit", match: true }
@@ -433,10 +433,10 @@ features:
       - "common/weapons/weapon/vortex.qc:wr_killmessage"
       - "common/weapons/weapon/vortex.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:100"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:174"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:395"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:842"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:100"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:174"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:395"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:842"
     constants:
       - { name: "wr_killmessage", base: "WEAPON_VORTEX_MURDER", port: "WEAPON_VORTEX_MURDER", match: true }
       - { name: "wr_suicidemessage", base: "WEAPON_THINKING_WITH_PORTALS", port: "WEAPON_THINKING_WITH_PORTALS", match: true }
@@ -461,8 +461,8 @@ features:
     base_refs:
       - "common/weapons/weapon/vortex.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:ShotSpeedFor"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ShotSpeedFor"
     constants:
       - { name: "bot_aim(shotspeed)", base: "1000000 (hitscan: effectively instant)", port: "hitscan branch => near-instant lead (BotBrain.cs:807)", match: true }
       - { name: "bot_aim(shotspeedupward)", base: "0", port: "0 (no upward lead for hitscan)", match: true }
@@ -490,8 +490,8 @@ features:
       - "server/client.qc:2470-2487 (PlayerPostThink charge-rot loop)"
       - "common/weapons/weapon/vortex.qc:wr_think (vortex_charge_rottime push via charge_rot_pause)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs:RotCharge"
-      - "src/XonoticGodot.Server/GameWorld.cs:2501-2505"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs:RotCharge"
+      - "src/VortexArena.Server/GameWorld.cs:2501-2505"
     constants:
       - { name: "g_balance_vortex_charge_rot_rate", base: "0", port: "0 (read; Cvars.ChargeRotRate)", match: true }
       - { name: "g_balance_vortex_charge_rot_pause", base: "0", port: "0 (read; sets VortexChargeRotTime)", match: true }

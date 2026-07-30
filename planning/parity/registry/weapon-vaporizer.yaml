@@ -17,8 +17,8 @@ features:
       - "common/weapons/weapon/vaporizer.qc:W_Vaporizer_Attack"
       - "server/weapons/tracing.qc:FireRailgunBullet"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireRailgunBullet"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireRailgunBullet"
     constants:
       - { name: "primary_damage", base: "150 (<=0 => 10000 instakill)", port: "150 (<=0 => 10000)", match: true }
       - { name: "primary_force", base: "800", port: "800", match: true }
@@ -49,8 +49,8 @@ features:
       - "server/weapons/tracing.qc:Headshot"
       - "server/weapons/tracing.qc:FireRailgunBullet"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:Headshot"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:TraceHitsBox"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:Headshot"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:TraceHitsBox"
     constants:
       - { name: "head_box_horizontal", base: "0.6 * body box", port: "0.6 * mins/maxs", match: true }
       - { name: "head_box_vertical", base: "1.3*view_ofs_z - 0.3*maxs_z .. maxs_z", port: "same", match: true }
@@ -77,7 +77,7 @@ features:
     base_refs:
       - "common/weapons/weapon/vaporizer.qc:W_Vaporizer_Attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:Attack"
     constants:
       - { name: "fire_sound", base: "weapons/minstanexfire.wav", port: "weapons/minstanexfire.wav", match: true }
       - { name: "fire_volume", base: "VOL_BASE * 0.8", port: "SoundLevels.VolBase * 0.8f", match: true }
@@ -104,8 +104,8 @@ features:
       - "common/weapons/weapon/vaporizer.qc:VaporizerBeam_Draw"
       - "common/weapons/weapon/vaporizer.qc:W_Vaporizer_Attack (W_MuzzleFlash thiswep)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:Attack (EffectEmitter.Emit VAPORIZER_BEAM/_HIT with team-color RGB + VORTEX_MUZZLEFLASH)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:107-108 (VAPORIZER_BEAM/_HIT trails)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:Attack (EffectEmitter.Emit VAPORIZER_BEAM/_HIT with team-color RGB + VORTEX_MUZZLEFLASH)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:107-108 (VAPORIZER_BEAM/_HIT trails)"
     constants:
       - { name: "beam_tex", base: "particles/gauntletbeam (hit) / particles/lgbeam", port: "VAPORIZER_BEAM_HIT (TE_TEI_G3_HIT) / VAPORIZER_BEAM (TE_TEI_G3)", match: false }
       - { name: "cl_vaporizerbeam_lifetime", base: "0.8", port: "engine trail default", match: false }
@@ -134,7 +134,7 @@ features:
     base_refs:
       - "common/weapons/weapon/vaporizer.qc:wr_impacteffect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:Attack (EffectEmitter.Emit VORTEX_IMPACT + WeaponSplash.ImpactSoundAt neximpact)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:Attack (EffectEmitter.Emit VORTEX_IMPACT + WeaponSplash.ImpactSoundAt neximpact)"
     constants:
       - { name: "impact_effect", base: "EFFECT_VORTEX_IMPACT", port: "VORTEX_IMPACT (nex_impact)", match: true }
       - { name: "impact_sound", base: "weapons/neximpact.wav (SND_VAPORIZER_IMPACT) VOL_BASE ATTN_NORM", port: "weapons/neximpact.wav VolBase AttenNorm", match: true }
@@ -161,8 +161,8 @@ features:
       - "common/weapons/weapon/vaporizer.qc:W_Vaporizer_Attack (yoda/impressive_hits, vaporizer_lasthit)"
       - "common/weapons/weapon/vaporizer.qc:wr_setup/wr_resetplayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:Announce"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:WrSetup/WrResetPlayer (vaporizer_lasthit reset)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:Announce"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:WrSetup/WrResetPlayer (vaporizer_lasthit reset)"
     constants:
       - { name: "impressive_cadence", base: "every 2nd qualifying hit (vaporizer_lasthit toggle)", port: "every 2nd hit via ConditionalWeakTable side-table", match: true }
       - { name: "yoda_gate", base: "yoda && shooter-flying (victim flying PLAYER, cross-team)", port: "impressiveHit && shooterFlying && victim Client && IsFlying(hit)", match: true }
@@ -187,8 +187,8 @@ features:
     base_refs:
       - "common/weapons/weapon/vaporizer.qc:wr_think (fire&2 -> W_Blaster_Attack)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:BlasterSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:BlasterSecondary"
     constants:
       - { name: "blaster_refire", base: "0.7 (WEP_CVAR_PRI(BLASTER,refire)) * W_WeaponRateFactor", port: "0.7 * WeaponRateFactor(actor)", match: true }
       - { name: "blaster_ammo_decrement", base: "WEP_CVAR_PRI(BLASTER,ammo) if set (default 0)", port: "not decremented (harmless at default 0)", match: true }
@@ -214,8 +214,8 @@ features:
     base_refs:
       - "common/weapons/weapon/vaporizer.qc:W_RocketMinsta_Explosion"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:RocketMinstaExplosion"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:RocketMinstaExplosion"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "g_rm_damage", base: "70", port: "fallback 70", match: true }
       - { name: "g_rm_edgedamage", base: "38", port: "fallback 38", match: true }
@@ -247,9 +247,9 @@ features:
       - "common/weapons/weapon/vaporizer.qc:W_RocketMinsta_Attack"
       - "common/weapons/weapon/vaporizer.qc:wr_think (rapid ladder jump_interval2)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:RocketMinstaLaserBarrage"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:RocketMinstaLaserExplode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:RocketMinstaLaserBarrage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:RocketMinstaLaserExplode"
     constants:
       - { name: "g_rm_laser_count", base: "3", port: "fallback 3", match: true }
       - { name: "g_rm_laser_damage", base: "80", port: "fallback 80", match: true }
@@ -289,11 +289,11 @@ features:
       - "common/weapons/weapon/vaporizer.qc:W_Vaporizer_Attack (W_DecreaseAmmo)"
       - "common/weapons/weapon/vaporizer.qc:wr_checkammo1/wr_checkammo2/wr_reload/wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:CheckAmmoSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:WrThink (forced reload)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:BotWantsSecondary (wr_aim)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:CheckAmmoSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:WrThink (forced reload)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:BotWantsSecondary (wr_aim)"
     constants:
       - { name: "primary_ammo (non-instagib)", base: "10 (g_instagib ? 1 : primary_ammo)", port: "10 (InstagibActive reads live g_instagib; non-instagib pickup spends Primary.Ammo)", match: true }
       - { name: "instagib_per_shot", base: "1 (g_instagib ? 1 : ammo)", port: "1 (InstagibActive re-reads g_instagib in Attack/CheckAmmoPrimary/WrThink)", match: true }
@@ -323,7 +323,7 @@ features:
       - "common/mutators/mutator/instagib/sv_instagib.qc:SetStartItems"
       - "common/mutators/mutator/instagib/sv_instagib.qc:instagib_ammocheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs"
     constants:
       - { name: "g_instagib_ammo_start", base: "10", port: "10", match: true }
       - { name: "g_instagib_extralives", base: "1", port: "1", match: true }
@@ -352,8 +352,8 @@ features:
       - "common/weapons/weapon/vaporizer.qc:wr_killmessage"
       - "common/weapons/weapon/vaporizer.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectKillMessage"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectSuicideMessage"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectKillMessage"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectSuicideMessage"
     constants:
       - { name: "kill_message", base: "WEAPON_VAPORIZER_MURDER", port: "WEAPON_VAPORIZER_MURDER", match: true }
       - { name: "suicide_message", base: "WEAPON_THINKING_WITH_PORTALS", port: "WEAPON_THINKING_WITH_PORTALS", match: true }
@@ -380,7 +380,7 @@ features:
       - "common/weapons/weapon/vaporizer.qc:wr_init"
       - "common/weapons/weapon/vaporizer.qc:wr_zoom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:Reticle (=> gfx/reticle_nex)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:Reticle (=> gfx/reticle_nex)"
       - "game/client/ReticleOverlay.cs:UpdateReticle"
       - "game/net/NetGame.cs:_reticle.UpdateReticle (live call)"
     constants:
@@ -407,7 +407,7 @@ features:
     base_refs:
       - "common/weapons/weapon/vaporizer.qc:describe (METHOD Vaporizer, describe)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:GuideDescription"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:GuideDescription"
     constants:
       - { name: "guide_paragraphs", base: "4 PAR (energy-beam superweapon overview + instagib/ExtraLife one-shot, Blaster-laser secondary, superweapon-rarity/instagib-spawn note, Cells ammo note)", port: "4 paragraphs (same content; COLORED_NAME(%s) substitutions pre-filled with plain literals, same convention as Electro/Shotgun/Tuba)", match: true }
       - { name: "W_Guide_Keybinds / W_Guide_DPS_onlyOne", base: "appended by describe()", port: "not reproduced (guide-page helpers unported)", match: false }

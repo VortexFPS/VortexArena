@@ -6,10 +6,10 @@
 // static setup method (Action<Entity>), matching one QC spawnfunc.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Installs the map-object spawnfuncs into <see cref="SpawnFuncs"/>. Call <see cref="RegisterAll"/> once at
@@ -351,7 +351,7 @@ public static class MapObjectsRegistry
         ViewLocation.RunDeferredInit();
         Follow.RunDeferredInit();
         AdvancedMovers.RunDeferredInit();
-        Teleporters.RunDeferredInit(); // target_teleporter_checktarget disambiguation (dest/self-target/teleporter)
+        Teleporters.RunDeferredInit(); // target_teleporter_checktarget disambiguation + teleport_findtarget (dest cache + touch)
         InfoAutoScreenshot.RunDeferredInit(); // aim each info_autoscreenshot at its .target (QC findtarget pass)
     }
 

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Multiplayer dialog — C# successor to <c>XonoticMultiplayerDialog</c> (dialog_multiplayer.qc): one

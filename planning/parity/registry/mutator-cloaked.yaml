@@ -16,10 +16,10 @@ features:
     base_refs:
       - "common/mutators/mutator/cloaked/sv_cloaked.qc:4 REGISTER_MUTATOR(cloaked, expr_evaluate(cvar_string(\"g_cloaked\")))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CloakedMutator.cs:30 IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CloakedMutator.cs:35 Hook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
-      - "src/XonoticGodot.Server/GameWorld.cs:602 MutatorActivation.Apply() (boot, before map entities spawn)"
+      - "src/VortexArena.Common/Gameplay/Mutators/CloakedMutator.cs:30 IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/CloakedMutator.cs:35 Hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Server/GameWorld.cs:602 MutatorActivation.Apply() (boot, before map entities spawn)"
     constants:
       - { name: "g_cloaked", base: "0 (mutators.cfg:563)", port: "0 (assets/.../mutators.cfg:563)", match: true }
     status:
@@ -34,7 +34,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "VERIFIED (unchanged): CloakedMutator.IsEnabled = Api.Services is not null && Api.Cvars.GetFloat(\"g_cloaked\") != 0f (CloakedMutator.cs:30-31); MutatorActivation.Apply() called live at GameWorld.cs:602 (before map entities spawn); Hook() Adds OnSetDefaultAlpha + reads g_balance_cloaked_alpha", result: pass }
-      - { kind: value, ref: "VERIFIED: assets/data/xonotic-data.pk3dir/mutators.cfg:563 'set g_cloaked 0' matches Base", result: pass }
+      - { kind: value, ref: "VERIFIED: Base/data/xonotic-data.pk3dir/mutators.cfg:563 'set g_cloaked 0' matches Base", result: pass }
     confidence: high
     notes: "UNCHANGED in behavior. The mutator IS registered (auto-discovered via [Mutator]) and its handler IS subscribed on the live boot path when g_cloaked != 0. Base uses expr_evaluate(cvar_string) which parses expressions; port uses a simple != 0 float check — functionally equivalent for the stock '0'/'1' usage (campaign Stormkeep sets g_cloaked 1). Line ref for MutatorActivation.Apply() drifted to GameWorld.cs:602 (2026-06-25); behavior identical."
 
@@ -46,9 +46,9 @@ features:
       - "server/world.qc:105-112 SetDefaultAlpha() (free fn that fires the hook / seeds default)"
       - "server/world.qh:72-73 default_player_alpha / default_weapon_alpha globals"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CloakedMutator.cs:53 OnSetDefaultAlpha"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:485 SetDefaultAlpha chain + 493/496 DefaultPlayerAlpha/DefaultWeaponAlpha + 507-517 FireSetDefaultAlpha"
-      - "src/XonoticGodot.Server/GameWorld.cs:618 (DefaultPlayerAlpha, DefaultWeaponAlpha) = MutatorHooks.FireSetDefaultAlpha()"
+      - "src/VortexArena.Common/Gameplay/Mutators/CloakedMutator.cs:53 OnSetDefaultAlpha"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:485 SetDefaultAlpha chain + 493/496 DefaultPlayerAlpha/DefaultWeaponAlpha + 507-517 FireSetDefaultAlpha"
+      - "src/VortexArena.Server/GameWorld.cs:618 (DefaultPlayerAlpha, DefaultWeaponAlpha) = MutatorHooks.FireSetDefaultAlpha()"
     constants:
       - { name: "g_balance_cloaked_alpha", base: "0.25 (mutators.cfg:564)", port: "0.25 (CloakedMutator.Alpha default + re-read in Hook()/OnSetDefaultAlpha)", match: true }
       - { name: "default_player_alpha = alpha", base: "yes (world.qh global)", port: "MutatorHooks.DefaultPlayerAlpha set from args.PlayerAlpha", match: true }
@@ -83,10 +83,10 @@ features:
       - "common/vehicles/sv_vehicles.qc:814 (restore player.alpha on vehicle exit)"
       - "common/mutators/mutator/powerups/powerup/invisibility.qc:16-18 (Invisibility expiry restores default_player/weapon_alpha)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:640 p.Alpha = MutatorHooks.DefaultPlayerAlpha (reads the seed)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:687 victim.Alpha = MutatorHooks.DefaultPlayerAlpha (corpse reads the seed)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:640 p.Alpha = MutatorHooks.DefaultPlayerAlpha (reads the seed)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:687 victim.Alpha = MutatorHooks.DefaultPlayerAlpha (corpse reads the seed)"
       - "game/net/ServerNet.cs:1830,1944 QuantizeAlpha(p.Alpha)/QuantizeAlpha(e.Alpha) — networking present"
-      - "src/XonoticGodot.Net/NetEntity.cs:96,132,177,231,272 EntityField.Alpha + NetEntityState.Alpha encode/decode — networking present"
+      - "src/VortexArena.Net/NetEntity.cs:96,132,177,231,272 EntityField.Alpha + NetEntityState.Alpha encode/decode — networking present"
       - "game/net/ClientEntityView.cs:135 e.Alpha = s.Alpha switch { 0=>1f, 255=>-1f, _=>s.Alpha/255f } — client net->render bridge WIRED"
       - "game/client/PlayerModel.cs:160,217 ApplyAlpha(e.Alpha) — render present + fed the decoded alpha"
     constants:
@@ -128,9 +128,9 @@ features:
       - "common/util.qc:302 X(\"Cloaked\", _(\"Cloaked\"), MUT_CLOAKED, cvar(\"g_cloaked\"))"
       - "common/util.qh:62 const int MUT_CLOAKED = 7"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:288 MutatorBase.BuildMutatorsPrettyString (base no-op virtual)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CloakedMutator.cs:73-78 BuildMutatorsPrettyString override — returns s + ', Cloaked' unless g_cts (Wave-6b)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:121 BuildMutatorsPrettyString chain runner — NOW LIVE: called at GameWorld.cs:1079 (match-start 'modifications' serverinfo) + ServerNet.cs:607 (server-browser infostring)"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:288 MutatorBase.BuildMutatorsPrettyString (base no-op virtual)"
+      - "src/VortexArena.Common/Gameplay/Mutators/CloakedMutator.cs:73-78 BuildMutatorsPrettyString override — returns s + ', Cloaked' unless g_cts (Wave-6b)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:121 BuildMutatorsPrettyString chain runner — NOW LIVE: called at GameWorld.cs:1079 (match-start 'modifications' serverinfo) + ServerNet.cs:607 (server-browser infostring)"
     constants:
       - { name: "pretty string append", base: "', Cloaked' (suppressed in CTS)", port: "', Cloaked' unless g_cts (CloakedMutator.cs:73-78)", match: true }
       - { name: "g_cts suppression gate", base: "if (!g_cts) (sv_cloaked.qc:17)", port: "cts ? s : s + ', Cloaked' (CloakedMutator.cs:76-77)", match: true }
@@ -188,8 +188,8 @@ features:
     base_refs:
       - "common/mutators/mutator/powerups/powerup/invisibility.qc:16-18 (m_remove: actor.alpha = default_player_alpha; exteriorweaponentity.alpha = default_weapon_alpha)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PowerupsMutator.cs:383 (invisibility held: player.Alpha = _invisibilityAlpha 0.15)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PowerupsMutator.cs:385 (lapse: player.Alpha = MutatorHooks.DefaultPlayerAlpha — composes with cloaked)"
+      - "src/VortexArena.Common/Gameplay/Mutators/PowerupsMutator.cs:383 (invisibility held: player.Alpha = _invisibilityAlpha 0.15)"
+      - "src/VortexArena.Common/Gameplay/Mutators/PowerupsMutator.cs:385 (lapse: player.Alpha = MutatorHooks.DefaultPlayerAlpha — composes with cloaked)"
     constants:
       - { name: "Invisibility while held sets player.alpha", base: "invisibility_alpha (0.15)", port: "player.Alpha = _invisibilityAlpha 0.15 (PowerupsMutator.cs:383) — LIVE", match: true }
       - { name: "Invisibility expiry restores to default_player_alpha", base: "yes (so under cloaked → 0.25, not 1)", port: "restores MutatorHooks.DefaultPlayerAlpha (PowerupsMutator.cs:385) — composes with cloaked", match: true }

@@ -17,11 +17,11 @@
 // multi-pad bookkeeping IS ported (JumppadPush), as are the q3compat gravity correction + target_push 1.5s debounce.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary><c>trigger_push</c> (jumppad) + <c>target_push</c>/<c>target_position</c> destinations. Each setup is a spawnfunc.</summary>
 public static class Jumppads

@@ -1,10 +1,10 @@
 using System;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// A screen-space vignette — a soft darkened gradient framing the edges of the view. There is no QuakeC

@@ -4,12 +4,12 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Dpm;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats;
+using VortexArena.Formats.Dpm;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — direct coverage for <see cref="DpmReader"/> (port of Darkplaces <c>Mod_DARKPLACESMODEL_Load</c>,
@@ -22,7 +22,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class DpmReaderTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     // ---------------------------------------------------------------- synthetic builder (big-endian!)
 
@@ -208,7 +208,7 @@ public class DpmReaderTests
     {
         if (!Directory.Exists(DataDir)) return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return null;
+        if (!vfs.MountContentRoot(DataDir)) return null;
         string? path = vfs.Find("models/", "dpm").FirstOrDefault(p => p.EndsWith("zombie.dpm", StringComparison.OrdinalIgnoreCase))
                        ?? vfs.Find("models/", "dpm").FirstOrDefault();
         return path is null ? null : DpmReader.Read(vfs.ReadBytes(path));

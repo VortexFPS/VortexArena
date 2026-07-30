@@ -15,9 +15,9 @@
 // per-arg token expansion (s2loc/spree_inf/item_wepname/frag_stats/death_team/…) are implemented in
 // NotificationSystem. The wire protocol (ENT_CLIENT_NOTIFICATION) remains a client-wiring concern.
 
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>The notification message families (QC <c>ENUMCLASS(MSG)</c> in notifications/all.qh).</summary>
 public enum MsgType

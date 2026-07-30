@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Md3;
-using VKind = XonoticGodot.Game.Client.VehicleCatalog.VehicleKind;
+using VortexArena.Formats.Md3;
+using VKind = VortexArena.Game.Client.VehicleCatalog.VehicleKind;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The client-side visual driver for a single vehicle — the Godot successor to the per-vehicle CSQC
@@ -72,7 +72,7 @@ public partial class VehicleVisuals : Node3D
     public BeamRenderer? Beams { get; set; }
     public Func<string, Md3Data?>? ModelResolver { get; set; }
     /// <summary>Material facade for texturing the vehicle body/guns (ModelLoader.BuildModel/ModelAnimator material resolution).</summary>
-    public XonoticGodot.Game.Loaders.AssetSystem? Assets { get; set; }
+    public VortexArena.Game.Loaders.AssetSystem? Assets { get; set; }
     public Func<string, string?>? SoundResolver { get; set; }
     /// <summary>VFS-backed sample → <see cref="AudioStream"/> loader (host-set to <c>AssetLoader.LoadSound</c>);
     /// tried before the <see cref="SoundResolver"/> <c>res://</c> fallback so engine/idle/boost loops play from
@@ -80,7 +80,7 @@ public partial class VehicleVisuals : Node3D
     public Func<string, AudioStream?>? AudioLoader { get; set; }
 
     /// <summary>The networked vehicle entity this visual reflects (set by the renderer; drives the per-frame state).</summary>
-    public XonoticGodot.Common.Framework.Entity? Bound { get; set; }
+    public VortexArena.Common.Framework.Entity? Bound { get; set; }
 
     /// <summary>Build the visuals for a vehicle kind. Call once after construction + dependency injection.</summary>
     public void Build(VKind kind)

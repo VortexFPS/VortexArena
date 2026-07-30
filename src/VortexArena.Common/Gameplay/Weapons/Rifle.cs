@@ -1,10 +1,10 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Rifle (Nexuiz "Camping Rifle"/"Sniper Rifle") — port of common/weapons/weapon/rifle.{qh,qc}. A
@@ -59,6 +59,7 @@ public sealed class Rifle : Weapon
     public Rifle()
     {
         NetName = "rifle";
+        BotPickupBaseValue = 7000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Bullets;   // QC ammo_type
         DisplayName = "Rifle";
         Impulse = 7;

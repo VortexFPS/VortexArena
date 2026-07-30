@@ -18,8 +18,8 @@ features:
       - "common/mapobjects/target/kill.qc:target_kill_use"
       - "common/mapobjects/target/kill.qc:spawnfunc(target_kill)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:KillUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:KillSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:KillUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:KillSetup"
     constants:
       - { name: "damage", base: "1000", port: "1000", match: true }
       - { name: "deathtype", base: "DEATH_HURTTRIGGER", port: "DeathTypes.Void", match: true }
@@ -37,7 +37,7 @@ features:
     gaps:
       - "QC gates on actor.iscreature || actor.damagedbytriggers; the port has no damagedbytriggers field and substitutes IsPushable (projectiles/loot/bodies) — same intent, slightly different membership."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetKill_DamagesCreatureActorToDeath", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetKill_DamagesCreatureActorToDeath", result: pass }
       - { kind: code, ref: "KillUse gate + Combat.Damage(...,1000,DeathTypes.Void); registered MapObjectsRegistry.cs; reached via MapObjectsCommon.UseTargets (t.Use(t,actor))", result: pass }
     confidence: high
     notes: "Re-verified 2026-06-27 unchanged. Reached on the live path via SUB_UseTargets from a trigger/button."
@@ -49,8 +49,8 @@ features:
       - "common/mapobjects/target/speed.qc:target_speed_use"
       - "common/mapobjects/target/speed.qc:target_speed_calculatevelocity"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:SpeedUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:CalculateVelocity"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:SpeedUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:CalculateVelocity"
     constants:
       - { name: "default_speed", base: "100", port: "100", match: true }
       - { name: "SPEED_PERCENTAGE/ADD/POS_X/NEG_X/POS_Y/NEG_Y/POS_Z/NEG_Z/LAUNCHER", base: "1/2/4/8/16/32/64/128/256", port: "1/2/4/8/16/32/64/128/256", match: true }
@@ -67,8 +67,8 @@ features:
       - "On a Q3-compat map a launcher target_speed would apply a different (larger) speed in Base; the port always uses the non-Q3 magnitude."
       - "No CSQC-side velocity application, so a target_speed mid-air boost may visibly correct on the next server update rather than predict instantly."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetSpeed_SetsAxisVelocityToSpeed", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetSpeed_Percentage_ScalesCurrentSpeed", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetSpeed_SetsAxisVelocityToSpeed", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetSpeed_Percentage_ScalesCurrentSpeed", result: pass }
       - { kind: code, ref: "spawnflag bits verified against speed.qh (all 9 match exactly)", result: pass }
     confidence: high
     notes: "Re-verified 2026-06-27 unchanged. All 9 spawnflag bits verified."
@@ -79,8 +79,8 @@ features:
     base_refs:
       - "common/mapobjects/target/spawnpoint.qc:target_spawnpoint_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:SpawnPointUse"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:SelectSpawnPoint"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:SpawnPointUse"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:SelectSpawnPoint"
     constants: []
     status:
       logic: faithful
@@ -94,7 +94,7 @@ features:
     gaps:
       - "The .reset (target_spawnpoint_reset, re-asserts ACTIVE_ACTIVE) is a no-op trivially-satisfied invariant; no port .Reset hook installed but immaterial (Active is already ActiveActive)."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetSpawnpoint_SetsActorForcedSpawn", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetSpawnpoint_SetsActorForcedSpawn", result: pass }
       - { kind: code, ref: "SpawnPointUse sets actor.SpawnPointTarg = self; registered MapObjectsRegistry.cs", result: pass }
       - { kind: code, ref: "SpawnSystem.SelectSpawnPoint (SpawnSystem.cs:392) reads `if (forPlayer.SpawnPointTarg is { IsFreed:false } forced) ...` — short-circuits gather/score/team-filter exactly like QC `if(this.spawnpoint_targ) return this.spawnpoint_targ;`. One-shot: cleared at SpawnSystem.cs:794 (p.SpawnPointTarg = null). Race also writes SpawnPointTarg for checkpoint respawns, so the field has multiple live producers and a live consumer", result: pass }
     confidence: high
@@ -107,9 +107,9 @@ features:
       - "common/mapobjects/target/location.qc:spawnfunc(target_location)"
       - "common/mapobjects/target/location.qc:spawnfunc(info_location)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:LocationSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:InfoLocationSetup"
-      - "src/XonoticGodot.Server/Chat.cs:NearestLocation"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:LocationSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:InfoLocationSetup"
+      - "src/VortexArena.Server/Chat.cs:NearestLocation"
     constants: []
     status:
       logic: faithful
@@ -123,8 +123,8 @@ features:
     gaps:
       - "QC NearestLocation falls back to the nearest g_items entity (findnearest checkitems=true) when no target_location wins; the port's reader only walks the location volumes (item fallback out of scope — documented at Chat.cs:648)."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetLocation_RegistersIntoLocationsListAsPassivePoint", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:InfoLocation_CopiesNetnameToMessage", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetLocation_RegistersIntoLocationsListAsPassivePoint", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:InfoLocation_CopiesNetnameToMessage", result: pass }
       - { kind: code, ref: "LocationSetup pushes to MapObjectsState.Locations; both classes registered MapObjectsRegistry.cs", result: pass }
       - { kind: code, ref: "Chat.NearestLocation (Chat.cs:651) walks MapObjectsState.Locations and returns the nearest label; reached from the %l/%y/%d chat formatmessage token expansion (Chat.cs:584-586) — the live chat path. So the location volumes ARE consumed (the prior audit left this untraced)", result: pass }
     confidence: high
@@ -138,9 +138,9 @@ features:
       - "common/mapobjects/target/changelevel.qc:spawnfunc(target_changelevel)"
       - "common/mapobjects/target/changelevel.qh:CHANGELEVEL_MULTIPLAYER"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:ChangeLevelUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:ChangeLevelSetup"
-      - "src/XonoticGodot.Server/GameWorld.cs:663"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:ChangeLevelUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:ChangeLevelSetup"
+      - "src/VortexArena.Server/GameWorld.cs:663"
     constants:
       - { name: "count_default_fraction", base: "0.7", port: "0.7 (when count==0)", match: true }
       - { name: "CHANGELEVEL_MULTIPLAYER", base: "BIT(1)=2", port: "1<<1=2 (TargetUtilities.cs:272)", match: true }
@@ -157,7 +157,7 @@ features:
       - "The .gametype next-map gametype switch is wired (SwitchGameTypeHandler -> Cvars.Set(\"gametype\", gt), GameWorld.cs:675), but it only sets the cvar for the NEXT changelevel boot — it does NOT live-switch MapInfo like QC's MapInfo_SwitchGameType. Faithful enough on the named-chmap path; a bare end-match (.chmap empty) carrying a .gametype changes the cvar but the immediate intermission/next-map still uses the current gametype context."
       - "Listen-server / authoritative: the CSQC side of the changelevel is not networked (no remote vote UI), but the rules-side fraction + map switch are server-authoritative and faithful."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetChangelevel_EmptyChmap_CallsNextLevel", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetChangelevel_EmptyChmap_CallsNextLevel", result: pass }
       - { kind: code, ref: "changelevel.qh CHANGELEVEL_MULTIPLAYER=BIT(1); port TargetUtilities.cs:272 `1<<1` (=2) — matches", result: pass }
       - { kind: code, ref: "ALL host seams assigned LIVE in GameWorld.Boot (re-confirmed 2026-06-27, line refs refreshed): GiveItemHandler (670), IsCampaign (682), NextLevelHandler (692), ChangeLevelHandler (701), RealPlayerVoteCount (704), SwitchGameTypeHandler (717), CampaignLevelWarpHandler (719) — real lambdas (EndMatch / Commands.ChangeLevelHandler / Clients.Players vote count / Cvars.Set gametype / Campaign.LevelWarp), re-wired every Boot so they never go stale", result: pass }
       - { kind: code, ref: ".chmap / .gametype BSP keys bound (MapObjectFieldsExtra.cs:181-182 -> e.ChMap / e.ChLevelGameType) on the live entity-field path; .count bound as FLOAT onto ParticleCount (MapObjectFieldsExtra.cs:139-141) so a fractional 0.5 survives (ChangeLevelSetup:314-315 seeds MoverCnt from ParticleCount)", result: pass }
@@ -170,8 +170,8 @@ features:
     base_refs:
       - "common/mapobjects/target/levelwarp.qc:target_levelwarp_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:LevelWarpUse"
-      - "src/XonoticGodot.Server/GameWorld.cs:681"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:LevelWarpUse"
+      - "src/VortexArena.Server/GameWorld.cs:681"
     constants: []
     status:
       logic: faithful
@@ -185,7 +185,7 @@ features:
     gaps:
       - "Live only inside a campaign (g_campaign): outside a campaign the .use early-returns (matching QC). Campaign.LevelWarp itself is a real Unload/Load/Setup implementation — only reachable on the single-player campaign path."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetLevelwarp_OnlyInCampaign", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetLevelwarp_OnlyInCampaign", result: pass }
       - { kind: code, ref: "CampaignLevelWarpHandler = n => Campaign.LevelWarp(n) (GameWorld.cs:719) and IsCampaign = () => Cvars.Bool(\"g_campaign\") (GameWorld.cs:682) both assigned LIVE in GameWorld.Boot, re-wired every Boot — re-confirmed 2026-06-27 (line refs corrected from stale 681/644). Campaign.LevelWarp is a real Unload/Load(n,1)/Setup implementation", result: pass }
       - { kind: code, ref: "LevelWarpUse cnt-1 specific-level / 0->next (-1) logic faithful; registered MapObjectsRegistry.cs; reached via UseTargets", result: pass }
     confidence: high
@@ -197,8 +197,8 @@ features:
     base_refs:
       - "common/mapobjects/target/give.qc:target_give_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:GiveUse"
-      - "src/XonoticGodot.Server/GameWorld.cs:632"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:GiveUse"
+      - "src/VortexArena.Server/GameWorld.cs:632"
     constants: []
     status:
       logic: faithful
@@ -225,8 +225,8 @@ features:
       - "common/mapobjects/target/items.qc:target_items_use"
       - "common/mapobjects/target/items.qc:spawnfunc(target_items)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:ItemsUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:ApplyGiveTokens"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:ItemsUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:ApplyGiveTokens"
     constants:
       - { name: "powerup_durations", base: "g_balance_powerup_{strength,invincible,speed,invisibility}_time + g_balance_superweapons_time", port: "same cvars, fallback 30", match: true }
     status:
@@ -242,8 +242,8 @@ features:
       - "The spawnfunc's normalized re-serialization of item tokens into a max/min/minus-prefixed give string (driven by spawnflags 0/1/2/4, then re-tokenized) is NOT reproduced; the port keeps the raw netname and parses it directly via GiveItems.Apply — equivalent for the common (give-string) case, but spawnflag-prefixed (max/min/minus) target_items semantics and the GetResource-driven resource serialization are not honored."
       - "The loot-toucher delete branch (ITEM_IS_LOOT actor -> EXACTTRIGGER_TOUCH + delete, and IL_EACH delete of loot enemies) is not modelled (target_items is .use-only here; the port early-returns on an Item-flagged actor instead of deleting it)."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetItems_GivesResourcesAndItemFlags", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs:TargetItems_GrantsPowerupStatusEffect", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetItems_GivesResourcesAndItemFlags", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetItems_GrantsPowerupStatusEffect", result: pass }
       - { kind: code, ref: "ItemsUse calls MapMover.Centerprint(actor, self.Message) (TargetUtilities.cs:659) only on a successful give; routes through GiveItems.Apply (ApplyGiveTokens:671); powerup-duration seeding from 5 balance cvars (ItemsSetup:489-498). Loot-toucher delete branch now modelled (ItemsUse:627-651)", result: pass }
       - { kind: code, ref: "MapObjectsCommon.Centerprint calls NotificationSystem.SendCenterRaw(NotifBroadcast.OneOnly, actor, message) DIRECTLY (CenterRaw->Sink.Dispatch->CenterPrintPanel) — no longer depends on the unassigned CenterprintHandler delegate, so the message text reaches the activator on the live path", result: pass }
     confidence: high
@@ -257,8 +257,8 @@ features:
       - "common/mapobjects/target/spawn.qc:target_spawn_edit_entity"
       - "common/mapobjects/target/spawn.qc:target_spawn_cancreate"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:SpawnSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:SpawnUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:SpawnSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:SpawnUse"
     constants:
       - { name: "ON_MAPLOAD spawnflag", base: "BIT(1)", port: "MapMover.SpawnAllEntities (BIT(1))", match: true }
     status:
@@ -278,7 +278,7 @@ features:
     verification:
       - { kind: grep, ref: "TargetUtilities.SpawnEntityHandler now ASSIGNED at GameWorld.cs:730 (live Boot block, same block as the GiveItem/NextLevel/ChangeLevel seams, all consecutive at 670-730; SpawnMapEntities() called at GameWorld.cs:812 — confirms live boot path)", result: pass }
       - { kind: code, ref: "the wired lambda is a real impl: EntityDict from the tokenized message, ApplyDictFields (GameWorld.cs:4496, the shared BSP key→field applier), SpawnFuncs.TrySpawn (EntityClasses.cs:206, the real spawnfunc dispatcher), .count cap via MoverCnt. SpawnUse (TargetUtilities.cs:709) invokes the seam; ON_MAPLOAD deferred think (SpawnSetup:699-703) gated on BIT(1)", result: pass }
-      - { kind: build, ref: "dotnet build XonoticGodot.Server -c Debug — succeeded, 0 warnings/errors (the new seam compiles)", result: pass }
+      - { kind: build, ref: "dotnet build VortexArena.Server -c Debug — succeeded, 0 warnings/errors (the new seam compiles)", result: pass }
     confidence: medium
     notes: "RECLASSIFIED 2026-06-28 OPUS re-audit: liveness dead->live, logic stub->partial, values na->faithful. This wave wired SpawnEntityHandler in the live GameWorld.Boot seam block (GameWorld.cs:730) with a REAL minimal-create implementation (tokenize .message -> classname -> ApplyDictFields -> SpawnFuncs.TrySpawn) AND honored the .count create-cap. So the common mapper case (a target_spawn with ON_MAPLOAD creating one fixed entity at match start) now works on the live path; build is green. Logic stays `partial` (NOT faithful) because the *activator / FOREACH_ENTITY_STRING(target) EDIT modes and the $-templating reflection engine are still intentionally cut. confidence: medium — verified by code-read + compile, but NOT runtime-verified (no unit test was added this wave and it wasn't exercised in-game); the seam is reached and the impl is sound but the actual create has not been observed firing."
 
@@ -291,10 +291,10 @@ features:
       - "common/mapobjects/target/speaker.qc:target_speaker_reset"
       - "common/mapobjects/target/speaker.qh:SPEAKER_LOOPED_ON/OFF/GLOBAL/ACTIVATOR"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetSpeaker.cs:SpeakerSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetSpeaker.cs:SpeakerUseActivator"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetSpeaker.cs:SpeakerReset"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetSpeaker.cs:PlayToClientHandler"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetSpeaker.cs:SpeakerSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetSpeaker.cs:SpeakerUseActivator"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetSpeaker.cs:SpeakerReset"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetSpeaker.cs:PlayToClientHandler"
     constants:
       - { name: "default_volume", base: "1", port: "1", match: true }
       - { name: "atten default (targeted/untargeted)", base: "ATTEN_NORM / ATTEN_STATIC", port: "AttenNorm / AttenStatic", match: true }
@@ -319,7 +319,7 @@ features:
       - { kind: code, ref: "SpeakerReset installed on LOOPED_ON (TargetSpeaker.cs:115) and LOOPED_OFF (TargetSpeaker.cs:123) -> this_.Reset; re-arms the loop state per spawnflag on round restart. The central .Reset pump is live (GameWorld.ResetMapObjects fires e.Reset on every non-client entity), so this is LIVE on a round restart", result: pass }
       - { kind: code, ref: "ModelSoundResolver wired on the host path (game/loaders/PlayerSoundResolver.cs:47), so the *-voice-sample path is not dead", result: pass }
       - { kind: code, ref: "FIXED 2026-06-27: PlayToClientHandler MSG_ONE seam (decl TargetSpeaker.cs:207-208) is ASSIGNED ON THE LIVE PATH in NetGame.SetupListenServer (game/net/NetGame.cs:863) -> sv.SendSoundToPlayer (game/net/ServerNet.cs:888), which encodes a per-peer SoundBundle via the SoundWire codec. Routes only for a real Player activator (`if (client is Player p)`). Re-wired every server start (never goes stale). So the live ACTIVATOR(BIT3) path now plays soundto(MSG_ONE) to the triggering client ONLY, matching QC target_speaker_use_activator — no longer a broadcast. Line refs corrected from stale 854/883", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TargetUtilitiesTests.cs (ACTIVATOR MSG_ONE seam, TargetUtilitiesTests.cs:482/524)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs (ACTIVATOR MSG_ONE seam, TargetUtilitiesTests.cs:482/524)", result: pass }
     confidence: high
     notes: "Re-verified 2026-06-27 (line refs corrected). audio is faithful: the PlayToClientHandler MSG_ONE seam is wired on the LIVE listen-server boot path (NetGame.cs:863 -> ServerNet.SendSoundToPlayer:888) and re-wired on every server start, so the ACTIVATOR(BIT3) speaker plays to the triggering client only (byte-faithful with QC soundto MSG_ONE). LOOPED_ON/OFF reset hook is live (ResetMapObjects pump, GameWorld.cs:4683); *-voice-sample resolves via ResolveNoise for a real-client activator with a model. logic stays `partial` ONLY for the un-modelled LOOPED_OFF-untargeted objerror (the port now Log.Warns instead of QC objerror — TargetSpeaker.cs:152 — and leaves it inert; same audible outcome). channel byte-faithful (Item=3 / TriggerAuto=-3); ACTIVATOR(BIT3) checked before looped flags per QC spawn order (TargetSpeaker.cs:102). NOTE: the TargetSpeaker.cs file header comment is now accurate (lines 12/20 already say 'wired via PlayToClientHandler / MSG_ONE faithful')."
 
@@ -331,9 +331,9 @@ features:
       - "common/mapobjects/target/music.qc:Net_TargetMusic / TargetMusic_Advance"
       - "common/mapobjects/target/music.qc:target_music_reset / target_music_kill / TargetMusic_RestoreGame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicReset"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs:TargetMusicReset"
       - "game/client/MusicPlayer.cs:EvaluateMusicSources"
     constants:
       - { name: "default_volume", base: "1", port: "1", match: true }
@@ -356,7 +356,7 @@ features:
       - { kind: code, ref: "TargetMusicUse guards `activator is null` + non-client (matches QC `if(!actor) return;`); TargetMusicReset hook assigned to e.Reset", result: pass }
       - { kind: code, ref: "MusicPlayer.cs priority eval (trigger/lifetime-target/default-slot); MusicLifetime field bound from the `lifetime` key (MapObjectFieldsExtra.cs:173 -> e.MusicLifetime); MusicActivationTime stamped in TargetMusicUse", result: pass }
       - { kind: code, ref: "GameWorld.ResetMapObjects iterates every non-client entity and fires e.Reset?.Invoke(e); reached via ResetMap, called on Rounds.OnRoundReset + Assault round-2. So TargetMusicReset is LIVE on a round restart", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MusicSystemTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MusicSystemTests.cs", result: pass }
     confidence: medium
     notes: "Re-verified 2026-06-27: the QC null/client trigger gate is present + live; the target_music_reset hook is LIVE (ResetMapObjects dispatches e.Reset). Core priority/lifetime/default-slot eval faithful. Liveness stays `partial` only because the override remains listen-server-only / global (no net path, no per-activator routing). Registered MapObjectsRegistry.cs."
 
@@ -368,8 +368,8 @@ features:
       - "common/mapobjects/target/music.qc:trigger_music_reset"
       - "common/mapobjects/defs.qh:START_DISABLED"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs:TriggerMusicSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs:TriggerMusicReset"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs:TriggerMusicSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs:TriggerMusicReset"
       - "game/client/MusicPlayer.cs:EvaluateMusicSources"
     constants:
       - { name: "default_volume", base: "1", port: "1", match: true }
@@ -402,9 +402,9 @@ features:
       - "common/mapobjects/target/voicescript.qc:target_voicescript_next"
       - "common/mapobjects/target/voicescript.qc:spawnfunc(target_voicescript)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/VoiceScript.cs:VoiceScriptUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/VoiceScript.cs:Next"
-      - "src/XonoticGodot.Server/GameWorld.cs:2528"
+      - "src/VortexArena.Common/Gameplay/MapObjects/VoiceScript.cs:VoiceScriptUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/VoiceScript.cs:Next"
+      - "src/VortexArena.Server/GameWorld.cs:2528"
     constants:
       - { name: "nextthink_jitter", base: "voiceend + wait*(0.5+random())", port: "voiceend + Wait*(0.5+Prandom.Float())", match: true }
       - { name: "negative_dur (no extra delay)", base: "voiceend = time - dt; nextthink = voiceend", port: "same", match: true }
@@ -420,7 +420,7 @@ features:
     gaps:
       - "play2 (per-player audible) maps to the shared sound facade on the Voice channel rather than a true per-client message — acceptable on the listen server but a remote client may hear another player's script."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MapObjectLongTailTests.cs (voicescript latch/advance/clear)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MapObjectLongTailTests.cs (voicescript latch/advance/clear)", result: pass }
       - { kind: code, ref: "GameWorld.cs:2528 pumps VoiceScript.Next(p) every per-client frame (line ref corrected from stale :2176)", result: pass }
     confidence: high
     notes: "Re-verified 2026-06-27 unchanged. Ordered-prefix-then-looping-random-pool token math, the cnt split on '*', and the schedule are all faithful. Live: pumped each tick."
@@ -432,7 +432,7 @@ features:
       - "common/mapobjects/misc/teleport_dest.qc:spawnfunc(info_teleport_destination)"
       - "common/mapobjects/misc/teleport_dest.qc:spawnfunc(misc_teleporter_dest)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportDestSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportDestSetup"
     constants:
       - { name: "dest_z_nudge", base: "1 - mins.z - 24", port: "1 - mins.z - 24 (DestZNudge)", match: true }
     status:
@@ -448,7 +448,7 @@ features:
       - "QC objerrors (refuses to link) a destination with no targetname; the port just registers it (a teleporter would fail to find it anyway)."
       - "The ENT_CLIENT_TELEPORT_DEST net link (so CSQC can predict the teleport) is not ported; consumed only server-side."
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/TeleportersTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/TeleportersTests.cs", result: pass }
       - { kind: code, ref: "both classnames registered MapObjectsRegistry.cs; mangle=angles, angles cleared", result: pass }
     confidence: high
     notes: "Re-verified 2026-06-27 unchanged. .mangle = .angles; angles cleared. Consumed by Simple_TeleportPlayer (teleporters unit)."
@@ -461,7 +461,7 @@ features:
       - "common/mapobjects/trigger/jumppads.qc:spawnfunc(info_notnull)"
       - "common/mapobjects/trigger/jumppads.qc:target_push_init"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Jumppads.cs:TargetPushSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Jumppads.cs:TargetPushSetup"
     constants: []
     status:
       logic: faithful

@@ -29,7 +29,7 @@ features:
       - "client/hud/panel/scoreboard.qc:Scoreboard_WouldDraw"
     port_refs:
       - "game/net/NetGame.cs:UpdateScoreboard"
-      - "src/XonoticGodot.Engine/Console/BindTable.cs:ApplyBind"
+      - "src/VortexArena.Engine/Console/BindTable.cs:ApplyBind"
     constants:
       - { name: "cl_deathscoreboard", base: "1", port: "1", match: true }
       - { name: "cl_deathscoreboard_delay", base: "1", port: "1", match: true }
@@ -136,7 +136,7 @@ features:
       - "common/util.qc:ScoreString"
     port_refs:
       - "game/hud/ScoreboardPanel.cs:GetField"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ScoreString"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ScoreString"
     constants: []
     status:
       logic: partial
@@ -164,7 +164,7 @@ features:
       - "game/hud/ScoreboardPanel.cs:GetField (Ping)"
       - "game/hud/ScoreboardPanel.cs:PingColor"
       - "game/hud/ScoreboardPanel.cs:SetWireRows (PingMs)"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:ScoreRowWire (PingMs)"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire (PingMs)"
       - "game/net/ServerNet.cs:BuildScoreboard (RoundTripMs)"
       - "game/net/NetTransport.cs:RoundTripMs"
     constants:
@@ -221,8 +221,8 @@ features:
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawRow (handicap icon)"
       - "game/hud/ScoreboardPanel.cs:SetWireRows (HandicapLevel)"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:ScoreRowWire (HandicapLevel)"
-      - "src/XonoticGodot.Common/Gameplay/Handicap.cs:UpdateHandicapLevel"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire (HandicapLevel)"
+      - "src/VortexArena.Common/Gameplay/Handicap.cs:UpdateHandicapLevel"
     constants:
       - { name: "playerid", base: "0", port: "none", match: false }
       - { name: "playerid_prefix", base: "#", port: "none", match: false }
@@ -253,7 +253,7 @@ features:
     port_refs:
       - "game/hud/ScoreboardPanel.cs:SortRows"
       - "game/hud/ScoreboardPanel.cs:CompareRows"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:CompareValues"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CompareValues"
     constants: []
     status:
       logic: faithful
@@ -396,7 +396,7 @@ features:
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawSpectators"
       - "game/hud/ScoreboardPanel.cs:SetWireRows"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:ScoreRowWire (IsSpectator)"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire (IsSpectator)"
       - "game/net/ServerNet.cs:CaptureScoreboard (isSpectator)"
     constants:
       - { name: "spectators_showping", base: "1", port: "1", match: true }
@@ -488,7 +488,7 @@ features:
       - "game/hud/ScoreboardPanel.cs:SetRankings"
       - "game/hud/ScoreboardPanel.cs:DrawSpeedAward"
       - "game/hud/ScoreboardPanel.cs:SetSpeedAward"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:ScoreboardWire (SpeedAward*)"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreboardWire (SpeedAward*)"
     constants: []
     status:
       logic: faithful
@@ -515,8 +515,8 @@ features:
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawMapStats"
       - "game/net/NetGame.cs:FeedMapStats"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs:SecretSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/EntityMapObjectStateExtra.cs:SecretsTotal"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:SecretSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/EntityMapObjectStateExtra.cs:SecretsTotal"
     constants: []
     status:
       logic: faithful
@@ -542,7 +542,7 @@ features:
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawRespawn"
       - "game/net/NetGame.cs:UpdateScoreboard"
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink"
       - "game/net/ClientNet.cs:RespawnTimeStat"
     constants:
       - { name: "respawntime_decimals", base: "1", port: "1", match: true }

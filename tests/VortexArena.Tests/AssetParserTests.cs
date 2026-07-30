@@ -1,11 +1,11 @@
 using System.IO;
 using System.Linq;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Materials;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Exercises the Godot-free asset PARSERS (pk3 VFS, IQM, Q3 shader) against the REAL Xonotic data tree.
@@ -14,20 +14,28 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class AssetParserTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     [Fact]
     public void Vfs_Mounts_And_Finds_Content()
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         Assert.True(vfs.Find("scripts/", "shader").Count() >= 40, "expected the shipped .shader scripts");
         Assert.True(vfs.Find("models/", "iqm").Any(), "expected IQM models");
-        Assert.True(vfs.Find("maps/", "bsp").Any(), "expected at least one .bsp");
+        // BSPs arrive with the fetched map packs (D7), so only assert when they are present.
+        if (TestPaths.HasMaps)
+            Assert.True(vfs.Find("maps/", "bsp").Any(), "expected at least one .bsp");
         // extension-search resolves an image base name to a concrete file
-        var anyTga = vfs.Find("textures/", "tga").FirstOrDefault() ?? vfs.Find("models/", "tga").FirstOrDefault();
+        // Probe png as well as tga: the content tree was re-encoded to PNG (restructure section 4.2),
+        // so a tga-only probe would silently stop exercising ResolveImage entirely.
+        var anyTga = vfs.Find("textures/", "tga").FirstOrDefault()
+                     ?? vfs.Find("models/", "tga").FirstOrDefault()
+                     ?? vfs.Find("textures/", "png").FirstOrDefault()
+                     ?? vfs.Find("models/", "png").FirstOrDefault();
+        Assert.NotNull(anyTga); // the tree always has art in one of those forms
         if (anyTga is not null)
         {
             string baseName = anyTga[..anyTga.LastIndexOf('.')];
@@ -40,11 +48,16 @@ public class AssetParserTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        vfs.MountGameDir(DataDir);
+        vfs.MountContentRoot(DataDir);
 
         var texts = vfs.Find("scripts/", "shader").Select(vfs.ReadText);
         var shaders = Q3ShaderParser.ParseFiles(texts);
-        Assert.True(shaders.Count >= 500, $"expected 500+ materials from the real shader scripts, got {shaders.Count}");
+        // The map packs carry roughly half the shader scripts, so the floor depends on whether they
+        // have been fetched. Scaled rather than dropped: a real assertion runs either way.
+        int floor = TestPaths.HasMaps ? 500 : 200;
+        Assert.True(shaders.Count >= floor,
+            $"expected {floor}+ materials from the real shader scripts, got {shaders.Count} "
+            + $"(maps present: {TestPaths.HasMaps})");
     }
 
     [Fact]
@@ -52,7 +65,7 @@ public class AssetParserTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        vfs.MountGameDir(DataDir);
+        vfs.MountContentRoot(DataDir);
 
         string iqmPath = vfs.Find("models/", "iqm").First();
         var iqm = IqmReader.Read(vfs.ReadBytes(iqmPath));

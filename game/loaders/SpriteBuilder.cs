@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Sprites;
+using VortexArena.Formats.Sprites;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// Turns a parsed <see cref="SpriteData"/> (the Godot-free sprite importer output, all four Quake-family

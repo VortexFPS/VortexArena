@@ -17,12 +17,12 @@
 //  * target_voicescript_next is the per-player tick; the host's per-client think calls VoiceScript.Next(pl)
 //    (mirroring QC's call from the player frame). Exposed public so the server frame can drive it.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 using System.Globalization;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -37,9 +37,9 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
-    using XonoticGodot.Common.Framework;
+    using VortexArena.Common.Framework;
 
     /// <summary><c>target_voicescript</c> — a scripted voice-line sequence. Registered by <see cref="MapObjectsRegistry"/>.</summary>
     public static class VoiceScript

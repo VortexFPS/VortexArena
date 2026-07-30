@@ -1,12 +1,12 @@
 using System.Text;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Translates Quake/DarkPlaces <c>^</c> colour codes into Godot BBCode so menu text (player names, server names,
 /// …) renders coloured in a <see cref="Godot.RichTextLabel"/> — the C# stand-in for the engine's
 /// <c>drawcolorcodedstring</c> path (menu/draw.qc <c>draw_Text</c> with <c>allowColorCodes</c>). Mirrors the
-/// colour table used by <c>XonoticGodot.Common.Diagnostics.Log.ToBBCode</c>: <c>^0</c>–<c>^9</c> palette colours,
+/// colour table used by <c>VortexArena.Common.Diagnostics.Log.ToBBCode</c>: <c>^0</c>–<c>^9</c> palette colours,
 /// <c>^xRGB</c> (3 hex digits) → <c>#RRGGBB</c>, <c>^^</c> → a literal caret, <c>^7</c> resets to the default.
 /// BBCode-special <c>[</c> is escaped as <c>[lb]</c> so names can't inject tags.
 /// </summary>

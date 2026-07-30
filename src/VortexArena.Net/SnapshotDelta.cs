@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Server-side delta-compression history for ONE client — the C# successor to DP's per-client entity-delta

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Mod Icons" panel config dialog — a faithful C# port of <c>XonoticHUDModIconsDialog_fill</c>
@@ -15,7 +15,7 @@ namespace XonoticGodot.Game.Menu;
 /// gametype display names are resolved here from the same mapinfo table (CA -> "Clan Arena", etc.).
 ///
 /// FAITHFUL UI NOW: every binding writes the real <c>hud_panel_modicons*</c> cvars the in-game mod-icons
-/// panel reads. There is no live HUD editor/preview in XonoticGodot yet, so nothing previews here.
+/// panel reads. There is no live HUD editor/preview in VortexArena yet, so nothing previews here.
 /// </summary>
 public partial class DialogHudPanelModIcons : MenuScreen
 {

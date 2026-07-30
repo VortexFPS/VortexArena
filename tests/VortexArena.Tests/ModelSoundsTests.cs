@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — first coverage for the <see cref="ModelSounds"/> sidecar parser (the Xonotic player/monster
@@ -18,7 +18,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class ModelSoundsTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private const string Sample =
         "//TAG: soldier\n" +
@@ -104,7 +104,7 @@ public class ModelSoundsTests
     {
         if (!Directory.Exists(DataDir)) return; // skip-if-missing
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         string? path = vfs.Find("models/", "sounds").FirstOrDefault();
         if (path is null) return;

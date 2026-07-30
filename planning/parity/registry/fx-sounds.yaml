@@ -18,8 +18,8 @@ features:
       - "common/sounds/all.qh:SOUND"
       - "common/sounds/all.inc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs:Sounds"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs:RegisterAll"
+      - "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs:Sounds"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs:RegisterAll"
     constants:
       - { name: "registry_size", base: "BITS(9)=512", port: "Registry<GameSound> (unbounded)", match: true }
       - { name: "path_resolve", base: "wav (sv) / wav,ogg,flac probe (cl)", port: "AssetLoader.ResolveSoundVpath ogg/wav probe under sound/", match: true }
@@ -44,8 +44,8 @@ features:
     base_refs:
       - "common/sounds/sound.qh:6"
     port_refs:
-      - "src/XonoticGodot.Common/Services/Services.cs:SoundChannel"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs:EngineChannel"
+      - "src/VortexArena.Common/Services/Services.cs:SoundChannel"
+      - "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs:EngineChannel"
     constants:
       - { name: "CH_PLAYER", base: "-7 auto", port: "PlayerAuto=-7", match: true }
       - { name: "CH_VOICE", base: "-2 auto", port: "VoiceAuto=-2", match: true }
@@ -73,7 +73,7 @@ features:
     base_refs:
       - "common/sounds/sound.qh:27"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs:SoundLevels"
+      - "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs:SoundLevels"
     constants:
       - { name: "ATTEN_NONE/MIN/LOW/NORM/LARGE/IDLE/STATIC/MAX", base: "0/0.015625/0.2/0.5/1/2/3/3.984375", port: "0/0.015625/0.2/0.5/1/2/3/3.984375", match: true }
       - { name: "VOL_BASE/BASEVOICE/MUFFLED", base: "0.7/1.0/0.35", port: "0.7/1.0/0.35", match: true }
@@ -99,7 +99,7 @@ features:
       - "common/sounds/all.inc:SND_GRENADE_BOUNCE_RANDOM"
       - "common/effects/qc/globalsound.qc:GlobalSound_sample"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:SoundVariantGroups"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:SoundVariantGroups"
     constants:
       - { name: "STEP/STEP_METAL count", base: "6", port: "6", match: true }
       - { name: "FALL/FALL_METAL count", base: "4", port: "4", match: true }
@@ -128,9 +128,9 @@ features:
       - "common/sounds/sound.qh:43"
       - "common/sounds/all.qc:soundtoat"
     port_refs:
-      - "src/XonoticGodot.Common/Services/Services.cs:ISoundService.Play"
-      - "src/XonoticGodot.Engine/Simulation/EngineServices.cs:SoundService"
-      - "src/XonoticGodot.Net/SoundWire.cs:SoundWire"
+      - "src/VortexArena.Common/Services/Services.cs:ISoundService.Play"
+      - "src/VortexArena.Engine/Simulation/EngineServices.cs:SoundService"
+      - "src/VortexArena.Net/SoundWire.cs:SoundWire"
       - "game/client/ClientWorld.cs:OnSound"
     constants:
       - { name: "emit_origin", base: "origin + 0.5*(mins+maxs)", port: "e.Origin + (Mins+Maxs)*0.5", match: true }
@@ -156,7 +156,7 @@ features:
     base_refs:
       - "common/sounds/all.qc:stopsound"
     port_refs:
-      - "src/XonoticGodot.Common/Services/Services.cs:ISoundService.Stop"
+      - "src/VortexArena.Common/Services/Services.cs:ISoundService.Stop"
       - "game/client/ClientWorld.cs:CreateLoop"
     constants:
       - { name: "loop_key", base: "(entity, channel)", port: "(SourceNetId, Channel)", match: true }
@@ -181,7 +181,7 @@ features:
     base_refs:
       - "common/sounds/all.qc:sound_allowed"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:SoundAllowedGate"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:SoundAllowedGate"
     constants:
       - { name: "bot_sound_monopoly", base: "0", port: "bot_sound_monopoly cvar (default 0, gate honored)", match: true }
       - { name: "owner_walk", base: "body->enemy / realowner / owner", port: "SoundAllowedGate.WalkOwner (same chain, 16-guard)", match: true }
@@ -212,9 +212,9 @@ features:
       - "common/sounds/all.qc:play2all"
       - "common/sounds/all.qc:spamsound"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:PlayGlobal"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:SpamSound"
-      - "src/XonoticGodot.Common/Framework/Entity.cs:SpamTime"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:PlayGlobal"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:SpamSound"
+      - "src/VortexArena.Common/Framework/Entity.cs:SpamTime"
     constants:
       - { name: "play2", base: "soundtoat(MSG_ONE, NULL, '0 0 0', CH_INFO, file, VOL_BASE, ATTEN_NONE)", port: "Play2: Api.Sound.Play(recipient, Auto, sample, VolBase, AttenNone)", match: true }
       - { name: "play2team", base: "if(monopoly)return; FOREACH_CLIENT(IS_PLAYER&&IS_REAL_CLIENT&&team==t) play2", port: "Play2Team: monopoly early-return + per-team roster filter -> Play2", match: true }
@@ -245,8 +245,8 @@ features:
       - "common/effects/qc/globalsound.qh:REGISTER_PLAYERSOUND"
       - "common/effects/qc/globalsound.qh:REGISTER_GLOBALSOUND"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs:PlayerSoundIds"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs:RegisterGlobalSounds"
+      - "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs:PlayerSoundIds"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs:RegisterGlobalSounds"
     constants:
       - { name: "playersound_ids", base: "death drown fall falling gasp jump pain25 pain50 pain75 pain100", port: "same 10 ids", match: true }
       - { name: "globalsound_ids", base: "STEP/STEP_METAL (misc/footstep0/metalfootstep0, count 6) FALL/FALL_METAL (misc/hitground/metalhitground, count 4)", port: "same 4 + counts", match: true }
@@ -272,8 +272,8 @@ features:
       - "common/effects/qc/globalsound.qh:REGISTER_VOICEMSG"
       - "common/effects/qc/globalsound.qh:64"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/VoiceMessage.cs:VoiceMessages"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/VoiceTypes.cs:VoiceType"
+      - "src/VortexArena.Common/Gameplay/Sounds/VoiceMessage.cs:VoiceMessages"
+      - "src/VortexArena.Common/Gameplay/Sounds/VoiceTypes.cs:VoiceType"
     constants:
       - { name: "VOICETYPE_PLAYERSOUND..TAUNT", base: "10..15", port: "10..15", match: true }
       - { name: "voicemsg_count", base: "21 (11 listed + 10 situational)", port: "21 (same order, listed flags)", match: true }
@@ -298,8 +298,8 @@ features:
     base_refs:
       - "common/effects/qc/globalsound.qc:_GlobalSound"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:_GlobalSound"
-      - "src/XonoticGodot.Server/Commands.cs:3149"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:_GlobalSound"
+      - "src/VortexArena.Server/Commands.cs:3149"
     constants:
       - { name: "sv_taunt", base: "1", port: "reads cvar (gate honored)", match: true }
       - { name: "sv_autotaunt", base: "1", port: "reads cvar (gate honored)", match: true }
@@ -334,9 +334,9 @@ features:
       - "common/physics/player.qc:PM_check_hitground"
       - "server/player.qc:374"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:Footsteps"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:610"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:946"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:Footsteps"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:610"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:946"
     constants:
       - { name: "footstep_interval", base: "nextstep = time + 0.3 + random*0.1", port: "now + 0.3 + FootstepJitter (random*0.1, server-local RNG)", match: true }
       - { name: "footstep_speed_gate", base: "vdist > 0.6*sv_maxspeed", port: "0.6*MaxSpeed", match: true }
@@ -370,11 +370,11 @@ features:
       - "common/effects/qc/globalsound.qc:UpdatePlayerSounds"
       - "common/effects/qc/globalsound.qc:ClearPlayerSounds"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs:PlayerSoundSample"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs:ModelSoundsFile"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs:ModelSoundResolver"
+      - "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs:PlayerSoundSample"
+      - "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs:ModelSoundsFile"
+      - "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs:ModelSoundResolver"
       - "game/loaders/PlayerSoundResolver.cs:Install"
-      - "src/XonoticGodot.Formats/Sidecars/ModelSounds.cs:ParseEntries"
+      - "src/VortexArena.Formats/Sidecars/ModelSounds.cs:ParseEntries"
     constants:
       - { name: "default_path", base: "key->file from sound/player/default.sounds (e.g. pain50 -> sound/player/espeak/player/pain50)", port: "PlayerSoundResolver parses default.sounds manifest -> same key->file mapping", match: true }
       - { name: "model_dir_resolve", base: "get_model_datafilename(model,skin,'sounds') parse; model pack overrides default", port: "ModelSoundsFile(model,skin) = '{model}_{skin}.sounds'; resolver tries model pack then default (override order matches)", match: true }
@@ -449,7 +449,7 @@ features:
     gaps:
       - "Anti-spam uses real-time (Time.GetTicksMsec) rather than sim time; QC also has an arc_hack that ignores cl_hitsound_antispam_time when the Arc is held + cl_hitsound>=2 (not ported). Minor: port adds an explicit Clamp([min,max]) the QC curve approaches but doesn't apply — negligible (the gradient stays in range)."
     verification:
-      - { kind: code, ref: "HitSound.cs:142 loads 'misc/hit' (fallback res://sound/misc/hit.wav) — matches SOUND(HIT,'misc/hit'); shipped file assets/data/.../sound/misc/hit.wav confirmed; no 'hitconfirm' refs remain", result: pass }
+      - { kind: code, ref: "HitSound.cs:142 loads 'misc/hit' (fallback res://sound/misc/hit.wav) — matches SOUND(HIT,'misc/hit'); shipped file Base/data/.../sound/misc/hit.wav confirmed; no 'hitconfirm' refs remain", result: pass }
       - { kind: code, ref: "ComputePitch (HitSound.cs:96-128) now implements QC's gradient pitch_shift = (b*d*(a-1)+a*c*(1-b))/(d*(a-1)+c*(1-b)) with the mode-3 mirror (a-b)/2+b, bit-faithful to view.qc:937-949; cvar defaults max=1.5/min=0.75/nom=25 match view.qh", result: pass }
     confidence: high
     notes: "FIX since baseline: the mode 2/3 pitch curve was a linear ramp; it now implements QC's exact asymptotic gradient function (ComputePitch, HitSound.cs:96-128) with the mode-3 mirror, so values partial->faithful and pitch_formula constant match false->true. The earlier hitsound-silent fix (misc/hit, not misc/hitconfirm) remains in place. Residual nits only: real-time vs sim-time anti-spam + the unported arc_hack."

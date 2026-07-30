@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Server welcome dialog — a faithful C# port of <c>XonoticWelcomeDialog_fill</c>
@@ -9,7 +9,7 @@ namespace XonoticGodot.Game.Menu;
 /// buttons that join or spectate and close.
 ///
 /// INERT (faithful UI, no backend): the title (<c>HOSTNAME</c>) and body (<c>WELCOME</c>/<c>CAMPAIGN</c> MOTD)
-/// are supplied by the server at connect time (QC <c>readInputArgs</c> from an args buffer); XonoticGodot has no
+/// are supplied by the server at connect time (QC <c>readInputArgs</c> from an args buffer); VortexArena has no
 /// server-connect backend, so the title falls back to QC's reset string ("Welcome") and the body shows a
 /// short honest placeholder. The buttons are faithful and issue the SAME console commands QC does:
 ///   * Join -> <c>cmd join</c> (QC <c>makeXonoticCommandButton("Join", …, "cmd join", COMMANDBUTTON_CLOSE)</c>);

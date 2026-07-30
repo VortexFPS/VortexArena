@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server.Bot;
+namespace VortexArena.Server.Bot;
 
 /// <summary>
 /// Per-bot aiming state + logic — the C# port of server/bot/default/aim.qc (bot_aimdir, bot_shotlead,

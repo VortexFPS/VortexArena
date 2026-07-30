@@ -1,10 +1,10 @@
 using System;
 using Godot;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Md3;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// Turns a parsed <see cref="Md3Data"/> (the Godot-free MD3 importer output) into Godot scene nodes, and is

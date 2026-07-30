@@ -1,7 +1,7 @@
 # MLRS Turret — parity spec
 
 **Base refs:** `common/turrets/turret/mlrs.qc` · `mlrs.qh` · `mlrs_weapon.qc` · `mlrs_weapon.qh` · `common/turrets/sv_turrets.qc` (shared framework) · `common/turrets/cl_turrets.qc` (shared presentation) · `turrets.cfg` (balance)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretAI.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretAI.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

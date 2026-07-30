@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// A tiny load-once texture cache for HUD art (weapon icons, crosshair pics, powerup/notify icons) — the

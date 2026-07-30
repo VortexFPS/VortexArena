@@ -11,10 +11,10 @@
 // NADE_TYPE_NORMAL exactly as QC does.
 
 using System.Numerics;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades;
+namespace VortexArena.Common.Gameplay.Nades;
 
 /// <summary>
 /// One nade type — the C# successor to QuakeC's <c>CLASS(Nade)</c> (nades.qh) + the per-type subclass

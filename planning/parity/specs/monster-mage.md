@@ -1,7 +1,7 @@
 # Mage (monster) — parity spec
 
 **Base refs:** `common/monsters/monster/mage.qc` (+ `mage.qh`), `common/monsters/sv_monsters.qc` (`Monster_Damage`), `common/util.qc` (`healtharmor_applydamage`), `monsters.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs`, `MonsterAI.cs`, `MonsterFramework.cs`, `MonsterSpawnFuncs.cs`, `src/.../MapObjects/MapObjectsRegistry.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Monsters/Mage.cs`, `MonsterAI.cs`, `MonsterFramework.cs`, `MonsterSpawnFuncs.cs`, `src/.../MapObjects/MapObjectsRegistry.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

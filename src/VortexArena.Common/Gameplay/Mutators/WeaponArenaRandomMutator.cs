@@ -1,12 +1,12 @@
 // Port of common/mutators/mutator/weaponarena_random/sv_weaponarena_random.qc
 // (+ W_RandomWeapons from common/weapons/all.qc:178)
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Gameplay.Damage;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Common.Math;
+using VortexArena.Common.Gameplay.Damage;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Random Weapon Arena mutator — port of

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The GPU vertex-morph spatial shader for MD3 frame interpolation (item 3.3 Tier-3). It reproduces, on the
@@ -68,7 +68,7 @@ public static class Md3MorphShader
     /// the GDShader built-ins of the same name — no uniform declaration; the mesh surface must declare the
     /// matching ARRAY_CUSTOM0/ARRAY_CUSTOM1 RgbaFloat format (done C#-side in ModelAnimator).
     /// </summary>
-    public const string Code = @"// XonoticGodot MD3 GPU vertex-morph shader (R_AliasLerpVerts on the GPU). Generated in C#.
+    public const string Code = @"// VortexArena MD3 GPU vertex-morph shader (R_AliasLerpVerts on the GPU). Generated in C#.
 shader_type spatial;
 // OPAQUE, cull_back to match the StandardMaterial3D default this wraps (and PlayerSkinShader). We deliberately
 // do NOT write ALPHA: any assignment to ALPHA sets the shader's uses_alpha flag and moves the material into the
@@ -90,7 +90,7 @@ uniform float morph_amount = 0.0;
 // per-animator, so ViewModelRenderFx can set it directly) and compresses into the nearest 1/16 slice so it
 // never clips into world geometry.
 uniform float viewmodel_depth_range = 1.0;
-// Dynamic scene tint (XonoticGodot.Game.WorldTint) — a GLOBAL shader parameter applied to every model material
+// Dynamic scene tint (VortexArena.Game.WorldTint) — a GLOBAL shader parameter applied to every model material
 // (players, weapon viewmodels, pickups, and now GPU-morph props) so the look matches the rest of the pipeline.
 // Strength is folded in on the C# side; default (1,1,1) is identity.
 global uniform vec3 entity_tint;

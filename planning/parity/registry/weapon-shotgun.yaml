@@ -16,8 +16,8 @@ features:
       - "common/weapons/weapon/shotgun.qc:W_Shotgun_Attack"
       - "common/weapons/weapon/shotgun.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:WrThink"
     constants:
       - { name: "primary_ammo (shells/shot)", base: "1", port: "1", match: true }
       - { name: "primary_bullets (pellets)", base: "12", port: "12", match: true }
@@ -50,9 +50,9 @@ features:
       - "common/weapons/calculations.qc:W_CalculateSpread"
       - "server/weapons/tracing.qc:370 (fireBullet passes autocvar_g_hitscan_spread_style)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpread"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:HitscanSpreadStyle"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet (passes HitscanSpreadStyle)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateSpread"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:HitscanSpreadStyle"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet (passes HitscanSpreadStyle)"
     constants:
       - { name: "g_hitscan_spread_style (default)", base: "4 (gauss-2D plane; balance-xonotic.cfg:209)", port: "4 (HitscanSpreadStyle reads cvar, fallback 4)", match: true }
       - { name: "g_weaponspreadfactor", base: "1", port: "1 (WeaponSpreadFactor)", match: true }
@@ -80,8 +80,8 @@ features:
       - "server/weapons/tracing.qc:fireBullet_falloff (tracing.qc:~378-537)"
       - "lib/math.qh:ExponentialFalloff"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ExponentialFalloff"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ExponentialFalloff"
     constants:
       - { name: "g_ballistics_solidpenetration_exponent", base: "1 (xonotic-server.cfg:474)", port: "1 (reads cvar, fallback 1, WeaponFiring.cs:300-301)", match: true }
       - { name: "g_ballistics_mindistance", base: "2 (xonotic-server.cfg:470)", port: "2 (reads cvar, fallback 2, WeaponFiring.cs:302-303)", match: true }
@@ -110,7 +110,7 @@ features:
     base_refs:
       - "server/weapons/tracing.qc:W_SetupShot_Dir_ProjectileSize_Range"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
     constants:
       - { name: "recoil punchangle", base: "5 (deg up)", port: "5", match: true }
       - { name: "g_norecoil (default)", base: "1 — recoil SUPPRESSED by default (xonotic-server.cfg:232)", port: "reads g_norecoil cvar; cfg ships default 1 so suppressed when loaded", match: true }
@@ -139,8 +139,8 @@ features:
       - "common/weapons/weapon/shotgun.qc:wr_think (shotgun.qc:289-309)"
       - "server/weapons/weaponsystem.qc:weapon_prepareattack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:PrepareAttack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:PrepareAttack"
     constants:
       - { name: "primary_refire", base: "0.75 s", port: "0.75", match: true }
       - { name: "primary_animtime", base: "0.2 s", port: "0.2", match: true }
@@ -167,8 +167,8 @@ features:
       - "common/weapons/weapon/shotgun.qc:W_Shotgun_Attack2"
       - "common/weapons/weapon/shotgun.qc:W_Shotgun_Melee_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:Melee"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:MeleeThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:Melee"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:MeleeThink"
     constants:
       - { name: "secondary_damage (vs player)", base: "70", port: "70", match: true }
       - { name: "melee_nonplayerdamage", base: "40", port: "40", match: true }
@@ -205,12 +205,12 @@ features:
       - "common/weapons/weapon/shotgun.qc:W_Shotgun_Attack3_Frame2"
       - "server/weapons/weaponsystem.qc:weapon_prepareattack_checkammo (the empty-primary silent early-out)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:Attack3Frame1"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:Attack3Frame2"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:ScheduleThink (Frame1/Frame2 scheduling; dispatched in WeaponFireDriver.Frame:145-150)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:PrepareAttackImpl (buttonFire gate)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:CheckAmmoWithAutoSwitch (Shotgun melee silent early-out)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:Attack3Frame1"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:Attack3Frame2"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:ScheduleThink (Frame1/Frame2 scheduling; dispatched in WeaponFireDriver.Frame:145-150)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:PrepareAttackImpl (buttonFire gate)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:CheckAmmoWithAutoSwitch (Shotgun melee silent early-out)"
     constants:
       - { name: "secondary (mode)", base: "1 (melee)", port: "1", match: true }
       - { name: "melee_blockedbyfiring", base: "0", port: "0", match: true }
@@ -243,9 +243,9 @@ features:
       - "common/weapons/weapon/shotgun.qc:wr_checkammo2"
       - "common/weapons/weapon/shotgun.qc:wr_reload"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:CheckAmmoSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload/WReload/WReloadedAndReady"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:CheckAmmoSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload/WReload/WReloadedAndReady"
     constants:
       - { name: "ammo_type", base: "RES_SHELLS", port: "ResourceType.Shells", match: true }
       - { name: "pickup_ammo", base: "15 (bal-wep-xonotic.cfg:46)", port: "read by framework: ItemSpawnFuncs.ItemInit (ItemSpawnFuncs.cs:441) reads g_balance_shotgun_pickup_ammo via CvarOr, matching WEP_CVAR(pickup_ammo)", match: true }
@@ -274,9 +274,9 @@ features:
     base_refs:
       - "common/weapons/weapon/shotgun.qc:wr_aim (shotgun.qc:267-273)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:BotWantsSecondary (cs:186-187)"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary (virtual)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:355 (calls BotWantsSecondary, routes ButtonAttack2)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:BotWantsSecondary (cs:186-187)"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary (virtual)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:355 (calls BotWantsSecondary, routes ButtonAttack2)"
     constants:
       - { name: "melee_range switch threshold", base: "120", port: "120 (Secondary.MeleeRange)", match: true }
     status:
@@ -302,10 +302,10 @@ features:
       - "common/weapons/weapon/shotgun.qc:W_MuzzleFlash (via W_Shotgun_Attack)"
       - "common/weapons/weapon/shotgun.qc:wr_impacteffect (CSQC, shotgun.qc:400-410)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:Emit"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:43-44 (SHOTGUN_IMPACT/MUZZLEFLASH registered)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:Emit"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:43-44 (SHOTGUN_IMPACT/MUZZLEFLASH registered)"
       - "game/net/ServerNet.cs:WriteEffect (EffectNetSink) ; game/client/ClientWorld.cs:OnEffect (RenderSink)"
     constants:
       - { name: "muzzleflash effect", base: "EFFECT_SHOTGUN_MUZZLEFLASH + uziflash.md3 model", port: "SHOTGUN_MUZZLEFLASH particle + uziflash.md3 model (NetGame.MuzzleModelFor shotgun->models/uziflash.md3; ViewModel.SpawnMuzzleFlashModel attaches at muzzle socket + fades 3x0.05s ticks)", match: true }
@@ -336,11 +336,11 @@ features:
       - "common/weapons/weapon/shotgun.qc:W_Shotgun_Melee_Think (EFFECT_SHOTGUN_WOOSH, shotgun.qc:126)"
       - "common/weapons/weapon/shotgun.qc:W_Shotgun_Attack (SpawnCasing when g_casings>=1, shotgun.qc:78-83)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (calls SoundSystem.PlayRic — LIVE, throttled)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:MeleeWoosh (emits SHOTGUN_WOOSH — LIVE)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:EjectCasing (emits 'casing_shell', gate>=1 — LIVE both ends)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:101 (CASING_SHELL registered Effect)"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:PlayRic (RIC group ric1..ric3 registered)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:BulletImpactFx (calls SoundSystem.PlayRic — LIVE, throttled)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:MeleeWoosh (emits SHOTGUN_WOOSH — LIVE)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:EjectCasing (emits 'casing_shell', gate>=1 — LIVE both ends)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:101 (CASING_SHELL registered Effect)"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:PlayRic (RIC group ric1..ric3 registered)"
       - "game/client/EffectSystem.cs:Spawn -> SpawnCasing(origin, velocity, shell) for casing_shell/CASING_SHELL"
     constants:
       - { name: "ricochet chance / throttle", base: "w_random<0.05 / 0.25 s (prevric)", port: "Prandom.Float()<0.05 / now-actor.PrevRic>0.25 throttle (WeaponFiring.cs:552-558)", match: true }
@@ -372,9 +372,9 @@ features:
       - "common/weapons/weapon/shotgun.qc:wr_killmessage (shotgun.qc:388-394)"
       - "common/weapons/weapon/shotgun.qc:wr_suicidemessage (shotgun.qc:383-386)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:91 (SelectKillMessage shotgun branch)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:MeleeThink (slapDeathType via DeathTypes.WithHitType + Combat.Damage)"
-      - "src/XonoticGodot.Server/Scores.cs:643 (EmitObituary -> SelectKillMessage with full deathType)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:91 (SelectKillMessage shotgun branch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:MeleeThink (slapDeathType via DeathTypes.WithHitType + Combat.Damage)"
+      - "src/VortexArena.Server/Scores.cs:643 (EmitObituary -> SelectKillMessage with full deathType)"
     constants:
       - { name: "murder slap notif", base: "(HITTYPE_SECONDARY) ? WEAPON_SHOTGUN_MURDER_SLAP : WEAPON_SHOTGUN_MURDER", port: "slap tags |secondary so MURDER_SLAP is reached; blast -> MURDER", match: true }
       - { name: "suicide notif", base: "WEAPON_THINKING_WITH_PORTALS", port: "WEAPON_THINKING_WITH_PORTALS", match: true }
@@ -400,7 +400,7 @@ features:
     base_refs:
       - "common/weapons/weapon/shotgun.qc:describe (MENUQC, shotgun.qc:416-428)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs:GuideDescription (Shotgun.cs:71-78)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs:GuideDescription (Shotgun.cs:71-78)"
       - "game/menu/dialogs/DialogMediaGuide.cs:194 (renders w.GuideDescription for the active weapon)"
     constants:
       - { name: "describe_paragraphs", base: "4 (primary fan / secondary slap timing / ammo / range falloff)", port: "4 (GuideDescription string, same 4 paragraphs)", match: true }

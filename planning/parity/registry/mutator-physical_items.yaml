@@ -15,9 +15,9 @@ features:
       - "common/mutators/mutator/physical_items/sv_physical_items.qc:7 REGISTER_MUTATOR"
       - "common/mutators/mutator/physical_items/sv_physical_items.qc:10 MUTATOR_ONADD"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:47 IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:297 HasPhysicsEngine"
-      - "src/XonoticGodot.Server/GameWorld.cs:631 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:47 IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:297 HasPhysicsEngine"
+      - "src/VortexArena.Server/GameWorld.cs:631 (MutatorActivation.Apply)"
     constants:
       - { name: "physics_ode (engine cvar, required for activation)", base: "0 (off; needs DP_PHYSICS_ODE)", port: "no autocvar_physics_ode / no ODE engine", match: false }
     status:
@@ -43,8 +43,8 @@ features:
       - "common/mutators/mutator/physical_items/sv_physical_items.qc:3-5"
       - "mutators.cfg:154-156"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:53 Hook"
-      - "assets/data/xonotic-data.pk3dir/mutators.cfg:154-156"
+      - "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:53 Hook"
+      - "Base/data/xonotic-data.pk3dir/mutators.cfg:154-156"
     constants:
       - { name: "g_physical_items", base: "0 (0 off / 1 dropped only / 2 all map items)", port: "0", match: true }
       - { name: "g_physical_items_damageforcescale", base: "3", port: "3", match: true }
@@ -70,10 +70,10 @@ features:
     base_refs:
       - "common/mutators/mutator/physical_items/sv_physical_items.qc:92 MUTATOR_HOOKFUNCTION(physical_items, Item_Spawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:79 OnItemSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:1274 ItemSpawn HookChain / 1282 FireItemSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:180 (FireItemSpawn call site)"
-      - "src/XonoticGodot.Common/Gameplay/Items/EntityItemState.cs:187,193,201 (PhysSpawnOrigin/Angles/PhysIsDropped)"
+      - "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:79 OnItemSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:1274 ItemSpawn HookChain / 1282 FireItemSpawn"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:180 (FireItemSpawn call site)"
+      - "src/VortexArena.Common/Gameplay/Items/EntityItemState.cs:187,193,201 (PhysSpawnOrigin/Angles/PhysIsDropped)"
     constants:
       - { name: "ghost solid", base: "SOLID_CORPSE", port: "Solid.Corpse (PhysicalItemsMutator.cs:107)", match: true }
       - { name: "ghost movetype", base: "MOVETYPE_PHYSICS", port: "MoveType.Physics (PhysicalItemsMutator.cs:108)", match: true }
@@ -109,10 +109,10 @@ features:
       - "common/mutators/mutator/physical_items/sv_physical_items.qc:72 physical_item_touch"
       - "common/mutators/mutator/physical_items/sv_physical_items.qc:82 physical_item_damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:159 PhysicalItemThink"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:215 PhysicalItemTouch"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:235 PhysicalItemDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs:264 ItemDamageNeedKill"
+      - "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:159 PhysicalItemThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:215 PhysicalItemTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs:235 PhysicalItemDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs:264 ItemDamageNeedKill"
     constants:
       - { name: "reset gate", base: "autocvar_g_physical_items_reset (1)", port: "g_physical_items_reset re-read live (PhysicalItemsMutator.cs:175)", match: true }
       - { name: "awaiting-respawn state", base: "SOLID_NOT + alpha=-1 + MOVETYPE_NONE, snap to spawn_origin/spawn_angles, gated by owner.wait > time", port: "Solid.Not + Alpha=-1 + MoveType.None, snap to PhysSpawnOrigin/Angles, gated by item.ItemWait > time (PhysicalItemsMutator.cs:184-193)", match: true }

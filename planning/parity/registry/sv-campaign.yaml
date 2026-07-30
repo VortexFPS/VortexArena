@@ -16,9 +16,9 @@ features:
       - "common/campaign_file.qc:CampaignFile_Load"
       - "common/campaign_common.qh"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:Load"
-      - "src/XonoticGodot.Server/Campaign.cs:ParseCsvLine"
-      - "src/XonoticGodot.Server/CampaignCatalog.cs:Parse"
+      - "src/VortexArena.Server/Campaign.cs:Load"
+      - "src/VortexArena.Server/Campaign.cs:ParseCsvLine"
+      - "src/VortexArena.Server/CampaignCatalog.cs:Parse"
     constants:
       - { name: "CAMPAIGN_MAX_ENTRIES (server)", base: "2", port: "2", match: true }
       - { name: "comment/blank line classification", base: "// and \"// skip but advance lineno; blank transparent (no lineno++)", port: "same", match: true }
@@ -49,9 +49,9 @@ features:
     base_refs:
       - "server/campaign.qc:CampaignPreInit"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:PreInit"
-      - "src/XonoticGodot.Server/Campaign.cs:ApplyMutators"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (step 1e, line 488-490)"
+      - "src/VortexArena.Server/Campaign.cs:PreInit"
+      - "src/VortexArena.Server/Campaign.cs:ApplyMutators"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (step 1e, line 488-490)"
     constants:
       - { name: "baseskill", base: "max(0, g_campaign_skill + botskill[0])", port: "max(0, g_campaign_skill + botskill)", match: true }
       - { name: "permanent sets", base: "sv_public 0; pausable 1", port: "sv_public 0; pausable 1", match: true }
@@ -83,12 +83,12 @@ features:
       - "server/campaign.qc:CampaignPreInit"
       - "server/campaign.qc:Campaign_Invalid"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (gametype resolution, line 488-490)"
-      - "src/XonoticGodot.Server/Campaign.cs:Validate (Campaign_Invalid)"
-      - "src/XonoticGodot.Server/Campaign.cs:PreInit (calls Validate at tail, line 266)"
-      - "src/XonoticGodot.Server/Campaign.cs:PostInit (calls Validate at entry, line 312)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (LoadedMapName probe wired line 506)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (GametypeMismatch probe wired line 507-515)"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (gametype resolution, line 488-490)"
+      - "src/VortexArena.Server/Campaign.cs:Validate (Campaign_Invalid)"
+      - "src/VortexArena.Server/Campaign.cs:PreInit (calls Validate at tail, line 266)"
+      - "src/VortexArena.Server/Campaign.cs:PostInit (calls Validate at entry, line 312)"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (LoadedMapName probe wired line 506)"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (GametypeMismatch probe wired line 507-515)"
     constants: []
     status:
       logic: faithful
@@ -113,8 +113,8 @@ features:
       - "server/campaign.qc:CampaignBailout"
       - "server/campaign.qc:CampaignPreInit"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:Bailout"
-      - "src/XonoticGodot.Server/Campaign.cs:PreInit"
+      - "src/VortexArena.Server/Campaign.cs:Bailout"
+      - "src/VortexArena.Server/Campaign.cs:PreInit"
     constants:
       - { name: "bailout cvar set", base: "g_campaign 0", port: "g_campaign 0", match: true }
       - { name: "abort on", base: "entries<1 (unknown map); sv_cheats", port: "entries<1; sv_cheats", match: true }
@@ -141,8 +141,8 @@ features:
     base_refs:
       - "server/campaign.qc:CampaignPostInit"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:PostInit"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (step 6b, line 657-658)"
+      - "src/VortexArena.Server/Campaign.cs:PostInit"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (step 6b, line 657-658)"
     constants:
       - { name: "testrun limits", base: "fraglimit 0; leadlimit 0; timelimit 0.01", port: "0 / 0 / 0.01", match: true }
       - { name: "fraglimit form", base: "score+lead (tokenize by +)", port: "Split('+')", match: true }
@@ -175,14 +175,14 @@ features:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:51"
       - "common/gametypes/gametype/lms/sv_lms.qc:85"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:BotsMayStart"
-      - "src/XonoticGodot.Server/GameWorld.cs:InfraClientSpawn (sets true for non-bot; SendCampaignWelcome path; client.qc:2082)"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:MovementHeld (line 507-509, bot.qc:77 gate) + consumed line 141 (bot_think)"
-      - "src/XonoticGodot.Server/RoundHandler.cs:CampaignBotHold (line 120) + consumed line 237 (round_handler.qc:38 gate)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:CampaignBotHold (2246) + CampaignMovementHeld consumed Monster_Move (line 1045) + idle (1297) (sv_monsters.qc:846/1165)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:CampaignBotHold (55) + consumed prethink (sv_campcheck.qc:51)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs:CampaignBotsMayStart (602) + consumed win condition (line 643) (sv_lms.qc:85)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (wires monster/LMS/campcheck gates lines 731/734/737 + RoundHandler gate line 1637, every Boot)"
+      - "src/VortexArena.Server/Campaign.cs:BotsMayStart"
+      - "src/VortexArena.Server/GameWorld.cs:InfraClientSpawn (sets true for non-bot; SendCampaignWelcome path; client.qc:2082)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:MovementHeld (line 507-509, bot.qc:77 gate) + consumed line 141 (bot_think)"
+      - "src/VortexArena.Server/RoundHandler.cs:CampaignBotHold (line 120) + consumed line 237 (round_handler.qc:38 gate)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:CampaignBotHold (2246) + CampaignMovementHeld consumed Monster_Move (line 1045) + idle (1297) (sv_monsters.qc:846/1165)"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:CampaignBotHold (55) + consumed prethink (sv_campcheck.qc:51)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:CampaignBotsMayStart (602) + consumed win condition (line 643) (sv_lms.qc:85)"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (wires monster/LMS/campcheck gates lines 731/734/737 + RoundHandler gate line 1637, every Boot)"
     constants:
       - { name: "set true on", base: "first real client spawn (client.qc:2082)", port: "InfraClientSpawn (non-bot human)", match: true }
     status:
@@ -211,10 +211,10 @@ features:
     base_refs:
       - "server/campaign.qc:CampaignPreIntermission"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:PreIntermission"
-      - "src/XonoticGodot.Server/GameWorld.cs:NextLevel (PreIntermission call, line 3976-3982)"
-      - "src/XonoticGodot.Server/GameWorld.cs:_checkRulesEquality field (line 3678) + RunCheckRulesWorld assignment (line 3795-3798, 3896)"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:GameType.ReportsTie (virtual, line 412) + per-mode overrides (DM/Duel/Mayhem/Keepaway/TDM/CTF/Dom/KH/TeamMayhem/TeamKeepaway/Nexball/LMS)"
+      - "src/VortexArena.Server/Campaign.cs:PreIntermission"
+      - "src/VortexArena.Server/GameWorld.cs:NextLevel (PreIntermission call, line 3976-3982)"
+      - "src/VortexArena.Server/GameWorld.cs:_checkRulesEquality field (line 3678) + RunCheckRulesWorld assignment (line 3795-3798, 3896)"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:GameType.ReportsTie (virtual, line 412) + per-mode overrides (DM/Duel/Mayhem/Keepaway/TDM/CTF/Dom/KH/TeamMayhem/TeamKeepaway/Nexball/LMS)"
     constants:
       - { name: "win condition", base: "won==1 && lost==0 && checkrules_equality==0 (bots excluded)", port: "same; non-bot clients only (p.IsBot filter)", match: true }
       - { name: "time-up loss (sole-winner branch)", base: "timelimit!=0 && fraglimit!=0 && time>timelimit*60 -> LOST", port: "same", match: true }
@@ -245,8 +245,8 @@ features:
       - "server/campaign.qc:CampaignSaveCvar"
       - "server/campaign.qc:CampaignPreIntermission (save gate)"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:SaveCvar"
-      - "src/XonoticGodot.Server/Campaign.cs:PreIntermission"
+      - "src/VortexArena.Server/Campaign.cs:SaveCvar"
+      - "src/VortexArena.Server/Campaign.cs:PreIntermission"
       - "game/net/NetGame.cs:OnProgressSaved bridge"
     constants:
       - { name: "save gate", base: "won && cheatcount_total==0 && !testrun && level==g_campaign<name>_index", port: "same", match: true }
@@ -274,9 +274,9 @@ features:
       - "server/campaign.qc:CampaignPostIntermission"
       - "common/campaign_setup.qc:CampaignSetup"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:PostIntermission"
-      - "src/XonoticGodot.Server/Campaign.cs:Setup"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveEndOfMatchMapFlow (line 2402-2409)"
+      - "src/VortexArena.Server/Campaign.cs:PostIntermission"
+      - "src/VortexArena.Server/Campaign.cs:Setup"
+      - "src/VortexArena.Server/GameWorld.cs:DriveEndOfMatchMapFlow (line 2402-2409)"
       - "game/net/NetGame.cs:MapChangeRequested"
     constants:
       - { name: "last-level end", base: "won && entries<2 -> campaign over (togglemenu 1)", port: "PostIntermission returns false; ApplyMapChange(\"\")", match: true }
@@ -304,8 +304,8 @@ features:
       - "server/campaign.qc:CampaignLevelWarp"
       - "server/command/sv_cmd.qc:1718"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:LevelWarp"
-      - "src/XonoticGodot.Server/Commands.cs:CmdWarp"
+      - "src/VortexArena.Server/Campaign.cs:LevelWarp"
+      - "src/VortexArena.Server/Commands.cs:CmdWarp"
     constants:
       - { name: "next-level sentinel", base: "n<0 -> campaign_level+1", port: "n<0 -> Level+1", match: true }
       - { name: "warp setup", base: "Unload; CampaignFile_Load(n,1); if entries CampaignSetup(0) else error", port: "Unload; Load(n,1); if>0 Setup(0) else Echo", match: true }
@@ -332,11 +332,11 @@ features:
       - "common/mapobjects/target/levelwarp.qc:target_levelwarp_use"
       - "common/mapobjects/target/changelevel.qc:target_changelevel_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:LevelWarpUse (line 403-414)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:ChangeLevelUse (line 366-370)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (IsCampaign line 567, NextLevelHandler 577-582, CampaignLevelWarpHandler 604)"
-      - "src/XonoticGodot.Server/Campaign.cs:ForceWin (live setter via NextLevelHandler)"
-      - "src/XonoticGodot.Server/Campaign.cs:LevelWarp"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:LevelWarpUse (line 403-414)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:ChangeLevelUse (line 366-370)"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (IsCampaign line 567, NextLevelHandler 577-582, CampaignLevelWarpHandler 604)"
+      - "src/VortexArena.Server/Campaign.cs:ForceWin (live setter via NextLevelHandler)"
+      - "src/VortexArena.Server/Campaign.cs:LevelWarp"
     constants:
       - { name: "levelwarp cnt", base: "cnt-1 (1-based specific) / -1 (next)", port: "Cnt-1 / -1 (LevelWarpUse, now wired to IsCampaign + CampaignLevelWarpHandler)", match: true }
       - { name: "changelevel campaign win", base: "empty chmap + IS_REAL_CLIENT + g_campaign -> campaign_forcewin=true; NextLevel()", port: "NextLevelHandler: g_campaign && actor is non-bot Player -> Campaign.ForceWin=true; EndMatch()", match: true }
@@ -363,9 +363,9 @@ features:
     base_refs:
       - "common/mapobjects/target/changelevel.qc:target_changelevel_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:ChangeLevelUse (line 358-364)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs:SwitchGameTypeHandler (seam, line 298)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Boot (SwitchGameTypeHandler line 602)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:ChangeLevelUse (line 358-364)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs:SwitchGameTypeHandler (seam, line 298)"
+      - "src/VortexArena.Server/GameWorld.cs:Boot (SwitchGameTypeHandler line 602)"
     constants:
       - { name: "gametype switch", base: "if(.gametype != \"\") MapInfo_SwitchGameType(MapInfo_Type_FromString(...))", port: "SwitchGameTypeHandler -> Cvars.Set(\"gametype\", gt) so the next changelevel boots that mode", match: true }
     status:
@@ -392,10 +392,10 @@ features:
       - "server/teamplay.qc:385"
       - "server/teamplay.qc:938"
     port_refs:
-      - "src/XonoticGodot.Server/Cvars.cs (g_campaign_forceteam registration)"
-      - "src/XonoticGodot.Server/Teamplay.cs:DetermineForcedTeam (Player_DetermineForcedTeam, reads g_campaign_forceteam, line 123-163)"
-      - "src/XonoticGodot.Server/Teamplay.cs:AssignBestTeam (honors HasRealForcedTeam, line 245-254)"
-      - "src/XonoticGodot.Server/ClientManager.cs:184 (live caller on connect)"
+      - "src/VortexArena.Server/Cvars.cs (g_campaign_forceteam registration)"
+      - "src/VortexArena.Server/Teamplay.cs:DetermineForcedTeam (Player_DetermineForcedTeam, reads g_campaign_forceteam, line 123-163)"
+      - "src/VortexArena.Server/Teamplay.cs:AssignBestTeam (honors HasRealForcedTeam, line 245-254)"
+      - "src/VortexArena.Server/ClientManager.cs:184 (live caller on connect)"
     constants:
       - { name: "g_campaign_forceteam default", base: "0", port: "0", match: true }
       - { name: "forced-team index (1..4) honored in balance", base: "team_forced 1..4 -> that team", port: "DetermineForcedTeam stores 1..4 (campaign real clients); AssignBestTeam early-outs on HasRealForcedTeam when the team is allowed", match: true }
@@ -422,11 +422,11 @@ features:
       - "server/campaign.qc:Campaign_GetLevelNum"
       - "server/client.qc:1080 (SendWelcomeMessage)"
     port_refs:
-      - "src/XonoticGodot.Server/Campaign.cs:LevelNum (Campaign_GetLevelNum = Level + 1)"
-      - "src/XonoticGodot.Server/GameWorld.cs:SendCampaignWelcome (live reader, ~line 1288; per-client via Commands.ChatToPlayer)"
-      - "src/XonoticGodot.Server/GameWorld.cs:CampaignLevelDescription (~line 1324; reconstructs shortdesc+longdesc via CampaignCatalog)"
-      - "src/XonoticGodot.Server/GameWorld.cs:InfraClientConnect (welcome call)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Campaign.Log wiring (~line 1096 -> Commands.ChatBroadcast, bare-host fallback)"
+      - "src/VortexArena.Server/Campaign.cs:LevelNum (Campaign_GetLevelNum = Level + 1)"
+      - "src/VortexArena.Server/GameWorld.cs:SendCampaignWelcome (live reader, ~line 1288; per-client via Commands.ChatToPlayer)"
+      - "src/VortexArena.Server/GameWorld.cs:CampaignLevelDescription (~line 1324; reconstructs shortdesc+longdesc via CampaignCatalog)"
+      - "src/VortexArena.Server/GameWorld.cs:InfraClientConnect (welcome call)"
+      - "src/VortexArena.Server/GameWorld.cs:Campaign.Log wiring (~line 1096 -> Commands.ChatBroadcast, bare-host fallback)"
     constants:
       - { name: "level num", base: "campaign_level + 1 (networked in SendWelcomeMessage when g_campaign; CSQC builds 'Level %d:')", port: "Campaign.LevelNum = Level+1, read by SendCampaignWelcome and surfaced as 'Level N:'", match: true }
     status:

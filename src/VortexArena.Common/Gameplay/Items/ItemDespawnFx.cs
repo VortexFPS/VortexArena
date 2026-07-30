@@ -12,7 +12,7 @@
 // (ClientWorld in game/ isn't visible to the test project), and the renderer just supplies the current time +
 // the cl_items_animate cvar value and consumes the (alpha, emitPuff) it returns.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The per-item loot-despawn animation timer (QC <c>ItemDraw</c>'s <c>ITS_EXPIRING</c> branch,

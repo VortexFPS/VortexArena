@@ -21,8 +21,8 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_Initialize"
       - "common/gametypes/gametype/freezetag/freezetag.qh:INIT(FreezeTag)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:Activate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:TeamCount"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:TeamCount"
     constants:
       - { name: "default teams", base: "2 (1..4 via g_freezetag_teams/_override, BITS(bound(2,n,4)))", port: "2 (clamp 2..4)", match: true }
       - { name: "mapinfo defaults", base: "timelimit=20 pointlimit=10 teams=2 leadlimit=6", port: "fraglimit→10 round-limit", match: false }
@@ -53,8 +53,8 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_Add_Score"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:Freeze"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:Freeze"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnDeath"
     constants:
       - { name: "freeze HP", base: "RES_HEALTH = 1", port: "SetResource(Health, 1)", match: true }
       - { name: "score self-freeze", base: "victim -1", port: "victim -1", match: true }
@@ -84,8 +84,8 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, LockWeapon)"
       - "common/physics/player.qc:(weapon ready gate PHYS_FROZEN)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:WeaponLocked"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:IsFrozen"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:WeaponLocked"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:IsFrozen"
     constants: []
     status:
       logic: faithful
@@ -109,7 +109,7 @@ features:
       - "common/physics/player.qc:PM_check_frozen"
       - "common/physics/player.qc:PlayerJump (PHYS_FROZEN no-jump)"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:IsFrozen"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:IsFrozen"
     constants:
       - { name: "frozen move", base: "movement = '0 0 0' (dodging-frozen sub-case allows ±2)", port: "move = Vector3.Zero (dodging-frozen omitted)", match: false }
     status:
@@ -134,7 +134,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_Unfreeze"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:Unfreeze"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:Unfreeze"
     constants:
       - { name: "restored HP", base: "start_health (player) / max_health", port: "StartHealth", match: true }
       - { name: "spawnshield on revive", base: "spawnshieldtime = time + g_freezetag_revive_spawnshield (1s)", port: "SpawnShieldExpire = time + ReviveSpawnShield (read by damage pipeline)", match: true }
@@ -162,9 +162,9 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerPreThink)"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:IN_REVIVING_RANGE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:InRevivingRange"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:InRevivingRange"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame"
     constants:
       - { name: "g_freezetag_revive_extra_size", base: "100 qu bbox expand", port: "100 (DefaultReviveExtraSize)", match: true }
       - { name: "revive speed used", base: "revive_speed_t2s=0.25 (t2s on, default) / revive_speed=0.4*(1-base) (t2s off)", port: "t2s ON → ReviveSpeedT2s 0.25; t2s OFF → ReviveSpeed 0.4*(1-base)", match: true }
@@ -190,9 +190,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerPreThink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:AddRevival"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:TryRevive"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:AddRevival"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:TryRevive"
     constants:
       - { name: "revival credit", base: "FREEZETAG_REVIVALS +1 per nearby reviver", port: "FREEZETAG_REVIVALS +1 per nearby reviver", match: true }
       - { name: "SCORE on revive", base: "t2s ON (default): SCORE accrues over time (+1 per 1.5s); t2s OFF: +1 per reviver on completion", port: "same — t2s ON accrues via _reviveTime, t2s OFF awards +1 on completion", match: true }
@@ -220,10 +220,10 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerPreThink)"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qh:autocvar_g_freezetag_revive_time_to_score"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:TryRevive"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTimeToScore"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveSpeedT2s"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:TryRevive"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTimeToScore"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveSpeedT2s"
     constants:
       - { name: "g_freezetag_revive_time_to_score", base: "1.5 (ON by default)", port: "DefaultReviveTimeToScore 1.5", match: true }
       - { name: "g_freezetag_revive_speed_t2s", base: "0.25", port: "DefaultReviveSpeedT2s 0.25", match: true }
@@ -250,10 +250,10 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_Freeze"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerPreThink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:Freeze"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveAuto"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveAutoProgress"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:Freeze"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveAuto"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveAutoProgress"
     constants:
       - { name: "g_freezetag_frozen_maxtime", base: "60 s", port: "live cvar; FrozenMaxtime fallback 60", match: true }
       - { name: "g_freezetag_revive_auto", base: "1", port: "ReviveAuto cvar (default true); arms FrozenTimeout only when on", match: true }
@@ -279,7 +279,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
     constants:
       - { name: "g_freezetag_revive_auto_reducible", base: "1 (enemy hits reduce; -1 also teammates)", port: "cvar read, default 1; enemyOrAlways gate", match: true }
       - { name: "revive_auto_reducible_forcefactor", base: "0.01", port: "cvar read, fallback 0.01", match: true }
@@ -305,8 +305,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs"
     constants:
       - { name: "frag_damage on frozen", base: "0 (non-NEEDKILL/teamchange)", port: "args.Damage = 0f for frozen non-NEEDKILL/non-teamchange", match: true }
       - { name: "g_frozen_force", base: "0.6 force multiplier", port: "g_frozen_force cvar, fallback 0.6, args.Force *= frozenForce", match: true }
@@ -332,8 +332,8 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, Damage_Calculate)"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnDamageCalculate"
     constants:
       - { name: "g_frozen_damage_trigger", base: "1 (frozen die in void/lava)", port: "none (no relocate path)", match: false }
       - { name: "g_frozen_revive_falldamage", base: "0 (off)", port: "g_frozen_revive_falldamage cvar, fallback 0", match: true }
@@ -363,9 +363,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerPreThink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:Unfreeze"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveSpawnShield"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:HasSpawnShield"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:Unfreeze"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveSpawnShield"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:HasSpawnShield"
     constants:
       - { name: "g_freezetag_revive_spawnshield", base: "1 s", port: "DefaultReviveSpawnShield 1f", match: true }
     status:
@@ -391,11 +391,11 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_CheckWinner"
       - "server/round_handler.qc:round_handler_Think"
     port_refs:
-      - "src/XonoticGodot.Server/RoundHandler.cs:Think"
-      - "src/XonoticGodot.Server/GameWorld.cs:EnableRounds"
-      - "src/XonoticGodot.Server/GameWorld.cs:MirrorRoundTiming"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:CheckTeams"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:CheckWinner"
+      - "src/VortexArena.Server/RoundHandler.cs:Think"
+      - "src/VortexArena.Server/GameWorld.cs:EnableRounds"
+      - "src/VortexArena.Server/GameWorld.cs:MirrorRoundTiming"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:CheckTeams"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:CheckWinner"
     constants:
       - { name: "g_freezetag_warmup", base: "10 s", port: "live cvar; EnableRounds countdown = g_freezetag_warmup (fallback 5)", match: true }
       - { name: "g_freezetag_round_timelimit", base: "360 s", port: "live cvar (fallback 180)", match: true }
@@ -424,9 +424,9 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_CheckWinner"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qh:GameRules_limit_score/limit_lead"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:CheckWinner"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:CheckRound"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:CheckWinner"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:CheckRound"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:UpdateLeaderAndCheckLimit"
     constants:
       - { name: "round win score", base: "TeamScore_AddToTeam(winner, ST_FT_ROUNDS, +1)", port: "AddToTeam(winner, TeamSlotSecondary, +1)", match: true }
       - { name: "round limit default", base: "mapinfo pointlimit 10", port: "fraglimit else 10", match: true }
@@ -453,8 +453,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnSetStartItems"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems"
     constants:
       - { name: "g_ft_start_health", base: "100", port: "100 (DefaultStartHealth)", match: true }
       - { name: "g_ft_start_armor", base: "100", port: "100", match: true }
@@ -482,9 +482,9 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_count_alive_players"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_isEliminated"
     port_refs:
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:Capture"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:AliveCount"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:IsEliminated"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:Capture"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:AliveCount"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:IsEliminated"
       - "game/hud/ModIconsPanel.cs:DrawCaStyle"
     constants:
       - { name: "alive stats", base: "STAT(REDALIVE..PINKALIVE)", port: "4-byte alive counts red,blue,yellow,pink", match: true }
@@ -538,8 +538,8 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_Freeze (WP_Frozen)"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerPreThink) (WP_Reviving/health bar)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:CollectWaypoints"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:CollectWaypoints"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs"
       - "game/net/ServerNet.cs:SendWaypoints"
     constants:
       - { name: "WP offset", base: "'0 0 64'", port: "new Vector3(0,0,64)", match: true }
@@ -568,10 +568,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:(Send_Notification INFO/CENTER_FREEZETAG_*)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:Freeze"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:Freeze"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:ReviveTick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs"
       - "game/net/ServerNet.cs:NotificationNetSink"
     constants:
       - { name: "freeze line", base: "INFO_FREEZETAG_FREEZE / CENTER+INFO_FREEZETAG_SELF", port: "Send INFO_FREEZETAG_FREEZE / CENTER+INFO_FREEZETAG_SELF", match: true }
@@ -636,10 +636,10 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:havocbot_role_ft_freeing"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, HavocBot_ChooseRole/Bot_ForbidAttack)"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleFreezeTag (664-689)"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs:128 (ChooseRole \"freezetag\"/\"ft\" → RoleFreezeTag)"
-      - "src/XonoticGodot.Server/Bot/BotController.cs:101 (AddBot → Role = ChooseRole)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:1093 (ShouldAttack frozen-target skip)"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleFreezeTag (664-689)"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:128 (ChooseRole \"freezetag\"/\"ft\" → RoleFreezeTag)"
+      - "src/VortexArena.Server/Bot/BotController.cs:101 (AddBot → Role = ChooseRole)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:1093 (ShouldAttack frozen-target skip)"
     constants:
       - { name: "role timeout", base: "time + 10..20 s (random)", port: "none (RoleFreezeTag assigned once at AddBot, no re-roll)", match: false }
       - { name: "free-player rating", base: "freeing 20000 / offense items+enemies", port: "RatingFrozenTeammate 20000 (frozen same-team), items 10000, enemies 7000, roam 3000", match: true }
@@ -666,8 +666,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:PlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:PlayerSpawn"
     constants:
       - { name: "spawn-while-round-live → freeze", base: "round_handler_IsRoundStarted → freezetag_Freeze(player, NULL) + CENTER_FREEZETAG_SPAWN_LATE", port: "Handler.IsRoundStarted → Freeze(player, null, announce:false) + CENTER_FREEZETAG_SPAWN_LATE", match: true }
       - { name: "round-reset respawn excluded", base: "freezetag_frozen_timeout == -1 (reset_map_players) → no freeze", port: "gated on Handler.IsRoundStarted (false during countdown) so reset respawns are excluded", match: true }
@@ -694,7 +694,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, GiveFragsForKill, CBC_ORDER_FIRST)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnGiveFragsForKill"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnGiveFragsForKill"
     constants:
       - { name: "frag delta on kill", base: "M_ARGV(2,float) = 0 (return true)", port: "args.FragScore = 0f; return true", match: true }
     status:
@@ -718,8 +718,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, SetWeaponArena)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnSetWeaponArena"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:SetWeaponArena.Call"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnSetWeaponArena"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:SetWeaponArena.Call"
     constants:
       - { name: "g_freezetag_weaponarena", base: "'most_available' (gametypes-server.cfg:429)", port: "CvarString(g_freezetag_weaponarena, 'most_available') when arena unset/'0'", match: true }
     status:
@@ -743,8 +743,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, PlayerRegen)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnPlayerRegen"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:PlayerRegen.Call"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnPlayerRegen"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:PlayerRegen.Call"
     constants: []
     status:
       logic: faithful
@@ -768,8 +768,8 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, ItemTouch)"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, BuffTouch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnItemTouch"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:FireItemTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnItemTouch"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:FireItemTouch"
     constants: []
     status:
       logic: faithful
@@ -792,10 +792,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, FragCenterMessage)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnFragCenterMessage"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:FragCenterMessage (chain)"
-      - "src/XonoticGodot.Server/Scores.cs:809 (FragCenterMessage.Call — LIVE; result consumed Scores.cs:810-814)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:1292 (CHOICE FRAG_FREEZE/FRAGGED_FREEZE)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnFragCenterMessage"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:FragCenterMessage (chain)"
+      - "src/VortexArena.Server/Scores.cs:809 (FragCenterMessage.Call — LIVE; result consumed Scores.cs:810-814)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:1292 (CHOICE FRAG_FREEZE/FRAGGED_FREEZE)"
     constants:
       - { name: "attacker line", base: "CHOICE_FRAG_FREEZE 'You froze X'", port: "args.AttackerChoice = 'FRAG_FREEZE' (FreezeTag.cs:945) → DEATH_MURDER_FRAG_FREEZE 'You froze X' (NotificationsList.cs:936)", match: true }
       - { name: "target line", base: "CHOICE_FRAGGED_FREEZE 'You were frozen by Y'", port: "args.TargetChoice = 'FRAGGED_FREEZE' (FreezeTag.cs:946) → DEATH_MURDER_FRAGGED_FREEZE 'You were frozen by Y' (NotificationsList.cs:937)", match: true }
@@ -847,8 +847,8 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_LastPlayerForTeam"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_LastPlayerForTeam_Notify"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:NotifyLastPlayerForTeam"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:NotifyLastPlayerForTeam"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnDeath"
     constants:
       - { name: "alone line", base: "CENTER_ALONE 'You are now alone!' to the team's last unfrozen survivor", port: "NotificationSystem.Center(last, \"ALONE\") (FreezeTag.cs:1079); CENTER_ALONE declared NotificationsList.cs:872 '^F4You are now alone!'", match: true }
       - { name: "survivor test", base: "!STAT(FROZEN) && !IS_DEAD teammate, leaving player excluded, round started only", port: "!IsEliminated (frozen OR dead excluded) teammate, leaving excluded, gated on Handler.IsRoundStarted", match: true }

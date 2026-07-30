@@ -45,7 +45,7 @@ features:
       - "common/notifications/all.qc:Local_Notification (case MSG_CENTER)"
       - "common/notifications/all.qc:Local_Notification_centerprint_Add"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:Send"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:Send"
       - "game/net/ClientNet.cs:HandleReliableBundle"
       - "game/net/NetGame.cs:OnNotificationReceived"
       - "game/hud/HudNotifications.cs:ShowCenter"
@@ -77,8 +77,8 @@ features:
       - "game/hud/CenterPrintPanel.cs:_Process"
       - "game/hud/CenterPrintPanel.cs:MessageAlpha"
       - "game/hud/HudNotifications.cs:ShowCenter"
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastGameStartCountdown"
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastRoundStartCountdown"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastGameStartCountdown"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastRoundStartCountdown"
     constants:
       - { name: "countdown forces fade_in/out=0", base: "yes", port: "yes (MessageAlpha countdown branch)", match: true }
       - { name: "always-laid-out at ~0 alpha", base: "yes (hold position)", port: "yes (isCountdown skip-guard)", match: true }
@@ -195,8 +195,8 @@ features:
     port_refs:
       - "game/hud/CenterPrintPanel.cs:Kill"
       - "game/hud/HudNotifications.cs:OnNotification (case MsgType.CenterKill)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterKill"
-      - "src/XonoticGodot.Server/GameWorld.cs:Warmup.OnCountdownStop / BroadcastRoundStop"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterKill"
+      - "src/VortexArena.Server/GameWorld.cs:Warmup.OnCountdownStop / BroadcastRoundStop"
     constants:
       - { name: "kill fade time", base: "min(5, fade_out)", port: "min(5, fade_out)", match: true }
     status:
@@ -221,12 +221,12 @@ features:
       - "common/notifications/all.qc:NET_HANDLE(ENT_CLIENT_NOTIFICATION) MSG_CENTER_KILL (1372-1392)"
       - "client/hud/panel/centerprint.qc:centerprint_KillAll"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterKill"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterKill"
       - "game/net/ServerNet.cs:WriteNotification (WireType)"
       - "game/net/ClientNet.cs:HandleReliableBundle"
       - "game/hud/HudNotifications.cs:OnNotification (case MsgType.CenterKill)"
       - "game/hud/CenterPrintPanel.cs:ClearAll / Kill"
-      - "src/XonoticGodot.Server/GameWorld.cs:2873 (SendCenterKill All/null → kill all)"
+      - "src/VortexArena.Server/GameWorld.cs:2873 (SendCenterKill All/null → kill all)"
     constants:
       - { name: "CPID_Null → kill all", base: "centerprint_KillAll", port: "ClearAll (empty cpid branch)", match: true }
       - { name: "else → kill group", base: "centerprint_Kill(cpid)", port: "Kill(text)", match: true }
@@ -254,8 +254,8 @@ features:
     port_refs:
       - "game/hud/CenterPrintPanel.cs:SetTitle / ClearTitle / DrawTitle"
       - "game/hud/HudNotifications.cs:OnNotification (case MsgType.CenterTitle)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterTitle"
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastCountdownTitle"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterTitle"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastCountdownTitle"
     constants:
       - { name: "fontscale_title", base: "1.3 shipped skin", port: "1.3 (skin override now applied as default)", match: true }
       - { name: "title text", base: "^BG + MapInfo_Type_ToText(gametype)", port: "^BG + GameType.DisplayName", match: true }
@@ -283,8 +283,8 @@ features:
     port_refs:
       - "game/hud/CenterPrintPanel.cs:SetDuelTitle / DrawTitle / ShortenColored"
       - "game/hud/HudNotifications.cs:OnNotification (case MsgType.CenterDuelTitle)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterDuelTitle"
-      - "src/XonoticGodot.Server/GameWorld.cs:BroadcastCountdownTitle"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterDuelTitle"
+      - "src/VortexArena.Server/GameWorld.cs:BroadcastCountdownTitle"
     constants:
       - { name: "name shorten width", base: "textShortenToWidth(name, hud_panel_scoreboard_namesize * hud_fontsize.x)", port: "ShortenColored(name, namesize(default 15) * Cfg.FontSize)", match: true }
       - { name: "hud_panel_scoreboard_namesize default", base: "15", port: "15", match: true }
@@ -314,8 +314,8 @@ features:
       - "common/mapobjects/target/items.qc / target_print (map-trigger centerprints)"
       - "server/compat/quake3.qc:target_print_message"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:MapMover.Centerprint"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterRaw"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:MapMover.Centerprint"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterRaw"
       - "game/hud/HudNotifications.cs:OnNotification (case MsgType.CenterRaw)"
       - "game/hud/CenterPrintPanel.cs:Add"
       - "MapObjects/Doors.cs:406 / TargetUtilities.cs:509,805 / CompatRemaps.cs:424,472 (callers)"
@@ -343,8 +343,8 @@ features:
     base_refs:
       - "server/chat.qc (cmsgstr / sourcecmsgstr → centerprint(client, ...))"
     port_refs:
-      - "src/XonoticGodot.Server/Chat.cs:CenterPrint"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterRaw"
+      - "src/VortexArena.Server/Chat.cs:CenterPrint"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterRaw"
       - "game/hud/HudNotifications.cs:OnNotification (case MsgType.CenterRaw)"
       - "game/hud/CenterPrintPanel.cs:Add"
     constants:

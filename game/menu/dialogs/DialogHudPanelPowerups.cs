@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Powerups" panel configuration dialog — a faithful C# port of <c>XonoticHUDPowerupsDialog_fill</c>

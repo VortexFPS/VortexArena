@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Blaster — port of common/weapons/weapon/blaster.{qh,qc}. A projectile weapon: primary fire spawns
@@ -38,6 +38,7 @@ public sealed class Blaster : Weapon
     public Blaster()
     {
         NetName = "blaster";
+        BotPickupBaseValue = 0;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         DisplayName = "Blaster";
         Impulse = 1;
         // WEP_FLAG_NORMAL | WEP_FLAG_CANCLIMB | WEP_TYPE_SPLASH

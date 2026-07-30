@@ -5,7 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 
-namespace XonoticGodot.Formats.Vfs;
+namespace VortexArena.Formats.Vfs;
 
 /// <summary>
 /// A read-only virtual filesystem that reproduces the Darkplaces gamedir search path over
@@ -134,6 +134,34 @@ public sealed class VirtualFileSystem : IDisposable
         // Prepend the whole batch atomically, preserving relative order (last element = top).
         PrependRange(built);
         return true;
+    }
+
+    /// <summary>
+    /// Mount a content root the way the game does: the per-map packages under <c>&lt;root&gt;/maps</c>
+    /// first, then <paramref name="dataRoot"/> itself. Returns whether the root mounted.
+    /// </summary>
+    /// <remarks>
+    /// Two calls are needed because <see cref="MountGameDir(string)"/> only enumerates packs DIRECTLY
+    /// inside the directory it is handed, and compiled maps live one level down in per-map
+    /// <c>.pk3dir</c> packages — they are fetched per <c>data/maps.lock.json</c> rather than committed.
+    /// <para>
+    /// Order is load-bearing and must be maps-first. Each call PREPENDS its batch, so the LAST call ends
+    /// up highest in the search path. Mounting maps first leaves the data root above it, preserving the
+    /// precedence the old bundled layout had, where core data outranked the compiled map packs
+    /// (<c>xonotic-20230620-maps.pk3</c> sorts before <c>xonotic-data.pk3dir</c>). Reversing it would let
+    /// any one map's <c>textures/foo</c> shadow core's.
+    /// </para>
+    /// <para>
+    /// This lives here rather than at the call sites so the game and the tests cannot drift apart on it.
+    /// They did once: the tests mounted only the root, so they saw 50 of the 185 shader scripts and the
+    /// material-count assertions failed while the content was in fact all present.
+    /// </para>
+    /// </remarks>
+    public bool MountContentRoot(string dataRoot)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(dataRoot);
+        MountGameDir(Path.Combine(dataRoot, "maps")); // absent on a checkout that has not fetched maps
+        return MountGameDir(dataRoot);
     }
 
     private void Prepend(IMount mount)

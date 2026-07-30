@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The menu's console-command dispatcher — the C# stand-in for the engine command layer the QuakeC menu
@@ -39,6 +39,12 @@ public static class MenuCommand
 
     /// <summary><c>map NAME</c> / <c>menu_cmd map NAME</c> — start a local match on the given map.</summary>
     public static Action<string>? StartMap;
+
+    /// <summary>
+    /// <c>editor [map]</c> — host a map in the editor gametype. Empty string means "the one already
+    /// running", so the editor is reachable from wherever you are without a trip through the menu.
+    /// </summary>
+    public static Action<string>? StartEditor;
 
     /// <summary><c>connect ADDR</c> — connect to a server.</summary>
     public static Action<string>? Connect;
@@ -78,6 +84,22 @@ public static class MenuCommand
     /// the join/spectate/leave buttons are inert (logged only).
     /// </summary>
     public static Action<string>? SendGameCommand;
+
+    /// <summary>
+    /// DP <c>commandmode &lt;prefill&gt;</c> — open the in-game command prompt with a half-typed line the player
+    /// finishes (the submitted text runs as a command, not chat). Wired by <c>Shell</c> to the ChatPrompt; used by
+    /// the interactive scoreboard's Ctrl+T (QC <c>commandmode tell "&lt;player&gt;^7"</c>). Passing the prefill
+    /// through this hook rather than an <c>ExecuteLine("commandmode …")</c> string keeps a player name containing
+    /// spaces or quotes intact — a re-tokenized command line would drop the quoting.
+    /// </summary>
+    public static Action<string>? OpenCommandPrompt;
+
+    /// <summary>
+    /// In-match Escape claim for the interactive scoreboard (QC HUD_Scoreboard_InputEvent's ESC branch + the
+    /// TAB+ESC opener in main.qc:545). Returns true when it consumed the key, so <c>Shell</c> stops before the
+    /// pause menu. Wired by the play path; null (and inert) at the menu.
+    /// </summary>
+    public static Func<bool>? ScoreboardEscape;
 
     /// <summary>
     /// QC gamestatus test (<c>gamestatus &amp; (GAME_ISSERVER|GAME_CONNECTED)</c>): is a match currently live?
@@ -226,6 +248,12 @@ public static class MenuCommand
             // command here too so the keybind opens the Sandbox Tools dialog even if the cfg alias isn't loaded.
             case "menu_showsandboxtools":
                 OpenDialog?.Invoke("SandboxTools");
+                break;
+
+            // QC commands.cfg `alias team_selection_show "menu_cmd directmenu TeamSelect"` (bound to F5 in
+            // binds-xonotic.cfg). The dialog existed but nothing invoked it, leaving F5 a dead key.
+            case "team_selection_show":
+                OpenDialog?.Invoke("TeamSelect");
                 break;
 
             // QC commands.cfg `alias menu_showhudoptions "menu_cmd directpanelhudmenu ${* ?}"`: with a panel

@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Net;
 
-namespace XonoticGodot.Tests.Camera;
+namespace VortexArena.Tests.Camera;
 
 /// <summary>
 /// Test-side <see cref="IMovementStep"/> adapter — the parity twin of the production

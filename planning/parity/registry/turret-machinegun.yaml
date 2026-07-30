@@ -19,9 +19,9 @@ features:
       - "common/turrets/turret/machinegun.qc:5 (spawnfunc(turret_machinegun))"
       - "common/turrets/sv_turrets.qc:1247 (turret_initialize)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs (Machinegun + Spawn)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs (Register turret_machinegun)"
-      - "src/XonoticGodot.Server/GameWorld.cs (SpawnFuncs.TrySpawn in SpawnMapEntities)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs (Machinegun + Spawn)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs (Register turret_machinegun)"
+      - "src/VortexArena.Server/GameWorld.cs (SpawnFuncs.TrySpawn in SpawnMapEntities)"
     constants:
       - { name: "g_turrets", base: "1", port: "default-on (MasterSwitchEnabled)", match: true }
     status:
@@ -47,8 +47,8 @@ features:
       - "common/turrets/sv_turrets.qc:1321 (model/size/team/solid/health stamping)"
       - "common/turrets/sv_turrets.qc:1344 (tur_head = new(turret_head); setattachment tag_head)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MachinegunTurret.cs:48 (ctor)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:43 (Init)"
+      - "src/VortexArena.Common/Gameplay/Turrets/MachinegunTurret.cs:48 (ctor)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:43 (Init)"
     constants:
       - { name: "m_mins", base: "'-32 -32 0'", port: "(-32,-32,0)", match: true }
       - { name: "m_maxs", base: "'32 32 64'", port: "(32,32,64)", match: true }
@@ -78,7 +78,7 @@ features:
     base_refs:
       - "common/turrets/turret/machinegun.qc:9 (tr_setup)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MachinegunTurret.cs:45 (Select) + :62 (Think/TurretParams) + :59 (headShake:true)"
+      - "src/VortexArena.Common/Gameplay/Turrets/MachinegunTurret.cs:45 (Select) + :62 (Think/TurretParams) + :59 (headShake:true)"
     constants:
       - { name: "target_select_flags", base: "PLAYERS|RANGELIMITS|TEAMCHECK", port: "Players|RangeLimits|TeamCheck", match: true }
       - { name: "aim_flags", base: "LEAD|SHOTTIMECOMPENSATE", port: "lead+shotTimeCompensate (zPredict false)", match: true }
@@ -107,7 +107,7 @@ features:
       - "turrets.cfg:210-244 (g_turrets_unit_machinegun_*)"
       - "common/turrets/sv_turrets.qc:365 (load_unit_settings)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MachinegunTurret.cs:22-40 (consts)"
+      - "src/VortexArena.Common/Gameplay/Turrets/MachinegunTurret.cs:22-40 (consts)"
     constants:
       - { name: "shot_dmg", base: "10", port: "10", match: true }
       - { name: "shot_refire", base: "0.1", port: "0.1", match: true }
@@ -150,10 +150,10 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:991 (turret_think)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:586 (RunCombat)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:210 (Cvar helper)"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs (RunThink / RunEntity walk)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs (re-arm NextThink each frame)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:586 (RunCombat)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:210 (Cvar helper)"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs (RunThink / RunEntity walk)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs (re-arm NextThink each frame)"
     constants:
       - { name: "ammo regen", base: "ammo += ammo_recharge*frametime (cap)", port: "same (RunCombat:593)", match: true }
       - { name: "targetscan_mindelay", base: "0.1", port: "0.1 (cvar g_turrets_targetscan_mindelay, fallback 0.1)", match: true }
@@ -181,7 +181,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:677 (turret_validate_target)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:257 (ValidTarget)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:257 (ValidTarget)"
     constants:
       - { name: "alpha cloak", base: "alpha!=0 && alpha<=0.3 reject", port: "same (:271)", match: true }
       - { name: "checkpvs", base: "reject if !checkpvs(target.origin, turret)", port: "Api.Trace.CheckPvs gate (:274, no-op on unvised maps like DP)", match: true }
@@ -208,7 +208,7 @@ features:
       - "common/turrets/sv_turrets.qc:78 (turret_targetscore_generic)"
       - "common/turrets/sv_turrets.qc:809 (turret_select_target)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:351 (ScoreTarget) + :396 (SelectTarget)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:351 (ScoreTarget) + :396 (SelectTarget)"
     constants:
       - { name: "killzone ikr", base: "target_range_optimal (1000)", port: "RangeOptimal (1000)", match: true }
       - { name: "out-of-range penalty", base: "score*=0.001", port: "score*=0.001", match: true }
@@ -234,7 +234,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:12 (turret_aim_generic)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:455 (AimPoint)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:455 (AimPoint)"
     constants:
       - { name: "mintime", base: "max(attack_finished-time,0)+sys_frametime", port: "same (:466)", match: true }
       - { name: "impact_time", base: "vlen(enemy-muzzle)/shot_speed", port: "same (:471)", match: true }
@@ -261,7 +261,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:528 (turret_track, TFL_TRACKTYPE_FLUIDINERTIA)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:512 (Track, TrackFluidInertia)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:512 (Track, TrackFluidInertia)"
     constants:
       - { name: "track_accel_pitch/rot", base: "0.4/0.9", port: "0.4/0.9", match: true }
       - { name: "track_blendrate", base: "0.2", port: "0.2", match: true }
@@ -289,7 +289,7 @@ features:
       - "common/turrets/sv_turrets.qc:960 (turret_fire)"
       - "common/turrets/sv_turrets.qc:496 (turret_do_updates tracebox -> tur_dist_impact_to_aimpos)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:653 (fire gate in RunCombat) + :764 (Fire) + :731 (UpdateImpact) + OnTarget geometric fallback"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:653 (fire gate in RunCombat) + :764 (Fire) + :731 (UpdateImpact) + OnTarget geometric fallback"
     constants:
       - { name: "refire", base: "time + shot_refire (0.1)", port: "now + 0.1", match: true }
       - { name: "ammo cost", base: "ammo -= shot_dmg (10)", port: "Ammo -= ShotDamage (10)", match: true }
@@ -318,8 +318,8 @@ features:
       - "common/turrets/turret/machinegun_weapon.qc:7 (METHOD MachineGunTurretAttack wr_think)"
       - "common/turrets/turret.qh:51 (default tr_attack -> wr_think with the turret as actor, non-player)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/MachinegunTurret.cs:81 (Attack)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretCombat.cs:27 (FireBullet)"
+      - "src/VortexArena.Common/Gameplay/Turrets/MachinegunTurret.cs:81 (Attack)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretCombat.cs:27 (FireBullet)"
     constants:
       - { name: "deathtype", base: "DEATH_TURRET_MACHINEGUN", port: "DeathTypes.TurretMachinegun", match: true }
       - { name: "fire sound (turret path)", base: "NONE (W_SetupShot_Dir SND_MachineGunTurretAttack_FIRE is inside `if (isPlayer)`)", port: "NONE (turret path silent)", match: true }
@@ -349,8 +349,8 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc (turret_use)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:815 (Use)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:92 (e.Use wired)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:815 (Use)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:92 (e.Use wired)"
     constants:
       - { name: "active", base: "active = (team != 0)", port: "Active = (Team != 0)", match: true }
     status:
@@ -374,9 +374,9 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:207 (turret_damage; wired as .event_damage in turret_initialize/turret_respawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:828 (Damage) + :867 (EventDamage shim, headshake :893-897)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:93 (e.GtEventDamage = TurretAI.EventDamage)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs (EventDamage routes non-player edicts with GtEventDamage)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:828 (Damage) + :867 (EventDamage shim, headshake :893-897)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:93 (e.GtEventDamage = TurretAI.EventDamage)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs (EventDamage routes non-player edicts with GtEventDamage)"
     constants:
       - { name: "inactive immunity", base: "if (!active) return", port: "if (!Active) return 0 (Damage:832)", match: true }
       - { name: "friendlyfire scale", base: "g_friendlyfire (0 => no team dmg)", port: "g_friendlyfire (Damage:835-840)", match: true }
@@ -408,8 +408,8 @@ features:
       - "common/turrets/sv_turrets.qc:182 (RadiusDamage death blast — COMMENTED OUT)"
       - "common/turrets/cl_turrets.qc (turret_die FX/gibs, client)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:907 (Die) + :949 (Respawn) + :796 (EnsureDeathHook/OnAnyDeath)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs (Combat.Death.Call via TurretAI.EventDamage:897)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:907 (Die) + :949 (Respawn) + :796 (EnsureDeathHook/OnAnyDeath)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs (Combat.Death.Call via TurretAI.EventDamage:897)"
     constants:
       - { name: "respawntime", base: "60 (turret_hide: nextthink = time + respawntime - 0.2)", port: "60 (Die schedules Hide@+0.2 -> Respawn@+respawntime-0.2)", match: true }
       - { name: "death blast", base: "COMMENTED OUT (no RadiusDamage) at sv_turrets.qc:182", port: "NO RadiusDamage (TurretAI.Die:1092 emits no area damage)", match: true }

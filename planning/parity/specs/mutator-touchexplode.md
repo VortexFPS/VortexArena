@@ -1,7 +1,7 @@
 # Touch Explode mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/touchexplode/sv_touchexplode.qc` · `.../touchexplode.qc` · `.../touchexplode.qh` · `mutators.cfg:162-166`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/TouchExplodeMutator.cs` · `.../EntityMutatorState.cs` (`.TouchExplodeTime`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/TouchExplodeMutator.cs` · `.../EntityMutatorState.cs` (`.TouchExplodeTime`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

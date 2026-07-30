@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
-using GS = XonoticGodot.Common.Gameplay.Scoring.GameScores; // T7: alias the static score table for the per-mode ScoreRules
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
+using GS = VortexArena.Common.Gameplay.Scoring.GameScores; // T7: alias the static score table for the per-mode ScoreRules
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Key Hunt — port of <c>CLASS(KeyHunt, Gametype)</c>
@@ -626,7 +626,7 @@ public sealed class KeyHunt : GameType
             if ((int)p.Team != team || p.IsDead)
                 continue;
             seen++;
-            if (XonoticGodot.Common.Math.Prandom.Float() * seen <= 1f)
+            if (VortexArena.Common.Math.Prandom.Float() * seen <= 1f)
                 chosen = p;
         }
         return chosen;
@@ -877,7 +877,7 @@ public sealed class KeyHunt : GameType
         if (key.Carrier is not { } carrier || key.Entity is not Entity e)
             return;
         float yaw = key.SpawnAngle + (GametypeEntities.Now % 360f) * KeyXySpeed;
-        XonoticGodot.Common.Math.QMath.AngleVectors(new Vector3(0f, yaw, 0f), out Vector3 fwd, out _, out _);
+        VortexArena.Common.Math.QMath.AngleVectors(new Vector3(0f, yaw, 0f), out Vector3 fwd, out _, out _);
         Vector3 pos = carrier.Origin + fwd * KeyXyDist + new Vector3(0f, 0f, KeyZShift);
         GametypeEntities.SetOrigin(e, pos);
     }
@@ -933,9 +933,9 @@ public sealed class KeyHunt : GameType
                 e.DamageForceScale = DamageForcescale; // QC kh_Key_Detach: key.damageforcescale = autocvar_g_balance_keyhunt_damageforcescale
                 GametypeEntities.SetOrigin(e, player.Origin);
                 // QC: fling the key out — makevectors('-1 0 0'*(45+45*random()) + '0 360 0'*random()), dropvelocity*v_forward.
-                float pitch = -(45f + 45f * XonoticGodot.Common.Math.Prandom.Float());
-                float yaw = 360f * XonoticGodot.Common.Math.Prandom.Float();
-                XonoticGodot.Common.Math.QMath.AngleVectors(new Vector3(pitch, yaw, 0f), out Vector3 fwd, out _, out _);
+                float pitch = -(45f + 45f * VortexArena.Common.Math.Prandom.Float());
+                float yaw = 360f * VortexArena.Common.Math.Prandom.Float();
+                VortexArena.Common.Math.QMath.AngleVectors(new Vector3(pitch, yaw, 0f), out Vector3 fwd, out _, out _);
                 e.Velocity = player.Velocity + fwd * DropVelocity; // QC W_CalculateProjectileVelocity adds the thrower's velocity
                 SetKeyVisual(e, key.HomeTeam, carried: false); // dropped: restore the spin + dropped model
             }
@@ -980,7 +980,7 @@ public sealed class KeyHunt : GameType
             e.DamageForceScale = DamageForcescale; // QC kh_Key_Detach: key.damageforcescale = autocvar_g_balance_keyhunt_damageforcescale
             GametypeEntities.SetOrigin(e, player.Origin);
             // QC: makevectors(player.v_angle); throwvelocity * v_forward (+ thrower velocity).
-            XonoticGodot.Common.Math.QMath.AngleVectors(player.Angles, out Vector3 fwd, out _, out _);
+            VortexArena.Common.Math.QMath.AngleVectors(player.Angles, out Vector3 fwd, out _, out _);
             e.Velocity = player.Velocity + fwd * ThrowVelocity;
             SetKeyVisual(e, key.HomeTeam, carried: false);
         }

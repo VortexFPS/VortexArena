@@ -4,10 +4,10 @@
 // the world item's per-spawn cap (QC item.max_health) — set by ItemInit at spawn.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Base for health pickups — port of common/items/item/health.{qh,qc} CLASS(Health, Pickup) and its

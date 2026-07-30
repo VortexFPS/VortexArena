@@ -4,7 +4,7 @@ base_ref_rev: "v0.8.6-1779-g863cd3e84"
 last_audited: "2026-06-28"
 summary:
   feature_count: 17
-  reaudit_note: "DRIFT RE-AUDIT 2026-06-28 (FIFTH pass, post Phase-1/2/3a parity waves on branch claude/parity-port-waves): the ONLY file in this unit touched since the 11baede baseline is Warpzone.cs (+107 lines, git diff 11baede..HEAD); Teleporters.cs / Porto.cs / GameWorld.cs unchanged. Two additions landed, but only ONE lands in a row this unit owns: (A) GRAPPLING-HOOK TELEPORT through the Porto portal is now implemented (Warpzone.cs:359-373) — closes the second of the two gaps in portals.weapon.hook_and_predict (the Portal_WillHitPlane predict-ahead is now its sole remaining gap). The hook block runs on the live Teleport() crossing, gated Porto-only (owner!=null) + client-only, warping each weapon-slot Hook's origin/velocity/avelocity through wz.Transform with OldOrigin reset (mirrors Portal_Think_TryTeleportPlayer, portals.qc:248-262); Hook is a real runtime field (PlayerPhysics.cs:1301). (B) func_camera / func_warpzone_camera spawnfunc + camera-pose FixAngle stamp (WarpzoneSpawns.FuncCameraSetup, registered MapObjectsRegistry.cs:128-129, dispatched live via SpawnFuncs.TrySpawn GameWorld.cs:4356) — but that feature belongs to the warpzones.yaml unit (warpzones.camera row), NOT this unit, so it is flagged as cross-unit drift here and NOT scored in this registry. No teleporter-row status changed. ===PRIOR=== DRIFT RE-AUDIT 2026-06-28 (FOURTH pass, post-warpzone-angle-fix wave): re-read Teleporters.cs + Warpzone.cs + GameWorld.cs wiring on branch claude/parity-port-waves; XonoticGodot.Common builds clean (0 err/0 warn). The wave's edits to this unit's files were the warpzone EXIT-ANGLE fixes (commits 11baede normalize transformed angles, 1c62b01 server stamps authoritative fixangle, c264c27 plane-normal-faced-backwards) — these refine the already-`partial`-values warpzone transform (correctness still not behaviorally verified, so portals.teleport.transform_and_amazing values stays partial; e.FixAngle/FixAngleAngles stamp on a CLIENT crossing confirmed Warpzone.cs:339-343) and do NOT change any teleporter-row status. ONE GENUINE DRIFT CORRECTION (a stale baseline claim, not a this-wave fix): teleporters.core.telefrag_cvars + teleporters.dest.random_selection listed 'g_telefrags_avoid still hardcoded always-on for clients' as a residual gap — that is INACCURATE. PickDestination reads g_telefrags_avoid LIVE via CvarOr (Teleporters.cs:336, landed Wave 13 / commit 5427e74, PRE-dating the 2026-06-27 baseline), honoring an explicit `set g_telefrags_avoid 0` while defaulting to 1 on the unregistered path. All three telefrag cvars registered Cvars.cs:241-243. Both rows now zero-gap faithful. Everything else from the 2026-06-27 (THIRD) pass re-verified and CARRIED unchanged. ===PRIOR=== DRIFT RE-AUDIT 2026-06-27 (THIRD pass, consolidated re-verify) against current branch claude/parity-port-waves. Re-read all four port files (Teleporters.cs, Warpzone.cs, Porto.cs, GameWorld.cs) + confirmed XonoticGodot.Common builds clean (0 errors). Every fix the prior pass claimed is CONFIRMED genuinely landed AND wired live; only line refs had drifted, now corrected throughout. Wiring re-traced to live callers: GameScores.Gametype = GameType.NetName at GameWorld.cs:586 (Race.cs:284 \"rc\", Cts.cs:132 \"cts\"); RoundHandler.RoundNotStartedProvider wired GameWorld.cs:1645 (nulled 2776); ExpirePortals swept once/frame at GameWorld.cs:1811; Porto.PortalSpawner/PortalInId/PortalClearWithId/PortalClearAll wired GameWorld.cs:437-449; NotificationSystem.Announce(\"ACHIEVEMENT_AMAZING\") reaches a real Send->Sink.Dispatch (NotificationSystem.cs:200), registered NotificationsList.cs:144. The 15s Porto-portal LIFETIME/EXPIRY is implemented on the warpzone path — Warpzone.cs FadeTime + PortalFadeTime() (reads g_balance_portal_lifetime live, default 15, recharged on every crossing Warpzone.cs:344-349, stamped LinkPair:709-715), ExpirePortals() (Warpzone.cs:663-683) sweeps both halves. NEW CORRECTION this pass: natural-expiry now PLAYS the SND_PORTO_EXPIRE cue (porto/expire.wav, CH_SHOTS) via EmitPortalExpire (Warpzone.cs:691-696) for both halves — so portals.entity.lifecycle audio missing->partial (only the SHOOT-DOWN SND_PORTO_EXPLODE + EFFECT_ROCKET_EXPLODE remain absent, gated behind the unported portal-HEALTH entity). NOT registered: g_balance_portal_lifetime/_health read raw via GetFloat with a 15f test-path fallback (functionally correct at default; a live `set g_balance_portal_lifetime N` still applies). CARRIED FORWARD (all re-verified): Porto-crossing FORCE_TDEATH + Amazing<1s else portal-owner kill-credit (Warpzone.cs:336-367); item_flag_team never portalled + independent-player gate (Warpzone.cs:296-309); teleport SOUND CH_TRIGGER(-3), EF_TELEPORT_BIT XOR (1<<21) + istypefrag, RemoveGrapplingHooks on teleport, portal_activatetime self-skip; per-owner in/out slot replacement; exit-flash at to+v_forward*32. RESIDUAL OPEN (architectural): portal HEALTH entity (g_balance_portal_health=200, Portal_Damage shoot-down), MDL_PORTAL model/skins/EF glow, SND_PORTO_EXPLODE + EFFECT_ROCKET_EXPLODE on shoot-down, SUB_SetFade 0.5s expiry fade, Portal_Customize; Portal_WillHitPlane predict-ahead + grappling-hook teleport through the portal; the exact +/-48 plane-shift / Portal_FindSafeOrigin transform (warpzone transform substituted); g_telefrags_avoid hardcoded always-on for clients; EXACTTRIGGER_TOUCH brush-face precision."
+  reaudit_note: "DRIFT RE-AUDIT 2026-06-28 (FIFTH pass, post Phase-1/2/3a parity waves on branch claude/parity-port-waves): the ONLY file in this unit touched since the 11baede baseline is Warpzone.cs (+107 lines, git diff 11baede..HEAD); Teleporters.cs / Porto.cs / GameWorld.cs unchanged. Two additions landed, but only ONE lands in a row this unit owns: (A) GRAPPLING-HOOK TELEPORT through the Porto portal is now implemented (Warpzone.cs:359-373) — closes the second of the two gaps in portals.weapon.hook_and_predict (the Portal_WillHitPlane predict-ahead is now its sole remaining gap). The hook block runs on the live Teleport() crossing, gated Porto-only (owner!=null) + client-only, warping each weapon-slot Hook's origin/velocity/avelocity through wz.Transform with OldOrigin reset (mirrors Portal_Think_TryTeleportPlayer, portals.qc:248-262); Hook is a real runtime field (PlayerPhysics.cs:1301). (B) func_camera / func_warpzone_camera spawnfunc + camera-pose FixAngle stamp (WarpzoneSpawns.FuncCameraSetup, registered MapObjectsRegistry.cs:128-129, dispatched live via SpawnFuncs.TrySpawn GameWorld.cs:4356) — but that feature belongs to the warpzones.yaml unit (warpzones.camera row), NOT this unit, so it is flagged as cross-unit drift here and NOT scored in this registry. No teleporter-row status changed. ===PRIOR=== DRIFT RE-AUDIT 2026-06-28 (FOURTH pass, post-warpzone-angle-fix wave): re-read Teleporters.cs + Warpzone.cs + GameWorld.cs wiring on branch claude/parity-port-waves; VortexArena.Common builds clean (0 err/0 warn). The wave's edits to this unit's files were the warpzone EXIT-ANGLE fixes (commits 11baede normalize transformed angles, 1c62b01 server stamps authoritative fixangle, c264c27 plane-normal-faced-backwards) — these refine the already-`partial`-values warpzone transform (correctness still not behaviorally verified, so portals.teleport.transform_and_amazing values stays partial; e.FixAngle/FixAngleAngles stamp on a CLIENT crossing confirmed Warpzone.cs:339-343) and do NOT change any teleporter-row status. ONE GENUINE DRIFT CORRECTION (a stale baseline claim, not a this-wave fix): teleporters.core.telefrag_cvars + teleporters.dest.random_selection listed 'g_telefrags_avoid still hardcoded always-on for clients' as a residual gap — that is INACCURATE. PickDestination reads g_telefrags_avoid LIVE via CvarOr (Teleporters.cs:336, landed Wave 13 / commit 5427e74, PRE-dating the 2026-06-27 baseline), honoring an explicit `set g_telefrags_avoid 0` while defaulting to 1 on the unregistered path. All three telefrag cvars registered Cvars.cs:241-243. Both rows now zero-gap faithful. Everything else from the 2026-06-27 (THIRD) pass re-verified and CARRIED unchanged. ===PRIOR=== DRIFT RE-AUDIT 2026-06-27 (THIRD pass, consolidated re-verify) against current branch claude/parity-port-waves. Re-read all four port files (Teleporters.cs, Warpzone.cs, Porto.cs, GameWorld.cs) + confirmed VortexArena.Common builds clean (0 errors). Every fix the prior pass claimed is CONFIRMED genuinely landed AND wired live; only line refs had drifted, now corrected throughout. Wiring re-traced to live callers: GameScores.Gametype = GameType.NetName at GameWorld.cs:586 (Race.cs:284 \"rc\", Cts.cs:132 \"cts\"); RoundHandler.RoundNotStartedProvider wired GameWorld.cs:1645 (nulled 2776); ExpirePortals swept once/frame at GameWorld.cs:1811; Porto.PortalSpawner/PortalInId/PortalClearWithId/PortalClearAll wired GameWorld.cs:437-449; NotificationSystem.Announce(\"ACHIEVEMENT_AMAZING\") reaches a real Send->Sink.Dispatch (NotificationSystem.cs:200), registered NotificationsList.cs:144. The 15s Porto-portal LIFETIME/EXPIRY is implemented on the warpzone path — Warpzone.cs FadeTime + PortalFadeTime() (reads g_balance_portal_lifetime live, default 15, recharged on every crossing Warpzone.cs:344-349, stamped LinkPair:709-715), ExpirePortals() (Warpzone.cs:663-683) sweeps both halves. NEW CORRECTION this pass: natural-expiry now PLAYS the SND_PORTO_EXPIRE cue (porto/expire.wav, CH_SHOTS) via EmitPortalExpire (Warpzone.cs:691-696) for both halves — so portals.entity.lifecycle audio missing->partial (only the SHOOT-DOWN SND_PORTO_EXPLODE + EFFECT_ROCKET_EXPLODE remain absent, gated behind the unported portal-HEALTH entity). NOT registered: g_balance_portal_lifetime/_health read raw via GetFloat with a 15f test-path fallback (functionally correct at default; a live `set g_balance_portal_lifetime N` still applies). CARRIED FORWARD (all re-verified): Porto-crossing FORCE_TDEATH + Amazing<1s else portal-owner kill-credit (Warpzone.cs:336-367); item_flag_team never portalled + independent-player gate (Warpzone.cs:296-309); teleport SOUND CH_TRIGGER(-3), EF_TELEPORT_BIT XOR (1<<21) + istypefrag, RemoveGrapplingHooks on teleport, portal_activatetime self-skip; per-owner in/out slot replacement; exit-flash at to+v_forward*32. RESIDUAL OPEN (architectural): portal HEALTH entity (g_balance_portal_health=200, Portal_Damage shoot-down), MDL_PORTAL model/skins/EF glow, SND_PORTO_EXPLODE + EFFECT_ROCKET_EXPLODE on shoot-down, SUB_SetFade 0.5s expiry fade, Portal_Customize; Portal_WillHitPlane predict-ahead + grappling-hook teleport through the portal; the exact +/-48 plane-shift / Portal_FindSafeOrigin transform (warpzone transform substituted); g_telefrags_avoid hardcoded always-on for clients; EXACTTRIGGER_TOUCH brush-face precision."
   worst_gaps:
     - "Porto portal ENTITY partially replaced by a seamless warpzone pair: no portal HEALTH (g_balance_portal_health=200, can't be shot down via Portal_Damage), no portal model/skins(0/1/2)/EF_RED/BLUE/STARDUST/ADDITIVE glow, no SND_PORTO_EXPLODE + EFFECT_ROCKET_EXPLODE on shoot-down, no SUB_SetFade 0.5s fade-out, no Portal_Customize independent-player hiding. (The 15s lifetime/timeout AND the SND_PORTO_EXPIRE natural-expiry cue are now DONE — see below.)"
     - "Portal_WillHitPlane predict-ahead crossing (PHYS_GRAVITY-aware tracebox over velocity*2*frametime, portals.qc:237/317) is still absent on the warpzone path — a very fast mover relies on the fixed trigger overlap rather than a same-frame predicted crossing. (Flag exclusion + Amazing + FORCE_TDEATH + the 15s lifetime/expiry + the grappling-hook teleport-through-the-portal — Warpzone.cs:359-373, landed 2026-06-28 — are now all DONE; the predict-ahead is the sole survivor of this cluster.)"
@@ -17,7 +17,7 @@ features:
     base_refs:
       - "common/mapobjects/teleporters.qc:TeleportPlayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
     constants:
       - { name: "g_maxpushtime", base: "8.0", port: "8 (registered Cvars.cs)", match: true }
       - { name: "effect_debounce_s", base: "0.2", port: "0.2", match: true }
@@ -45,10 +45,10 @@ features:
       - "common/mapobjects/teleporters.qc:TeleportPlayer (telefrag gate, teleporters.qc:148-150)"
       - "common/mapobjects/teleporters.qh:TDEATHLOOP"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:Telefrag"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportRoundGateSuppressed"
-      - "src/XonoticGodot.Server/GameWorld.cs:586 (server-side GameScores.Gametype wire)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:Telefrag"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportRoundGateSuppressed"
+      - "src/VortexArena.Server/GameWorld.cs:586 (server-side GameScores.Gametype wire)"
     constants:
       - { name: "telefrag_damage", base: "10000", port: "10000", match: true }
       - { name: "deathtype", base: "DEATH_TELEFRAG", port: "DeathTypes.Telefrag", match: true }
@@ -75,8 +75,8 @@ features:
       - "common/mapobjects/teleporters.qc:tdeath"
       - "common/mapobjects/teleporters.qh:autocvar_g_telefrags_teamplay"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:Telefrag"
-      - "src/XonoticGodot.Server/Cvars.cs (g_telefrags_teamplay)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:Telefrag"
+      - "src/VortexArena.Server/Cvars.cs (g_telefrags_teamplay)"
     constants:
       - { name: "g_telefrags_teamplay", base: "1 (xonotic-server.cfg:60 = never telefrag teammates)", port: "1 (REGISTERED Cvars.cs)", match: true }
     status:
@@ -102,8 +102,8 @@ features:
       - "common/mapobjects/teleporters.qh:autocvar_g_telefrags_avoid"
       - "common/stats.qh:REGISTER_STAT(TELEPORT_TELEFRAG_AVOID, INT, autocvar_g_telefrags_avoid)"
     port_refs:
-      - "src/XonoticGodot.Server/Cvars.cs (g_telefrags / _avoid)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:PickDestination"
+      - "src/VortexArena.Server/Cvars.cs (g_telefrags / _avoid)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:PickDestination"
     constants:
       - { name: "g_telefrags", base: "1 (xonotic-server.cfg:59)", port: "1 (REGISTERED Cvars.cs)", match: true }
       - { name: "g_telefrags_avoid", base: "1 (xonotic-server.cfg:61)", port: "1 (REGISTERED Cvars.cs); read LIVE via CvarOr in PickDestination", match: true }
@@ -128,7 +128,7 @@ features:
     base_refs:
       - "common/mapobjects/teleporters.qc:Simple_TeleportPlayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:SimpleTeleportPlayer"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:SimpleTeleportPlayer"
     constants:
       - { name: "dest_z_nudge", base: "1 - mins.z - 24 (= 1 for PL_MIN.z=-24)", port: "1f - mins.Z - 24f", match: true }
       - { name: "out_velocity", base: "v_forward * vlen(player.velocity)", port: "forward * Velocity.Length()", match: true }
@@ -154,8 +154,8 @@ features:
       - "common/mapobjects/teleporters.qc:Simple_TeleportPlayer"
       - "common/mapobjects/teleporters.qc:check_tdeath"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:PickDestination"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:CheckTdeath"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:PickDestination"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:CheckTdeath"
     constants:
       - { name: "dest_weight", base: "it.cnt ? it.cnt : 1", port: "Cnt != 0 ? Cnt : 1", match: true }
     status:
@@ -179,7 +179,7 @@ features:
     base_refs:
       - "common/mapobjects/trigger/teleport.qc:Teleport_Active"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportActive"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportActive"
     constants:
       - { name: "TELEPORT_OBSERVERS_ONLY", base: "BIT(0)", port: "ObserversOnly = 1<<0", match: true }
       - { name: "INVERT_TEAMS", base: "BIT(2)", port: "InvertTeams = 1<<2 (Teleporters.cs:30/231)", match: true }
@@ -205,7 +205,7 @@ features:
     base_refs:
       - "common/mapobjects/trigger/teleport.qc:Teleport_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportTouch"
     constants: []
     status:
       logic: faithful
@@ -229,7 +229,7 @@ features:
     base_refs:
       - "common/mapobjects/trigger/teleport.qc:trigger_teleport_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportUse"
     constants: []
     status:
       logic: faithful
@@ -256,10 +256,10 @@ features:
       - "common/mapobjects/trigger/teleport.qc:target_teleporter_checktarget"
       - "common/mapobjects/misc/teleport_dest.qc:spawnfunc(info_teleport_destination)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TargetTeleporterSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportDestSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TargetTeleporterSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportDestSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs"
     constants: []
     status:
       logic: partial
@@ -284,8 +284,8 @@ features:
     base_refs:
       - "common/mapobjects/teleporters.qc:TeleportPlayer (Send_Effect EFFECT_TELEPORT x2)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs (EFFECT_TELEPORT)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs (EFFECT_TELEPORT)"
     constants:
       - { name: "exit_effect_offset", base: "to + v_forward*32", port: "to + toForward*32 (Teleporters.cs:406)", match: true }
       - { name: "entry_effect_origin", base: "player.origin", port: "from (= entry origin)", match: true }
@@ -310,9 +310,9 @@ features:
     base_refs:
       - "common/mapobjects/teleporters.qc:TeleportPlayer (_sound SND(TELEPORT), CH_TRIGGER, noise RandomSelection)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:TeleportSound"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs (misc/teleport)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportPlayer"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:TeleportSound"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs (misc/teleport)"
     constants:
       - { name: "sound", base: "misc/teleport", port: "misc/teleport", match: true }
       - { name: "channel", base: "CH_TRIGGER (= -3, SoundChannel.TriggerAuto)", port: "SoundChannel.TriggerAuto (= -3) (Teleporters.cs:401)", match: true }
@@ -340,10 +340,10 @@ features:
       - "common/weapons/weapon/porto.qc:W_Porto_Think"
       - "common/weapons/weapon/porto.qc:wr_think (porto_v_angle hold)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:OnTouch"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:PortoThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:OnTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:PortoThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:WrThink"
     constants:
       - { name: "g_balance_porto_primary_speed", base: "1000", port: "1000", match: true }
       - { name: "g_balance_porto_primary_lifetime", base: "5", port: "5", match: true }
@@ -377,7 +377,7 @@ features:
       - "server/portals.qc:Portal_MakeInPortal/Portal_MakeOutPortal/Portal_MakeWaitingPortal/Portal_MakeBrokenPortal"
       - "server/portals.qc:Portal_Customize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:PlacePortoPortal"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:PlacePortoPortal"
     constants:
       - { name: "g_balance_portal_health", base: "200", port: "none (indestructible warpzone; cvar unused)", match: false }
       - { name: "g_balance_portal_lifetime", base: "15", port: "15 (read live via PortalFadeTime, Warpzone.cs:648-654; NOW IMPLEMENTED)", match: true }
@@ -412,10 +412,10 @@ features:
       - "server/portals.qc:Portal_ApplyTransformToPlayerAngle"
       - "server/portals.qc:Portal_Connect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:LinkPair"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:Teleport"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:PlacePortoPortal"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:PortalForceTelefrag"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:LinkPair"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:Teleport"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:PlacePortoPortal"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:PortalForceTelefrag"
     constants:
       - { name: "amazing_window_s", base: "1", port: "1 (Warpzone.cs:331 now < TeleportTime + 1f)", match: true }
       - { name: "directionality", base: "two-way (Portal_Connect sets .enemy both ways; both portals run Portal_Think)", port: "two-way (LinkPair)", match: true }
@@ -447,13 +447,13 @@ features:
       - "server/portals.qc:Portal_ClearWithID"
       - "common/weapons/weapon/porto.qc:W_Porto_Remove"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:CleanupProjectile"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:PortalClearWithId"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:PortalClearAll"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs:WrPlayerDeath"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:ClearPortoPortal"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:ClearAllPortoPortals"
-      - "src/XonoticGodot.Server/GameWorld.cs:424-431"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:CleanupProjectile"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:PortalClearWithId"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:PortalClearAll"
+      - "src/VortexArena.Common/Gameplay/Weapons/Porto.cs:WrPlayerDeath"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:ClearPortoPortal"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:ClearAllPortoPortals"
+      - "src/VortexArena.Server/GameWorld.cs:424-431"
     constants: []
     constants:
       - { name: "g_balance_portal_lifetime", base: "15", port: "15 (read live, PortalFadeTime Warpzone.cs:648-654)", match: true }
@@ -482,7 +482,7 @@ features:
       - "server/portals.qc:Portal_Think_TryTeleportPlayer"
       - "server/portals.qc:Portal_WillHitPlane"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:Teleport (flag exclusion + independent-player gate + hook relocate)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:Teleport (flag exclusion + independent-player gate + hook relocate)"
     constants: []
     status:
       logic: partial

@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Md3;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Drives MD3 vertex-morph animation playback for a model — the Godot successor to the CSQC
@@ -295,7 +295,7 @@ public partial class ModelAnimator : Node3D
     /// <summary>Advance the playhead and rebuild the morph mesh for this frame (call once per frame).</summary>
     public void Advance(float delta)
     {
-        using var _animScope = XonoticGodot.Game.Client.FrameProfiler.Scope("md3.morph"); // [profiling] all MD3 morph this frame
+        using var _animScope = VortexArena.Game.Client.FrameProfiler.Scope("md3.morph"); // [profiling] all MD3 morph this frame
         if (_md3.FrameCount <= 1)
             return;
 
@@ -477,7 +477,7 @@ public partial class ModelAnimator : Node3D
                     ShaderMaterial => "shader! ", // no morph vertex stage — pins the model to the CPU path
                     _ => "other! ",
                 });
-            XonoticGodot.Common.Diagnostics.Log.Info(
+            VortexArena.Common.Diagnostics.Log.Info(
                 $"[md3morph] '{_md3.Name}' frames={_md3.FrameCount} gpu={_gpuMorph} mats: {mats.ToString().TrimEnd()}");
         }
     }

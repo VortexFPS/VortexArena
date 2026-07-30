@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Phase 2 of the loading-speed work (planning/loading-speed-background-precache-2026-07-06.md): warm the
@@ -67,9 +67,9 @@ public partial class MenuAssetWarmer : Node
         // throwaway build node (the parse/material/texture caches are what persist). Weapon models are small, and
         // the budget caps a single build so it can't spike the menu. WeaponVModelPath is NetGame's shared key so
         // the later real load hits the SAME cache entry; the v_→h_ rewrite mirrors PrecacheWeaponModelsAsync.
-        foreach (XonoticGodot.Common.Gameplay.Weapon w in XonoticGodot.Common.Gameplay.Weapons.All)
+        foreach (VortexArena.Common.Gameplay.Weapon w in VortexArena.Common.Gameplay.Weapons.All)
         {
-            string vModel = XonoticGodot.Game.Net.NetGame.WeaponVModelPath(w);
+            string vModel = VortexArena.Game.Net.NetGame.WeaponVModelPath(w);
             if (string.IsNullOrEmpty(vModel))
                 continue;
             string hModel = vModel.Replace("/v_", "/h_").Replace(".md3", ".iqm");
@@ -83,7 +83,7 @@ public partial class MenuAssetWarmer : Node
 
         // Combat sounds (sound/weapons/*): decode into the shared sound cache so the first fire/impact doesn't
         // stall decoding its OGG. Main-thread (AudioStream creation), and cheap. Mirrors the per-map precache's set.
-        foreach (XonoticGodot.Common.Gameplay.GameSound s in XonoticGodot.Common.Gameplay.Sounds.All)
+        foreach (VortexArena.Common.Gameplay.GameSound s in VortexArena.Common.Gameplay.Sounds.All)
         {
             string sample = s.Sample;
             if (string.IsNullOrEmpty(sample)

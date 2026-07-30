@@ -3,11 +3,11 @@
 **Base refs:** `common/gametypes/gametype/assault/{assault.qc,assault.qh,sv_assault.qc,sv_assault.qh}`
 (there is **no** `cl_assault.qc` — Assault has no dedicated CSQC; its only client-visible state rides on the
 generic waypoint-sprite + notification systems)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs` ·
-`src/XonoticGodot.Server/GameWorld.cs` (WireObjectiveSpawns / ActivateGameType / MatchEnded / win read) ·
-`src/XonoticGodot.Common/Gameplay/MapObjects/{MapObjectsRegistry.cs,Breakable.cs}` ·
-`src/XonoticGodot.Server/Bot/{BotRoles.cs,BotObjectiveRoles.cs}` ·
-`src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Assault.cs` ·
+`src/VortexArena.Server/GameWorld.cs` (WireObjectiveSpawns / ActivateGameType / MatchEnded / win read) ·
+`src/VortexArena.Common/Gameplay/MapObjects/{MapObjectsRegistry.cs,Breakable.cs}` ·
+`src/VortexArena.Server/Bot/{BotRoles.cs,BotObjectiveRoles.cs}` ·
+`src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -223,7 +223,7 @@ is a known-deferred note, not a deliberate behavioral change, so it is recorded 
 intended_divergence).
 
 ## Verification
-- `tests/XonoticGodot.Tests/AssaultSpawnTests.cs` — chain build, spawn-order-independent resolution, dmg-101
+- `tests/VortexArena.Tests/AssaultSpawnTests.cs` — chain build, spawn-order-independent resolution, dmg-101
   default, head-objective arming, single-round attacker win, live damage-pipeline path, wrong-team gate,
   attacker/defender spawn retag. (All the *implemented & live* logic above.)
 - Liveness of the dead paths established by code reading: grep shows `StartSecondRound`/`TimeLimitReached` have

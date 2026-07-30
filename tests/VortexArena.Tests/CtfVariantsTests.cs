@@ -1,11 +1,11 @@
 using System.Numerics;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for §4.6: CTF one-flag mode (a shared neutral flag, captured at a team base; team flags not pickable)
@@ -16,7 +16,7 @@ public class CtfVariantsTests
 {
     private static void Facade() => Api.Services = new EngineServices(new CollisionWorld());
 
-    private static Player NewPlayer(int team) => new Player { Team = team, Flags = XonoticGodot.Common.Framework.EntFlags.Client };
+    private static Player NewPlayer(int team) => new Player { Team = team, Flags = VortexArena.Common.Framework.EntFlags.Client };
 
     [Fact]
     public void OneFlag_CaptureNeutralAtOwnBase()

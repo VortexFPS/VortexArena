@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Server-side rules for Nine Men's Morris — port of common/minigames/minigame/nmm.qc (nmm_server_event,
 // the move handler, nmm_in_mill / nmm_tile_adjacent / nmm_tile_canmove, nmm_count_pieces, the tile/mill

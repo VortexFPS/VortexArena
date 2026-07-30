@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay.Waypoints;
+namespace VortexArena.Common.Gameplay.Waypoints;
 
 /// <summary>
 /// The waypoint-sprite registry — the C# port of QuakeC's <c>REGISTER_WAYPOINT</c> table

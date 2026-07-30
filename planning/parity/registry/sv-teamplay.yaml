@@ -19,8 +19,8 @@ features:
       - "common/teams.qh:NUM_TEAM_1..NUM_TEAM_4"
       - "common/teams.qh:Team_IndexToTeam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Teams.cs:Teams"
-      - "src/XonoticGodot.Server/Teamplay.cs:IndexToTeam"
+      - "src/VortexArena.Common/Gameplay/Teams.cs:Teams"
+      - "src/VortexArena.Server/Teamplay.cs:IndexToTeam"
     constants:
       - { name: "RED", base: "4 (NUM_TEAM_1)", port: "4", match: true }
       - { name: "BLUE", base: "13 (NUM_TEAM_2)", port: "13", match: true }
@@ -50,9 +50,9 @@ features:
       - "server/teamplay.qc:TeamBalance_FindBestTeam"
       - "server/teamplay.qc:TeamBalance_FindBestTeams"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:AssignBestTeam"
-      - "src/XonoticGodot.Server/Teamplay.cs:CompareTeams"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:TeamBalance.JoinSmallestTeam"
+      - "src/VortexArena.Server/Teamplay.cs:AssignBestTeam"
+      - "src/VortexArena.Server/Teamplay.cs:CompareTeams"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:TeamBalance.JoinSmallestTeam"
     constants: []
     status:
       logic: faithful
@@ -78,10 +78,10 @@ features:
       - "server/teamplay.qc:TeamBalance_GetTeamCounts"
       - "server/teamplay.qc:TeamBalance_CompareTeamsInternal"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:MeasureTeam"
-      - "src/XonoticGodot.Server/Teamplay.cs:CompareTeams"
-      - "src/XonoticGodot.Server/Teamplay.cs:SkillProvider"
-      - "src/XonoticGodot.Server/GameWorld.cs:585 (SkillProvider = bot BotSkill; IsWarmup/SecondsSinceMatchStart wired 589-590)"
+      - "src/VortexArena.Server/Teamplay.cs:MeasureTeam"
+      - "src/VortexArena.Server/Teamplay.cs:CompareTeams"
+      - "src/VortexArena.Server/Teamplay.cs:SkillProvider"
+      - "src/VortexArena.Server/GameWorld.cs:585 (SkillProvider = bot BotSkill; IsWarmup/SecondsSinceMatchStart wired 589-590)"
     constants:
       - { name: "g_balance_teams_skill", base: "1", port: "1 (registered)", match: true }
       - { name: "g_balance_teams_skill_significance_threshold", base: "1.645", port: "1.645 (registered, consumed in CompareTeams)", match: true }
@@ -113,8 +113,8 @@ features:
       - "server/teamplay.qc:TeamBalance_AutoBalanceBots"
       - "server/teamplay.qc:TeamBalance_GetPlayerForTeamSwitch"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:AutoBalanceBots"
-      - "src/XonoticGodot.Server/GameWorld.cs:BalanceTeamsTick"
+      - "src/VortexArena.Server/Teamplay.cs:AutoBalanceBots"
+      - "src/VortexArena.Server/GameWorld.cs:BalanceTeamsTick"
     constants:
       - { name: "imbalance gap threshold", base: "2 (largest-smallest >= 2)", port: "2", match: true }
       - { name: "tiebreak score", base: "SP_SCORE", port: "frag score (ScoreFrags)", match: false }
@@ -143,8 +143,8 @@ features:
       - "server/command/cmd.qc:746 (g_balance_teams_prevent_imbalance switch gate in ClientCommand_selectteam)"
       - "server/teamplay.qc:TeamBalance_FindBestTeams"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:IsTeamAllowedForSwitch"
-      - "src/XonoticGodot.Server/Commands.cs:CmdSelectTeam (calls IsTeamAllowedForSwitch)"
+      - "src/VortexArena.Server/Teamplay.cs:IsTeamAllowedForSwitch"
+      - "src/VortexArena.Server/Commands.cs:CmdSelectTeam (calls IsTeamAllowedForSwitch)"
     constants:
       - { name: "g_balance_teams_prevent_imbalance", base: "1", port: "1 (registered)", match: true }
     status:
@@ -173,14 +173,14 @@ features:
       - "server/teamplay.qc:Player_HasRealForcedTeam"
       - "server/client.qc:1162 (ClientConnect calls Player_DetermineForcedTeam)"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:DetermineForcedTeam"
-      - "src/XonoticGodot.Server/Teamplay.cs:HasRealForcedTeam"
-      - "src/XonoticGodot.Server/Teamplay.cs:GetForcedTeam"
-      - "src/XonoticGodot.Server/Teamplay.cs:AssignBestTeam (honors HasRealForcedTeam)"
-      - "src/XonoticGodot.Server/ClientManager.cs:220 (DetermineForcedTeam on connect)"
-      - "src/XonoticGodot.Server/ClientManager.cs:348 (force-spectate join block)"
-      - "src/XonoticGodot.Server/Cvars.cs:176-180 (g_forced_team_* / _otherwise registration)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdSelectTeam (forced-team players can't selectteam)"
+      - "src/VortexArena.Server/Teamplay.cs:DetermineForcedTeam"
+      - "src/VortexArena.Server/Teamplay.cs:HasRealForcedTeam"
+      - "src/VortexArena.Server/Teamplay.cs:GetForcedTeam"
+      - "src/VortexArena.Server/Teamplay.cs:AssignBestTeam (honors HasRealForcedTeam)"
+      - "src/VortexArena.Server/ClientManager.cs:220 (DetermineForcedTeam on connect)"
+      - "src/VortexArena.Server/ClientManager.cs:348 (force-spectate join block)"
+      - "src/VortexArena.Server/Cvars.cs:176-180 (g_forced_team_* / _otherwise registration)"
+      - "src/VortexArena.Server/Commands.cs:CmdSelectTeam (forced-team players can't selectteam)"
     constants:
       - { name: "g_forced_team_red/blue/yellow/pink", base: "\"\"", port: "\"\" (registered, Cvars.cs:176-179)", match: true }
       - { name: "g_forced_team_otherwise", base: "\"default\"", port: "\"default\" (registered, Cvars.cs:180)", match: true }
@@ -212,10 +212,10 @@ features:
       - "server/teamplay.qc:TeamBalance_QueuedPlayersTagIn"
       - "server/teamplay.qc:QueuedPlayersReady"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:QueueNeeded / EnqueueJoin / DequeueJoin / IsQueued (LIVE enqueue half)"
-      - "src/XonoticGodot.Server/Teamplay.cs:QueuedPlayersTagIn (tag-in half — DEAD, zero callers)"
-      - "src/XonoticGodot.Server/Commands.cs:1539-1546 (CmdJoin: QueueNeeded -> EnqueueJoin)"
-      - "src/XonoticGodot.Server/Cvars.cs:153 (g_balance_teams_queue registration)"
+      - "src/VortexArena.Server/Teamplay.cs:QueueNeeded / EnqueueJoin / DequeueJoin / IsQueued (LIVE enqueue half)"
+      - "src/VortexArena.Server/Teamplay.cs:QueuedPlayersTagIn (tag-in half — DEAD, zero callers)"
+      - "src/VortexArena.Server/Commands.cs:1539-1546 (CmdJoin: QueueNeeded -> EnqueueJoin)"
+      - "src/VortexArena.Server/Cvars.cs:153 (g_balance_teams_queue registration)"
     constants:
       - { name: "g_balance_teams_queue", base: "0", port: "0 (registered, Cvars.cs:153)", match: true }
     status:
@@ -243,12 +243,12 @@ features:
       - "server/teamplay.qc:Remove_Countdown"
       - "server/client.qc:3057 (ClientDisconnect calls TeamBalance_RemoveExcessPlayers)"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:RemoveExcessPlayers"
-      - "src/XonoticGodot.Server/Teamplay.cs:TickRemoveCountdown"
-      - "src/XonoticGodot.Server/Teamplay.cs:MoveToSpectator (host hook)"
-      - "src/XonoticGodot.Server/GameWorld.cs:860/865 (MoveToSpectator -> PutObserverInServer; OnAfterClientDisconnect -> RemoveExcessPlayers)"
-      - "src/XonoticGodot.Server/GameWorld.cs:3315 (per-frame TickRemoveCountdown)"
-      - "src/XonoticGodot.Server/Cvars.cs:151-152 (g_balance_teams_remove / _wait registration)"
+      - "src/VortexArena.Server/Teamplay.cs:RemoveExcessPlayers"
+      - "src/VortexArena.Server/Teamplay.cs:TickRemoveCountdown"
+      - "src/VortexArena.Server/Teamplay.cs:MoveToSpectator (host hook)"
+      - "src/VortexArena.Server/GameWorld.cs:860/865 (MoveToSpectator -> PutObserverInServer; OnAfterClientDisconnect -> RemoveExcessPlayers)"
+      - "src/VortexArena.Server/GameWorld.cs:3315 (per-frame TickRemoveCountdown)"
+      - "src/VortexArena.Server/Cvars.cs:151-152 (g_balance_teams_remove / _wait registration)"
     constants:
       - { name: "g_balance_teams_remove", base: "0", port: "0 (registered, Cvars.cs:151)", match: true }
       - { name: "g_balance_teams_remove_wait", base: "10", port: "10 (registered, Cvars.cs:152)", match: true }
@@ -278,11 +278,11 @@ features:
       - "server/command/vote.qc:580 (ReadyCount badteams gate)"
       - "server/client.qc:143 (SendFlags bits 5/6 — Nagger network entity)"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:SizeDifference"
-      - "src/XonoticGodot.Server/Teamplay.cs:TeamsUnbalancedForNag"
-      - "src/XonoticGodot.Server/Teamplay.cs:SendTeamNag (center-print networker — DEAD, zero callers)"
-      - "src/XonoticGodot.Server/WarmupController.cs:BadTeams (ReadyCount hold)"
-      - "src/XonoticGodot.Server/GameWorld.cs:855 (BadTeams = Teamplay.TeamsUnbalancedForNag)"
+      - "src/VortexArena.Server/Teamplay.cs:SizeDifference"
+      - "src/VortexArena.Server/Teamplay.cs:TeamsUnbalancedForNag"
+      - "src/VortexArena.Server/Teamplay.cs:SendTeamNag (center-print networker — DEAD, zero callers)"
+      - "src/VortexArena.Server/WarmupController.cs:BadTeams (ReadyCount hold)"
+      - "src/VortexArena.Server/GameWorld.cs:855 (BadTeams = Teamplay.TeamsUnbalancedForNag)"
     constants:
       - { name: "sv_teamnagger", base: "2", port: "2 (registered)", match: true }
     status:
@@ -310,9 +310,9 @@ features:
       - "server/teamplay.qc:TeamBalance_CheckAllowedTeams (bot_vs_human branch)"
       - "server/bot/default/bot.qc:642 (count sizing)"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:AllowedTeams"
-      - "src/XonoticGodot.Server/Teamplay.cs:AssignBestTeam (filters candidates by AllowedTeams)"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:TargetBotCount"
+      - "src/VortexArena.Server/Teamplay.cs:AllowedTeams"
+      - "src/VortexArena.Server/Teamplay.cs:AssignBestTeam (filters candidates by AllowedTeams)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:TargetBotCount"
     constants:
       - { name: "bot_vs_human", base: "0", port: "0 (registered)", match: true }
     status:
@@ -339,7 +339,7 @@ features:
       - "server/teamplay.qc:KillPlayerForTeamChange"
       - "server/teamplay.qc:SetPlayerTeam (PlayerScore_Clear + LogTeamChange + notification)"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:KillPlayerForTeamChange"
+      - "src/VortexArena.Server/Teamplay.cs:KillPlayerForTeamChange"
     constants:
       - { name: "team-change kill damage", base: "100000 (DEATH_TEAMCHANGE manual / DEATH_AUTOTEAMCHANGE autobalance, damage.qc:272-273)", port: "100000 (DeathTypes.TeamChange manual / DeathTypes.AutoTeamChange autobalance)", match: true }
       - { name: "autobalance frag-negation skip", base: "GiveFrags(-1) SKIPPED for AUTOTEAMCHANGE (damage.qc:304)", port: "DeathTypes.IsAutoTeamChange gate skips the suicide -1 in the generic team-scoring path (Tdm.OnDeath, Scores.Obituary)", match: true }
@@ -367,9 +367,9 @@ features:
       - "server/teamplay.qc:SetPlayerTeam"
       - "server/command/cmd.qc (team/shuffleteams/movetoteam)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdLockTeams"
-      - "src/XonoticGodot.Server/Commands.cs:CmdShuffleTeams"
-      - "src/XonoticGodot.Server/Commands.cs:CmdMovePlayer"
+      - "src/VortexArena.Server/Commands.cs:CmdLockTeams"
+      - "src/VortexArena.Server/Commands.cs:CmdShuffleTeams"
+      - "src/VortexArena.Server/Commands.cs:CmdMovePlayer"
     constants: []
     status:
       logic: partial
@@ -395,10 +395,10 @@ features:
       - "server/teamplay.qc:setcolor"
       - "server/teamplay.qc:SetPlayerColors"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:SetColor (QC setcolor)"
-      - "src/XonoticGodot.Server/Teamplay.cs:SetPlayerColors"
-      - "src/XonoticGodot.Server/Teamplay.cs:ChangeTeam (QC SV_ChangeTeam)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdColor (engine `color` command -> ChangeTeam)"
+      - "src/VortexArena.Server/Teamplay.cs:SetColor (QC setcolor)"
+      - "src/VortexArena.Server/Teamplay.cs:SetPlayerColors"
+      - "src/VortexArena.Server/Teamplay.cs:ChangeTeam (QC SV_ChangeTeam)"
+      - "src/VortexArena.Server/Commands.cs:CmdColor (engine `color` command -> ChangeTeam)"
     constants:
       - { name: "team-from-color decode", base: "team = (clr & 15) + 1", port: "(clr & 15) + 1 (SetColor)", match: true }
       - { name: "teamplay color set", base: "16*pants + pants", port: "16*pants + pants (SetPlayerColors)", match: true }
@@ -428,7 +428,7 @@ features:
       - "server/teamplay.qc:Team_GetWinnerAliveTeam"
       - "server/teamplay.qc:Team_GetWinnerTeam_WithOwnedItems"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs"
     constants: []
     status:
       logic: partial
@@ -453,9 +453,9 @@ features:
       - "server/teamplay.qc:Player_SetTeamIndex (MUTATOR_CALLHOOK Player_ChangeTeam / Player_ChangedTeam)"
       - "server/mutators/events.qh:Player_ChangeTeam / Player_ChangedTeam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:PlayerChangeTeam / PlayerChangedTeam (HookChain)"
-      - "src/XonoticGodot.Server/Teamplay.cs:SetTeam (fires both hooks; veto on the pre-hook)"
-      - "src/XonoticGodot.Server/Teamplay.cs:TeamToIndex (old/new index for the hook args)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:PlayerChangeTeam / PlayerChangedTeam (HookChain)"
+      - "src/VortexArena.Server/Teamplay.cs:SetTeam (fires both hooks; veto on the pre-hook)"
+      - "src/VortexArena.Server/Teamplay.cs:TeamToIndex (old/new index for the hook args)"
     constants: []
     status:
       logic: faithful
@@ -482,8 +482,8 @@ features:
       - "server/command/vote.qc:478 (if autocvar_teamplay_lockonrestart && teamplay -> lockteams = !warmup_stage)"
       - "server/teamplay.qh:autocvar_teamplay_lockonrestart"
     port_refs:
-      - "src/XonoticGodot.Server/WarmupController.cs:ReadyRestart (teamplay_lockonrestart -> OnLockTeams)"
-      - "src/XonoticGodot.Server/GameWorld.cs:879 (OnLockTeams = locked => TeamsLocked = locked)"
+      - "src/VortexArena.Server/WarmupController.cs:ReadyRestart (teamplay_lockonrestart -> OnLockTeams)"
+      - "src/VortexArena.Server/GameWorld.cs:879 (OnLockTeams = locked => TeamsLocked = locked)"
     constants:
       - { name: "teamplay_lockonrestart", base: "0", port: "0 (registered)", match: true }
     status:
@@ -509,10 +509,10 @@ features:
       - "server/teamplay.qc:461 (TeamBalance_JoinBestTeam early-out on bot_forced_team)"
       - "server/bot/default/bot.qc:257 (this.bot_forced_team = stof(argv(5)))"
     port_refs:
-      - "src/XonoticGodot.Server/Teamplay.cs:SetBotForcedTeam"
-      - "src/XonoticGodot.Server/Teamplay.cs:GetBotForcedTeam"
-      - "src/XonoticGodot.Server/Teamplay.cs:AssignBestTeam (bot-forced early-out)"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:SpawnBot / PickNameAndModel (argv5 parse)"
+      - "src/VortexArena.Server/Teamplay.cs:SetBotForcedTeam"
+      - "src/VortexArena.Server/Teamplay.cs:GetBotForcedTeam"
+      - "src/VortexArena.Server/Teamplay.cs:AssignBestTeam (bot-forced early-out)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:SpawnBot / PickNameAndModel (argv5 parse)"
     constants:
       - { name: "forced-team column (argv5, 1..4)", base: "bot_forced_team = stof(argv(5))", port: "argv5 parsed 1..4 -> SetBotForcedTeam + AssignBestTeam re-run", match: true }
     status:

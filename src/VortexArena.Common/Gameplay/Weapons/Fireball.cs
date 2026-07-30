@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Fireball — port of common/weapons/weapon/fireball.{qh,qc}. A splash superweapon. Primary charges up
@@ -70,6 +70,7 @@ public sealed class Fireball : Weapon
     public Fireball()
     {
         NetName = "fireball";
+        BotPickupBaseValue = 5000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         DisplayName = "Fireball";
         Impulse = 9;
         // WEP_FLAG_SUPERWEAPON | WEP_TYPE_SPLASH | WEP_FLAG_NODUAL

@@ -18,7 +18,11 @@ namespace VortexArena.Tests;
 /// </summary>
 public class RagdollSolverTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\VortexArena\assets\data";
+    // Was a hardcoded absolute path under Projects/Xonotic/.../assets/data. This test predates the shared
+    // TestPaths helper (restructure G13, stage -1), and that literal pointed at a path that no longer
+    // exists on ANY machine: the repo moved to Projects/Vortex/VortexArena and the content tree to data/.
+    // TestPathsTests.No_Test_Hardcodes_A_Workstation_Path is what caught it during this merge.
+    private static string DataDir => TestPaths.Data;
 
     private static RagdollTraceHit NoHit(Vector3 s, Vector3 e, float r) => new(e, Vector3.Zero, false);
 

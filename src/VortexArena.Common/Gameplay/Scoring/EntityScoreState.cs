@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Gameplay.Scoring;
+using VortexArena.Common.Gameplay.Scoring;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// The per-entity scorekeeper state — the Godot-free essence of the QuakeC <c>scorekeeper</c> edict's

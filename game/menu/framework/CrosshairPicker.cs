@@ -1,10 +1,10 @@
 // Port of qcsrc/menu/xonotic/crosshairpicker.qc (XonoticCrosshairPicker).
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The crosshair picker — a faithful C# port of <c>XonoticCrosshairPicker</c>

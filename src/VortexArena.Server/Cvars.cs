@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// A console variable's static metadata — the C# successor to one QuakeC <c>autocvar_*</c> declaration
@@ -397,7 +397,7 @@ public static class Cvars
         // ---- server identity / admin (xonotic-server.cfg) ----
         new("sv_dedicated", "0", CvarFlags.ReadOnly),
         new("sv_spectate", "1"),
-        new("hostname", "Xonotic XonoticGodot Server", Save),
+        new("hostname", "Xonotic VortexArena Server", Save),
         new("g_maplist", "", Save, "the map rotation"),
         // QC server/client.qh:53 / xonotic-server.cfg:5: max player name length (not counting color codes)
         // enforced by PlayerFrame; a longer name is truncated and the player warned. 0 = no limit.
@@ -478,7 +478,7 @@ public static class Cvars
         // shared-store client reads it where QC reads the engine `serverflags` global.
         new("serverflags", "0", "computed server flags (SERVERFLAG_* bits); set by the server at map init"),
 
-        // ---- diagnostics / logging (engine cvar; gates lib/log.qh → XonoticGodot.Common.Diagnostics.Log) ----
+        // ---- diagnostics / logging (engine cvar; gates lib/log.qh → VortexArena.Common.Diagnostics.Log) ----
         // QC autocvar_developer: 0 = off, 1 = LOG_TRACE + LOG_INFO headers, 2 = + LOG_DEBUG and full source
         // locations. Read live by Log.Emit on every call, so `set developer 1` / `toggle developer` are instant.
         new("developer", "0", "developer/debug log verbosity (0=off, 1=trace+info, 2=+debug)"),

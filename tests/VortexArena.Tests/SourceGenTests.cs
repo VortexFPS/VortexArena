@@ -1,12 +1,12 @@
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.SourceGen;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.SourceGen;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the registry source generator (T26 — <see cref="RegistryGenerator"/>, ADR-0003, the C# successor
@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests;
 ///      identity), asserting per-category emission (all 7 catalogs incl. Monster/Turret/Vehicle), the
 ///      skip rules (abstract/static/generic/private-ctor/untagged), and byte-identical determinism.
 ///   2. Registration-parity test: after a real Reset()+Bootstrap(), an INDEPENDENT reflection scan over
-///      XonoticGodot.Common (the old Bootstrap algorithm) must produce exactly the same per-catalog name
+///      VortexArena.Common (the old Bootstrap algorithm) must produce exactly the same per-catalog name
 ///      sets and the same FNV-1a content hash — proving generated == reflection, so the swap changed the
 ///      mechanism but not the registries (registry ids, WepSet bits, deathtypes, wire fields all unchanged).
 /// </summary>
@@ -31,12 +31,12 @@ public class SourceGenTests
 
     /// <summary>
     /// Stub declarations mirroring the real marker-attribute metadata names and catalog base classes.
-    /// Weapon/Item/Mutator/GameType/Monster attributes live in XonoticGodot.Common.Framework
+    /// Weapon/Item/Mutator/GameType/Monster attributes live in VortexArena.Common.Framework
     /// (Framework/Registry.cs); Turret/Vehicle were declared later next to their descriptor bases in
-    /// XonoticGodot.Common.Gameplay (Gameplay/Turrets/TurretAI.cs, Gameplay/Vehicles/VehicleCommon.cs).
+    /// VortexArena.Common.Gameplay (Gameplay/Turrets/TurretAI.cs, Gameplay/Vehicles/VehicleCommon.cs).
     /// </summary>
     private const string StubDecls = @"
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     [System.AttributeUsage(System.AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
     public abstract class GameRegistryAttribute : System.Attribute { }
@@ -46,10 +46,10 @@ namespace XonoticGodot.Common.Framework
     public sealed class GameTypeAttribute : GameRegistryAttribute { }
     public sealed class MonsterAttribute : GameRegistryAttribute { }
 }
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
-    public sealed class TurretAttribute : XonoticGodot.Common.Framework.GameRegistryAttribute { }
-    public sealed class VehicleAttribute : XonoticGodot.Common.Framework.GameRegistryAttribute { }
+    public sealed class TurretAttribute : VortexArena.Common.Framework.GameRegistryAttribute { }
+    public sealed class VehicleAttribute : VortexArena.Common.Framework.GameRegistryAttribute { }
     public abstract class Weapon { }
     public abstract class Pickup { }
     public abstract class MutatorBase { }
@@ -64,8 +64,8 @@ namespace XonoticGodot.Common.Gameplay
     private const string AllCategoriesSource = StubDecls + @"
 namespace Test.Stub
 {
-    using XonoticGodot.Common.Framework;
-    using XonoticGodot.Common.Gameplay;
+    using VortexArena.Common.Framework;
+    using VortexArena.Common.Gameplay;
 
     [Weapon] public sealed class StubWeapon : Weapon { }
     [Item] public sealed class StubItem : Pickup { }
@@ -114,11 +114,11 @@ namespace Test.Stub
     }
 
     private static string RegisterLine(string catalog, string type)
-        => $"global::XonoticGodot.Common.Framework.Registry<global::XonoticGodot.Common.Gameplay.{catalog}>"
+        => $"global::VortexArena.Common.Framework.Registry<global::VortexArena.Common.Gameplay.{catalog}>"
            + $".Register(new global::{type}());";
 
     private static string SortLine(string catalog)
-        => $"global::XonoticGodot.Common.Framework.Registry<global::XonoticGodot.Common.Gameplay.{catalog}>.Sort();";
+        => $"global::VortexArena.Common.Framework.Registry<global::VortexArena.Common.Gameplay.{catalog}>.Sort();";
 
     // ---------------------------------------------------------------------- generator behavior ----
 
@@ -154,8 +154,8 @@ namespace Test.Stub
         string source = StubDecls + @"
 namespace Test.Stub
 {
-    using XonoticGodot.Common.Framework;
-    using XonoticGodot.Common.Gameplay;
+    using VortexArena.Common.Framework;
+    using VortexArena.Common.Gameplay;
 
     [Weapon] public abstract class AbstractWeapon : Weapon { }
     [Weapon] public static class StaticTagged { }
@@ -221,7 +221,7 @@ namespace Test.Stub
     // ------------------------------------------------------------------------ registration parity ----
 
     /// <summary>
-    /// The old Bootstrap algorithm, re-run independently: reflect over XonoticGodot.Common for
+    /// The old Bootstrap algorithm, re-run independently: reflect over VortexArena.Common for
     /// [GameRegistry]-derived markers, instantiate, dispatch by runtime base type. Returns per-catalog
     /// RegistryName sets (ordinal-sorted, matching Registry&lt;T&gt;.Sort()).
     /// </summary>

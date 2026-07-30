@@ -1,7 +1,7 @@
 # Port-O-Launch (porto) — parity spec
 
 **Base refs:** `common/weapons/weapon/porto.qc` · `common/weapons/weapon/porto.qh` · `server/portals.qc`/`.qh` · `bal-wep-xonotic.cfg` · `balance-xonotic.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs` · `src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs` · `src/XonoticGodot.Server/GameWorld.cs` · `game/client/ProjectileCatalog.cs` · `game/client/WeaponFireSounds.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Porto.cs` · `src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs` · `src/VortexArena.Server/GameWorld.cs` · `game/client/ProjectileCatalog.cs` · `game/client/WeaponFireSounds.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

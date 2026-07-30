@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lines-of-code report for the XonoticGodot port.
+"""Lines-of-code report for the VortexArena port.
 
 Walks the port's source tree (src/, game/, tests/, tools/) and prints a
 breakdown of files / code / comment / blank lines per area, classified with a
@@ -259,7 +259,7 @@ def print_report(port_root: str, base_path: str | None):
 
     print()
     print("=" * 80)
-    print("  XonoticGodot - lines of code")
+    print("  VortexArena - lines of code")
     print(f"  root: {os.path.abspath(port_root)}")
     print("=" * 80)
 
@@ -356,7 +356,7 @@ def print_csv(port_root: str):
 
 
 def main(argv):
-    ap = argparse.ArgumentParser(description="Lines-of-code report for the XonoticGodot port.")
+    ap = argparse.ArgumentParser(description="Lines-of-code report for the VortexArena port.")
     ap.add_argument("--base", metavar="PATH",
                     help="path to a Xonotic Base/ checkout; recompute & diff the footnote")
     ap.add_argument("--csv", action="store_true", help="emit port rows as CSV")

@@ -5,7 +5,7 @@
 // typed members on the partial Entity (ADR-0007, specs/entity-model.md). Entity is declared partial and
 // this is a NEW file, so adding these here respects the task constraint (no existing Entity file modified).
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {

@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Sprites;
+namespace VortexArena.Formats.Sprites;
 
 /// <summary>
 /// Engine-neutral, Godot-free representation of a Quake-family sprite, parsed by <see cref="SpriteReader"/>.

@@ -31,10 +31,10 @@ features:
       - "common/playerstats.qc:PlayerStats_GameReport_Reset_All (36)"
       - "common/playerstats.qh:PLAYERSTATS_* event-id constants (32-56)"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerStats.cs:Init (93)"
-      - "src/XonoticGodot.Server/PlayerStats.cs:AddPlayer (157)"
-      - "src/XonoticGodot.Server/PlayerStats.cs:AddEvent (146) / AddTeam (177) / Event (191) / ResetAll (132)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1256 (Init at match boot), 1443 (AddPlayer on connect), 4662 (ResetAll on readyrestart)"
+      - "src/VortexArena.Server/PlayerStats.cs:Init (93)"
+      - "src/VortexArena.Server/PlayerStats.cs:AddPlayer (157)"
+      - "src/VortexArena.Server/PlayerStats.cs:AddEvent (146) / AddTeam (177) / Event (191) / ResetAll (132)"
+      - "src/VortexArena.Server/GameWorld.cs:1256 (Init at match boot), 1443 (AddPlayer on connect), 4662 (ResetAll on readyrestart)"
     constants:
       - { name: "enabled iff g_playerstats_gamereport_uri != \"\"", base: "yes (Init returns early)", port: "Enabled flag (PlayerStats.cs:101)", match: true }
       - { name: "event-id strings", base: "alivetime/avglatency/wins/matches/joins/scoreboardvalid/scoreboardpos/rank/handicapgiven/handicaptaken/total-/scoreboard-/achievement-*/acc-<wep>-{real,hit,fired,cnt-hit,cnt-fired,frags}/kills-<id>", port: "identical strings (PlayerStats.cs:25-34,105-128)", match: true }
@@ -51,7 +51,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:444-490 (disabled-without-uri, accumulate+build, warmup discard); live callers GameWorld.cs:1256/1443/1611/1645/4067/4662", result: pass }
+      - { kind: code, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:444-490 (disabled-without-uri, accumulate+build, warmup discard); live callers GameWorld.cs:1256/1443/1611/1645/4067/4662", result: pass }
     confidence: high
     notes: "The dictionary-backed accumulator replaces QC's db_* string DB but preserves the observable contract (registered-event ordering, dedupe, per-match unique player-id fallback). Pipeline-level verdict owned by scoring.yaml scoring.report.playerstats; this row records the accumulator contract itself."
 
@@ -64,8 +64,8 @@ features:
       - "common/playerstats.qc:REPLICATE cvar_cl_allow_uid2name/uidranking/uidtracking (20-27)"
       - "common/playerstats.qh:playerstats_id / REPLICATE_INIT (90, 126-132)"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerStats.cs:AddPlayer (157-174)"
-      - "src/XonoticGodot.Server/PlayerStats.cs:FinalizePlayer (248-287)"
+      - "src/VortexArena.Server/PlayerStats.cs:AddPlayer (157-174)"
+      - "src/VortexArena.Server/PlayerStats.cs:FinalizePlayer (248-287)"
       - "game/menu/dialogs/DialogMultiplayerProfile.cs:121-133 (the three consent checkboxes)"
       - "game/menu/dialogs/DialogFirstRun.cs:100-113 (first-run cl_allow_uid2name prompt)"
     constants:
@@ -105,10 +105,10 @@ features:
       - "common/playerstats.qc:PlayerStats_GameReport_Accuracy (167)"
       - "server/anticheat.qc:221-224 (anticheat-* feed)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:1250-1255 (provider wiring: IsWarmup/AnticheatReporter/RankProvider/ScoreboardPosProvider/WinnerPredicate/HandicapReportProvider — AccuracyProvider/ScoreColumnsProvider/PingProvider NOT wired)"
-      - "src/XonoticGodot.Server/PlayerStats.cs:EventTeam (204) — zero callers"
-      - "src/XonoticGodot.Server/Scores.cs:WeaponAccuracy (176) — tracks all six QC columns but is never connected to PlayerStats"
-      - "src/XonoticGodot.Server/AntiCheat.cs:RegisterPlayerStats (337) / ReportToPlayerStats (348)"
+      - "src/VortexArena.Server/GameWorld.cs:1250-1255 (provider wiring: IsWarmup/AnticheatReporter/RankProvider/ScoreboardPosProvider/WinnerPredicate/HandicapReportProvider — AccuracyProvider/ScoreColumnsProvider/PingProvider NOT wired)"
+      - "src/VortexArena.Server/PlayerStats.cs:EventTeam (204) — zero callers"
+      - "src/VortexArena.Server/Scores.cs:WeaponAccuracy (176) — tracks all six QC columns but is never connected to PlayerStats"
+      - "src/VortexArena.Server/AntiCheat.cs:RegisterPlayerStats (337) / ReportToPlayerStats (348)"
     constants:
       - { name: "kill-spree milestones", base: "3/5/10/15/20/25/30", port: "event ids registered (PlayerStats.cs:119) but never incremented", match: false }
       - { name: "accuracy suffixes", base: "real/hit/fired/cnt-hit/cnt-fired/frags per weapon netname", port: "ids registered (PlayerStats.cs:111-116); WeaponAccuracy holds the values; no bridge", match: false }
@@ -142,8 +142,8 @@ features:
       - "server/player.qc:456 (flush on death)"
       - "common/playerstats.qh:PLAYERSTATS_ALIVETIME (32)"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerStats.cs:BeginAlivetime (211) / AdvanceAliveStart (221) / FlushAlivetime (229)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1611 (begin at spawn), 1981 (per-frame AFK advance), 1645 (finalize on disconnect)"
+      - "src/VortexArena.Server/PlayerStats.cs:BeginAlivetime (211) / AdvanceAliveStart (221) / FlushAlivetime (229)"
+      - "src/VortexArena.Server/GameWorld.cs:1611 (begin at spawn), 1981 (per-frame AFK advance), 1645 (finalize on disconnect)"
     constants:
       - { name: "AFK idle threshold", base: "30 s (client.qc PlayerFrame: idle >= 30 -> alivetime_start += frametime)", port: "AdvanceAliveStart(frameTime) — port advances the start stamp; caller gates the 30s (GameWorld.cs:1981)", match: true }
       - { name: "flush points", base: "death + observer transition + finalize", port: "finalize only", match: false }
@@ -170,8 +170,8 @@ features:
       - "common/playerstats.qc:PlayerStats_GameReport_FinalizePlayer latency block (208-224)"
       - "common/playerstats.qh:PLAYERSTATS_AVGLATENCY (33)"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerStats.cs:FinalizePlayer latency block (278-284)"
-      - "src/XonoticGodot.Server/PlayerStats.cs:PingProvider (57) — default 0, never wired"
+      - "src/VortexArena.Server/PlayerStats.cs:FinalizePlayer latency block (278-284)"
+      - "src/VortexArena.Server/PlayerStats.cs:PingProvider (57) — default 0, never wired"
     constants:
       - { name: "reconnect averaging", base: "new = !prev ? latency : (prev+latency)/2", port: "same formula (PlayerStats.cs:282)", match: true }
       - { name: "latency source", base: "CS(p).latency_sum / latency_cnt (10s PingPLReport sampler, world.qc)", port: "PingProvider default 0 — no sampler exists", match: false }
@@ -198,7 +198,7 @@ features:
       - "common/playerstats.qc:PlayerStats_GameReport_Handler URL_READY_CANWRITE (414-485)"
       - "common/playerstats.qc:PlayerStats_GetGametype duel hack (346-357)"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerStats.cs:BuildReport (343-382)"
+      - "src/VortexArena.Server/PlayerStats.cs:BuildReport (343-382)"
     constants:
       - { name: "format version line", base: "V 9", port: "V 9", match: true }
       - { name: "e-line filter", base: "value != 0 only, %g format", port: "v != 0f, 0.###### invariant", match: true }
@@ -264,7 +264,7 @@ features:
       - "common/playerstats.qh:PS_B_STATUS_* + autocvar_g_playerstats_playerbasic_uri (98-108)"
       - "common/state.qc:55 (live caller: ClientState_attach -> CheckUpdate on join)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:166 (SP_SKILL field registered, NotSortable, survives PlayerScore_Clear per :597 — but never fed)"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:166 (SP_SKILL field registered, NotSortable, survives PlayerScore_Clear per :597 — but never fed)"
     constants:
       - { name: "g_playerstats_playerbasic_uri default", base: "https://stats.xonotic.org", port: "same value sits in the live store (shipped xonotic-server.cfg:638, exec'd at boot) but NO code ever reads it", match: false }
       - { name: "activation gate", base: "uri != \"\" && (g_balance_teams_skill || sv_showskill)", port: "none", match: false }

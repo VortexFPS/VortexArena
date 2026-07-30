@@ -1,7 +1,7 @@
 // Port of qcsrc/server/damage.qh (.spawnshieldtime, rocket/mine detonate-gate role)
 //   + common/weapons/weapon/devastator.qc + common/weapons/weapon/minelayer.qc
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// The rocket/mine remote-detonate GATE — the role QuakeC overloaded onto the single

@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
 
-namespace XonoticGodot.Engine.Particles;
+namespace VortexArena.Engine.Particles;
 
 // =====================================================================================================
 //  FAITHFUL CPU particle simulation — the perfect-parity port of Darkplaces' cl_particles.c (spawn:
@@ -120,7 +120,7 @@ public sealed class ParticleSim
 
     /// <summary>
     /// The collision/trace seam for particle bounces and content checks. Set this to the CLIENT's static,
-    /// world-only tracer — a <see cref="XonoticGodot.Engine.Collision.TraceService"/> over the per-map
+    /// world-only tracer — a <see cref="VortexArena.Engine.Collision.TraceService"/> over the per-map
     /// <c>MapLoader.BuildCollision</c> world with NO entity provider and NO concurrency gate. That mirrors
     /// DP's <c>CL_TraceLine</c>: particles clip against the static map BSP only, never live players/items/
     /// projectiles, and never the SERVER's collision world. Null (tests) falls back to the ambient

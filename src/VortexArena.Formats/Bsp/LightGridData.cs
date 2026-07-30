@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Bsp;
+namespace VortexArena.Formats.Bsp;
 
 /// <summary>
 /// The Q3 BSP <b>lightgrid</b> (lump 15): a uniform 3-D grid of baked light probes covering the world model,

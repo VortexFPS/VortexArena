@@ -1,7 +1,7 @@
 # HLAC (Heavy Laser Assault Cannon) — parity spec
 
 **Base refs:** `common/weapons/weapon/hlac.qc` · `common/weapons/weapon/hlac.qh` · `server/weapons/tracing.qc` (W_SetupShot, W_SetupProjVelocity) · `common/weapons/calculations.qc` (W_CalculateSpread) · balance in `bal-wep-xonotic.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs` · `WeaponFiring.cs` · `WeaponFireGate.cs` · `WeaponFireDriver.cs` · `WeaponSplash.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Hlac.cs` · `WeaponFiring.cs` · `WeaponFireGate.cs` · `WeaponFireDriver.cs` · `WeaponSplash.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -216,7 +216,7 @@ notifications are wired. Bolt entities are spawned and damage-dealing on the liv
 
 ## Verification
 - Constants: value-diffed `Configure()` defaults against `bal-wep-xonotic.cfg:535-569` — all match.
-- Crouch-spread gate (logic+values): `tests/XonoticGodot.Tests/HlacCrouchSpreadTests.cs` (8 tests, pass per
+- Crouch-spread gate (logic+values): `tests/VortexArena.Tests/HlacCrouchSpreadTests.cs` (8 tests, pass per
   project test history) pin the `IsDucked && OnGround` gate, per-mode crouchmod (0.25/0.5), and the
   zero/one/0.25 multiplier outcomes via the deterministic PRNG.
 - Liveness: traced `WeaponFireDriver.Frame` → `Weapon.WrThink` dispatch; HLAC registration in

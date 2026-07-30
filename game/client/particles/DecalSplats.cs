@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Formats.Bsp;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Formats.Bsp;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  Faithful decal SPLATS — the C# mirror of Darkplaces' R_DecalSystem (gl_rmain.c:9134-9710), the "new
@@ -587,7 +587,7 @@ public sealed partial class DecalSplats : Node3D
         int count = _liveSlots.Count;
         if (count == 0)
             return;
-        using var _scope = XonoticGodot.Game.Client.FrameProfiler.Scope("decals.splat"); // [profiling] §18: out of proc:other
+        using var _scope = VortexArena.Game.Client.FrameProfiler.Scope("decals.splat"); // [profiling] §18: out of proc:other
         float dt = (float)delta;
         for (int i = count - 1; i >= 0; i--)
         {

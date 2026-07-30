@@ -76,8 +76,8 @@ if [ ! -x "$GODOT" ] && [ ! -f "$GODOT" ]; then
     echo "visual-qa.sh: Godot not found at '$GODOT' — set GODOT= to the mono console exe (see docs/RUNNING.md)." >&2
     exit 1
 fi
-if [ ! -d "$ROOT/assets/data" ]; then
-    echo "visual-qa.sh: WARNING — $ROOT/assets/data missing; captures will be empty (run download-assets.sh)." >&2
+if [ ! -d "$ROOT/data" ]; then
+    echo "visual-qa.sh: WARNING — $ROOT/data missing; captures will be empty. Core content is committed, so this checkout is broken; for maps run: python tools/data/fetch-maps.py" >&2
 fi
 
 mkdir -p "$OUT"

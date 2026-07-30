@@ -1,10 +1,10 @@
 using System.IO;
 using System.IO.Compression;
 using System.Text;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Regression tests for pk3 (zip) SYMLINK resolution. Xonotic's build-time dedup
@@ -112,7 +112,7 @@ public class VfsSymlinkTests
     [Fact]
     public void RealData_DedupSymlink_NowReadsAsRealDds()
     {
-        const string dataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+        string dataDir = TestPaths.Data;
         if (!Directory.Exists(dataDir)) return;
 
         using var vfs = new VirtualFileSystem();

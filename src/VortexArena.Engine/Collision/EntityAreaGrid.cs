@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Engine.Collision;
+namespace VortexArena.Engine.Collision;
 
 /// <summary>
 /// The DYNAMIC-ENTITY broadphase — the C# successor to Darkplaces' <c>SV_AreaGrid</c>

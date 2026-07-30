@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Mine Layer — port of common/weapons/weapon/minelayer.{qh,qc}. A splash weapon: primary lobs a mine
@@ -60,6 +60,7 @@ public sealed class Minelayer : Weapon
     public Minelayer()
     {
         NetName = "minelayer";
+        BotPickupBaseValue = 7000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type
         DisplayName = "Mine Layer";
         Impulse = 4;

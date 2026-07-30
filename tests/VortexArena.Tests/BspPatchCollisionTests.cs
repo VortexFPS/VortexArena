@@ -2,14 +2,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Regression tests for bezier-PATCH collision. Q3 patches carry no brushes; DP makes them collidable by
@@ -78,14 +78,14 @@ public class BspPatchCollisionTests
 
     // ---- real data: the exact Stormkeep spot from the bug report -------------------------------------
 
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     [Fact]
     public void Stormkeep_Grate_Over_Lava_Collides()
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? path = vfs.Find("maps/", "bsp").FirstOrDefault(p => p.Contains("stormkeep"));
         if (path is null) return;   // map not in this checkout — skip
 
@@ -111,7 +111,7 @@ public class BspPatchCollisionTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? path = vfs.Find("maps/", "bsp").FirstOrDefault(p => p.Contains("stormkeep"));
         if (path is null) return;
 

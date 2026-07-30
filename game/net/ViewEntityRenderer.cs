@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Game.Client;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Game.Client;
+using VortexArena.Net;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// Renders the held-weapon view-entities of networked players — the C# successor to CSQC's
@@ -251,9 +251,9 @@ public sealed class ViewEntityRenderer
 
         // Only a Vortex-family weapon (vortex / vaporizer / *nex*) with live charge glows; everything else clears.
         bool isVortexWeapon = false;
-        if (displayWeaponId >= 0 && displayWeaponId < XonoticGodot.Common.Gameplay.Weapons.Count)
+        if (displayWeaponId >= 0 && displayWeaponId < VortexArena.Common.Gameplay.Weapons.Count)
         {
-            XonoticGodot.Common.Gameplay.Weapon w = XonoticGodot.Common.Gameplay.Weapons.ById(displayWeaponId);
+            VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(displayWeaponId);
             string net = w?.NetName ?? "";
             isVortexWeapon = net is "vortex" or "vaporizer" || net.Contains("nex");
         }

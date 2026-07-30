@@ -12,10 +12,10 @@ features:
     base_refs:
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:9 REGISTER_MUTATOR(kick_teamkiller, (autocvar_g_kick_teamkiller_rate > 0))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:40 IsEnabled"
-      - "src/XonoticGodot.Server/GameWorld.cs:535 MutatorActivation.Apply()"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:40 IsEnabled"
+      - "src/VortexArena.Server/GameWorld.cs:535 MutatorActivation.Apply()"
     constants:
-      - { name: "g_kick_teamkiller_rate (enable when >0)", base: "0", port: "0 (assets/data/xonotic-data.pk3dir/mutators.cfg:536)", match: true }
+      - { name: "g_kick_teamkiller_rate (enable when >0)", base: "0", port: "0 (Base/data/xonotic-data.pk3dir/mutators.cfg:536)", match: true }
     status:
       logic: faithful
       values: faithful
@@ -29,7 +29,7 @@ features:
     verification:
       - { kind: code, ref: "IsEnabled = Api.Services!=null && Cvars.GetFloat(\"g_kick_teamkiller_rate\")>0; mirrors REGISTER_MUTATOR predicate", result: pass }
       - { kind: code, ref: "MutatorActivation.Apply() called at GameWorld.cs:535 on server boot; subscribes Hook() only when IsEnabled", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:103 asserts Mutators.ByName(\"kick_teamkiller\") not null (registration only)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:103 asserts Mutators.ByName(\"kick_teamkiller\") not null (registration only)", result: pass }
     confidence: high
     notes: "Unchanged by Wave 1/2. Disabled by default in both Base and port (rate=0 via bundled mutators.cfg). When an admin sets rate>0 the PlayerDies hook subscribes at boot — detection is genuinely live. severity/bantime have no `set` in either Base or port and resolve to 0 (=> default play-ban branch)."
 
@@ -40,8 +40,8 @@ features:
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:13-25 MUTATOR_HOOKFUNCTION(kick_teamkiller, PlayerDies)"
       - "server/utils.qh:17 #define IS_REAL_CLIENT(v) (clienttype(v) == CLIENTTYPE_REAL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:74-82 OnPlayerDies gates"
-      - "src/XonoticGodot.Server/GameWorld.cs:946 NotificationSystem.WarmupStage = Warmup.WarmupStage (live source of the warmup gate)"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:74-82 OnPlayerDies gates"
+      - "src/VortexArena.Server/GameWorld.cs:946 NotificationSystem.WarmupStage = Warmup.WarmupStage (live source of the warmup gate)"
     constants: []
     status:
       logic: faithful
@@ -67,8 +67,8 @@ features:
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:30 teamkills = PlayerScore_Get(attacker, SP_TEAMKILLS)"
       - "server/damage.qc:56 GiveFrags increments SP_TEAMKILLS when f<0 && targ!=attacker"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:84 GameScores.Get(attacker, GameScores.TeamKills)"
-      - "src/XonoticGodot.Server/Scores.cs:501 Row(attacker).AddAux(ScoreField.TeamKills, 1)"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:84 GameScores.Get(attacker, GameScores.TeamKills)"
+      - "src/VortexArena.Server/Scores.cs:501 Row(attacker).AddAux(ScoreField.TeamKills, 1)"
     constants: []
     status:
       logic: faithful
@@ -93,9 +93,9 @@ features:
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:32 playtime = time - CS(attacker).startplaytime"
       - "server/client.qc:780 startplaytime set on spectator->player switch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:100-101 startPlayTime = (attacker as Player).StartPlayTime; playtime = Api.Clock.Time - startPlayTime"
-      - "src/XonoticGodot.Common/Gameplay/Player/Player.cs:164 float StartPlayTime"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:608-609 StartPlayTime stamped on FragsStatus==FragsSpectator spectator->player edge"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:100-101 startPlayTime = (attacker as Player).StartPlayTime; playtime = Api.Clock.Time - startPlayTime"
+      - "src/VortexArena.Common/Gameplay/Player/Player.cs:164 float StartPlayTime"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:608-609 StartPlayTime stamped on FragsStatus==FragsSpectator spectator->player edge"
     constants:
       - { name: "playtime source", base: "time - CS(attacker).startplaytime (seconds since spectator->player switch)", port: "Api.Clock.Time - Player.StartPlayTime (seconds since spectator->player switch)", match: true }
     status:
@@ -120,7 +120,7 @@ features:
     base_refs:
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:34-35 teamkills >= autocvar_g_kick_teamkiller_lower_limit && teamkills >= autocvar_g_kick_teamkiller_rate*playtime/60.0"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:104 teamkills < LowerLimit || teamkills < Rate * playtime / 60f (early-return negation of the QC AND)"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:104 teamkills < LowerLimit || teamkills < Rate * playtime / 60f (early-return negation of the QC AND)"
     constants:
       - { name: "g_kick_teamkiller_lower_limit", base: "5", port: "5 (mutators.cfg:537)", match: true }
       - { name: "g_kick_teamkiller_rate", base: "0", port: "0 (mutators.cfg:536)", match: true }
@@ -147,11 +147,11 @@ features:
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:37-74 switch(autocvar_g_kick_teamkiller_severity)"
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:41 dropclient_schedule(attacker) / :48 Ban_KickBanClient / :63-70 PutObserverInServer + cvar_set g_playban_list + TRANSMUTE(Observer)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:96-150 switch(Severity)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:122-138 default branch: RESPAWN_SILENT + IsObserver + g_playban_list write"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:95 LastAction = (attacker, Severity) (sev1/2 host hook — no observer)"
-      - "src/XonoticGodot.Server/ClientManager.cs:400 PutObserverInServer (the proper force-spectate; NOT called by the mutator)"
-      - "src/XonoticGodot.Server/Bans.cs:78 DropClient / :273 KickBanClient (sev1/2 substrate; unreached)"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:96-150 switch(Severity)"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:122-138 default branch: RESPAWN_SILENT + IsObserver + g_playban_list write"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:95 LastAction = (attacker, Severity) (sev1/2 host hook — no observer)"
+      - "src/VortexArena.Server/ClientManager.cs:400 PutObserverInServer (the proper force-spectate; NOT called by the mutator)"
+      - "src/VortexArena.Server/Bans.cs:78 DropClient / :273 KickBanClient (sev1/2 substrate; unreached)"
     constants:
       - { name: "g_kick_teamkiller_severity", base: "0 (unset->0; default=play-ban)", port: "read into Severity; default branch implemented, sev1/2 unenforced", match: false }
       - { name: "g_kick_teamkiller_bantime", base: "0 (unset->0)", port: "read into BanTime but unused (KickBanClient never called)", match: false }
@@ -182,10 +182,10 @@ features:
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:66 INFO_QUIT_PLAYBAN_TEAMKILL (default, NOTIF_ALL)"
       - "common/mutators/mutator/kick_teamkiller/sv_kick_teamkiller.qc:67 CENTER_QUIT_PLAYBAN_TEAMKILL (default, NOTIF_ONE to offender)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:104,114 QUIT_KICK_TEAMKILL (Info, sev 1 & 2)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:141 QUIT_PLAYBAN_TEAMKILL (Info, default broadcast)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:144 QUIT_PLAYBAN_TEAMKILL (Center, NotifBroadcast.One to offender)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:739-740,977 notif definitions"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:104,114 QUIT_KICK_TEAMKILL (Info, sev 1 & 2)"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:141 QUIT_PLAYBAN_TEAMKILL (Info, default broadcast)"
+      - "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs:144 QUIT_PLAYBAN_TEAMKILL (Center, NotifBroadcast.One to offender)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:739-740,977 notif definitions"
     constants:
       - { name: "info notif (severity 1 & 2)", base: "INFO_QUIT_KICK_TEAMKILL", port: "QUIT_KICK_TEAMKILL", match: true }
       - { name: "info notif (default/play-ban)", base: "INFO_QUIT_PLAYBAN_TEAMKILL", port: "QUIT_PLAYBAN_TEAMKILL (now sent in default branch)", match: true }

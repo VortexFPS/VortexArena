@@ -1,7 +1,7 @@
 # Waypoint sprites (`mutator-waypoints`) — parity spec
 
 **Base refs:** `common/mutators/mutator/waypoints/waypointsprites.qc` / `.qh` · `common/mutators/mutator/waypoints/all.inc` / `all.qh` · `server/impulse.qc` (player-deploy impulses) · `xonotic-client.cfg` / `xonotic-server.cfg` (cvar defaults)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs` · `game/client/WaypointSpriteLayer.cs` · `game/net/ServerNet.cs` (`SendWaypoints`) · `game/net/ClientNet.cs` (`HandleWaypoints`) · `src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs` (`CollectWaypoints`) · `game/hud/RadarPanel.cs` (radar icons)
+**Port refs:** `src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs` · `game/client/WaypointSpriteLayer.cs` · `game/net/ServerNet.cs` (`SendWaypoints`) · `game/net/ClientNet.cs` (`HandleWaypoints`) · `src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs` (`CollectWaypoints`) · `game/hud/RadarPanel.cs` (radar icons)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 > Note: the unit is named `mutator-waypoints` per the audit assignment, but in Base it is **not a gameplay

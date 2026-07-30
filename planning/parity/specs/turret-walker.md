@@ -1,7 +1,7 @@
 # Walker Turret — parity spec
 
 **Base refs:** `common/turrets/turret/walker.qc` · `walker_weapon.qc` · `walker.qh` · `walker_weapon.qh` · `turrets.cfg` (`g_turrets_unit_walker_*`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs` · `GuidedProjectile.cs` (WalkerRocket) · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretCombat.cs` · `TurretAI.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs` · `GuidedProjectile.cs` (WalkerRocket) · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretCombat.cs` · `TurretAI.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

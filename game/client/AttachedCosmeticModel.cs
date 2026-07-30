@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Md3;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// A generic client-side <b>attached cosmetic model</b>: a small <see cref="Node3D"/> that owns a single

@@ -1,8 +1,8 @@
 using System;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Exercises <see cref="MenuPickerMath"/> — the Godot-free port of the crosshair picker cell↔index math, the

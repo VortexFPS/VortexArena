@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Shotgun — port of common/weapons/weapon/shotgun.{qh,qc}. A hitscan weapon: primary fire sprays a
@@ -84,6 +84,7 @@ public sealed class Shotgun : Weapon
     public Shotgun()
     {
         NetName = "shotgun";
+        BotPickupBaseValue = 6000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Shells;   // QC ammo_type
         DisplayName = "Shotgun";
         Impulse = 2;

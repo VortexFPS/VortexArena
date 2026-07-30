@@ -1,7 +1,7 @@
 # Fireball — parity spec
 
 **Base refs:** `common/weapons/weapon/fireball.qc` · `common/weapons/weapon/fireball.qh` · `bal-wep-xonotic.cfg` (`g_balance_fireball_*`) · shared: `server/weapons/tracing.qc` (`W_SetupShot*`, `W_SetupProjVelocity_*`), `common/weapons/calculations.qc`, `server/damage.qc` (`RadiusDamage`, `Fire_AddDamage`, `Fire_ApplyDamage`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs` · shared: `WeaponFiring.cs`, `WeaponSplash.cs`, `WeaponFireGate.cs`, `WeaponFireDriver.cs`, `StatusEffects.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Fireball.cs` · shared: `WeaponFiring.cs`, `WeaponSplash.cs`, `WeaponFireGate.cs`, `WeaponFireDriver.cs`, `StatusEffects.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

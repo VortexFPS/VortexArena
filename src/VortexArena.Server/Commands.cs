@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using Waypoints = XonoticGodot.Common.Gameplay.Waypoints;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using Waypoints = VortexArena.Common.Gameplay.Waypoints;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The context handed to a console-command handler — the C# successor to QuakeC's command argv/source
@@ -138,6 +138,12 @@ public sealed class Commands
 
     /// <summary>Optional sink the host wires to load a named map (QC changelevel). Args: map name.</summary>
     public Action<string>? ChangeLevelHandler { get; set; }
+
+    /// <summary>
+    /// E6: the authoritative editing session, when the editor gametype has one open. Set by the host; null in
+    /// every other mode, which is what makes <c>editor_op</c> inert outside an editing session.
+    /// </summary>
+    public VortexArena.Formats.Vmap.VmapEditServer? EditorOps { get; set; }
 
     /// <summary>
     /// Optional sink the host wires to shut the server down (QC <c>localcmd("quit\n")</c>). Invoked at match end
@@ -530,7 +536,7 @@ public sealed class Commands
         // multiplied into the damage handicap by DamageSystem.HandicapTotal. Same forwards-compat vector branch as
         // QC: prefer the new scalar cvars, fall back to the legacy cl_handicap vector (.y = take, .x = give), bound
         // to [1, 10]. HANDICAP_DISABLED() (CTS/RACE) → 1.
-        XonoticGodot.Common.Gameplay.Damage.DamageSystem.VoluntaryHandicapProvider = (e, receiving) =>
+        VortexArena.Common.Gameplay.Damage.DamageSystem.VoluntaryHandicapProvider = (e, receiving) =>
         {
             if (_world.GameType is Cts or Race) return 1f; // HANDICAP_DISABLED()
             if (e is not Player p) return 1f;
@@ -819,6 +825,18 @@ public sealed class Commands
         Register("ready", "ready — toggle your ready state during warmup", CmdReady);
         Register("join", "join — join the game as a player", CmdJoin);
         Register("spectate", "spectate — become a spectator", CmdSpectate);
+        Register("editor_playtest", "editor_playtest — toggle between EDIT free-fly and PLAYTEST (editor gametype)",
+            CmdEditorPlaytest);
+
+        // ---- Base bind aliases (binds-xonotic.cfg F1-F6). These are the exact verbs the stock binds invoke;
+        // without them F1/F2/F3/F5/F6 are dead keys, which is what made F3-to-spectate look broken. QC defines
+        // them as aliases over the same underlying commands, so they forward rather than duplicate logic.
+        Register("vyes", "vyes — vote yes (F1)", ctx => CmdVoteAlias(ctx, "yes"));
+        Register("vno", "vno — vote no (F2)", ctx => CmdVoteAlias(ctx, "no"));
+        Register("vabstain", "vabstain — abstain from the current vote", ctx => CmdVoteAlias(ctx, "abstain"));
+        Register("spec", "spec — become a spectator (alias of spectate, F3)", CmdSpectate);
+        Register("team_auto", "team_auto — join the team the balancer picks (F6)", CmdTeamAuto);
+        Register("editor_op", "editor_op <wire> — apply a map-editor geometry op (server-authoritative)", CmdEditorOp);
         Register("selectteam", "selectteam <red|blue|yellow|pink|auto> — choose a team", CmdSelectTeam);
         // QC the engine `color` command → SV_ChangeTeam (server/teamplay.qc:1340): in DP `color`/`topcolor`/
         // `bottomcolor` are engine-handled (host_cmd.c) and call SV_ChangeTeam, which only re-colors in a NON-team
@@ -1378,7 +1396,7 @@ public sealed class Commands
         bool custom = ctx.ArgCount >= 3;
         string result1 = custom ? $"^7{ctx.Arg(1)}" : "^1HEADS";
         string result2 = custom ? $"^7{ctx.Arg(2)}" : "^4TAILS";
-        string result = XonoticGodot.Common.Math.Prandom.Float() > 0.5f ? result1 : result2;
+        string result = VortexArena.Common.Math.Prandom.Float() > 0.5f ? result1 : result2;
         // QC: Send_Notification(NOTIF_ALL, NULL, MSG_MULTI, MULTI_COINTOSS, choice) → broadcast to everyone.
         ChatBroadcast?.Invoke($"^2* Coin toss: {result}");
         ctx.Print($"coin toss: {result}");
@@ -1451,7 +1469,7 @@ public sealed class Commands
         var shuffled = new List<Player>(players.Count);
         foreach (Player it in players)
         {
-            int j = (int)MathF.Floor(XonoticGodot.Common.Math.Prandom.Float() * (shuffled.Count + 1));
+            int j = (int)MathF.Floor(VortexArena.Common.Math.Prandom.Float() * (shuffled.Count + 1));
             if (j == shuffled.Count) shuffled.Add(it);
             else { shuffled.Add(shuffled[j]); shuffled[j] = it; }
         }
@@ -1531,6 +1549,14 @@ public sealed class Commands
     {
         if (ctx.Caller is null) { ctx.Print("join is a client command"); return true; }
         Player p = ctx.Caller;
+
+        // QC ClientCommand_join (server/command/cmd.qc:665): the join command is gated on joinAllowed(), the
+        // SAME predicate the delayed auto-join uses. The port was calling ClientManager.Join directly, so a
+        // `join` bypassed every gametype join rule — Duel's 2-player cap, LMS's round lockout, the team lock,
+        // and the editor's "EDIT is where you live" gate — while the auto-join path honored all of them.
+        // An already-live (dead) player is a respawn, not a join, and QC lets that through unchecked.
+        if (p.IsObserver && !_world.Clients.JoinAllowed(p, _world.Time))
+            return true;
         // QC Join_Try (client.qc:2274): a non-INGAME client in g_playban_list cannot (re)join — the play-ban's
         // load-bearing enforcement. A player who isn't currently in play is one sitting as observer/spectator;
         // a live (dead) player is already INGAME and falls through to respawn.
@@ -1571,6 +1597,79 @@ public sealed class Commands
         return true;
     }
 
+    /// <summary>
+    /// Toggle the caller between the editor's EDIT (free-fly) and PLAYTEST (live player) states, preserving
+    /// position and view angles (design doc §11.3). Only meaningful in the editor gametype: everywhere else
+    /// this would be a free noclip/respawn, so it is refused.
+    /// </summary>
+    private bool CmdEditorPlaytest(CommandContext ctx)
+    {
+        if (ctx.Caller is null) { ctx.Print("editor_playtest is a client command"); return true; }
+        if (_world.GameType is not VortexArena.Common.Gameplay.EditorMode)
+        {
+            ctx.Print("editor_playtest: not in the editor gametype");
+            return true;
+        }
+
+        EditorSession.Toggle(_world, ctx.Caller, out string message);
+        ctx.Print(message);
+        return true;
+    }
+
+    /// <summary>
+    /// QC's <c>vyes</c>/<c>vno</c>/<c>vabstain</c> aliases (binds-xonotic.cfg F1/F2): forward to the real
+    /// <c>vote</c> command rather than reimplementing the vote state machine, so the two can never diverge.
+    /// </summary>
+    private bool CmdVoteAlias(CommandContext ctx, string verb)
+    {
+        var forwarded = new CommandContext(new[] { "vote", verb }, ctx.IsServerConsole, ctx.Caller);
+        bool handled = CmdVote(forwarded);
+        ctx.Print(forwarded.Output.TrimEnd());
+        return handled;
+    }
+
+    /// <summary>
+    /// QC <c>team_auto</c> (binds-xonotic.cfg F6): join with no team preference, letting the balancer pick.
+    /// In a non-team gametype this is just a plain join, which is what QC does too.
+    /// </summary>
+    private bool CmdTeamAuto(CommandContext ctx)
+    {
+        if (ctx.Caller is null) { ctx.Print("team_auto is a client command"); return true; }
+        ctx.Caller.WantsJoin = 0;   // QC wants_join 0 = autoselect
+        return CmdJoin(ctx);
+    }
+
+    /// <summary>
+    /// E6: apply a wire-encoded editor op on the server, which owns the authoritative geometry.
+    ///
+    /// Ops ride the existing <c>clc_stringcmd</c> channel rather than a new packet type — they are rare (one
+    /// per drag release, not per frame), so a dedicated channel and a protocol bump would buy nothing, and the
+    /// line is readable in a packet log when co-editing misbehaves. Per-brush locks stop two mappers from
+    /// interleaving edits on the same brush.
+    /// </summary>
+    private bool CmdEditorOp(CommandContext ctx)
+    {
+        if (_world.GameType is not VortexArena.Common.Gameplay.EditorMode)
+        {
+            ctx.Print("editor_op: not in the editor gametype");
+            return true;
+        }
+        if (EditorOps is null)
+        {
+            ctx.Print("editor_op: no editing session is open on the server");
+            return true;
+        }
+
+        // Client id: the caller's entity identity is enough to keep two editors' locks apart.
+        int clientId = ctx.Caller?.GetHashCode() ?? 0;
+
+        // Queued, not applied here. This runs on whichever thread read the packet, and the document belongs to
+        // the editor on the main thread; the host drains the queue there and broadcasts what landed. The reply
+        // is therefore an acknowledgement of receipt — the outcome arrives as the echo, or as its absence.
+        EditorOps.Enqueue(clientId, ctx.ArgTail(1));
+        return true;
+    }
+
     private bool CmdSpectate(CommandContext ctx)
     {
         if (ctx.Caller is null) { ctx.Print("spectate is a client command"); return true; }
@@ -1580,7 +1679,7 @@ public sealed class Commands
         // (out-of-game) LMS player can no longer become a real spectator — they stay a ranked observer of the
         // match. Keyed on frags == FRAGS_PLAYER_OUT_OF_GAME (the eliminated state), which here is the LmsState's
         // OutOfGame + an assigned finishing rank.
-        if (_world.GameType is XonoticGodot.Common.Gameplay.LastManStanding lms)
+        if (_world.GameType is VortexArena.Common.Gameplay.LastManStanding lms)
         {
             var lst = lms.GetState(p);
             if (lst.OutOfGame && lst.Rank > 0)
@@ -1842,7 +1941,7 @@ public sealed class Commands
                 {
                     Vector3 eyes = p.Origin + p.ViewOfs;
                     Vector3 aim  = p.ViewAngles != Vector3.Zero ? p.ViewAngles : p.Angles;
-                    XonoticGodot.Common.Math.QMath.AngleVectors(aim, out Vector3 fwd, out _, out _);
+                    VortexArena.Common.Math.QMath.AngleVectors(aim, out Vector3 fwd, out _, out _);
                     Vector3 end = eyes + fwd * WeaponFiring.CurrentMaxShotDistance;
                     var tr = Api.Trace.Trace(eyes, Vector3.Zero, Vector3.Zero, end, MoveFilter.Normal, p);
                     return tr.EndPos;
@@ -1903,8 +2002,8 @@ public sealed class Commands
         // Now that the .personal checkpoint is modelled (Player.PersonalCheckpoint via the SPEEDRUN_INIT snapshot),
         // honor that gate: only act when a checkpoint exists, and clear it on the personal-waypoint clear.
         if (personalOnly && p.PersonalCheckpoint is not null
-            && (_world.GameType is XonoticGodot.Common.Gameplay.Cts
-                || _world.GameType is XonoticGodot.Common.Gameplay.Race)
+            && (_world.GameType is VortexArena.Common.Gameplay.Cts
+                || _world.GameType is VortexArena.Common.Gameplay.Race)
             && Cvars.Bool("g_allow_checkpoints")
             && !p.IsObserver && p.FragsStatus != Player.FragsSpectator && !p.IsDead)
         {
@@ -2162,9 +2261,9 @@ public sealed class Commands
             // only when the restore actually ran (checkpoint existed + not start-solid + sv_cheats gate passed).
             if (_world.Cheats.Speedrun(caller))
             {
-                if (_world.GameType is XonoticGodot.Common.Gameplay.Race race)
+                if (_world.GameType is VortexArena.Common.Gameplay.Race race)
                     race.AbortSpeedrun(caller);
-                else if (_world.GameType is XonoticGodot.Common.Gameplay.Cts cts)
+                else if (_world.GameType is VortexArena.Common.Gameplay.Cts cts)
                     cts.AbortSpeedrun(caller);
             }
             return true;
@@ -2209,11 +2308,11 @@ public sealed class Commands
         if (imp == 21)
         {
             VehicleBoarding.UseKey(caller);
-            if (_world.GameType is XonoticGodot.Common.Gameplay.Ctf ctf)
+            if (_world.GameType is VortexArena.Common.Gameplay.Ctf ctf)
                 ctf.HandleUseKey(caller, _world.Clients.Players);
             // QC MUTATOR_HOOKFUNCTION(ons, PlayerUseKey) (sv_onslaught.qc:1990): next to an own control point,
             // +use opens the click-radar (the HUD is client-side; HandleUseKey is the faithful server-side gate).
-            else if (_world.GameType is XonoticGodot.Common.Gameplay.Onslaught ons)
+            else if (_world.GameType is VortexArena.Common.Gameplay.Onslaught ons)
                 ons.HandleUseKey(caller);
             return true;
         }
@@ -2445,7 +2544,7 @@ public sealed class Commands
     private bool CmdTeamStatus(CommandContext ctx)
     {
         // QC: t = count of labeled Scores columns; w = bound(6, floor(SCORESWIDTH/t - 1), 9).
-        var fields = XonoticGodot.Common.Gameplay.Scoring.GameScores.Fields;
+        var fields = VortexArena.Common.Gameplay.Scoring.GameScores.Fields;
         int labeled = 0;
         foreach (var f in fields)
             if (f.Label != "") ++labeled;
@@ -2482,10 +2581,10 @@ public sealed class Commands
     }
 
     /// <summary>QC <c>Score_NicePrint_ItemColor(vflags)</c>: primary ^3 / secondary ^5 / other ^7.</summary>
-    private static string NicePrintItemColor(XonoticGodot.Common.Gameplay.Scoring.ScoreFlags fl)
+    private static string NicePrintItemColor(VortexArena.Common.Gameplay.Scoring.ScoreFlags fl)
     {
-        if ((fl & XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary) != 0) return "^3";
-        if ((fl & XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary) != 0) return "^5";
+        if ((fl & VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary) != 0) return "^3";
+        if ((fl & VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary) != 0) return "^5";
         return "^7";
     }
 
@@ -2508,7 +2607,7 @@ public sealed class Commands
 
     /// <summary>QC <c>Score_NicePrint_Team</c> (server/scores.qc:838): the per-team header row.</summary>
     private void NicePrintTeamHeader(CommandContext ctx, int team, int w,
-        IReadOnlyList<XonoticGodot.Common.Gameplay.Scoring.ScoreField> fields)
+        IReadOnlyList<VortexArena.Common.Gameplay.Scoring.ScoreField> fields)
     {
         var sb = new StringBuilder();
         // QC: if the team has a scorekeeper, prefix the colored team name + each labeled team-score slot;
@@ -2516,17 +2615,17 @@ public sealed class Commands
         if (team >= 1)
         {
             sb.Append(NicePrintTeamColoredFullName(team));
-            for (int slot = 0; slot < XonoticGodot.Common.Gameplay.Scoring.GameScores.MaxTeamScore; ++slot)
+            for (int slot = 0; slot < VortexArena.Common.Gameplay.Scoring.GameScores.MaxTeamScore; ++slot)
             {
-                if (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(slot) == "") continue;
-                var fl = XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(slot);
+                if (VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(slot) == "") continue;
+                var fl = VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(slot);
                 // slot 0 (ST_SCORE) honors the gametype's owned total via Scores.TeamScore; other slots read
                 // the GameScores team store directly (QC reads sk.(teamscores(i)) for every slot).
-                int sc = slot == XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamSlotScore
+                int sc = slot == VortexArena.Common.Gameplay.Scoring.GameScores.TeamSlotScore
                     ? _world.Scores.TeamScore(team)
-                    : XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamScore(team, slot);
+                    : VortexArena.Common.Gameplay.Scoring.GameScores.TeamScore(team, slot);
                 sb.Append(' ').Append(NicePrintItemColor(fl))
-                  .Append(XonoticGodot.Common.Gameplay.Scoring.GameScores.ScoreString(fl, sc, 0));
+                  .Append(VortexArena.Common.Gameplay.Scoring.GameScores.ScoreString(fl, sc, 0));
             }
         }
         else
@@ -2550,7 +2649,7 @@ public sealed class Commands
 
     /// <summary>QC <c>Score_NicePrint_Player</c> (server/scores.qc:873): one player's standings row.</summary>
     private void NicePrintPlayer(CommandContext ctx, PlayerScoreRow row, int w,
-        IReadOnlyList<XonoticGodot.Common.Gameplay.Scoring.ScoreField> fields)
+        IReadOnlyList<VortexArena.Common.Gameplay.Scoring.ScoreField> fields)
     {
         // QC: s = "  " + playername; then loop — i = strlennocol(s) - NAMEWIDTH; while i > 0 trim i raw chars
         // off the end and recompute (color codes mean a raw trim may not drop the visible length by i); once
@@ -2572,15 +2671,15 @@ public sealed class Commands
         foreach (var f in fields)
         {
             if (f.Label == "") continue;
-            int sc = XonoticGodot.Common.Gameplay.Scoring.GameScores.Get(row.Player, f);
-            string val = XonoticGodot.Common.Gameplay.Scoring.GameScores.ScoreString(f.Flags, sc, 0);
+            int sc = VortexArena.Common.Gameplay.Scoring.GameScores.Get(row.Player, f);
+            string val = VortexArena.Common.Gameplay.Scoring.GameScores.ScoreString(f.Flags, sc, 0);
             sb.Append(' ').Append(NicePrintItemColor(f.Flags)).Append(val.PadRight(w));
         }
         ctx.Print(sb.ToString());
     }
 
     /// <summary>QC <c>strlennocol</c>: visible length, ignoring ^-color codes.</summary>
-    private static int VisibleLen(string s) => XonoticGodot.Common.Diagnostics.Log.StripColors(s).Length;
+    private static int VisibleLen(string s) => VortexArena.Common.Diagnostics.Log.StripColors(s).Length;
 
     // =============================================================================================
     // score log (QC DumpStats / GetPlayerScoreString / GetTeamScoreString / GetScoreLogLabel,
@@ -2592,13 +2691,13 @@ public sealed class Commands
     /// suffixes to the column name so log-parsers know which column wins ties and which direction is better.
     /// Order: append <c>&lt;</c> for LowerIsBetter, then <c>!!</c> for PRIMARY, <c>!</c> for SECONDARY.
     /// </summary>
-    private static string GetScoreLogLabel(string label, XonoticGodot.Common.Gameplay.Scoring.ScoreFlags fl)
+    private static string GetScoreLogLabel(string label, VortexArena.Common.Gameplay.Scoring.ScoreFlags fl)
     {
-        if ((fl & XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.LowerIsBetter) != 0)
+        if ((fl & VortexArena.Common.Gameplay.Scoring.ScoreFlags.LowerIsBetter) != 0)
             label += "<";
-        if ((fl & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
+        if ((fl & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
             label += "!!";
-        else if ((fl & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+        else if ((fl & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
             label += "!";
         return label;
     }
@@ -2613,22 +2712,22 @@ public sealed class Commands
     private static string GetPlayerScoreString(Player? pl, bool shortString = false)
     {
         var sb = new System.Text.StringBuilder();
-        var fields = XonoticGodot.Common.Gameplay.Scoring.GameScores.Fields;
+        var fields = VortexArena.Common.Gameplay.Scoring.GameScores.Fields;
         if (pl is null)
         {
             // label header — primary first, then secondary, then the rest (unless shortString trims them)
             foreach (var f in fields)
-                if (f.Label != "" && !f.ClientOnly && (f.Flags & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
+                if (f.Label != "" && !f.ClientOnly && (f.Flags & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
                     sb.Append(GetScoreLogLabel(f.Label, f.Flags)).Append(',');
             if (!shortString)
             {
                 foreach (var f in fields)
-                    if (f.Label != "" && !f.ClientOnly && (f.Flags & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+                    if (f.Label != "" && !f.ClientOnly && (f.Flags & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
                         sb.Append(GetScoreLogLabel(f.Label, f.Flags)).Append(',');
                 foreach (var f in fields)
                     if (f.Label != "" && !f.ClientOnly
-                        && (f.Flags & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary
-                        && (f.Flags & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+                        && (f.Flags & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary
+                        && (f.Flags & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
                         sb.Append(GetScoreLogLabel(f.Label, f.Flags)).Append(',');
             }
         }
@@ -2636,18 +2735,18 @@ public sealed class Commands
         {
             // numeric values — same order: primary, secondary, rest
             foreach (var f in fields)
-                if (f.Label != "" && !f.ClientOnly && (f.Flags & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
-                    sb.Append(XonoticGodot.Common.Gameplay.Scoring.GameScores.Get(pl, f)).Append(',');
+                if (f.Label != "" && !f.ClientOnly && (f.Flags & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
+                    sb.Append(VortexArena.Common.Gameplay.Scoring.GameScores.Get(pl, f)).Append(',');
             if (!shortString)
             {
                 foreach (var f in fields)
-                    if (f.Label != "" && !f.ClientOnly && (f.Flags & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
-                        sb.Append(XonoticGodot.Common.Gameplay.Scoring.GameScores.Get(pl, f)).Append(',');
+                    if (f.Label != "" && !f.ClientOnly && (f.Flags & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+                        sb.Append(VortexArena.Common.Gameplay.Scoring.GameScores.Get(pl, f)).Append(',');
                 foreach (var f in fields)
                     if (f.Label != "" && !f.ClientOnly
-                        && (f.Flags & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary
-                        && (f.Flags & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
-                        sb.Append(XonoticGodot.Common.Gameplay.Scoring.GameScores.Get(pl, f)).Append(',');
+                        && (f.Flags & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary
+                        && (f.Flags & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+                        sb.Append(VortexArena.Common.Gameplay.Scoring.GameScores.Get(pl, f)).Append(',');
             }
         }
         // QC: substring(out, 0, strlen(out) - 1) — strip trailing comma
@@ -2666,41 +2765,41 @@ public sealed class Commands
         if (tm == 0)
         {
             // label header
-            for (int i = 0; i < XonoticGodot.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
-                if (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
-                    && (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
-                    sb.Append(GetScoreLogLabel(XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i), XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i))).Append(',');
+            for (int i = 0; i < VortexArena.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
+                if (VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
+                    && (VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
+                    sb.Append(GetScoreLogLabel(VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i), VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i))).Append(',');
             if (!shortString)
             {
-                for (int i = 0; i < XonoticGodot.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
-                    if (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
-                        && (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
-                        sb.Append(GetScoreLogLabel(XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i), XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i))).Append(',');
-                for (int i = 0; i < XonoticGodot.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
-                    if (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
-                        && (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary
-                        && (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
-                        sb.Append(GetScoreLogLabel(XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i), XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i))).Append(',');
+                for (int i = 0; i < VortexArena.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
+                    if (VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
+                        && (VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+                        sb.Append(GetScoreLogLabel(VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i), VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i))).Append(',');
+                for (int i = 0; i < VortexArena.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
+                    if (VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
+                        && (VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary
+                        && (VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+                        sb.Append(GetScoreLogLabel(VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i), VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i))).Append(',');
             }
         }
         else
         {
             // numeric values: QC teamscorekeepers[tm-1] non-null check — we always have storage so write directly.
-            for (int i = 0; i < XonoticGodot.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
-                if (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
-                    && (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
-                    sb.Append(XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamScore(tm, i)).Append(',');
+            for (int i = 0; i < VortexArena.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
+                if (VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
+                    && (VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary)
+                    sb.Append(VortexArena.Common.Gameplay.Scoring.GameScores.TeamScore(tm, i)).Append(',');
             if (!shortString)
             {
-                for (int i = 0; i < XonoticGodot.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
-                    if (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
-                        && (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
-                        sb.Append(XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamScore(tm, i)).Append(',');
-                for (int i = 0; i < XonoticGodot.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
-                    if (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
-                        && (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary
-                        && (XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & XonoticGodot.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != XonoticGodot.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
-                        sb.Append(XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamScore(tm, i)).Append(',');
+                for (int i = 0; i < VortexArena.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
+                    if (VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
+                        && (VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) == VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+                        sb.Append(VortexArena.Common.Gameplay.Scoring.GameScores.TeamScore(tm, i)).Append(',');
+                for (int i = 0; i < VortexArena.Common.Gameplay.Scoring.GameScores.MaxTeamScore; i++)
+                    if (VortexArena.Common.Gameplay.Scoring.GameScores.TeamLabel(i) != ""
+                        && (VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioPrimary
+                        && (VortexArena.Common.Gameplay.Scoring.GameScores.TeamFlags(i) & VortexArena.Common.Gameplay.Scoring.ScoreFlagsExtensions.SortPrioMask) != VortexArena.Common.Gameplay.Scoring.ScoreFlags.SortPrioSecondary)
+                        sb.Append(VortexArena.Common.Gameplay.Scoring.GameScores.TeamScore(tm, i)).Append(',');
             }
         }
         if (sb.Length > 0 && sb[sb.Length - 1] == ',') sb.Length--;
@@ -2762,7 +2861,7 @@ public sealed class Commands
         }
 
         // teamplay: :labels:teamscores: + per-team :teamscores:see-labels: for teams 1..15
-        if (XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay)
+        if (VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay)
         {
             s = ":labels:teamscores:" + GetTeamScoreString(0);
             if (toConsole) _world.GameLog.ConsoleSink?.Invoke(s);
@@ -2773,7 +2872,7 @@ public sealed class Commands
                 // QC: `else if((sk = teamscorekeepers[tm - 1]))` — only emit for teams that actually have a
                 // scorekeeper. The port keys team scores by team COLOUR CODE (Red=4/Blue=13/Yellow=12/Pink=9),
                 // so the active team set is the key set of the score dict; an unused colour-code index gets no row.
-                if (!XonoticGodot.Common.Gameplay.Scoring.GameScores.TeamScores.ContainsKey(i)) continue;
+                if (!VortexArena.Common.Gameplay.Scoring.GameScores.TeamScores.ContainsKey(i)) continue;
                 string ts = GetTeamScoreString(i);
                 if (ts == "") continue; // no labeled team-score slots at all
                 s = ":teamscores:see-labels:" + ts + ":" + i;
@@ -2890,9 +2989,9 @@ public sealed class Commands
         // CommandReplies.GetRankings does, so delrec deletes exactly the table the active mode files times into.
         string gt = _world.GameType?.NetName ?? "";
         string recordType = gt == "cts"
-            ? XonoticGodot.Common.Gameplay.RaceRecords.CtsRecord
-            : XonoticGodot.Common.Gameplay.RaceRecords.RaceRecord;
-        XonoticGodot.Common.Gameplay.RaceRecords.DeleteTime(map, recordType, rank);
+            ? VortexArena.Common.Gameplay.RaceRecords.CtsRecord
+            : VortexArena.Common.Gameplay.RaceRecords.RaceRecord;
+        VortexArena.Common.Gameplay.RaceRecords.DeleteTime(map, recordType, rank);
         ctx.Print($"Deleted records up to rank {rank} on map {map}");
         return true;
     }
@@ -2913,9 +3012,9 @@ public sealed class Commands
         // it.eent_eff_name is the effectinfo.txt name (port: Effect.NetName); it.m_id is the network id
         // (port: Effect.RegistryId). EFFECT_Null (id 0, empty NetName) is included, like QC's FOREACH(..., true, ...).
         ctx.Print("begin");
-        foreach (XonoticGodot.Common.Gameplay.Effect fx in XonoticGodot.Common.Gameplay.Effects.All)
+        foreach (VortexArena.Common.Gameplay.Effect fx in VortexArena.Common.Gameplay.Effects.All)
             ctx.Print($"effect {fx.NetName} is {fx.RegistryId}");
-        ctx.Print($"end ({XonoticGodot.Common.Gameplay.Effects.Count} effects)");
+        ctx.Print($"end ({VortexArena.Common.Gameplay.Effects.Count} effects)");
         return true;
     }
 
@@ -3040,7 +3139,7 @@ public sealed class Commands
     /// <summary>QC GENERIC_COMMAND(rpn): run the RPN VM against the server cvar store, printing diagnostics.</summary>
     private bool CmdRpn(CommandContext ctx)
     {
-        XonoticGodot.Engine.Console.Rpn.Run(ctx.Argv, _world.Services.CvarsImpl, ctx.Print);
+        VortexArena.Engine.Console.Rpn.Run(ctx.Argv, _world.Services.CvarsImpl, ctx.Print);
         return true;
     }
 
@@ -3051,9 +3150,9 @@ public sealed class Commands
         string cvar = ctx.Arg(1), value = ctx.Arg(2);
         string cur = Cvars.String(cvar);
         if (cur == "") { Cvars.Set(cvar, value); return true; }
-        foreach (string w in XonoticGodot.Engine.Console.WordList.Words(cur))
+        foreach (string w in VortexArena.Engine.Console.WordList.Words(cur))
             if (w == value) return true; // already present
-        Cvars.Set(cvar, XonoticGodot.Engine.Console.WordList.Cons(cur, value));
+        Cvars.Set(cvar, VortexArena.Engine.Console.WordList.Cons(cur, value));
         return true;
     }
 
@@ -3063,8 +3162,8 @@ public sealed class Commands
         if (ctx.ArgCount != 3) { ctx.Print($"Usage: {ctx.Arg(0)} <cvar> <value>"); return true; }
         string cvar = ctx.Arg(1), removal = ctx.Arg(2);
         string rebuilt = "";
-        foreach (string w in XonoticGodot.Engine.Console.WordList.Words(Cvars.String(cvar)))
-            if (w != removal) rebuilt = XonoticGodot.Engine.Console.WordList.Cons(rebuilt, w);
+        foreach (string w in VortexArena.Engine.Console.WordList.Words(Cvars.String(cvar)))
+            if (w != removal) rebuilt = VortexArena.Engine.Console.WordList.Cons(rebuilt, w);
         Cvars.Set(cvar, rebuilt);
         return true;
     }
@@ -3084,13 +3183,13 @@ public sealed class Commands
             case "remove" when ctx.ArgCount == 3:
             {
                 string rebuilt = "";
-                foreach (string w in XonoticGodot.Engine.Console.WordList.Words(Cvars.String("g_maplist")))
-                    if (w != ctx.Arg(2)) rebuilt = XonoticGodot.Engine.Console.WordList.Cons(rebuilt, w);
+                foreach (string w in VortexArena.Engine.Console.WordList.Words(Cvars.String("g_maplist")))
+                    if (w != ctx.Arg(2)) rebuilt = VortexArena.Engine.Console.WordList.Cons(rebuilt, w);
                 Cvars.Set("g_maplist", rebuilt);
                 return true;
             }
             case "shuffle":
-                Cvars.Set("g_maplist", XonoticGodot.Engine.Console.WordList.Shuffle(Cvars.String("g_maplist"), _maplistRng));
+                Cvars.Set("g_maplist", VortexArena.Engine.Console.WordList.Shuffle(Cvars.String("g_maplist"), _maplistRng));
                 return true;
             case "cleanup":
                 // No reachable map catalog here → identity (keep all words), matching the console surface (R4).
@@ -3484,7 +3583,7 @@ public sealed class Commands
                 if (caller.FragsStatus == Player.FragsSpectator || caller.IsObserver) { outCtx.Print("You must be playing to spawn a monster"); return true; }
                 // QC common.qc:369 MUTATOR_CALLHOOK(AllowMobSpawning) → invasion's AllowMobSpawning hook blocks
                 // spawnmob during an invasion (sv_invasion.qc: "You cannot spawn monsters during an invasion!").
-                if (_world.GameType is XonoticGodot.Common.Gameplay.Invasion) { outCtx.Print("You cannot spawn monsters during an invasion!"); return true; }
+                if (_world.GameType is VortexArena.Common.Gameplay.Invasion) { outCtx.Print("You cannot spawn monsters during an invasion!"); return true; }
                 // QC common.qc:370: can't spawn while seated in a vehicle (gate goes after IS_PLAYER, before the dead check).
                 if (caller.Vehicle is not null) { outCtx.Print("You can't spawn monsters while driving a vehicle"); return true; }
                 if (caller.IsDead) { outCtx.Print("You can't spawn monsters while dead"); return true; }
@@ -3511,8 +3610,8 @@ public sealed class Commands
                 if (!isVisible) { outCtx.Print("You must look at your monster to edit it"); return true; }
                 // QC: Damage(mon, NULL, NULL, health + max_health + 200, DEATH_KILL, ...).
                 float lethal = mon!.Health + mon.MaxHealth + 200f;
-                XonoticGodot.Common.Gameplay.Damage.Combat.Damage(mon, null, null, lethal,
-                    XonoticGodot.Common.Gameplay.Damage.DeathTypes.Kill, mon.Origin, System.Numerics.Vector3.Zero);
+                VortexArena.Common.Gameplay.Damage.Combat.Damage(mon, null, null, lethal,
+                    VortexArena.Common.Gameplay.Damage.DeathTypes.Kill, mon.Origin, System.Numerics.Vector3.Zero);
                 outCtx.Print($"Your pet '{mon.NetName}' has been brutally mutilated");
                 return true;
             }
@@ -3544,7 +3643,7 @@ public sealed class Commands
                 if (caller is not null) { outCtx.Print("This command is not available to players"); return true; }
                 // QC common.qc:428 MUTATOR_CALLHOOK(AllowMobButcher) → invasion's AllowMobButcher hook blocks
                 // butcher during an invasion (sv_invasion.qc: "This command does not work during an invasion!").
-                if (_world.GameType is XonoticGodot.Common.Gameplay.Invasion) { outCtx.Print("This command does not work during an invasion!"); return true; }
+                if (_world.GameType is VortexArena.Common.Gameplay.Invasion) { outCtx.Print("This command does not work during an invasion!"); return true; }
                 int removed = RemoveAllMonsters();
                 outCtx.Print(removed > 0
                     ? $"Killed {removed} monster{(removed == 1 ? "" : "s")}"
@@ -3605,11 +3704,11 @@ public sealed class Commands
         Vector3 eyes = caller.Origin + caller.ViewOfs;
         // QC makevectors(caller.v_angle): aim along the VIEW angles (fall back to body angles when unset).
         Vector3 aim = caller.ViewAngles != Vector3.Zero ? caller.ViewAngles : caller.Angles;
-        XonoticGodot.Common.Math.QMath.AngleVectors(aim, out Vector3 forward, out _, out _);
+        VortexArena.Common.Math.QMath.AngleVectors(aim, out Vector3 forward, out _, out _);
         Vector3 end = eyes + forward * dist;
-        XonoticGodot.Common.Services.TraceResult tr = Api.Trace.Trace(
+        VortexArena.Common.Services.TraceResult tr = Api.Trace.Trace(
             eyes, System.Numerics.Vector3.Zero, System.Numerics.Vector3.Zero, end,
-            XonoticGodot.Common.Framework.MoveFilter.Normal, caller);
+            VortexArena.Common.Framework.MoveFilter.Normal, caller);
         if (tr.Ent is { } hit && MonsterAI.StateOf(hit) is not null)
             return hit;
         return null;
@@ -3620,11 +3719,11 @@ public sealed class Commands
     {
         Vector3 eyes = caller.Origin + caller.ViewOfs;
         Vector3 aim = caller.ViewAngles != Vector3.Zero ? caller.ViewAngles : caller.Angles;
-        XonoticGodot.Common.Math.QMath.AngleVectors(aim, out Vector3 forward, out _, out _);
+        VortexArena.Common.Math.QMath.AngleVectors(aim, out Vector3 forward, out _, out _);
         Vector3 end = eyes + forward * dist;
         if (Api.Services is null) return end;
-        XonoticGodot.Common.Services.TraceResult tr = Api.Trace.Trace(
-            eyes, caller.Mins, caller.Maxs, end, XonoticGodot.Common.Framework.MoveFilter.Normal, caller);
+        VortexArena.Common.Services.TraceResult tr = Api.Trace.Trace(
+            eyes, caller.Mins, caller.Maxs, end, VortexArena.Common.Framework.MoveFilter.Normal, caller);
         return tr.EndPos;
     }
 

@@ -5,14 +5,14 @@ using System.Globalization;
 using System.IO;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Common.Framework;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Engine.Collision;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T33 perf bench (BotPerfBench pattern — measurement, not a CI assertion) for the collision/trace
@@ -23,9 +23,9 @@ namespace XonoticGodot.Tests;
 /// (DP SV_TraceBox), so ms/trace here bounds the whole server tick.
 ///
 /// No-ops when the content checkout is missing (CI without assets); the data dir can be overridden
-/// with the XG_DATA_DIR environment variable.
+/// with the VA_DATA_DIR environment variable.
 ///
-/// Run: dotnet test tests/XonoticGodot.Tests --filter TracePerfBench -l "console;verbosity=detailed"
+/// Run: dotnet test tests/VortexArena.Tests --filter TracePerfBench -l "console;verbosity=detailed"
 ///
 /// Measured baseline (2026-06-09, dev machine, Debug build, atelier):
 ///   map load:      BspReader.Read 22 ms + BspCollisionBuilder.Build 219 ms (4.5 MB bsp)
@@ -41,9 +41,7 @@ namespace XonoticGodot.Tests;
 [Collection("GlobalState")]
 public class TracePerfBench
 {
-    private static readonly string DataDir =
-        Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
     private const string Map = "atelier";
 
     private readonly ITestOutputHelper _out;
@@ -59,9 +57,11 @@ public class TracePerfBench
 
         // --- map load (the dedicated-server startup metric): read + parse + build collision ---
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
-        Assert.True(vfs.Exists(bspPath), $"missing {bspPath}");
+        // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
+        // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.
+        if (!vfs.Exists(bspPath)) return;
 
         byte[] bytes = vfs.ReadBytes(bspPath);
         var swRead = Stopwatch.StartNew();

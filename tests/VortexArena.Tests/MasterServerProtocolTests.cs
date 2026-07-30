@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Text;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Byte-layout and round-trip tests for <see cref="MasterServerProtocol"/>, the DP/Q3 connectionless

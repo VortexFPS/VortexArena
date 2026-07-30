@@ -1,7 +1,7 @@
 # sv-cheats — parity spec
 
 **Base refs:** `server/cheats.qc` · `server/cheats.qh` · `common/impulses/all.qh` (CHIMPULSE block)
-**Port refs:** `src/XonoticGodot.Server/Cheats.cs` · `src/XonoticGodot.Server/Commands.cs` (`CmdCheat`/`DispatchImpulse`) · `src/XonoticGodot.Server/ClientCommandRegistry.cs`
+**Port refs:** `src/VortexArena.Server/Cheats.cs` · `src/VortexArena.Server/Commands.cs` (`CmdCheat`/`DispatchImpulse`) · `src/VortexArena.Server/ClientCommandRegistry.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -162,7 +162,7 @@ cheats is a deferral, not a deliberate behavioral divergence, so it is recorded 
 
 ## Verification
 - Gating + god + noclip/fly toggle + give-all: unit tests `ServerInfraTests.Cheats_GatedBySvCheats`,
-  `Cheats_NoclipAndFlyToggle`, `Cheats_GiveAll_GrantsWeaponsAndResources` (tests/XonoticGodot.Tests/ServerInfraTests.cs:262-300) — pass.
+  `Cheats_NoclipAndFlyToggle`, `Cheats_GiveAll_GrantsWeaponsAndResources` (tests/VortexArena.Tests/ServerInfraTests.cs:262-300) — pass.
 - Command liveness: traced `cmd god` → `ClientCommandRegistry` allowlist (line 92) → `Commands.CmdCheat` →
   `Cheats.Command` (read, verified).
 - GIVE_ALL deadness: `grep` for `.GiveAll(` returns only the definition; `DispatchImpulse` reviewed and routes only

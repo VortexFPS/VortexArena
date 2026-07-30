@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Mod-icons panel — port of Base/.../qcsrc/client/hud/panel/modicons.qc (HUD panel #10) and the per-gametype
@@ -241,7 +241,7 @@ public partial class ModIconsPanel : HudPanel
     /// <summary>QC the modicons layout cvars exported by each gametype's m_modicons_export
     /// (cl_clanarena.qc/cl_freezetag.qc/cl_domination.qc HUD_Write_Cvar) + the panel's dynamichud flag.
     /// Registered into the SHARED store so console/menu edits flip the layout live.</summary>
-    public static void RegisterDefaults(XonoticGodot.Engine.Simulation.CvarService c)
+    public static void RegisterDefaults(VortexArena.Engine.Simulation.CvarService c)
     {
         const CvarFlags save = CvarFlags.Save;
         // _hud_descriptions.cfg ships ca/freezetag layout = 1 (icon + number); dom layout 1 = icon + percent.

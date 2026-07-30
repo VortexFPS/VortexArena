@@ -1,8 +1,8 @@
 // Port of qcsrc/menu/xonotic/charmap.qc (XonoticCharmap).
 using Godot;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The character map — a faithful C# port of <c>XonoticCharmap</c> (qcsrc/menu/xonotic/charmap.qc): a 10×14

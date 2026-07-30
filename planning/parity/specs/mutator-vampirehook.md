@@ -1,6 +1,6 @@
 # Vampire Hook mutator — parity spec
 
-**Base refs:** `common/mutators/mutator/vampirehook/sv_vampirehook.qc` (+ `_mod.inc`, `_mod.qh`, `sv_vampirehook.qh`); hook driver `server/hook.qc:GrapplingHookThink`; event `server/mutators/events.qh:EV_GrappleHookThink` · **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs`, dispatch `src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:GrapplingHookThink`
+**Base refs:** `common/mutators/mutator/vampirehook/sv_vampirehook.qc` (+ `_mod.inc`, `_mod.qh`, `sv_vampirehook.qh`); hook driver `server/hook.qc:GrapplingHookThink`; event `server/mutators/events.qh:EV_GrappleHookThink` · **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs`, dispatch `src/VortexArena.Common/Gameplay/Weapons/Hook.cs:GrapplingHookThink`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

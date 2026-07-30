@@ -1,16 +1,22 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the real per-column score table (§4.3): the SP_* field registry, the SP_SCORE/<c>.frags</c>-status
 /// split (frags reset on respawn no longer wipes score), column add/clear, winning-condition sort, and the
 /// server→client scoreboard net codec round-trip.
 /// </summary>
+// GameScores is entirely static mutable state (_teamScores, _teamDirty, _teamLabel, _registered, …), so a
+// class that mutates it must not run in parallel with another that does. 15 of the 17 test classes touching
+// GameScores already carried this; this one and ScoreboardColumnsTests did not, and they were the two that
+// intermittently failed — 4 failures in one full run, 0 in the next. Diagnosed while renaming the assembly,
+// which perturbed scheduling enough to surface it; the omission long predates that.
+[Collection("GlobalState")]
 public class ScoresTests
 {
     public ScoresTests() => GameScores.RegisterAll(); // idempotent; ensures the registry is present

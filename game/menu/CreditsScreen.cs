@@ -1,7 +1,7 @@
 using Godot;
 using System;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Credits screen — full port of the Xonotic credits roll from
@@ -180,7 +180,7 @@ public partial class CreditsScreen : MenuScreen
         {
             "enolp",
             "Llumex03",
-            "Tornes \"Ḷlume\" Ḷḷume",
+            "Tornes \"Tornes.Llume\" Ḷḷume",
             "Ximielga",
         }),
         (EntryKind.Function, "Belarusian", new[]
@@ -250,7 +250,7 @@ public partial class CreditsScreen : MenuScreen
             "sapphireliu",
             "Simon \"XMLSDK\" Chow",
             "韬 \"jiegushijia\" 刘",
-            "黃柏諴",
+            "黃柏諺",
         }),
         (EntryKind.Function, "Czech", new[]
         {
@@ -475,7 +475,7 @@ public partial class CreditsScreen : MenuScreen
             "Adrian-Ciprian \"adrian.tinjala\" Tînjală",
             "busterdbk",
             "Cuzenco \"andonis1616\" Andrei Robert",
-            "Daniel \"Șerbănescu\" dasj",
+            "Daniel \"dasj\" Șerbănescu",
             "Edward205",
             "Iulian \"ElektroBoom\" Oancea",
             "Mircea \"Taoki\" Kitsune",
@@ -664,7 +664,7 @@ public partial class CreditsScreen : MenuScreen
             "Shaggy",
             "Shank",
             "s1lence",
-            "Simon O'Callaghan",
+            "Simon O’Callaghan",
             "slava",
             "Soelen",
             "SomeGuy",

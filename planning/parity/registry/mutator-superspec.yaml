@@ -17,11 +17,11 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:3-4 (REGISTER_MUTATOR(superspec, expr_evaluate(autocvar_g_superspectate)))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:54 ([Mutator] SuperSpecMutator)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:132-133 (IsEnabled = ExprEvaluate(g_superspectate))"
-      - "src/XonoticGodot.Server/GameWorld.cs:535 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:54 ([Mutator] SuperSpecMutator)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:132-133 (IsEnabled = ExprEvaluate(g_superspectate))"
+      - "src/VortexArena.Server/GameWorld.cs:535 (MutatorActivation.Apply)"
     constants:
-      - { name: "g_superspectate (default)", base: "0", port: "0 (declared assets/data/.../mutators.cfg:172)", match: true }
+      - { name: "g_superspectate (default)", base: "0", port: "0 (declared Base/data/.../mutators.cfg:172)", match: true }
       - { name: "registration", base: "REGISTER_MUTATOR via expr_evaluate", port: "[Mutator] source-gen -> Registry<MutatorBase>.All; expr_evaluate ported (ExprEvaluate)", match: true }
     status:
       logic: faithful
@@ -43,8 +43,8 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:8-25 (ASF_*/SSF_* consts + .autospec_flags/.superspec_flags/.superspec_itemfilter)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:57-72 (ASF_*/SSF_* consts + ASF_ALL)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:138-160 (Options side-table keyed by Player)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:57-72 (ASF_*/SSF_* consts + ASF_ALL)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:138-160 (Options side-table keyed by Player)"
     constants:
       - { name: "ASF_STRENGTH..ASF_FOLLOWKILLER", base: "BIT(0)..BIT(8)", port: "1<<0..1<<8", match: true }
       - { name: "ASF_ALL", base: "0xFFFFFF", port: "0xFFFFFF", match: true }
@@ -70,7 +70,7 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:27-31 (superspec_Spectate -> Spectate(this, targ))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:188-193 (SpectateTransfer)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:188-193 (SpectateTransfer)"
     constants: []
     status:
       logic: faithful
@@ -95,11 +95,11 @@ features:
       - "common/mutators/mutator/superspec/sv_superspec.qc:378-419 (ClientConnect load)"
       - "common/mutators/mutator/superspec/sv_superspec.qc:437-442 (ClientDisconnect save)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:355-392 (OnClientConnect — defaults + load)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:397-427 (OnClientDisconnect -> SaveClientConf)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:99-121 (IOptionsStore seam)"
-      - "src/XonoticGodot.Server/GameWorld.cs:910-911 (InfraClientConnect -> OnClientConnect, gated on Added)"
-      - "src/XonoticGodot.Server/GameWorld.cs:960-961 (InfraClientDisconnect -> OnClientDisconnect, gated on Added)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:355-392 (OnClientConnect — defaults + load)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:397-427 (OnClientDisconnect -> SaveClientConf)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:99-121 (IOptionsStore seam)"
+      - "src/VortexArena.Server/GameWorld.cs:910-911 (InfraClientConnect -> OnClientConnect, gated on Added)"
+      - "src/VortexArena.Server/GameWorld.cs:960-961 (InfraClientDisconnect -> OnClientDisconnect, gated on Added)"
       - "game/net/NetGame.cs:912 + 918-936 (Store = SuperspecOptionsStore over ~/XonData/superspec/, CryptoIdfpProvider = PersistentId)"
     constants:
       - { name: "options file magic", base: "\"SUPERSPEC_OPTIONSFILE_V1\"", port: "\"SUPERSPEC_OPTIONSFILE_V1\" (checked on read, written on save)", match: true }
@@ -131,10 +131,10 @@ features:
       - "common/mutators/mutator/superspec/sv_superspec.qc:390-393 (ClientConnect schedules delayed_hello)"
       - "common/notifications/all.inc:271 (MSG_INFO SUPERSPEC_MISSING_UID)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:367 (schedule time+5 in OnClientConnect)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:431-447 (OnStartFrame drains _pendingHello -> Send INFO_SUPERSPEC_MISSING_UID)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:636 (registered string)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1128-1130 (MutatorHooks.FireStartFrame pump — live)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:367 (schedule time+5 in OnClientConnect)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:431-447 (OnStartFrame drains _pendingHello -> Send INFO_SUPERSPEC_MISSING_UID)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:636 (registered string)"
+      - "src/VortexArena.Server/GameWorld.cs:1128-1130 (MutatorHooks.FireStartFrame pump — live)"
     constants:
       - { name: "think delay", base: "time + 5 (s)", port: "Api.Clock.Time + 5f (scheduled in OnClientConnect, drained by SvStartFrame)", match: true }
       - { name: "notification text", base: "\"^F2You lack a UID, superspec options will not be saved/restored\"", port: "same text (NotificationsList.cs:636)", match: true }
@@ -160,9 +160,9 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:63-74 (superspec_msg)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:214-232 (Msg)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:214-232 (Msg)"
       - "game/net/NetGame.cs:896 (PrintTo = SendChatToPlayer — sprint seam)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:267 (SendCenterRaw); game/hud/HudNotifications.cs:146 (CenterRaw consumed)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:267 (SendCenterRaw); game/hud/HudNotifications.cs:146 (CenterRaw consumed)"
     constants:
       - { name: "centerprint gate", base: "skip if SSF_SILENT, or (spamlevel>1 and !SSF_VERBOSE)", port: "same gate (SSF_SILENT early-return; spamLevel>1 && !SSF_VERBOSE return)", match: true }
       - { name: "sprint (console) form", base: "sprint(_to, strcat(con_title, msg)) — always", port: "PrintTo?.Invoke(to, conTitle+msg) — always", match: true }
@@ -188,8 +188,8 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:76-89 (superspec_filteritem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:196-208 (FilterItem)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:283 (live caller: OnItemTouch)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:196-208 (FilterItem)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:283 (live caller: OnItemTouch)"
     constants:
       - { name: "empty filter behavior", base: "match all items", port: "filter.Length==0 -> return true", match: true }
       - { name: "match field", base: "item.classname token equality (tokenize_console)", port: "whitespace-split tokens vs item.ClassName equality", match: true }
@@ -214,9 +214,9 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:91-139 (MUTATOR_HOOKFUNCTION superspec ItemTouch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:264-328 (OnItemTouch)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:421-438 (ItemTouch chain + FireItemTouch)"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:372 (FireItemTouch — after gate, before give; live)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:264-328 (OnItemTouch)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:421-438 (ItemTouch chain + FireItemTouch)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:372 (FireItemTouch — after gate, before give; live)"
     constants:
       - { name: "spectator gate", base: "IS_SPEC(it) || IS_OBSERVER(it)", port: "if(!it.IsObserver) continue — covers both following spectators and pure observers", match: true }
       - { name: "STRENGTH trigger", base: "item.strength_finished", port: "item.StrengthFinished != 0f (EntityItemState)", match: true }
@@ -248,9 +248,9 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:421-435 (MUTATOR_HOOKFUNCTION superspec PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:166-174 (Hook subscribes MutatorHooks.PlayerDies)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:236-257 (OnPlayerDies)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:588-589 (MutatorHooks.PlayerDies.Call — live fire)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:166-174 (Hook subscribes MutatorHooks.PlayerDies)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:236-257 (OnPlayerDies)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:588-589 (MutatorHooks.PlayerDies.Call — live fire)"
     constants:
       - { name: "condition", base: "ASF_FOLLOWKILLER && IS_PLAYER(attacker) && it.enemy == victim", port: "IsSpectator(it) && ASF_FOLLOWKILLER && IsLivePlayer(attacker) && it.Spectatee == victim", match: true }
       - { name: "show_what message", base: "ASF_SHOWWHAT -> superspec_msg(...followkiller, spamlevel 2)", port: "ASF_SHOWWHAT -> Msg(...followkiller, 2); both sprint + centerprint forms now wired", match: true }
@@ -275,8 +275,8 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:141-358 (MUTATOR_HOOKFUNCTION superspec SV_ParseClientCommand)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:473-674 (HandleCommand — the 6 verbs)"
-      - "src/XonoticGodot.Server/Commands.cs:664-669 (Register the 6 verbs) + 1797-1808 (CmdSuperspec routing, gated on Added + IsLivePlayer)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:473-674 (HandleCommand — the 6 verbs)"
+      - "src/VortexArena.Server/Commands.cs:664-669 (Register the 6 verbs) + 1797-1808 (CmdSuperspec routing, gated on Added + IsLivePlayer)"
       - "game/net/NetGame.cs:889-913 (WireSuperspec: PrintTo + RosterProvider + CryptoIdfp + Store)"
     constants:
       - { name: "player guard", base: "IS_PLAYER(player) -> return (spectator-only cmds)", port: "IsLivePlayer(player) -> return false (spectator/observer-only)", match: true }
@@ -304,11 +304,11 @@ features:
     base_refs:
       - "common/mutators/mutator/superspec/sv_superspec.qc:360-368 (BuildMutatorsString / BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:676 (BuildMutatorsString override -> s + \":SS\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs:679 (BuildMutatorsPrettyString override -> s + \", Super Spectators\")"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:108-114 (BuildMutatorsString chain — live) / 117-128 (BuildMutatorsPrettyString chain — now live)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1068 (MutatorActivation.BuildMutatorsString — live, sv_eventlog gamelog init)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1079 (MutatorActivation.BuildMutatorsPrettyString -> 'modifications' serverinfo, match-start; faithful to Base PutClientInServer server/client.qc:1107)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:676 (BuildMutatorsString override -> s + \":SS\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:679 (BuildMutatorsPrettyString override -> s + \", Super Spectators\")"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:108-114 (BuildMutatorsString chain — live) / 117-128 (BuildMutatorsPrettyString chain — now live)"
+      - "src/VortexArena.Server/GameWorld.cs:1068 (MutatorActivation.BuildMutatorsString — live, sv_eventlog gamelog init)"
+      - "src/VortexArena.Server/GameWorld.cs:1079 (MutatorActivation.BuildMutatorsPrettyString -> 'modifications' serverinfo, match-start; faithful to Base PutClientInServer server/client.qc:1107)"
       - "game/net/ServerNet.cs:607 (MutatorActivation.BuildMutatorsPrettyString -> BuildServerInfo 'modifications' key, server-browser infostring; live via _master.GetInfoRequested ServerNet.cs:561/576)"
     constants:
       - { name: "machine tag", base: "\":SS\"", port: "\":SS\" (SuperSpecMutator.cs:676)", match: true }

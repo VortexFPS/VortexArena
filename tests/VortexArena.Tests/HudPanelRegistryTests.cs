@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T29 verification — the 7 remaining HUD panels (CHAT #12, PRESSEDKEYS #11, ENGINEINFO #13, PICKUP #26,
@@ -11,7 +11,7 @@ namespace XonoticGodot.Tests;
 /// <c>hud_panel_&lt;id&gt;_*</c> cvars.
 ///
 /// <para>The panels + the discovery/registry/cvar-default infra live in the Godot host assembly
-/// (<c>XonoticGodot.Game.Hud</c>: <c>HudPanel</c>, <c>HudRegistry</c>, <c>HudLayoutDefaults</c>, <c>HudConfig</c>,
+/// (<c>VortexArena.Game.Hud</c>: <c>HudPanel</c>, <c>HudRegistry</c>, <c>HudLayoutDefaults</c>, <c>HudConfig</c>,
 /// <c>HudManager</c>), which this test project does NOT reference (it links only the Godot-free <c>src/</c>
 /// libraries — see <c>HudConfigEditorTests</c> for the same constraint). So, following the established repo
 /// idiom, these tests mirror the canonical Base facts VERBATIM — the <c>REGISTER_HUD_PANEL</c> order + numeric

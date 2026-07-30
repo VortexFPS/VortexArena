@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Server-side rules for Bulldozer — port of common/minigames/minigame/bd.qc (bd_server_event, bd_move,
 // bd_move_dozer, bd_check_winner, bd_get_dir / bd_dir_fromname, bd_editor_place / bd_do_fill, the level

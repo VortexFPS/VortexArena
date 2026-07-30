@@ -1,10 +1,10 @@
 // Port of common/mutators/mutator/spawn_unique/sv_spawn_unique.qc
 
 using System.Runtime.CompilerServices;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Unique Spawn mutator — port of common/mutators/mutator/spawn_unique/sv_spawn_unique.qc. Stops a player

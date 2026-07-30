@@ -30,7 +30,7 @@ screenshots/*
 _*.png
 
 # Local scratch / throwaway dev files (test textures, comparison captures, one-off
-# experiments). Same deal as assets/ and screenshots/: the folder is .gdignore'd so
+# experiments). The folder is .gdignore'd so
 # Godot never imports it (no *.import noise) and the contents are git-ignored. The
 # two marker files stay tracked so a fresh checkout has the folder ready to use.
 _scratch/*
@@ -45,11 +45,8 @@ _scratch/*
 /tools/movement-ref/movement_ref
 /tools/movement-ref/movement_ref.exe
 
-# Downloaded game assets (populated by download-assets.sh). The .gdignore IS tracked
+# (removed: the legacy assets/ content dir is gone — content lives in data/)
 # so the Godot editor skips this tree (the game reads it via its own VFS, not Godot's
-# resource importer) even on a fresh checkout before the assets are downloaded.
-assets/*
-!assets/.gdignore
 
 # OS
 Thumbs.db
@@ -67,3 +64,10 @@ _*.log
 # Python bytecode from the tools/ scripts (perf-report, wobble-detect, find-cvars, …)
 __pycache__/
 *.pyc
+
+# Compiled maps are fetched per data/maps.lock.json, never committed (restructure D7).
+data/maps/
+
+# Fetched engine export templates (tools/data/fetch-engine-template.py, pinned by
+# tools/engine-patches/engine.lock.json). Build inputs, not source — ~300 MB across three platforms.
+tools/engine-templates/

@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
-namespace XonoticGodot.SourceGen
+namespace VortexArena.SourceGen
 {
     /// <summary>
     /// Roslyn analyzer enforcing the godot#105750 per-frame-allocation convention (planning/PERFORMANCE_REPORT.md C3,
@@ -16,8 +16,8 @@ namespace XonoticGodot.SourceGen
     /// the never-used offenders has ZERO false positives and locks in a property that is currently true only by
     /// habit. Suppressible per-line (<c>#pragma warning disable XG0001</c>) on the rare genuine need.
     ///
-    /// <para>The analyzer is referenced as an Analyzer by both <c>XonoticGodot.Common</c> and the Godot host
-    /// (<c>XonoticGodot.csproj</c>) so it runs over <c>game/</c> — where 100% of the Godot interop lives. The host
+    /// <para>The analyzer is referenced as an Analyzer by both <c>VortexArena.Common</c> and the Godot host
+    /// (<c>VortexArena.csproj</c>) so it runs over <c>game/</c> — where 100% of the Godot interop lives. The host
     /// csproj elevates <c>XG0001</c> to an error via <c>WarningsAsErrors</c> so a regression fails the build.</para>
     /// </summary>
     [DiagnosticAnalyzer(LanguageNames.CSharp)]

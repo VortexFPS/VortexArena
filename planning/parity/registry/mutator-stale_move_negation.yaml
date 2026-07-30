@@ -12,9 +12,9 @@ features:
     base_refs:
       - "common/mutators/mutator/stale_move_negation/sv_stale_move_negation.qc:REGISTER_MUTATOR"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
-      - "src/XonoticGodot.Server/GameWorld.cs:614"
+      - "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Server/GameWorld.cs:614"
     constants:
       - { name: "g_smneg", base: "false (mutators.cfg 0)", port: "g_smneg != 0", match: true }
     status:
@@ -39,9 +39,9 @@ features:
     base_refs:
       - "common/mutators/mutator/stale_move_negation/sv_stale_move_negation.qc:AUTOCVAR"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:Hook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:ReadFloat"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:StartHealth"
+      - "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:Hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:ReadFloat"
+      - "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:StartHealth"
     constants:
       - { name: "g_smneg_bonus", base: "true (1)", port: "true", match: true }
       - { name: "g_smneg_bonus_asymptote", base: "4", port: "4", match: true }
@@ -69,7 +69,7 @@ features:
     base_refs:
       - "common/mutators/mutator/stale_move_negation/sv_stale_move_negation.qc:smneg_multiplier"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:Multiplier"
+      - "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:Multiplier"
     constants:
       - { name: "x floor (bonus on)", base: "-a + .1 = -3.9", port: "-a + 0.1", match: true }
       - { name: "x floor (bonus off)", base: "0", port: "0", match: true }
@@ -99,8 +99,8 @@ features:
       - "common/mutators/mutator/stale_move_negation/sv_stale_move_negation.qc:MUTATOR_HOOKFUNCTION(mutator_smneg, Damage_Calculate)"
       - "qcsrc/server/damage.qc:601"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:264"
+      - "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:264"
     constants:
       - { name: "damage scale", base: "M_ARGV(4) *= f", port: "args.Damage *= f", match: true }
       - { name: "force scale", base: "M_ARGV(6) *= f", port: "args.Force *= f", match: true }
@@ -130,12 +130,12 @@ features:
       - "common/mutators/mutator/stale_move_negation/sv_stale_move_negation.qc:MUTATOR_HOOKFUNCTION(mutator_smneg, BuildMutatorsString)"
       - "common/mutators/mutator/stale_move_negation/sv_stale_move_negation.qc:MUTATOR_HOOKFUNCTION(mutator_smneg, BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:BuildMutatorsPrettyString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsPrettyString"
-      - "src/XonoticGodot.Server/GameWorld.cs:1117"
-      - "src/XonoticGodot.Server/GameWorld.cs:1392 (SendMutatorsWelcome)"
+      - "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Server/GameWorld.cs:1117"
+      - "src/VortexArena.Server/GameWorld.cs:1392 (SendMutatorsWelcome)"
     constants:
       - { name: "machine token", base: "\":StaleMoveNegation\"", port: "\":StaleMoveNegation\"", match: true }
       - { name: "pretty string", base: "\", Stale-move negation\"", port: "\", Stale-move negation\"", match: true }

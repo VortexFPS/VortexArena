@@ -1,9 +1,9 @@
 // Port of common/mutators/mutator/hook/sv_hook.qc
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Grappling Hook mutator — port of common/mutators/mutator/hook/sv_hook.qc. Gives every player the

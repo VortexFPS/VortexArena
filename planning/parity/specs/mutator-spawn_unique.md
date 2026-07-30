@@ -1,8 +1,8 @@
 # Spawn Unique mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/spawn_unique/sv_spawn_unique.qc` · `sv_spawn_unique.qh`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs` (+ the host seams in
-`src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs` and `src/XonoticGodot.Server/ClientManager.cs`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs` (+ the host seams in
+`src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs` and `src/VortexArena.Server/ClientManager.cs`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -85,7 +85,7 @@ The whole mutator is two hook functions plus one per-player edict field.
 | Base feature | Port symbol | Notes |
 |---|---|---|
 | `.entity su_last_point` | `SpawnUniqueMutator._lastPoint` (`ConditionalWeakTable<Entity, StrongRef>`) | Port-specific: per-player state held in a GC-keyed table instead of an `Entity` field (the port doesn't add edict fields per mutator). Behaviorally a per-player `Entity?`. |
-| `REGISTER_MUTATOR(..., expr_evaluate(autocvar_g_spawn_unique))` | `SpawnUniqueMutator.IsEnabled` + `ExprEvaluate` | Reads `g_spawn_unique` via `Api.Cvars.GetString`; `ExprEvaluate` mirrors QC (""/"0"/"false" → false). Default `g_spawn_unique 0` present in `assets/data/.../mutators.cfg:569`. |
+| `REGISTER_MUTATOR(..., expr_evaluate(autocvar_g_spawn_unique))` | `SpawnUniqueMutator.IsEnabled` + `ExprEvaluate` | Reads `g_spawn_unique` via `Api.Cvars.GetString`; `ExprEvaluate` mirrors QC (""/"0"/"false" → false). Default `g_spawn_unique 0` present in `Base/data/.../mutators.cfg:569`. |
 | Spawn_Score hook | `SpawnUniqueMutator.OnSpawnScore` ↔ `MutatorHooks.SpawnScore` chain, fired from `SpawnSystem.ScoreSpot` (`MutatorHooks.SpawnScore.Call`, SpawnSystem.cs:434) | `if (lastPoint == args.Spot) args.Priority = 0.1f;`. The chain's `Priority`/`Weight` are the QC `spawn_score.x`/`.y`. |
 | PlayerSpawn hook | `SpawnUniqueMutator.OnPlayerSpawn` ↔ `MutatorHooks.PlayerSpawn` chain, fired from `ClientManager.Spawn` (`MutatorHooks.PlayerSpawn.Call`, ClientManager.cs:542) with `sp.Value.Source` | Records `_lastPoint[player] = args.Spot`. |
 | Mutator activation (QC `STATIC_INIT_LATE` / `Mutator_Add`) | `MutatorActivation.Apply()` → `Add` → `mut.Hook()`, called from `GameWorld` boot (GameWorld.cs:511) | Subscribes the two handlers to the hook chains when enabled; unsubscribes when disabled. |
@@ -139,11 +139,11 @@ behaviorally-equivalent port convention (see intended divergence).
   mutators (stale_move_negation, vampirehook) use. Not a behavioral change.
 
 ## Verification
-- **Unit test:** `tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs:SpawnUnique_DropsScore_OnLastSpawnPoint`
+- **Unit test:** `tests/VortexArena.Tests/MutatorBatchT19Tests.cs:SpawnUnique_DropsScore_OnLastSpawnPoint`
   boots with `g_spawn_unique=1`, fires `PlayerSpawn` for spotA, then asserts a re-score of spotA is demoted
   to `0.1` while a different spotB is left unchanged (`10f`). Confirms both hooks and the constant.
 - **Constant diff:** `0.1` and `g_spawn_unique 0` confirmed identical between Base `sv_spawn_unique.qc` /
-  `mutators.cfg:569` and the port `SpawnUniqueMutator.cs` / `assets/data/.../mutators.cfg:569`.
+  `mutators.cfg:569` and the port `SpawnUniqueMutator.cs` / `Base/data/.../mutators.cfg:569`.
 - **Liveness:** call chain traced by reading SpawnSystem.cs (434), ClientManager.cs (515–542),
   MutatorActivation.cs, GameWorld.cs (511). The `SpawnPoint.Source` identity-preservation was verified by
   reading `ToSpawnPoint` (SpawnSystem.cs:501) and `GatherSpawnPoints` (480–495).

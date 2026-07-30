@@ -84,7 +84,7 @@
   "unit": "mutator-globalforces",
   "tier": "sonnet",
   "notes": [
-   "[liveness] mutator-globalforces.advertise.mutatorstring: BuildMutatorsPrettyString chain (MutatorActivation.cs:121) has NO live caller in src/XonoticGodot.Server (grep 'BuildMutatorsPrettyString(' returns no Server callsite), so the ', Global forces' pretty token is never emitted — the QC consumer is server/client.qc:1107 (scoreboard/votescreen mutator line). The machine token ':GlobalForces' IS live (GameWorld.cs:876 GameLogInit). Cosmetic only; no gameplay effect."
+   "[liveness] mutator-globalforces.advertise.mutatorstring: BuildMutatorsPrettyString chain (MutatorActivation.cs:121) has NO live caller in src/VortexArena.Server (grep 'BuildMutatorsPrettyString(' returns no Server callsite), so the ', Global forces' pretty token is never emitted — the QC consumer is server/client.qc:1107 (scoreboard/votescreen mutator line). The machine token ':GlobalForces' IS live (GameWorld.cs:876 GameLogInit). Cosmetic only; no gameplay effect."
   ]
  },
  {
@@ -119,7 +119,7 @@
   "unit": "mutator-multijump",
   "tier": "sonnet",
   "notes": [
-   "[liveness] mutator-multijump.presentation.mutator_list_string: BuildMutatorsPrettyString (', Multi jump') override and MutatorActivation.BuildMutatorsPrettyString aggregator both exist, but the aggregator has NO live consumer in the Server project -- nothing calls BuildMutatorsPrettyString() to feed a scoreboard/votescreen line (grep over src/XonoticGodot.Server: zero callers). So the human-readable label never reaches a UI. The machine ':multijump' tag IS live (consumed by gamelog init, GameWorld.cs:876, gated by sv_eventlog)."
+   "[liveness] mutator-multijump.presentation.mutator_list_string: BuildMutatorsPrettyString (', Multi jump') override and MutatorActivation.BuildMutatorsPrettyString aggregator both exist, but the aggregator has NO live consumer in the Server project -- nothing calls BuildMutatorsPrettyString() to feed a scoreboard/votescreen line (grep over src/VortexArena.Server: zero callers). So the human-readable label never reaches a UI. The machine ':multijump' tag IS live (consumed by gamelog init, GameWorld.cs:876, gated by sv_eventlog)."
   ]
  },
  {

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Media dialog — a <see cref="TabContainer"/> of the four media categories, C# successor to
@@ -9,7 +9,7 @@ namespace XonoticGodot.Game.Menu;
 /// <see cref="Control"/> subclass mirroring the matching <c>dialog_media_*.qc</c> fill function.
 ///
 /// FAITHFUL UI NOW: the surrounding controls, layout and command buttons are reproduced, but the
-/// demo / screenshot / music / guide-registry data sources have no XonoticGodot backend yet, so the
+/// demo / screenshot / music / guide-registry data sources have no VortexArena backend yet, so the
 /// list panes render empty with honest notes and their action buttons are inert (see each page).
 /// </summary>
 public partial class MediaScreen : MenuScreen

@@ -1,7 +1,7 @@
 # Physical Items mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/physical_items/sv_physical_items.qc` (+ `.qh`, `_mod.inc`) · `mutators.cfg:154-156`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs` · `assets/data/xonotic-data.pk3dir/mutators.cfg:154-156`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs` · `Base/data/xonotic-data.pk3dir/mutators.cfg:154-156`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

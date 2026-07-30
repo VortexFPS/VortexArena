@@ -1,19 +1,20 @@
+using System.Linq;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Console;
-using XonoticGodot.Game.Menu;
-using XonoticGodot.Server;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Console;
+using VortexArena.Game.Menu;
+using VortexArena.Server;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// The application shell — the C# successor to the engine's menu/client lifecycle (DP <c>menu_restart</c> +
 /// the <c>CL_</c> connect/disconnect flow). It owns the single front-end <see cref="MenuRoot"/> and the live
-/// match (<see cref="XonoticGodot.Game.Net.NetGame"/> — a listen server or a remote client), and switches
+/// match (<see cref="VortexArena.Game.Net.NetGame"/> — a listen server or a remote client), and switches
 /// between them: boot into the main menu, start a match from the Create/Singleplayer screens, drop the in-game
 /// menu on Escape (Xonotic's behavior), and tear the match down on Disconnect. It also performs the one-time
 /// client bootstrap (<see cref="MenuState.Boot"/>),
@@ -23,7 +24,7 @@ namespace XonoticGodot.Game;
 /// Pause model (#19 auto-pause): <see cref="SyncAutoPause"/> sets <c>GetTree().Paused</c> for a SOLO local game
 /// while the pause menu / console is open or the window is unfocused. The shell and its menu layer are
 /// <see cref="Node.ProcessModeEnum.Always"/> so they keep running (Escape, the menu UI, the pause release).
-/// NOTE: <see cref="XonoticGodot.Game.Net.NetGame"/> is ALSO deliberately Always — pausing its subtree would
+/// NOTE: <see cref="VortexArena.Game.Net.NetGame"/> is ALSO deliberately Always — pausing its subtree would
 /// starve the ENet pump and time the link out — so the tree pause does NOT stop its _Process; instead NetGame
 /// freezes the authoritative sim itself by driving the server tick with dt=0 while <c>GetTree().Paused</c>
 /// (transport keeps pumping, zero fixed ticks run). The ModelViewer (no netcode) is plain Pausable.
@@ -31,7 +32,7 @@ namespace XonoticGodot.Game;
 public partial class Shell : Node
 {
     /// <summary>The game data dir to mount (forwarded to <see cref="MenuState.Boot"/> + each match).</summary>
-    [Export] public string DataPath { get; set; } = "res://assets/data";
+    [Export] public string DataPath { get; set; } = "res://data";
 
     /// <summary>If set at boot, skip the menu and start straight into this map (CI/dev; the smoke test uses it).</summary>
     public string? BootMap { get; set; }
@@ -57,7 +58,7 @@ public partial class Shell : Node
     /// <summary>Bot count for the <c>--host</c> listen server (CLI <c>--bots N</c>); 0 = no bots.</summary>
     public int BootBots { get; set; }
 
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
     /// <summary>Bot-player harness (CLI <c>--bot-player</c>): drive the LOCAL player from a bot brain so an
     /// unattended run exercises the real player pipeline. Compile-gated — see Directory.Build.props.</summary>
     public bool BootBotPlayer { get; set; }
@@ -69,12 +70,12 @@ public partial class Shell : Node
     /// <summary>UDP port every listen server this process hosts binds (CLI <c>--port N</c>, DP <c>-port</c>).
     /// Defaults to the stock game port; override it so scripted/agent runs don't collide with a live instance
     /// already holding 26000 (a second host on a busy port otherwise self-connects to the WRONG server).</summary>
-    public int BootPort { get; set; } = XonoticGodot.Game.Net.NetGame.DefaultPort;
+    public int BootPort { get; set; } = VortexArena.Game.Net.NetGame.DefaultPort;
 
     private CanvasLayer _menuLayer = null!;
     private MenuRoot _menu = null!;
     private ModelViewer? _viewer;
-    private XonoticGodot.Game.Net.NetGame? _netGame;
+    private VortexArena.Game.Net.NetGame? _netGame;
     private ConsoleOverlay _console = null!;
     private bool _paused;                    // the in-game (pause) menu is open
     private bool _windowFocused = true;      // OS window focus, tracked from _Notification (drives auto-pause)
@@ -89,10 +90,26 @@ public partial class Shell : Node
         if (!MatchRunning || ConsoleState.IsOpen)
         {
             if (!MatchRunning)
-                XonoticGodot.Common.Diagnostics.Log.Help("messagemode: not connected — start a match first.");
+                VortexArena.Common.Diagnostics.Log.Help("messagemode: not connected — start a match first.");
             return;
         }
         _chatPrompt.Open(team);
+    }
+
+    /// <summary>
+    /// DP <c>commandmode</c> (the <c>/</c> prompt): open the same input line, but the typed text is submitted as
+    /// a raw COMMAND rather than chat, optionally prefilled. Base's interactive scoreboard uses it for Ctrl+T
+    /// (<c>commandmode tell "&lt;player&gt;^7"</c>) so the player only has to type the message.
+    /// </summary>
+    private void OpenCommandPrompt(string prefill)
+    {
+        if (!MatchRunning || ConsoleState.IsOpen)
+        {
+            if (!MatchRunning)
+                VortexArena.Common.Diagnostics.Log.Help("commandmode: not connected — start a match first.");
+            return;
+        }
+        _chatPrompt.Open(team: false, commandMode: true, prefill: prefill ?? "");
     }
 
     /// <summary>Apply any <c>--cvar NAME VALUE</c> command-line overrides into the shared store (repeatable; each
@@ -106,7 +123,7 @@ public partial class Shell : Node
             if (args[i] != "--cvar")
                 continue;
             MenuState.Cvars.Set(args[i + 1], args[i + 2]);
-            XonoticGodot.Common.Diagnostics.Log.Info($"[shell] --cvar {args[i + 1]} = \"{args[i + 2]}\"");
+            VortexArena.Common.Diagnostics.Log.Info($"[shell] --cvar {args[i + 1]} = \"{args[i + 2]}\"");
             i += 2;
         }
     }
@@ -163,6 +180,11 @@ public partial class Shell : Node
         chatLayer.AddChild(_chatPrompt);
         MenuState.Interp!.RegisterCommand("messagemode", _ => OpenChatPrompt(team: false));
         MenuState.Interp!.RegisterCommand("messagemode2", _ => OpenChatPrompt(team: true));
+        // DP commandmode [prefill…]: the raw-command variant of messagemode (see OpenCommandPrompt).
+        MenuState.Interp!.RegisterCommand("commandmode",
+            a => OpenCommandPrompt(a.Count >= 2 ? string.Join(' ', a.Skip(1)) : ""));
+        // Direct hook for callers that must preserve exact quoting in the prefill (the scoreboard's Ctrl+T tell).
+        Menu.MenuCommand.OpenCommandPrompt = OpenCommandPrompt;
 
         // The client-side `screenshot` command (DP CF_CLIENT, bound to F12 by binds-xonotic.cfg): a Godot node that
         // grabs the next rendered frame and writes it to user://screenshots/. Registered on the SHARED interpreter
@@ -172,6 +194,22 @@ public partial class Shell : Node
         var screenshots = new Client.ScreenshotService { Name = "ScreenshotService" };
         AddChild(screenshots);
         screenshots.RegisterCommand(MenuState.Interp!, MenuState.Cvars);
+
+        // Editable-map-format commands (vmap_import/_info/_list): local authoring actions, so they register
+        // client-side on the shared interpreter and never route to the server. The asset system is passed so a
+        // .map import can resolve real texture sizes for its texel-based texdefs.
+        if (MenuState.Vfs is { } vfs)
+        {
+            var vmaps = new Vmap.VmapService(vfs, MenuState.SharedAssets?.Assets);
+            vmaps.RegisterCommands(MenuState.Interp!);
+        }
+
+        // Editor view aids: the world-space alignment grid's cvars + its `editor_grid` / `editor_grid_size`
+        // commands. Client-side and bindable; the grid node itself lives in the match scene (NetGame).
+        Vmap.EditorGrid.RegisterDefaults(MenuState.Cvars);
+        Vmap.EditorGrid.RegisterCommands(MenuState.Interp!, MenuState.Cvars);
+        Vmap.EditorController.RegisterDefaults(MenuState.Cvars);
+        Vmap.EditorOrthoView.RegisterDefaults(MenuState.Cvars);
 
         // Dev/CI: `--menu-screen nexposee:<Title>` opens that panel inside the nexposee on boot (vs the plain
         // `--menu-screen settings` which pushes a framed dialog). Consumed by MainMenu; clear it so the
@@ -193,11 +231,11 @@ public partial class Shell : Node
         MouseCapture.SetWantCapture(false); // at the menu the cursor is free
 
         // Optional: boot straight into a match (smoke test / dev), bypassing the menu.
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
         // Bot-player harness: latch the request before any match starts, so NetGame binds the brain as soon
         // as the local player exists. Compile-gated — see Directory.Build.props.
-        XonoticGodot.Game.Net.BotPlayerMode.Requested = BootBotPlayer;
-        XonoticGodot.Game.Net.BotPlayerMode.Skill = BootBotPlayerSkill;
+        VortexArena.Game.Net.BotPlayerMode.Requested = BootBotPlayer;
+        VortexArena.Game.Net.BotPlayerMode.Skill = BootBotPlayerSkill;
         if (BootBotPlayer)
             GD.Print("[bot-player] --bot-player: the local player will be driven by a bot brain.");
 #endif
@@ -216,10 +254,29 @@ public partial class Shell : Node
         else if (!string.IsNullOrWhiteSpace(DebugScreen))
             OpenDebugScreen(DebugScreen!);
         else
+        {
             // Plain menu boot (the real launch path): warm the map-independent eager asset set into the shared
             // cache in the background NOW, so the first match's precache is a cache hit and the map loads fast.
             // Skipped above for a direct --map/--host/--connect boot — that match runs its own precache.
             StartMenuAssetWarm();
+            // …and, on this path only, the development-release disclaimer over the main menu. Deliberately NOT
+            // on the boot-into-match / --menu-screen branches: automation and CI must never have a modal to
+            // dismiss (see MaybeShowStartupDisclaimer).
+            MaybeShowStartupDisclaimer();
+        }
+    }
+
+    /// <summary>
+    /// Push the development-release disclaimer (<see cref="Menu.DialogDisclaimer"/>) over the freshly-shown main
+    /// menu, unless the player has turned it off. Gated on <c>cl_startup_disclaimer</c> (default 1); the dialog's
+    /// "Don't show this again" checkbox writes 0 and its OK button persists that to config.cfg, so the next
+    /// launch goes straight to the menu. `set cl_startup_disclaimer 1` in the console brings it back.
+    /// </summary>
+    private void MaybeShowStartupDisclaimer()
+    {
+        if (MenuState.Cvars.GetFloat("cl_startup_disclaimer") == 0f)
+            return;
+        _menu.Push(new DialogDisclaimer());
     }
 
     /// <summary>
@@ -271,6 +328,7 @@ public partial class Shell : Node
             "hudpanels" => new DialogHudPanels(),
             "hudweapons" => new DialogHudPanelWeapons(),
             "cvarlist" => new DialogCvarList(),
+            "disclaimer" => new DialogDisclaimer(),
             "sandbox" => new DialogSandboxTools(),
             _ => null,
         };
@@ -308,6 +366,7 @@ public partial class Shell : Node
         // QC `map`/`devmap`: in a running match this is a changelevel (keep mode + bots); at the menu it starts a
         // fresh listen server on the map then self-connects (the real "start a game" path).
         MenuCommand.StartMap = ChangeLevel;
+        MenuCommand.StartEditor = EditorMap;
         MenuCommand.Connect = OnConnect;
 
         // --- T50: the menu nav verbs + the live-match gameplay-command channel ---
@@ -410,7 +469,7 @@ public partial class Shell : Node
     /// <summary>
     /// The single owner of the Escape→pause-menu toggle. Handled in <see cref="_UnhandledKeyInput"/> (Godot
     /// dispatches this BEFORE <c>_unhandled_input</c>) and the event is CONSUMED, so the gameplay bind path in
-    /// <see cref="XonoticGodot.Game.Net.NetGame"/> — which runs in <c>_unhandled_input</c> and would otherwise
+    /// <see cref="VortexArena.Game.Net.NetGame"/> — which runs in <c>_unhandled_input</c> and would otherwise
     /// also fire the <c>togglemenu</c> bind — never sees this Escape.
     /// Earlier-stage handlers still win: the console (<c>_Input</c>) eats Escape while open, and the key-rebind
     /// capture button (<c>_GuiInput</c>) eats it while capturing.
@@ -442,6 +501,12 @@ public partial class Shell : Node
             _chatPrompt.Close();
             return;
         }
+        //   1b. the interactive scoreboard: Escape closes it, and Escape WHILE the scoreboard key is held opens
+        //       it (QC main.qc:545-551 checks S_TAB before falling through to the menu). Must be claimed here —
+        //       Godot runs _UnhandledKeyInput before _UnhandledInput, and this method marks both Escape edges
+        //       handled, so the play path's own handler never sees the key.
+        if (Menu.MenuCommand.ScoreboardEscape?.Invoke() == true)
+            return;
         //   2. the live HUD editor (no menu dialog up) opens its setup-exit dialog — QC menu_showhudexit —
         //      instead of the pause menu; with a dialog already up (_paused) fall through so Escape pops it.
         if (!_paused && MenuState.Cvars.GetFloat("_hud_configure") != 0f)
@@ -532,6 +597,7 @@ public partial class Shell : Node
         _menu.ShowScreen(new PauseMenu());
         _menu.Visible = true;
         _paused = true;
+        MouseCapture.MenuWantsCursor = true; // survives NetGame's per-frame reassert on an unpaused tree
         MouseCapture.SetWantCapture(false);
         SyncAutoPause(); // freeze the sim iff this is a solo local listen game
     }
@@ -543,6 +609,7 @@ public partial class Shell : Node
             return;
         _menu.Visible = false;
         _paused = false;
+        MouseCapture.MenuWantsCursor = false; // clear BEFORE SetWantCapture so recapture lands this frame
         MouseCapture.SetWantCapture(true);
         SyncAutoPause();
     }
@@ -588,13 +655,18 @@ public partial class Shell : Node
             }
         }
 
+        // The menu layer (main or pause) always owns the pointer: re-sync the MouseCapture menu override off
+        // menu visibility every frame (not just the Open/Resume edges) so any other path that shows/hides the
+        // menu keeps the cursor state consistent — same reassert-not-edge-latch reasoning as NetGame's cursor block.
+        MouseCapture.MenuWantsCursor = _menu.Visible;
+
         // Per-frame so console open/close and a remote client joining/leaving (which changes eligibility) are
         // picked up even without a discrete edge — e.g. a remote joins while the host sits in the menu → release
         // the pause so they aren't frozen. Shell is ProcessModeEnum.Always, so this runs even while paused.
         SyncAutoPause();
     }
 
-    /// <summary>True while a networked match (<see cref="XonoticGodot.Game.Net.NetGame"/> — listen server or
+    /// <summary>True while a networked match (<see cref="VortexArena.Game.Net.NetGame"/> — listen server or
     /// remote client) is live. The no-net <see cref="ModelViewer"/> is intentionally NOT a "match" (no pause menu).</summary>
     private bool MatchRunning => _netGame is not null;
 
@@ -635,6 +707,11 @@ public partial class Shell : Node
             _netGame.Shutdown();
             _netGame.QueueFree();
             _netGame = null;
+
+            // --observe is a one-session boot capture: disarm when that session ENDS (not on the boot-path
+            // TeardownGame that runs before the first session exists), so a later menu-created game
+            // auto-joins normally and doesn't inherit a camera pinned at the previous map's coordinates.
+            Net.ObserverCamera.Disarm();
         }
     }
 
@@ -643,7 +720,7 @@ public partial class Shell : Node
     // -------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Server-browser / address connect: build a REAL networked client (<see cref="XonoticGodot.Game.Net.NetGame"/>
+    /// Server-browser / address connect: build a REAL networked client (<see cref="VortexArena.Game.Net.NetGame"/>
     /// — ClientNet + prediction + the ClientWorld render bridge + a first-person camera following the predicted
     /// local player + a basic HUD/crosshair/radar) and connect to <paramref name="address"/>. Parses
     /// <c>host[:port]</c> (default 26000) and reuses the menu's shared VFS + cvar store so models/sounds resolve
@@ -667,7 +744,7 @@ public partial class Shell : Node
         // blocking connect — not the menu frozen behind the overlay. The cursor stays free until the player spawns.
         EnterMatchView();
 
-        var net = new XonoticGodot.Game.Net.NetGame
+        var net = new VortexArena.Game.Net.NetGame
         {
             Name = "NetClient",
             // Keep processing while the in-game menu pauses the tree, so the netcode keeps pumping (the link
@@ -688,8 +765,8 @@ public partial class Shell : Node
     }
 
     /// <summary>
-    /// Host a LISTEN SERVER for the chosen config — boot a <see cref="XonoticGodot.Server.GameWorld"/> + a
-    /// <see cref="XonoticGodot.Game.Net.ServerNet"/> in-process (filled with the config's bots), then self-connect a
+    /// Host a LISTEN SERVER for the chosen config — boot a <see cref="VortexArena.Server.GameWorld"/> + a
+    /// <see cref="VortexArena.Game.Net.ServerNet"/> in-process (filled with the config's bots), then self-connect a
     /// networked client to 127.0.0.1. This is the "Create Game" / <c>map</c> path, and also the boot path for
     /// <c>--map</c> (a 0-bot listen server — the consolidated local-match path). Reuses the menu's shared VFS + cvar store.
     /// </summary>
@@ -707,7 +784,7 @@ public partial class Shell : Node
         if (config.TimeLimit > 0) MenuState.Cvars.Set("timelimit", config.TimeLimit.ToString());
         if (config.FragLimit > 0) MenuState.Cvars.Set("fraglimit", config.FragLimit.ToString());
 
-        var net = new XonoticGodot.Game.Net.NetGame
+        var net = new VortexArena.Game.Net.NetGame
         {
             Name = "ListenServer",
             ProcessMode = ProcessModeEnum.Always, // the hosted server must keep ticking under the pause menu
@@ -719,7 +796,7 @@ public partial class Shell : Node
             botSkill: config.BotSkill,
             port: BootPort,
             playerName: ResolvePlayerName(),
-            serverName: MenuState.Cvars.GetString("hostname") is { Length: > 0 } hn ? hn : "XonoticGodot Listen Server",
+            serverName: MenuState.Cvars.GetString("hostname") is { Length: > 0 } hn ? hn : "VortexArena Listen Server",
             vfs: MenuState.Vfs,
             cvars: MenuState.Cvars,
             campaignName: config.CampaignId ?? "",   // non-empty → the server boots this as a campaign level
@@ -823,7 +900,7 @@ public partial class Shell : Node
 
     /// <summary>Point a freshly-created match's input + console-output hooks at the shared console: bound keys run
     /// one-shot commands through the shared interpreter, and the server's console replies print in the overlay.</summary>
-    private void WireConsoleToNet(XonoticGodot.Game.Net.NetGame net)
+    private void WireConsoleToNet(VortexArena.Game.Net.NetGame net)
     {
         net.RunCommand = MenuState.Interp!.ExecuteLine;
         net.ConsolePrint += _console.Print;
@@ -844,14 +921,36 @@ public partial class Shell : Node
     /// match), start a fresh listen server on it. A pure <c>--connect</c> client has no local server to changelevel
     /// (the real server owns the map), so this no-ops there.
     /// </summary>
-    private void ChangeLevel(string map)
+    private void ChangeLevel(string map) => ChangeLevel(map, null);
+
+    /// <param name="gametype">Gametype to switch to, or null to keep the current one.</param>
+    private void ChangeLevel(string map, string? gametype)
     {
         if (string.IsNullOrWhiteSpace(map))
             return;
         if (_netGame is { ServerWorld: not null })
-            _netGame.RequestMapChange(map);                                  // in a match → server-side changelevel
+            _netGame.RequestMapChange(map, gametype);                        // in a match → server-side changelevel
         else if (_netGame is null)
-            StartListenServer(new MatchConfig { Map = map, Gametype = "dm" }); // at the menu → start a game on it
+            StartListenServer(new MatchConfig { Map = map, Gametype = gametype ?? "dm" });
+    }
+
+    /// <summary>
+    /// <c>editor [map]</c> — the map editor as a destination, alongside <c>map</c> and <c>devmap</c>.
+    ///
+    /// With no argument it re-hosts the map already running, which is the point: you are looking at
+    /// something you want to change, and getting to the editor should not mean quitting to the menu and
+    /// starting over. The gametype rides the same changelevel path every map switch uses.
+    /// </summary>
+    private void EditorMap(string map)
+    {
+        string target = !string.IsNullOrWhiteSpace(map) ? map!
+            : _netGame?.CurrentMap ?? BootMap ?? "";
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            _console.Print("editor: no map running — use `editor <map>`.");
+            return;
+        }
+        ChangeLevel(target, "editor");
     }
 
     /// <summary>
@@ -882,6 +981,6 @@ public partial class Shell : Node
         if (_netGame is not null)
             _netGame.SendStringCommand(line);
         else
-            XonoticGodot.Common.Diagnostics.Log.Help($"\"{line}\": no server — start a match (`map <name>`) or `connect <addr>` first.");
+            VortexArena.Common.Diagnostics.Log.Help($"\"{line}\": no server — start a match (`map <name>`) or `connect <addr>` first.");
     }
 }

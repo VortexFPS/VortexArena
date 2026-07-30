@@ -1,9 +1,9 @@
 using System.Numerics;
 
-namespace XonoticGodot.Common.Math;
+namespace VortexArena.Common.Math;
 
 /// <summary>
-/// Quake-style vector &amp; angle math. The vector type throughout XonoticGodot is
+/// Quake-style vector &amp; angle math. The vector type throughout VortexArena is
 /// <see cref="System.Numerics.Vector3"/>.
 ///
 /// IMPORTANT semantic note for porters: in QuakeC the operator <c>*</c> applied to two vectors is the

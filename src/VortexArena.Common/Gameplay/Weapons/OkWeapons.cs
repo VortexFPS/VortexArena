@@ -2,11 +2,11 @@
 // common/mutators/mutator/overkill/ok{machinegun,shotgun,nex,hmg,rpc}.qc).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Shared helper for the five Overkill weapons. Every ok* weapon's <c>wr_think</c> opens with the same

@@ -1,7 +1,7 @@
 # sv-world-rules — parity spec
 
 **Base refs:** `server/world.qc` · `server/command/vote.qc` (warmup/ready-restart machinery) · `server/world.qh` · `server/command/vote.qh`
-**Port refs:** `src/XonoticGodot.Server/GameWorld.cs` · `WarmupController.cs` · `OverTimeManager.cs` · `Intermission.cs` · `CommandReplies.cs`
+**Port refs:** `src/VortexArena.Server/GameWorld.cs` · `WarmupController.cs` · `OverTimeManager.cs` · `Intermission.cs` · `CommandReplies.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

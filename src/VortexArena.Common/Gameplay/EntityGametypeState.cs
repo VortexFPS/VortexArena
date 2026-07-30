@@ -10,7 +10,7 @@
 // is the Godot-free model the server networks via ServerNet.SendWaypoints); they default null and are
 // set/cleared by their owning producer (BuffsMutator for the buff marker, Ctf for the carrier bar).
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -22,7 +22,7 @@ namespace XonoticGodot.Common.Framework
         /// <c>WaypointSprite</c>, radar icon 1). Set when <c>BuffsMutator.SpawnBuffWaypoint</c> attaches it,
         /// cleared (WaypointSprite_Kill) when the buff is taken or relocated. Null = no marker.
         /// </summary>
-        public XonoticGodot.Common.Gameplay.Waypoints.WaypointSprite? BuffWaypoint;
+        public VortexArena.Common.Gameplay.Waypoints.WaypointSprite? BuffWaypoint;
 
         // --- CTF (sv_ctf.qc, on a flag entity / its carrier) ---
         /// <summary>
@@ -32,6 +32,6 @@ namespace XonoticGodot.Common.Framework
         /// CTF flag entity's status/carrier fields (<see cref="GtStatus"/>/<see cref="GtCarrier"/>). Set by
         /// <c>Ctf</c> on pickup, cleared (WaypointSprite_Kill) on drop/score/return. Null = no carrier marker.
         /// </summary>
-        public XonoticGodot.Common.Gameplay.Waypoints.WaypointSprite? CarrierWaypoint;
+        public VortexArena.Common.Gameplay.Waypoints.WaypointSprite? CarrierWaypoint;
     }
 }

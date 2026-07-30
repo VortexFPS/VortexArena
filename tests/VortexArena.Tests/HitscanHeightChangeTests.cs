@@ -2,12 +2,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Engine.Collision;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// The gameplay-level confirmation of the 2026-07-27 <see cref="CollisionWorld.QuerySwept"/> fix, on REAL
@@ -34,7 +34,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class HitscanHeightChangeTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     /// <summary>Exact segment vs AABB (slab method), returning the ENTRY fraction. No sampling — a thin
     /// brush cannot slip between steps. <paramref name="entry"/> orders hits along the ray, which is what
@@ -70,7 +70,7 @@ public class HitscanHeightChangeTests
         if (!Directory.Exists(DataDir))
             return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir))
+        if (!vfs.MountContentRoot(DataDir))
             return null;
         string? pick = vfs.Find("maps/", "bsp")
             .FirstOrDefault(m => Path.GetFileNameWithoutExtension(m)

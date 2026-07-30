@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Bsp;
+namespace VortexArena.Formats.Bsp;
 
 /// <summary>
 /// Engine-neutral, Godot-free representation of an IBSP v46/47/48 (Quake 3) map, parsed from the

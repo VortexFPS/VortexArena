@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Text;
 using Godot;
-using XonoticGodot.Common.Services;     // CvarFlags
-using XonoticGodot.Engine.Simulation;   // CvarService (RegisterDefaults)
+using VortexArena.Common.Services;     // CvarFlags
+using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Minigame help / rules text — the C# successor to QuakeC's <c>HUD_MinigameHelp</c>

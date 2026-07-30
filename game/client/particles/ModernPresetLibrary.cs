@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  ModernPresetLibrary — the named ModernPreset recipes (planning/particles-dual-system.md §D.1). The

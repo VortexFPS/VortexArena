@@ -1,12 +1,12 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Regression guard for the spawn-loadout weapon equip (the weapon-fire driver, §E). A freshly-spawned player
@@ -65,7 +65,7 @@ public class SpawnLoadoutTests
         var p = new Player { Flags = EntFlags.Client, ViewOfs = NVec3.Zero, IsDucked = true };
         SpawnSystem.PutPlayerInServer(p, new SpawnPoint(NVec3.Zero, NVec3.Zero));
 
-        Assert.Equal(XonoticGodot.Common.Physics.PlayerPhysics.StandViewOfs, p.ViewOfs); // standing eye seeded (0,0,35)
+        Assert.Equal(VortexArena.Common.Physics.PlayerPhysics.StandViewOfs, p.ViewOfs); // standing eye seeded (0,0,35)
         Assert.False(p.IsDucked);                                                         // duck state reset to standing
     }
 }

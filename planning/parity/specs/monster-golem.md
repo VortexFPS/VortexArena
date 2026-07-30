@@ -1,7 +1,7 @@
 # Golem (monster) — parity spec
 
 **Base refs:** `common/monsters/monster/golem.qc` (+ `golem.qh`), shared framework `common/monsters/sv_monsters.qc` / `sv_monsters.qh` / `monster.qh`, balance `monsters.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs` · `MonsterAI.cs` · `MonsterFramework.cs` · `MonsterSpawnFuncs.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Monsters/Golem.cs` · `MonsterAI.cs` · `MonsterFramework.cs` · `MonsterSpawnFuncs.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -145,7 +145,7 @@ registry → `Monster_Spawn`; `SimulationLoop.RunThink` drives the brain; `Damag
 `GtEventDamage` to `MonsterEventDamage`; `monsters.cfg` ships and loads; `g_monsters` default-on.
 
 **Values — faithful.** All 17 golem cvars match (`monsters.cfg`, shipped verbatim in
-`assets/data/.../monsters.cfg`): health 650, claw 60, smash 50/force 100/range 200, lightning 25/zap
+`Base/data/.../monsters.cfg`): health 650, claw 60, smash 50/force 100/range 200, lightning 25/zap
 15/force 100/radius 50/radiusZap 250/speed 1000/speedUp 150, walk/run/stop 150/320/300, force 0.1,
 loot "health_mega electro". The hardcoded fallbacks in `Golem.cs` mirror them, and `MonsterAI.Cvar`
 reads the live cvar first.
@@ -189,7 +189,7 @@ faithful reorganizations in `MonsterAI.cs`, not behavioral changes.
 - Liveness traced: `MapObjectsRegistry.cs:196-197` (spawnfunc registration) →
   `GameWorld.cs:2158 SpawnFuncs.TrySpawn` (map-load caller) → `SpawnFromMap` →
   `SimulationLoop.cs:276 RunThink` (think driver) → `DamageSystem.cs:294 GtEventDamage` (damage
-  route). `assets/data/xonotic-data.pk3dir/monsters.cfg` present (cvars + `g_monsters 1`).
+  route). `Base/data/xonotic-data.pk3dir/monsters.cfg` present (cvars + `g_monsters 1`).
 - No dedicated golem unit test found; behavior not run in-game during this audit. Timing/anim/audio
   gaps are static-read conclusions — confidence medium on those, high on logic+values+liveness.
 

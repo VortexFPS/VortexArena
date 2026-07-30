@@ -17,25 +17,25 @@
 // NOT automatable here — it is the WINDOWED manual checklist driven by tools/visual-qa.sh and documented in
 // docs/RUNNING.md "Visual QA". Do NOT add a test here that claims to verify rendered output.
 //
-// Like the ~18 other real-data test classes, every [Theory]/[Fact] self-skips when assets/data is absent (CI
-// has no assets): the MemberData providers yield a single sentinel row carrying null, and the test returns on it.
+// Like the ~18 other real-data test classes, every [Theory]/[Fact] self-skips when the map content is absent
+// (core content is committed, so only maps can be missing): the MemberData providers yield a single sentinel row carrying null, and the test returns on it.
 
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Dpm;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Formats.Mdl;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Dpm;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Materials;
+using VortexArena.Formats.Md3;
+using VortexArena.Formats.Mdl;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T5 (Wave A5) — the headless-safe half of the Visual QA. A sweep over every shipped map, model, and shader
@@ -45,7 +45,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class VisualQaTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     // One VFS mount for the whole class (the asset tree is large; the data tests share a single read-only mount).
     private static readonly Lazy<VirtualFileSystem?> Vfs = new(() =>
@@ -53,11 +53,11 @@ public class VisualQaTests
         if (!Directory.Exists(DataDir))
             return null;
         var vfs = new VirtualFileSystem();
-        return vfs.MountGameDir(DataDir) ? vfs : null;
+        return vfs.MountContentRoot(DataDir) ? vfs : null;
     });
 
     // A sentinel data row (a single null path) so a [Theory] never fails with xUnit's "No data found" when
-    // assets/data is absent — the test body returns on a null path, mirroring the other real-data classes' skip.
+    // map content is absent — the test body returns on a null path, mirroring the other real-data classes' skip.
     private static object[] SkipRow() => new object[] { null! };
 
     private static IEnumerable<object[]> PathsOrSkip(string prefix, string extension)
@@ -350,7 +350,11 @@ public class VisualQaTests
 
         var texts = vfs.Find("scripts/", "shader").Select(vfs.ReadText);
         IReadOnlyDictionary<string, ShaderDef> shaders = Q3ShaderParser.ParseFiles(texts);
-        Assert.True(shaders.Count >= 500,
-            $"expected 500+ compiled materials from the stock shader scripts, got {shaders.Count}");
+        // Floor depends on whether the fetched map packs are present — they carry about half the
+        // stock shader scripts. See restructure D7.
+        int floor = TestPaths.HasMaps ? 500 : 200;
+        Assert.True(shaders.Count >= floor,
+            $"expected {floor}+ compiled materials from the stock shader scripts, got {shaders.Count} "
+            + $"(maps present: {TestPaths.HasMaps})");
     }
 }

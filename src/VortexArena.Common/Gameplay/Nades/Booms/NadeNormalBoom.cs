@@ -14,12 +14,12 @@
 // RadiusDamageForSource). This file deliberately does NOT edit WeaponSplash.cs (not owned by this task).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The normal nade detonation — port of <c>nade_normal_boom</c>.</summary>
 public sealed class NadeNormalBoom : INadeBoom

@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Port of QuakeC's sound registry (common/sounds/sound.qh, all.inc, all.qh).
 //

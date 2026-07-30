@@ -19,16 +19,16 @@
 //    camera does not yet lock to the region. Documented in followups. (The Net_LinkEntity/send halves are
 //    client networking — out of scope for the server port.)
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
 // NOTE: QC player .viewloc is already promoted on the partial Entity by the player-physics port
 // (Physics/PlayerPhysicsState.cs Entity.ViewLoc — the swim/ladder code reads it). We reuse that field here
 // (the server stamps it each tick), so this file declares NO new Entity field.
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
-    using XonoticGodot.Common.Framework;
+    using VortexArena.Common.Framework;
 
     /// <summary><c>trigger_viewlocation</c> + <c>target_viewlocation_start/end</c>. Registered by <see cref="MapObjectsRegistry"/>.</summary>
     public static class ViewLocation

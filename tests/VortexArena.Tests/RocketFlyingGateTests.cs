@@ -1,14 +1,14 @@
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T19c — the rocket/mine remote-detonate GATE field (<see cref="Entity.ProjectileDetonateTime"/>, the role QC
@@ -223,9 +223,9 @@ public class RocketFlyingGateTests : IDisposable
 
         Entity rocket = f.Entities.FindByClass("rocket").First(e => !e.IsFreed);
         Assert.Equal(Solid.Corpse, rocket.Solid);
-        Assert.NotEqual(0, rocket.DpHitContentsMask & XonoticGodot.Engine.Collision.SuperContents.Corpse);
-        Assert.NotEqual(0, rocket.DpHitContentsMask & XonoticGodot.Engine.Collision.SuperContents.Body);
-        Assert.NotEqual(0, rocket.DpHitContentsMask & XonoticGodot.Engine.Collision.SuperContents.Solid);
+        Assert.NotEqual(0, rocket.DpHitContentsMask & VortexArena.Engine.Collision.SuperContents.Corpse);
+        Assert.NotEqual(0, rocket.DpHitContentsMask & VortexArena.Engine.Collision.SuperContents.Body);
+        Assert.NotEqual(0, rocket.DpHitContentsMask & VortexArena.Engine.Collision.SuperContents.Solid);
     }
 
     [Fact]

@@ -1,8 +1,8 @@
 using System;
 using Godot;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The per-projectile-type visual table — the faithful port of CSQC's <c>Projectile_Draw</c> /

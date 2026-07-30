@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The upper-body ACTION half of QuakeC's <c>animdecide</c> (common/animdecide.qc) — the DECISION logic only,
@@ -61,7 +61,7 @@ public static class AnimDecide
     /// The per-action (numframes, framerate) table — seeded with SHOOT (Base <c>ANIM_VEC(shoot, 1, 5)</c> →
     /// 0.2s). PAIN/DRAW/TAUNT/MELEE/DIE rows are reserved for Stage 4; until set they fall through to a
     /// zero-duration window (they expire immediately, so a stray latch never sticks). The same numbers are
-    /// referenced client-side by <see cref="XonoticGodot.Engine.Simulation"/> via <see cref="SpecFor"/> so the
+    /// referenced client-side by <see cref="VortexArena.Engine.Simulation"/> via <see cref="SpecFor"/> so the
     /// phase/clamp math agrees with the server expiry.
     /// </summary>
     public static AnimSpec SpecFor(AnimUpperAction action) => action switch

@@ -39,7 +39,7 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def logs_dir() -> Path:
-    override = os.environ.get("XONOTIC_USERDIR")
+    override = os.environ.get("VORTEX_USERDIR")
     if override:
         return Path(override) / "logs"
     home = Path.home()

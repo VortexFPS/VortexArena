@@ -1,7 +1,7 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The gameplay hook bus — the C# successor to QuakeC's MUTATOR_HOOKABLE / CALLHOOK chains

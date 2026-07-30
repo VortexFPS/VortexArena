@@ -15,8 +15,8 @@ features:
     base_refs:
       - "server/damage.qc:Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:Apply"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs:IsAlwaysLethal"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs:IsAlwaysLethal"
     constants:
       - { name: "kill/teamchange damage", base: "100000 (lethal)", port: "100000", match: true }
       - { name: "teamchange pre-set health", base: "0.9 (<1)", port: "0.9", match: true }
@@ -46,8 +46,8 @@ features:
       - "server/damage.qc:Damage"
       - "server/client.qc:PlayerFrame (dmg_team decay + teamkill_soundtime voice)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:Apply"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs:Regen"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:Apply"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs:Regen"
     constants:
       - { name: "teamplay_mode (team games)", base: "4 (xonotic-server.cfg:279)", port: "in-code fallback 4 (read live)", match: true }
       - { name: "g_friendlyfire", base: "0.5", port: "0.5", match: true }
@@ -82,7 +82,7 @@ features:
     base_refs:
       - "server/damage.qc:Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:Apply"
     constants:
       - { name: "g_weapondamagefactor", base: "1", port: "1", match: true }
       - { name: "g_weaponforcefactor", base: "1", port: "1", match: true }
@@ -110,8 +110,8 @@ features:
       - "common/util.qc:healtharmor_applydamage"
       - "server/player.qc:PlayerDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:HealthArmorApplyDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:ArmorBlockPercent"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:HealthArmorApplyDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:ArmorBlockPercent"
     constants:
       - { name: "g_balance_armor_blockpercent", base: "0.7 (stock xonotic balance)", port: "0.7", match: true }
       - { name: "save formula", base: "bound(0, dmg*armorblock, armor)", port: "QClamp(dmg*armorBlock,0,armor)", match: true }
@@ -141,10 +141,10 @@ features:
       - "server/player.qc:PlayerDamage"
       - "server/player.qc:PlayerCorpseDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:PlayerDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:PlayerCorpseDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:HandicapTotal"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:EmitPainSound"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:PlayerDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:PlayerCorpseDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:HandicapTotal"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:EmitPainSound"
     constants:
       - { name: "g_spawnshield_blockdamage", base: "1 (full block)", port: "1", match: true }
       - { name: "g_maxpushtime", base: "8 s", port: "8 s", match: true }
@@ -182,9 +182,9 @@ features:
       - "common/weapons/calculations.qc:damage_explosion_calcpush"
       - "common/weapons/calculations.qc:explosion_calcpush_getmultiplier"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:ApplyKnockback"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:DamageExplosionCalcPush"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:ExplosionCalcPushGetMultiplier"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:ApplyKnockback"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:DamageExplosionCalcPush"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:ExplosionCalcPushGetMultiplier"
     constants:
       - { name: "g_balance_damagepush_speedfactor", base: "2.5 (stock)", port: "2.5", match: true }
       - { name: "speedfactor<1 bypass", base: "return raw force", port: "return raw force", match: true }
@@ -216,9 +216,9 @@ features:
       - "server/damage.qc:RadiusDamageForSource"
       - "server/damage.qc:RadiusDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ApplyDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:SplashDeathType"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ApplyDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:SplashDeathType"
     constants:
       - { name: "falloff", base: "finaldmg = core*f + edge*(1-f), f=1-dist/rad", port: "same", match: true }
       - { name: "distance metric", base: "nearest-point bbox to (portal-shifted) blast origin", port: "Vector3.Clamp nearest-point to bbox", match: true }
@@ -258,12 +258,12 @@ features:
       - "server/damage.qc:Fire_AddDamage"
       - "server/damage.qc:Fire_ApplyDamage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:FireAddDamage"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:FireApplyDamage"
-      - "src/XonoticGodot.Common/Gameplay/StatusEffects.cs:Tick"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:AddFireDamage"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs:337"
-      - "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeNapalmBoom.cs:218"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:FireAddDamage"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:FireApplyDamage"
+      - "src/VortexArena.Common/Gameplay/StatusEffects.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:AddFireDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:337"
+      - "src/VortexArena.Common/Gameplay/Nades/Booms/NadeNapalmBoom.cs:218"
     constants:
       - { name: "g_balance_firetransfer_damage", base: "0.8", port: "0.8 (read live, fallback 0.8)", match: true }
       - { name: "g_balance_firetransfer_time", base: "0.9", port: "0.9 (read live, fallback 0.9)", match: true }
@@ -296,8 +296,8 @@ features:
     base_refs:
       - "server/damage.qc:Heal"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageContracts.cs:Heal"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/EntityGametypeState.cs:GtEventHeal"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageContracts.cs:Heal"
+      - "src/VortexArena.Common/Gameplay/GameTypes/EntityGametypeState.cs:GtEventHeal"
     constants:
       - { name: "Heal gate", base: "game_stopped / spectator / frozen / dead reject; .event_heal route", port: "freed / TakeDamage==No (spectator) / FrozenStat|STATUSEFFECT_Frozen / dead reject; GtEventHeal route", match: true }
     status:

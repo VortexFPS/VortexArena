@@ -1,7 +1,7 @@
 # Fusion Reactor turret — parity spec
 
 **Base refs:** `common/turrets/turret/fusionreactor.qc` · `common/turrets/turret/fusionreactor.qh` · shared framework `common/turrets/sv_turrets.qc`, `common/turrets/cl_turrets.qc`, `common/turrets/turret.qh` · balance `turrets.cfg` (`g_turrets_unit_fusreac_*`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/FusionReactorTurret.cs` · framework `TurretAI.cs`, `TurretSpawn.cs`, `TurretSpawnFuncs.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/FusionReactorTurret.cs` · framework `TurretAI.cs`, `TurretSpawn.cs`, `TurretSpawnFuncs.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -160,7 +160,7 @@ not a deliberate design change — flagged as gaps, not intended_divergence.
   `TurretSpawn`/`TurretSpawnFuncs`: recharge logic + constants confirmed; firecheck nuances confirmed by reading both.
 - **liveness trace** — `MapObjectsRegistry.cs:216` registers `turret_fusionreactor`; `TurretSpawnFuncs.Spawn` wires
   `e.Think`; `SimulationLoop.RunThink` invokes it. Confirmed live by reading the chain.
-- **tests** — `tests/XonoticGodot.Tests/TurretLifecycleTests.cs` covers spawn/use/damage/die/respawn but ONLY for EWheel;
+- **tests** — `tests/VortexArena.Tests/TurretLifecycleTests.cs` covers spawn/use/damage/die/respawn but ONLY for EWheel;
   there is NO test exercising the FusionReactor recharge sweep, its firecheck, or the head spin. Recharge correctness is
   therefore unverified at runtime.
 - **presentation** — unverified by observation; absence of any turret net entity / client draw inferred from grep across

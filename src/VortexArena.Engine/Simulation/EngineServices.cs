@@ -1,11 +1,11 @@
 using System.Numerics;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// Concrete <see cref="IEngineServices"/> — the C# reimplementation of the QuakeC builtins facade
@@ -35,7 +35,7 @@ public sealed class EngineServices : IEngineServices
     /// The map's compiled PVS, backing <c>checkpvs</c> (<see cref="ITraceService.CheckPvs"/>). The host that
     /// loads the BSP sets <c>new BspPvs(bsp)</c> here; null leaves every PVS query conservatively visible.
     /// </summary>
-    public XonoticGodot.Formats.Bsp.BspPvs? Pvs { get => TraceImpl.Pvs; set => TraceImpl.Pvs = value; }
+    public VortexArena.Formats.Bsp.BspPvs? Pvs { get => TraceImpl.Pvs; set => TraceImpl.Pvs = value; }
 
     /// <summary>
     /// Swap the static collision world the trace service clips against, in place (keeping the entity table, clock,
@@ -840,12 +840,12 @@ public sealed class ModelService : IModelService
     /// </summary>
     public bool TryGetTag(Entity e, string tagName, out Vector3 origin, out Vector3 forward, out Vector3 right, out Vector3 up)
     {
-        XonoticGodot.Common.Math.QMath.AngleVectors(e.Angles, out Vector3 ef, out Vector3 er, out Vector3 eu);
+        VortexArena.Common.Math.QMath.AngleVectors(e.Angles, out Vector3 ef, out Vector3 er, out Vector3 eu);
 
         if (_byName.TryGetValue(e.Model, out var def) && def.Tags.TryGetValue(tagName, out var tag))
         {
             // local tag basis
-            XonoticGodot.Common.Math.QMath.AngleVectors(tag.Angles, out Vector3 tf, out Vector3 tr, out Vector3 tu);
+            VortexArena.Common.Math.QMath.AngleVectors(tag.Angles, out Vector3 tf, out Vector3 tr, out Vector3 tu);
 
             // world tag origin = entity origin + entity-basis * local tag origin
             origin = e.Origin

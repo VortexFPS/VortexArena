@@ -13,9 +13,9 @@ features:
       - "common/mutators/mutator/doublejump/doublejump.qc:10 REGISTER_MUTATOR(doublejump, autocvar_sv_doublejump) (SVQC) / :12 true (CSQC)"
       - "common/mutators/mutator/doublejump/doublejump.qh:4 autocvar_sv_doublejump"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DoublejumpMutator.cs:34 IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:49 Add (Hook subscribes _onJump)"
-      - "src/XonoticGodot.Server/GameWorld.cs:563 MutatorActivation.Apply()"
+      - "src/VortexArena.Common/Gameplay/Mutators/DoublejumpMutator.cs:34 IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:49 Add (Hook subscribes _onJump)"
+      - "src/VortexArena.Server/GameWorld.cs:563 MutatorActivation.Apply()"
     constants:
       - { name: "sv_doublejump", base: "0 (xonotic-server.cfg; presets set 1: physicsQ2/Q2a, physicsFruit (TINY 1.35x), physicsWarsow, physicsXDF)", port: "0 (default; read via Cvars.GetFloat at IsEnabled time)", match: true }
     status:
@@ -29,7 +29,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:139 Doublejump_Disabled_Inert", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:139 Doublejump_Disabled_Inert", result: pass }
       - { kind: code-read, ref: "GameWorld.cs:563 MutatorActivation.Apply -> Add (MutatorActivation.cs:49) -> Hook subscribes _onJump to MutatorHooks.PlayerJump, .Call'd PlayerPhysics.cs:875", result: pass }
     confidence: high
     notes: "Re-audited 2026-06-25 (drift check). DoublejumpMutator.IsEnabled gates the whole mutator on sv_doublejump (server) mirroring Base's SVQC-gated REGISTER_MUTATOR(doublejump, autocvar_sv_doublejump); shared PlayerPhysics runs the hook in client prediction too, matching Base's CSQC-always-true registration. Live boot chain reconfirmed: GameWorld.cs MutatorActivation.Apply moved :535->:563 (line shift only, still live) -> Add -> Hook -> MutatorHooks.PlayerJump, .Call'd at PlayerPhysics.cs:875. No change; no regression. The cvar-level gate is intentionally Base-faithful (per-player divergence is handled inside the hook body via the DOUBLEJUMP stat, see doublejump.stat.per_player_doublejump)."
@@ -43,12 +43,12 @@ features:
       - "common/physics/player.qc:23 Physics_ClientOption"
       - "common/mutators/mutator/doublejump/doublejump.qc:22 PHYS_DOUBLEJUMP(player) gate inside the PlayerJump hook"
     port_refs:
-      - "src/XonoticGodot.Common/Physics/PhysicsPreset.cs:66 OptionNames (\"doublejump\" -> \"sv_doublejump\")"
-      - "src/XonoticGodot.Common/Physics/PhysicsPreset.cs:187 Resolve (g_physics_clientselect chain -> p.DoubleJump)"
-      - "src/XonoticGodot.Common/Physics/MovementParameters.cs:62 DoubleJump (per-player resolved value)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:874 new PlayerJumpArgs(..., mp.DoubleJump) carries the stat into the hook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:286 PlayerJumpArgs.DoubleJump (in arg)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DoublejumpMutator.cs:62 OnPlayerJump gates on args.DoubleJump (PHYS_DOUBLEJUMP)"
+      - "src/VortexArena.Common/Physics/PhysicsPreset.cs:66 OptionNames (\"doublejump\" -> \"sv_doublejump\")"
+      - "src/VortexArena.Common/Physics/PhysicsPreset.cs:187 Resolve (g_physics_clientselect chain -> p.DoubleJump)"
+      - "src/VortexArena.Common/Physics/MovementParameters.cs:62 DoubleJump (per-player resolved value)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:874 new PlayerJumpArgs(..., mp.DoubleJump) carries the stat into the hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:286 PlayerJumpArgs.DoubleJump (in arg)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DoublejumpMutator.cs:62 OnPlayerJump gates on args.DoubleJump (PHYS_DOUBLEJUMP)"
     constants:
       - { name: "g_physics_clientselect", base: "0 (off; enables per-client g_physics_<preset>_doublejump override)", port: "0 (implemented: PhysicsPreset.Resolve g_physics_clientselect chain)", match: true }
       - { name: "doublejump in clientselect option set", base: "Physics_ClientOption(this,\"doublejump\",...)", port: "registered PhysicsPreset.cs:66; resolved into MovementParameters.DoubleJump; consumed by the mutator via args.DoubleJump", match: true }
@@ -77,9 +77,9 @@ features:
       - "common/physics/player.qc:403 MUTATOR_CALLHOOK(PlayerJump,...)"
       - "common/physics/player.qc:424 if(!doublejump) if(!IS_ONGROUND) return IS_JUMP_HELD"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DoublejumpMutator.cs:65 OnPlayerJump (tracebox + Fraction<1 && PlaneNormal.Z>0.7)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:875 MutatorHooks.PlayerJump.Call"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:896 (!doublejump && OnGround==0) gate"
+      - "src/VortexArena.Common/Gameplay/Mutators/DoublejumpMutator.cs:65 OnPlayerJump (tracebox + Fraction<1 && PlaneNormal.Z>0.7)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:875 MutatorHooks.PlayerJump.Call"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:896 (!doublejump && OnGround==0) gate"
     constants:
       - { name: "trace_down_offset_z", base: "+0.01 / -0.01 qu", port: "+0.01 / -0.01", match: true }
       - { name: "trace_plane_normal_z_gate", base: "> 0.7", port: "> 0.7f", match: true }
@@ -95,8 +95,8 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:153 Doublejump_GrantsAndClips_OnWalkableSurface", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:172 Doublejump_NoGrant_InMidair", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:153 Doublejump_GrantsAndClips_OnWalkableSurface", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:172 Doublejump_NoGrant_InMidair", result: pass }
       - { kind: code-read, ref: "PlayerPhysics.PlayerJump gate at :896 consumes pj.Multijump to allow the mid-air jump", result: pass }
     confidence: high
     notes: "Re-audited 2026-06-25: logic unchanged. 1:1 translation of the tracebox + Fraction<1 && PlaneNormal.Z>0.7 gate + Multijump grant verified against Base doublejump.qc:24-25. Line shifts since the 2026-06-22 baseline: PlayerPhysics PlayerJump.Call :827->:875, the (!doublejump && OnGround==0) gate :848->:896, and DoublejumpMutator OnPlayerJump tracebox :51->:65 (lines moved by the per-player DOUBLEJUMP gate added above; logic intact). No regression."
@@ -107,7 +107,7 @@ features:
     base_refs:
       - "common/mutators/mutator/doublejump/doublejump.qc:30-32 (f=velocity*normal; if(f<0) velocity-=f*normal)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DoublejumpMutator.cs:76-78 OnPlayerJump (f=Dot(v,n); if(f<0) v-=f*n)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DoublejumpMutator.cs:76-78 OnPlayerJump (f=Dot(v,n); if(f<0) v-=f*n)"
     constants:
       - { name: "clip_condition", base: "f = v.n; clip only when f < 0 (into-surface component)", port: "f = QMath.Dot(v,n); if(f<0) v -= f*n", match: true }
     status:
@@ -121,7 +121,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:153 Doublejump_GrantsAndClips_OnWalkableSurface (Velocity.Z >= ~0 after clip)", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MutatorBatchT51Tests.cs:153 Doublejump_GrantsAndClips_OnWalkableSurface (Velocity.Z >= ~0 after clip)", result: pass }
       - { kind: code-read, ref: "DoublejumpMutator.cs:76-78 matches doublejump.qc:30-32 exactly", result: pass }
     confidence: high
     notes: "Re-audited 2026-06-25: unchanged and still 1:1 with Base (line shift :71-73->:76-78 from the per-player gate added above). Removes only the negative-dot (into-surface) velocity component; a player already rising away from the surface is left untouched. No regression."

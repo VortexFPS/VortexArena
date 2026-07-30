@@ -1,16 +1,16 @@
 using System;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The server-side team manager — the C# successor to the team-assignment slice of
 /// server/teamplay.qc (<c>TeamBalance_JoinBestTeam</c> → <c>TeamBalance_FindBestTeam</c>: place a joining
 /// player on the active team with the fewest players; ties → the lowest-index such team). It wraps the
-/// Godot-free core already ported in <see cref="TeamBalance"/> (XonoticGodot.Common) and adds the server-roster
+/// Godot-free core already ported in <see cref="TeamBalance"/> (VortexArena.Common) and adds the server-roster
 /// concerns: the configured team count, balance over the live roster, and a notion of "this gametype is a
 /// team game".
 ///

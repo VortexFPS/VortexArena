@@ -19,8 +19,8 @@ features:
       - "common/turrets/all.qh:REGISTER_TURRET"
       - "common/turrets/all.qh:TR_PROPS_COMMON"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/EntityClasses.cs:Turret"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:TurretAttribute"
+      - "src/VortexArena.Common/Gameplay/EntityClasses.cs:Turret"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:TurretAttribute"
     constants:
       - { name: "per-unit cvar fields", base: "28 (TR_PROPS_COMMON via g_turrets_unit_<name>_<field>)", port: "C# const per turret class (no per-unit cvar table)", match: false }
       - { name: "tr_attack default", base: "m_weapon.wr_think", port: "per-turret Attack method", match: true }
@@ -47,7 +47,7 @@ features:
       - "common/turrets/sv_turrets.qc:turret_initparams"
       - "common/turrets/sv_turrets.qc:load_unit_settings"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "solid", base: "SOLID_BBOX", port: "Solid.BBox", match: true }
       - { name: "movetype", base: "MOVETYPE_NOCLIP", port: "MoveType.Noclip", match: true }
@@ -85,10 +85,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_link"
       - "common/turrets/turret/*.qc:spawnfunc(turret_X)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:229"
-      - "src/XonoticGodot.Common/GameInit.cs:21"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:276"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:229"
+      - "src/VortexArena.Common/GameInit.cs:21"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:276"
     constants:
       - { name: "g_turrets master switch", base: "1 (default on)", port: "MasterSwitchEnabled default-on", match: true }
       - { name: "nextthink re-arm", base: "turret_think sets nextthink=time", port: "spawnfunc re-arms NextThink each frame", match: true }
@@ -114,9 +114,9 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Fire"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Cvar"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Fire"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Cvar"
     constants:
       - { name: "ammo regen", base: "ammo += ammo_recharge*frametime, cap ammo_max", port: "same", match: true }
       - { name: "inactive -> track+return", base: "yes", port: "yes", match: true }
@@ -140,7 +140,7 @@ features:
       - "HITALLVALID / CUSTOM / VOLLYALWAYS shoot-mode branches are folded into per-turret Think rather than the shared driver (functionally covered by Tesla/Phaser/FusionReactor self-scan + the RunCombat VollyAlways path, but the generic dispatch is not in RunCombat)."
     verification:
       - { kind: code_read, ref: "turret_think vs TurretAI.RunCombat/Fire; Cvar() helper reads turrets.cfg (exec'd live via ConfigLoader.LoadServerConfig) with Base-matching fallbacks; the 3 turret mutator hooks (TurretThink/Turret_CheckFire/TurretFire) are real HookChain dispatchers (MutatorHooks.cs:1343/1409/1436) fired live from RunCombat (TurretAI.cs:690), the checkFire gate (757), and Fire (891) with empty-chain fast-paths", result: pass }
-      - { kind: test, ref: "OPUS 06-28 re-verify: XonoticGodot.Common build green + 58 turret tests pass; grep confirms ZERO MutatorHooks.Turret{Think,CheckFire,Fire}.Add callers (dispatch seam live, no handler registered — Base-faithful, no stock mutator registers EV_Turret*)", result: pass }
+      - { kind: test, ref: "OPUS 06-28 re-verify: VortexArena.Common build green + 58 turret tests pass; grep confirms ZERO MutatorHooks.Turret{Think,CheckFire,Fire}.Add callers (dispatch seam live, no handler registered — Base-faithful, no stock mutator registers EV_Turret*)", result: pass }
     confidence: high
     notes: "FIX vs baseline (TurretThink/Turret_CheckFire/TurretFire mutator hooks now ported + live): Wave-16 wired all three brain/fire mutator hooks through the real HookChain dispatchers — a mutator can now pause a turret's think (TurretThink), force/hold its firecheck (Turret_CheckFire), or suppress an individual shot (TurretFire), matching the MUTATOR_CALLHOOK sites in turret_think/turret_firecheck/turret_fire. No stock mutator registers them (fast-path no-op in stock play), exactly like Base. Brain stays faithful (scan delays + aimidle + nofire master gate cvar-backed; VollyAlways mid-burst path in RunCombat). Only the generic HITALLVALID/CUSTOM shoot-mode dispatch remains folded into per-turret Think (functionally covered by the self-scanning Tesla/Phaser/FusionReactor)."
   - id: turret-framework.acquire.target
@@ -152,9 +152,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_targetscore_generic"
       - "common/turrets/sv_turrets.qc:turret_targetscore_support"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ValidTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ValidTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
     constants:
       - { name: "checkpvs gate", base: "validate:688 if(!checkpvs(target.origin, turret)) return -1", port: "ValidTarget Api.Trace.CheckPvs gate (NEW Wave-7; no-op on unvised map like DP)", match: true }
       - { name: "alpha-cloak cull", base: "alpha!=0 && <=0.3 reject", port: "same", match: true }
@@ -187,7 +187,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_aim_generic"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
     constants:
       - { name: "TFL_AIM_LEAD", base: "vel*mintime", port: "same", match: true }
       - { name: "TFL_AIM_SHOTTIMECOMPENSATE", base: "lead by vlen/shot_speed", port: "same", match: true }
@@ -214,7 +214,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_track"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Track"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Track"
     constants:
       - { name: "STEPMOTOR(1)", base: "step aim_speed*frametime, hard clamp", port: "same", match: true }
       - { name: "FLUIDINERTIA(3)", base: "accel-scaled + blendrate avelocity", port: "same", match: true }
@@ -247,9 +247,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_fire"
       - "common/turrets/sv_turrets.qc:turret_do_updates"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:UpdateImpact"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Fire"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:UpdateImpact"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Fire"
     constants:
       - { name: "refire gate", base: "attack_finished_single[0]>time", port: "AttackFinished>now", match: true }
       - { name: "ammo gate", base: "ammo<shot_dmg", port: "Ammo<ShotDamage", match: true }
@@ -288,7 +288,7 @@ features:
       - "common/turrets/sv_turrets.qc:turret_projectile_touch"
       - "common/turrets/sv_turrets.qc:turret_projectile_damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
     constants:
       - { name: "movetype", base: "MOVETYPE_FLYMISSILE", port: "MoveType.FlyMissile", match: true }
       - { name: "velocity", base: "normalize(dir+randomvec*spread)*shot_speed", port: "same (Prandom)", match: true }
@@ -318,11 +318,11 @@ features:
       - "common/turrets/sv_turrets.qc:turret_damage"
       - "common/turrets/sv_turrets.qc:turret_heal"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Use"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Damage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Use"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Damage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "use: adopt team, active=(team!=0)", base: "yes", port: "yes (live, wired to Entity.Use)", match: true }
       - { name: "dead/inactive take no damage", base: "yes", port: "TurretAI.Damage returns 0 — live via GtEventDamage", match: true }
@@ -355,9 +355,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_hide"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:OnAnyDeath"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:OnAnyDeath"
     constants:
       - { name: "die: SOLID_NOT + takedamage NO + health 0", base: "yes", port: "yes", match: true }
       - { name: "respawn delay", base: "respawntime (turret_die nextthink=time+0.2 -> turret_hide nextthink=time+respawntime-0.2 -> turret_respawn)", port: "Die NextThink=now+0.2 -> Hide NextThink=now+max(RespawnTime-0.2,0) -> Respawn (two-step ported, FIXED 06-25; total dead time = RespawnTime)", match: true }
@@ -386,9 +386,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_reset"
       - "common/turrets/sv_turrets.qc:turret_link"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:102"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
-      - "src/XonoticGodot.Server/GameWorld.cs:4614"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:102"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
+      - "src/VortexArena.Server/GameWorld.cs:4614"
     constants:
       - { name: ".reset hook install", base: "turret_link sets this.reset = turret_reset (sv_turrets.qc:1158/1342)", port: "TurretSpawn.Init sets e.Reset = TurretAI.Respawn (TurretSpawn.cs:102) (FIXED 06-25)", match: true }
       - { name: "reset action", base: "turret_reset -> turret_respawn (full health/ammo/volley/head, re-active)", port: "Entity.Reset = TurretAI.Respawn (turret_respawn body: restore health/ammo/volley/head, re-active, re-install per-frame think)", match: true }
@@ -416,9 +416,9 @@ features:
       - "common/turrets/cl_turrets.qc:NET_HANDLE(ENT_CLIENT_TURRET)"
     port_refs:
       - "game/net/ServerNet.cs:2248"
-      - "src/XonoticGodot.Net/NetEntity.cs:EntityField.TurretHead"
+      - "src/VortexArena.Net/NetEntity.cs:EntityField.TurretHead"
       - "game/net/ClientEntityView.cs:162"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:TryGetState"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:TryGetState"
     constants:
       - { name: "TNSF_ANG (head pitch/yaw)", base: "turret_send writes tur_head.angles_x/_y (8-bit angles)", port: "ServerNet folds TurHeadPitch/Yaw into the generic entity delta; codec writes WriteAngles(Low)=8-bit per axis (NetEntity.cs EntityField.TurretHead) (NEW this wave)", match: true }
       - { name: "TNSF_AVEL (head avelocity yaw)", base: "turret_send writes tur_head.avelocity_y", port: "TurHeadAVelYaw raw float in the TurretHead block (NEW this wave)", match: true }
@@ -452,12 +452,12 @@ features:
       - "common/turrets/cl_turrets.qc:turret_die"
       - "common/turrets/cl_turrets.qc:turret_changeteam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:DrawFx"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:TrThinkHeadAnim"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:DrawFx"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:TrThinkHeadAnim"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Think"
     constants:
       - { name: "head rotation render", base: "tur_head.angles += avelocity*dt (turret_draw, every turret)", port: "none (no tur_head sub-entity; head angles are a TurretState vector, never rendered as a separate bone)", match: false }
       - { name: "low-HP sparks/smoke (framework turret_draw)", base: "te_spark <127 @0.03 / SMOKE_LARGE <85 @0.01 / SMOKE_SMALL <32 @0.015, one shared random roll — ALL turrets (cl_turrets.qc:36-53)", port: "TurretAI.DrawFx mirrors all three tiers from one Prandom roll, emitted server-side, called every think from RunCombat; skips ewheel/walker (their own draw has its own spark) (FIXED 06-25)", match: true }
@@ -495,11 +495,11 @@ features:
       - "common/turrets/sv_turrets.qc:turrets_manager_think"
       - "common/turrets/sv_turrets.qc:turret_findtarget"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Checkpoint"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:TargetTrigger"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:243"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:NextCheckpoint"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:FindTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Checkpoint"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:TargetTrigger"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:243"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:NextCheckpoint"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:FindTarget"
     constants:
       - { name: "turret_checkpoint chain", base: "drop-to-floor (1024u down, +32u) + .enemy=find(targetname,target)", port: "Checkpoint: WorldOnly down-trace +32u + MapMover index; chain resolved lazily by targetname in EWheel.NextCheckpoint", match: true }
       - { name: "walker_checkpoint compat alias", base: "spawnfunc_turret_checkpoint", port: "walker_checkpoint -> Checkpoint", match: true }

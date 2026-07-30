@@ -1,8 +1,8 @@
 // Port of qcsrc/menu/xonotic/picker.qc (XonoticPicker) — the base for the crosshair picker and the charmap.
 using Godot;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The clickable rows×columns grid the crosshair picker and the charmap are built on — a faithful C# port of

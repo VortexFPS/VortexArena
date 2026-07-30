@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// [Wave 8e sv-world-rules] Tests for the world-rules boot side-effects this unit owns: the networked

@@ -17,7 +17,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace XonoticGodot.Common.Menu;
+namespace VortexArena.Common.Menu;
 
 /// <summary>
 /// The parsed contents of one map's <c>.mapinfo</c> — C# successor to the QC <c>MapInfo_Map_*</c> globals

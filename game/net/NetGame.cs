@@ -1055,6 +1055,12 @@ public sealed partial class NetGame : Node3D
         // the port's transport is ENet, so registering with the public DP masters would only mislead DP clients).
         server.EnableLanDiscovery(_port);
 
+        // DS-7: the modern announce lane, alongside the classic one above. Where the DP masters are the wrong
+        // audience for an ENet server, Conductor is the right one — and it verifies us with a UDP getinfo
+        // challenge to the responder EnableLanDiscovery just bound, so this adds no listener and no open port.
+        // Gated at announce time on sv_public, which is unset (0) unless an operator asked to be listed.
+        server.EnableMasterAnnounce(_port);
+
         // --- wire the server-command host sinks (QC the say bus / bprint + bot_cmd add/remove). Without these,
         //     console/clc_stringcmd `say`/`bot_add`/`setbots` no-op; with them, chat reaches every client's console
         //     and bots are added/removed live. Bots auto-join + spawn on connect (ClientManager.ClientConnect) and

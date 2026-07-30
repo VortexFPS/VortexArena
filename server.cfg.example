@@ -23,6 +23,19 @@ set sv_motd "Welcome!  Have fun."          // message of the day
 set port 26000                             // game port (also --port <n> on the CLI)
 set sv_public 1                            // 1 = announce to the master (server browser); 0 = private/LAN
 // set sv_master_url ""                    // (DS-7) our master; empty = built-in default
+// sv_public 0 does not announce AT ALL, on either lane. The announce is itself the disclosure: it tells
+// the master this server exists, at an address, running a named map. Point sv_master_url at your own
+// deployment to run a private directory.
+
+// --- orchestration (DS-7, optional) ---------------------------------------
+// Only for a server supervised by a Vortex runner. conductor_control 1 puts an OFFER in Conductor's
+// adoption queue; it grants nothing by itself. Control begins only when the runner dials out and proves
+// it holds the private key behind the fingerprint below, so both have to be true on the same box. Without
+// a valid fingerprint the offer is simply omitted and the server still lists normally.
+// The runner writes both of these into the instance's server.cfg; set them by hand only when you are
+// deliberately reproducing that setup.
+// set conductor_control 0
+// set conductor_control_key ""            // sha256 of the runner's public key (lowercase hex)
 
 // --- slots / gameplay -----------------------------------------------------
 set g_maxplayers 16                        // 0 = engine max

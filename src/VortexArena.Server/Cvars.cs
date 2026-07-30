@@ -407,6 +407,22 @@ public static class Cvars
         new("sv_motd", "", "additional information to show on the welcome screen that greets joining players"),
         new("g_mutatormsg", "", "mutator message shown on the welcome screen"),
 
+        // ---- DS-7: the modern master (Conductor) announce lane ----
+        // Additive to the classic dpmaster heartbeat, which is untouched. sv_public gates BOTH lanes and is
+        // deliberately NOT registered here: DP leaves it unregistered/0, so a listen server that never asked
+        // to be public cannot leak itself to a public directory by upgrading. server.cfg.example ships
+        // `set sv_public 1` for operators who do want listing.
+        new("sv_master_url", "https://master.vortexfps.org",
+            "base URL of the master server this host announces to (self-hosters point this at their own)"),
+        // The adoption OFFER, not adoption itself: it only asks Conductor to show this box in its queue.
+        // Accepting there still grants nothing until the runner dials out and proves the private key behind
+        // the fingerprint below, so an operator who flips this on has not handed over control by doing so.
+        new("conductor_control", "0", "1 = offer this server for Conductor orchestration (needs conductor_control_key)"),
+        // Lowercase hex sha256 of the runner's public key. Set by the runner in the instance's server.cfg
+        // rather than read out of the runner's key file, because the game must not know where a launcher
+        // keeps its data directory. Empty (a server with no runner beside it) omits the offer entirely.
+        new("conductor_control_key", "", "sha256 fingerprint of the runner's control key, written by the runner"),
+
         // ---- voting (server/command/vote.qc) ----
         new("sv_vote_call", "1", "allow players to call votes"),
         new("sv_vote_change", "0", "allow changing a vote after casting"),

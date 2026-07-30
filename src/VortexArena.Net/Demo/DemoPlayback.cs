@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace XonoticGodot.Net.Demo;
+namespace VortexArena.Net.Demo;
 
 /// <summary>
 /// The replay entity injector (planning/specs/demo-replay-and-spectator.md §6): when installed on

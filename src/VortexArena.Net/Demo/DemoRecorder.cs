@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace XonoticGodot.Net.Demo;
+namespace VortexArena.Net.Demo;
 
 /// <summary>
 /// The server's per-tick demo tap (planning/specs/demo-replay-and-spectator.md §4): <c>ServerNet</c> exposes a

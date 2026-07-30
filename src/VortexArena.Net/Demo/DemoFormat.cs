@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace XonoticGodot.Net.Demo;
+namespace VortexArena.Net.Demo;
 
 /// <summary>
 /// The frame kinds a <c>.xgd</c> demo stream carries (see <see cref="DemoFormat"/> for the container layout).
@@ -78,7 +78,7 @@ public struct DemoFrame
 }
 
 /// <summary>
-/// The <c>.xgd</c> binary demo container (planning/specs/demo-replay-and-spectator.md §5) — the XonoticGodot
+/// The <c>.xgd</c> binary demo container (planning/specs/demo-replay-and-spectator.md §5) — the VortexArena
 /// demo format. Own format, deliberately NOT DP <c>.dem</c>-compatible (ADR-0011); it records the server's
 /// omniscient per-tick entity set (keyframe + delta via the live wire's <see cref="EntityStateCodec"/>) plus
 /// the event bundles, so free-cam replay works everywhere in the map. Pure C# (no Godot types) so a headless

@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Console;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Console;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// [T65] The demo-replay spectator camera (planning/specs/demo-replay-and-spectator.md §8): a free-roam view
@@ -91,7 +91,7 @@ public sealed partial class SpectatorCamera : Camera3D
 
         // F: cycle the follow target (free → player 1 → player 2 → … → free).
         if (@event is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F }
-            && !XonoticGodot.Game.Console.ConsoleState.IsOpen)
+            && !VortexArena.Game.Console.ConsoleState.IsOpen)
         {
             CycleFollowTarget();
             GetViewport().SetInputAsHandled();
@@ -133,7 +133,7 @@ public sealed partial class SpectatorCamera : Camera3D
         Basis basis = GlobalTransform.Basis;
 
         bool inputActive = Input.MouseMode == Input.MouseModeEnum.Captured
-                           && !XonoticGodot.Game.Console.ConsoleState.IsOpen && !GetTree().Paused;
+                           && !VortexArena.Game.Console.ConsoleState.IsOpen && !GetTree().Paused;
 
         if (_followNetId != 0 && TryResolveFollowTarget(out NVec3 targetQuake))
         {

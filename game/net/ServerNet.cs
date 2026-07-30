@@ -2,21 +2,21 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Net;
-using XonoticGodot.Server;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Net;
+using VortexArena.Server;
 using NVec3 = System.Numerics.Vector3;
-using BitWriter = XonoticGodot.Net.BitWriter;
-using BitReader = XonoticGodot.Net.BitReader;
-// [W14b LI1] alias the animdecide unit — the `Player` class in XonoticGodot.Common.Gameplay (imported above) shadows
+using BitWriter = VortexArena.Net.BitWriter;
+using BitReader = VortexArena.Net.BitReader;
+// [W14b LI1] alias the animdecide unit — the `Player` class in VortexArena.Common.Gameplay (imported above) shadows
 // the `...Gameplay.Player` namespace, so `Player.AnimDecide` would bind to the class. The alias resolves the unit.
-using AnimDecideUnit = XonoticGodot.Common.Gameplay.AnimDecide;
+using AnimDecideUnit = VortexArena.Common.Gameplay.AnimDecide;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// The authoritative server's network driver — the glue that turns a headless <see cref="GameWorld"/> into a
@@ -82,12 +82,12 @@ public sealed class ServerNet : IDisposable
     /// <summary>[T62] The optional demo tap: when set, <see cref="BroadcastSnapshots"/> hands it the omniscient
     /// per-tick entity set right after <see cref="BuildEntitySet"/> (before the per-client encode), and each
     /// flushed event bundle is recorded verbatim. Null = not recording (the live path pays one null check).</summary>
-    public XonoticGodot.Net.Demo.IDemoSink? DemoSink { get; set; }
+    public VortexArena.Net.Demo.IDemoSink? DemoSink { get; set; }
 
     /// <summary>[T63] The replay entity injector: when set, <see cref="BuildEntitySet"/> uses the recorded set
     /// INSTEAD of the live world scan (a replay host's humans are all observers, which the scan skips anyway),
     /// and observer join-edges are suppressed so viewers stay free-flying spectators.</summary>
-    public XonoticGodot.Net.Demo.IReplayEntitySource? ReplaySource { get; set; }
+    public VortexArena.Net.Demo.IReplayEntitySource? ReplaySource { get; set; }
 
     /// <summary>[T63] Re-broadcast a recorded server→client wire packet (an effect/sound/notification bundle,
     /// leading control byte included) to every viewer — the replay host emits these as the demo playhead
@@ -151,7 +151,7 @@ public sealed class ServerNet : IDisposable
     private uint _moveVarsHash;
 
     // this tick's scoreboard snapshot (built once, broadcast to all; per-client gated by _scoreVersion).
-    private readonly List<XonoticGodot.Net.ScoreRowWire> _scoreRows = new();
+    private readonly List<VortexArena.Net.ScoreRowWire> _scoreRows = new();
     // #22: last roster/status signature — a change bumps the score version so the row set re-sends on join/leave.
     private long _lastRosterSig = long.MinValue;
     private readonly List<(int team, int score)> _scoreTeams = new();
@@ -325,7 +325,7 @@ public sealed class ServerNet : IDisposable
         public string IdentityFingerprint = "";
     }
 
-    public ServerNet(NetTransport.Server transport, GameWorld world, string serverName = "XonoticGodot Server")
+    public ServerNet(NetTransport.Server transport, GameWorld world, string serverName = "VortexArena Server")
     {
         _transport = transport;
         _world = world;
@@ -410,7 +410,7 @@ public sealed class ServerNet : IDisposable
     }
 
     /// <summary>Convenience: start a server on <paramref name="port"/> and drive <paramref name="world"/>.</summary>
-    public static ServerNet? Start(GameWorld world, int port, int maxClients = 32, string serverName = "XonoticGodot Server")
+    public static ServerNet? Start(GameWorld world, int port, int maxClients = 32, string serverName = "VortexArena Server")
     {
         NetTransport.Server? t = NetTransport.Server.Start(port, maxClients);
         return t is null ? null : new ServerNet(t, world, serverName) { _maxClients = maxClients };
@@ -753,7 +753,7 @@ public sealed class ServerNet : IDisposable
     /// <summary>Read the live <c>slowmo</c> time scale (DP host_timescale), default 1 when unset, clamped to &gt;= 0
     /// (0 = paused). Shared by the server tick (<see cref="StepWorld"/>) and exposed so the client scales its input
     /// cadence by the same value.</summary>
-    internal static float ResolveSlowmo(XonoticGodot.Common.Services.ICvarService cv)
+    internal static float ResolveSlowmo(VortexArena.Common.Services.ICvarService cv)
     {
         string s = cv.GetString("slowmo");
         if (string.IsNullOrWhiteSpace(s)) return 1f;
@@ -1226,7 +1226,7 @@ public sealed class ServerNet : IDisposable
     /// <summary>
     /// QC <c>soundto(MSG_ONE, emitter, channel, sample, volume, atten, 0)</c>: send one positional sound to a
     /// single client only (the <c>target_speaker ACTIVATOR</c> BIT3 per-client sound). Encodes a one-record
-    /// <see cref="NetControl.SoundBundle"/> using the same <see cref="XonoticGodot.Net.SoundWire"/> codec as
+    /// <see cref="NetControl.SoundBundle"/> using the same <see cref="VortexArena.Net.SoundWire"/> codec as
     /// <see cref="FlushSounds"/> and delivers it ONLY to <paramref name="client"/>'s peer (reliable so it
     /// arrives even on a laggy connection — matching QC's reliable SOUND channel for MSG_ONE). No-op if the
     /// player has no accepted peer (bot, unconnected, or non-remote entity).
@@ -1241,7 +1241,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.Reset();
         _scratchWriter.WriteByte((byte)NetControl.SoundBundle);
         int countPos = ReserveCount(_scratchWriter);
-        var rec = new XonoticGodot.Net.SoundWire
+        var rec = new VortexArena.Net.SoundWire
         {
             Sample = sample,
             Origin = emitter.Origin + (emitter.Mins + emitter.Maxs) * 0.5f,
@@ -1451,7 +1451,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.Reset();
         _scratchWriter.WriteByte((byte)NetControl.ClientInit);
         // QC hook_shotorigin[s] (a single port offset; see the divergence note above) — raw float vector.
-        _scratchWriter.WriteVector(XonoticGodot.Common.Gameplay.Hook.HookShotOrigin, NetPrecision.Float);
+        _scratchWriter.WriteVector(VortexArena.Common.Gameplay.Hook.HookShotOrigin, NetPrecision.Float);
         // QC autocvar_g_trueaim_minrange (WriteCoord) — the min range below which true-aim is skipped.
         _scratchWriter.WriteFloat(cvars.GetFloat("g_trueaim_minrange"));
         // QC this.cnt * 255 → g_balance_damagepush_speedfactor; this.count * 255 → g_balance_armor_blockpercent. The
@@ -1459,7 +1459,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.WriteFloat(cvars.GetFloat("g_balance_damagepush_speedfactor"));
         _scratchWriter.WriteFloat(cvars.GetFloat("g_balance_armor_blockpercent"));
         // QC serverflags (the networked SERVERFLAG_* bitmap — fullbright/forbid-pickuptimer/teamplay).
-        _scratchWriter.WriteLong(XonoticGodot.Common.Gameplay.ServerFlags.Value);
+        _scratchWriter.WriteLong(VortexArena.Common.Gameplay.ServerFlags.Value);
         // QC: if (autocvar_sv_foginterval && world.fog != "") WriteString(world.fog) else WriteString("").
         string fog = cvars.GetFloat("sv_foginterval") != 0f ? cvars.GetString("sv_fog") : "";
         _scratchWriter.WriteString(fog ?? "");
@@ -1470,7 +1470,7 @@ public sealed class ServerNet : IDisposable
 
     /// <summary>Push the item respawn-time table to each peer — the C# port of QC's CSQC <c>itemstime</c> net
     /// message + <c>Item_ItemsTime_SetTimesForPlayer</c> / <c>SetTimesForAllPlayers</c> (itemstime.qc). The table
-    /// is the <see cref="XonoticGodot.Common.Gameplay.ItemstimeMutator"/>'s <c>CurrentTimes</c> (absolute respawn
+    /// is the <see cref="VortexArena.Common.Gameplay.ItemstimeMutator"/>'s <c>CurrentTimes</c> (absolute respawn
     /// times with the negative "another copy available now" encoding) plus the live <c>STAT(ITEMSTIME)</c> tier
     /// (= <c>sv_itemstime</c>). QC's <c>SetTimesForAllPlayers</c> only sends to a peer when
     /// <c>warmup_stage || !IS_PLAYER(it) || sv_itemstime == 2</c> — i.e. only spectators get times in a live
@@ -1481,8 +1481,8 @@ public sealed class ServerNet : IDisposable
     /// hooks). The client decode mirrors this field order (<see cref="ClientNet.HandleItemsTime"/>).</summary>
     private void SendItemsTime()
     {
-        if (XonoticGodot.Common.Gameplay.Mutators.ByName("itemstime")
-            is not XonoticGodot.Common.Gameplay.ItemstimeMutator itm || !itm.IsEnabled)
+        if (VortexArena.Common.Gameplay.Mutators.ByName("itemstime")
+            is not VortexArena.Common.Gameplay.ItemstimeMutator itm || !itm.IsEnabled)
             return;
 
         int tier = itm.Tier; // QC STAT(ITEMSTIME) = autocvar_sv_itemstime (0/1/2)
@@ -1525,19 +1525,19 @@ public sealed class ServerNet : IDisposable
         }
     }
 
-    private readonly System.Collections.Generic.List<XonoticGodot.Common.Gameplay.Waypoints.WaypointSprite> _wpScratch = new();
-    private readonly System.Collections.Generic.List<XonoticGodot.Common.Gameplay.Waypoints.WaypointSprite> _wpVisible = new();
+    private readonly System.Collections.Generic.List<VortexArena.Common.Gameplay.Waypoints.WaypointSprite> _wpScratch = new();
+    private readonly System.Collections.Generic.List<VortexArena.Common.Gameplay.Waypoints.WaypointSprite> _wpVisible = new();
     private bool _wpWasNonEmpty;
 
     /// <summary>Push the live waypoint sprites (QC the networked ENT_CLIENT_WAYPOINT entities) to each peer,
     /// filtered to what that peer may see (team/rule/predicate). The set is the persistent
-    /// <see cref="XonoticGodot.Common.Gameplay.Waypoints.WaypointSprites"/> manager (player pings, deployed
+    /// <see cref="VortexArena.Common.Gameplay.Waypoints.WaypointSprites"/> manager (player pings, deployed
     /// markers) merged with the gametype's per-tick objective rebuild (flags/points/keys via
     /// <c>GameType.CollectWaypoints</c>). Unreliable + small (positions move with carriers). Skipped for
     /// waypoint-less modes except the single clearing message when a mode that HAD waypoints drops to none.</summary>
     private void SendWaypoints()
     {
-        var mgr = XonoticGodot.Common.Gameplay.Waypoints.WaypointSprites.Active;
+        var mgr = VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active;
         _wpScratch.Clear();
         _world.GameType?.CollectWaypoints(_wpScratch);
 
@@ -1577,14 +1577,14 @@ public sealed class ServerNet : IDisposable
                 // QC packs the radar-icon byte: low 7 bits = m_radaricon (0/1), bit 7 = "ping now" (cnt|BIT(7)),
                 // which the client turns into an expanding gfx/teamradar_ping ring. waypointsprites.qc:187-192.
                 int radarByte = (wp.RadarIcon & 0x7F);
-                if (XonoticGodot.Common.Gameplay.Waypoints.WaypointSprites.IsPinging(wp))
+                if (VortexArena.Common.Gameplay.Waypoints.WaypointSprites.IsPinging(wp))
                     radarByte |= 0x80;
                 _scratchWriter.WriteByte((byte)radarByte);
                 _scratchWriter.WriteByte(Clamp255(wp.Color.X));
                 _scratchWriter.WriteByte(Clamp255(wp.Color.Y));
                 _scratchWriter.WriteByte(Clamp255(wp.Color.Z));
                 _scratchWriter.WriteFloat(wp.Health);
-                _scratchWriter.WriteFloat(XonoticGodot.Common.Gameplay.Waypoints.WaypointSprites.FadeAlpha(wp));
+                _scratchWriter.WriteFloat(VortexArena.Common.Gameplay.Waypoints.WaypointSprites.FadeAlpha(wp));
                 _scratchWriter.WriteByte((byte)(wp.HelpmeUntil > now ? 1 : 0));
                 _scratchWriter.WriteFloat(wp.MaxDistance);
                 _scratchWriter.WriteBool(wp.Hideable);
@@ -1593,7 +1593,7 @@ public sealed class ServerNet : IDisposable
         }
     }
 
-    private readonly System.Collections.Generic.List<XonoticGodot.Common.Gameplay.Onslaught.RadarLinkSegment> _radarLinkScratch = new();
+    private readonly System.Collections.Generic.List<VortexArena.Common.Gameplay.Onslaught.RadarLinkSegment> _radarLinkScratch = new();
     private bool _radarLinksWasNonEmpty;
 
     /// <summary>Push the live Onslaught radar links (QC the networked ENT_CLIENT_RADARLINK entities) to every
@@ -1605,7 +1605,7 @@ public sealed class ServerNet : IDisposable
     private void SendRadarLinks()
     {
         _radarLinkScratch.Clear();
-        if (_world.GameType is XonoticGodot.Common.Gameplay.Onslaught ons)
+        if (_world.GameType is VortexArena.Common.Gameplay.Onslaught ons)
             ons.CollectRadarLinks(_radarLinkScratch);
 
         if (_radarLinkScratch.Count == 0 && !_radarLinksWasNonEmpty)
@@ -1618,7 +1618,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.WriteByte((byte)count);
         for (int i = 0; i < count; i++)
         {
-            XonoticGodot.Common.Gameplay.Onslaught.RadarLinkSegment seg = _radarLinkScratch[i];
+            VortexArena.Common.Gameplay.Onslaught.RadarLinkSegment seg = _radarLinkScratch[i];
             _scratchWriter.WriteFloat(seg.A.X);
             _scratchWriter.WriteFloat(seg.A.Y);
             _scratchWriter.WriteByte((byte)(seg.TeamA & 0xFF));
@@ -1637,7 +1637,7 @@ public sealed class ServerNet : IDisposable
     /// <summary>QC WaypointSprite_visible_for_player (waypointsprites.qc:982): a waypoint's team/rule/predicate
     /// gate for one viewer. Mirrors the QC control flow: personal-waypoint predicate first, then the SPECTATOR
     /// (sv_itemstime-gated) and the team-restricted DEFAULT branches.</summary>
-    private bool WaypointVisible(XonoticGodot.Common.Gameplay.Waypoints.WaypointSprite wp, Player peer)
+    private bool WaypointVisible(VortexArena.Common.Gameplay.Waypoints.WaypointSprite wp, Player peer)
     {
         // QC: personal waypoints (enemy set) — visible only to that one viewer.
         if (wp.VisibleForPlayer is not null) return wp.VisibleForPlayer(peer);
@@ -1650,17 +1650,17 @@ public sealed class ServerNet : IDisposable
         // team. QC: IS_CLIENT(wp.owner) && (viewentity == viewer) && DIFF_TEAM(wp.owner, viewer)
         //          && StatusEffects_active(STATUSEFFECT_Invisibility, wp.owner). Only applies to real players
         // (a spectator is not "the view-entity", so they still see it — matches the QC e==player guard).
-        if (wp.Owner is XonoticGodot.Common.Gameplay.Player carrier && isPlayer
+        if (wp.Owner is VortexArena.Common.Gameplay.Player carrier && isPlayer
             && (int)carrier.Team != (int)peer.Team
-            && XonoticGodot.Common.Gameplay.StatusEffectsCatalog.ByName("invisibility") is { } invisDef
-            && XonoticGodot.Common.Gameplay.StatusEffectsCatalog.Has(carrier, invisDef))
+            && VortexArena.Common.Gameplay.StatusEffectsCatalog.ByName("invisibility") is { } invisDef
+            && VortexArena.Common.Gameplay.StatusEffectsCatalog.Has(carrier, invisDef))
         {
             return false;
         }
 
         switch (wp.Rule)
         {
-            case XonoticGodot.Common.Gameplay.Waypoints.SpriteRule.Spectator:
+            case VortexArena.Common.Gameplay.Waypoints.SpriteRule.Spectator:
             {
                 // QC: hidden entirely when sv_itemstime == 0; for live players hidden unless warmup or sv_itemstime == 2.
                 float itemstime = _world.Services.Cvars.GetFloat("sv_itemstime");
@@ -1670,7 +1670,7 @@ public sealed class ServerNet : IDisposable
                     return false;
                 return true;
             }
-            case XonoticGodot.Common.Gameplay.Waypoints.SpriteRule.Teamplay:
+            case VortexArena.Common.Gameplay.Waypoints.SpriteRule.Teamplay:
                 // QC Draw_WaypointSprite SPRITERULE_TEAMPLAY (waypointsprites.qc:514) is visible to EVERYONE — it
                 // never hides on team; it only swaps the IMAGE (own/enemy/spectator, resolved in SendWaypoints via
                 // SpriteFor). The only "hide" is when the chosen image is "" (QC: if(spriteimage=="") return). So
@@ -2272,7 +2272,7 @@ public sealed class ServerNet : IDisposable
             _snapshotWriter.WriteBool(sendScoreInfo);
             if (sendScoreInfo)
             {
-                XonoticGodot.Net.ScoreInfoBlock.Serialize(_snapshotWriter);
+                VortexArena.Net.ScoreInfoBlock.Serialize(_snapshotWriter);
                 st.LastScoreInfoHash = _scoreInfoHash;
                 st.SentScoreInfo = true;
             }
@@ -2282,7 +2282,7 @@ public sealed class ServerNet : IDisposable
             _snapshotWriter.WriteBool(sendScores);
             if (sendScores)
             {
-                XonoticGodot.Net.ScoreboardBlock.Serialize(_snapshotWriter, _scoreRows, _scoreTeams, _scoreRankings, _scoreSpeedAward);
+                VortexArena.Net.ScoreboardBlock.Serialize(_snapshotWriter, _scoreRows, _scoreTeams, _scoreRankings, _scoreSpeedAward);
                 st.LastScoreVersion = _scoreVersion;
             }
 
@@ -2292,10 +2292,10 @@ public sealed class ServerNet : IDisposable
             // "31 = self" slot, the SURV hunter visibility), so serialize per peer into a scratch and hash-gate
             // (steady-state cost = one bool; QC's equivalent is stat delta-compression + linked-entity SendFlags).
             _modeStatusScratch.Reset();
-            bool haveModeStatus = XonoticGodot.Net.GametypeStatusBlock.Capture(
+            bool haveModeStatus = VortexArena.Net.GametypeStatusBlock.Capture(
                 _modeStatusScratch, _world.GameType, owner, _world.Clients.Players, NetIdFor,
                 roundStarted: _world.Rounds is { IsRoundStarted: true });
-            uint modeStatusHash = haveModeStatus ? XonoticGodot.Net.GametypeStatusBlock.Hash(_modeStatusScratch.WrittenSpan) : 0u;
+            uint modeStatusHash = haveModeStatus ? VortexArena.Net.GametypeStatusBlock.Hash(_modeStatusScratch.WrittenSpan) : 0u;
             bool sendModeStatus = haveModeStatus && st.LastModeStatusHash != modeStatusHash;
             _snapshotWriter.WriteBool(sendModeStatus);
             if (sendModeStatus)
@@ -2512,20 +2512,20 @@ public sealed class ServerNet : IDisposable
                 // networked; 255 = hidden). Running Guns hides the body (body Alpha = -1 hidden) but keeps the gun
                 // (DefaultWeaponAlpha = +1), and Cloaked fades both; the exterior-weapon alpha is the SetDefaultAlpha
                 // hook's DefaultWeaponAlpha, networked independently of the body Alpha above so the two can differ.
-                WepAlpha = (byte)QuantizeAlpha(XonoticGodot.Common.Gameplay.MutatorHooks.DefaultWeaponAlpha),
+                WepAlpha = (byte)QuantizeAlpha(VortexArena.Common.Gameplay.MutatorHooks.DefaultWeaponAlpha),
                 // [W-wepent-view] the per-player wepent HUD view-state — the spectatee/third-person counterpart of
                 // the owner-block OwnerWeaponRings; every client viewing this player gets its charge/clip/heat/beam.
                 // Resolved by the SAME WepentResolver the owner block uses (ResolveOwnerWeaponRings now delegates to
                 // it), so the owner's own rings and other players' views of this player stay in lockstep. An idle /
                 // no-charge player resolves to WepentViewState.None, which NetEntityState.Diff compares field-by-field
                 // against the baseline → the EntityField.WepentView bit stays clear and that player costs nothing here.
-                WepentView = XonoticGodot.Common.Gameplay.WepentResolver.Resolve(p, CountLiveMines, _world.Time),
+                WepentView = VortexArena.Common.Gameplay.WepentResolver.Resolve(p, CountLiveMines, _world.Time),
                 // [W-vehicleview] the per-player vehicle HUD view-state — the seated-pilot health/shield/energy/ammo/
                 // reload bars, the vehicle hud id, weapon-2 mode, and lock strength/flags. Resolved off the
                 // authoritative player exactly like WepentView above; an on-foot / observing player resolves to
                 // VehicleViewState.None (VehKind 0), which NetEntityState.Diff compares field-by-field against the
                 // baseline → the EntityField.VehicleView bit stays clear and that player costs nothing here.
-                VehicleView = XonoticGodot.Common.Gameplay.VehicleViewResolver.Resolve(p),
+                VehicleView = VortexArena.Common.Gameplay.VehicleViewResolver.Resolve(p),
                 // ViewmodelSkin / GunAlign have NO server-side producer in the port (the viewmodel skin variant and
                 // cl_gunalign side are client-local concepts; QC networks them off the wepent entity, which the port
                 // doesn't yet model server-side). Left at their defaults (0) — the wire is RESERVED for a later wave
@@ -2602,7 +2602,7 @@ public sealed class ServerNet : IDisposable
                 // registry id 0 is the "random/null" sentinel (no specific type) — only append a concrete netname.
                 if (e.ClassName == "nade")
                 {
-                    var def = XonoticGodot.Common.Gameplay.Nades.NadeRegistry.ById(e.NadeBonusType);
+                    var def = VortexArena.Common.Gameplay.Nades.NadeRegistry.ById(e.NadeBonusType);
                     if (def is not null && def.Id != 0)
                         netModel += " " + def.NetName;
                 }
@@ -2653,7 +2653,7 @@ public sealed class ServerNet : IDisposable
             // TURRET head aim/active (QC cl_turrets tur_head.angles/.avelocity + .active/DEAD_DEAD): TryGetState is the
             // non-allocating probe (State(e) would alloc for every non-turret entity each tick), so only a real turret
             // populates the head block; everything else leaves it default.
-            if (XonoticGodot.Common.Gameplay.TurretAI.TryGetState(e, out var tst))
+            if (VortexArena.Common.Gameplay.TurretAI.TryGetState(e, out var tst))
             {
                 s.TurHeadPitch = tst.HeadAngles.X;
                 s.TurHeadYaw = tst.HeadAngles.Y;
@@ -2730,7 +2730,7 @@ public sealed class ServerNet : IDisposable
     /// The weapon a player is ACTUALLY holding (raising/in-use) this tick — the QC <c>wepent</c> exterior weapon's
     /// <c>m_weapon</c> (CL_ExteriorWeaponentity_Think reads <c>w_ent.weaponname</c>, which the switch state machine
     /// sets to the new weapon only at the WS_CLEAR→WS_RAISE transition, server/weapons/weaponsystem.qc:547). The
-    /// port drives that in <see cref="XonoticGodot.Common.Gameplay.WeaponFireDriver"/> via slot-0
+    /// port drives that in <see cref="VortexArena.Common.Gameplay.WeaponFireDriver"/> via slot-0
     /// <c>CurrentWeaponId</c>, which (unlike the immediately-mirrored <see cref="Player.ActiveWeaponId"/>) still
     /// holds the OLD weapon through the drop window — so the remote third-person held model lowers the old weapon
     /// and only snaps to the new one when the raise begins, exactly like Base's exterior weapon entity. Falls back
@@ -2783,7 +2783,7 @@ public sealed class ServerNet : IDisposable
             return _entityScratch;
 
         int viewerCluster = -1;
-        XonoticGodot.Formats.Bsp.BspPvs? pvs = null;
+        VortexArena.Formats.Bsp.BspPvs? pvs = null;
         if (havePvsCull)
         {
             pvs = _world.Pvs;
@@ -2803,10 +2803,10 @@ public sealed class ServerNet : IDisposable
         if (havePvsCull)
         {
             _viewClustersScratch.Add(viewerCluster);
-            IReadOnlyList<XonoticGodot.Common.Gameplay.Warpzone> zones = _world.Warpzones.Zones;
+            IReadOnlyList<VortexArena.Common.Gameplay.Warpzone> zones = _world.Warpzones.Zones;
             for (int zi = 0; zi < zones.Count; zi++)
             {
-                XonoticGodot.Common.Gameplay.Warpzone wz = zones[zi];
+                VortexArena.Common.Gameplay.Warpzone wz = zones[zi];
                 if (!wz.Linked) continue;
                 NVec3 inP = wz.Transform.InOrigin + wz.Transform.InForward * 8f;
                 int inC = pvs!.LeafCluster(pvs.FindLeaf(inP));
@@ -2865,9 +2865,9 @@ public sealed class ServerNet : IDisposable
             // VehicleView to None so EntityField.VehicleView stays clear for remotes (independent of the enemy-privacy
             // gate above, which only fires for enemy recipients — vehicle state is private from teammates too).
             if (applyPrivacy && !isOwn && state.Kind == NetEntityKind.Player
-                && !state.VehicleView.Equals(XonoticGodot.Net.VehicleViewState.None))
+                && !state.VehicleView.Equals(VortexArena.Net.VehicleViewState.None))
             {
-                state.VehicleView = XonoticGodot.Net.VehicleViewState.None;
+                state.VehicleView = VortexArena.Net.VehicleViewState.None;
             }
 
             _relevantScratch[kv.Key] = state;
@@ -2962,7 +2962,7 @@ public sealed class ServerNet : IDisposable
     /// <summary>
     /// Snapshot the score table for this tick (QC PlayerScore_SendEntity / TeamScore_SendEntity). Mirrors the
     /// authoritative per-team totals (which the gametype owns) into the shared score table so its
-    /// <see cref="XonoticGodot.Common.Gameplay.Scoring.GameScores.Version"/> reflects team changes, then captures
+    /// <see cref="VortexArena.Common.Gameplay.Scoring.GameScores.Version"/> reflects team changes, then captures
     /// every player's networked columns + the active team totals once. The version stamp gates the per-client send.
     /// </summary>
     private void BuildScoreboard()
@@ -2971,13 +2971,13 @@ public sealed class ServerNet : IDisposable
         // ScoreInfo_SendEntity's WriteRegistered(Gametypes) + teamplay) carries the live mode for the client's
         // column filter. Idempotent; writing the same NetName doesn't bump the layout generation (only label/flag
         // changes do), so it doesn't spuriously force a ScoreInfo resend.
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype = _world.GameType?.RegistryName ?? "dm";
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay = _world.Teamplay is { IsTeamGame: true };
+        VortexArena.Common.Gameplay.Scoring.GameScores.Gametype = _world.GameType?.RegistryName ?? "dm";
+        VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay = _world.Teamplay is { IsTeamGame: true };
 
         // mirror gametype-owned team totals into the score table (bumps Version on a team-score change).
         if (_world.Teamplay is { IsTeamGame: true })
-            foreach (int t in XonoticGodot.Common.Gameplay.Teams.Active(_world.Teamplay.TeamCount))
-                XonoticGodot.Common.Gameplay.Scoring.GameScores.SetTeamScore(t, _world.Scores.TeamScore(t));
+            foreach (int t in VortexArena.Common.Gameplay.Teams.Active(_world.Teamplay.TeamCount))
+                VortexArena.Common.Gameplay.Scoring.GameScores.SetTeamScore(t, _world.Scores.TeamScore(t));
 
         IReadOnlyList<Player> players = _world.Clients.Players;
 
@@ -2998,12 +2998,12 @@ public sealed class ServerNet : IDisposable
         if (rosterSig != _lastRosterSig)
         {
             _lastRosterSig = rosterSig;
-            XonoticGodot.Common.Gameplay.Scoring.GameScores.MarkDirty();
+            VortexArena.Common.Gameplay.Scoring.GameScores.MarkDirty();
         }
 
-        _scoreVersion = XonoticGodot.Common.Gameplay.Scoring.GameScores.Version;
-        _scoreInfoGen = XonoticGodot.Common.Gameplay.Scoring.GameScores.LayoutGeneration;
-        _scoreInfoHash = XonoticGodot.Net.ScoreInfoBlock.Hash();
+        _scoreVersion = VortexArena.Common.Gameplay.Scoring.GameScores.Version;
+        _scoreInfoGen = VortexArena.Common.Gameplay.Scoring.GameScores.LayoutGeneration;
+        _scoreInfoHash = VortexArena.Net.ScoreInfoBlock.Hash();
 
         _scoreRows.Clear();
         for (int i = 0; i < players.Count; i++)
@@ -3027,8 +3027,8 @@ public sealed class ServerNet : IDisposable
             }
             // carry the entcs name/team slice so the client can label/group the row without an entcs stream
             // (the port has no entcs name source; the scoreboard would otherwise have an opaque net id).
-            _scoreRows.Add(new XonoticGodot.Net.ScoreRowWire(NetIdFor(p),
-                XonoticGodot.Common.Gameplay.Scoring.GameScores.CaptureColumns(p), p.NetName, (int)p.Team,
+            _scoreRows.Add(new VortexArena.Net.ScoreRowWire(NetIdFor(p),
+                VortexArena.Common.Gameplay.Scoring.GameScores.CaptureColumns(p), p.NetName, (int)p.Team,
                 // QC pl.team == NUM_SPECTATOR: an observer is listed in the scoreboard spectator block, not the
                 // score table. The port keeps the observer's last team color, so flag it explicitly here.
                 isSpectator: p.IsObserver || p.FragsStatus == Player.FragsSpectator,
@@ -3038,7 +3038,7 @@ public sealed class ServerNet : IDisposable
 
         _scoreTeams.Clear();
         if (_world.Teamplay is { IsTeamGame: true })
-            foreach (int t in XonoticGodot.Common.Gameplay.Teams.Active(_world.Teamplay.TeamCount))
+            foreach (int t in VortexArena.Common.Gameplay.Teams.Active(_world.Teamplay.TeamCount))
                 _scoreTeams.Add((t, _world.Scores.TeamScore(t)));
 
         // QC the race/CTS rankings table (Scoreboard_Rankings_Draw): in race modes, snapshot the persistent
@@ -3051,8 +3051,8 @@ public sealed class ServerNet : IDisposable
         {
             string map = _world.Services.Cvars.GetString("mapname");
             string recordType = gt == "cts"
-                ? XonoticGodot.Common.Gameplay.RaceRecords.CtsRecord
-                : XonoticGodot.Common.Gameplay.RaceRecords.RaceRecord;
+                ? VortexArena.Common.Gameplay.RaceRecords.CtsRecord
+                : VortexArena.Common.Gameplay.RaceRecords.RaceRecord;
             // QC race_send_rankings_cnt: m = min(RANKINGS_CNT, autocvar_g_cts_send_rankings_cnt) — the number of
             // ranked records networked for display. Base default g_cts_send_rankings_cnt = 15 (gametypes-server.cfg),
             // hard-capped at RANKINGS_CNT (99). Read the cvar live so a server config edit takes effect.
@@ -3063,26 +3063,26 @@ public sealed class ServerNet : IDisposable
                 float rc = _world.Services.Cvars.GetFloat("g_cts_send_rankings_cnt");
                 if (float.IsFinite(rc) && rc >= 0f) displayCnt = (int)rc;
             }
-            displayCnt = System.Math.Clamp(displayCnt, 0, XonoticGodot.Common.Gameplay.RaceRecords.RankingsCnt);
+            displayCnt = System.Math.Clamp(displayCnt, 0, VortexArena.Common.Gameplay.RaceRecords.RankingsCnt);
             for (int pos = 1; pos <= displayCnt; pos++)
             {
-                float t = XonoticGodot.Common.Gameplay.RaceRecords.ReadTime(map, recordType, pos);
+                float t = VortexArena.Common.Gameplay.RaceRecords.ReadTime(map, recordType, pos);
                 if (t == 0f) break; // ranked table is dense from rank 1; first empty slot ends it
                 _scoreRankings.Add((
-                    XonoticGodot.Common.Gameplay.Scoring.GameScores.TimeEncode(t),
-                    XonoticGodot.Common.Gameplay.RaceRecords.ReadName(map, recordType, pos)));
+                    VortexArena.Common.Gameplay.Scoring.GameScores.TimeEncode(t),
+                    VortexArena.Common.Gameplay.RaceRecords.ReadName(map, recordType, pos)));
             }
 
             // QC race_send_speedaward / _best (server/race.qc:267): Race and CTS both track the round-best +
             // persisted all-time best planar speed; rounded to an int (QC floor(speed + 0.5)). Now that Race owns
             // SpeedAwardFrame too, feed both gametypes.
             int SpeedRound(float s) => (int)System.MathF.Floor(s + 0.5f);
-            if (_world.GameType is XonoticGodot.Common.Gameplay.Cts cts)
+            if (_world.GameType is VortexArena.Common.Gameplay.Cts cts)
             {
                 _scoreSpeedAward = (SpeedRound(cts.SpeedAwardSpeed), cts.SpeedAwardHolder,
                                     SpeedRound(cts.SpeedAwardBest), cts.SpeedAwardBestHolder);
             }
-            else if (_world.GameType is XonoticGodot.Common.Gameplay.Race raceGt)
+            else if (_world.GameType is VortexArena.Common.Gameplay.Race raceGt)
             {
                 _scoreSpeedAward = (SpeedRound(raceGt.SpeedAwardSpeed), raceGt.SpeedAwardHolder,
                                     SpeedRound(raceGt.SpeedAwardBest), raceGt.SpeedAwardBestHolder);
@@ -3185,7 +3185,7 @@ public sealed class ServerNet : IDisposable
         // CrosshairPanel -1 "no ring" sentinel the owner wire expects) and resolves the two owner-only CAPS
         // (HagarLoadMax / MineLimit) locally — those caps are NOT on the per-player WepentView wire (the design
         // keeps resolved caps owner-only; the client clamps the per-player view against the panel defaults).
-        WepentViewState v = XonoticGodot.Common.Gameplay.WepentResolver.Resolve(p, CountLiveMines, _world.Time);
+        WepentViewState v = VortexArena.Common.Gameplay.WepentResolver.Resolve(p, CountLiveMines, _world.Time);
 
         // [0,1] charge/pool/heat: the struct carries 0 when the active weapon doesn't own that ring; the owner
         // wire hides a ring with -1, so translate 0 → -1 (a held charge weapon at exactly 0 reads as hidden for
@@ -3218,7 +3218,7 @@ public sealed class ServerNet : IDisposable
     /// [W-wepent-view] Count this player's live mines (QC the W_MineLayer_Count <c>g_mines</c> scan) — the
     /// Mine Layer count ring's current value, which isn't cached on the weapon slot. Extracted from the old
     /// ResolveOwnerWeaponRings so BOTH the owner block and the per-player WepentView (which pass this as the
-    /// <c>mineCounter</c> delegate to <see cref="XonoticGodot.Common.Gameplay.WepentResolver.Resolve"/>)
+    /// <c>mineCounter</c> delegate to <see cref="VortexArena.Common.Gameplay.WepentResolver.Resolve"/>)
     /// reuse the same authoritative count.
     /// </summary>
     private int CountLiveMines(Player p)
@@ -3235,8 +3235,8 @@ public sealed class ServerNet : IDisposable
     /// <c>ClientNet.HandleSnapshot</c>'s owner read, appending new fields at the END.</summary>
     private void WriteOwnerState(BitWriter w, Player p, PeerState st)
     {
-        w.WriteVector(p.Origin, XonoticGodot.Net.NetPrecision.Float);
-        w.WriteVector(p.Velocity, XonoticGodot.Net.NetPrecision.Float);
+        w.WriteVector(p.Origin, VortexArena.Net.NetPrecision.Float);
+        w.WriteVector(p.Velocity, VortexArena.Net.NetPrecision.Float);
         w.WriteBool(p.OnGround);
         w.WriteShort((int)p.Health);
         w.WriteShort((int)p.ArmorValue);
@@ -3272,12 +3272,12 @@ public sealed class ServerNet : IDisposable
         // QC view punch (PM_check_punch): the weapon-recoil view kick, decayed server-side and applied to the
         // owner's rendered view angles client-side. Owner-only (only the local player sees their own kick), so
         // it rides the owner block, not the entity stream. Small + cheap; sent unconditionally for lockstep.
-        w.WriteVector(p.PunchAngle, XonoticGodot.Net.NetPrecision.Float);
+        w.WriteVector(p.PunchAngle, VortexArena.Net.NetPrecision.Float);
 
         // QC view punch ORIGIN kick (PM_check_punch punchvector, decayed 30u/s server-side): added to the rendered
         // view ORIGIN (vieworg += view_punchvector, cl_player.qc:570) — owner-only, same block as PunchAngle. Stock
         // content never sets it non-zero, but the seam is now wired end-to-end so any future origin kick is faithful.
-        w.WriteVector(p.PunchVector, XonoticGodot.Net.NetPrecision.Float);
+        w.WriteVector(p.PunchVector, VortexArena.Net.NetPrecision.Float);
 
         // QC STAT(MOVEVARS_HIGHSPEED) per-player (Physics_UpdateStats): the RESOLVED top-speed multiplier this tick
         // — the Speed powerup ×, the speed/disability buffs ×, the entrap nade × all folded into player.SpeedMultiplier
@@ -3318,7 +3318,7 @@ public sealed class ServerNet : IDisposable
             out float wsHagarLoad, out float wsHagarLoadMax,
             out float wsMineCount, out float wsMineLimit,
             out float wsArcHeat);
-        new XonoticGodot.Net.OwnerWeaponRings
+        new VortexArena.Net.OwnerWeaponRings
         {
             VortexCharge = wsCharge, VortexChargePool = wsChargePool,
             ClipLoad = wsClipLoad, ClipSize = wsClipSize,
@@ -3332,7 +3332,7 @@ public sealed class ServerNet : IDisposable
         // color) needs; a listen host reads the same values straight off LocalServerPlayer. Appended at the END
         // of the owner block; ClientNet.HandleSnapshot reads it via OwnerInventory.Read, in lockstep — the
         // struct's single Write/Read pair owns the wire layout (see OwnerWeaponRings for why).
-        new XonoticGodot.Net.OwnerInventory
+        new VortexArena.Net.OwnerInventory
         {
             Shells = p.GetResource(ResourceType.Shells),
             Bullets = p.GetResource(ResourceType.Bullets),
@@ -3470,15 +3470,15 @@ public sealed class ServerNet : IDisposable
 
     private readonly struct CapturedSound
     {
-        public readonly XonoticGodot.Engine.Simulation.SoundEvent Event;
-        public CapturedSound(in XonoticGodot.Engine.Simulation.SoundEvent e) { Event = e; }
+        public readonly VortexArena.Engine.Simulation.SoundEvent Event;
+        public CapturedSound(in VortexArena.Engine.Simulation.SoundEvent e) { Event = e; }
     }
 
     internal void CaptureEffect(in EffectRequest request) => _effectQueue.Add(new CapturedEffect(request));
     internal void CaptureNotification(in NotificationDispatch d) => _notifyQueue.Add(new CapturedNotification(d));
 
     /// <summary>SoundService.Broadcast handler — queue a server-emitted sound for this frame's sound bundle.</summary>
-    private void OnSoundEmitted(XonoticGodot.Engine.Simulation.SoundEvent e) => _soundQueue.Add(new CapturedSound(e));
+    private void OnSoundEmitted(VortexArena.Engine.Simulation.SoundEvent e) => _soundQueue.Add(new CapturedSound(e));
 
     /// <summary>
     /// Flush the per-frame captured effects + notifications to clients. Effects go in an unreliable
@@ -3625,7 +3625,7 @@ public sealed class ServerNet : IDisposable
     }
 
     /// <summary>
-    /// Encode one sound record via the shared <see cref="XonoticGodot.Net.SoundWire"/> codec: sample, origin (raw
+    /// Encode one sound record via the shared <see cref="VortexArena.Net.SoundWire"/> codec: sample, origin (raw
     /// floats, matching <see cref="WriteEffect"/>'s origin — NOT the quantized WriteVector path), volume,
     /// attenuation, channel, the SOURCE entity's net id, and the loop/stop flags. The net id + flags let the
     /// client key a looping AudioStreamPlayer3D by (entity, channel) and replace/stop it as the emitter moves
@@ -3633,11 +3633,11 @@ public sealed class ServerNet : IDisposable
     /// the bundle count stays accurate; a STOP record is always written though its sample is empty. Inverse of
     /// <c>ClientNet.HandleSoundBundle</c>.
     /// </summary>
-    private bool WriteSound(BitWriter w, in XonoticGodot.Engine.Simulation.SoundEvent e)
+    private bool WriteSound(BitWriter w, in VortexArena.Engine.Simulation.SoundEvent e)
     {
         if (!e.Stop && string.IsNullOrEmpty(e.Sample))
             return false;
-        var rec = new XonoticGodot.Net.SoundWire
+        var rec = new VortexArena.Net.SoundWire
         {
             Sample = e.Sample,
             Origin = e.Origin,
@@ -3777,7 +3777,7 @@ public sealed class ServerNet : IDisposable
 
     // The world's fixed tick dt (SimulationLoop.TicRate is the per-tick seconds, 1/72). Mirrored from the
     // engine constant so the input dt fallback and the advertised tick rate stay in lockstep with the sim.
-    private const float SimulationLoopTicRate = XonoticGodot.Engine.Simulation.SimulationLoop.TicRate;
+    private const float SimulationLoopTicRate = VortexArena.Engine.Simulation.SimulationLoop.TicRate;
 
     private sealed class EffectNetSink : IEffectSink
     {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Demos tab — a faithful C# port of <c>XonoticDemoBrowserTab_fill</c>
@@ -119,7 +119,7 @@ public partial class DialogMediaDemo : Control
                 string name = System.IO.Path.GetFileNameWithoutExtension(path);
                 try
                 {
-                    var header = XonoticGodot.Net.Demo.DemoFormat.ReadHeader(path);
+                    var header = VortexArena.Net.Demo.DemoFormat.ReadHeader(path);
                     string len = header.DurationSeconds > 0f
                         ? header.DurationSeconds.ToString("0.0", CultureInfo.InvariantCulture) + "s"
                         : "unfinished"; // crash-truncated: duration never patched (still playable via scan)
@@ -165,7 +165,7 @@ public partial class DialogMediaDemo : Control
         DemoRow row = _demos[_visible[selected[0]]];
         if (!row.Playable)
         {
-            XonoticGodot.Common.Diagnostics.Log.Info("[DialogMediaDemo] cannot play an unreadable demo file");
+            VortexArena.Common.Diagnostics.Log.Info("[DialogMediaDemo] cannot play an unreadable demo file");
             return;
         }
         Net.NetGame.PendingReplayDemo = row.Path;

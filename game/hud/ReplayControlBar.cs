@@ -1,8 +1,8 @@
 using System;
 using Godot;
-using XonoticGodot.Net.Demo;
+using VortexArena.Net.Demo;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// [T63·P2] Demo-replay time-control bar (demo-replay-and-spectator.md §9): a bottom-of-screen strip with a

@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
-using XonoticGodot.Net;
-using XonoticGodot.Net.Demo;
+using VortexArena.Net;
+using VortexArena.Net.Demo;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the demo record/replay spine (T62/T63, planning/specs/demo-replay-and-spectator.md §5/§12): the

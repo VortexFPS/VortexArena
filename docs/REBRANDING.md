@@ -74,7 +74,7 @@ The window title bar currently reads **"VortexArena"** (Godot derives it from `c
 | B2 | `project.godot` | 14 | `config/description="Xonotic, reborn on Godot + C#…"` | Vortex Arena description | Metadata only |
 | B3 | `export_presets.cfg` | 64 | `application/product_name="VortexArena"` | `"Vortex Arena"` | Windows .exe product name (file properties) |
 | B4 | `export_presets.cfg` | 65 | `application/file_description="VortexArena client"` | `"Vortex Arena client"` | Windows .exe description |
-| B5 | `export_presets.cfg` | 175 | `application/bundle_identifier="org.vortexarena.client"` | e.g. `"org.vortexarena.client"` | macOS bundle id — **changing it after first release re-identifies the app** to the OS |
+| B5 — **DONE (already correct in the file)** | `export_presets.cfg` | 175 | `application/bundle_identifier="org.vortexarena.client"` | e.g. `"org.vortexarena.client"` | macOS bundle id — **changing it after first release re-identifies the app** to the OS |
 
 > **Kept as-is (artifact filenames):** `export_path=".../VortexArena.exe"`,
 > `vortexarena-dedicated.x86_64`, preset *names* (`windows-client`, etc.), and
@@ -144,10 +144,10 @@ These ship as *defaults* and end up baked into servers' listings and users' save
 
 | # | File | Line | Current | Proposed | Note |
 |---|------|------|---------|----------|------|
-| G1 | `src/VortexArena.Server/Cvars.cs` | 378 | `hostname` default `"Xonotic VortexArena Server"` | `"Vortex Arena Server"` | Shown in the server browser & server-info dialog |
-| G2 | `game/net/NetGame.cs` | 74, 386, 399 | `"VortexArena Listen Server"` (×3) | `"Vortex Arena Listen Server"` | Scoreboard/server-info default |
-| G3 | `game/Shell.cs` | 614 | `"VortexArena Listen Server"` | `"Vortex Arena Listen Server"` | Fallback when `hostname` is empty |
-| G4 | `campaign.cfg` | 1 | `set g_campaignxonoticbeta_index 1` | **rename** → e.g. `g_campaignvortexbeta_index` | Campaign id `xonoticbeta` is baked into the cvar **name**; progress persists as `g_campaignxonoticbeta_index` in `config.cfg`. **Decision 3 — renaming.** Pre-release, resetting progress is acceptable; otherwise add a one-time cvar-copy migration. Rename the campaign data file/dir it points at too. See [Decision 3](#decision-3--internal-id-rename-scope) |
+| G1 — **DONE 2026-07-30** | `src/VortexArena.Server/Cvars.cs` | 378 | `hostname` default `"Xonotic VortexArena Server"` | `"Vortex Arena Server"` | Shown in the server browser & server-info dialog |
+| G2 — **DONE 2026-07-30** | `game/net/NetGame.cs` | 74, 386, 399 | `"VortexArena Listen Server"` (×3) | `"Vortex Arena Listen Server"` | Scoreboard/server-info default |
+| G3 — **DONE 2026-07-30** | `game/Shell.cs` | 614 | `"VortexArena Listen Server"` | `"Vortex Arena Listen Server"` | Fallback when `hostname` is empty |
+| G4 — **DEFERRED by decision 2026-07-30** | `campaign.cfg` | 1 | `set g_campaignxonoticbeta_index 1` | **rename** → e.g. `g_campaignvortexbeta_index` | Campaign id `xonoticbeta` is baked into the cvar **name**; progress persists as `g_campaignxonoticbeta_index` in `config.cfg`. **Decision 3 — renaming.** Pre-release, resetting progress is acceptable; otherwise add a one-time cvar-copy migration. Rename the campaign data file/dir it points at too. See [Decision 3](#decision-3--internal-id-rename-scope) |
 | G5 | `game/UserPaths.cs` | 29 | user data dir `~/XonData` | keep `XonData`; rename env var | Folder `XonData` is already de-Xonoticized — fine. The **env-var override `VORTEX_USERDIR`** → `VORTEX_USERDIR` (Tier 0, dev/CI only; update CI scripts + tests that set it) |
 
 > **G-note (config path coupling):** Godot's `user://` location is derived from
@@ -276,6 +276,26 @@ content and drop/keep the mark? *(ii) product* — how visually independent shou
 The earlier naming rule froze all internal identifiers as `VortexArena`. **That is now
 reversed: internal IDs are being renamed too, including the campaign.** "Internal IDs" spans a
 wide cost range, so the real decision is *how far to go now*. Two tiers:
+
+
+> **Status 2026-07-30.** Hostname / listen-server defaults (G1—G3) are **done**: the server `hostname`
+> cvar now defaults to `"Vortex Arena Server"` and the four listen-server display strings to
+> `"Vortex Arena Listen Server"`. The macOS bundle id (B5) was **already** `org.vortexarena.client`.
+> Full suite green afterwards: 3,933 passed, 0 skipped.
+>
+> **The campaign id (G4) is deliberately NOT done**, by decision: the id is baked into the cvar *name*
+> `g_campaignxonoticbeta_index`, so renaming it orphans any saved campaign progress. That is cheap now
+> and expensive later, but it was judged not worth doing in the same pass as cosmetic display strings.
+> Revisit before the first release that advertises campaign progress as persistent.
+>
+> **`gamename` (H1/H3) is NOT a display string and was left alone.** `"Xonotic"` appears in
+> `MasterServerProtocol`, `ServerBrowser` and `ServerNet` as the dpmaster/server-browser game filter — a
+> **protocol identifier**. Changing it makes our servers invisible to anything filtering on the old
+> value, so it is a compatibility decision, not a branding one, and needs its own call.
+>
+> **Do not trust the "current value" column below for anything.** The Tier-1 namespace sweep rewrote
+> string literals inside this document too, so several rows now read `X —> X` with both sides
+> identical (see the bundle-id and env-var bullets). Verify against the actual file before acting.
 
 **Tier 0 — Player-adjacent internal IDs (cheap, low-risk — do now, folded into Phase 1)**
 - **Campaign id** `xonoticbeta` → e.g. `vortexbeta`: `campaign.cfg`, the campaign data

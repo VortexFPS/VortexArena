@@ -746,7 +746,28 @@ else already does).
 
 **G7 — After the TGA delete there is no rollback source.**
 
-- **Status:** **Accepted 2026-07-29** — archive outside git until the gate passes.
+- **Status:** **CLOSED 2026-07-30** — gate retired without the decode measurement, by decision.
+  The archive obligation is lifted with it: `Projects/Vortex/Base/` may be updated again.
+
+  **There was never a separate archive to discard, and `Base/` itself stays.** Item 17 chose to let the
+  pristine upstream clone serve as the G7 archive rather than making a frozen copy, so "discard the
+  archive" resolves to "stop freezing `Base/`", not to deleting anything. `Base/` is also the parity
+  baseline — eight tools under `tools/` plus `TestPaths.BaseData` (`VA_BASE_DIR`, else the
+  sibling-of-repo fallback) resolve against it — so deleting it would break the parity gate and the
+  asset-dependent tests. `data/` holds **zero** `.tga` files, so there is no leftover to sweep either.
+
+  **A premise worth correcting, because it will come up again:** it is natural to assume Godot converts
+  these textures to its own format so decode cost is a non-issue. It does not, for *these* textures.
+  Godot's import pipeline produces `.ctex` only for assets imported as engine resources under `res://`;
+  our map/content textures are read out of `.pk3` archives at runtime through our own VFS and decoded
+  per load — `game/loaders/AssetSystem.cs:851` calls `Image.LoadPngFromBuffer` on the raw bytes. So
+  the PNG decode cost is real and is paid at map load.
+
+  Closing anyway is still defensible, which is why it is closed: it is a **load-time** cost rather than
+  a per-frame one, `cl_persist_asset_cache` already mitigates it, and G7's own note below concedes the
+  outcome was never going to be a revert. The measurement would have informed nothing that changes.
+  What is lost is a number, not a safety net — but if map-load times are ever reported as slow, this
+  is the first thing to measure, and `perf-smoke.ps1 -Live` is still how.
 
 - **Breaks:** if the §8 perf gate fails and PNG decode proves too expensive, the original data exists
   only in a git history that G1 deliberately kept it out of.
@@ -918,6 +939,11 @@ else already does).
     tree hash is identical at both commits (`6930c37`) because the five intervening commits touched only
     build tooling — so a rebuild from the tag would use the same sources either way. The tag now points
     one commit set later than where it was cut, which is untidy rather than harmful.
+  - **Decision 2026-07-30: leave the tag where it is.** The lockfile is what tooling reads, and it pins
+    `provenance.source_commit` explicitly while recording `release_tag_commit` beside it, so nothing
+    resolves through the tag. Moving it would mean deleting and recreating a protected tag —
+    precisely the operation the G12 ruleset exists to block — performed to fix something cosmetic.
+    Not worth spending the protection to tidy a pointer that nothing follows.
   - **Lesson worth keeping:** a protection rule that has not been tested against the specific action you
     fear is a guess. This one read as complete and had a hole in exactly the direction that matters.
 - **Do (2): built 2026-07-30.** `fetch-maps.py --rebuild` compiles from the pinned `maps-src`
@@ -1408,7 +1434,9 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
     `.shader` lines and 46 `.qc` lines that name `.tga` explicitly resolve to the PNG unchanged.
     Same for `LaserRenderer.cs:145`. The `.tga` literals in `Q3ShaderParserDirectiveTests` and
     `AutospriteBoltTests` are synthetic parser input and touch no real file.
-17. **Gate (G7): run 2026-07-29 — correctness proven, decode cost still unmeasured.**
+17. **Gate (G7): run 2026-07-29; CLOSED 2026-07-30 without the decode measurement.** Correctness
+    proven. The decode number was deliberately never taken — see G7's status entry for why that
+    is acceptable and what it costs.
     - **`tools/perf-smoke.ps1` passes.** `ServerTickPerfBench` against the fetched `atelier`:
       boot 174 ms (453 map entities), 4 players at **0.4423 ms/tick — 3.2% of the 72 Hz budget**,
       per-player marginal cost 0.1022 ms.
@@ -1425,11 +1453,10 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
       it needs `perf-smoke.ps1 -Live` (a 30 s windowed release-export capture diffed against
       `tools/perf-baselines/catharsis-release.json`), which wants a release export and a GUI session.
     - Two consequences still standing:
-    - **Do not discard the pre-conversion source.** `Projects/Vortex/Base/data/` is a pristine upstream
-      clone (verified: `git status --porcelain` empty, no local edits) and is the rollback source. It
-      also serves as the G7 archive, which is cheaper than the separate frozen copy stage 0 item 5
-      called for — **but only while nothing updates it.** Do not run the upstream update script until
-      this gate passes.
+    - ~~**Do not discard the pre-conversion source.**~~ **Freeze lifted 2026-07-30** when G7 closed.
+      `Projects/Vortex/Base/data/` served as the G7 archive instead of a separate frozen copy, so the
+      upstream update script may run again. `Base/` itself stays regardless — it is the parity
+      baseline, not just an archive.
     - **The expected outcome is still not a revert.** Per G7, if map-load regresses the mitigation is
       `cl_persist_asset_cache`, not the format. The measured conversion ratio came in at 23.7% rather
       than the projected 38.6%, so the I/O saving is larger than the plan assumed and the trade tilts

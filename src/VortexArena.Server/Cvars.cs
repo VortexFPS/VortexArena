@@ -397,7 +397,7 @@ public static class Cvars
         // ---- server identity / admin (xonotic-server.cfg) ----
         new("sv_dedicated", "0", CvarFlags.ReadOnly),
         new("sv_spectate", "1"),
-        new("hostname", "Xonotic VortexArena Server", Save),
+        new("hostname", "Vortex Arena Server", Save),
         new("g_maplist", "", Save, "the map rotation"),
         // QC server/client.qh:53 / xonotic-server.cfg:5: max player name length (not counting color codes)
         // enforced by PlayerFrame; a longer name is truncated and the player warned. 0 = no limit.

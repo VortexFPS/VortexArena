@@ -72,7 +72,7 @@ public sealed partial class NetGame : Node3D
     private int _botSkill = -1;                 // -1 = unspecified: never write the `skill` cvar (MatchConfig.BotSkill)
     private string _campaignName = "";          // non-empty → host this listen server as a campaign level
     private int _campaignIndex;
-    private string _serverName = "VortexArena Listen Server";
+    private string _serverName = "Vortex Arena Listen Server";
     private string _playerName = "player";
     private VirtualFileSystem? _vfs;            // shared asset VFS (from the menu shell), for models/sounds/maps
     private VortexArena.Engine.Simulation.CvarService? _sharedCvars;
@@ -493,7 +493,7 @@ public sealed partial class NetGame : Node3D
     /// drive both the server's config + the client's rendering; pass null for a bare CLI host on a test floor.
     /// </summary>
     public void ConfigureListenServer(string map, string gametype = "dm", int botCount = 0, int botSkill = -1,
-        int port = DefaultPort, string playerName = "player", string serverName = "VortexArena Listen Server",
+        int port = DefaultPort, string playerName = "player", string serverName = "Vortex Arena Listen Server",
         VirtualFileSystem? vfs = null, VortexArena.Engine.Simulation.CvarService? cvars = null,
         string campaignName = "", int campaignIndex = 0, AssetLoader? sharedAssets = null)
     {
@@ -506,7 +506,7 @@ public sealed partial class NetGame : Node3D
         _botSkill = botSkill;
         _campaignName = campaignName ?? "";
         _campaignIndex = campaignIndex;
-        _serverName = string.IsNullOrWhiteSpace(serverName) ? "VortexArena Listen Server" : serverName;
+        _serverName = string.IsNullOrWhiteSpace(serverName) ? "Vortex Arena Listen Server" : serverName;
         _playerName = string.IsNullOrWhiteSpace(playerName) ? "player" : playerName;
         _vfs = vfs;
         _sharedCvars = cvars;

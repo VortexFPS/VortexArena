@@ -1428,6 +1428,19 @@ Same convention as above: `qcsrc/…` = `Base/data/xonotic-data.pk3dir/qcsrc/…
 
 ## TODO-CORE-ZIP — the `-core` split and manifest wiring are still only on a retired branch
 
+> **DEFERRED by decision 2026-07-30.** Wanted eventually, not now. Releases keep shipping the single
+> fat zip until then, which works — it just means a patch release re-pushes the whole ~900 MB to
+> every player instead of only the changed part.
+>
+> **The cost of deferring is not zero, and it is worth knowing which way it runs.** The split is
+> cheapest to introduce BEFORE the launcher serves its first update: once players hold a fat-zip
+> install, moving to core+content pack makes them re-download once during the changeover. So this
+> gets more expensive the longer it waits, not less. The trigger to revisit is "the launcher is about
+> to serve real updates", not a date.
+>
+> Nothing is lost meanwhile: the branch below still has the working implementation, and
+> `make-manifest.py` on `main` already models both zips and can emit the content key.
+
 `feature/launcher-updater` was retired locally on 2026-07-30 (the launcher itself now lives in
 [VortexLauncher](https://github.com/VortexFPS/VortexLauncher)). `tools/make-manifest.py` was recovered
 onto `main` at that point, because it is the GAME side of the boundary — it emits the `latest.json` the

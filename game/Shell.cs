@@ -796,7 +796,7 @@ public partial class Shell : Node
             botSkill: config.BotSkill,
             port: BootPort,
             playerName: ResolvePlayerName(),
-            serverName: MenuState.Cvars.GetString("hostname") is { Length: > 0 } hn ? hn : "VortexArena Listen Server",
+            serverName: MenuState.Cvars.GetString("hostname") is { Length: > 0 } hn ? hn : "Vortex Arena Listen Server",
             vfs: MenuState.Vfs,
             cvars: MenuState.Cvars,
             campaignName: config.CampaignId ?? "",   // non-empty → the server boots this as a campaign level

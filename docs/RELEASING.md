@@ -25,15 +25,15 @@ Unzip and play; nothing else to fetch.
 
 | Zip | Contents | Run |
 |---|---|---|
-| `XonoticGodot-<ver>-windows-x86_64.zip` | `XonoticGodot.exe` (+ console wrapper, `data_*` .NET folder), `assets/data/` | double-click the `.exe` |
-| `XonoticGodot-<ver>-linux-x86_64.zip` | `XonoticGodot.x86_64`, `run-client.sh`, `assets/data/` | `./run-client.sh` |
-| `XonoticGodot-<ver>-linux-dedicated-x86_64.zip` | `xonoticgodot-dedicated.x86_64`, `run-dedicated.sh`, `assets/data/` | `./run-dedicated.sh [map]` |
+| `XonoticGodot-<ver>-windows-x86_64.zip` | `XonoticGodot.exe` (+ console wrapper, `data_*` .NET folder), `data/` | double-click the `.exe` |
+| `XonoticGodot-<ver>-linux-x86_64.zip` | `XonoticGodot.x86_64`, `run-client.sh`, `data/` | `./run-client.sh` |
+| `XonoticGodot-<ver>-linux-dedicated-x86_64.zip` | `xonoticgodot-dedicated.x86_64`, `run-dedicated.sh`, `data/` | `./run-dedicated.sh [map]` |
 | `XonoticGodot-<ver>-macos-universal.zip` | `XonoticGodot.app` (data inside `Contents/Resources/`) | double-click — see macOS note below |
 | `SHA256SUMS-<ver>.txt` | checksums for the above | — |
 
 The game finds its data **relative to the executable** (`DataPaths.Resolve`), so the zips work no
 matter the working directory — a double-clicked binary, a file-manager launch, or a macOS `.app` (CWD `/`)
-all resolve `assets/data` correctly. Keep the files together when you unzip.
+all resolve `data/` correctly. Keep the files together when you unzip.
 
 ## Pipeline shape
 

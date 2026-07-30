@@ -33,7 +33,7 @@ if (-not (Test-Path $Out)) {
 if ($LASTEXITCODE -ne 0) { Write-Host "[run-release] note: godot exited $LASTEXITCODE but produced the binary (benign export warnings) -- continuing." -ForegroundColor Yellow }
 
 # Launch from the project root so the exported build's CWD-relative asset fallback finds the in-tree
-# assets/data (a packaged zip instead carries assets beside the binary). Else: empty world.
+# data/ (a packaged zip instead carries data/ beside the binary). Else: empty world.
 Write-Host "[run-release] launching $Out $args"
 Set-Location $Proj
 & $Out @args

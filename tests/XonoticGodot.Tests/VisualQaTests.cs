@@ -17,8 +17,8 @@
 // NOT automatable here — it is the WINDOWED manual checklist driven by tools/visual-qa.sh and documented in
 // docs/RUNNING.md "Visual QA". Do NOT add a test here that claims to verify rendered output.
 //
-// Like the ~18 other real-data test classes, every [Theory]/[Fact] self-skips when assets/data is absent (CI
-// has no assets): the MemberData providers yield a single sentinel row carrying null, and the test returns on it.
+// Like the ~18 other real-data test classes, every [Theory]/[Fact] self-skips when the map content is absent
+// (core content is committed, so only maps can be missing): the MemberData providers yield a single sentinel row carrying null, and the test returns on it.
 
 using System;
 using System.Collections.Generic;
@@ -57,7 +57,7 @@ public class VisualQaTests
     });
 
     // A sentinel data row (a single null path) so a [Theory] never fails with xUnit's "No data found" when
-    // assets/data is absent — the test body returns on a null path, mirroring the other real-data classes' skip.
+    // map content is absent — the test body returns on a null path, mirroring the other real-data classes' skip.
     private static object[] SkipRow() => new object[] { null! };
 
     private static IEnumerable<object[]> PathsOrSkip(string prefix, string extension)

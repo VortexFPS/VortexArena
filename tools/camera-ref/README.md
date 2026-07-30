@@ -54,7 +54,7 @@ over `1/cl_bobfallcycle` = 0.33 s; rerun with `"cvars": {"cl_bobfall": "0"}` as 
 GODOT="/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe"
 # build the C# assembly first (dotnet build XonoticGodot.csproj -c Debug); run from INSIDE the worktree.
 "$GODOT" --headless --fixed-fps 72 --path . \
-  --data "C:/Users/Bryan/Projects/Xonotic/XonoticGodot/assets/data" \
+  --data "<repo>/data" \
   --camera-trace tools/camera-ref/stationary.json "$PWD/_cam_stationary.json" --quit-after-seconds 120
 python tools/camera-ref/analyze.py _cam_stationary.json     # drift = slope/maxdev over the steady-state tail
 ```

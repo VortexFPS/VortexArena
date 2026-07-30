@@ -82,9 +82,9 @@ if [ ! -e "$OUT" ]; then
 fi
 echo "[run-release][debug] export OK — binary present: $OUT ($(wc -c <"$OUT" 2>/dev/null | tr -d ' ') bytes)"
 
-# Launch from the project root so the exported build's asset resolver finds the in-tree assets/data
-# (DataPaths.Resolve falls back to a CWD-relative 'assets/data' in an exported build; a packaged
-# zip instead carries assets beside the binary). Without this a release run boots into an empty world.
+# Launch from the project root so the exported build's content resolver finds the in-tree data/
+# (DataPaths.Resolve probes <exe-dir>/data then a CWD-relative 'data' in an exported build; a packaged
+# zip instead carries data/ beside the binary). Without this a release run boots into an empty world.
 cd "$PROJ"
 echo "[run-release] launching: $OUT $*"
 [ -x "$OUT" ] || echo "[run-release][debug] WARNING: '$OUT' is not marked executable — trying anyway" >&2

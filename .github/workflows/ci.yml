@@ -1,9 +1,9 @@
 ﻿# CI for the XonoticGodot port (T33 â€” see planning/decisions/ADR-0014-ci-packaging-distribution.md).
 #
 # Topology:
-#   test       â€” always: restore + run the full xUnit suite (no Godot, no assets; the ~18 real-data
-#                test classes self-skip without assets/data, so CI green proves LESS than a local
-#                `ci/ci.sh` run with assets mounted â€” that stays the authoritative gate).
+#   test       - always: restore + run the full xUnit suite (no Godot). Core content is COMMITTED, so
+#                it runs against the real tree; only the map-dependent cases skip until maps are
+#                fetched. `ci/ci.sh` stays the authoritative gate (it also runs the headless smokes).
 #   build-host â€” always: compile the Godot host project (XonoticGodot.csproj) from a clean clone with
 #                NO Godot editor installed â€” proves the Godot.NET.Sdk/GodotSharp 4.6.3 restore works
 #                purely from nuget.org.

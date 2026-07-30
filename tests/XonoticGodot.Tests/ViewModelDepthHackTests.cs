@@ -8,7 +8,7 @@
 //
 // The test assembly references only src/* (game/ is the Godot host assembly), so the shader sources are
 // pinned by READING THE SOURCE FILES from the repo tree — located by walking up from the test bin dir, and
-// self-skipping when the tree isn't found (mirrors the real-data classes' assets/data skip).
+// self-skipping when the tree isn't found (mirrors the real-data classes' map-content skip).
 
 using System;
 using System.IO;

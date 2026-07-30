@@ -10,7 +10,7 @@ namespace XonoticGodot.Tests;
 /// hardcoded dev-box paths went unnoticed after the repo moved (restructure plan G13).
 ///
 /// So these assert the CONDITIONAL: if a content tree is discoverable from the repo root, TestPaths
-/// must have found it. On a checkout with no assets they hold trivially, so CI stays portable.
+/// must have found it. Core content is committed, so `data/` is present on every checkout.
 /// </summary>
 public class TestPathsTests
 {
@@ -45,12 +45,11 @@ public class TestPathsTests
         if (repo is null)
             return;
 
-        // Either layout counts: `data/` after the restructure, `assets/data/` before it.
+        // Only `data/` counts now. The `assets/data` alternative is gone on purpose: it is a junction to
+        // the upstream reference on a dev box, so accepting it would let this test pass while TestPaths
+        // pointed the suite at content the game never mounts.
         string moved = Path.Combine(repo, "data");
-        string legacy = Path.Combine(repo, "assets", "data");
-        string? expected = Directory.Exists(moved) ? moved
-            : Directory.Exists(legacy) ? legacy
-            : null;
+        string? expected = Directory.Exists(moved) ? moved : null;
 
         if (expected is null)
             return; // no tree here — nothing to resolve, and the real-data tests will self-skip

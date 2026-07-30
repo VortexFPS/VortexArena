@@ -12,10 +12,9 @@ namespace XonoticGodot.Tests;
 /// Resolution order for <see cref="Data"/>:
 /// <list type="number">
 ///   <item><c>VA_DATA_DIR</c>, if set — the escape hatch for a tree parked anywhere.</item>
-///   <item><c>&lt;repo&gt;/data</c>, then <c>&lt;repo&gt;/assets/data</c>, walking up from
-///     <see cref="AppContext.BaseDirectory"/> to find the repo root. Probing BOTH is deliberate: it
-///     makes this helper survive the <c>assets/data</c> → <c>data</c> move (repo-restructure plan
-///     stage 3) with no test edits, and it keeps working in the meantime.</item>
+///   <item><c>&lt;repo&gt;/data</c>, walking up from <see cref="AppContext.BaseDirectory"/> to find
+///     the repo root. There is deliberately NO <c>assets/data</c> fallback — see
+///     <see cref="ResolveData"/> for why one would be actively harmful.</item>
 ///   <item><see cref="Unresolved"/>, a path that cannot exist, so guarded tests skip.</item>
 /// </list>
 ///
@@ -129,16 +128,17 @@ internal static class TestPaths
         string? repo = FindRepoRoot();
         if (repo is not null)
         {
-            // Post-restructure layout first, then the pre-restructure one.
             string moved = Path.Combine(repo, "data");
             if (Directory.Exists(moved))
                 return moved;
-
-            string legacy = Path.Combine(repo, "assets", "data");
-            if (Directory.Exists(legacy))
-                return legacy;
         }
 
+        // No `assets/data` fallback any more, and its removal is a correctness fix rather than tidying.
+        // That directory is a JUNCTION to the pristine upstream reference on a dev box, so the fallback
+        // could silently point the whole suite at UPSTREAM content: no core.pk3dir, no vortex-*.cfg layer,
+        // and every real-data assertion evaluated against a tree the game never mounts. Tests would pass
+        // or fail for reasons unrelated to this repo. The same shape as the cvar differ diffing Base
+        // against itself. If `data/` is absent the checkout is broken, and Unresolved says so.
         return Unresolved;
     }
 

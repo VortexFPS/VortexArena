@@ -1,6 +1,12 @@
 {
- "generated": "2026-07-02",
+ "generated": "2026-07-30",
  "missing": [
+  {
+   "ref": "cubemaps/default/sky",
+   "where": [
+    "game/loaders/AssetSystem.cs:407"
+   ]
+  },
   {
    "ref": "gfx/hud/default/nopreview_map",
    "where": [
@@ -30,7 +36,7 @@
    "where": [
     "game/hud/VehicleHud.cs:154",
     "game/hud/VehicleHud.cs:190",
-    "game/net/NetGame.cs:3662"
+    "game/net/NetGame.cs:4962"
    ]
   },
   {
@@ -39,6 +45,25 @@
     "game/client/NadeOrbRenderer.cs:78",
     "game/client/NadeOrbRenderer.cs:79"
    ]
+  },
+  {
+   "ref": "models/weapons/h_",
+   "where": [
+    "src/XonoticGodot.Formats/Sidecars/WeaponRigAnims.cs:30"
+   ]
+  },
+  {
+   "ref": "textures/exx/base_wall01",
+   "where": [
+    "game/net/NetGame.cs:10026",
+    "game/vmap/EditorController.cs:1756"
+   ]
+  },
+  {
+   "ref": "textures/exx/floor01",
+   "where": [
+    "src/XonoticGodot.Formats/Vmap/VmapDocument.cs:476"
+   ]
   }
  ],
  "unsupported": [
@@ -46,7 +71,7 @@
    "ref": "models/casing_shell.mdl",
    "resolved": "models/casing_shell.mdl",
    "where": [
-    "game/client/ShellCasings.cs:134"
+    "game/client/ShellCasings.cs:136"
    ]
   },
   {
@@ -58,6 +83,6 @@
    ]
   }
  ],
- "ok": 135,
- "interpolated_skipped": 75
+ "ok": 141,
+ "interpolated_skipped": 82
 }

@@ -108,7 +108,7 @@ the frame — screenshots then look like the viewmodel is missing). Scripted win
 
 For a packaged install, `tools/run-dedicated.sh` (shipped beside the exported `linux-dedicated`
 binary by `tools/package.sh`) `cd`s to its own directory first, matching upstream's
-`xonotic-linux-dedicated.sh`. The exported build resolves `assets/data` relative to the **executable**
+`xonotic-linux-dedicated.sh`. The exported build resolves `data/` relative to the **executable**
 (`DataPaths.Resolve` — exe-dir, plus the macOS `../Resources` bundle path), so the data just has
 to sit beside the binary; the launcher is a convenience, not a requirement (`--data <path>` overrides).
 
@@ -145,7 +145,7 @@ Weapons:   24
 ```
 Add `--map stormkeep` (or `--host stormkeep --bots 2`) to boot a 0-bot listen server on a real map instead —
 that adds `[NetGame] listen server on 127.0.0.1:26000 …`, `[AssetSystem] loaded … shaders`, the map's
-`collision brushes`, and `handshake accepted` to the log (the heavier smoke; needs `assets/data`).
+`collision brushes`, and `handshake accepted` to the log (the heavier smoke; needs the stormkeep map).
 Error patterns to grep for: `^ERROR:`, `SCRIPT ERROR`, `Unhandled exception`, `WARNING:`, `at XonoticGodot.` (managed
 stack frames). Godot prints managed exceptions with a `WARNING:`/`ERROR:` banner + a C# stack trace.
 
@@ -317,7 +317,7 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - **`Main.cs`** parses the boot flags (above) and constructs the `Shell`, which owns the menu↔match lifecycle.
   `--map <name>` boots a match on any of the 31 official maps in `xonotic-20230620-maps.pk3` (e.g. `solarium`,
   `afterslime`); `--model <name>` boots the model viewer on `models/player/<name>.iqm`.
-- **`--data <dir>`** overrides the content mount (default `res://assets/data`, resolved project-relative — a
+- **`--data <dir>`** overrides the content mount (default `res://data`, resolved project-relative — a
   `res://`/`user://` or absolute OS path also works). Mainly an escape hatch for a packaged build whose data dir
   isn't beside the binary, or to point a dev build at an external gamedir.
 - **`ModelViewer.ModelName`** (`game/ModelViewer.cs`) is the model-viewer's settable seam — the bare hero name
@@ -337,10 +337,10 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   `planning/`, `.godot/`, `obj/`, `bin/` so it doesn't double-compile the libraries. Don't drop those removes.
 - **`dotnet build XonoticGodot.csproj` outputs to `.godot/mono/temp/bin`** (the Godot SDK redirects it), not `bin/` —
   that's where the engine looks for the assembly.
-- **Maps:** the **31 official compiled maps** ship in `assets/data/xonotic-20230620-maps.pk3`
+- **Maps:** the **32 pinned compiled maps** install as one `.pk3` each into `data/maps/` via `tools/data/fetch-maps.py`
   (downloaded from the `xonotic-0.8.6.zip` release; `xonotic-20230620-nexcompat.pk3` adds the Nexuiz-compat set).
   `maps/_init/_init.bsp` is still present (inside the maps pk3) as the lightweight placeholder. To add more,
-  drop another `*.pk3` into `assets/data/` — `MountGameDir` picks it up automatically.
+  drop another `*.pk3` into `data/maps/` — `MountGameDir` picks it up automatically.
 - **Sounds** load from the mounted content (`sound/*.ogg|wav`) via `AssetLoader.LoadSound` (wired into
   `ClientWorld.AudioLoader`); the old `res://sound/<sample>.ogg` convention remains as a fallback. The same
   loader feeds **announcer voices** (`HudNotifications.AudioLoader` → `sound/announcer/<voice>/<snd>.ogg`).

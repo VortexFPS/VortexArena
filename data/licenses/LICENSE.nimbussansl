@@ -1,61 +1,139 @@
-Nimbus Sans L — copyright notice (INCOMPLETE: licence grant still missing)
-==========================================================================
+Nimbus Sans L — licence notice
+==============================
 
 Covers: data/font-nimbussansl.pk3dir/fonts/n019004l.pfb
+        (sha256 17cde8c6428261284593495b910027ce9ef4c891a4e99f4d4d00e97d3e565f9e)
         data/font-nimbussansl.pk3dir/fonts/n019004l.afm
         data/font-nimbussansl.pk3dir/fonts/n019004l.pfm
-Work:   Nimbus Sans L Bold (URW++ Design & Development), Type 1, version 1.06
+Work:   Nimbus Sans L Bold, version 1.06 — URW++ Design & Development, Cyrillic
+        glyphs added by Valek Filippov. Type 1.
 
 This is a third-party work redistributed unmodified. It is NOT covered by COPYING.xonotic's
 blanket "GPL version 3 or any later version" grant.
 
 
-The copyright notice, VERBATIM from the font files
----------------------------------------------------
+LICENCE: GNU General Public License, version 2, with a font embedding exception
+--------------------------------------------------------------------------------
 
-The .pfb carries this in its cleartext header as `/Notice`, and the .afm repeats it as its
-`Notice` line. The two agree exactly, which is the cross-check that it was read correctly.
-Reproduced with the PostScript `\050` / `\051` escapes resolved to the parentheses they encode:
+The GPL version 2 text is already in this directory as **GPL-2**, and it is the right text: it
+was compared against the COPYING shipped in the font's own upstream package and is the same
+licence, differing only in the FSF's postal address (they moved in 2005) and in the preamble
+saying "Lesser" where the older printing says "Library" (the FSF renamed the LGPL in 1999).
+Both are official FSF printings of GPL version 2.
+
+The exception, quoted VERBATIM from the upstream README written by Valek Filippov — the same
+person named in this font's own /Notice:
+
+    The license for result is (of course) same as for original fonts,
+    i.e. GPL with an exception that you can put these fonts in your own non-GPLed
+    documents. (Looks like LGPL from my point of view =).
+
+and, from the acknowledgements in that same README:
+
+    Also I have to thank RMS for GPL and URW for releasing the fonts
+    under it.
+
+
+The copyright notice carried by the font files themselves
+-----------------------------------------------------------
+
+From the .pfb's `/Notice` (PostScript `\050`/`\051` escapes resolved to the parentheses they
+encode) and repeated identically in the .afm's `Notice` line:
 
     Copyright (URW)++,Copyright 1999 by (URW)++ Design & Development;
     Cyrillic glyphs added by Valek Filippov (C) 2001-2002
 
-Supporting metadata from the same headers, for identifying which release this is:
 
-    FontName    NimbusSanL-Bold
-    FullName    Nimbus Sans L Bold
-    FamilyName  Nimbus Sans L
-    Version     1.06
-    Generated   by pfaedit, 2002-12-31
+How this was established (2026-07-30)
+---------------------------------------
+
+Three independent sources agree, and the dangerous alternative was ruled out.
+
+1. **The upstream package's own COPYING is the GPL version 2 text.**
+2. **The upstream README states the grant**, quoted above. It is written by Filippov, who is
+   named in our file's `/Notice`, describing the licence of exactly the work he produced.
+3. **Debian's copyright file for the same package** records: "Upstream Authors: URW++ Design &
+   Development GmbH / Valek Filippov <frob@df.ru> et. al." and "you can redistribute it and/or
+   modify it under the terms of the GNU General Public License ... version 2 dated June, 1991",
+   sourced from `ftp://ftp.gnome.ru/fonts/urw/release/` (Filippov's urw-fonts) and the
+   Ghostscript GPL fonts.
+
+**AFPL is ruled out.** That was the real risk — the Nimbus family has also circulated under the
+Aladdin Free Public License, which is NOT a free licence and would have been a genuine problem
+rather than a paperwork one. Every source above says GPL.
+
+Packages examined (Debian pool / snapshot.debian.org):
+
+    gsfonts_8.11+urwcyr1.0.7~pre44.orig.tar.gz  sha256 9f2a598998bf05e023546ac981aa2a857aa1635d2e0e3020a3c3004ad564dc00
+    gsfonts_8.11+urwcyr1.0.7~pre44-4.5_all.deb  sha256 74fa211939138b63fbe065247719881a1a0869beccadd2c719c3f7b7f70ce1a0
+    gsfonts_8.14+v8.11+urw.orig.tar.gz          sha1   858d88497c446bdc6598009938c64fefad70b219
 
 
-What is still missing, and why this file does not guess at it
----------------------------------------------------------------
+Honest limitation: no byte-identical release was found
+--------------------------------------------------------
 
-**The licence grant itself is not present in any file we ship.** Everything above is a copyright
-notice — it identifies the rights holder, it does not state the terms under which the work may be
-redistributed. Those terms are not in the .pfb, the .afm, or the .pfm; the search that produced
-this file looked at every printable run in the binaries' cleartext.
+The intended proof was to byte-match our `n019004l.pfb` against a package and adopt that
+package's licence. **That match was not obtained**, and this file says so rather than implying a
+stronger result than was reached.
 
-URW++ donated several Nimbus faces to the Ghostscript project, and the family has been
-distributed under more than one licence over time — GPL and AFPL for the 1996 Type 1 release,
-LPPL for a 2009 release. That history is exactly why this file does not name one: which grant
-applies depends on which release this 2002-dated, pfaedit-generated build descends from, and
-that cannot be settled from the bytes on disk.
+What was found instead is that all three copies are the same work regenerated at different
+dates, which explains the byte difference without weakening the licence conclusion:
 
-To close this properly, take the licence file as shipped by the upstream package this font came
-from — the Ghostscript fonts distribution (`COPYING` alongside the URW fonts) or the Debian
-`gsfonts` package copyright file — and add it here. Do not substitute a licence found by
-searching for the font's name: several redistributors have relabelled these files.
+    ours                       pfaedit,            2002-12-31   72,400 bytes   Notice: 2001-2002
+    gsfonts 8.14+v8.11+urw     pfaedit,            2005-03-27   73,988 bytes   Notice: 2001-2002
+    gsfonts urwcyr1.0.7~pre44  FontForge 20070723, 2007-08-02   70,730 bytes   Notice: 2001-2005
 
-Until then this notice at least travels with the work, and identifies the rights holder
-verbatim, which is strictly better than the nothing that shipped before it.
+All three carry identical `/FontName` (`NimbusSanL-Bold`), `/FullName` (`Nimbus Sans L Bold`)
+and `/version` (1.06), and name the same two rights holders. Ours is simply the OLDEST — a 2002
+pfaedit generation predating Debian's surviving archive, whose earliest gsfonts upload is 2005.
+The middle copy carries a `/Notice` string byte-identical to ours.
+
+So the licence is established by provenance rather than by byte-identity: our file is a build of
+Filippov's Cyrillized URW fonts, and that work is GPL-2 with the embedding exception. If a
+2002-vintage `urwcyr` release ever surfaces, byte-matching it would close the last gap.
+
+
+Compatibility with this project — GPLv3 code beside a GPLv2 font
+------------------------------------------------------------------
+
+Vortex Arena's own source is "GPL version 3 or any later version" (see COPYING at the repo
+root). GPLv2-only and GPLv3 are **incompatible for forming a single derived work**, so this
+deserves a straight answer rather than a shrug:
+
+**It is fine as we ship it**, for three reasons that must all keep holding:
+
+  * We redistribute the font **unmodified, as a data file**. The program does not link it or
+    incorporate it; it loads it at runtime like any other asset. That is mere aggregation on a
+    distribution medium, not a derived work, so the two licences never have to combine.
+  * The **font embedding exception** is broader than we need. It exists precisely so that using
+    the font in output does not pull the GPL onto that output.
+  * GPL-2 permits verbatim redistribution provided the copyright notice and the licence travel
+    with the copy. That is what this file and GPL-2 in this directory now accomplish, and it is
+    what was missing before.
+
+**What would break it:** modifying the font, or building it into the program such that the
+result is a derived work of both. Either would put a GPLv2-only work and GPLv3 code into one
+combined work, which cannot be licensed. If a font needs changing, replace it with one whose
+terms permit that rather than editing this one.
+
+Note also that the grant is version 2, **not** "or later" — Debian pins "version 2 dated June,
+1991", and the upstream COPYING is the bare GPL-2 text with no "or any later version" clause.
+Do not assume v2+.
+
+
+Historical note: upstream Xonotic ships no notice for this font at all
+------------------------------------------------------------------------
+
+Checked against the upstream reference tree: Xonotic ships the identical four font packs with
+identical file lists, and the only font licence anywhere in it is Xolonium's fonts/README.txt.
+There is no notice for this font, nothing in Docs/, nothing in its COPYING. This gap was
+inherited, not introduced here — but it was still a gap, and it is now closed on our side.
 
 
 Provenance of this file
 -----------------------
 
-Written 2026-07-30. The quoted notice is a byte-for-byte extraction from the font files in this
-repository. Nothing here is transcribed from memory or summarised from a web page; where the
-authoritative text is absent, this file says so rather than filling the gap. See
-data/licenses/FONTS for the other three font packs.
+Written 2026-07-30. The quoted exception is a verbatim copy from the upstream README; the
+copyright notice is reproduced from the .pfb's `/Notice` and confirmed against the .afm.
+Nothing here is transcribed from memory or summarised from a web page. See data/licenses/FONTS
+for the other three font packs.

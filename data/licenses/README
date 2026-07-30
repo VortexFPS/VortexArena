@@ -23,15 +23,16 @@ GPLv3 grant for them. Their notices live here:
   LICENSE.dejavu        DejaVu Sans Bold + Sans Mono. Bitstream Vera / Arev notices.
   LICENSE.unifont       GNU Unifont 7.0.06. GPLv2-or-later with the GNU Font Embedding
                         Exception, both texts verbatim.
-  LICENSE.nimbussansl   Nimbus Sans L Bold (URW++). Copyright notice only — the licence
-                        GRANT is still outstanding, and the file says so rather than
-                        guessing. The one open item in this directory.
+  LICENSE.nimbussansl   Nimbus Sans L Bold (URW++, Cyrillic by Valek Filippov). GNU GPL
+                        version 2 — NOT "or later" — with a font embedding exception.
+                        GPL-2 above is that licence text.
 
   (font-xolonium needs no file here: its own fonts/README.txt already carries the
   full notice, as do its binaries.)
 
-Each of those was extracted verbatim from the font binaries themselves rather than
-transcribed from a website. If you add one, do the same and record where the copy came
+Those notices were taken from the works themselves wherever possible — three of the four
+were extracted verbatim from the font binaries' own name tables. Nimbus needed its upstream
+package downloaded, because its files carry a copyright notice but no grant. If you add one, do the same and record where the copy came
 from — the reasoning is in FONTS.
 
 Attribution for the contributors who authored this content is carried in the game's

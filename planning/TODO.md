@@ -28,41 +28,43 @@ Created 2026-06-05 from `REBIRTH_FEATURE_COMPLETENESS.md` Part III (P0–P3), in
 
 ---
 
-## 🚧 Open blockers for a public release
+## ✅ Release blockers — none outstanding (last cleared 2026-07-30)
 
-**TODO-FONTS — ONE font pack still lacks a licence GRANT (nimbussansl).** *(unifont RESOLVED 2026-07-30;
-dejavu RESOLVED 2026-07-30.)* Added 2026-07-29 during the repo restructure, when `data/` became committed
-content (D1/D2) and the licence texts stopped living in an upstream checkout that travelled with nothing.
+_This section held the licensing blockers. It is kept, rather than deleted, so the reasoning stays
+findable and so the next blocker has an obvious home. Deferred-but-wanted work is NOT a blocker and
+lives elsewhere: see TODO-CORE-ZIP below._
 
-The four font packs are third-party works. `COPYING.xonotic`'s blanket "GPL v3 or later" grant does not
-cover them, because Team Xonotic redistributes them without owning them and cannot relicense them.
+**TODO-FONTS — RESOLVED 2026-07-30. All four bundled font families now ship a licence notice.**
 
-| pack | state |
-|---|---|
-| `font-xolonium.pk3dir` | **OK** — `fonts/README.txt` carries the full GPLv2+ notice; the binaries carry more (name record 13 holds the GPLv2+ statement *and* the full Font Embedding Exception) |
-| `font-dejavu.pk3dir` | **RESOLVED 2026-07-30** — `LICENSE.dejavu`, verbatim from name record 13. Both faces, because Bold has an Arev-glyphs clause Mono does not |
-| `font-unifont.pk3dir` | **RESOLVED 2026-07-30** — `LICENSE.unifont`. GPLv2+ with the Font Embedding Exception |
-| `font-nimbussansl.pk3dir` | **PARTIAL** — `LICENSE.nimbussansl` now ships the URW++ copyright notice verbatim, but the licence **grant** is in none of the files and is not recoverable from disk |
+| pack | licence | where the text came from |
+|---|---|---|
+| `font-xolonium.pk3dir` | GPLv2+ with Font Embedding Exception | already shipped; the binaries carry the full text in name record 13 |
+| `font-dejavu.pk3dir` | Bitstream Vera + Arev | `LICENSE.dejavu`, verbatim from name record 13, both faces |
+| `font-unifont.pk3dir` | GPLv2+ with Font Embedding Exception | `LICENSE.unifont`, verbatim from name record 0 |
+| `font-nimbussansl.pk3dir` | **GPL v2 (not "or later") + font embedding exception** | `LICENSE.nimbussansl`, from the upstream gsfonts package |
 
-**The previous entry here was wrong and it cost time.** It recorded unifont as needing an external
-source because "the TTF carries no licence record at all". It carries the grant in name record **0**;
-the earlier check looked only at record 13, which is where DejaVu's happened to live. The Font Embedding
-Exception text it said was missing was also already in the tree, in full, inside `xolonium-regular.otf`.
-Both were extracted verbatim — nothing was fetched or paraphrased. **Check every name record before
-concluding a font binary is silent.**
+Nimbus was the hard one and needed a download: its files carry a copyright notice but no grant.
+Three independent sources in the gsfonts/urw-fonts package agree — the COPYING is the GPL-2 text,
+the README states the exception in Valek Filippov's own words (he is the contributor named in our
+font's own `/Notice`), and Debian's copyright file records GPL v2 naming URW++ and Filippov.
+**AFPL was ruled out** — that was the outcome that would have been a genuine problem rather than a
+paperwork one, since it is not a free licence.
 
-**What remains:** nimbussansl's grant. Take it from the upstream package this build descends from (the
-Ghostscript fonts `COPYING`, or Debian's `gsfonts` copyright file), not from a font-download site —
-several redistributors have relabelled these files, and the family has shipped under GPL, AFPL and LPPL
-at different times, so it cannot be named from memory. Do **not** accept a web SUMMARY of a licence page
-as the text. Details: [`data/licenses/FONTS`](../data/licenses/FONTS).
+**Compatibility, stated plainly:** our source is GPLv3-or-later and this font is GPLv2-only, which
+are incompatible *for forming a single derived work*. It is fine as shipped because the font is
+redistributed **unmodified as a data file** and loaded at runtime — mere aggregation, not linkage —
+and the embedding exception is broader than we need. What would break it: modifying the font, or
+building it into the program as a derived work. If a font ever needs editing, replace it instead.
 
-**One trap worth keeping:** a project's current licence page may describe a LATER release than the binary
-we ship. unifoundry.com today states SIL OFL v1.1; our `unifont.ttf` is 7.0.06 (2014) and declares
-GPLv2+. A binary is governed by the terms it shipped under. Re-derive from the binary on every upgrade.
+**Not achieved:** a byte-identical upstream release. Ours is a 2002-12-31 pfaedit build that
+predates Debian's surviving archive (earliest upload 2005); the 2005 copy carries a `/Notice`
+byte-identical to ours and all three known copies share `/FontName`, `/FullName` and `/version`.
+The licence therefore rests on provenance rather than byte-identity, and `LICENSE.nimbussansl`
+records that limitation rather than implying a stronger result.
 
-Does not block development. Does block a public release that ships these fonts — now for one pack
-rather than two.
+This gap was **inherited**: upstream Xonotic ships the identical four packs and the only font
+licence anywhere in its tree is Xolonium's README.
+
 ---
 
 ## How this is managed (orchestrated fan-out, no per-item locks)

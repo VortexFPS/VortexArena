@@ -149,7 +149,7 @@ public class SkeletonTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         // find an IQM that actually has a skeleton with several bones (player/weapon models)
         IqmData? skeletal = null;
         foreach (string path in vfs.Find("models/", "iqm").Take(80))

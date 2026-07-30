@@ -28,7 +28,7 @@ namespace XonoticGodot.Tests;
 /// <para>Parameterised by env vars so it doubles as an experiment harness — change something, re-run, compare:
 /// <c>XG_BOTS</c> (default 6), <c>XG_MAP</c> (stormkeep), <c>XG_TICKS</c> (72*30). Run:
 /// <c>XG_BOTS=8 dotnet test tests/XonoticGodot.Tests --filter BotTickPerfBench -l "console;verbosity=detailed"</c>.
-/// Skips without the content checkout (<c>XG_DATA_DIR</c> overrides the path).</para>
+/// Skips without the content checkout (<c>VA_DATA_DIR</c> overrides the path).</para>
 /// </summary>
 [Collection("GlobalState")]
 public class BotTickPerfBench
@@ -51,7 +51,7 @@ public class BotTickPerfBench
 
         // --- build the world exactly like the live listen server (NetGame.StartListenServer) ---
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
         // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
         // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.

@@ -242,7 +242,7 @@ public class SpriteReaderTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         // IDSP v1 (models/misc/chatbubble.spr and friends)
         string? sprPath = vfs.Find("models/", "spr").FirstOrDefault();

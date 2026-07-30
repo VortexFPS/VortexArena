@@ -47,7 +47,7 @@ public class BotPerfBench
 
         // --- load the real map: BSP collision + entity lump + the shipped waypoints/cache ---
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
         // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
         // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.

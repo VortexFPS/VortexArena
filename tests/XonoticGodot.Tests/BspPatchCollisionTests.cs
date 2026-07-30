@@ -85,7 +85,7 @@ public class BspPatchCollisionTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? path = vfs.Find("maps/", "bsp").FirstOrDefault(p => p.Contains("stormkeep"));
         if (path is null) return;   // map not in this checkout — skip
 
@@ -111,7 +111,7 @@ public class BspPatchCollisionTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? path = vfs.Find("maps/", "bsp").FirstOrDefault(p => p.Contains("stormkeep"));
         if (path is null) return;
 

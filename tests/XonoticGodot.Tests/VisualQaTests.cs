@@ -53,7 +53,7 @@ public class VisualQaTests
         if (!Directory.Exists(DataDir))
             return null;
         var vfs = new VirtualFileSystem();
-        return vfs.MountGameDir(DataDir) ? vfs : null;
+        return vfs.MountContentRoot(DataDir) ? vfs : null;
     });
 
     // A sentinel data row (a single null path) so a [Theory] never fails with xUnit's "No data found" when

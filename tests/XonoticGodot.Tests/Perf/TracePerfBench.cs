@@ -23,7 +23,7 @@ namespace XonoticGodot.Tests;
 /// (DP SV_TraceBox), so ms/trace here bounds the whole server tick.
 ///
 /// No-ops when the content checkout is missing (CI without assets); the data dir can be overridden
-/// with the XG_DATA_DIR environment variable.
+/// with the VA_DATA_DIR environment variable.
 ///
 /// Run: dotnet test tests/XonoticGodot.Tests --filter TracePerfBench -l "console;verbosity=detailed"
 ///
@@ -57,7 +57,7 @@ public class TracePerfBench
 
         // --- map load (the dedicated-server startup metric): read + parse + build collision ---
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
         // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
         // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.

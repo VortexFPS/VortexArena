@@ -44,7 +44,7 @@ public class PatchCollisionAccuracyBench
         void Line(string s) => _out.WriteLine(s);
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         Line($"Adaptive vs fixed patch subdivision (tolerance {Tolerance} unit).");
         Line($"{"map",-12} {"patches",8} {"curved",7} | {"worst@3",9} {"worst@adapt",12} "

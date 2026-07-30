@@ -117,7 +117,10 @@ public static class MenuState
         try
         {
             var vfs = new VirtualFileSystem();
-            if (vfs.MountGameDir(DataPaths.Resolve(dataPath)))
+
+            // MountContentRoot mounts <data>/maps (the fetched per-map packages) and then <data> itself,
+            // in that order — see its remarks for why the order is load-bearing. Restructure G11, §9.3.
+            if (vfs.MountContentRoot(DataPaths.Resolve(dataPath)))
                 _vfs = vfs;
             else
                 XonoticGodot.Common.Diagnostics.Log.Warn($"[MenuState] data dir '{dataPath}' not found — menu runs on registered cvar defaults only.");

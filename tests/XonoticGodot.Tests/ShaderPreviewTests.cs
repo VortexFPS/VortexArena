@@ -19,9 +19,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class ShaderPreviewTests
 {
-    private static readonly string DataDir =
-        System.Environment.GetEnvironmentVariable("XG_DATA_DIR")
-        ?? TestPaths.Data;
+    private static readonly string DataDir = TestPaths.Data;
 
     private readonly ITestOutputHelper _out;
     public ShaderPreviewTests(ITestOutputHelper output) => _out = output;
@@ -167,7 +165,7 @@ public class ShaderPreviewTests
         }
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         IReadOnlyDictionary<string, ShaderDef> shaders =
             Q3ShaderParser.ParseFiles(vfs.Find("scripts/", "shader").Select(vfs.ReadText));

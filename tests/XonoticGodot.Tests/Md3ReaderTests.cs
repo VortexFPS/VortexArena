@@ -236,7 +236,7 @@ public class Md3ReaderTests
     {
         if (!Directory.Exists(DataDir)) return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return null;
+        if (!vfs.MountContentRoot(DataDir)) return null;
         string? path = vfs.Find("models/", "md3").FirstOrDefault();
         return path is null ? null : Md3Reader.Read(vfs.ReadBytes(path));
     });

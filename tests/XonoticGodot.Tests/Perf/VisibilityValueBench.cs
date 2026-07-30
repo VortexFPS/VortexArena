@@ -31,7 +31,7 @@ namespace XonoticGodot.Tests.Perf;
 /// small enough makes the question moot before any occluder work starts.</item>
 /// </list>
 ///
-/// <para>Skips without the content checkout (<c>XG_DATA_DIR</c>). <c>XG_MAP</c>, <c>XG_BOTS</c>,
+/// <para>Skips without the content checkout (<c>VA_DATA_DIR</c>). <c>XG_MAP</c>, <c>XG_BOTS</c>,
 /// <c>XG_TICKS</c> parameterise it.</para>
 /// </summary>
 [Collection("GlobalState")]
@@ -66,7 +66,7 @@ public class VisibilityValueBench
         void Line(string s) => _out.WriteLine(s);
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
         if (!vfs.Exists(bspPath)) { Line($"{bspPath} missing — skipped"); return; }
         BspData bsp = BspReader.Read(vfs.ReadBytes(bspPath));
@@ -105,7 +105,7 @@ public class VisibilityValueBench
         void Line(string s) => _out.WriteLine(s);
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         Line("How often PVS rejects a gameplay visibility query (deterministic — no timing noise).");
         Line($"{"map",-12} {"points",7} {"pairs",9} {"rejected",9} {"rate",7}");
@@ -230,7 +230,7 @@ public class VisibilityValueBench
         void Line(string s) => _out.WriteLine(s);
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         Line("What PVS would be culling: the world is one MeshInstance3D per (1024-unit cell, material).");
         Line($"{"map",-12} {"instances",10} {"cells",7} {"materials",10} {"tris",10} {"tris/inst",10}");

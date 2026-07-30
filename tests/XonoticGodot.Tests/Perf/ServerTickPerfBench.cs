@@ -25,7 +25,7 @@ namespace XonoticGodot.Tests;
 /// B/tick here are THE dedicated-server capacity numbers.
 ///
 /// No-ops when the content checkout is missing (CI without assets); the data dir can be overridden
-/// with the XG_DATA_DIR environment variable.
+/// with the VA_DATA_DIR environment variable.
 ///
 /// Run: dotnet test tests/XonoticGodot.Tests --filter ServerTickPerfBench -l "console;verbosity=detailed"
 ///
@@ -72,7 +72,7 @@ public class ServerTickPerfBench
 
         // --- build the world exactly like the live listen server (NetGame.StartListenServer) ---
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
         // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
         // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.

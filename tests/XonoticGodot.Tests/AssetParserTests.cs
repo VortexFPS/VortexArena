@@ -21,7 +21,7 @@ public class AssetParserTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         Assert.True(vfs.Find("scripts/", "shader").Count() >= 40, "expected the shipped .shader scripts");
         Assert.True(vfs.Find("models/", "iqm").Any(), "expected IQM models");
@@ -48,7 +48,7 @@ public class AssetParserTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        vfs.MountGameDir(DataDir);
+        vfs.MountContentRoot(DataDir);
 
         var texts = vfs.Find("scripts/", "shader").Select(vfs.ReadText);
         var shaders = Q3ShaderParser.ParseFiles(texts);
@@ -65,7 +65,7 @@ public class AssetParserTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        vfs.MountGameDir(DataDir);
+        vfs.MountContentRoot(DataDir);
 
         string iqmPath = vfs.Find("models/", "iqm").First();
         var iqm = IqmReader.Read(vfs.ReadBytes(iqmPath));

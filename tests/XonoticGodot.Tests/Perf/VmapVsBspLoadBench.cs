@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests.Perf;
 ///
 /// <para>Reports, per map: the two collision builds, the surface build, and the batch/triangle counts each
 /// path produces — because equal batching is what makes the load-time-only claim true. Skips without the
-/// content checkout (<c>XG_DATA_DIR</c>); <c>XG_MAPS</c> overrides the map list.</para>
+/// content checkout (<c>VA_DATA_DIR</c>); <c>XG_MAPS</c> overrides the map list.</para>
 /// </summary>
 [Collection("GlobalState")]
 public class VmapVsBspLoadBench
@@ -62,7 +62,7 @@ public class VmapVsBspLoadBench
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         _out.WriteLine($"{"map",-12} {"brush",6} {"patch",6} | {"bsp coll",9} {"vmap coll",9} "
                        + $"| {"import",8} {"surfaces",9} | {"bsp surf",8} {"vmap surf",9} {"vmap tris",10}");

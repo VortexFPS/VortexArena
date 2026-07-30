@@ -104,7 +104,7 @@ public class ModelSoundsTests
     {
         if (!Directory.Exists(DataDir)) return; // skip-if-missing
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         string? path = vfs.Find("models/", "sounds").FirstOrDefault();
         if (path is null) return;

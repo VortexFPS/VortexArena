@@ -170,7 +170,7 @@ public class MapEntityFilterTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         if (!vfs.Exists("maps/stormkeep.bsp")) return;
 
         BspData bsp = BspReader.Read(vfs.ReadBytes("maps/stormkeep.bsp"));

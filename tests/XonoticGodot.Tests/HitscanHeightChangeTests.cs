@@ -70,7 +70,7 @@ public class HitscanHeightChangeTests
         if (!Directory.Exists(DataDir))
             return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir))
+        if (!vfs.MountContentRoot(DataDir))
             return null;
         string? pick = vfs.Find("maps/", "bsp")
             .FirstOrDefault(m => Path.GetFileNameWithoutExtension(m)

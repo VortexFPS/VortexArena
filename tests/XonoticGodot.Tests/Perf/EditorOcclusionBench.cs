@@ -18,7 +18,7 @@ namespace XonoticGodot.Tests.Perf;
 /// what fraction of the boxes the test actually hides — a hit rate near zero would mean the feature is paying
 /// for nothing.
 ///
-/// <para>Skips without the content checkout (<c>XG_DATA_DIR</c>) and without <c>XG_BENCH=1</c>.</para>
+/// <para>Skips without the content checkout (<c>VA_DATA_DIR</c>) and without <c>XG_BENCH=1</c>.</para>
 /// </summary>
 [Collection("GlobalState")]
 public class EditorOcclusionBench
@@ -44,7 +44,7 @@ public class EditorOcclusionBench
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         _out.WriteLine("map          brushes patches entities   ray µs   sweep ms/frame   frames/refresh   hidden");
         foreach (string map in Maps)

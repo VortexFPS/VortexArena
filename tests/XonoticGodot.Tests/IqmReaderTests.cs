@@ -144,7 +144,7 @@ public class IqmReaderTests
     {
         if (!Directory.Exists(DataDir)) return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return null;
+        if (!vfs.MountContentRoot(DataDir)) return null;
         string? path = vfs.Find("models/", "iqm").FirstOrDefault();
         return path is null ? null : IqmReader.Read(vfs.ReadBytes(path));
     });

@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests;
 /// Thread-exact via <see cref="GC.GetAllocatedBytesForCurrentThread"/>.
 ///
 /// No-ops when the content checkout is missing (CI without assets); the data dir can be overridden with
-/// the XG_DATA_DIR environment variable.
+/// the VA_DATA_DIR environment variable.
 ///
 /// Run: dotnet test tests/XonoticGodot.Tests --filter IqmParsePerfBench -l "console;verbosity=detailed"
 /// </summary>
@@ -38,7 +38,7 @@ public class IqmParsePerfBench
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         string[] models = vfs.Find("models/player/", "iqm").OrderBy(p => p, StringComparer.Ordinal).ToArray();
         if (models.Length == 0) { _out.WriteLine("no player models — skipped"); return; }

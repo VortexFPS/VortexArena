@@ -171,7 +171,7 @@ public class SurfaceQueryTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? bspPath = vfs.Find("maps/", "bsp").FirstOrDefault();
         if (bspPath is null) return;
 

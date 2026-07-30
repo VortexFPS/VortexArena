@@ -199,7 +199,7 @@ public class BspReaderLayoutTests
     {
         if (!Directory.Exists(DataDir)) return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return null;
+        if (!vfs.MountContentRoot(DataDir)) return null;
         var maps = vfs.Find("maps/", "bsp").ToList();
         if (maps.Count == 0) return null;
         // prefer a real gameplay map (the _init/_hudsetup specials have no worldspawn entity)

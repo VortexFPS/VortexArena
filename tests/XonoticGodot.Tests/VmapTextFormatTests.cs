@@ -404,7 +404,7 @@ public class VmapTextFormatTests
         }
 
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
 
         int checkedMaps = 0;
         foreach (string map in new[] { "stormkeep", "fuse", "afterslime" })

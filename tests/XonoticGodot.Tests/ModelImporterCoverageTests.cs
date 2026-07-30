@@ -123,7 +123,7 @@ public class ModelImporterCoverageTests
     {
         if (!Directory.Exists(DataDir)) return; // no checkout → no-op
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         string[] mdls = vfs.Find("models/", "mdl").ToArray();
         Assert.NotEmpty(mdls); // the data tree ships .mdl files (19 in stock Base)
@@ -162,7 +162,7 @@ public class ModelImporterCoverageTests
     {
         if (!Directory.Exists(DataDir)) return; // no checkout → no-op
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         Assert.Empty(vfs.Find("", "md2")); // MD2 ("IDP2"): zero shipped content
         Assert.Empty(vfs.Find("", "psk")); // PSK ("ACTRHEAD"): zero shipped content

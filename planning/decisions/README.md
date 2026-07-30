@@ -22,5 +22,7 @@ Status values: `Proposed` · `Accepted` · `Superseded by ADR-NNNN` · `Deprecat
 | [0011](ADR-0011-protocol-ecosystem-boundary.md) | XonoticGodot is its own network ecosystem (no DP wire interop) | Accepted | Own protocol; enforce build parity on connect; drop d0_blind_id. |
 | [0012](ADR-0012-platform-scope.md) | Platform scope: desktop + dedicated server first; web deferred | Accepted | No stable C#→WASM; target desktop and a headless server. |
 | [0013](ADR-0013-modding-untrusted-client-code.md) | Sandboxed WebAssembly for server-pushed client mods (client code only) | Proposed | Restore the `csprogs.dat`-style download as sandboxed `client.wasm` via Wasmtime .NET; server stays compiled; reject→reconcile handshake. See [`specs/modding.md`](../specs/modding.md). |
+| [0014](ADR-0014-ci-packaging-distribution.md) | CI topology, perf baselines, packaging and dedicated-server distribution | Accepted | `ci.yml` with a `ci/ci.sh` mirror; per-platform release zips; perf baselines gate merges. |
+| [0015](ADR-0015-launcher-updater.md) | Launcher/updater: Avalonia shell, Velopack self-update, split game payload | Accepted | **Moved** to [`VortexFPS/VortexLauncher`](https://github.com/VortexFPS/VortexLauncher) with the code (stage 6); the file here is a pointer stub. `latest.json` is the only interface between the repos. |
 
 New decisions: copy an existing ADR as a template, take the next number, set status `Proposed`, and add a row here.

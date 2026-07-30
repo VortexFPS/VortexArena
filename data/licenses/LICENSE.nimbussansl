@@ -1,0 +1,61 @@
+Nimbus Sans L — copyright notice (INCOMPLETE: licence grant still missing)
+==========================================================================
+
+Covers: data/font-nimbussansl.pk3dir/fonts/n019004l.pfb
+        data/font-nimbussansl.pk3dir/fonts/n019004l.afm
+        data/font-nimbussansl.pk3dir/fonts/n019004l.pfm
+Work:   Nimbus Sans L Bold (URW++ Design & Development), Type 1, version 1.06
+
+This is a third-party work redistributed unmodified. It is NOT covered by COPYING.xonotic's
+blanket "GPL version 3 or any later version" grant.
+
+
+The copyright notice, VERBATIM from the font files
+---------------------------------------------------
+
+The .pfb carries this in its cleartext header as `/Notice`, and the .afm repeats it as its
+`Notice` line. The two agree exactly, which is the cross-check that it was read correctly.
+Reproduced with the PostScript `\050` / `\051` escapes resolved to the parentheses they encode:
+
+    Copyright (URW)++,Copyright 1999 by (URW)++ Design & Development;
+    Cyrillic glyphs added by Valek Filippov (C) 2001-2002
+
+Supporting metadata from the same headers, for identifying which release this is:
+
+    FontName    NimbusSanL-Bold
+    FullName    Nimbus Sans L Bold
+    FamilyName  Nimbus Sans L
+    Version     1.06
+    Generated   by pfaedit, 2002-12-31
+
+
+What is still missing, and why this file does not guess at it
+---------------------------------------------------------------
+
+**The licence grant itself is not present in any file we ship.** Everything above is a copyright
+notice — it identifies the rights holder, it does not state the terms under which the work may be
+redistributed. Those terms are not in the .pfb, the .afm, or the .pfm; the search that produced
+this file looked at every printable run in the binaries' cleartext.
+
+URW++ donated several Nimbus faces to the Ghostscript project, and the family has been
+distributed under more than one licence over time — GPL and AFPL for the 1996 Type 1 release,
+LPPL for a 2009 release. That history is exactly why this file does not name one: which grant
+applies depends on which release this 2002-dated, pfaedit-generated build descends from, and
+that cannot be settled from the bytes on disk.
+
+To close this properly, take the licence file as shipped by the upstream package this font came
+from — the Ghostscript fonts distribution (`COPYING` alongside the URW fonts) or the Debian
+`gsfonts` package copyright file — and add it here. Do not substitute a licence found by
+searching for the font's name: several redistributors have relabelled these files.
+
+Until then this notice at least travels with the work, and identifies the rights holder
+verbatim, which is strictly better than the nothing that shipped before it.
+
+
+Provenance of this file
+-----------------------
+
+Written 2026-07-30. The quoted notice is a byte-for-byte extraction from the font files in this
+repository. Nothing here is transcribed from memory or summarised from a web page; where the
+authoritative text is absent, this file says so rather than filling the gap. See
+data/licenses/FONTS for the other three font packs.

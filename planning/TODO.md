@@ -30,28 +30,39 @@ Created 2026-06-05 from `REBIRTH_FEATURE_COMPLETENESS.md` Part III (P0–P3), in
 
 ## 🚧 Open blockers for a public release
 
-**TODO-FONTS — ~~two~~ ONE bundled font family ships with no licence notice.** *(dejavu RESOLVED 2026-07-30 — see below.)* Added 2026-07-29 during the
-repo restructure, when `data/` became committed content (D1/D2) and the licence texts stopped living in
-an upstream checkout that travelled with nothing.
+**TODO-FONTS — ONE font pack still lacks a licence GRANT (nimbussansl).** *(unifont RESOLVED 2026-07-30;
+dejavu RESOLVED 2026-07-30.)* Added 2026-07-29 during the repo restructure, when `data/` became committed
+content (D1/D2) and the licence texts stopped living in an upstream checkout that travelled with nothing.
 
 The four font packs are third-party works. `COPYING.xonotic`'s blanket "GPL v3 or later" grant does not
 cover them, because Team Xonotic redistributes them without owning them and cannot relicense them.
-Verified by reading what each pack actually ships:
 
 | pack | state |
 |---|---|
-| `font-xolonium.pk3dir` | **OK** — `fonts/README.txt` carries the full GPLv2+ notice, © 2011–2020 Severin Meyer |
-| `font-unifont.pk3dir` | **partial** — names the work + URL, no licence text. Needs the GPL font-embedding exception from unifoundry.com |
-| `font-dejavu.pk3dir` | **RESOLVED 2026-07-30** — `data/licenses/LICENSE.dejavu` carries both faces' notices verbatim from the fonts' own `name` table record 13. The two differ (Bold has an Arev-glyphs clause), so both are reproduced. |
-| `font-nimbussansl.pk3dir` | **missing** — URW++ Nimbus Sans L, no notice |
+| `font-xolonium.pk3dir` | **OK** — `fonts/README.txt` carries the full GPLv2+ notice; the binaries carry more (name record 13 holds the GPLv2+ statement *and* the full Font Embedding Exception) |
+| `font-dejavu.pk3dir` | **RESOLVED 2026-07-30** — `LICENSE.dejavu`, verbatim from name record 13. Both faces, because Bold has an Arev-glyphs clause Mono does not |
+| `font-unifont.pk3dir` | **RESOLVED 2026-07-30** — `LICENSE.unifont`. GPLv2+ with the Font Embedding Exception |
+| `font-nimbussansl.pk3dir` | **PARTIAL** — `LICENSE.nimbussansl` now ships the URW++ copyright notice verbatim, but the licence **grant** is in none of the files and is not recoverable from disk |
 
-**What to do:** fetch the authoritative licence text from each font project and add it as
-`data/licenses/FONTS.<name>`. Do **not** paraphrase or reconstruct from memory — these are legal
-documents and only the real copy is any use. Details and sources: [`data/licenses/FONTS`](../data/licenses/FONTS).
+**The previous entry here was wrong and it cost time.** It recorded unifont as needing an external
+source because "the TTF carries no licence record at all". It carries the grant in name record **0**;
+the earlier check looked only at record 13, which is where DejaVu's happened to live. The Font Embedding
+Exception text it said was missing was also already in the tree, in full, inside `xolonium-regular.otf`.
+Both were extracted verbatim — nothing was fetched or paraphrased. **Check every name record before
+concluding a font binary is silent.**
 
-Does not block development. Does block a public release that ships these fonts, since two of the four
-currently carry no notice and one of those licences demands one.
+**What remains:** nimbussansl's grant. Take it from the upstream package this build descends from (the
+Ghostscript fonts `COPYING`, or Debian's `gsfonts` copyright file), not from a font-download site —
+several redistributors have relabelled these files, and the family has shipped under GPL, AFPL and LPPL
+at different times, so it cannot be named from memory. Do **not** accept a web SUMMARY of a licence page
+as the text. Details: [`data/licenses/FONTS`](../data/licenses/FONTS).
 
+**One trap worth keeping:** a project's current licence page may describe a LATER release than the binary
+we ship. unifoundry.com today states SIL OFL v1.1; our `unifont.ttf` is 7.0.06 (2014) and declares
+GPLv2+. A binary is governed by the terms it shipped under. Re-derive from the binary on every upgrade.
+
+Does not block development. Does block a public release that ships these fonts — now for one pack
+rather than two.
 ---
 
 ## How this is managed (orchestrated fan-out, no per-item locks)

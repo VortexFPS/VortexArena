@@ -1,57 +1,89 @@
-Font licensing — PARTIALLY RESOLVED (2026-07-30)
-================================================
-
-RESOLVED: font-dejavu. Its full Bitstream Vera / Arev notice now ships as LICENSE.dejavu in
-this directory, extracted VERBATIM from the fonts' own OpenType name table (record 13) rather
-than transcribed from a website — that is the text the binaries we redistribute actually carry.
-Both faces are reproduced because they differ: DejaVuSans-Bold includes an Arev-glyphs clause
-that DejaVuSansMono does not, so shipping one notice would drop a clause covering the other.
-
-STILL OUTSTANDING: font-unifont. Its pack ships only a two-line README (name + URL) and its
-TTF carries NO licence record at all, so there is nothing on disk to extract. GPL-2 is present
-in this directory, but Unifont is GPLv2+ WITH THE FONT EMBEDDING EXCEPTION, and that exception
-text is what is missing. It has to come from unifoundry.com — deliberately not paraphrased here,
-because an approximated licence grant is worse than an absent one.
+Font licensing — 3 of 4 RESOLVED (updated 2026-07-30)
+=====================================================
 
 The four font packs in this content tree are third-party works. They are NOT covered
 by COPYING.xonotic's blanket "GPL version 3 or any later version" grant: Team Xonotic
 redistributes them, it does not own them, and it cannot relicense them.
 
-Verified 2026-07-29 by reading what each pack actually ships:
+  pack                      state
+  ------------------------  --------------------------------------------------------------
+  font-xolonium.pk3dir      COVERED, and it always was. fonts/README.txt carries the full
+                            notice, and the binaries carry more: name record 13 holds the
+                            complete GPLv2+ statement AND the full GNU Font Embedding
+                            Exception. Copyright 2011-2020 Severin Meyer <sev.ch@web.de>.
+                            Public release: https://gitlab.com/sev/xolonium
 
-  font-xolonium.pk3dir    COVERED. fonts/README.txt carries the full notice:
-                          "special GPL version of the Xolonium font, intended for
-                          Xonotic", GPL version 2 or any later version,
-                          Copyright 2011-2020 Severin Meyer <sev.ch@web.de>.
-                          Public release: https://gitlab.com/sev/xolonium
+  font-dejavu.pk3dir        RESOLVED 2026-07-30 -> LICENSE.dejavu. Extracted verbatim from
+                            the fonts' own name table record 13. Both faces are reproduced
+                            because they differ: DejaVuSans-Bold includes an Arev-glyphs
+                            clause that DejaVuSansMono does not, so shipping one notice
+                            would drop a clause covering the other.
 
-  font-unifont.pk3dir     PARTIAL. fonts/README names the work (GNU Unifont 7.0.06,
-                          http://unifoundry.com/unifont.html) but carries no licence
-                          text. GNU Unifont is distributed under the GPL with a font
-                          embedding exception; that exception text is NOT in this tree
-                          and needs adding from unifoundry.com.
+  font-unifont.pk3dir       RESOLVED 2026-07-30 -> LICENSE.unifont. GPLv2-or-later with the
+                            GNU Font Embedding Exception. See the correction below.
 
-  font-dejavu.pk3dir      MISSING. Ships DejaVuSans-Bold.ttf and DejaVuSansMono.ttf
-                          with no notice of any kind. The DejaVu fonts are released
-                          under the Bitstream Vera Fonts Copyright with the Arev Fonts
-                          Copyright addition — a permissive licence, NOT the GPL, which
-                          requires the copyright notice and permission notice to be
-                          included in all copies. Source: https://dejavu-fonts.github.io/
+  font-nimbussansl.pk3dir   PARTIAL -> LICENSE.nimbussansl. The URW++ copyright notice now
+                            ships verbatim (extracted from the .pfb's /Notice, confirmed
+                            against the .afm). The LICENCE GRANT is still missing and is not
+                            recoverable from anything on disk. This is the one open item.
 
-  font-nimbussansl.pk3dir MISSING. Ships n019004l.pfb/.pfm/.afm with no notice. These
-                          are URW++ Nimbus Sans L. Needs the URW++ notice as shipped by
-                          the upstream font package.
 
-What to do
-----------
+CORRECTION (2026-07-30): what this file said about unifont was wrong
+---------------------------------------------------------------------
 
-For each MISSING/PARTIAL entry, obtain the licence text from the font project itself and
-add it here as FONTS.<name>. Do not paraphrase or reconstruct licence text from memory —
-these are legal documents and only the authoritative copy is any use.
+It said:
 
-Nothing here blocks development. It does want closing before a public release that ships
-these fonts, because two of the four are currently distributed with no notice at all, and
-in the DejaVu case the licence specifically requires one.
+    "Its pack ships only a two-line README (name + URL) and its TTF carries NO licence
+     record at all, so there is nothing on disk to extract."
+
+The second half is false. unifont.ttf carries its grant in `name` table record **0**
+(Copyright), verbatim:
+
+    Copyright (C) 2014 Roman Czyborra, Paul Hardy, Qianqian Fang, Andrew Miller, et al.
+    Licensed under the GNU General Public License; either version 2, or (at your option) a
+    later version, with the GNU Font Embedding Exception.
+
+The earlier check looked at record **13** (License Description) — which is where DejaVu's
+notice lives, because that is the record the DejaVu work had just been resolved from — found
+record 13 absent, and concluded the font carried nothing. A font may put its terms in either
+record, and many put them in both. **Check every name record before concluding a binary is
+silent.** The cost of that mistake here was recording a release blocker as "needs an external
+source" when the answer was already in the tree — and the exception text it said was missing
+turned out to be on disk too, in full, inside xolonium-regular.otf.
+
+
+How the remaining gap differs from the ones now closed
+--------------------------------------------------------
+
+For xolonium, dejavu and unifont the authoritative text was on disk and is now extracted.
+For nimbussansl it genuinely is not: the .pfb, .afm and .pfm carry a copyright notice and no
+grant, and every printable run in their cleartext headers was searched. LICENSE.nimbussansl
+records what IS there, states plainly what is not, and does not guess — Nimbus Sans L has been
+distributed under GPL, AFPL and LPPL at different points, so naming one from memory would be
+inventing a legal fact.
+
+Close it by taking the licence file from the upstream package this build descends from (the
+Ghostscript fonts distribution's COPYING, or Debian's gsfonts copyright file) rather than from
+a font-download site — several redistributors have relabelled these files.
+
+
+Rule for anything added here
+------------------------------
+
+Obtain licence text from the work itself or from the font project, and add it as
+LICENSE.<name>. Do not paraphrase or reconstruct from memory, and do not accept a SUMMARY of a
+licence page as the text — these are legal documents and only the authoritative copy is any
+use. State in the file where the copy came from, so the next reader can judge it.
+
+One more trap, found while closing unifont: a project's CURRENT licence page may describe a
+LATER release than the binary in this tree. unifoundry.com today states SIL OFL v1.1 for
+compiled fonts; the unifont.ttf here is 7.0.06 from 2014 and declares GPLv2+ in its own name
+table. A binary is governed by the terms it shipped under, not by terms its upstream adopted
+afterwards. Re-derive from the binary on every font upgrade.
+
+
+Nothing here blocks development. The one remaining item (nimbussansl's grant) wants closing
+before a public release that ships these fonts.
 
 Context: before the repo restructure this content was fetched at build time and never
 committed, so the notices lived in the upstream checkout and travelled with nothing. This

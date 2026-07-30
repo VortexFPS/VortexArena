@@ -1,0 +1,69 @@
+GNU Unifont — licence notice
+============================
+
+Covers: data/font-unifont.pk3dir/fonts/unifont.ttf
+Work:   GNU Unifont 7.0.06 (http://unifoundry.com/unifont.html)
+
+This is a third-party work redistributed unmodified. It is NOT covered by COPYING.xonotic's
+blanket "GPL version 3 or any later version" grant.
+
+
+1. The grant, VERBATIM from the font binary
+-------------------------------------------
+
+Extracted from unifont.ttf's own OpenType `name` table, record 0 (Copyright), rather than
+transcribed from a website — this is what the binary we redistribute actually carries:
+
+    Copyright (C) 2014 Roman Czyborra, Paul Hardy, Qianqian Fang, Andrew Miller, et al.
+    Licensed under the GNU General Public License; either version 2, or (at your option) a
+    later version, with the GNU Font Embedding Exception.
+
+The GPL version 2 text is in this directory as GPL-2.
+
+
+2. The GNU Font Embedding Exception, VERBATIM — read the provenance note
+-------------------------------------------------------------------------
+
+Unifont's binary NAMES this exception but does not carry its text. The paragraph below is the
+standard exception, reproduced verbatim from a different font in this same content tree:
+data/font-xolonium.pk3dir/fonts/xolonium-regular.otf, `name` table record 13, which is also
+GPLv2+ with this same exception and does ship the full wording. It appears there identically in
+both the Macintosh (record 13, platform 1) and Windows (record 13, platform 3, UTF-16BE)
+encodings, which is a useful cross-check that it was not garbled in extraction.
+
+    As a special exception, if you create a document which uses this font, and embed this font
+    or unaltered portions of this font into the document, this font does not by itself cause
+    the resulting document to be covered by the GNU General Public License. This exception does
+    not however invalidate any other reasons why the document might be covered by the GNU
+    General Public License. If you modify this font, you may extend this exception to your
+    version of the font, but you are not obligated to do so. If you do not wish to do so,
+    delete this exception statement from your version.
+
+**Where this copy came from is stated plainly above and deliberately.** It is a real, verbatim
+copy of the standard exception, not a paraphrase and not written from memory — but it was taken
+from Xolonium's binary, not Unifont's, because Unifont's does not contain it. Anyone who wants
+the text from Unifont's own distribution should take it from unifoundry.com's release of 7.0.06
+and replace this section. That is a strictly better source; it is simply not one that exists
+anywhere in this repository.
+
+
+3. A trap: do NOT take this font's terms from unifoundry.com today
+-------------------------------------------------------------------
+
+Checked 2026-07-30: unifoundry.com's current LICENSE.txt states that compiled fonts are under
+the **SIL Open Font License v1.1** plus the font embedding exception. That describes a LATER
+release than the one we ship. The binary in this tree is version 7.0.06 (2014) and declares
+GPLv2-or-later in its own name table, as quoted in section 1.
+
+A binary is governed by the terms it was released under, not by the terms its upstream project
+adopted afterwards. Reading today's licence page and applying it to a 2014 font would attach the
+wrong licence to this file. If Unifont is ever upgraded here, re-derive this notice from the new
+binary rather than assuming either licence carried over.
+
+
+Provenance of this file
+-----------------------
+
+Written 2026-07-30. Sections 1 and 2 are byte-for-byte extractions from the OpenType name tables
+of fonts in this repository; nothing here is transcribed from memory or summarised from a web
+page. See data/licenses/FONTS for the other three font packs.

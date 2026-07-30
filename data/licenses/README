@@ -14,6 +14,26 @@ that content arrives under, copied unmodified from the upstream Xonotic distribu
                     "provided in the files GPL-2 and GPL-3 in this package", and because
                     the "or any later version" clause makes the v2 text part of the grant.
 
+The four bundled FONT packs are a separate matter, and COPYING.xonotic does not cover
+them: Team Xonotic redistributes those works without owning them, so it cannot pass on a
+GPLv3 grant for them. Their notices live here:
+
+  FONTS                 Status of all four packs, what each one ships, and the rule for
+                        adding to this set. Read this first.
+  LICENSE.dejavu        DejaVu Sans Bold + Sans Mono. Bitstream Vera / Arev notices.
+  LICENSE.unifont       GNU Unifont 7.0.06. GPLv2-or-later with the GNU Font Embedding
+                        Exception, both texts verbatim.
+  LICENSE.nimbussansl   Nimbus Sans L Bold (URW++). Copyright notice only — the licence
+                        GRANT is still outstanding, and the file says so rather than
+                        guessing. The one open item in this directory.
+
+  (font-xolonium needs no file here: its own fonts/README.txt already carries the
+  full notice, as do its binaries.)
+
+Each of those was extracted verbatim from the font binaries themselves rather than
+transcribed from a website. If you add one, do the same and record where the copy came
+from — the reasoning is in FONTS.
+
 Attribution for the contributors who authored this content is carried in the game's
 credits screen (game/menu/CreditsScreen.cs), a verbatim port of upstream's
 qcsrc/menu/xonotic/credits.qc.

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Engine Info" panel config dialog — a faithful C# port of <c>XonoticHUDEngineInfoDialog_fill</c>
@@ -8,7 +8,7 @@ namespace XonoticGodot.Game.Menu;
 /// group, via <see cref="HudPanelCommon"/>) then the engine-info-specific rows: an "FPS:" header label, the
 /// FPS averaging checkbox, and the FPS decimal-places slider.
 ///
-/// FAITHFUL UI NOW: the engine-info panel is rendered in-game by the HUD backend XonoticGodot hasn't wired up;
+/// FAITHFUL UI NOW: the engine-info panel is rendered in-game by the HUD backend VortexArena hasn't wired up;
 /// the cvar bindings are real (they write the shared store the game reads). No live FPS preview is fabricated.
 /// </summary>
 public partial class DialogHudPanelEngineInfo : MenuScreen

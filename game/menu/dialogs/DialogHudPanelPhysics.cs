@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Physics HUD panel config — a faithful C# port of <c>XonoticHUDPhysicsDialog_fill</c>
@@ -17,7 +17,7 @@ namespace XonoticGodot.Game.Menu;
 /// mode + alignment, the speed group, the acceleration group). Every control binds the same
 /// <c>hud_panel_physics_*</c> cvar; <c>setDependent</c> grey-outs are reproduced with <see cref="Dependent"/>.
 ///
-/// FAITHFUL UI NOW: the <c>hud_panel_physics_*</c> cvars drive the in-game HUD renderer/editor XonoticGodot has not
+/// FAITHFUL UI NOW: the <c>hud_panel_physics_*</c> cvars drive the in-game HUD renderer/editor VortexArena has not
 /// wired yet, but the bindings are REAL (they write the shared <see cref="MenuState.Cvars"/> store). No
 /// apply/command button exists (just Back). Two approximations are noted inline: the "Show speed unit"
 /// checkbox uses QC <c>setDependent</c>+<c>setDependentOR</c> (enabled if topspeed==0 OR jumpspeed==0); the

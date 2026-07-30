@@ -1,9 +1,9 @@
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// World-coordinate readout — the position sibling of <see cref="FpsPanel"/>/<see cref="PingPanel"/>, drawn in
@@ -15,7 +15,7 @@ namespace XonoticGodot.Game.Hud;
 ///
 /// <list type="bullet">
 ///   <item><b>Source</b> — the value comes from <see cref="PositionProvider"/>, which the net layer wires to
-///         <see cref="XonoticGodot.Game.Net.ClientNet.PredictedOrigin"/> (the local player's predicted physics
+///         <see cref="VortexArena.Game.Net.ClientNet.PredictedOrigin"/> (the local player's predicted physics
 ///         origin). It returns <c>null</c> when there's no live local body (menu / pre-spawn / model viewer), and
 ///         the panel then draws nothing.</item>
 ///   <item><b>Format</b> — <c>"x:&lt;x&gt; y:&lt;y&gt; z:&lt;z&gt;"</c>, the three coordinates rounded to whole Quake
@@ -32,7 +32,7 @@ public partial class PositionPanel : HudPanel
 {
     /// <summary>Supplies the local player's current Quake-space origin, or <c>null</c> when there's no live body
     /// (menu / pre-spawn / model viewer). The net layer sets this to read
-    /// <see cref="XonoticGodot.Game.Net.ClientNet.PredictedOrigin"/>; null on paths with no local player.</summary>
+    /// <see cref="VortexArena.Game.Net.ClientNet.PredictedOrigin"/>; null on paths with no local player.</summary>
     public System.Func<NVec3?>? PositionProvider { get; set; }
 
     /// <summary>

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// Dev/CI visual-capture helper. When the host is launched with <c>--screenshot &lt;path&gt;</c>,
@@ -65,18 +65,18 @@ public partial class ScreenshotHook : Node
         // photographed a world 31% recoloured — half old lighting, half new, and plausible enough to publish.
         for (int guard = 0; guard < 4; guard++)
         {
-            while (XonoticGodot.Game.Vmap.EditorLightBake.BakeRunning
-                   || XonoticGodot.Game.Vmap.EditorLightBake.BakeFinished
-                   || XonoticGodot.Game.Vmap.VmapMapBuilder.RecolorRemaining > 0)
+            while (VortexArena.Game.Vmap.EditorLightBake.BakeRunning
+                   || VortexArena.Game.Vmap.EditorLightBake.BakeFinished
+                   || VortexArena.Game.Vmap.VmapMapBuilder.RecolorRemaining > 0)
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
             // Settle, then look again: if the handoff started something, the loop above catches it.
             for (int i = 0; i < 8; i++)
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
-            if (!XonoticGodot.Game.Vmap.EditorLightBake.BakeRunning
-                && !XonoticGodot.Game.Vmap.EditorLightBake.BakeFinished
-                && XonoticGodot.Game.Vmap.VmapMapBuilder.RecolorRemaining == 0)
+            if (!VortexArena.Game.Vmap.EditorLightBake.BakeRunning
+                && !VortexArena.Game.Vmap.EditorLightBake.BakeFinished
+                && VortexArena.Game.Vmap.VmapMapBuilder.RecolorRemaining == 0)
                 break;
         }
 

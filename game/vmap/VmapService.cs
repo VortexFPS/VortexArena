@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using Godot;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Formats.Vmap;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Common.Config;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Formats;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Formats.Vmap;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// Console front-end for the editable map format: converts a shipped <c>.bsp</c> or an authored <c>.map</c>

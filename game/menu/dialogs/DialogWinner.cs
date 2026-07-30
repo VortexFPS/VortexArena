@@ -1,13 +1,13 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// "Winner" popup — a faithful C# port of <c>XonoticWinnerDialog</c>
 /// (qcsrc/menu/xonotic/dialog_singleplayer_winner.qc). Shown after winning a single-player campaign level: it
 /// is just the <c>/gfx/winner</c> banner image filling the dialog, with an "OK" button beneath
 /// (QC <c>Dialog_Close</c> — here the universal Back). The QC also plays MENU_SOUND_WINNER on focus
-/// (<c>XonoticWinnerDialog_focusEnter</c>); XonoticGodot's menu has no focus-sound hook wired here, so that cue is
+/// (<c>XonoticWinnerDialog_focusEnter</c>); VortexArena's menu has no focus-sound hook wired here, so that cue is
 /// omitted (noted).
 ///
 /// The banner is a content texture from the asset repo; we load <c>/gfx/winner</c> if a Godot-importable
@@ -85,5 +85,5 @@ public partial class DialogWinner : MenuScreen
     private static Texture2D? LoadWinnerBanner()
         // TextureCache routes a bare name through the VFS resolver and a res:// path through the resource
         // loader, caching both outcomes including the miss. Null still means "no banner", as before.
-        => XonoticGodot.Game.Hud.TextureCache.GetFirst(WinnerImagePaths);
+        => VortexArena.Game.Hud.TextureCache.GetFirst(WinnerImagePaths);
 }

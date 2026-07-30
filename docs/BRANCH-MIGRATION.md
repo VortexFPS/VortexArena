@@ -48,8 +48,8 @@ Five mechanical transformations, all scriptable:
 
 | # | Change | Scale |
 |---|---|---|
-| T1 | `XonoticGodot.*` → `VortexArena.*` namespaces and `using` lines | ~250 files |
-| T2 | `src/XonoticGodot.<X>/` → `src/VortexArena.<X>/`, plus `.sln` / `.csproj` filenames, `RootNamespace`, `AssemblyName` | 6 projects |
+| T1 | `VortexArena.*` → `VortexArena.*` namespaces and `using` lines | ~250 files |
+| T2 | `src/VortexArena.<X>/` → `src/VortexArena.<X>/`, plus `.sln` / `.csproj` filenames, `RootNamespace`, `AssemblyName` | 6 projects |
 | T3 | `assets/data` → `data`, and the `.pk3dir` suffixes on `core` / `music` / `font-*` | every path literal |
 | T4 | all twelve `XG_*` / `Xg*` env vars and MSBuild properties → `VA_*` / `Va*`, `XONOTIC_USERDIR` → `VORTEX_USERDIR`, artifact filenames | scattered |
 | T5 | `bryankruman/VortexArena` → `VortexFPS/VortexArena` in URLs | 6 files |
@@ -124,7 +124,7 @@ The merge above pays that cost once. Take the merge.
 
 ### Why not just merge without the transform
 
-Without the transform, git sees the branch's `src/XonoticGodot.Common/Foo.cs` and main's
+Without the transform, git sees the branch's `src/VortexArena.Common/Foo.cs` and main's
 `src/VortexArena.Common/Foo.cs` and must infer the rename. Rename detection is heuristic, capped, and
 degrades badly when a file was both renamed and edited — which is exactly the case for any file the
 branch touched. Doing the transform first turns "infer a rename and merge the edits" into "merge the
@@ -157,7 +157,7 @@ UID for the same path. Take either side; they are opaque identifiers.
 
 `tools/migrate-branch.sh` is deliberately dumb and re-runnable:
 
-1. `git mv` the six `src/XonoticGodot.<X>` directories and the `.sln` / `.csproj` files (T2).
+1. `git mv` the six `src/VortexArena.<X>` directories and the `.sln` / `.csproj` files (T2).
 2. `sed` the namespace, `RootNamespace`, and `AssemblyName` strings across `*.cs`, `*.csproj`, `*.sln`,
    `project.godot` (T1, T2).
 3. `sed` the path literals: `assets/data` → `data`, `res://assets/data` → `res://data` (T3).
@@ -177,7 +177,7 @@ Work through these in order. Each one catches a different class of miss.
 - **Run the suite.** `dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj`.
 - **Fetch content and run the real gate.** `tools/data/fetch-maps.py` then `ci/ci.sh`. Asset-dependent
   tests no longer self-skip, so a path the transform missed shows up here rather than at runtime.
-- **Grep for survivors.** `grep -rn "XonoticGodot\|assets/data\|XG_DATA_DIR" --include='*.cs'
+- **Grep for survivors.** `grep -rn "VortexArena\|assets/data\|XG_DATA_DIR" --include='*.cs'
   --include='*.csproj' --include='*.sh' --include='*.yml' .` Expect zero outside
   `planning/legacy/` and upstream-lineage comments, which stay per `docs/REBRANDING.md`.
 - **Check the branch's own docs.** Design notes and briefs under `planning/` often hardcode old paths.

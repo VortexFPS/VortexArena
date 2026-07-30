@@ -1,6 +1,6 @@
 // Port of qcsrc/lib/i18n.qh (the `_()` / CTX runtime helpers) + the gettext APPLICATION step from
 // darkplaces/prvm_edict.c (PRVM_PO_Load at progs load, prvm_edict.c:2631-2657) + the language swap from
-// qcsrc/menu/menu.qc m_init (menu.qc:65-74). The pure PO/CTX logic lives in XonoticGodot.Common.Localization
+// qcsrc/menu/menu.qc m_init (menu.qc:65-74). The pure PO/CTX logic lives in VortexArena.Common.Localization
 // (PoCatalog, Ctx); this Godot-side facade owns the ACTIVE catalog + current language and exposes the menu's
 // translation seam (Tr / Ctx / CtxTr), loading the .po through the asset VFS.
 //
@@ -9,10 +9,10 @@
 // verbatim from the QC `_()` text, so they match the .pot keys. en/""/dump => identity (no PO loaded).
 using System;
 using Godot;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Localization;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Localization;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The menu's localization facade — the C# successor to QuakeC's <c>_()</c> translation operator and the
@@ -50,7 +50,7 @@ public static class Localization
     /// is wanted (e.g. a string already passed through <see cref="Tr"/> elsewhere).
     /// </summary>
     public static string Ctx(string source)
-        => string.IsNullOrEmpty(source) ? source : XonoticGodot.Common.Localization.Ctx.Strip(source);
+        => string.IsNullOrEmpty(source) ? source : VortexArena.Common.Localization.Ctx.Strip(source);
 
     /// <summary>
     /// Translate THEN strip a context prefix — the C# stand-in for <c>CTX(_("PREFIX^Text"))</c>, the most common
@@ -58,7 +58,7 @@ public static class Localization
     /// removed from the result for display. Faithful order: lookup with the prefix, strip after.
     /// </summary>
     public static string CtxTr(string source)
-        => XonoticGodot.Common.Localization.Ctx.Strip(Tr(source));
+        => VortexArena.Common.Localization.Ctx.Strip(Tr(source));
 
     /// <summary>
     /// Switch the active language and (re)load its catalog through <paramref name="vfs"/> — the C# successor to
@@ -72,7 +72,7 @@ public static class Localization
     {
         CurrentLanguage = string.IsNullOrEmpty(id) ? "en" : id!;
 
-        if (XonoticGodot.Common.Localization.Ctx.IsIdentityLanguage(CurrentLanguage) || vfs is null)
+        if (VortexArena.Common.Localization.Ctx.IsIdentityLanguage(CurrentLanguage) || vfs is null)
         {
             _catalog = PoCatalog.Empty;
             return;

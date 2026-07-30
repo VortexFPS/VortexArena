@@ -1,7 +1,7 @@
 using Godot;
-using XonoticGodot.Common.Menu;
+using VortexArena.Common.Menu;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Screenshots tab — a faithful C# port of <c>XonoticScreenshotBrowserTab_fill</c>

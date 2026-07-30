@@ -1,7 +1,7 @@
 // Port of qcsrc/client/csqcmodel_hooks.qc — CSQCModel_Effects_Apply (lines 545-661). Each rendered frame this
 // turns a model's EF_* effect bits into dynamic lights / particle emissions / render-flag tweaks, and its MF_*
 // model flags (+ EF_BRIGHTFIELD) into a projectile trail; it also drives the jetpack loop (MF_ROCKET). The pure
-// EF_*/MF_* constants + the MF→trail mapping live in XonoticGodot.Engine.Simulation.CsqcModelEffectFlags
+// EF_*/MF_* constants + the MF→trail mapping live in VortexArena.Engine.Simulation.CsqcModelEffectFlags
 // (unit-tested); this is the thin Godot adapter (lights/materials/sound/trail are Godot-side).
 //
 // PARITY GAPS (the wire doesn't carry everything CSQC had locally — see the T58 report):
@@ -18,14 +18,14 @@
 
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Loaders;
 using NVec3 = System.Numerics.Vector3;
-using EFlags = XonoticGodot.Engine.Simulation.CsqcModelEffectFlags;
+using EFlags = VortexArena.Engine.Simulation.CsqcModelEffectFlags;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Applies a model's networked <see cref="Entity.Effects"/> bits (and locally-supplied MF_* model flags) to its

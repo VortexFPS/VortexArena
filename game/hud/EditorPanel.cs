@@ -1,12 +1,12 @@
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Formats.Vmap;
-using XonoticGodot.Game.Vmap;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Console;
+using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Vmap;
+using VortexArena.Game.Vmap;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The map editor's status readout (design doc §11.6): current state, world-grid setting, and — the part that
@@ -176,7 +176,7 @@ public partial class EditorPanel : HudPanel
                 // nobody would guess at. Reports what the rig actually built, not just the toggle: a map
                 // compiled without -keeplights yields no point lights, and the mapper should be told that
                 // rather than left wondering why "lit" looks flat.
-                bool lit = XonoticGodot.Game.Vmap.EditorLighting.Enabled(XonoticGodot.Game.Menu.MenuState.Cvars);
+                bool lit = VortexArena.Game.Vmap.EditorLighting.Enabled(VortexArena.Game.Menu.MenuState.Cvars);
                 string lighting = lit
                     ? $"Light: ON  {(Lights >= 0 ? $"{Lights} lights" : "")}{(Baked ? " BAKED" : "")}{(HasMapSun ? " + map sun" : " + default sun")}"
                     : "Light: OFF (fullbright)";
@@ -465,7 +465,7 @@ public partial class EditorPanel : HudPanel
         return ay >= az ? "Y" : "Z";
     }
 
-    private static string EKey(string command) => XonoticGodot.Game.Vmap.EditorBinds.KeyLabel(command);
+    private static string EKey(string command) => VortexArena.Game.Vmap.EditorBinds.KeyLabel(command);
 
     private static string Key(string command)
     {

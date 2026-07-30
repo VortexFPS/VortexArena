@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Gameplay;  // WarpzoneManager, Warpzone, WarpzoneTransform, WarpzoneTrace
+using VortexArena.Common.Gameplay;  // WarpzoneManager, Warpzone, WarpzoneTransform, WarpzoneTrace
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Port of <c>lib/warpzone/client.qc</c> <c>WarpZone_FixView</c> / <c>WarpZone_FixNearClip</c> /

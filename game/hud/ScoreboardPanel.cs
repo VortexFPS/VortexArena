@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Scoreboard overlay — port of the core of Base/.../qcsrc/client/hud/panel/scoreboard.qc (HUD panel #25).
@@ -19,7 +19,7 @@ namespace XonoticGodot.Game.Hud;
 /// and (stubbed) accuracy + rankings blocks.
 ///
 /// Data source: other players' columns/name/team are a networked thing. The net layer pushes rows via
-/// <see cref="SetWireRows"/> (the decoded <see cref="XonoticGodot.Net.ScoreboardWire"/> — full column values per
+/// <see cref="SetWireRows"/> (the decoded <see cref="VortexArena.Net.ScoreboardWire"/> — full column values per
 /// player) which is the column-driven path, or via <see cref="SetRows"/> (a <see cref="ScoreRow"/> per player)
 /// for the simpler #/name/score/deaths/ping view. The active per-mode column layout comes from the networked
 /// <see cref="GameScores"/> labels/flags (set by the ScoreInfo block, QC ENT_CLIENT_SCORES_INFO).
@@ -341,7 +341,7 @@ public partial class ScoreboardPanel : HudPanel
         UiDisabling = true;
         // QC HUD_Scoreboard_UI_Disable also clears sb_showscores: without it, closing the UI with the scoreboard
         // key still held keeps the board up, so the fade never reaches 0 and the teardown never runs.
-        XonoticGodot.Engine.Console.BindTable.ReleaseShowScores();
+        VortexArena.Engine.Console.BindTable.ReleaseShowScores();
         Active = false;
         QueueRedraw();
     }
@@ -359,7 +359,7 @@ public partial class ScoreboardPanel : HudPanel
         if (UiMode != 0 && !UiDisabling) { UiDisable(); return true; }
         // QC main.qc:547 — `if (hudShiftState & S_TAB)`: Escape while the scoreboard key is held opens the
         // interactive UI instead of the pause menu.
-        if (UiMode == 0 && XonoticGodot.Engine.Console.BindTable.ShowScores) { UiEnable(0); return true; }
+        if (UiMode == 0 && VortexArena.Engine.Console.BindTable.ShowScores) { UiEnable(0); return true; }
         return false;
     }
 
@@ -396,7 +396,7 @@ public partial class ScoreboardPanel : HudPanel
     /// <summary>QC <c>intermission</c> — the match has ended (the team picker closes itself then). Fed by the host.</summary>
     public bool MatchIntermission { get; set; }
 
-    private float UiNow() => XonoticGodot.Common.Services.Api.Services?.Clock?.Time ?? 0f;
+    private float UiNow() => VortexArena.Common.Services.Api.Services?.Clock?.Time ?? 0f;
 
     /// <summary>
     /// QC <c>HUD_Scoreboard_InputEvent</c> (scoreboard.qc:231-505) — the key half (QC's <c>bInputType</c> 3
@@ -672,14 +672,14 @@ public partial class ScoreboardPanel : HudPanel
     // =====================================================================================
 
     /// <summary>
-    /// THE net path: replace the rows from a decoded <see cref="XonoticGodot.Net.ScoreboardWire"/> (full per-player
+    /// THE net path: replace the rows from a decoded <see cref="VortexArena.Net.ScoreboardWire"/> (full per-player
     /// columns + the entcs name/team slice). Resolves netId→local via <paramref name="localNetId"/>, hydrates
     /// each row's full column array, sets <see cref="TeamPlay"/> from <see cref="GameScores.Teamplay"/>, and
     /// applies the team totals. This is what makes the networked columns actually render (QC the scores stats →
     /// the scoreboard grid). Maps the wire columns (in <see cref="GameScores.NetworkedFields"/> order) back to a
     /// registry-indexed array so <see cref="ScoreRow.Col"/> reads the right field.
     /// </summary>
-    public void SetWireRows(XonoticGodot.Net.ScoreboardWire wire, int localNetId,
+    public void SetWireRows(VortexArena.Net.ScoreboardWire wire, int localNetId,
         IReadOnlyCollection<int>? eliminatedNetIds = null)
     {
         _rows.Clear();
@@ -690,7 +690,7 @@ public partial class ScoreboardPanel : HudPanel
             int fieldCount = GameScores.FieldCount;
             ScoreField? scoreF = GameScores.Field("SCORE");
             ScoreField? deathsF = GameScores.Field("DEATHS");
-            foreach (XonoticGodot.Net.ScoreRowWire wr in wire.Rows)
+            foreach (VortexArena.Net.ScoreRowWire wr in wire.Rows)
             {
                 // QC Scoreboard_Spectators_Draw (scoreboard.qc:2369): a spectator/observer is NOT a score-table
                 // row — list it in the spectator block instead. The wire carries the flag (the port has no

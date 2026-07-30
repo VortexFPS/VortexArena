@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Game.Menu;
+using VortexArena.Formats.Bsp;
+using VortexArena.Game.Menu;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// A dynamic, whole-map colour tint — the engine-wide colormod for world geometry, plus a separate, usually

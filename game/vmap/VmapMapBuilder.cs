@@ -1,10 +1,10 @@
 using Godot;
-using XonoticGodot.Formats.Vmap;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Vmap;
+using VortexArena.Game.Loaders;
 using NVec2 = System.Numerics.Vector2;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// Builds Godot render geometry from an editable <see cref="VmapDocument"/> — the <c>.vmap</c> counterpart of
@@ -389,7 +389,7 @@ public static class VmapMapBuilder
 
     /// <summary>
     /// Emit one node per coplanar group of a portal/decor surface, carrying the metadata contract
-    /// <see cref="XonoticGodot.Game.Client.PortalRenderer"/> matches on.
+    /// <see cref="VortexArena.Game.Client.PortalRenderer"/> matches on.
     ///
     /// Grouping by plane is what makes a window ONE node: a warpzone surface is usually several brush faces, and
     /// a node per face would give the renderer several overlapping portals for one opening. Unlike the BSP path

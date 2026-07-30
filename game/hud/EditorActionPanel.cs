@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Formats.Vmap;
-using XonoticGodot.Game.Vmap;
+using VortexArena.Formats.Vmap;
+using VortexArena.Game.Vmap;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The editor's action readout (design doc §11.9): one line under the crosshair saying what you are about to

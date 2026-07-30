@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Console-variable (cvar) inventory scanner for the XonoticGodot port.
+"""Console-variable (cvar) inventory scanner for the VortexArena port.
 
 Walks the C# source tree (src/, game/) and extracts every console variable the
 port declares or reads, then groups them by prefix and prints an inventory. It
@@ -116,12 +116,12 @@ SCOPE_BY_DIR = [
     ("game/hud", "client"),
     ("game/menu", "client"),
     ("game/console", "client"),
-    ("src/XonoticGodot.Server", "server"),
-    ("src/XonoticGodot.Common", "shared"),
-    ("src/XonoticGodot.Engine", "shared"),
+    ("src/VortexArena.Server", "server"),
+    ("src/VortexArena.Common", "shared"),
+    ("src/VortexArena.Engine", "shared"),
     ("game/net", "net"),
-    ("src/XonoticGodot.Net", "net"),
-    ("src/XonoticGodot.Formats", "shared"),
+    ("src/VortexArena.Net", "net"),
+    ("src/VortexArena.Formats", "shared"),
 ]
 
 PRUNE_DIRS = {".git", ".claude", ".godot", ".idea", ".vs", ".vscode", "obj",
@@ -194,12 +194,12 @@ def scope_for(relpath: str) -> str:
         if rp.startswith(prefix):
             return scope
         # The src/ project directories carry the old codename and the Tier-1 rename relocates them
-        # (src/XonoticGodot.* -> src/VortexArena.*). Match either, because the alternative is the
+        # (src/VortexArena.* -> src/VortexArena.*). Match either, because the alternative is the
         # fallthrough below quietly reclassifying every server/shared/net cvar as "host" - and since
         # docs/reference/CVARS.md treats the prefix as AUTHORITY, that is a wrong document rather than a
         # missing one. validate_scope_dirs() below turns the same drift into a loud failure.
-        if prefix.startswith("src/XonoticGodot.") and rp.startswith(
-            prefix.replace("src/XonoticGodot.", "src/VortexArena.", 1)
+        if prefix.startswith("src/VortexArena.") and rp.startswith(
+            prefix.replace("src/VortexArena.", "src/VortexArena.", 1)
         ):
             return scope
     return "host"
@@ -217,7 +217,7 @@ def validate_scope_dirs(root) -> None:
     root = pathlib.Path(root)
     missing = []
     for prefix, _ in SCOPE_BY_DIR:
-        alt = prefix.replace("src/XonoticGodot.", "src/VortexArena.", 1)
+        alt = prefix.replace("src/VortexArena.", "src/VortexArena.", 1)
         if not (root / prefix).is_dir() and not (root / alt).is_dir():
             missing.append(prefix)
     if missing:
@@ -377,7 +377,7 @@ def order_key(g: str) -> int:
 def report_text(cvars, rejects, show_rejects):
     groups = grouped(cvars)
     total = len(cvars)
-    print(f"XonoticGodot cvar inventory - {total} distinct cvars\n")
+    print(f"VortexArena cvar inventory - {total} distinct cvars\n")
     for g in sorted(groups, key=order_key):
         items = groups[g]
         print(f"== {g}  ({len(items)}) " + "=" * max(0, 60 - len(g)))

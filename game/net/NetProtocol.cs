@@ -1,17 +1,17 @@
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Net;
+using VortexArena.Common.Gameplay;
+using VortexArena.Net;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
-/// The top-level packet framing for the XonoticGodot client/server link, plus the build-parity gate.
+/// The top-level packet framing for the VortexArena client/server link, plus the build-parity gate.
 ///
 /// Two layers of "message id" exist:
 /// <list type="bullet">
 ///   <item><b>This file</b> — the <see cref="NetControl"/> byte that prefixes every datagram and says what
 ///         KIND of packet it is (handshake, a server snapshot frame, a client input frame, a bundle of
 ///         server events). It is the analogue of the DP top-level <c>svc_*</c>/<c>clc_*</c> framing.</item>
-///   <item><see cref="NetMessageId"/> (XonoticGodot.Net) — the per-message id INSIDE a frame, dispatched by
+///   <item><see cref="NetMessageId"/> (VortexArena.Net) — the per-message id INSIDE a frame, dispatched by
 ///         <see cref="NetDispatcher"/> (Linked entity updates, Temp events, C2S input). The QC
 ///         <c>LinkedEntities</c>/<c>TempEntities</c>/<c>C2S_Protocol</c> registries.</item>
 /// </list>
@@ -29,14 +29,14 @@ public static class NetProtocol
     /// registry content hash would not catch (e.g. a change to <see cref="InputCommand.Serialize"/> or the
     /// snapshot layout). Mixed with the registry hashes into <see cref="BuildParity"/>.
     ///
-    /// v2: the SoundBundle record gained a source entity net-id + loop/stop flags (<see cref="XonoticGodot.Net.SoundWire"/>)
+    /// v2: the SoundBundle record gained a source entity net-id + loop/stop flags (<see cref="VortexArena.Net.SoundWire"/>)
     /// for DP's entity+channel looping-sound model (Arc beam loop, vehicle engines).
     /// v3: added the console string-command channel (<see cref="NetControl.ClientCommand"/> /
     /// <see cref="NetControl.ServerPrint"/>) — the DP <c>clc_stringcmd</c> / <c>svc_print</c> pair that lets the
     /// in-game console run gameplay commands against a remote server and print the reply.
-    /// v4: the snapshot gained the <see cref="XonoticGodot.Net.ScoreInfoBlock"/> (QC ENT_CLIENT_SCORES_INFO) — the
+    /// v4: the snapshot gained the <see cref="VortexArena.Net.ScoreInfoBlock"/> (QC ENT_CLIENT_SCORES_INFO) — the
     /// active per-mode score label/flag set + gametype/teamplay, sent before the per-player
-    /// <see cref="XonoticGodot.Net.ScoreboardBlock"/> so a remote client's networked-column layout matches the server
+    /// <see cref="VortexArena.Net.ScoreboardBlock"/> so a remote client's networked-column layout matches the server
     /// (without it the scoreboard block's layout hash disagreed and was silently dropped). The ScoreboardBlock
     /// row also gained the entcs name+team slice.
     /// v5: the C2S <see cref="InputCommand"/> gained a one-shot <see cref="InputCommand.Impulse"/> byte (QC
@@ -48,7 +48,7 @@ public static class NetProtocol
     /// minigame …</c> command itself rides the existing <see cref="NetControl.ClientCommand"/> channel.
     /// v7 (the SINGLE wave-A3 bump — T53/T57 additions ride it too):
     /// <list type="number">
-    ///   <item>the snapshot's <see cref="XonoticGodot.Net.MoveVarsBlock"/> grew from 40 to 46 entries (the full
+    ///   <item>the snapshot's <see cref="VortexArena.Net.MoveVarsBlock"/> grew from 40 to 46 entries (the full
     ///         stats.qh MOVEVARS breadth: g_movement_highspeed(+_q3_compat), sv_gameplayfix_nudgeoutofsolid,
     ///         sv_wallclip, sv_nostep, sv_slick_applygravity — appended, prefix-stable);</item>
     ///   <item>a per-peer preset-RESOLVED physics block follows the global movevars block: one bool, then —
@@ -105,7 +105,7 @@ public static class NetProtocol
     ///   <item>the HandshakeAccept gained two trailing strings — the server's current map name + gametype — so a
     ///         pure --connect client can load the BSP for world render + prediction collision
     ///         (<c>NetGame.LoadClientMapFromServer</c>);</item>
-    ///   <item>the owner block gained the <see cref="XonoticGodot.Net.OwnerInventory"/> tail (ammo pools, owned-
+    ///   <item>the owner block gained the <see cref="VortexArena.Net.OwnerInventory"/> tail (ammo pools, owned-
     ///         weapon bitset, unlimited-ammo, STAT_ITEMS flag bits) feeding the pure client's full HUD;</item>
     ///   <item>the snapshot entity section now INCLUDES the recipient's own entity (the old encoder excluded it
     ///         via excludeEntNum) — the client diverts it into <c>ClientNet.LocalState</c> (never interpolated),
@@ -127,7 +127,7 @@ public static class NetProtocol
     /// (dropped-weapon loot, colormapped props/monsters), and the non-player snapshot's <c>Weapon</c> field now
     /// carries a weapon PICKUP's registry id (+1 biased). New delta bit in every entity delta ⇒ version bump.
     ///
-    /// v18 (hit/kill/typehit feedback parity): the <see cref="XonoticGodot.Net.EntityField.Feedback"/> block
+    /// v18 (hit/kill/typehit feedback parity): the <see cref="VortexArena.Net.EntityField.Feedback"/> block
     /// gained three trailing floats — QC STAT(HIT_TIME) / STAT(TYPEHIT_TIME) / STAT(KILL_TIME), the
     /// EndFrame-flushed feedback times driving the client's distinct hit/typehit/kill confirmation sounds
     /// (view.qc HitSound). Unconditional reads inside an existing block ⇒ version bump.
@@ -297,7 +297,7 @@ public enum NetControl : byte
     RadarLinks = 23,
 
     // ---- map-editor co-editing (design doc §11.7, phase E6) ----
-    /// <summary>Server → client (reliable): one applied map-editor op, as a <see cref="XonoticGodot.Formats.Vmap.VmapOpWire"/>
+    /// <summary>Server → client (reliable): one applied map-editor op, as a <see cref="VortexArena.Formats.Vmap.VmapOpWire"/>
     /// line. The server owns the geometry: a client submits an op over <c>clc_stringcmd</c> (<c>editor_op</c>),
     /// the server validates and applies it, and echoes the APPLIED form here — with any id the apply minted
     /// filled in — to every client including the sender. Rare (one per drag release, not per frame), so the

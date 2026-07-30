@@ -29,7 +29,7 @@ port = the Vortex Arena repo root: \`git rev-parse --show-toplevel\` (you start 
 base = the upstream Xonotic reference checkout's QuakeC spec tree. Take the FIRST that exists:
   1. $VA_BASE_DIR/xonotic-data.pk3dir/qcsrc   (only if VA_BASE_DIR is set in the environment)
   2. <parent of port>/Base/data/xonotic-data.pk3dir/qcsrc
-That order mirrors tests/XonoticGodot.Tests/TestPaths.cs, which is the existing contract for where
+That order mirrors tests/VortexArena.Tests/TestPaths.cs, which is the existing contract for where
 the reference checkout lives; keep the two in agreement.
 
 Confirm each path with a real directory listing. Set ok=true ONLY if both directories exist AND base

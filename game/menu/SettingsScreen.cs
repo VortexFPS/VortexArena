@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Settings screen: a <see cref="TabContainer"/> with Video / Audio / Input / Player tabs and an
@@ -9,7 +9,7 @@ namespace XonoticGodot.Game.Menu;
 ///
 /// <para><strong>ORPHANED + keybinds QUARANTINED (T15).</strong> Nothing constructs this screen — the live
 /// front-end uses the nexposee <c>DialogSettings*</c> dialogs (<see cref="DialogSettingsInput"/> is the live
-/// input tab, which now edits the canonical <c>XonoticGodot.Engine.Console.BindTable</c> via <c>BindInput</c>). The
+/// input tab, which now edits the canonical <c>VortexArena.Engine.Console.BindTable</c> via <c>BindInput</c>). The
 /// Input tab here still talks to the legacy <see cref="MenuSettings.Keybinds"/> store, which is no longer read
 /// by any gameplay path; its capture is inert downstream. Kept for its video/audio/player tabs; do NOT revive
 /// the keybind capture through <see cref="MenuSettings"/> — route it through <c>BindInput</c> like

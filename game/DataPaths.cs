@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// Resolves the configured content-data directory (the <c>res://data</c> default, a <c>user://</c> path,
@@ -8,7 +8,7 @@ namespace XonoticGodot.Game;
 /// "where does the gamedir live" — the menu shell mounts it at boot (<see cref="Menu.MenuState"/>), and a
 /// packaged build resolves it relative to the executable (ADR-0014).
 ///
-/// <para>It lives in the host assembly (not <c>XonoticGodot.Formats</c>) because the resolution is
+/// <para>It lives in the host assembly (not <c>VortexArena.Formats</c>) because the resolution is
 /// Godot-dependent: <see cref="ProjectSettings.GlobalizePath"/> for <c>res://</c>/<c>user://</c> and
 /// <see cref="OS.GetExecutablePath"/> for the exported exe-relative layout.</para>
 /// </summary>

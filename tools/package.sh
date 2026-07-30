@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Package XonoticGodot distributions (T33 — ADR-0014; extended 2026-06 for the full release matrix).
+# Package VortexArena distributions (T33 — ADR-0014; extended 2026-06 for the full release matrix).
 # Takes the export-preset outputs under dist/<target>/ (produced by `ci/ci.sh --export`, run-release.*,
 # or the release workflow), lays the game assets beside each binary, adds the launcher + licenses + a
 # README, and zips each into a versioned "fat" archive (binary + Godot runtime + all Xonotic data — one
 # download, unzip and play). Mirrors the upstream layout: one install dir = binary + data + launch script.
 #
 # Targets (each = one export preset → one zip):
-#   windows-client    dist/windows-client/XonoticGodot.exe            → XonoticGodot-<ver>-windows-x86_64.zip
-#   linux-client      dist/linux-client/XonoticGodot.x86_64           → XonoticGodot-<ver>-linux-x86_64.zip
-#   linux-dedicated   dist/linux-dedicated/xonoticgodot-dedicated.*   → XonoticGodot-<ver>-linux-dedicated-x86_64.zip
-#   macos-client      dist/macos-client/XonoticGodot.app              → XonoticGodot-<ver>-macos-universal.zip
+#   windows-client    dist/windows-client/VortexArena.exe            → VortexArena-<ver>-windows-x86_64.zip
+#   linux-client      dist/linux-client/VortexArena.x86_64           → VortexArena-<ver>-linux-x86_64.zip
+#   linux-dedicated   dist/linux-dedicated/vortexarena-dedicated.*   → VortexArena-<ver>-linux-dedicated-x86_64.zip
+#   macos-client      dist/macos-client/VortexArena.app              → VortexArena-<ver>-macos-universal.zip
 #       (macOS keeps its data INSIDE the bundle at Contents/Resources/data — DataPaths.Resolve
 #        probes ../Resources relative to the executable, so a double-clicked .app finds it.)
 #
@@ -60,10 +60,10 @@ info "version: $version"
 
 # target → (export-output marker, friendly zip suffix)
 marker_for()  { case "$1" in
-    windows-client)  echo "windows-client/XonoticGodot.exe" ;;
-    linux-client)    echo "linux-client/XonoticGodot.x86_64" ;;
-    linux-dedicated) echo "linux-dedicated/xonoticgodot-dedicated.x86_64" ;;
-    macos-client)    echo "macos-client/XonoticGodot.app" ;;
+    windows-client)  echo "windows-client/VortexArena.exe" ;;
+    linux-client)    echo "linux-client/VortexArena.x86_64" ;;
+    linux-dedicated) echo "linux-dedicated/vortexarena-dedicated.x86_64" ;;
+    macos-client)    echo "macos-client/VortexArena.app" ;;
 esac; }
 suffix_for()  { case "$1" in
     windows-client)  echo "windows-x86_64" ;;
@@ -146,13 +146,13 @@ EOF
         windows-client)
             cat >> "$dir/README.txt" <<'EOF'
 
-RUN:  double-click XonoticGodot.exe  (or XonoticGodot.console.exe for a debug console window).
+RUN:  double-click VortexArena.exe  (or VortexArena.console.exe for a debug console window).
 EOF
             ;;
         linux-client)
             cat >> "$dir/README.txt" <<'EOF'
 
-RUN:  ./run-client.sh        (or run ./XonoticGodot.x86_64 directly)
+RUN:  ./run-client.sh        (or run ./VortexArena.x86_64 directly)
 EOF
             ;;
         linux-dedicated)
@@ -164,10 +164,10 @@ EOF
         macos-client)
             cat >> "$dir/README.txt" <<'EOF'
 
-RUN:  double-click XonoticGodot.app
+RUN:  double-click VortexArena.app
 This build is UNSIGNED. The first launch macOS will refuse it ("can't be opened"). Clear the
 quarantine flag once, from Terminal in this folder:
-    xattr -dr com.apple.quarantine XonoticGodot.app
+    xattr -dr com.apple.quarantine VortexArena.app
 then double-click it (or right-click → Open).
 EOF
             ;;
@@ -180,7 +180,7 @@ for t in "${targets[@]}"; do
     tdir="$DIST/$t"
     if [ "$t" = macos-client ]; then
         # macOS: data lives INSIDE the bundle so a double-clicked .app finds it (exe-relative ../Resources).
-        copy_assets "$tdir/XonoticGodot.app/Contents/Resources/data"
+        copy_assets "$tdir/VortexArena.app/Contents/Resources/data"
     else
         copy_assets "$tdir/data"
     fi
@@ -193,10 +193,10 @@ for t in "${targets[@]}"; do
     case "$t" in
         linux-client)
             cp "$ROOT/tools/run-client.sh" "$tdir/"
-            chmod +x "$tdir/run-client.sh" "$tdir/XonoticGodot.x86_64" 2>/dev/null || true ;;
+            chmod +x "$tdir/run-client.sh" "$tdir/VortexArena.x86_64" 2>/dev/null || true ;;
         linux-dedicated)
             cp "$ROOT/tools/run-dedicated.sh" "$tdir/"
-            chmod +x "$tdir/run-dedicated.sh" "$tdir/xonoticgodot-dedicated.x86_64" 2>/dev/null || true ;;
+            chmod +x "$tdir/run-dedicated.sh" "$tdir/vortexarena-dedicated.x86_64" 2>/dev/null || true ;;
     esac
 done
 
@@ -229,7 +229,7 @@ PY
 if $do_zip; then
     : > "$DIST/SHA256SUMS-$version.txt"
     for t in "${targets[@]}"; do
-        out="$DIST/XonoticGodot-$version-$(suffix_for "$t").zip"
+        out="$DIST/VortexArena-$version-$(suffix_for "$t").zip"
         info "zipping $(basename "$out")"
         zip_dir "$out" "$t"
         # checksum (sha256sum on Linux, shasum on macOS)
@@ -242,4 +242,4 @@ if $do_zip; then
 fi
 
 info "Done. Distributions in $DIST/"
-$do_zip && info "Zips: $(cd "$DIST" && ls XonoticGodot-"$version"-*.zip 2>/dev/null | tr '\n' ' ')"
+$do_zip && info "Zips: $(cd "$DIST" && ls VortexArena-"$version"-*.zip 2>/dev/null | tr '\n' ' ')"

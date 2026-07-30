@@ -27,12 +27,12 @@ if [ "${PERF_DEBUG:-0}" = "1" ]; then
     EXE="/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe"
     EXTRA_ARGS=(--path "$ROOT")
 else
-    EXE="$ROOT/dist/windows-client/XonoticGodot.exe"
+    EXE="$ROOT/dist/windows-client/VortexArena.exe"
     EXTRA_ARGS=()
     [ -x "$EXE" ] || { echo "!!! release export missing at $EXE — export windows-client first (or PERF_DEBUG=1)"; exit 1; }
 fi
 
-powershell -NoProfile -Command "Get-Process Godot*,XonoticGodot* -ErrorAction SilentlyContinue | Stop-Process -Force" 2>/dev/null
+powershell -NoProfile -Command "Get-Process Godot*,VortexArena* -ErrorAction SilentlyContinue | Stop-Process -Force" 2>/dev/null
 BEFORE=$(ls -t "$LOGDIR"/*.log 2>/dev/null | head -1)
 echo ">>> [$LABEL] $MAP + $BOTS bots, ${SECS}s  extra: $*"
 # Pinned capture profile (later --cvar wins, so caller flags override the pins — see perf-run.ps1

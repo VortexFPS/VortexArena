@@ -1,10 +1,10 @@
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Game.Hud;           // TextureCache (VFS art resolver) for gfx/blood
-using SC = XonoticGodot.Engine.Collision.SuperContents;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Game.Hud;           // TextureCache (VFS art resolver) for gfx/blood
+using SC = VortexArena.Engine.Collision.SuperContents;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The full-screen view post-effects overlay — the C# successor to the 2D <c>drawfill</c> screen tints in

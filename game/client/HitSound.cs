@@ -1,12 +1,12 @@
 // Port of qcsrc/client/view.qc HitSound() + UpdateDamage() — the client-side hit/typehit/kill feedback sounds.
 // The state machine (accumulate → antispam window → pitch; stat-time-advance typehit/kill) lives in the
-// testable XonoticGodot.Net.HitSoundLogic; this wrapper owns the cvar reads and the Godot audio player.
+// testable VortexArena.Net.HitSoundLogic; this wrapper owns the cvar reads and the Godot audio player.
 
 using Godot;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Net;
+using VortexArena.Engine.Simulation;
+using VortexArena.Net;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The three client hit-feedback sounds (QC <c>HitSound()</c> in <c>view.qc</c>), driven per frame by the

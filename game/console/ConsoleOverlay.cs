@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Menu;
+using VortexArena.Common.Config;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Engine.Console;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Menu;
 
-namespace XonoticGodot.Game.Console;
+namespace VortexArena.Game.Console;
 
 /// <summary>
 /// The in-game developer console overlay — the C# successor to DP's drop-down console (<c>con_*</c> +
@@ -316,7 +316,7 @@ public partial class ConsoleOverlay : CanvasLayer
         if (dev == _renderedDeveloper && _output.GetParagraphCount() > 0)
             return; // nothing to do — already at this level and scrollback isn't empty
         _output.Clear();
-        AppendBuffer("[color=#888888]XonoticGodot console. Type [/color][color=#cccccc]help[/color][color=#888888] for a hint, [/color][color=#cccccc]`[/color][color=#888888] to close. developer = [/color][color=#cccccc]" + dev.ToString() + "[/color][color=#888888].[/color]");
+        AppendBuffer("[color=#888888]VortexArena console. Type [/color][color=#cccccc]help[/color][color=#888888] for a hint, [/color][color=#cccccc]`[/color][color=#888888] to close. developer = [/color][color=#cccccc]" + dev.ToString() + "[/color][color=#888888].[/color]");
         foreach (LogEntry e in Log.BufferSnapshot())
         {
             if (!Log.IsVisibleAt(e.Level, dev))

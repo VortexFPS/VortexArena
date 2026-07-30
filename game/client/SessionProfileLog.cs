@@ -5,9 +5,9 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Diagnostics;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// One per-frame scalar row for the parallel CSV. A plain struct so the main thread enqueues it without any heap
@@ -101,7 +101,7 @@ public sealed class SessionProfileLog
         }
 
         // Header block (synchronous — runs once at start before the thread, so it's always first in the file).
-        _log.WriteLine($"# XonoticGodot session profile — launched {launchWall:yyyy-MM-dd HH:mm:ss}");
+        _log.WriteLine($"# VortexArena session profile — launched {launchWall:yyyy-MM-dd HH:mm:ss}");
         _log.WriteLine($"# {envBanner}");
         _log.WriteLine($"# {columnsLegend}");
         _log.WriteLine($"# columns key: t=SECONDS = session seconds; the HH:MM:SS stamp is wall-clock.");

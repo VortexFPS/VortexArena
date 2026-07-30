@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Formats.Vmap;
-using XonoticGodot.Game.Vmap;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Console;
+using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Vmap;
+using VortexArena.Game.Vmap;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The map editor's context menu (design doc §11.9): right-click and release pops a list beside the crosshair.

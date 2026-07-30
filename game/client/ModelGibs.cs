@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Game;
+using VortexArena.Game;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Model gibs — the real limb/chunk meshes a player throws when gibbed, instead of a generic particle
@@ -258,7 +258,7 @@ public sealed partial class ModelGibs : Node3D
         {
             // #30 slowmo/pause: gib tosses are Base CSQC (cl.time-driven) — scale like the casings so gibs
             // hang frozen at slowmo 0 instead of settling on wall clock.
-            float dt = XonoticGodot.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
+            float dt = VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
             if (dt <= 0f)
                 return; // paused — hold everything in place
             _age += dt;

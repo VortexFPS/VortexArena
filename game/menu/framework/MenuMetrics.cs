@@ -1,4 +1,4 @@
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Xonotic menu coordinate system + dialog metrics, ported from the QC so dialog sizes, title bars, rows and

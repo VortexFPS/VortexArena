@@ -16,7 +16,7 @@ link=$(readlink -f "${0}" 2>/dev/null)
 [ -n "${link}" ] && path=$(dirname "${link}")
 cd "${path}" || exit 1
 
-for candidate in ./XonoticGodot.x86_64 ./XonoticGodot ./xonoticgodot.x86_64; do
+for candidate in ./VortexArena.x86_64 ./VortexArena ./vortexarena.x86_64; do
     if [ -x "$candidate" ]; then
         xonotic="$candidate"
         break
@@ -25,7 +25,7 @@ done
 
 if [ -z "${xonotic:-}" ]; then
     echo "run-client.sh: no client binary found beside this script" >&2
-    echo "(expected XonoticGodot.x86_64 — export the 'linux-client' preset, or see tools/package.sh)" >&2
+    echo "(expected VortexArena.x86_64 — export the 'linux-client' preset, or see tools/package.sh)" >&2
     exit 1
 fi
 

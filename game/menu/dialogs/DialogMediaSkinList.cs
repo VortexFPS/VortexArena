@@ -1,12 +1,12 @@
 using System;
 using Godot;
-using XonoticGodot.Common.Menu;
+using VortexArena.Common.Menu;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Godot-side bridge from the (Godot-free) menu <see cref="DataSource"/> backends to the mounted asset
-/// VFS and the shared cvar store. The data sources in <c>XonoticGodot.Common</c> deliberately don't
+/// VFS and the shared cvar store. The data sources in <c>VortexArena.Common</c> deliberately don't
 /// reference Godot (ADR-0008), so each list backend takes these seams; this is the single place that wires
 /// them to <see cref="MenuState"/>. Reused by the screenshot / music / skin dialogs.
 /// </summary>

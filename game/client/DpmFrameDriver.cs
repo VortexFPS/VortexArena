@@ -1,9 +1,9 @@
 using System;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Game.Loaders.Models;
+using VortexArena.Common.Framework;
+using VortexArena.Game.Loaders.Models;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Drives a skeletal DPM model's <see cref="AnimationPlayer"/> from a bound <see cref="Entity"/>'s networked

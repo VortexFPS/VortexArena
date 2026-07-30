@@ -1,9 +1,9 @@
 using System.Globalization;
 using Godot;
-using XonoticGodot.Game.Menu;   // MenuState.Cvars — the shared menu/console store (live console `set` reaches it)
+using VortexArena.Game.Menu;   // MenuState.Cvars — the shared menu/console store (live console `set` reaches it)
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Base for every on-screen HUD panel — the C# successor to QuakeC's <c>HUDPanel</c> class plus the

@@ -1,10 +1,10 @@
-﻿# CI for the XonoticGodot port (T33 â€” see planning/decisions/ADR-0014-ci-packaging-distribution.md).
+﻿# CI for the VortexArena port (T33 â€” see planning/decisions/ADR-0014-ci-packaging-distribution.md).
 #
 # Topology:
 #   test       - always: restore + run the full xUnit suite (no Godot). Core content is COMMITTED, so
 #                it runs against the real tree; only the map-dependent cases skip until maps are
 #                fetched. `ci/ci.sh` stays the authoritative gate (it also runs the headless smokes).
-#   build-host â€” always: compile the Godot host project (XonoticGodot.csproj) from a clean clone with
+#   build-host â€” always: compile the Godot host project (VortexArena.csproj) from a clean clone with
 #                NO Godot editor installed â€” proves the Godot.NET.Sdk/GodotSharp 4.6.3 restore works
 #                purely from nuget.org.
 # Export + packaging + GitHub Releases live in a SEPARATE workflow (.github/workflows/release.yml),
@@ -48,11 +48,11 @@ jobs:
         run: dotnet nuget remove source godot-editor --configfile nuget.config
 
       - name: Restore
-        run: dotnet restore tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj
+        run: dotnet restore tests/VortexArena.Tests/VortexArena.Tests.csproj
 
       - name: Test
         run: >
-          dotnet test tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj
+          dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj
           -c Debug --no-restore
           --logger "trx;LogFileName=test-results.trx"
           --results-directory TestResults
@@ -78,4 +78,4 @@ jobs:
         run: dotnet nuget remove source godot-editor --configfile nuget.config
 
       - name: Build the Godot host project
-        run: dotnet build XonoticGodot.csproj -c Debug
+        run: dotnet build VortexArena.csproj -c Debug

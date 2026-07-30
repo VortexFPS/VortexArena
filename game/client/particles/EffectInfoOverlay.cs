@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Game.Client;   // EffectInfoEmitter, EiType/EiBlend/EiOrientation (game/client/EffectInfoParticle.cs)
+using VortexArena.Game.Client;   // EffectInfoEmitter, EiType/EiBlend/EiOrientation (game/client/EffectInfoParticle.cs)
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  EffectInfoOverlay — parser for the PORT-SIDE authoring overlay file `effectinfo_xg.txt`

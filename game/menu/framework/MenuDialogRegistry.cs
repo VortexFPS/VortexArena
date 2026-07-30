@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Maps the QuakeC dialog <c>name</c> strings (the identifiers <c>menu_cmd directmenu &lt;name&gt;</c> and the

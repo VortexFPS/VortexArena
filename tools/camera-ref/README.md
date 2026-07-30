@@ -28,17 +28,17 @@ port path (adaptive stair catch-up + error-comp glide), now hardened so the erro
 
 ## Tier A1 — C# headless harness (the gate; pure C#, no engine)
 
-`tests/XonoticGodot.Tests/Camera/` + `CameraDriftTests.cs`. Drives the full
+`tests/VortexArena.Tests/Camera/` + `CameraDriftTests.cs`. Drives the full
 server → full-precision-seed → client predict/reconcile → stair-smooth → camera-origin pipeline over thousands
 of frames and measures secular drift (linear-fit slope) + max departure. `CameraReferenceQc` /
 `FaithfulViewSmoothing` are an independent transcription of Base `cl_player.qc` (the ground truth), proven to
 agree to 6e-5u. Run:
 
 ```bash
-dotnet test tests/XonoticGodot.Tests --filter "CameraDriftTests|ReconcilerTests|MovementParityTests|StepUpSpeedTests"
+dotnet test tests/VortexArena.Tests --filter "CameraDriftTests|ReconcilerTests|MovementParityTests|StepUpSpeedTests"
 ```
 
-## Tier A2 — XonoticGodot in-engine capture
+## Tier A2 — VortexArena in-engine capture
 
 `--camera-trace <scenario.json> <out.json>` boots a 0-bot listen server on the scenario's map, feeds NetGame the
 scripted per-tick input (`game/net/CameraTrace.cs`), and dumps the rendered camera + predicted origin per frame.
@@ -52,7 +52,7 @@ over `1/cl_bobfallcycle` = 0.33 s; rerun with `"cvars": {"cl_bobfall": "0"}` as 
 
 ```bash
 GODOT="/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe"
-# build the C# assembly first (dotnet build XonoticGodot.csproj -c Debug); run from INSIDE the worktree.
+# build the C# assembly first (dotnet build VortexArena.csproj -c Debug); run from INSIDE the worktree.
 "$GODOT" --headless --fixed-fps 72 --path . \
   --data "<repo>/data" \
   --camera-trace tools/camera-ref/stationary.json "$PWD/_cam_stationary.json" --quit-after-seconds 120

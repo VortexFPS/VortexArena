@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;  // WarpzoneTrace, WarpzoneManager, Warpzone, WarpzoneTransform
-using XonoticGodot.Common.Services;  // Api
+using VortexArena.Common.Gameplay;  // WarpzoneTrace, WarpzoneManager, Warpzone, WarpzoneTransform
+using VortexArena.Common.Services;  // Api
 using NVec3 = System.Numerics.Vector3;
-// Coords (Quake<->Godot axis swap) lives in the parent XonoticGodot.Game namespace — reachable implicitly.
+// Coords (Quake<->Godot axis swap) lives in the parent VortexArena.Game namespace — reachable implicitly.
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The client-side warpzone PORTAL render — the C# stand-in for DarkPlaces' engine <c>r_water</c> portal pass

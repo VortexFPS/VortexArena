@@ -1,5 +1,5 @@
 #if VA_BOTPLAYER
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// BOT-PLAYER HARNESS — compile-gated, see <c>Directory.Build.props</c> (<c>VaBotPlayer</c>).

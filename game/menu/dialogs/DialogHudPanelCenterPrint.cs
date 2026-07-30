@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Center-print HUD panel config — a faithful C# port of <c>XonoticHUDCenterprintDialog_fill</c>
@@ -15,7 +15,7 @@ namespace XonoticGodot.Game.Menu;
 /// <c>setDependentNOT(..., "hud_panel_centerprint_time", 0)</c> grey-out (every panel-specific row greys out
 /// while message duration is 0, i.e. the panel disabled).
 ///
-/// FAITHFUL UI NOW: these cvars drive the in-game HUD editor / HUD renderer XonoticGodot does not have wired yet, but
+/// FAITHFUL UI NOW: these cvars drive the in-game HUD editor / HUD renderer VortexArena does not have wired yet, but
 /// the bindings are REAL — they write the shared <see cref="MenuState.Cvars"/> store the HUD will read. No
 /// command/apply buttons exist in this dialog (just the universal Back). The QC "Fade time" widget is a
 /// <c>makeXonoticMixedSlider</c> (an "Instant"=0 text entry plus a numeric range); reproduced with a

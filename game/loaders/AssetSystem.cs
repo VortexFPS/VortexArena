@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Materials;
+using VortexArena.Formats.Vfs;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The central asset facade: it turns Quake 3 shader names and texture base names into ready-to-use
@@ -23,7 +23,7 @@ namespace XonoticGodot.Game.Loaders;
 /// </list>
 ///
 /// <para>Everything here lives on the Godot/render side; the parsed POCOs and the VFS come from the
-/// Godot-free <c>XonoticGodot.Formats</c> library. Conversions between the two are explicit. Materials and
+/// Godot-free <c>VortexArena.Formats</c> library. Conversions between the two are explicit. Materials and
 /// textures are cached and shared, so callers must treat returned resources as read-only.</para>
 /// </summary>
 public sealed class AssetSystem
@@ -407,7 +407,7 @@ public sealed class AssetSystem
             Image? img = LoadImage("cubemaps/default/sky" + s);
             if (img is null)
             {
-                XonoticGodot.Common.Diagnostics.Log.Info("[AssetSystem] cubemaps/default/sky*: face missing — weapon reflection falls back to the mild sheen.");
+                VortexArena.Common.Diagnostics.Log.Info("[AssetSystem] cubemaps/default/sky*: face missing — weapon reflection falls back to the mild sheen.");
                 return null;
             }
             // All layers of a layered texture must share one format/size; the shipped faces are uniform PNGs,
@@ -654,7 +654,7 @@ public sealed class AssetSystem
         // (perf 2026-07-03) Named scope: the worker-side read+decode was the biggest UNATTRIBUTED allocator in
         // the profiler (a 190 MB join-window frame carried no top-alloc scope) — per-thread Prof accumulators
         // make worker scopes cheap, and the alloc column now names this path in hitch trees.
-        using var _ = XonoticGodot.Common.Diagnostics.Prof.Sample("stream.predecode");
+        using var _ = VortexArena.Common.Diagnostics.Prof.Sample("stream.predecode");
         string? vpath = _vfs.ResolveImage(baseNameNoExt);   // ConcurrentDictionary-cached (thread-safe)
         if (vpath is null || _predecodedImages.ContainsKey(vpath))
             return;

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// User settings tab — a faithful C# port of <c>XonoticUserSettingsTab_fill</c>

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Reflection-driven panel discovery — the C# successor to QuakeC's <c>REGISTER_HUD_PANEL</c> registry

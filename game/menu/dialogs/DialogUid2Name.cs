@@ -1,7 +1,7 @@
 using Godot;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// "Allow nickname in statistics?" popup — a faithful C# port of <c>XonoticUid2NameDialog</c>

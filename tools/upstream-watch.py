@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upstream contribution harvester for Vortex Arena (XonoticGodot).
+"""Upstream contribution harvester for Vortex Arena (VortexArena).
 
 Surfaces new upstream Xonotic work worth triaging: every commit that has landed
 on the `master` branch of the two source repositories since a cutoff date, plus
@@ -325,7 +325,7 @@ def write_worklist(results: list[dict], since: str, run_date: str) -> tuple[Path
                  f"**{n_branches} branch/MR candidate(s)** not yet in the ledger.")
     lines.append("")
     lines.append("Next: run the analysis pass (`Workflow { name: \"upstream-watch\", "
-                 f"args: {{ worklist: \"{json_path.as_posix().split('XonoticGodot/')[-1]}\" }} }}`) "
+                 f"args: {{ worklist: \"{json_path.as_posix().split('VortexArena/')[-1]}\" }} }}`) "
                  "or hand this file to Claude. See ../README.md §6.")
     lines.append("")
 

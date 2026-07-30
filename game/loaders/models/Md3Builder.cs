@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Formats.Sidecars;
+using VortexArena.Formats.Materials;
+using VortexArena.Formats.Md3;
+using VortexArena.Formats.Sidecars;
 
-namespace XonoticGodot.Game.Loaders.Models;
+namespace VortexArena.Game.Loaders.Models;
 
 /// <summary>
 /// Turns a parsed <see cref="Md3Data"/> (the Godot-free id Tech 3 MD3 importer output) into a Godot

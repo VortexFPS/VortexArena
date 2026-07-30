@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Shared looping-audio helper — the one place that turns a decoded <see cref="AudioStream"/> into a seamless

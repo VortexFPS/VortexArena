@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>QC <c>PANEL_SHOW_*</c> — the game contexts a panel is allowed to draw in.</summary>
 [Flags]

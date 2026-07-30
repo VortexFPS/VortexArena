@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Notification HUD panel config — a faithful C# port of <c>XonoticHUDNotificationDialog_fill</c>
@@ -14,7 +14,7 @@ namespace XonoticGodot.Game.Menu;
 /// "Flip notify order" checkbox. The panel-specific rows depend on <c>hud_panel_notify_time != 0</c>
 /// (QC <c>setDependentNOT</c>).
 ///
-/// FAITHFUL UI NOW: the <c>hud_panel_notify_*</c> cvars drive the in-game HUD renderer/editor XonoticGodot has not
+/// FAITHFUL UI NOW: the <c>hud_panel_notify_*</c> cvars drive the in-game HUD renderer/editor VortexArena has not
 /// wired yet, but the bindings are REAL (they write the shared <see cref="MenuState.Cvars"/> store). No
 /// apply/command button exists (just Back). The QC "Entry fadetime" widget is a <c>makeXonoticMixedSlider</c>
 /// ("Instant"=0 + numeric range 0.5..5 step 0.5), reproduced with a <see cref="Widgets.TextSlider"/> over the

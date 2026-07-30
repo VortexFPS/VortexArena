@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// An always-available, low-overhead frame-time + GC hitch monitor — the instrument the per-second
@@ -1321,7 +1321,7 @@ public partial class FrameProfiler : CanvasLayer
     // ---- cvars -----------------------------------------------------------------------------------------------
     private static CvarService? ClientCvars()
     {
-        CvarService cv = XonoticGodot.Game.Menu.MenuState.Cvars;
+        CvarService cv = VortexArena.Game.Menu.MenuState.Cvars;
         return cv is not null && cv.Has("cl_frameprofiler") ? cv : null;
     }
 
@@ -1329,7 +1329,7 @@ public partial class FrameProfiler : CanvasLayer
     {
         if (_defaultsRegistered)
             return;
-        CvarService cv = XonoticGodot.Game.Menu.MenuState.Cvars;
+        CvarService cv = VortexArena.Game.Menu.MenuState.Cvars;
         if (cv is null)
             return;
         RegisterDefaults(cv);

@@ -2,16 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Particles;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Particles;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  Faithful particle BACKEND facade (planning/particles-dual-system.md §C.1/§C.4). A Node3D that owns:
 //
-//    * a ParticleSim (the Godot-free CPU simulation, src/XonoticGodot.Engine/Particles/ParticleSim.cs),
+//    * a ParticleSim (the Godot-free CPU simulation, src/VortexArena.Engine/Particles/ParticleSim.cs),
 //    * a FaithfulParticleRenderer child (the 3 blend-keyed MultiMesh batches).
 //
 //  The EffectSystem routes "original"-styled spawns here (the perfect-parity path). This facade is the
@@ -104,7 +104,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
 
     /// <summary>
     /// Wire the particle sim's collision tracer (orchestrator, at map load). Pass the CLIENT's static,
-    /// world-only <see cref="XonoticGodot.Engine.Collision.TraceService"/> over the per-map collision world
+    /// world-only <see cref="VortexArena.Engine.Collision.TraceService"/> over the per-map collision world
     /// so bounces/content checks clip the static map BSP only — never the live SERVER world (which on a
     /// listen server cost a box-sweep of the whole entity broadphase under the tick lock per bouncing
     /// particle). See <see cref="ParticleSim.Trace"/>. Null reverts to the ambient Api.Trace.
@@ -153,14 +153,14 @@ public sealed partial class FaithfulParticleBackend : Node3D
     /// <summary>Set the CLIENT cvar store (MenuState.Cvars) the sim + renderer read cl_particles* from. MUST
     /// be the client store — on a listen server Api.Cvars is the server store and cl_particles reads 0, which
     /// gates every spawn off (no particles render at all). Propagates to the sim and the renderer.</summary>
-    public void SetCvars(XonoticGodot.Common.Services.ICvarService cvars)
+    public void SetCvars(VortexArena.Common.Services.ICvarService cvars)
     {
         _pendingCvars = cvars;
         _sim.Cvars = cvars;
         if (_renderer is not null)
             _renderer.Cvars = cvars;
     }
-    private XonoticGodot.Common.Services.ICvarService? _pendingCvars;
+    private VortexArena.Common.Services.ICvarService? _pendingCvars;
 
     // ---------------------------------------------------------------------------------------------
     //  Spawn API
@@ -305,7 +305,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
         // 2026-06-14 graphics audit flagged the port's toggle as dead — playtest #37 wires it). cl_decals
         // is a DP ENGINE cvar (default 1) that the shipped cfg tree never sets, so UNSET means ON — only an
         // explicit 0 disables (the cl_autopause unset-is-on pattern).
-        XonoticGodot.Common.Services.ICvarService? cv = _pendingCvars;
+        VortexArena.Common.Services.ICvarService? cv = _pendingCvars;
         if (cv is not null)
         {
             string dec = cv.GetString("cl_decals");
@@ -347,7 +347,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
     {
         // [profiling] the faithful sim+sync was the largest UNSCOPED per-frame cost (showed only as
         // proc:other in hitch dumps) — scope it so combat-frame attribution names it directly.
-        using var _scope = XonoticGodot.Common.Diagnostics.Prof.Sample("particles.cpu");
+        using var _scope = VortexArena.Common.Diagnostics.Prof.Sample("particles.cpu");
 
         // Advance the faithful simulation on RENDER delta (a client visual clock, like the GPU particles) —
         // NOT Api.Clock.Time, which is the server sim clock and reads 0/paused on the render side, freezing
@@ -366,7 +366,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
         // age on — advances by timescaled frametime, and not at all while paused). At slowmo 0 _clientTime holds
         // still, so Update() is a same-time no-op: particles hang frozen; no aging, no leak (paused sim emits
         // nothing new). This keeps the wall-clock SOURCE the doc above requires — only the step is scaled.
-        _clientTime += Math.Min(XonoticGodot.Game.Client.ClientRenderTime.ScaleDelta((float)delta), MaxParticleStep);
+        _clientTime += Math.Min(VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta), MaxParticleStep);
         _sim.Update(_clientTime);
 
         // View origin/forward in Quake space, from the active camera (GetViewport().GetCamera3D()). The

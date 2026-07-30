@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Wire serialization, message registry, quantization, prediction/reconciliation logic.
+       Godot-free; ENet transport adapter lives in the Godot host (ADR-0005). -->
+  <PropertyGroup>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Net</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VortexArena.Common\VortexArena.Common.csproj" />
+  </ItemGroup>
+</Project>

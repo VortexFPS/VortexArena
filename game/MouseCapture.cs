@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// The single owner of the OS mouse-grab state. FPS mouse-look wants the pointer <see cref="Input.MouseModeEnum.Captured"/>

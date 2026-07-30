@@ -1,7 +1,7 @@
 // Port of qcsrc/menu/xonotic/dialog_gamemenu.qc (XonoticGameMenuDialog) + leavematchbutton.qc.
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The in-game menu shown over a paused match (Escape) — a faithful C# port of <c>XonoticGameMenuDialog</c>

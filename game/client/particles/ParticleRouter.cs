@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Particles;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Particles;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  Particle ROUTER (planning/particles-dual-system.md §D.2). Resolves the backend for one effectinfo

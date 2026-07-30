@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Frames-per-second readout — the C# successor to Darkplaces' <c>Sbar_ShowFPS</c> / <c>Sbar_ShowFPS_Update</c>

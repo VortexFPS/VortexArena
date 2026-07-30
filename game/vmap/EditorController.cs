@@ -1,12 +1,12 @@
 ﻿using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Formats.Vmap;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Vmap;
+using VortexArena.Game.Loaders;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// Drives in-game geometry editing (design doc Â§11.4): owns the <see cref="VmapEditSession"/>, turns the

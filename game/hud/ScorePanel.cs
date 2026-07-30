@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Gameplay;     // Teams
-using XonoticGodot.Common.Services;     // CvarFlags
-using XonoticGodot.Engine.Simulation;   // CvarService (RegisterDefaults)
+using VortexArena.Common.Gameplay;     // Teams
+using VortexArena.Common.Services;     // CvarFlags
+using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Score (#7) — the separate in-game score OVERLAY (NOT the full scoreboard). C# port of

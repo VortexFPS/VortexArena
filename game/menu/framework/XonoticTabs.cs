@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The faithful Xonotic tab controller — C# successor to <c>makeXonoticTabController</c> +

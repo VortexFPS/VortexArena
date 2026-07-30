@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Binary asset PARSERS (IBSP v46, MD3/IQM/DPM) producing engine-neutral POCO data.
+       Godot-free so parsing is unit-testable; the Godot host turns the data into ArrayMesh/Skeleton3D.
+       (Refinement of ADR-0006 for buildability/testability.) -->
+  <PropertyGroup>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Formats</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VortexArena.Common\VortexArena.Common.csproj" />
+  </ItemGroup>
+</Project>

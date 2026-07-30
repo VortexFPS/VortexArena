@@ -3,7 +3,7 @@
 # dedicated mode from $0 and ALWAYS cd's to its own directory first — the working-directory
 # contract: game data is found relative to the install dir, Base/Makefile help says so explicitly).
 #
-# XonoticGodot equivalent: the exported build resolves `data` against the CWD
+# VortexArena equivalent: the exported build resolves `data` against the CWD
 # (DataPaths.Resolve — GlobalizePath("res://") is "" in an exported build), so this script
 # cd's to its own directory and execs the dedicated binary from there. Ship it INSIDE the
 # dist/linux-dedicated/ folder, next to the binary + data/ (tools/package.sh does this).
@@ -23,7 +23,7 @@ cd "${path}" || exit 1
 
 # Prefer a locally built/renamed binary over the shipped one (Base script shape: it prefers
 # xonotic-$mode over the prebuilt xonotic-linux64-$mode).
-for candidate in ./xonoticgodot-dedicated.x86_64 ./XonoticGodot.x86_64 ./xonoticgodot-dedicated; do
+for candidate in ./vortexarena-dedicated.x86_64 ./VortexArena.x86_64 ./vortexarena-dedicated; do
     if [ -x "$candidate" ]; then
         xonotic="$candidate"
         break
@@ -32,7 +32,7 @@ done
 
 if [ -z "${xonotic:-}" ]; then
     echo "run-dedicated.sh: no dedicated binary found beside this script" >&2
-    echo "(expected xonoticgodot-dedicated.x86_64 — export the 'linux-dedicated' preset, or see tools/package.sh)" >&2
+    echo "(expected vortexarena-dedicated.x86_64 — export the 'linux-dedicated' preset, or see tools/package.sh)" >&2
     exit 1
 fi
 

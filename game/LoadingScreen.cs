@@ -1,10 +1,10 @@
 using System;
 using Godot;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Game.Loaders;
-using XonoticGodot.Game.Menu;
+using VortexArena.Formats.Vfs;
+using VortexArena.Game.Loaders;
+using VortexArena.Game.Menu;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// The Darkplaces-style loading screen: a full-screen overlay showing the <c>gfx/loading.tga</c>

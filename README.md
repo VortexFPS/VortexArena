@@ -12,7 +12,7 @@ is now its own named project that will continue to evolve.
 > missing polish, and breaking changes.
 
 > **A note on naming.** The project is *Vortex Arena*, but the solution, `.csproj`, and C# namespaces still
-> carry the original `XonoticGodot` name from the port's origins. Those internal identifiers are being kept
+> carry the original `VortexArena` name from the port's origins. Those internal identifiers are being kept
 > stable for now; the rename to Vortex Arena is proceeding at the product/branding level first.
 
 ## Current state
@@ -53,25 +53,25 @@ work is mostly breadth, polish, and the long tail of parity fidelity — see
 ```
 VortexArena/
 ├── project.godot            Godot 4.6 (.NET) project
-├── XonoticGodot.csproj      Godot host (game client + headless dedicated server)
-├── XonoticGodot.sln         Full solution
+├── VortexArena.csproj      Godot host (game client + headless dedicated server)
+├── VortexArena.sln         Full solution
 ├── src/
-│   ├── XonoticGodot.Common       Gameplay, physics, protocol defs, framework (NO Godot dependency)
-│   ├── XonoticGodot.Engine       Deterministic simulation core + collision/trace (NO Godot)
-│   ├── XonoticGodot.Net          Wire serialization, prediction, reconciliation (NO Godot)
-│   ├── XonoticGodot.Formats      Binary asset parsers — IBSP, MD3, IQM, DPM (NO Godot)
-│   ├── XonoticGodot.Server       Dedicated server logic
-│   └── XonoticGodot.SourceGen    Roslyn source generators (registries, hooks, net)
+│   ├── VortexArena.Common       Gameplay, physics, protocol defs, framework (NO Godot dependency)
+│   ├── VortexArena.Engine       Deterministic simulation core + collision/trace (NO Godot)
+│   ├── VortexArena.Net          Wire serialization, prediction, reconciliation (NO Godot)
+│   ├── VortexArena.Formats      Binary asset parsers — IBSP, MD3, IQM, DPM (NO Godot)
+│   ├── VortexArena.Server       Dedicated server logic
+│   └── VortexArena.SourceGen    Roslyn source generators (registries, hooks, net)
 ├── game/                    Godot-side game code (rendering, UI, input, menus, netcode host)
-├── tests/XonoticGodot.Tests       xUnit test suite
+├── tests/VortexArena.Tests       xUnit test suite
 ├── docs/                    Operational guides — running, releasing, debugging, cvar reference
 └── planning/               Architecture decision records (ADRs), specs, design docs, trackers
 ```
 
-(The `XonoticGodot.*` project/assembly names are historical — the port's original codename. See the naming
+(The `VortexArena.*` project/assembly names are historical — the port's original codename. See the naming
 note above.)
 
-A core design rule: **`XonoticGodot.Common` has no Godot dependency.** This keeps the gameplay simulation
+A core design rule: **`VortexArena.Common` has no Godot dependency.** This keeps the gameplay simulation
 headless-testable and enables a dedicated server that runs without the Godot renderer.
 
 ## Getting started
@@ -109,11 +109,11 @@ git clone --filter=blob:none https://github.com/VortexFPS/VortexArena.git
 
 ```bash
 # Build and test the engine/gameplay libraries (no Godot needed)
-dotnet build tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj
-dotnet test  tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj
+dotnet build tests/VortexArena.Tests/VortexArena.Tests.csproj
+dotnet test  tests/VortexArena.Tests/VortexArena.Tests.csproj
 
 # Build the full Godot project
-dotnet build XonoticGodot.csproj
+dotnet build VortexArena.csproj
 
 # Or run the whole local CI gate (build + tests + host + headless boot smoke)
 ci/ci.sh
@@ -159,7 +159,7 @@ Contributions are welcome. A few guidelines:
   ported features should mirror the original QuakeC/DarkPlaces logic — same constants, defaults, and branch
   order. The canonical reference lives in `Base/data/xonotic-data.pk3dir/qcsrc/`. Intentional deviations
   should be commented.
-- **Keep `XonoticGodot.Common` Godot-free.** Gameplay and simulation code must not reference the Godot API.
+- **Keep `VortexArena.Common` Godot-free.** Gameplay and simulation code must not reference the Godot API.
   This is enforced architecturally (it's a plain .NET class library) and is non-negotiable.
 - **Don't commit compiled maps.** Core content IS committed under `data/`, deliberately — it is the
   fork's own content now, and the licence texts travel with it. Compiled maps are build output, fetched

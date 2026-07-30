@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// (engine-perf 2026-06-16) A tiny, self-guarding bridge to the RenderDoc in-application API

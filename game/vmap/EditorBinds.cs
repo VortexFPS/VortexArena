@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Config;
+using VortexArena.Common.Diagnostics;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// The editor's own key table (design doc §11.9) — a bind layer that exists ONLY while free-flying in an

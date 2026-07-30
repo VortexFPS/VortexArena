@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Deterministic simulation core + collision/trace service.
+       Godot-free so the sim is unit-testable (ADR-0004). Implements Common's facade interfaces. -->
+  <PropertyGroup>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Engine</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VortexArena.Common\VortexArena.Common.csproj" />
+    <!-- Consumes parsed BSP geometry (BspData) to build the collision world + inline brush models.
+         Assets is Godot-free, so the sim stays headless-testable and server-portable. -->
+    <ProjectReference Include="..\VortexArena.Formats\VortexArena.Formats.csproj" />
+  </ItemGroup>
+</Project>

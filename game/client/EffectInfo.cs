@@ -4,7 +4,7 @@ using System.Globalization;
 using Godot;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The effectinfo.txt parser and catalog — the C# successor to Darkplaces'

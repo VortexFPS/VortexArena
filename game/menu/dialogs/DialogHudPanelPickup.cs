@@ -1,7 +1,7 @@
 using System.Globalization;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Pickup" panel config dialog — a faithful C# port of <c>XonoticHUDPickupDialog_fill</c>
@@ -10,7 +10,7 @@ namespace XonoticGodot.Game.Menu;
 /// icon size scale, and the "Show timer" radio set. Every pickup row below the duration is greyed out while
 /// <c>hud_panel_pickup_time</c> is 0 (QC setDependentNOT(e, "hud_panel_pickup_time", 0)).
 ///
-/// FAITHFUL UI NOW: the pickup notification panel is drawn by the HUD backend XonoticGodot hasn't wired up; all
+/// FAITHFUL UI NOW: the pickup notification panel is drawn by the HUD backend VortexArena hasn't wired up; all
 /// cvar bindings are real (they write the shared store the game reads).
 /// </summary>
 public partial class DialogHudPanelPickup : MenuScreen

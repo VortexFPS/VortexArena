@@ -7,7 +7,7 @@
 // the chat bubble (playtest #46/#48).
 using Godot;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The messagemode chat input line. Owned by the Shell (created once, lives across matches); opened by the
@@ -81,7 +81,7 @@ public partial class ChatPrompt : Control
         if (!Visible) return;
         // House rule: a per-frame node ships with a Prof scope registered in FrameProfiler.TopLevelNodeScopes
         // (else it leaks into proc:other). Only runs while open (SetProcess is off otherwise), so it's free idle.
-        using var _prof = XonoticGodot.Game.Client.FrameProfiler.Scope("chat");
+        using var _prof = VortexArena.Game.Client.FrameProfiler.Scope("chat");
         _caretPhase += (float)delta;
         QueueRedraw(); // caret blink (cheap: one small Control)
     }
@@ -93,7 +93,7 @@ public partial class ChatPrompt : Control
 
         // The console takes priority when open (DP opens it OVER messagemode): yield its keystrokes so it can be
         // typed. We run before it in _input (reverse tree order), so without this we'd eat everything it needs.
-        if (XonoticGodot.Game.Console.ConsoleState.IsOpen)
+        if (VortexArena.Game.Console.ConsoleState.IsOpen)
             return;
 
         // Escape cancels the prompt, but the Shell owns the Escape toggle (pause menu / HUD-editor exit) and

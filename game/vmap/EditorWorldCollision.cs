@@ -1,7 +1,7 @@
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Formats.Vmap;
+using VortexArena.Engine.Collision;
+using VortexArena.Formats.Vmap;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// Collision for the editor's world, built from the DOCUMENT — the piece that makes PLAYTEST honest. Without

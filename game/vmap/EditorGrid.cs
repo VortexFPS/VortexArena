@@ -1,10 +1,10 @@
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Formats.Vmap;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Vmap;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// The world-space alignment grid (design doc §11.4): a grid fixed in WORLD space that geometry receives —

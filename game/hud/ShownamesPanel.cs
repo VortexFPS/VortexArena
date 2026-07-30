@@ -1,17 +1,17 @@
 // Port of Base/data/xonotic-data.pk3dir/qcsrc/client/shownames.qh + the hud_shownames_* block of
 // Base/data/xonotic-data.pk3dir/_hud_common.cfg (lines 331-349).
 using Godot;
-using XonoticGodot.Common.Services;          // CvarFlags
-using XonoticGodot.Engine.Simulation;         // CvarService (RegisterDefaults)
+using VortexArena.Common.Services;          // CvarFlags
+using VortexArena.Engine.Simulation;         // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The shownames "panel" — the cvar/identity shell for the floating player name + health/armor tags
 /// (QC <c>client/shownames.qc</c> <c>Draw_ShowNames</c>/<c>Draw_ShowNames_All</c>). Unlike a normal HUD panel,
 /// shownames is NOT a screen-space rectangle: it is a 3D in-world overlay drawn per visible player, projected
-/// through the first-person camera. That draw lives in <see cref="XonoticGodot.Game.Client.ShowNamesLayer"/>
-/// (the analogue of <see cref="XonoticGodot.Game.Client.WaypointSpriteLayer"/>), added by the net layer.
+/// through the first-person camera. That draw lives in <see cref="VortexArena.Game.Client.ShowNamesLayer"/>
+/// (the analogue of <see cref="VortexArena.Game.Client.WaypointSpriteLayer"/>), added by the net layer.
 ///
 /// <para>This class exists so the <c>hud_shownames_*</c> cvars (which live in <c>shownames.qh</c> as
 /// <c>autocvar_hud_shownames_*</c>, seeded by <c>_hud_common.cfg</c>) are registered centrally — it is
@@ -21,7 +21,7 @@ namespace XonoticGodot.Game.Hud;
 ///
 /// <para>Because shownames has no luma layout entry, <see cref="HudLayoutDefaults.For"/> hands it the harmless
 /// full-screen / no-frame fallback; <see cref="DrawPanel"/> is a deliberate no-op so the discovered panel paints
-/// nothing on the 2D HUD layer (all real drawing is the in-world <see cref="XonoticGodot.Game.Client.ShowNamesLayer"/>).
+/// nothing on the 2D HUD layer (all real drawing is the in-world <see cref="VortexArena.Game.Client.ShowNamesLayer"/>).
 /// The id is not in <c>HudRegistry.Order</c> / <c>StartHiddenIds</c>, so it simply sits inert in the panel set.</para>
 /// </summary>
 public partial class ShownamesPanel : HudPanel
@@ -34,7 +34,7 @@ public partial class ShownamesPanel : HudPanel
     public override bool IsDynamic => false;
 
     /// <summary>No 2D panel chrome/content (the floating tags are drawn in 3D by
-    /// <see cref="XonoticGodot.Game.Client.ShowNamesLayer"/>). Intentionally empty.</summary>
+    /// <see cref="VortexArena.Game.Client.ShowNamesLayer"/>). Intentionally empty.</summary>
     protected override void DrawPanel() { }
 
     /// <summary>

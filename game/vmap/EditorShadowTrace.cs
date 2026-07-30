@@ -1,7 +1,7 @@
-using XonoticGodot.Formats.Vmap;
+using VortexArena.Formats.Vmap;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// Ray-vs-world occlusion for the light bake — what turns flat direct light into light with shadows.

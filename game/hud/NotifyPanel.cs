@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Kill feed — faithful port of Base/.../qcsrc/client/hud/panel/notify.qc (HUD panel #4, <c>HUD_Notify</c>).
@@ -60,9 +60,9 @@ public partial class NotifyPanel : HudPanel
 
     /// <summary>Register the panel's behaviour-cvar defaults (luma values from hud_luma.cfg). Auto-invoked by
     /// reflection from <c>HudConfig.RegisterDefaults</c>.</summary>
-    public static void RegisterDefaults(XonoticGodot.Engine.Simulation.CvarService c)
+    public static void RegisterDefaults(VortexArena.Engine.Simulation.CvarService c)
     {
-        const XonoticGodot.Common.Services.CvarFlags save = XonoticGodot.Common.Services.CvarFlags.Save;
+        const VortexArena.Common.Services.CvarFlags save = VortexArena.Common.Services.CvarFlags.Save;
         c.Register("hud_panel_notify_flip", "0", save);
         c.Register("hud_panel_notify_fontsize", "0.8", save);
         c.Register("hud_panel_notify_time", "10", save);
@@ -323,14 +323,14 @@ public partial class NotifyPanel : HudPanel
     /// "weaponvortex"), best-first. The bare names resolve the REAL Xonotic kill-notify art from the mounted
     /// game data via <see cref="TextureCache"/>'s VFS resolver (<c>gfx/hud/&lt;skin&gt;/&lt;icon&gt;</c>), with a
     /// <c>res://</c> project override last. The active skin is the manager-updated
-    /// <c>XonoticGodot.Game.Hud.HudSkin.SkinName</c> (the type — shadowed inside this class by the
+    /// <c>VortexArena.Game.Hud.HudSkin.SkinName</c> (the type — shadowed inside this class by the
     /// <see cref="HudSkin"/> back-compat property, so it must be fully qualified here); the back-compat property
     /// is consulted too in case external code pinned a different preferred skin.
     /// </summary>
     private static string[] IconPaths(string icon)
     {
         if (string.IsNullOrEmpty(icon)) return System.Array.Empty<string>();
-        string liveSkin = XonoticGodot.Game.Hud.HudSkin.SkinName; // manager-updated active skin (e.g. "luma")
+        string liveSkin = VortexArena.Game.Hud.HudSkin.SkinName; // manager-updated active skin (e.g. "luma")
         string pinned = HudSkin;                                   // back-compat override property
         bool pinDiffers = !string.IsNullOrEmpty(pinned) && pinned != liveSkin;
         return pinDiffers

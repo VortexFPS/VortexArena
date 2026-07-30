@@ -1,11 +1,11 @@
 using Godot;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Formats.Vmap;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Materials;
+using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Vmap;
+using VortexArena.Game.Loaders;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// Real-time lighting for the edited world (design doc §10.1, rung 1).

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Convenience base for the menu screens: implements <see cref="IMenuScreen"/> and bundles the little

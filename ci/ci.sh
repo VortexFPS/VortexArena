@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local CI mirror for XonoticGodot (T33 — ADR-0014). Runs the same gate as
+# Local CI mirror for VortexArena (T33 — ADR-0014). Runs the same gate as
 # .github/workflows/ci.yml PLUS the asset-dependent steps GitHub can't run:
 # with data/ mounted, the ~18 real-data test classes actually execute
 # (in CI they self-skip), and the headless boot smoke exercises real asset
@@ -61,11 +61,11 @@ python "$ROOT/tools/verify-engine-template.py" --patches
 
 # ── 1. libraries + tests build (plain .NET SDK, no Godot) ─────────────────────
 step "build libraries + tests"
-dotnet build "$ROOT/tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj" -c Debug --nologo
+dotnet build "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --nologo
 
 # ── 2. the full test suite (assets present → real-data tests run too) ─────────
 step "dotnet test (baseline: 3931 passed / 0 failed; only MAP-dependent cases can skip)"
-dotnet test "$ROOT/tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj" -c Debug --no-build --nologo
+dotnet test "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --no-build --nologo
 # Core content is COMMITTED (item 21), so it cannot legitimately be absent — only compiled maps can,
 # and those are a fetch away. Fail loudly on a broken checkout instead of printing a note and carrying on
 # with the real-data classes quietly skipped.
@@ -78,8 +78,8 @@ if [ ! -d "$ROOT/data/maps" ] || [ -z "$(ls -A "$ROOT/data/maps" 2>/dev/null)" ]
 fi
 
 # ── 3. the Godot host project (restores Godot.NET.Sdk via nuget.config) ───────
-step "build the Godot host (XonoticGodot.csproj)"
-dotnet build "$ROOT/XonoticGodot.csproj" -c Debug --nologo
+step "build the Godot host (VortexArena.csproj)"
+dotnet build "$ROOT/VortexArena.csproj" -c Debug --nologo
 
 # ── 4. headless boot smoke (docs/RUNNING.md 'Run headless') ────────────────────────
 if $do_smoke; then
@@ -89,7 +89,7 @@ if $do_smoke; then
         timeout 180 "$GODOT" --headless --path "$ROOT" --quit-after 200 > "$log" 2>&1 || true
         hard_errors=$(grep -cE '^ERROR:|SCRIPT ERROR|Unhandled exception' "$log" || true)
         echo "hard errors: $hard_errors | warnings: $(grep -c 'WARNING:' "$log" || true)"
-        grep -iE "XonoticGodot boot|MenuState\]|NetGame\]|loaded .* shaders|collision brushes|spawned" "$log" || true
+        grep -iE "VortexArena boot|MenuState\]|NetGame\]|loaded .* shaders|collision brushes|spawned" "$log" || true
         [ "${hard_errors:-1}" -eq 0 ] || { echo "--- $log ---"; tail -40 "$log"; fail "headless smoke had $hard_errors hard error(s)"; }
         rm -f "$log"
 
@@ -144,7 +144,7 @@ fi
 # tests). It needs no Godot — pure xUnit over the parsed asset structures.
 step "Visual QA (headless assertions only): VisualQa map/model/shader sweep"
 vqa_log="$(mktemp)"
-dotnet test "$ROOT/tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj" -c Debug --no-build --nologo \
+dotnet test "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --no-build --nologo \
     --filter "FullyQualifiedName~VisualQa" > "$vqa_log" 2>&1 || { cat "$vqa_log"; rm -f "$vqa_log"; fail "Visual QA headless assertions failed"; }
 grep -E "Passed!|Failed!|Passed:|Failed:|Skipped:|Total tests" "$vqa_log" || true
 if [ -d "$ROOT/data/maps" ] && [ -n "$(ls -A "$ROOT/data/maps" 2>/dev/null)" ]; then
@@ -160,9 +160,9 @@ if $do_export; then
     [ -f "$GODOT" ] || fail "--export needs Godot (set GODOT=)"
     step "export windows-client + linux-client + linux-dedicated (macos-client is CI-only — needs a Mac)"
     mkdir -p "$ROOT/dist/windows-client" "$ROOT/dist/linux-client" "$ROOT/dist/linux-dedicated"
-    "$GODOT" --headless --path "$ROOT" --export-release "windows-client"  "$ROOT/dist/windows-client/XonoticGodot.exe"
-    "$GODOT" --headless --path "$ROOT" --export-release "linux-client"    "$ROOT/dist/linux-client/XonoticGodot.x86_64"
-    "$GODOT" --headless --path "$ROOT" --export-release "linux-dedicated" "$ROOT/dist/linux-dedicated/xonoticgodot-dedicated.x86_64"
+    "$GODOT" --headless --path "$ROOT" --export-release "windows-client"  "$ROOT/dist/windows-client/VortexArena.exe"
+    "$GODOT" --headless --path "$ROOT" --export-release "linux-client"    "$ROOT/dist/linux-client/VortexArena.x86_64"
+    "$GODOT" --headless --path "$ROOT" --export-release "linux-dedicated" "$ROOT/dist/linux-dedicated/vortexarena-dedicated.x86_64"
     echo "exports in $ROOT/dist/ — run tools/package.sh to bundle assets + zip"
 fi
 

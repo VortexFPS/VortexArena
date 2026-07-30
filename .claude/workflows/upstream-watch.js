@@ -31,7 +31,7 @@ port = the Vortex Arena repo root: \`git rev-parse --show-toplevel\` (you start 
 Then locate the upstream reference checkouts. Let BASE be the first of these that exists:
   1. $VA_BASE_DIR            (only if VA_BASE_DIR is set in the environment)
   2. <parent of port>/Base/data
-(that order mirrors tests/XonoticGodot.Tests/TestPaths.cs, the existing contract for where the
+(that order mirrors tests/VortexArena.Tests/TestPaths.cs, the existing contract for where the
 reference checkout lives). Then:
   data        = BASE/xonotic-data.pk3dir
   darkplaces  = the sibling darkplaces checkout — BASE/../darkplaces, else BASE/darkplaces

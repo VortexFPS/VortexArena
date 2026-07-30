@@ -2,7 +2,7 @@ using System.Threading;
 using Godot;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>What a light emits like. Mirrors q3map2's <c>EMIT_*</c>, because the maths differ per kind.</summary>
 public enum BakedLightKind

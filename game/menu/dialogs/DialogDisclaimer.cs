@@ -1,14 +1,14 @@
 using Godot;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Diagnostics;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Development-release disclaimer — the modal shown over the main menu on a plain launch, telling the player
 /// this is a work-in-progress build and pointing them at the Discord servers for bug reports and community.
 ///
 /// PORT-ONLY (no Base counterpart): Xonotic ships release builds and has no such dialog. Gated on
-/// <c>cl_startup_disclaimer</c> (default 1, <see cref="XonoticGodot.Common.Services.CvarFlags.Save"/>): the
+/// <c>cl_startup_disclaimer</c> (default 1, <see cref="VortexArena.Common.Services.CvarFlags.Save"/>): the
 /// "Don't show this again" checkbox writes 0 and OK persists it, so the next launch skips straight to the menu.
 /// Re-enable from the console with <c>set cl_startup_disclaimer 1</c>.
 ///

@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
-/// The raw ENet packet transport for the XonoticGodot link — a thin wrapper over Godot's
+/// The raw ENet packet transport for the VortexArena link — a thin wrapper over Godot's
 /// <see cref="ENetMultiplayerPeer"/> that sends/receives byte buffers on a reliable and an unreliable
 /// channel (<see cref="NetProtocol.ReliableChannel"/> / <see cref="NetProtocol.UnreliableChannel"/>) and
 /// surfaces peer connect/disconnect + per-packet receive as plain C# events.

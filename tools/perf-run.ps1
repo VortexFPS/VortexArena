@@ -58,7 +58,7 @@ if ($DebugBuild) {
     $exeArgs = @("--path", $root)
     if (-not (Test-Path $exe)) { throw "Godot console binary not found at $exe (see docs/RUNNING.md)" }
 } else {
-    $exe = Join-Path $root "dist\windows-client\XonoticGodot.exe"
+    $exe = Join-Path $root "dist\windows-client\VortexArena.exe"
     $exeArgs = @()
     if (-not (Test-Path $exe)) {
         throw "release export missing at $exe - export the windows-client preset first (or use -DebugBuild for a non-representative debug run)"
@@ -66,7 +66,7 @@ if ($DebugBuild) {
 }
 
 # --- clean strays (an orphaned host keeps UDP 26000 bound) -----------------------------------
-Get-Process Godot*, XonoticGodot* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process Godot*, VortexArena* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 $before = Get-ChildItem $logDir -Filter "session-*.log" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1

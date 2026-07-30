@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Formats.Vmap;
+using VortexArena.Formats.Vmap;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// Draws the editor's overlay geometry (design doc §11.4): the hover highlight, the selection outline, the

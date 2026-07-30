@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// Single source of truth for the per-user <em>writable</em> data directory — the user's config + keybinds
@@ -9,7 +9,7 @@ namespace XonoticGodot.Game;
 /// <see cref="DataPaths"/>, which resolves the read-only content gamedir.
 ///
 /// <para><b>Why this exists.</b> Godot's <c>user://</c> resolves to a hidden, platform-specific app-data
-/// location (<c>%APPDATA%\Godot\app_userdata\XonoticGodot</c> on Windows, <c>~/.local/share/godot/…</c> on
+/// location (<c>%APPDATA%\Godot\app_userdata\VortexArena</c> on Windows, <c>~/.local/share/godot/…</c> on
 /// Linux, <c>~/Library/Application Support/Godot/…</c> on macOS) that a player can't easily find. We instead
 /// store everything under a single, discoverable home-directory subfolder: <c>~/XonData</c>. Set the
 /// <c>VORTEX_USERDIR</c> environment variable to an absolute path to override it — used by tests/CI to keep

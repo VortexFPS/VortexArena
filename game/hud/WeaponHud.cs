@@ -1,8 +1,8 @@
 using System.Reflection;
 using Godot;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Presentation-side helpers that bridge a sim-side <see cref="Weapon"/> descriptor to the HUD's art and

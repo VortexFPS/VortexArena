@@ -1,7 +1,7 @@
 using Godot;
 using System;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Credits screen — full port of the Xonotic credits roll from

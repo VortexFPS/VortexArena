@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Text;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;     // CvarFlags
-using XonoticGodot.Engine.Simulation;   // CvarService (RegisterDefaults)
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;     // CvarFlags
+using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Status / info messages — port of Base/.../qcsrc/client/hud/panel/infomessages.qc (HUD panel #14). The

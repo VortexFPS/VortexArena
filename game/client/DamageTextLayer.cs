@@ -1,13 +1,13 @@
 // Port of common/mutators/mutator/damagetext/cl_damagetext.qc (the CSQC DamageText draw class) +
-// damagetext.qh. The server producer is DamagetextMutator (XonoticGodot.Common); this is the client draw.
+// damagetext.qh. The server producer is DamagetextMutator (VortexArena.Common); this is the client draw.
 
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Game.Hud;   // HudText (drawcolorcodedstring2) + HudPanel.HudFont (Xonotic HUD font)
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Game.Hud;   // HudText (drawcolorcodedstring2) + HudPanel.HudFont (Xonotic HUD font)
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Floating damage numbers (client draw) — port of the CSQC <c>DamageText</c> class in
@@ -293,7 +293,7 @@ public partial class DamageTextLayer : Control
             Color rgb = it.FriendlyFire ? cfg.FriendlyFireColor : cfg.Color;
             if (cfg.ColorPerWeapon && it.DeathTypeColorKey >= 0)
             {
-                Weapon? w = XonoticGodot.Common.Framework.Registry<Weapon>.ById(it.DeathTypeColorKey);
+                Weapon? w = VortexArena.Common.Framework.Registry<Weapon>.ById(it.DeathTypeColorKey);
                 if (w is not null) rgb = new Color(w.Color.X, w.Color.Y, w.Color.Z);
             }
             rgb.A = alpha;

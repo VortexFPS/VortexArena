@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The map editor's dialog surface (design doc §11.9): the entity palette, the key inspector, the shader
@@ -139,7 +139,7 @@ public partial class EditorDialogPanel : HudPanel
 
         if (_rows.Count == 0)
         {
-            XonoticGodot.Common.Diagnostics.Log.Info($"{_title}: nothing to show");
+            VortexArena.Common.Diagnostics.Log.Info($"{_title}: nothing to show");
             return;
         }
 

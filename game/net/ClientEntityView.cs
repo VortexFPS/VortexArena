@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Game.Client;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Game.Client;
+using VortexArena.Net;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// The networked entity → renderer bridge — the Godot successor to CSQC's <c>CSQC_Ent_Update</c> /
@@ -86,7 +86,7 @@ public sealed partial class ClientEntityView : Node
 
         // (perf-investigation) the remote-entity count drives this whole loop's cost; surface it as a marker so
         // the profiler shows how many entities catharsis carries at the spawn (estimates diverged 20x).
-        XonoticGodot.Common.Diagnostics.Prof.Mark("remote.ents", _net.RemoteIds.Count);
+        VortexArena.Common.Diagnostics.Prof.Mark("remote.ents", _net.RemoteIds.Count);
 
         foreach (int id in _net.RemoteIds)
         {

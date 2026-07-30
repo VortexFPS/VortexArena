@@ -2,16 +2,16 @@ using System;
 using System.Linq;
 using System.Text;
 using Godot;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Game.Console;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Config;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Game.Console;
+using VortexArena.Game.Loaders;
 using FileAccess = Godot.FileAccess;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Process-wide menu/client state — the C# stand-in for the engine's global cvar store + gamedir that the
@@ -101,7 +101,7 @@ public static class MenuState
             if (a is "--no-save-config" or "--quit-after-seconds" or "--camera-trace" or "--screenshot")
             {
                 ConfigSaveSuppressedBy = a;
-                XonoticGodot.Common.Diagnostics.Log.Info(
+                VortexArena.Common.Diagnostics.Log.Info(
                     $"[MenuState] {a} present — config.cfg will NOT be saved this run (DP -benchmark rule).");
                 break;
             }
@@ -123,11 +123,11 @@ public static class MenuState
             if (vfs.MountContentRoot(DataPaths.Resolve(dataPath)))
                 _vfs = vfs;
             else
-                XonoticGodot.Common.Diagnostics.Log.Warn($"[MenuState] data dir '{dataPath}' not found — menu runs on registered cvar defaults only.");
+                VortexArena.Common.Diagnostics.Log.Warn($"[MenuState] data dir '{dataPath}' not found — menu runs on registered cvar defaults only.");
         }
         catch (Exception ex)
         {
-            XonoticGodot.Common.Diagnostics.Log.Severe($"[MenuState] failed to mount data dir '{dataPath}': {ex.Message}");
+            VortexArena.Common.Diagnostics.Log.Severe($"[MenuState] failed to mount data dir '{dataPath}': {ex.Message}");
         }
 
         // --- build the PROCESS-LIFETIME asset loader now (parses every scripts/*.shader ONCE, here at boot,
@@ -140,13 +140,13 @@ public static class MenuState
             try { _sharedAssets = new AssetLoader(_vfs); }
             catch (Exception ex)
             {
-                XonoticGodot.Common.Diagnostics.Log.Severe($"[MenuState] shared asset loader failed to build: {ex.Message}");
+                VortexArena.Common.Diagnostics.Log.Severe($"[MenuState] shared asset loader failed to build: {ex.Message}");
             }
         }
 
         // --- publish the process-wide facade so Api.Cvars resolves to the shared store at the menu ---
         Api.Services = new EngineServices(new CollisionWorld(), _cvars);
-        XonoticGodot.Server.Cvars.RegisterDefaults();
+        VortexArena.Server.Cvars.RegisterDefaults();
 
         // --- load authentic defaults: the client master cfg (settings/binds/hud/crosshairs/effects) + the
         //     server gameplay tree (balance/physics/gametypes/mutators) + the notification table. The interpreter
@@ -167,12 +167,12 @@ public static class MenuState
                 _interp = ConfigLoader.Load(_cvars, reader, name => _cvars.MarkArchived(name),
                     "xonotic-client.cfg", "xonotic-server.cfg", "notifications.cfg",
                     ConfigLoader.VortexCommonEntry);
-                XonoticGodot.Common.Diagnostics.Log.Info($"[MenuState] config: {_interp.CvarsAssigned} cvars from {_interp.FilesExecuted} cfg files " +
+                VortexArena.Common.Diagnostics.Log.Info($"[MenuState] config: {_interp.CvarsAssigned} cvars from {_interp.FilesExecuted} cfg files " +
                          $"({_interp.AliasesDefined} aliases, {_interp.FilesMissing} missing).");
             }
             catch (Exception ex)
             {
-                XonoticGodot.Common.Diagnostics.Log.Severe($"[MenuState] config load failed: {ex.Message}");
+                VortexArena.Common.Diagnostics.Log.Severe($"[MenuState] config load failed: {ex.Message}");
             }
         }
         // Even without a data dir (config skipped/failed) the console still needs a live command buffer.
@@ -200,7 +200,7 @@ public static class MenuState
 
         // Fallback: if no data dir mounted (CI/bare run, so binds-xonotic.cfg never exec'd), seed the table from
         // the thin KeyBindings.Defaults so the game is still playable. With a data dir the cfg already filled it.
-        if (!XonoticGodot.Engine.Console.BindTable.List().Any())
+        if (!VortexArena.Engine.Console.BindTable.List().Any())
             BindInput.SeedFromActions(KeyBindings.Defaults);
 
         // (perf §12.7) The PORT "smoothest play" video defaults — vid_fullscreen 2 and vid_vsync 0 — used to
@@ -235,7 +235,7 @@ public static class MenuState
             {
                 freshCvars = true;
                 ConfigSaveSuppressedBy ??= a;   // never resave defaults over the player's real config
-                XonoticGodot.Common.Diagnostics.Log.Info(
+                VortexArena.Common.Diagnostics.Log.Info(
                     "[MenuState] --fresh-cvars — saved cvar edits IGNORED this run (registered defaults only).");
                 break;
             }
@@ -269,7 +269,7 @@ public static class MenuState
     /// </summary>
     public static void ReloadDefaultBinds()
     {
-        XonoticGodot.Engine.Console.BindTable.UnbindAll();
+        VortexArena.Engine.Console.BindTable.UnbindAll();
         Func<string, string?> reader = p => _vfs is not null && _vfs.Exists(p) ? _vfs.ReadText(p) : null;
         if (_vfs is not null)
         {
@@ -339,7 +339,7 @@ public static class MenuState
         if (!_booted || ConfigSaveSuppressedBy is not null)
             return;
         var sb = new StringBuilder();
-        sb.Append("// XonoticGodot — saved menu preferences (archived cvars + keybinds). Auto-generated; edits may be overwritten.\n");
+        sb.Append("// VortexArena — saved menu preferences (archived cvars + keybinds). Auto-generated; edits may be overwritten.\n");
         foreach (string name in _cvars.ArchivedNamesToPersist.OrderBy(n => n, StringComparer.Ordinal))
             sb.Append($"seta {name} \"{Escape(_cvars.GetString(name))}\"\n");
 

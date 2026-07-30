@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Vmap;
+namespace VortexArena.Game.Vmap;
 
 /// <summary>
 /// The editor world's surface shader when lighting is BAKED (design doc §10.1, the "compute it once" step).

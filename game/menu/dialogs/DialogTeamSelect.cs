@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The in-game Team Selection dialog — a faithful C# port of <c>XonoticTeamSelectDialog</c>
@@ -10,7 +10,7 @@ namespace XonoticGodot.Game.Menu;
 /// <see cref="MenuCommand"/>.
 ///
 /// FAITHFUL UI NOW: the join actions ("cmd selectteam red; cmd join", "cmd spectate", …) drive the server
-/// team backend, which XonoticGodot does NOT have yet — <see cref="MenuCommand"/> logs them inert (no live match
+/// team backend, which VortexArena does NOT have yet — <see cref="MenuCommand"/> logs them inert (no live match
 /// join). The team-availability gating is reproduced from the QC <c>showNotify</c>: it reads the
 /// <c>_teams_available</c> bitmask (1=red, 2=blue, 4=yellow, 8=pink) and disables teams whose bit is clear.
 /// With no live match that cvar is 0, so all four team buttons start disabled (exactly as QC would do
@@ -92,7 +92,7 @@ public partial class DialogTeamSelect : MenuScreen
         // Row 5 (QC: me.TD(me, 1, 4, makeXonoticCommandButton("spectate", '0 0 0', "cmd spectate", …))).
         root.AddChild(MakeBigCommandButton("spectate", Colors.White, "cmd spectate"));
 
-        // Not in the QC dialog itself (it auto-closes via COMMANDBUTTON_CLOSE), but every XonoticGodot full-screen
+        // Not in the QC dialog itself (it auto-closes via COMMANDBUTTON_CLOSE), but every VortexArena full-screen
         // dialog needs a way back to the host.
         root.AddChild(Ui.Spacer());
         root.AddChild(MakeButtonBar(MakeButton("Back", GoBack)));

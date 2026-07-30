@@ -1108,6 +1108,11 @@ project's record of that kind of choice, so:
 
 ---
 
+> **Sequencing for everything that remains:** see
+> [`planning/migration-sequencing-2026-07-29.md`](migration-sequencing-2026-07-29.md) — a dependency
+> graph, the critical path, what is startable with zero coordination, and the human decisions that
+> block downstream work. Produced by a 14-agent recon pass; its headline finding was a real bug.
+
 ### Stage −1 — prerequisites (no restructure risk, do these first)
 
 These three are independently correct, already-broken-today fixes. None depends on any decision in
@@ -1431,8 +1436,21 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
     `XG_BOTS` (9), `XG_MAPS` (6), `XG_TICKS` (5), `XG_PERF_ASSERT` (5), `XG_MAP` (5),
     `XgDebugUnoptimized` (3), `XG_PROBE_BSP` (2), `XG_BASE_DIR` (1). Sweep with
     `git ls-files | xargs grep -ohE '\bXG_[A-Z_]+|\bXg[A-Z][A-Za-z]+' | sort -u` and expect an empty
-    result afterwards. Note `XG_DATA_DIR` and `XG_BASE_DIR` are already renamed by Stage −1, so this
-    item covers the remaining ten.
+    result afterwards. Note `XG_DATA_DIR` and `XG_BASE_DIR` are already renamed **inside `tests/`** by
+    Stage −1, so this item covers the remaining ten plus the non-test users.
+    - **TRAP, found 2026-07-29: `XG_BASE_DIR` and `VA_BASE_DIR` are one directory level apart.**
+      `tools/upstream-watch.py:57` defaults `XG_BASE_DIR` to `<parent>/Base` and line 65 appends
+      `data/xonotic-data.pk3dir` to it — so it means the **Base repo root**. `TestPaths.cs`'s
+      `VA_BASE_DIR` means **`Base/data`** (fallback at `:144`). A blind rename gives
+      `Base/data/data/xonotic-data.pk3dir` and the upstream-watch tooling silently finds nothing.
+      Either adjust the level at the call site or give the tool a distinct name. This is the same
+      `data/data` mistake §8.3.1's map-compiler config hit — worth noticing that it has now appeared
+      twice, which suggests the convention itself ("does BASE mean the repo or its data dir?") deserves
+      writing down rather than re-deriving.
+    - A full sweep also has to cover `tools/find-cvars.py` and `DeterminismTests.cs`, which hardcode
+      `src/XonoticGodot.*` **directory prefixes** rather than the namespace — see
+      `planning/migration-sequencing-2026-07-29.md` §3, items 8. Both fail open: the determinism guard
+      would scan nothing and pass, and every cvar would collapse to the `host` prefix.
 28. `README.md`: replace the Assets section. Post-clone is now one command, `tools/data/fetch-maps.py`,
     and `git clone --filter=blob:none` becomes the documented default.
 28a. ~~**The hardcoded test paths**~~ — **G13. Moved to Stage −1 item −3**, since Stage 5's proof gate

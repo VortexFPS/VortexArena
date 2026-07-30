@@ -13,10 +13,10 @@ Performance capture + hitch diagnosis has its own playbook: **[PERF-DEBUGGING.md
 |---|---|---|
 | **Godot 4.6.3 (GUI/editor)** | `C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64.exe` | The **mono/.NET** build — required (the plain build can't run C#). |
 | **Godot 4.6.3 (console)** | `C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64_console.exe` | Same engine, but **writes to stdout** — use this for headless/CLI runs so you capture `GD.Print` + errors. |
-| Godot bundled C# packages | `C:\Program Files\Godot\GodotSharp\Tools\nupkgs` | Holds `Godot.NET.Sdk 4.6.3` etc. `XonoticGodot/nuget.config` adds this folder as a package source (exact editor parity + offline builds). The 4.6.3 packages **are** also on public NuGet (verified 2026-06) — CI removes this source and restores from nuget.org (see `.github/workflows/ci.yml`). |
+| Godot bundled C# packages | `C:\Program Files\Godot\GodotSharp\Tools\nupkgs` | Holds `Godot.NET.Sdk 4.6.3` etc. `VortexArena/nuget.config` adds this folder as a package source (exact editor parity + offline builds). The 4.6.3 packages **are** also on public NuGet (verified 2026-06) — CI removes this source and restores from nuget.org (see `.github/workflows/ci.yml`). |
 | .NET SDK | `dotnet --version` → 9.0.308 (builds the `net8.0` targets) | net8.0 ref pack auto-restores. |
-| Project root | `C:\Users\Bryan\Projects\Xonotic\XonoticGodot` | `project.godot` + `XonoticGodot.csproj` (the Godot host) live here. |
-| Xonotic asset data | `assets/data/` (in-tree, gitignored) | Downloaded by `download-assets.sh` from the upstream Xonotic GitLab repos + official release. The VFS mounts this at runtime (see `Shell.DataPath` / the `--data` flag, default `res://assets/data`). **`Base/` is only the historical port source — the game no longer reads it.** |
+| Project root | `C:\Users\Bryan\Projects\Xonotic\VortexArena` | `project.godot` + `VortexArena.csproj` (the Godot host) live here. |
+| Xonotic asset data | `data/` (in-tree, gitignored) | Downloaded by `download-assets.sh` from the upstream Xonotic GitLab repos + official release. The VFS mounts this at runtime (see `Shell.DataPath` / the `--data` flag, default `res://data`). **`Base/` is only the historical port source — the game no longer reads it.** |
 
 **Tip — set an env var once per shell** so commands/tests are short:
 ```bash
@@ -36,17 +36,17 @@ The Godot-free libraries + tests build with the plain .NET SDK; the Godot host n
 the bundled source via `nuget.config`).
 
 ```bash
-cd C:/Users/Bryan/Projects/Xonotic/XonoticGodot
+cd C:/Users/Bryan/Projects/Xonotic/VortexArena
 
 # libraries + tests (Common, Engine, Net, Assets, Server) — fast, no Godot needed
-dotnet build tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj -c Debug
-dotnet test  tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj   # ~1160 tests, incl. real-data ones (skip w/o assets)
+dotnet build tests/VortexArena.Tests/VortexArena.Tests.csproj -c Debug
+dotnet test  tests/VortexArena.Tests/VortexArena.Tests.csproj   # ~1160 tests, incl. real-data ones (skip w/o assets)
 
 # the Godot host (game client/server). Outputs into .godot/mono/temp/bin so the editor/engine picks it up.
-dotnet build XonoticGodot.csproj -c Debug
+dotnet build VortexArena.csproj -c Debug
 ```
 
-The SourceGen analyzer: `dotnet build src/XonoticGodot.SourceGen/XonoticGodot.SourceGen.csproj`.
+The SourceGen analyzer: `dotnet build src/VortexArena.SourceGen/VortexArena.SourceGen.csproj`.
 
 ---
 
@@ -56,7 +56,7 @@ The SourceGen analyzer: `dotnet build src/XonoticGodot.SourceGen/XonoticGodot.So
 
 - **test** — the full xUnit suite on ubuntu-latest. **No assets in CI**: the ~18 real-data test
   classes self-skip, so a green badge proves *less* than a local run.
-- **build-host** — `dotnet build XonoticGodot.csproj` from a clean clone, restoring `Godot.NET.Sdk`
+- **build-host** — `dotnet build VortexArena.csproj` from a clean clone, restoring `Godot.NET.Sdk`
   purely from nuget.org (CI first runs `dotnet nuget remove source godot-editor` because the
   Windows-only local source in `nuget.config` would hard-fail on a Linux runner).
 
@@ -141,7 +141,7 @@ the frame — screenshots then look like the viewmodel is missing). Scripted win
 
 For a packaged install, `tools/run-dedicated.sh` (shipped beside the exported `linux-dedicated`
 binary by `tools/package.sh`) `cd`s to its own directory first, matching upstream's
-`xonotic-linux-dedicated.sh`. The exported build resolves `assets/data` relative to the **executable**
+`xonotic-linux-dedicated.sh`. The exported build resolves `data` relative to the **executable**
 (`DataPaths.Resolve` — exe-dir, plus the macOS `../Resources` bundle path), so the data just has
 to sit beside the binary; the launcher is a convenience, not a requirement (`--data <path>` overrides).
 
@@ -153,7 +153,7 @@ Runs `Main.tscn` for N frames then quits, printing everything to stdout. This is
 without errors" check.**
 
 ```bash
-"$GODOT" --headless --path "C:/Users/Bryan/Projects/Xonotic/XonoticGodot" --quit-after 200
+"$GODOT" --headless --path "C:/Users/Bryan/Projects/Xonotic/VortexArena" --quit-after 200
 ```
 
 - `--headless` — no window (dummy display/renderer; logic + asset loading still execute).
@@ -162,24 +162,24 @@ without errors" check.**
 
 **One-liner smoke test** (build host, run, assert clean) — copy/paste:
 ```bash
-cd C:/Users/Bryan/Projects/Xonotic/XonoticGodot && \
-dotnet build XonoticGodot.csproj -c Debug --nologo -v q | grep -E "Build succeeded|error" && \
+cd C:/Users/Bryan/Projects/Xonotic/VortexArena && \
+dotnet build VortexArena.csproj -c Debug --nologo -v q | grep -E "Build succeeded|error" && \
 timeout 180 "$GODOT" --headless --path "$PWD" --quit-after 200 > /tmp/run.log 2>&1 ; \
 echo "hard errors: $(grep -cE '^ERROR:|SCRIPT ERROR|Unhandled exception' /tmp/run.log) | warnings: $(grep -c 'WARNING:' /tmp/run.log)" ; \
-grep -iE "XonoticGodot boot|MenuState\]|NetGame\]|loaded .* shaders|collision brushes|spawned" /tmp/run.log
+grep -iE "VortexArena boot|MenuState\]|NetGame\]|loaded .* shaders|collision brushes|spawned" /tmp/run.log
 ```
 
 **Expected clean output** (hard errors: 0, warnings: 0). With no boot flag the host comes up at the **main menu**
 (the lightest smoke), so you get the registry banner + the config load — no match is started:
 ```
-=== XonoticGodot boot ===
+=== VortexArena boot ===
 Weapons:   24
 [MenuState] config: 6462 cvars from 25 cfg files (374 aliases, 0 missing).
 ```
 Add `--map stormkeep` (or `--host stormkeep --bots 2`) to boot a 0-bot listen server on a real map instead —
 that adds `[NetGame] listen server on 127.0.0.1:26000 …`, `[AssetSystem] loaded … shaders`, the map's
-`collision brushes`, and `handshake accepted` to the log (the heavier smoke; needs `assets/data`).
-Error patterns to grep for: `^ERROR:`, `SCRIPT ERROR`, `Unhandled exception`, `WARNING:`, `at XonoticGodot.` (managed
+`collision brushes`, and `handshake accepted` to the log (the heavier smoke; needs `data`).
+Error patterns to grep for: `^ERROR:`, `SCRIPT ERROR`, `Unhandled exception`, `WARNING:`, `at VortexArena.` (managed
 stack frames). Godot prints managed exceptions with a `WARNING:`/`ERROR:` banner + a C# stack trace.
 
 ---
@@ -201,7 +201,7 @@ an aimbot, so the gate is the compiler, not a cvar a config or server could set.
 unless you ask for it, and even then it stays dormant until the CLI flag is passed:
 
 ```bash
-dotnet build XonoticGodot.csproj -c Debug -p:XgBotPlayer=true
+dotnet build VortexArena.csproj -c Debug -p:VaBotPlayer=true
 ```
 
 ```bash
@@ -223,7 +223,7 @@ dotnet build XonoticGodot.csproj -c Debug -p:XgBotPlayer=true
   really made the round trip through prediction, the wire, and server physics. `deaths`/`respawns` tracking
   each other is the proof the respawn cycle is turning over.
 
-Never define `XgBotPlayer` for a release or export build. Keep every use inside `#if XG_BOTPLAYER`.
+Never define `VaBotPlayer` for a release or export build. Keep every use inside `#if VA_BOTPLAYER`.
 
 Known limitation: the brain switches weapons server-side (as it does for bots), so the client's
 weapon-switch prediction is not driven by this; movement, aim, firing and the reconcile all are.
@@ -234,10 +234,10 @@ weapon-switch prediction is not driven by this; movement, aim, firing and the re
 
 Headless doesn't render. To walk around the scene:
 
-1. Launch `Godot_v4.6.3-stable_mono_win64.exe` → **Import** → pick `XonoticGodot/project.godot`.
+1. Launch `Godot_v4.6.3-stable_mono_win64.exe` → **Import** → pick `VortexArena/project.godot`.
 2. Top-right **Build** (🔨) to compile the C# solution, then **Play** (F5) → runs `Main.tscn`.
 3. Controls: **WASD** move, **mouse** look, **Space** jump, attack key fires. (Input is sampled in `game/net/NetGame.cs`.)
-4. Or from CLI, windowed: `"$GODOT" --path "C:/Users/Bryan/Projects/Xonotic/XonoticGodot"` (omit `--headless`).
+4. Or from CLI, windowed: `"$GODOT" --path "C:/Users/Bryan/Projects/Xonotic/VortexArena"` (omit `--headless`).
 5. For an **automated frame an agent/CI can inspect**, add `--screenshot <path>` (writes a PNG then quits) —
    see Tricks → *Visual capture* below.
 6. To frame a **specific spot on a map** (an item pickup, a lightmap seam, a prop) without walking there, add
@@ -253,7 +253,7 @@ pixel check can run in CI.
 
 | Half | What it checks | How | Where |
 |---|---|---|---|
-| **Headless (automated)** | every stock map *loads* + has renderable/collidable geometry; every model *loads* + has a valid bone parent-chain (IQM additionally: non-singular bind pose; DPM/MD3 skip the determinant/unit-scale check per shipped DP model baselines); every `.shader` *compiles* (parses, no hard failure) | `VisualQaTests.cs` (pure xUnit over the parsed asset structures — no GPU, self-skips without `assets/data`) | `ci/ci.sh` step 5; `dotnet test … --filter VisualQa` |
+| **Headless (automated)** | every stock map *loads* + has renderable/collidable geometry; every model *loads* + has a valid bone parent-chain (IQM additionally: non-singular bind pose; DPM/MD3 skip the determinant/unit-scale check per shipped DP model baselines); every `.shader` *compiles* (parses, no hard failure) | `VisualQaTests.cs` (pure xUnit over the parsed asset structures — no GPU, self-skips without `data`) | `ci/ci.sh` step 5; `dotnet test … --filter VisualQa` |
 | **Windowed (manual eye-check)** | actual on-screen *correctness*: lightmap/deluxemap direction, patch smoothness, flare quads, material color, bone pose | `tools/visual-qa.sh` captures a real frame per map + per model into `screenshots/`; then a human (or an agent via the Read tool) eyeballs each PNG against the checklist below | `tools/visual-qa.sh` + the checklist below |
 
 **The headless half is NOT a substitute for the eye-check.** A map can load with all counts in range and still
@@ -319,7 +319,7 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - **User data dir.** All writable per-user data — `config.cfg` (cvars + keybinds), `settings.cfg`,
   `favorites.cfg`, the `sdfcache/`, and the profiler dumps — lives under **`~/XonData/`** (resolved by
   `game/UserPaths.cs`, the writable-side counterpart to `DataPaths`), *not* Godot's hidden `user://` dir. Set
-  the `XONOTIC_USERDIR` env var to an absolute path to override it (tests/CI use this to keep `~` clean).
+  the `VORTEX_USERDIR` env var to an absolute path to override it (tests/CI use this to keep `~` clean).
   `MenuState.Boot` does a one-time copy of an existing `user://` `config.cfg`/`settings.cfg`/`favorites.cfg`
   into `~/XonData` on first run, so an upgrade keeps the player's saved prefs.
 - **In-game:** Escape opens the pause menu (`Shell` pauses the tree; Disconnect returns to the main menu).
@@ -350,30 +350,30 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - **`Main.cs`** parses the boot flags (above) and constructs the `Shell`, which owns the menu↔match lifecycle.
   `--map <name>` boots a match on any of the 31 official maps in `xonotic-20230620-maps.pk3` (e.g. `solarium`,
   `afterslime`); `--model <name>` boots the model viewer on `models/player/<name>.iqm`.
-- **`--data <dir>`** overrides the content mount (default `res://assets/data`, resolved project-relative — a
+- **`--data <dir>`** overrides the content mount (default `res://data`, resolved project-relative — a
   `res://`/`user://` or absolute OS path also works). Mainly an escape hatch for a packaged build whose data dir
   isn't beside the binary, or to point a dev build at an external gamedir.
 - **`ModelViewer.ModelName`** (`game/ModelViewer.cs`) is the model-viewer's settable seam — the bare hero name
   (`erebus`) or an explicit `models/...iqm` vpath, fed from the `--model` flag.
 - **`nuget.config`** adds the editor's bundled package source — needed for `dotnet` to restore `Godot.NET.Sdk
-  4.6.3`. If you upgrade Godot, bump the SDK version in `XonoticGodot.csproj` **and** the path/version here.
+  4.6.3`. If you upgrade Godot, bump the SDK version in `VortexArena.csproj` **and** the path/version here.
 
 ---
 
 ## Gotchas
 
-- **SDK version must match the editor.** `XonoticGodot.csproj`'s `Sdk="Godot.NET.Sdk/4.6.3"` must equal the installed
+- **SDK version must match the editor.** `VortexArena.csproj`'s `Sdk="Godot.NET.Sdk/4.6.3"` must equal the installed
   Godot version, or GodotSharp API mismatches at load. Bump both on a Godot upgrade.
 - **Stale `obj/` + `.godot/` after an SDK change** → duplicate `AssemblyInfo`/`TargetFramework` errors. Fix:
   `rm -rf obj bin .godot/mono` then rebuild.
-- **The host project globs `**/*.cs`** from its root; `XonoticGodot.csproj` `<Compile Remove>`s `src/`, `tests/`,
+- **The host project globs `**/*.cs`** from its root; `VortexArena.csproj` `<Compile Remove>`s `src/`, `tests/`,
   `planning/`, `.godot/`, `obj/`, `bin/` so it doesn't double-compile the libraries. Don't drop those removes.
-- **`dotnet build XonoticGodot.csproj` outputs to `.godot/mono/temp/bin`** (the Godot SDK redirects it), not `bin/` —
+- **`dotnet build VortexArena.csproj` outputs to `.godot/mono/temp/bin`** (the Godot SDK redirects it), not `bin/` —
   that's where the engine looks for the assembly.
-- **Maps:** the **31 official compiled maps** ship in `assets/data/xonotic-20230620-maps.pk3`
+- **Maps:** the **31 official compiled maps** ship in `data/xonotic-20230620-maps.pk3`
   (downloaded from the `xonotic-0.8.6.zip` release; `xonotic-20230620-nexcompat.pk3` adds the Nexuiz-compat set).
   `maps/_init/_init.bsp` is still present (inside the maps pk3) as the lightweight placeholder. To add more,
-  drop another `*.pk3` into `assets/data/` — `MountGameDir` picks it up automatically.
+  drop another `*.pk3` into `data/` — `MountGameDir` picks it up automatically.
 - **Sounds** load from the mounted content (`sound/*.ogg|wav`) via `AssetLoader.LoadSound` (wired into
   `ClientWorld.AudioLoader`); the old `res://sound/<sample>.ogg` convention remains as a fallback. The same
   loader feeds **announcer voices** (`HudNotifications.AudioLoader` → `sound/announcer/<voice>/<snd>.ogg`).
@@ -398,8 +398,8 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   means the VFS didn't mount the data dir (check the `--data` path). The gameplay layer's ~461 live `GetFloat`
   reads (movement physics, regen, gametype limits, mutator/monster balance) depend on this — a low number = stale
   defaults. Unit-test the parser headlessly via `dotnet test` (`ConfigTests.cs`, incl. 4 real-data assertions).
-- **Managed exceptions** surface as a `WARNING:`/`ERROR:` banner followed by a `at XonoticGodot.…` C# stack trace in
-  the console-exe stdout — grep `at XonoticGodot\.` to find the failing method:line.
+- **Managed exceptions** surface as a `WARNING:`/`ERROR:` banner followed by a `at VortexArena.…` C# stack trace in
+  the console-exe stdout — grep `at VortexArena\.` to find the failing method:line.
 - **Visual capture (verified 2026-06):** an agent/CI can capture a real frame and *look at it*. `Main` accepts
   `--screenshot <path> [--screenshot-frames N]` (see `game/ScreenshotHook.cs`): it lets the scene settle N idle
   frames (default 90), waits for `RenderingServer.FramePostDraw`, writes the root viewport to a PNG, and quits.
@@ -407,7 +407,7 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   Read tool renders images, so the agent literally sees the frame).
   ```bash
   GODOT="/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe"
-  "$GODOT" --path "C:/Users/Bryan/Projects/Xonotic/XonoticGodot" \
+  "$GODOT" --path "C:/Users/Bryan/Projects/Xonotic/VortexArena" \
            --resolution 1280x720 --screenshot "$PWD/screenshots/stormkeep.png"
   # success → stdout has: [Screenshot] wrote 1280x720 -> .../screenshots/stormkeep.png
   ```
@@ -451,19 +451,19 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   uncompressed). The last couple of `_norm`/`_gloss` maps were pk3 **symlink** stubs from build-time dedup,
   now followed by the VFS (`Pk3Mount`). Visual capture sees what the log can't.) Godot's Movie Maker
   `--write-movie <file>` still works for rendering animation *sequences* to frames (also needs a non-headless context).
-- **Perf benches (T33):** three measurement-first benches live in `tests/XonoticGodot.Tests/Perf/`
+- **Perf benches (T33):** three measurement-first benches live in `tests/VortexArena.Tests/Perf/`
   (`NetSnapshotPerfBench` — snapshot delta encode/decode; `TracePerfBench` — TraceService sweeps + map-load
   time on real atelier collision; `ServerTickPerfBench` — a booted `GameWorld`'s ms/tick + B/tick with 0 and
   4 players), plus the older `BotPerfBench` (bot nav). Run them with
-  `dotnet test tests/XonoticGodot.Tests --filter PerfBench -l "console;verbosity=detailed"` — each prints a
+  `dotnet test tests/VortexArena.Tests --filter PerfBench -l "console;verbosity=detailed"` — each prints a
   ms + B/op table; measured baselines are recorded as comments atop each file (update them when numbers move
-  materially). They skip without assets; point `XG_DATA_DIR` at a content dir to override the default path.
+  materially). They skip without assets; point `VA_DATA_DIR` at a content dir to override the default path.
 - **Live-process GC profiling:** the headless benches can't reach client-side per-frame paths
   (`EffectSystem._Process`, HUD rebuilds). Attach `dotnet-counters` to the running game instead:
   `dotnet tool install -g dotnet-counters`, launch the game windowed, then
   `dotnet-counters monitor --process-id <godot PID> --counters System.Runtime` and watch
   *Allocation Rate* / *% Time in GC* / gen0 counts while playing. **Do not** flip GC modes
-  (`ServerGarbageCollection` etc.) in `XonoticGodot.csproj` without counter evidence — client frame-pauses
+  (`ServerGarbageCollection` etc.) in `VortexArena.csproj` without counter evidence — client frame-pauses
   trade against dedicated throughput.
 - **Hitch forensics (FrameProfiler, reworked 2026-06-14):** `cl_frameprofiler 1` = overlay graph + hitch log +
   **session recording**; `2` = also the periodic snapshot on the console. Every frame is recorded into a
@@ -499,7 +499,7 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - **Dedicated/headless server:** v1 is the headless listen server (`--headless --host`, see the section
   above + `tools/run-dedicated.sh`); the `linux-dedicated` export preset uses Godot's "export as dedicated
   server" mode (`OS.HasFeature("dedicated_server")` is the feature-tag branch point). The
-  `XonoticGodot.Server` lib is Godot-free so a plain console host remains possible later.
+  `VortexArena.Server` lib is Godot-free so a plain console host remains possible later.
 - **Smoothest-play settings (PERFORMANCE_REPORT §12.7):** `vid_fullscreen 2` (exclusive — compositor out of
   the present path), `vid_vsync 2` (mailbox — no FIFO cascade on a missed present), `sys_priority_boost 1`
   (default — AboveNormal process priority). Hitch lines tagged `EXTERNAL?` are the machine (compositor/

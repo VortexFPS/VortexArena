@@ -1,15 +1,15 @@
 using System;
 using System.Runtime.InteropServices;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Game;
-using XonoticGodot.Game.Net;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Gameplay;
+using VortexArena.Game;
+using VortexArena.Game.Net;
 
-namespace XonoticGodot;
+namespace VortexArena;
 
 /// <summary>
-/// Boot scene for the XonoticGodot Godot host. Prints the discovered registries (proving the C# libraries
+/// Boot scene for the VortexArena Godot host. Prints the discovered registries (proving the C# libraries
 /// load) and then launches the walkable <see cref="GameDemo"/> — which boots the gameplay/engine facade
 /// and drives the ported player movement. This will grow into the real client/server bootstrap
 /// (see planning/legacy/todo/phase-2..3).
@@ -22,11 +22,11 @@ public partial class Main : Node
         // BLOCKING Gen2 collections (deferring the long pauses, not all collection), the right mode for a render
         // loop. Gated to the windowed client: a headless/dedicated host keeps the default latency mode (a
         // long-running server favours bounded memory + throughput over per-frame pauses). The GC FLAVOR
-        // (workstation + concurrent) is pinned in XonoticGodot.csproj. Set first so it spans the whole session.
+        // (workstation + concurrent) is pinned in VortexArena.csproj. Set first so it spans the whole session.
         if (DisplayServer.GetName() != "headless")
             System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
 
-        // Route the C# log facade (lib/log.qh successor, XonoticGodot.Common.Diagnostics.Log) to Godot's console so
+        // Route the C# log facade (lib/log.qh successor, VortexArena.Common.Diagnostics.Log) to Godot's console so
         // every LOG_INFO/WARN/TRACE/DEBUG/SEVERE/FATAL is visible in the editor Output panel + the player
         // console — the verbosity gate is the `developer` cvar (set developer 1 → trace, 2 → debug). Wired
         // first so even boot-time logging lands. Faults (Fatal/Severe) go through GD.PushError so they also
@@ -47,24 +47,24 @@ public partial class Main : Node
         // (reflection bootstrap; the source generator will replace this at compile time — ADR-0003).
         GameRegistries.Bootstrap();
 
-        // Register the dynamic map/scene colour-tint global shader parameters (XonoticGodot.Game.WorldTint).
+        // Register the dynamic map/scene colour-tint global shader parameters (VortexArena.Game.WorldTint).
         // MUST happen before any world/skin shader that declares them compiles (i.e. before the first map loads),
         // else Godot rejects the unknown global and the surface fails to render — so it's done here, up front.
         WorldTint.EnsureRegistered();
 
         // Always-on frame-time + GC hitch monitor (session-wide: menu + match). Self-driving; the on-screen
         // graph + hitch logging are gated by cl_frameprofiler (debug-default-on). Added early so it spans boot.
-        AddChild(new XonoticGodot.Game.Client.FrameProfiler { Name = "FrameProfiler" });
+        AddChild(new VortexArena.Game.Client.FrameProfiler { Name = "FrameProfiler" });
 
         // Boot banner through the new facade (a live end-to-end exercise of it): the summary at LOG_INFO
         // (always shown), the per-registry dump at LOG_TRACE — uncluttered at `developer 0`, and visible the
         // moment you `set developer 1`. Run with `developer 2` to also get DEBUG + source locations.
-        Log.Info("=== XonoticGodot boot ===");
+        Log.Info("=== VortexArena boot ===");
         Log.Info($"Weapons:   {Weapons.All.Count}");
         Log.Info($"Items:     {Items.All.Count}");
         Log.Info($"Mutators:  {Mutators.All.Count}");
         Log.Info($"GameTypes: {GameTypes.All.Count}");
-        Log.Info($"Sounds:    {XonoticGodot.Common.Gameplay.Sounds.All.Count}");
+        Log.Info($"Sounds:    {VortexArena.Common.Gameplay.Sounds.All.Count}");
         foreach (var w in Weapons.All)
             Log.Trace($"  weapon[{w.RegistryId}] {w.RegistryName} — {w.DisplayName}");
 
@@ -73,9 +73,9 @@ public partial class Main : Node
         // `--bake-sdf <map.bsp> [-o out.psdf]` (planning/particles-dual-system.md §A.7): the headless SDF
         // compiler-side baker — reuses the §A.3 generator verbatim (zero drift vs the load-time output), writes
         // maps/<map>.psdf for the pk3, then quits. Runs before any game/menu boot.
-        if (Array.IndexOf(args, XonoticGodot.Engine.Particles.SdfBakeCli.Flag) >= 0)
+        if (Array.IndexOf(args, VortexArena.Engine.Particles.SdfBakeCli.Flag) >= 0)
         {
-            int code = XonoticGodot.Engine.Particles.SdfBakeCli.Run(args);
+            int code = VortexArena.Engine.Particles.SdfBakeCli.Run(args);
             GetTree().Quit(code);
             return;
         }
@@ -99,7 +99,7 @@ public partial class Main : Node
             // `--gametype <short>` (e.g. dm/ctf/rc) selects the boot gametype — drives the per-gametype
             //   map-entity filter (which conditional walls appear); defaults to "dm".
             var shell = new Shell { Name = "Shell" };
-            // `--data <dir>` overrides the asset root (default res://assets/data). Mainly an escape hatch for
+            // `--data <dir>` overrides the asset root (default res://data). Mainly an escape hatch for
             // a packaged build whose data dir isn't beside the binary (ADR-0014: the exported default already
             // resolves exe-relative, so this is rarely needed) and for pointing a dev build at an external
             // gamedir. An absolute/user:// path here bypasses the res:// exe-relative resolution entirely.
@@ -160,7 +160,7 @@ public partial class Main : Node
             // but NetGame builds no local client (see NetGame._dedicatedNoClient), so no player slot is burned
             // and the browser's player count is real. The dedicated-server export template implies it via
             // OS.HasFeature("dedicated_server"). `--headless --host` intentionally keeps the v1 observer host.
-            if (XonoticGodot.Game.Net.NetGame.DedicatedRequested)
+            if (VortexArena.Game.Net.NetGame.DedicatedRequested)
             {
                 shell.BootHost = true;
                 int ded = Array.IndexOf(args, "--dedicated");
@@ -177,9 +177,9 @@ public partial class Main : Node
             int pt = Array.IndexOf(args, "--port");
             if (pt >= 0 && pt + 1 < args.Length && int.TryParse(args[pt + 1], out int port) && port > 0)
                 shell.BootPort = port;
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
             // `--bot-player [skill]`: hand the LOCAL player to a bot brain so an unattended run drives the real
-            // player pipeline (see Directory.Build.props / XgBotPlayer). The flag only exists in a build that
+            // player pipeline (see Directory.Build.props / VaBotPlayer). The flag only exists in a build that
             // opted in at COMPILE time — a normal binary has no way to reach this, by construction.
             int bp = Array.IndexOf(args, "--bot-player");
             if (bp >= 0)

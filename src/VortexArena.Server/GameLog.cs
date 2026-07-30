@@ -1,7 +1,7 @@
 using System.Text;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The server event log — the Godot-free essence of server/gamelog.qc (<c>GameLogEcho</c> / <c>GameLogInit</c>

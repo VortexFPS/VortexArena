@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The UDP socket layer for the connectionless master-server / server-info protocol — the C# successor to DP's
@@ -112,7 +112,7 @@ public sealed class MasterServerLink : IDisposable
             // to escape Poll → PumpMasterServer → _Process and take the whole frame loop down; one bad packet
             // or an oversized reply must never do that.
             try { Dispatch(data, from); }
-            catch (Exception ex) { XonoticGodot.Common.Diagnostics.Log.Warn($"[master] dropped packet: {ex.Message}"); }
+            catch (Exception ex) { VortexArena.Common.Diagnostics.Log.Warn($"[master] dropped packet: {ex.Message}"); }
         }
     }
 

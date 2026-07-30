@@ -1,9 +1,9 @@
 using System;
 using System.Text;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Round-trip + wire-layout tests for <see cref="RconProtocol"/> (DS-6), the DarkPlaces rcon/srcon codec. These

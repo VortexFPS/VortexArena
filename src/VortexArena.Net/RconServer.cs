@@ -4,7 +4,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>Live rcon config, fetched per request so a console/server.cfg change to any of these takes effect
 /// immediately (DP reads the cvars each packet). <see cref="Password"/> empty ⇒ rcon is OFF.</summary>

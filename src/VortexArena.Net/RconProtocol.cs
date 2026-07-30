@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>The three rcon request flavours DarkPlaces accepts (netconn.c NetConn_ServerParsePacket), plus the
 /// challenge request that precedes a <see cref="Challenge"/> command. Frozen wire grammar — an interop boundary.</summary>

@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using Godot;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// DS-2: the dedicated server's interactive stdin console — the C# successor to DP's dedicated-host terminal

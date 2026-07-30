@@ -1,18 +1,18 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using GameScores = XonoticGodot.Common.Gameplay.Scoring.GameScores;
+using VortexArena.Common;
+using VortexArena.Common.Config;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using GameScores = VortexArena.Common.Gameplay.Scoring.GameScores;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// A parsed map-entity dictionary — the key/value pairs of one entity lump from the BSP/.ent file
@@ -253,7 +253,7 @@ public sealed class GameWorld
 
     /// <summary>[T38] QC the minigame session spine (common/minigames/sv_minigames.qc) — live minigame
     /// sessions + the player→session map, driven by the <c>minigame</c> command. Built in WireCommandsWarmupVoting.</summary>
-    public XonoticGodot.Common.Gameplay.MinigameSessionManager Minigames { get; private set; } = null!;
+    public VortexArena.Common.Gameplay.MinigameSessionManager Minigames { get; private set; } = null!;
 
     /// <summary>
     /// The server-side entity facade that makes clients visible to find/radius (the entity-table fix). Set
@@ -277,7 +277,7 @@ public sealed class GameWorld
     public Func<string, string?>? ConfigReader { get; set; }
 
     /// <summary>Diagnostics from the last config load (null until <see cref="Boot"/> runs with a <see cref="ConfigReader"/>).</summary>
-    public XonoticGodot.Common.Config.ConfigInterpreter? LoadedConfig { get; private set; }
+    public VortexArena.Common.Config.ConfigInterpreter? LoadedConfig { get; private set; }
 
     /// <summary>
     /// The map's inline <c>"*N"</c> brush models (from <see cref="BspCollisionBuilder.Build"/>), registered on
@@ -293,14 +293,14 @@ public sealed class GameWorld
     /// <c>checkpvs</c> culls bot line-of-sight / sound / networking. Set by the host that loaded the BSP; null
     /// for a non-BSP/test world (every PVS query is then conservatively visible).
     /// </summary>
-    public XonoticGodot.Formats.Bsp.BspPvs? Pvs { get; set; }
+    public VortexArena.Formats.Bsp.BspPvs? Pvs { get; set; }
 
     /// <summary>
     /// The parsed map, used at <see cref="Boot"/> to attach each inline model's render surfaces for the
     /// <c>getsurface*</c> builtins (so a <c>trigger_warpzone</c> brush can auto-derive its portal plane, and
     /// surface/decal queries work). Set by the host that loaded the BSP; null for a non-BSP/test world.
     /// </summary>
-    public XonoticGodot.Formats.Bsp.BspData? MapBsp { get; set; }
+    public VortexArena.Formats.Bsp.BspData? MapBsp { get; set; }
 
     /// <summary>Whether <see cref="Boot"/> has run.</summary>
     public bool Booted { get; private set; }
@@ -434,26 +434,26 @@ public sealed class GameWorld
 
         // Wire the Porto weapon's portal placement to the warpzone manager (QC the lib/warpzone portal subsystem):
         // each landed portal becomes a warpzone, the in/out pair linked two-way so a player can walk through.
-        XonoticGodot.Common.Gameplay.Porto.PortalSpawner = r =>
+        VortexArena.Common.Gameplay.Porto.PortalSpawner = r =>
             Warpzones.PlacePortoPortal(r.Origin, r.SurfaceNormal, r.RightVector, r.IsInPortal, r.PortalId, r.Owner);
         // QC realowner.portal_in.portal_id: lets the combined-shot blue stage confirm its out-portal pairs with the
         // in-portal it just placed before committing (and clear-all + fail on a mismatch).
-        XonoticGodot.Common.Gameplay.Porto.PortalInId = owner =>
+        VortexArena.Common.Gameplay.Porto.PortalInId = owner =>
             Warpzones.PortalInId(owner);
         // QC Portal_ClearWithID: when a combined cnt<0 porto shot soft-fails after already placing its in-portal,
         // tear that orphaned in-portal (+ any linked partner) back out so it doesn't outlive the failed shot.
-        XonoticGodot.Common.Gameplay.Porto.PortalClearWithId = (owner, id) =>
+        VortexArena.Common.Gameplay.Porto.PortalClearWithId = (owner, id) =>
             Warpzones.ClearPortoPortal(owner, id);
         // QC Portal_ClearAll_PortalsOnly: on the owner's death/reset, tear down ALL of their porto portals.
-        XonoticGodot.Common.Gameplay.Porto.PortalClearAll = owner =>
+        VortexArena.Common.Gameplay.Porto.PortalClearAll = owner =>
             Warpzones.ClearAllPortoPortals(owner);
 
         // Bridge the (stateless) trigger_warpzone(/_position) spawnfuncs to THIS match's warpzone manager, so a
         // map's warpzone brushes register here; the planes are derived + the pairs linked in InitMapZones below.
-        XonoticGodot.Common.Gameplay.WarpzoneSpawns.Sink = Warpzones.OnMapEntity;
+        VortexArena.Common.Gameplay.WarpzoneSpawns.Sink = Warpzones.OnMapEntity;
         // Bridge the runtime trigger_warpzone_reconnect / target_warpzone_reconnect `use` (server.qc:785) so a fired
         // reconnect re-derives + re-links the matching zones at runtime (moving/rewired warpzones).
-        XonoticGodot.Common.Gameplay.WarpzoneSpawns.ReconnectSink = Warpzones.OnReconnectUse;
+        VortexArena.Common.Gameplay.WarpzoneSpawns.ReconnectSink = Warpzones.OnReconnectUse;
 
         // 1b) seed the server cvar defaults so the many GetFloat(...) reads return sane values (QC autocvars).
         Cvars.RegisterDefaults();
@@ -574,7 +574,7 @@ public sealed class GameWorld
             && (ConfigReader($"maps/{MapName}.arena") is not null || ConfigReader($"maps/{MapName}.defi") is not null);
         CompatRemaps.Q3CompatProvider = () => q3compat;
         // The items layer reads the same global q3compat flag (item-origin sits mid-bbox on Q3 maps, items.qc:1133).
-        XonoticGodot.Common.Gameplay.StartItem.Q3CompatProvider = () => q3compat;
+        VortexArena.Common.Gameplay.StartItem.Q3CompatProvider = () => q3compat;
 
         // 3) match-loop glue + team manager + client roster.
         Match = new MatchController();
@@ -583,8 +583,8 @@ public sealed class GameWorld
         // `gametype`/`teamplay`). On a pure client these are set on the ScoreInfo receive path; the authoritative
         // server keeps no equivalent, so without this the map-teleporter telefrag gate's !g_race/!g_cts arm
         // (Teleporters.TeleportRoundGateSuppressed reads GameScores.Gametype == "rc"/"cts") never fires server-side.
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.Gametype = GameType?.NetName ?? DefaultGameType;
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.Teamplay = GameType?.TeamGame ?? false;
+        VortexArena.Common.Gameplay.Scoring.GameScores.Gametype = GameType?.NetName ?? DefaultGameType;
+        VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay = GameType?.TeamGame ?? false;
         // #35: ALSO mirror the team mode onto the real `teamplay` CVAR, like Base's InitGameplayMode (DP exposes
         // the cvar as the QC global every `teamplay` read compiles to). The port only ever set the GameScores
         // static above (#27) — the cvar stayed 0 forever, so every Cvars.Teamplay reader was silently non-team:
@@ -615,7 +615,7 @@ public sealed class GameWorld
 
         // 5) activate the gametype's own scoring/round handler (FFA: Deathmatch; team: TDM/CA/...).
         // Clear any waypoint sprites from a previous map (QC the level-change reset of the WaypointSprite list).
-        XonoticGodot.Common.Gameplay.Waypoints.WaypointSprites.Reset();
+        VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Reset();
         ActivateGameType();
 
         // 5a′) bridge the gametype OBJECTIVE spawnfuncs (item_flag_*, dom_controlpoint, trigger_race_*,
@@ -633,7 +633,7 @@ public sealed class GameWorld
         // QC cvar_settemp from a mutator MUTATOR_ONADD (Random Gravity settemps sv_gravity so the original is
         // restored at match end): route Common's mutator-side settemp through the host's restore stack so
         // settemp_restore reverts it. Wired BEFORE Apply() so RandomGravity.Hook() registers on the restore stack.
-        XonoticGodot.Common.Gameplay.MutatorActivation.SettempCvarHandler = (n, v) => SettempCvars.Set(n, v);
+        VortexArena.Common.Gameplay.MutatorActivation.SettempCvarHandler = (n, v) => SettempCvars.Set(n, v);
         MutatorActivation.Apply();
 
         // QC spawnfunc_worldspawn (world.qc:1090): MUTATOR_CALLHOOK(SetModname, modname) — let a mutator that
@@ -659,33 +659,33 @@ public sealed class GameWorld
         //    canonical Item_GiveTo (QC ITEM_HANDLE(Pickup,…)); the SUB_UseTargets tail stays in TargetUtilities.
         // (CanPickupItems is tagged on each (re)spawn in ClientManager.Spawn; buff pickups self-spawn via the
         //  BuffsMutator hook in MutatorActivation.Apply above — no extra wiring needed here.)
-        XonoticGodot.Common.Gameplay.StartItem.GameStartTimeProvider = () => GameStartTime;
+        VortexArena.Common.Gameplay.StartItem.GameStartTimeProvider = () => GameStartTime;
         // LogicGates.GameStartTimeProvider feeds trigger_gamestart's deferred fire (QC game_starttime + wait) so a
         // wait>0 gamestart trigger fires relative to the real countdown end, not 0. Same live source as StartItem.
-        XonoticGodot.Common.Gameplay.LogicGates.GameStartTimeProvider = () => GameStartTime;
+        VortexArena.Common.Gameplay.LogicGates.GameStartTimeProvider = () => GameStartTime;
         // Tuba.TubaMelodyBprint feeds QC's W_Tuba_NoteOff recognized-melody broadcast (tuba.qc:115-131): when a
         // magic-ear matches a played melody, bprint "* NAME played on the @!#%'n {instrument}: {text}" to everyone.
         // The player display name (Player.NetName) and the chat broadcast primitive live host-side; compose here.
-        XonoticGodot.Common.Gameplay.Tuba.TubaMelodyBprint = (actor, instrument, text) =>
+        VortexArena.Common.Gameplay.Tuba.TubaMelodyBprint = (actor, instrument, text) =>
         {
             string name = actor is Player p ? p.NetName : "";
-            string label = XonoticGodot.Common.Gameplay.Tuba.InstrumentLabel(instrument);
+            string label = VortexArena.Common.Gameplay.Tuba.InstrumentLabel(instrument);
             // QC bprint(strcat("\{1}\{13}* ^3", netname, "^3 played on the ", label, ": ^7", s, "\n")).
             Commands.Chat.PrintToChatAll($"\x0d* ^3{name}^3 played on the {label}: ^7{text}");
         };
-        XonoticGodot.Common.Gameplay.TargetUtilities.GiveItemHandler = (worldItem, actor) =>
+        VortexArena.Common.Gameplay.TargetUtilities.GiveItemHandler = (worldItem, actor) =>
         {
             // QC target/give.qc:16-19: on a successful give, play the item's pickup sound on the actor. The
             // Item_Touch path plays it in its OWN tail, so this is ONLY for the target_give route (don't double-play).
-            bool gave = XonoticGodot.Common.Gameplay.ItemPickupRules.ItemGiveTo(worldItem, actor);
-            if (gave) XonoticGodot.Common.Gameplay.ItemPickupRules.PlayPickupSound(worldItem, actor);
+            bool gave = VortexArena.Common.Gameplay.ItemPickupRules.ItemGiveTo(worldItem, actor);
+            if (gave) VortexArena.Common.Gameplay.ItemPickupRules.PlayPickupSound(worldItem, actor);
             return gave;
         };
         // QC autocvar_g_campaign: the campaign master switch, read live. Wires the TargetUtilities.IsCampaign seam
         // that target_levelwarp / target_changelevel and Assault's WinningCondition_Assault (the campaign single-
         // round end in DestroyFinalObjective) consult. Assigned here (every Boot) so it never goes stale across a
         // map/gametype change. Was declared but never assigned, leaving the campaign branches dead.
-        XonoticGodot.Common.Gameplay.TargetUtilities.IsCampaign = () => Cvars.Bool("g_campaign");
+        VortexArena.Common.Gameplay.TargetUtilities.IsCampaign = () => Cvars.Bool("g_campaign");
 
         // QC target_changelevel / target_levelwarp host seams (common/mapobjects/target/{changelevel,levelwarp}.qc).
         // The Common layer can't reach the server's match-end / campaign / changelevel plumbing, so it fires these
@@ -695,7 +695,7 @@ public sealed class GameWorld
         // empty-chmap target_changelevel → QC NextLevel(): end the match now. QC also flags campaign_forcewin when a
         // REAL client triggered it (IS_REAL_CLIENT && g_campaign) so the stage counts as beaten — set Campaign.ForceWin
         // before EndMatch so the campaign win/lose decision (CampaignPreIntermission, fired in NextLevel) credits it.
-        XonoticGodot.Common.Gameplay.TargetUtilities.NextLevelHandler = actor =>
+        VortexArena.Common.Gameplay.TargetUtilities.NextLevelHandler = actor =>
         {
             if (Cvars.Bool("g_campaign") && actor is Player rp && !rp.IsBot)
                 Campaign.ForceWin = true; // QC: this counts as beating the map in a campaign stage
@@ -704,10 +704,10 @@ public sealed class GameWorld
         // named-chmap target_changelevel → QC changelevel(chmap): switch to that map. Route through the same
         // host changelevel pipeline the console `map`/`changelevel` command uses (resolved lazily — Commands is
         // built at the tail of Boot).
-        XonoticGodot.Common.Gameplay.TargetUtilities.ChangeLevelHandler = chmap => Commands?.ChangeLevelHandler?.Invoke(chmap);
+        VortexArena.Common.Gameplay.TargetUtilities.ChangeLevelHandler = chmap => Commands?.ChangeLevelHandler?.Invoke(chmap);
         // CHANGELEVEL_MULTIPLAYER fraction (QC FOREACH_CLIENT IS_PLAYER && IS_REAL_CLIENT, counting chlevel_targ):
         // supply the real-player count + how many voted for THIS changelevel target from the live roster.
-        XonoticGodot.Common.Gameplay.TargetUtilities.RealPlayerVoteCount = target =>
+        VortexArena.Common.Gameplay.TargetUtilities.RealPlayerVoteCount = target =>
         {
             int real = 0, voted = 0;
             foreach (Player p in Clients.Players)
@@ -720,9 +720,9 @@ public sealed class GameWorld
         };
         // QC MapInfo_SwitchGameType(MapInfo_Type_FromString(this.gametype)): set the live `gametype` cvar so the
         // next changelevel boots that mode (the port's switch equivalent — see Commands.CmdGameType).
-        XonoticGodot.Common.Gameplay.TargetUtilities.SwitchGameTypeHandler = gt => Cvars.Set("gametype", gt);
+        VortexArena.Common.Gameplay.TargetUtilities.SwitchGameTypeHandler = gt => Cvars.Set("gametype", gt);
         // QC target_levelwarp_use → CampaignLevelWarp(n): jump to a campaign level (n>=0 specific, -1 next).
-        XonoticGodot.Common.Gameplay.TargetUtilities.CampaignLevelWarpHandler = n => Campaign.LevelWarp(n);
+        VortexArena.Common.Gameplay.TargetUtilities.CampaignLevelWarpHandler = n => Campaign.LevelWarp(n);
 
         // QC target_spawn_use (minimal): the $-field reflection engine (numentityfields/putentityfieldstring) is
         // intentionally cut, but the seam was never assigned — so both the on-use path and the ON_MAPLOAD deferred
@@ -733,7 +733,7 @@ public sealed class GameWorld
         // a target_spawn with ON_MAPLOAD (BIT1) that creates one fixed entity at match start (e.g. a dynamic light
         // or a misc_laser that needs conditional spawning). The *activator edit and FOREACH_ENTITY_STRING(target)
         // edit modes and the .count create-cap are left as intentional cuts (the $-templating gap is documented).
-        XonoticGodot.Common.Gameplay.TargetUtilities.SpawnEntityHandler = (self, actor) =>
+        VortexArena.Common.Gameplay.TargetUtilities.SpawnEntityHandler = (self, actor) =>
         {
             if (Api.Services is null)
                 return;
@@ -792,27 +792,27 @@ public sealed class GameWorld
                 // No spawnfunc: keep the edict (matches BSP-lump behaviour) but register a targetname'd one so
                 // the SUB_UseTargets / FindByTargetName index can reach it.
                 if (!string.IsNullOrEmpty(e.TargetName))
-                    XonoticGodot.Common.Gameplay.MapMover.IndexRegister(e);
+                    VortexArena.Common.Gameplay.MapMover.IndexRegister(e);
             }
         };
 
         // [A2-review F13] Zero the process-global monster counters BEFORE the entity lump spawns any monster
         // (QC monsters_total/monsters_killed are server globals cleared when a new map spawns). Without this the
         // scoreboard map-stats row accumulates across every Invasion map played in one process run.
-        XonoticGodot.Common.Gameplay.MonsterAI.ResetCounters();
+        VortexArena.Common.Gameplay.MonsterAI.ResetCounters();
         // QC num_autoscreenshot is a server global cleared each map; reset before the BSP lump spawns any
         // info_autoscreenshot so the g_max_info_autoscreenshot cap counts per-map (not across the process run).
-        XonoticGodot.Common.Gameplay.InfoAutoScreenshot.ResetForMap();
+        VortexArena.Common.Gameplay.InfoAutoScreenshot.ResetForMap();
         // QC sv_monsters.qc:846/1165 `(autocvar_g_campaign && !campaign_bots_may_start)`: in a campaign, monsters
         // freeze (like bots) until the human spawns. Wired here every Boot so it never goes stale; previously the
         // monster move/think gate ignored Campaign.BotsMayStart entirely.
-        XonoticGodot.Common.Gameplay.MonsterAI.CampaignBotHold = () => Cvars.Bool("g_campaign") && !Campaign.BotsMayStart;
+        VortexArena.Common.Gameplay.MonsterAI.CampaignBotHold = () => Cvars.Bool("g_campaign") && !Campaign.BotsMayStart;
         // QC sv_lms.qc:85 `campaign_bots_may_start`: the LMS campaign human-lost early end keys off the human having
         // spawned. Wire the same Campaign.BotsMayStart probe (every Boot so it never goes stale).
-        XonoticGodot.Common.Gameplay.LastManStanding.CampaignBotsMayStart = () => Campaign.BotsMayStart;
+        VortexArena.Common.Gameplay.LastManStanding.CampaignBotsMayStart = () => Campaign.BotsMayStart;
         // QC sv_campcheck.qc:51 `(autocvar_g_campaign && !campaign_bots_may_start)`: the campcheck re-grace holds in
         // a campaign until the human spawns. Wire the same probe (every Boot so it never goes stale).
-        XonoticGodot.Common.Gameplay.CampcheckMutator.CampaignBotHold = () => Cvars.Bool("g_campaign") && !Campaign.BotsMayStart;
+        VortexArena.Common.Gameplay.CampcheckMutator.CampaignBotHold = () => Cvars.Bool("g_campaign") && !Campaign.BotsMayStart;
 
         // 6) spawn the map's entities (QC the BSP entity-lump loop → spawnfunc_CLASSNAME).
         SpawnMapEntities();
@@ -847,10 +847,10 @@ public sealed class GameWorld
         switch (GameType)
         {
             case Keepaway ka:
-                ka.SpawnBall(XonoticGodot.Common.Gameplay.BallEntity.RandomMapLocation(System.Numerics.Vector3.Zero));
+                ka.SpawnBall(VortexArena.Common.Gameplay.BallEntity.RandomMapLocation(System.Numerics.Vector3.Zero));
                 break;
             case TeamKeepaway tka:
-                tka.SpawnBall(XonoticGodot.Common.Gameplay.BallEntity.RandomMapLocation(System.Numerics.Vector3.Zero));
+                tka.SpawnBall(VortexArena.Common.Gameplay.BallEntity.RandomMapLocation(System.Numerics.Vector3.Zero));
                 break;
         }
 
@@ -869,11 +869,11 @@ public sealed class GameWorld
         //       (CurrentMaxShotDistance is process-static, so reset the fallback explicitly to avoid inheriting a
         //       prior map's value on a degenerate fixture.)
         if (Collision.WorldMaxs != Collision.WorldMins)
-            XonoticGodot.Common.Gameplay.WeaponFiring.SetMaxShotDistanceFromWorldBounds(
+            VortexArena.Common.Gameplay.WeaponFiring.SetMaxShotDistanceFromWorldBounds(
                 Collision.WorldMins, Collision.WorldMaxs);
         else
-            XonoticGodot.Common.Gameplay.WeaponFiring.CurrentMaxShotDistance =
-                XonoticGodot.Common.Gameplay.WeaponFiring.MaxShotDistance;
+            VortexArena.Common.Gameplay.WeaponFiring.CurrentMaxShotDistance =
+                VortexArena.Common.Gameplay.WeaponFiring.MaxShotDistance;
 
         // 6a″) [T45] wire this match's warpzone manager onto the trace service (QC global g_warpzones) so
         //       hitscan/projectile traces and radius-damage queries recurse through linked portals — a rocket or
@@ -932,7 +932,7 @@ public sealed class GameWorld
         // [T38] QC sv_minigames.qc: the minigame session manager (create/join/part/end). The `minigame` command
         // (Commands.cs) reads this. Cvar gates use the shared facade; observer-forcing is left unwired for P0
         // (sv_minigames_observer ships 0 = don't force, so it's a no-op; the spectator hooks are T44's domain).
-        Minigames = new XonoticGodot.Common.Gameplay.MinigameSessionManager(Cvars.Bool, Cvars.Int);
+        Minigames = new VortexArena.Common.Gameplay.MinigameSessionManager(Cvars.Bool, Cvars.Int);
         // [T38] wire the host-side play-ban membership check (g_playban_list lives in the server layer); the
         // g_playban_minigames cvar gate is applied inside the manager. Ships 0 → no-op by default.
         Minigames.PlayBanned = p => Bans.PlayerInList(p, "g_playban_list");
@@ -1032,11 +1032,11 @@ public sealed class GameWorld
                 // resource (we can't set a separate QC float), so deal enough damage to kill it outright.
                 VehicleCommon.DamageVehicle(vehicle, p, p,
                     vehicle.GetResource(ResourceType.Health) + 1f,
-                    XonoticGodot.Common.Gameplay.Damage.DeathTypes.Kill,
+                    VortexArena.Common.Gameplay.Damage.DeathTypes.Kill,
                     vehicle.Origin, System.Numerics.Vector3.Zero);
             }
-            XonoticGodot.Common.Gameplay.Damage.Combat.Damage(p, p, p, 100000f,
-                XonoticGodot.Common.Gameplay.Damage.DeathTypes.Kill, p.Origin, System.Numerics.Vector3.Zero);
+            VortexArena.Common.Gameplay.Damage.Combat.Damage(p, p, p, 100000f,
+                VortexArena.Common.Gameplay.Damage.DeathTypes.Kill, p.Origin, System.Numerics.Vector3.Zero);
         };
         // QC MUTATOR_CALLHOOK(ClientKill, this, killtime) (clientkill.qc:101). The three live gametype hooks:
         //  - ft (sv_freezetag.qc:438): return STAT(FROZEN) → a frozen player CANNOT self-kill (closes the exploit
@@ -1089,7 +1089,7 @@ public sealed class GameWorld
         // QC spawnfunc(worldspawn) (server/world.qc:882-920): install the fixed animated-lightstyle table (the 12
         // named flicker/pulse/candle/strobe styles + style 63) so map lights driven by a style index have their
         // animation string. Server-side authority half; the client animation consumer is a separate render unit.
-        XonoticGodot.Common.Gameplay.LightStyles.InstallWorldspawnTable();
+        VortexArena.Common.Gameplay.LightStyles.InstallWorldspawnTable();
 
         // QC readlevelcvars (server/world.qc:2187): the level-cvar side-effects this unit owns — publish the
         // networked serverflags bits (fullbright / pickup-timer) from sv_allow_fullbright / sv_forbid_pickuptimer.
@@ -1204,7 +1204,7 @@ public sealed class GameWorld
         // the shared physics; install the server-side give-all here. Cheats.GiveAll runs the sv_cheats/maycheat
         // gate itself (QC SpecialCommand's `if (autocvar_sv_cheats || this.maycheat)` + CheatImpulse), so the
         // seam can hand it the raw player.
-        XonoticGodot.Common.Physics.PlayerPhysics.SpecialCommandGiveAll = p => Cheats.GiveAll(p);
+        VortexArena.Common.Physics.PlayerPhysics.SpecialCommandGiveAll = p => Cheats.GiveAll(p);
 
         // Anticheat: ping provider for the snap-aim suppression window. The default is 0 (LAN/bot/headless host);
         // a net host (ServerNet) overrides this with the real per-client smoothed ping.
@@ -1432,7 +1432,7 @@ public sealed class GameWorld
         if (!p.IsBot && Mutators.ByName("grappling_hook") is HookMutator hookMut && hookMut.Added)
         {
             // QC: string key = getcommandkey(_("offhand hook"), "+hook") — resolve the bound key name.
-            string hookKey = XonoticGodot.Engine.Console.BindTable.CommandKey("offhand hook", "+hook");
+            string hookKey = VortexArena.Engine.Console.BindTable.CommandKey("offhand hook", "+hook");
             // QC: "^3grappling hook^8 is enabled, press ^3<key>^8 to use it" (cl_hook.qc:11), appended raw (no
             // "Special gameplay tips:" header — that header belongs to the separate cache_mutatormsg line in QC
             // client/main.qc:1441, not to the BuildGameplayTipsString hook output, which is appended verbatim).
@@ -1447,7 +1447,7 @@ public sealed class GameWorld
         if (!p.IsBot && Mutators.ByName("offhand_blaster") is OffhandBlasterMutator offhandMut && offhandMut.Added)
         {
             // QC: string key = getcommandkey(_("offhand hook"), "+hook").
-            string offhandKey = XonoticGodot.Engine.Console.BindTable.CommandKey("offhand hook", "+hook");
+            string offhandKey = VortexArena.Engine.Console.BindTable.CommandKey("offhand hook", "+hook");
             // QC: "^3offhand blaster^8 is enabled, press ^3%s^8 to use it" (cl_offhand_blaster.qc:9).
             Commands.ChatToPlayer?.Invoke(p,
                 $"^3offhand blaster^8 is enabled, press ^3{offhandKey}^8 to use it");
@@ -1507,7 +1507,7 @@ public sealed class GameWorld
         //   3. per-client delivery (QC SendWelcomeMessage is sent per-client, not bprinted) — so it does not
         //      re-spam every already-connected player on each new join.
         string desc = CampaignLevelDescription(Campaign.Name, Campaign.Level);
-        string jumpKey = XonoticGodot.Engine.Console.BindTable.CommandKey("jump", "+jump");
+        string jumpKey = VortexArena.Engine.Console.BindTable.CommandKey("jump", "+jump");
         // QC: " ^BG%s\n\n" + "^BGPress ^F2%s^BG to enter the game". The dialog's \n\n becomes " — " on the one
         // chat line; the description is shown only when the level actually carries one (QC's _LEVEL_DESC is the
         // shortdesc, which can be empty).
@@ -1735,7 +1735,7 @@ public sealed class GameWorld
         // QC round_handler_IsActive() && !round_handler_IsRoundStarted(): the same pre-round grace-window predicate,
         // exposed to the Common gameplay layer so mutators (e.g. Random Gravity's SV_StartFrame roll) can suppress
         // round-gated per-frame behavior. Rounds != NULL here == round_handler_IsActive(); cleared in ActivateGameType.
-        XonoticGodot.Common.Gameplay.RoundHandler.RoundNotStartedProvider = () => Rounds is { IsRoundStarted: false };
+        VortexArena.Common.Gameplay.RoundHandler.RoundNotStartedProvider = () => Rounds is { IsRoundStarted: false };
         // QC reset_map(false) on the next round: re-spawn players + reset map objects, preserving the score.
         Rounds.OnRoundReset = () => ResetMap(fakeRoundStart: true);
         Rounds.OnCountdownTick = n => BroadcastRoundStartCountdown(Rounds.RoundsPlayed, n); // [T40] round-start countdown
@@ -1890,7 +1890,7 @@ public sealed class GameWorld
         using (Prof.Sample("start.bots"))
             Bots.ServerFrame();
 
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
         // Bot-player harness (compile-gated): think the brain bound to the local HUMAN player on the sim
         // thread, right after the bot pass, and publish its command for the client to sample. Inert unless
         // --bot-player attached one. The player itself is not a bot, so its command still arrives over the
@@ -1935,9 +1935,9 @@ public sealed class GameWorld
         using (Prof.Sample("start.hooks"))
         {
             ServerHooks.FireStartFrame(Time);
-            // The gameplay-layer (XonoticGodot.Common) mutators can't reach ServerHooks, so they subscribe to the
+            // The gameplay-layer (VortexArena.Common) mutators can't reach ServerHooks, so they subscribe to the
             // mirrored MutatorHooks.SvStartFrame chain (T19 random_gravity et al.) — pump it from the same loop.
-            XonoticGodot.Common.Gameplay.MutatorHooks.FireStartFrame(Time);
+            VortexArena.Common.Gameplay.MutatorHooks.FireStartFrame(Time);
         }
 
         // [T41] QC client/announcer.qc Announcer_Time: the "5/1 minutes remain" map-time announcements with the
@@ -2208,7 +2208,7 @@ public sealed class GameWorld
 
     /// <summary>QC <c>strlennocol</c>: visible length of a string with Quake/DP color codes removed.</summary>
     private static int VisibleLength(string s) =>
-        XonoticGodot.Common.Diagnostics.Log.StripColors(s).Length;
+        VortexArena.Common.Diagnostics.Log.StripColors(s).Length;
 
     /// <summary>
     /// QC <c>substring(s, 0, textLengthUpToLength(s, n, strlennocol))</c>: keep the leading run of the string
@@ -2248,7 +2248,7 @@ public sealed class GameWorld
     /// approximates with the strip-colors + whitespace test, which catches the common "" / "^9 " abuse.</summary>
     private static bool IsInvisibleString(string s)
     {
-        string bare = XonoticGodot.Common.Diagnostics.Log.StripColors(s ?? "");
+        string bare = VortexArena.Common.Diagnostics.Log.StripColors(s ?? "");
         for (int i = 0; i < bare.Length; i++)
         {
             char c = bare[i];
@@ -2517,7 +2517,7 @@ public sealed class GameWorld
         // The seated player does NOT run PM_Main (else it fights the vehicle's player-glue → jitter); PostThink still runs.
         if (p.Vehicle is not null && canMove)
         {
-            XonoticGodot.Common.Physics.MovementInput vehInput = VehicleBoarding.ToInput(input);
+            VortexArena.Common.Physics.MovementInput vehInput = VehicleBoarding.ToInput(input);
             p.VehInput = vehInput;
             p.Vehicle.VehInput = vehInput;
             OnPlayerPostThink(p, input);
@@ -2715,8 +2715,8 @@ public sealed class GameWorld
     {
         // [T37] SEAM E: publish the world's frozen state to the vehicle subsystem and scoring layer (QC game_stopped)
         // so vehicles park and score additions drop during intermission/match-end/timeout.
-        XonoticGodot.Common.Gameplay.VehicleCommon.GameStopped = GameStopped;
-        XonoticGodot.Common.Gameplay.Scoring.GameScores.GameStopped = GameStopped;
+        VortexArena.Common.Gameplay.VehicleCommon.GameStopped = GameStopped;
+        VortexArena.Common.Gameplay.Scoring.GameScores.GameStopped = GameStopped;
 
         // 1) gametype per-frame step (QC the gametype's StartFrame/CheckRules slice). MatchController.Tick
         //    respawns due players (off Player.RespawnTime, set by the gametype's obituary handler) and keeps
@@ -2762,7 +2762,7 @@ public sealed class GameWorld
         Minigames.Tick(Simulation.FrameTime);
 
         // Waypoint sprites (QC WaypointSprite_Think): expire deployed-ping lifetimes + advance build-progress bars.
-        XonoticGodot.Common.Gameplay.Waypoints.WaypointSprites.Think();
+        VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Think();
     }
 
     // === [T40] countdown announcer broadcasts (QC client/announcer.qc Announcer_Countdown), emitted server-side
@@ -2930,7 +2930,7 @@ public sealed class GameWorld
         PlayerPhysics.RoundMoveForbidden = null;
         // Same for the Common-side pre-round gate (QC round_handler_IsActive): a non-round mode has no live handler,
         // so the gate must read inert until a round-based gametype's EnableRounds re-installs it.
-        XonoticGodot.Common.Gameplay.RoundHandler.RoundNotStartedProvider = null;
+        VortexArena.Common.Gameplay.RoundHandler.RoundNotStartedProvider = null;
         // Clear any prior gametype's bot attack-veto (only the incoming gametype's arm below re-installs it).
         Bot.BotBrain.ForbidAttackHook = null;
         // Reset the join gate + onJoin hooks: gametypes that override these (Survival, LMS) re-install them in their
@@ -3336,8 +3336,8 @@ public sealed class GameWorld
                 {
                     if (p.IsDead || p.IsObserver)
                         return; // already gone (e.g. a real death cancelled the run first)
-                    XonoticGodot.Common.Gameplay.Damage.Combat.Damage(p, p, p, 100000f,
-                        XonoticGodot.Common.Gameplay.Damage.DeathTypes.Kill, p.Origin,
+                    VortexArena.Common.Gameplay.Damage.Combat.Damage(p, p, p, 100000f,
+                        VortexArena.Common.Gameplay.Damage.DeathTypes.Kill, p.Origin,
                         System.Numerics.Vector3.Zero);
                 };
                 break;
@@ -4358,7 +4358,7 @@ public sealed class GameWorld
     /// <c>g_maplist</c> with that value. If the cvar is not set but reset is requested and the port knows the
     /// gametype, the existing <c>g_maplist</c> is kept (the port has no full MapInfo_ListAllowedMaps enumerate).
     ///
-    /// <para>Also fires <see cref="XonoticGodot.Server.Commands.GameTypeVoteHookHandler"/> for
+    /// <para>Also fires <see cref="VortexArena.Server.Commands.GameTypeVoteHookHandler"/> for
     /// <c>sv_vote_gametype_hook_all</c> and <c>sv_vote_gametype_hook_&lt;name&gt;</c> (QC <c>localcmd</c>).</para>
     /// </summary>
     private void ApplyGametypeSwitch()
@@ -4539,7 +4539,7 @@ public sealed class GameWorld
         // QC SV_OnEntityPreSpawnFunction gate: an entity whose gametypefilter (or Q3/QL compat keys) excludes
         // it for the active gametype is deleted before its spawnfunc runs. The context (gametype short name,
         // teamplay, have_team_spawns) is the same trio DP passes to isGametypeInFilter.
-        XonoticGodot.Engine.Collision.MapEntityFilter.GametypeContext gtFilter = BuildGametypeContext();
+        VortexArena.Engine.Collision.MapEntityFilter.GametypeContext gtFilter = BuildGametypeContext();
 
         foreach (EntityDict dict in _mapEntities)
         {
@@ -4553,7 +4553,7 @@ public sealed class GameWorld
             }
 
             // Drop a gametype-filtered entity (e.g. a Race-only func_wall in a DM match) — QC delete(this).
-            if (!XonoticGodot.Engine.Collision.MapEntityFilter.ShouldKeepEntity(dict.Fields, gtFilter))
+            if (!VortexArena.Engine.Collision.MapEntityFilter.ShouldKeepEntity(dict.Fields, gtFilter))
                 continue;
 
             Entity e = Api.Entities.Spawn();
@@ -4566,7 +4566,7 @@ public sealed class GameWorld
             // QC MUTATOR_CALLHOOK(OnEntityPreSpawn, this): a mutator may veto a map entity before its spawnfunc
             // runs (NIX deletes target_items triggers, which would otherwise fight its weapon/ammo rotation).
             // A true return deletes the edict (QC delete(this)).
-            if (XonoticGodot.Common.Gameplay.MutatorHooks.FireOnEntityPreSpawn(e))
+            if (VortexArena.Common.Gameplay.MutatorHooks.FireOnEntityPreSpawn(e))
             {
                 Api.Entities.Remove(e);
                 continue;
@@ -4585,7 +4585,7 @@ public sealed class GameWorld
                 // would be invisible to SUB_UseTargets' FindByTargetName index lookup. Register it here so the
                 // target/relay chain can reach it — QC's find(world, targetname, ...) saw every edict naturally.
                 if (!string.IsNullOrEmpty(e.TargetName))
-                    XonoticGodot.Common.Gameplay.MapMover.IndexRegister(e);
+                    VortexArena.Common.Gameplay.MapMover.IndexRegister(e);
                 if (!_unhandledClasses.Contains(cls))
                     _unhandledClasses.Add(cls);
             }
@@ -4598,7 +4598,7 @@ public sealed class GameWorld
     /// map entities (any <c>info_player_*</c> carrying a non-zero <c>team</c> — QC sets this while spawning
     /// spawnpoints). Computed once per <see cref="SpawnMapEntities"/>.
     /// </summary>
-    private XonoticGodot.Engine.Collision.MapEntityFilter.GametypeContext BuildGametypeContext()
+    private VortexArena.Engine.Collision.MapEntityFilter.GametypeContext BuildGametypeContext()
     {
         string shortName = GameType?.NetName ?? DefaultGameType;
         bool teamplay = Teamplay?.IsTeamGame ?? (GameType?.TeamGame ?? false);
@@ -4617,7 +4617,7 @@ public sealed class GameWorld
             }
         }
 
-        return new XonoticGodot.Engine.Collision.MapEntityFilter.GametypeContext(shortName, teamplay, haveTeamSpawns);
+        return new VortexArena.Engine.Collision.MapEntityFilter.GametypeContext(shortName, teamplay, haveTeamSpawns);
     }
 
     /// <summary>Copy the recognized map-dict fields onto the edict (origin/angles + a few common keys).</summary>
@@ -4721,7 +4721,7 @@ public sealed class GameWorld
         // direction and music keeps its fades — instead of all of it being silently dropped. Runs BEFORE the
         // spawnfunc dispatch (SpawnMapEntities), so PointParticles/RainSnow/TargetMusic read the values.
         // Idempotent with the keys promoted above (angle anglehack, count, cnt) — same guards.
-        XonoticGodot.Common.Gameplay.MapObjectFieldsExtra.Apply(e, f);
+        VortexArena.Common.Gameplay.MapObjectFieldsExtra.Apply(e, f);
 
         // Re-link after setting origin so traces/find see the final placement.
         if (Api.Services is not null)
@@ -4856,7 +4856,7 @@ public sealed class GameWorld
         // on a round/map reset every player drops their held nade, banked bonus, and spawn-loc marker so none of
         // it leaks across the reset (the port has no reset_map_global hook chain; the host drives it, gated on
         // g_nades). Runs before the per-client respawn below (the PlayerSpawn nades hook re-assigns the offhand).
-        XonoticGodot.Common.Gameplay.Nades.NadesMutator.ResetMapGlobal(Clients.Players);
+        VortexArena.Common.Gameplay.Nades.NadesMutator.ResetMapGlobal(Clients.Players);
 
         if (Rounds is not null)
             Rounds.Reset(GameStartTime);             // QC round_handler_Reset(game_starttime)
@@ -5048,7 +5048,7 @@ public sealed class GameWorld
         var net = Bot.WaypointNetwork.ForMap(wp, Services.EntityTable.All, cache, hardwired, skill, bunnyOffset);
         // Info, not Trace: this is the one-shot "bots are live on this map" boot diagnostic — a dedicated
         // server's log should show it at default verbosity, like [MapLoader] does for the world.
-        XonoticGodot.Common.Diagnostics.Log.Info(
+        VortexArena.Common.Diagnostics.Log.Info(
             $"[bots] waypoints for '{MapName}': nodes={net.Count} (file={(wp is null ? "none/auto" : "loaded")}, cache={(cache is null ? "no" : "yes")})");
         return net;
     }
@@ -5078,7 +5078,7 @@ public sealed class GameWorld
     /// gametype's CheckWinner / overtime reads (which consult their OWN <c>Handler.RoundEndTime</c>) match the
     /// round the live handler advanced (QC round_handler_GetEndTime()). No-op if the gametype handler is null.
     /// </summary>
-    private static void MirrorRoundTiming(RoundHandler live, XonoticGodot.Common.Gameplay.RoundHandler? owned)
+    private static void MirrorRoundTiming(RoundHandler live, VortexArena.Common.Gameplay.RoundHandler? owned)
     {
         if (owned is null)
             return;

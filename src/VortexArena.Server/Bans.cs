@@ -1,8 +1,8 @@
 using System.Text;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The IP/identity mask set derived for one client — the C# successor to the QC scratch globals

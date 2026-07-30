@@ -1,6 +1,6 @@
 using System;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// MD4 (RFC 1320) + HMAC-MD4 (RFC 2104), used ONLY for DarkPlaces <c>srcon</c> rcon parity (DS-6). MD4 is

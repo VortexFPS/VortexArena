@@ -1,9 +1,9 @@
 using System;
 using System.Text;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Pins <see cref="Md4"/> to the RFC 1320 (MD4) published test vectors and the RFC 2104 HMAC construction.

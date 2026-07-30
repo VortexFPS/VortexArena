@@ -28,8 +28,13 @@ on:
         default: "dev"
         type: string
 
+# Least privilege: read-only for every job, write granted only to the one job that publishes (below).
+# Previously this granted contents:write workflow-wide, so all six jobs held a token that could push to
+# the repository — including the four that only build and the one that fetches assets. GitHub's own
+# security-hardening guidance is to keep the default read-only and grant per job, which is also why the
+# org's read-only default GITHUB_TOKEN setting is correct and should stay.
 permissions:
-  contents: write          # required for softprops/action-gh-release to create the Release + upload assets
+  contents: read
 
 env:
   DOTNET_NOLOGO: "1"
@@ -206,6 +211,12 @@ jobs:
   release:
     needs: [prep, windows, linux, macos]
     runs-on: ubuntu-latest
+    # softprops/action-gh-release creates the Release and uploads assets, which GitHub counts as a
+    # `contents` write — there is no separate `releases` scope, so this is the narrowest grant that can
+    # publish. Confined to this job precisely because it is coarse: the same token could also push
+    # commits or move tags.
+    permissions:
+      contents: write
     steps:
       - name: Collect all zip artifacts
         uses: actions/download-artifact@v8

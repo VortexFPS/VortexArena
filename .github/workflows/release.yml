@@ -257,13 +257,45 @@ jobs:
           echo "â”€â”€ release contents â”€â”€"; ls -lh
 
       # Tag pushes publish a real Release; workflow_dispatch runs stop here (artifacts only).
+      # prerelease is derived from the TAG rather than hand-set, so an -alpha/-beta/-rc can never
+      # accidentally become `releases/latest`. That matters because the launcher's primary feed is
+      # /releases/latest/download/latest.json: a release that becomes `latest` without a manifest 404s
+      # that path and drops every client onto the unauthenticated API at 60 req/hr. No release carries
+      # latest.json until the manifest wiring lands (planning/TODO.md TODO-CORE-ZIP), so `latest` is
+      # better left unset than pointing at something incomplete.
+      - name: Classify the tag
+        if: startsWith(github.ref, 'refs/tags/')
+        id: rel
+        shell: bash
+        run: |
+          case "${{ github.ref_name }}" in
+            *-alpha*|*-beta*|*-rc*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
+            *)                      echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "tag ${{ github.ref_name }} -> prerelease=$(grep -o 'true\|false' "$GITHUB_OUTPUT" | tail -1)"
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: VortexArena ${{ github.ref_name }}
+          prerelease: ${{ steps.rel.outputs.prerelease }}
           generate_release_notes: true
+          body: |
+            > **Existing installs must reinstall once.** Every shipped artifact was renamed
+            > `XonoticGodot-*` → `VortexArena-*`, and the launcher installs by asset name, so an install
+            > pinned to an older release will not follow the rename. A deliberate one-way cutover, not a
+            > routine update — see `docs/RELEASING.md`.
+
+            Fat archives: binary + Godot runtime + all game content. Unzip and run, and keep the files
+            together — the game loads `data/` from beside the binary.
+
+            The Windows build uses a patched Godot export template (the high-polling-rate mouse-input
+            backport — `planning/decisions/ADR-0017-engine-patches.md`). The release job asserts the
+            shipped binary actually contains it rather than trusting the export to have used it.
+
+            ---
           fail_on_unmatched_files: true
           files: |
             final/VortexArena-*.zip

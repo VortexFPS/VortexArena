@@ -200,6 +200,23 @@ jobs:
           echo "building with -j$jobs on $RUNNER_OS"
           echo "JOBS=$jobs" >> "$GITHUB_ENV"
 
+      # macOS will not configure without the Vulkan SDK: scons exits 255 with "MoltenVK SDK installation
+      # directory not found". Godot ships the installer and its own CI runs it — but their CI FALLS BACK
+      # to vulkan=no with a warning, which is right for a build smoke and wrong for us. A template built
+      # without Vulkan cannot render anything; shipping one would be worse than shipping none, and the
+      # marker check cannot see the difference. So this fails hard instead.
+      - name: Install the Vulkan SDK (macOS)
+        if: matrix.leg == 'macos'
+        working-directory: godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! sh misc/scripts/install_vulkan_sdk_macos.sh; then
+            echo "::error::Vulkan SDK install failed. Not falling back to vulkan=no: a template built"
+            echo "::error::without Vulkan cannot render, and nothing downstream would detect that."
+            exit 1
+          fi
+
       # Parse the ENTIRE argument line without compiling. `--help` makes Godot's SConstruct configure,
       # print its options and exit 0; a malformed line exits 2 with the reason. Verified locally against
       # the real 4.6.3 tree in both directions.
@@ -301,7 +318,12 @@ jobs:
 
   publish:
     needs: build
-    if: inputs.publish
+    # `!cancelled()` rather than plain `needs: build`, because a matrix job is "failure" if ANY leg
+    # failed — so one bad platform would have withheld the templates that built fine, defeating the
+    # point of fail-fast: false. The "Show what will be published" step below is the real gate: it
+    # fails when dist/ is empty, so "publish whatever succeeded" cannot degrade into "publish nothing,
+    # quietly".
+    if: ${{ !cancelled() && inputs.publish }}
     runs-on: ubuntu-latest
     # Same reasoning as VortexMaps: GitHub has no releases-only scope, so publishing needs `contents`
     # write. Confined to this job so the long build above runs with read-only credentials.

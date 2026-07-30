@@ -44,12 +44,15 @@ Zero means delete it, not migrate it.
 
 ## What actually changed
 
-Five mechanical transformations, all scriptable:
+Five mechanical transformations, all scriptable. **The left column is the PRE-restructure spelling** —
+that is the whole point of the table, and it is easy to destroy: the stage 5 rename sweep ran over this
+file and briefly turned T1/T2 into `VortexArena.*` → `VortexArena.*`, mapping a name to itself. If you
+are running a repo-wide rename, exclude this document.
 
 | # | Change | Scale |
 |---|---|---|
-| T1 | `VortexArena.*` → `VortexArena.*` namespaces and `using` lines | ~250 files |
-| T2 | `src/VortexArena.<X>/` → `src/VortexArena.<X>/`, plus `.sln` / `.csproj` filenames, `RootNamespace`, `AssemblyName` | 6 projects |
+| T1 | `XonoticGodot.*` → `VortexArena.*` namespaces and `using` lines | ~250 files |
+| T2 | `src/XonoticGodot.<X>/` → `src/VortexArena.<X>/`, plus `.sln` / `.csproj` filenames, `RootNamespace`, `AssemblyName` | 6 projects |
 | T3 | `assets/data` → `data`, and the `.pk3dir` suffixes on `core` / `music` / `font-*` | every path literal |
 | T4 | all twelve `XG_*` / `Xg*` env vars and MSBuild properties → `VA_*` / `Va*`, `XONOTIC_USERDIR` → `VORTEX_USERDIR`, artifact filenames | scattered |
 | T5 | `bryankruman/VortexArena` → `VortexFPS/VortexArena` in URLs | 6 files |
@@ -124,7 +127,7 @@ The merge above pays that cost once. Take the merge.
 
 ### Why not just merge without the transform
 
-Without the transform, git sees the branch's `src/VortexArena.Common/Foo.cs` and main's
+Without the transform, git sees the branch's `src/XonoticGodot.Common/Foo.cs` and main's
 `src/VortexArena.Common/Foo.cs` and must infer the rename. Rename detection is heuristic, capped, and
 degrades badly when a file was both renamed and edited — which is exactly the case for any file the
 branch touched. Doing the transform first turns "infer a rename and merge the edits" into "merge the
@@ -157,7 +160,7 @@ UID for the same path. Take either side; they are opaque identifiers.
 
 `tools/migrate-branch.sh` is deliberately dumb and re-runnable:
 
-1. `git mv` the six `src/VortexArena.<X>` directories and the `.sln` / `.csproj` files (T2).
+1. `git mv` the six `src/XonoticGodot.<X>` directories and the `.sln` / `.csproj` files (T2).
 2. `sed` the namespace, `RootNamespace`, and `AssemblyName` strings across `*.cs`, `*.csproj`, `*.sln`,
    `project.godot` (T1, T2).
 3. `sed` the path literals: `assets/data` → `data`, `res://assets/data` → `res://data` (T3).

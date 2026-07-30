@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Tests.Camera;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Tests.Camera;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// LISTEN-SERVER movement diagnosis (the "build apparatus + diagnose more first" deliverable). Drives the
@@ -145,9 +145,9 @@ public class ListenServerDiagnosisTests
     {
         var (world, clock) = FlatWorld();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
         var h = new ListenServerHarness
         { ServerSoftCap = 4, PerFrameDrain = perFrame, Lockstep = lockstep, CommandDriven = commandDriven, ClientCatchupCap = catchupCap };
         h.Run(stream, world, clock);

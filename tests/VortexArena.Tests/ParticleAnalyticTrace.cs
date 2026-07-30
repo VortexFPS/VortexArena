@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// The analytic collision world + swept-POINT trace used by <see cref="ParticleParityTests"/>.
@@ -12,7 +12,7 @@ namespace XonoticGodot.Tests;
 /// traces (mins == maxs == 0), so — unlike the movement box trace — there is NO hull expansion; the plane
 /// distances are used as-is. The golden generator and the parity test therefore share <i>identical</i>
 /// collision by construction, so any trajectory divergence between the C reference and the ported
-/// <see cref="XonoticGodot.Engine.Particles.ParticleSim"/> is a pure particle-math difference.
+/// <see cref="VortexArena.Engine.Particles.ParticleSim"/> is a pure particle-math difference.
 /// </summary>
 public sealed class ParticleAnalyticWorld
 {
@@ -149,7 +149,7 @@ public sealed class ParticleAnalyticTraceService : ITraceService
 
 /// <summary>
 /// A minimal <see cref="IEngineServices"/> for the particle parity tests: the analytic point-trace + a
-/// settable clock + a cvar service that returns the stock <see cref="XonoticGodot.Engine.Particles.ParticleCvars"/>
+/// settable clock + a cvar service that returns the stock <see cref="VortexArena.Engine.Particles.ParticleCvars"/>
 /// defaults (and a configurable cl_particles_collisions). Entities/Sound/Models are unused by the sim.
 /// </summary>
 public sealed class ParticleTestServices : IEngineServices
@@ -174,10 +174,10 @@ public sealed class ParticleTestServices : IEngineServices
         private readonly Dictionary<string, float> _values = new();
         public ParticleDefaultsCvars(bool collisions)
         {
-            foreach (var (name, def, _) in XonoticGodot.Engine.Particles.ParticleCvars.Defaults)
+            foreach (var (name, def, _) in VortexArena.Engine.Particles.ParticleCvars.Defaults)
                 if (float.TryParse(def, System.Globalization.CultureInfo.InvariantCulture, out float v))
                     _values[name] = v;
-            _values[XonoticGodot.Engine.Particles.ParticleCvars.Collisions] = collisions ? 1f : 0f;
+            _values[VortexArena.Engine.Particles.ParticleCvars.Collisions] = collisions ? 1f : 0f;
             _values["sv_gravity"] = 800f;
         }
         public float GetFloat(string name) => _values.TryGetValue(name, out float v) ? v : 0f;

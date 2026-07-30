@@ -20,7 +20,7 @@ features:
       - "common/vehicles/vehicle/spiderbot.qh:CLASS(Spiderbot)"
       - "common/vehicles/vehicle/spiderbot.qh:REGISTER_VEHICLE(SPIDERBOT)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Spiderbot"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Spiderbot"
     constants:
       - { name: "netname", base: "spiderbot", port: "spiderbot", match: true }
       - { name: "m_name", base: "Spiderbot", port: "Spiderbot", match: true }
@@ -52,8 +52,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/spiderbot.qc:spawnfunc(vehicle_spiderbot)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:Spiderbot"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:252"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleSpawnFuncs.cs:Spiderbot"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:252"
     constants:
       - { name: "g_vehicle_spiderbot (master)", base: "true (1)", port: "MasterSwitchEnabled('g_vehicle_spiderbot')", match: true }
     status:
@@ -78,8 +78,8 @@ features:
       - "common/vehicles/vehicle/spiderbot.qc:vr_setup"
       - "common/vehicles/vehicle/spiderbot.qc:vr_spawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:SpawnVehicle"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:SpawnVehicle"
     constants:
       - { name: "health", base: "800", port: "800", match: true }
       - { name: "shield", base: "200", port: "200", match: true }
@@ -120,8 +120,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/spiderbot.qc:vr_enter"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Enter"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:EnterVehicle"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Enter"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:EnterVehicle"
     constants:
       - { name: "default rocket mode on enter", base: "SBRM_GUIDE (2)", port: "Guided (2)", match: true }
       - { name: "movetype on enter", base: "MOVETYPE_STEP", port: "MoveType.Step", match: true }
@@ -151,8 +151,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_exit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Exit"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:ExitVehicle"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Exit"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:ExitVehicle"
     constants:
       - { name: "eject velocity", base: "(v_up + v_forward*0.25)*750, exit 100u ahead", port: "(up + forward*0.25)*750, 100u ahead", match: true }
       - { name: "fast exit (|vel|>400)", base: "carry momentum + z+200, exit 128u ahead", port: "same", match: true }
@@ -181,10 +181,10 @@ features:
     base_refs:
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_frame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Frame"
-      - "src/XonoticGodot.Server/GameWorld.cs:2273"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:RunThink"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Frame"
+      - "src/VortexArena.Server/GameWorld.cs:2273"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:RunThink"
     constants:
       - { name: "controller invocation cadence", base: "PHYS_INPUT_FRAMETIME (every movement frame)", port: "0.1 (DefaultThinkRate)", match: false }
       - { name: "per-step dt multiplier", base: "PHYS_INPUT_FRAMETIME (= the same frame dt)", port: "dt = ThinkRate = 0.1 (= the elapsed time since the last think call)", match: true }
@@ -212,8 +212,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_frame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Frame"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:CrosshairTrace"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:CrosshairTrace"
     constants:
       - { name: "head_turnspeed", base: "110", port: "110", match: true }
       - { name: "head_turnlimit", base: "90", port: "90", match: true }
@@ -244,7 +244,7 @@ features:
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_frame"
       - "common/physics/movelib.qc:movelib_groundalign4point"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:GroundAlign4Point"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:GroundAlign4Point"
     constants:
       - { name: "springlength", base: "150", port: "150", match: true }
       - { name: "springup", base: "20", port: "20", match: true }
@@ -273,10 +273,10 @@ features:
       - "common/physics/movelib.qc:movelib_move_simple"
       - "common/physics/movelib.qc:movelib_brake_simple"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Frame"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:GravityTicrateFactor"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:MoveSimple"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:BrakeSimple"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:GravityTicrateFactor"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:MoveSimple"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs:BrakeSimple"
     constants:
       - { name: "speed_walk", base: "500", port: "500", match: true }
       - { name: "speed_strafe", base: "400", port: "400", match: true }
@@ -308,7 +308,7 @@ features:
     base_refs:
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_frame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Frame"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Frame"
     constants:
       - { name: "jump velocity", base: "sd*700 + rt*600 + v_up*600", port: "sd*700 + rt*600 + up*600", match: true }
       - { name: "jump/land lockout (tur_head.wait, jump_delay)", base: "time + 2", port: "time + 2", match: true }
@@ -339,8 +339,8 @@ features:
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_frame"
       - "common/vehicles/vehicle/spiderbot_weapons.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:FireMinigun"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:FireBulletPenetrating"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:FireMinigun"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:FireBulletPenetrating"
     constants:
       - { name: "minigun_damage", base: "16", port: "16", match: true }
       - { name: "minigun_refire", base: "0.06", port: "0.06", match: true }
@@ -363,7 +363,7 @@ features:
     divergence_rationale: null
     gaps:
       - "Cosmetic barrel spin (QC gun1.angles.z += 45 / gun2.angles.z -= 45 with 360 wrap) is done client-side (Firing flag in VehicleVisuals); the server-state field is not advanced — functionally fine, non-1:1 split."
-      - "FIXED-SINCE-BASELINE: EFFECT_SPIDERBOT_MINIGUN_MUZZLEFLASH is now emitted server-side via EffectEmitter.Emit (Spiderbot.cs:493; effect registered src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:161), matching QC spiderbot.qc:276 Send_Effect(EFFECT_SPIDERBOT_MINIGUN_MUZZLEFLASH, v, v_forward*2500, 1). (The client VehicleVisuals Firing flag also pops a flash; the server emit is the QC-faithful path.) Residual presentation gap = barrel-spin server-state only."
+      - "FIXED-SINCE-BASELINE: EFFECT_SPIDERBOT_MINIGUN_MUZZLEFLASH is now emitted server-side via EffectEmitter.Emit (Spiderbot.cs:493; effect registered src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:161), matching QC spiderbot.qc:276 Send_Effect(EFFECT_SPIDERBOT_MINIGUN_MUZZLEFLASH, v, v_forward*2500, 1). (The client VehicleVisuals Firing flag also pops a flash; the server emit is the QC-faithful path.) Residual presentation gap = barrel-spin server-state only."
     verification:
       - { kind: code, ref: "FireMinigun: alternates gun1/gun2 by VehBulletCounter%2, fires from 'barrels' tag + fwd*50 with spread; FireBulletPenetrating bounded 4-pass solid penetration budget 32u; ammo gated, refire 0.06; fire sound played", result: pass }
       - { kind: test, ref: "MonsterTurretVehicleObituaryTests.SpiderbotMinigun_RealFire_TagsVhSpidMinigun_ObituaryPicksVehicleLine", result: pass }
@@ -378,10 +378,10 @@ features:
       - "common/vehicles/vehicle/spiderbot_weapons.qc:spiberbot_calcartillery"
       - "common/vehicles/vehicle/spiderbot_weapons.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:RocketDo"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:CalcArtillery"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:SolveQuadratic"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:SpawnProjectile"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:RocketDo"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:CalcArtillery"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:SolveQuadratic"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:SpawnProjectile"
     constants:
       - { name: "rocket_damage", base: "50", port: "50", match: true }
       - { name: "rocket_force", base: "150", port: "150", match: true }
@@ -406,7 +406,7 @@ features:
     divergence_rationale: null
     gaps:
       - "ARTILLERY clearance-height traces use a headless WorldOnly trace; the h1/h2 (0.75 of the up/diagonal world clearance) are reproduced but the resulting arc was not in-game verified."
-      - "FIXED-SINCE-BASELINE: the launch effect EFFECT_SPIDERBOT_ROCKETLAUNCH is now emitted server-side via EffectEmitter.Emit (Spiderbot.cs:629; effect registered src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:157), matching QC vehicles_projectile Send_Effect. Residual: the rocket-in-flight CSQCProjectile visual (PROJECTILE_SPIDERROCKET) stays client/net deferred to the shared projectile catalog."
+      - "FIXED-SINCE-BASELINE: the launch effect EFFECT_SPIDERBOT_ROCKETLAUNCH is now emitted server-side via EffectEmitter.Emit (Spiderbot.cs:629; effect registered src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:157), matching QC vehicles_projectile Send_Effect. Residual: the rocket-in-flight CSQCProjectile visual (PROJECTILE_SPIDERROCKET) stays client/net deferred to the shared projectile catalog."
     verification:
       - { kind: code, ref: "RocketDo: VOLLY dumb+timed detonate, GUIDE crosshair-homing (AttachGuidance), ARTILLERY CalcArtillery toss; belt advances, refire/reload at frame 9; wait/-10 volley-empty + guide-hold latch", result: pass }
       - { kind: test, ref: "MonsterTurretVehicleObituaryTests vehicle-projectile vh_spid_rocket obituary path", result: pass }
@@ -421,8 +421,8 @@ features:
       - "common/vehicles/vehicle/spiderbot_weapons.qc:spiderbot_rocket_unguided"
       - "common/vehicles/vehicle/spiderbot_weapons.qc:spiderbot_guide_release"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:AttachGuidance"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:GuideRelease"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:AttachGuidance"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:GuideRelease"
     constants:
       - { name: "rocket_turnrate", base: "0.25", port: "0.25", match: true }
       - { name: "rocket_noise", base: "0.2", port: "0.2", match: true }
@@ -448,10 +448,10 @@ features:
     base_refs:
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_impulse"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:SetMode"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:CycleMode"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs:Impulse"
-      - "src/XonoticGodot.Server/Commands.cs:2109"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:SetMode"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:CycleMode"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:Impulse"
+      - "src/VortexArena.Server/Commands.cs:2109"
     constants:
       - { name: "SBRM_VOLLY/GUIDE/ARTILLERY", base: "1/2/3", port: "1/2/3", match: true }
       - { name: "impulse map", base: "1->VOLLY 2->GUIDE 3->ARTILLERY; next(10)/prev(11,12) cycle [1..3] wrap", port: "same", match: true }
@@ -480,7 +480,7 @@ features:
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_blowup"
       - "common/vehicles/vehicle/spiderbot.qc:spiderbot_headfade"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Death"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Death"
       - "game/client/VehicleVisuals.cs"
     constants:
       - { name: "burn delay", base: "3.4 + time + random()*2", port: "Time + 3.4 + Prandom.Range(0,2)", match: true }
@@ -507,8 +507,8 @@ features:
     verification:
       - { kind: code, ref: "Death: HP 0, DAMAGE_NO, MOVETYPE_TOSS, burn-timer think; ~10%/0.1s plays weapons/rocket_impact.wav (CH_SHOTS) + EffectEmitter.Emit('EXPLOSION_SMALL', randomvec*80 + origin+'0 0 100') during the burn; at expiry SpawnDeathGibs(self) THEN RadiusDamage(self,origin,250,15,250,enemy,0,250,VhSpidDeath), SOLID_NOT, respawn (SetOrigin SpawnPos, NextThink=+45, Think=Spawn)", result: pass }
       - { kind: code, ref: "SpawnDeathGibs (Spiderbot.cs:474-540, added Wave 15 719d377): Api.Entities.Spawn() 4 gibs — body(frame 11,dark,FadeGib), head(MODEL spiderbot_top, SOLID_BBOX, MOVETYPE_BOUNCE, vel up*(500+rnd*500)+rndvec*128, EF_FLAME, avelocity rndvec*360, HeadFade closure: alpha ramp, on death plays rocket_impact + EffectEmitter.Emit('EXPLOSION_BIG')), 2 guns(SOLID_CORPSE, MOVETYPE_TOSS, v_forward*700+rndvec*32, avel*180, FadeGib); originals alpha=-1. Networked via the normal entity feed.", result: pass }
-      - { kind: code, ref: "EffectEmitter.Emit (string overload, EffectEmitter.cs:246) -> Effects.ByName; EXPLOSION_SMALL/BIG registered EffectsList.cs:29/31 -> effectinfo explosion_small/big present in assets/data/.../effectinfo.txt; live host swaps EffectEmitter.Sink to EffectNetSink (ServerNet.cs:303) -> CaptureEffect -> unreliable EventBundle flush to clients", result: pass }
-      - { kind: build, ref: "dotnet build XonoticGodot.Common Debug — 0 warn / 0 err; tests: 24 Spiderbot/VehicleRuntime pass", result: pass }
+      - { kind: code, ref: "EffectEmitter.Emit (string overload, EffectEmitter.cs:246) -> Effects.ByName; EXPLOSION_SMALL/BIG registered EffectsList.cs:29/31 -> effectinfo explosion_small/big present in Base/data/.../effectinfo.txt; live host swaps EffectEmitter.Sink to EffectNetSink (ServerNet.cs:303) -> CaptureEffect -> unreliable EventBundle flush to clients", result: pass }
+      - { kind: build, ref: "dotnet build VortexArena.Common Debug — 0 warn / 0 err; tests: 24 Spiderbot/VehicleRuntime pass", result: pass }
     confidence: high
     notes: "FIXED-IN-WAVE-15 (719d377), VERIFIED this re-audit by reading the current Spiderbot.cs + building + running tests: SpawnDeathGibs now spawns the 4 physics gib entities server-side (body frame 11, head BOUNCE+EF_FLAME+spiderbot_headfade closure, 2 guns TOSS v_forward*700), hides the originals, and the head's final EXPLOSION_BIG+impact fires from HeadFade — matching spiderbot_blowup/spiderbot_headfade. presentation upgraded partial->faithful; gib-entities constant match false->true. (Spiderbot.cs was NOT touched by Waves 16/17 — most recent edit was Wave 15; the 2026-06-25 baseline that called gibs MISSING predated that wave.) Only the head's client-modelflag MF_ROCKET smoke-trail is unmodeled."
 
@@ -518,8 +518,8 @@ features:
     base_refs:
       - "common/vehicles/vehicle/spiderbot.qc:METHOD(Spiderbot, vr_impact)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs:Impact"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:Impact"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs:Impact"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:Impact"
     constants:
       - { name: "bouncepain", base: "'0 0 0' (default no-op)", port: "Vector3.Zero (hardcoded default; guard skips vehicles_impact, matching QC falsy-vector)", match: true }
     status:

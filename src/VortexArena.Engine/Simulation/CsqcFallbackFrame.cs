@@ -5,7 +5,7 @@
 
 using System;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// The CSQC fallback-frame remap (<c>CSQCPlayer_FallbackFrame</c>). Given a frame index and a

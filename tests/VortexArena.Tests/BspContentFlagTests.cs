@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Formats.Bsp;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Regression tests for the BSP "invisible walls" bug: the texture lump stores RAW Q3 native content flags

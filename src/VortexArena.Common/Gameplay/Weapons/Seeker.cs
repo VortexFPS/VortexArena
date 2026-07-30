@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The T.A.G. Seeker — port of common/weapons/weapon/seeker.{qh,qc}. A splash weapon with two layouts
@@ -91,6 +91,7 @@ public sealed class Seeker : Weapon
     public Seeker()
     {
         NetName = "seeker";
+        BotPickupBaseValue = 5000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type
         DisplayName = "T.A.G. Seeker";
         Impulse = 8;

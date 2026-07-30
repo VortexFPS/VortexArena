@@ -1,4 +1,4 @@
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The owner-only inventory stats (QC the ammo/items STATs: <c>RES_SHELLS/BULLETS/ROCKETS/CELLS/FUEL</c>,

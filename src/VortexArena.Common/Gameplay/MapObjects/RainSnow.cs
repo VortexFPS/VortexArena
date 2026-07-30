@@ -9,11 +9,11 @@
 // so this family is parity-complete but exercised only by tests/custom maps.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary><c>func_rain</c> / <c>func_snow</c> weather volumes. Registered by <see cref="MapObjectsRegistry"/>.</summary>
 public static class RainSnow

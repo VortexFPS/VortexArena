@@ -22,7 +22,7 @@ using Godot;
 using NVec3 = System.Numerics.Vector3;
 using GVec3 = Godot.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>The single reusable Draw_CylindricLine primitive: a <see cref="Node3D"/> owning a pool of
 /// in-place-updatable cross-ribbon <see cref="Segment"/>s, plus the static multi-point <see cref="BuildCrossRibbonMesh"/>

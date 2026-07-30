@@ -1,13 +1,13 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T61 — feedback / notification polish (the C# ports of common/deathtypes/all.{qh,inc},

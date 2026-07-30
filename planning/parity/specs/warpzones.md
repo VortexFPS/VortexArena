@@ -1,7 +1,7 @@
 # Warpzones — parity spec
 
 **Base refs:** `lib/warpzone/{anglestransform,common,server,client,util_server,mathlib}.qc/.qh` (+ `trigger_warpzone` / `trigger_warpzone_position` / `trigger_warpzone_reconnect` / `func_camera` spawnfuncs in server.qc)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs` · `src/XonoticGodot.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs` · `src/XonoticGodot.Engine/Collision/TraceServiceWarpzoneExt.cs` · `game/loaders/HeroMaterials.cs` (portal surface)
+**Port refs:** `src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs` · `src/VortexArena.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs` · `src/VortexArena.Engine/Collision/TraceServiceWarpzoneExt.cs` · `game/loaders/HeroMaterials.cs` (portal surface)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -105,9 +105,9 @@ A "transform" is a pure rotation stored as a Quake Euler `vector` in fixedmakeve
 - The radius recursion uses an explicit front-side gate instead of QC's LOS-trace + radius-reduction to discard the wrong side (noted in `WarpzoneRadiusQuery.cs:407`) — same result without the extra trace.
 
 ## Verification
-- `tests/XonoticGodot.Tests/WarpzoneTests.cs`: transform maps plane centers, preserves speed, moving-into-IN emerges-out-of-OUT, Teleport warps + preserves momentum, skips when moving out of the zone.
-- `tests/XonoticGodot.Tests/WarpzoneSpawnTests.cs`: map brushes spawn/orient/link from brush geometry, position entity overrides orientation, two-way link when only one carries a target.
-- `tests/XonoticGodot.Tests/WarpzoneTraceTests.cs`: chain identity/append, trace crosses one portal + accumulates transform, no-portal/no-manager plain trace, pathological self-recrossing stops at the 16-guard, FindRadius reaches a victim only through a portal, skips blacklisted classnames.
+- `tests/VortexArena.Tests/WarpzoneTests.cs`: transform maps plane centers, preserves speed, moving-into-IN emerges-out-of-OUT, Teleport warps + preserves momentum, skips when moving out of the zone.
+- `tests/VortexArena.Tests/WarpzoneSpawnTests.cs`: map brushes spawn/orient/link from brush geometry, position entity overrides orientation, two-way link when only one carries a target.
+- `tests/VortexArena.Tests/WarpzoneTraceTests.cs`: chain identity/append, trace crosses one portal + accumulates transform, no-portal/no-manager plain trace, pathological self-recrossing stops at the 16-guard, FindRadius reaches a victim only through a portal, skips blacklisted classnames.
 - Liveness traced through code (callers named above), not runtime-observed.
 - Client-side absence verified by grep: `NetGame.cs` has zero warpzone/portal/SubViewport/FixView references; no `func_camera`/`warpzone_reconnect`/`WarpZone_Think` symbols in `src/` or `game/`.
 

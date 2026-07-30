@@ -1,9 +1,9 @@
 <Project>
-  <!-- Shared MSBuild properties for all XonoticGodot projects.
+  <!-- Shared MSBuild properties for all VortexArena projects.
        The Godot host (Godot.NET.Sdk) and the SourceGen analyzer (netstandard2.0)
-       set their own TargetFramework; the plain libraries inherit $(XonoticGodotTfm). -->
+       set their own TargetFramework; the plain libraries inherit $(VortexArenaTfm). -->
   <PropertyGroup>
-    <XonoticGodotTfm>net8.0</XonoticGodotTfm>
+    <VortexArenaTfm>net8.0</VortexArenaTfm>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
@@ -18,9 +18,9 @@
        spends most of its hitch budget there. DEBUG defines/asserts and portable PDBs are untouched, so
        stack traces, Prof scopes and #if DEBUG diagnostics all keep working; what you lose is step-debugging
        fidelity (inlined frames, optimized-away locals). For a breakpoint session, restore classic Debug
-       codegen with:  dotnet build -p:XgDebugUnoptimized=true  (the FrameProfiler env banner reports which
+       codegen with:  dotnet build -p:VaDebugUnoptimized=true  (the FrameProfiler env banner reports which
        flavor a session ran: csharp=Debug(jit-opt) vs Debug(unopt)). -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(XgDebugUnoptimized)' != 'true'">
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(VaDebugUnoptimized)' != 'true'">
     <Optimize>true</Optimize>
   </PropertyGroup>
 
@@ -33,11 +33,11 @@
        This is deliberately NOT a cvar. A brain steering a human player IS an aimbot: the code must not exist
        in anything shippable, so the gate is the compiler, not a runtime flag a config could set. Nothing is
        compiled in unless you ask for it here, and even then it stays dormant until the CLI flag is passed.
-       Build it with:  dotnet build XonoticGodot.csproj -c Debug -p:XgBotPlayer=true
+       Build it with:  dotnet build VortexArena.csproj -c Debug -p:VaBotPlayer=true
        Run it with the "bot-player" CLI flag (see BotPlayerMode / docs/RUNNING.md).
 
-       Keep every use of it inside #if XG_BOTPLAYER. Never define this for a release/export build. -->
-  <PropertyGroup Condition="'$(XgBotPlayer)' == 'true'">
-    <DefineConstants>$(DefineConstants);XG_BOTPLAYER</DefineConstants>
+       Keep every use of it inside #if VA_BOTPLAYER. Never define this for a release/export build. -->
+  <PropertyGroup Condition="'$(VaBotPlayer)' == 'true'">
+    <DefineConstants>$(DefineConstants);VA_BOTPLAYER</DefineConstants>
   </PropertyGroup>
 </Project>

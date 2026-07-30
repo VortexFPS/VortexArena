@@ -1,10 +1,10 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
+using VortexArena.Formats.Bsp;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — direct coverage for <see cref="BezierPatch"/> (the Q3 biquadratic patch tessellator —

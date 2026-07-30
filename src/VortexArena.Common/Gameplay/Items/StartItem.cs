@@ -12,10 +12,10 @@
 // Net_LinkEntity hooks are CSQC/mutator networking and are out of scope; the spawn STATE + touch wiring are
 // ported faithfully.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The world-item spawn driver — QC <c>StartItem</c> + <c>Item_Reset</c>. <see cref="ItemSpawnFuncs"/> resolves
@@ -179,6 +179,21 @@ public static class StartItem
         // physics ghost and hide the real item. The hook is notify-style; the return value is informational only.
         MutatorHooks.FireItemSpawn(item);
 
+        // Dev/CI (port-only): g_debug_items_start_unavailable "<substring>|all" — mark matching PERMANENT
+        // items as already picked up at spawn (the same Item_ScheduleRespawn hide a real pickup runs), so the
+        // awaiting-respawn ghost render can be framed deterministically (--observe + --screenshot) without
+        // scripting a player to touch it. Empty/unset = off. Combine with a large g_pickup_respawntime_* to
+        // keep the ghost up for the whole capture. Runs AFTER the Item_Spawn hook (a real pickup always
+        // post-dates spawn hooks) and only on items that are actually AVAILABLE — a FindTeam-hidden teamed
+        // loser or a delayed-start powerup must not get a respawn timer that would later show extra members.
+        if (!isLoot && item.ItemAvailable && Api.Services is not null)
+        {
+            string dbgGhost = Api.Cvars.GetString("g_debug_items_start_unavailable");
+            if (!string.IsNullOrWhiteSpace(dbgGhost)
+                && (dbgGhost == "all" || item.ClassName.Contains(dbgGhost, System.StringComparison.OrdinalIgnoreCase)))
+                ItemPickupRules.ScheduleRespawn(item);
+        }
+
         LastSpawnFailed = false;
         return item;
     }
@@ -225,6 +240,14 @@ public static class StartItem
                 System.MathF.Max(item.InvincibleFinished, item.SuperweaponsFinished));
             if (t > 0f) item.NextThink = t;
         }
+
+        // QC items.qc:1089 — nudgeoutofsolid_OrFallback(this): "most loot items have a bigger horizontal size
+        // than a player". A dropped item's box is ITEM_D_MINS/MAXS (±30 wide) while the player hull that dropped
+        // it is only ±16, so a weapon thrown (or death-dropped) anywhere near a wall, pillar or step spawns
+        // already EMBEDDED in world geometry — measured at roughly half of all bot death-drops on fuse. A
+        // start-solid MOVETYPE_TOSS body is not obstructed by the brush it is already inside, so it sailed
+        // straight through the wall instead of resting against it. Extricate it first, exactly like Base.
+        NudgeOutOfSolid.Apply(item);
 
         // QC: don't drop loot in a NODROP zone (lava) — traceline at the origin, delete if NODROP.
         if (Api.Services is not null)

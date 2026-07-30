@@ -20,8 +20,8 @@
      "self_contained": false,
      "headline": "Wire CTF flag-status mod-icon (server OBJECTIVE_STATUS + client ModIconsMode.Ctf), bind throw/pass/request-pass input, drop-on-disconnect/observe/portal (ctf_RemovePlayer), stalemate detection, flag toss velocity + capture-assist/leaderboard/return team-color notifications, and flag model wave/glow presentation.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Ctf.cs",
-      "src/XonoticGodot.Net/GametypeStatusBlock.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs",
+      "src/VortexArena.Net/GametypeStatusBlock.cs",
       "game/net/NetGame.cs",
       "game/hud/ModIconsPanel.cs"
      ]
@@ -42,8 +42,8 @@
      "self_contained": false,
      "headline": "Emit KeyHunt's 36 notifications + 5 sounds (alarm siren, capture jingle, START/SCAN/MEET/HELP/INTERFERE, PICKUP/DROP/LOST/PUSHED/DESTROYED/CAPTURE), implement kh_LoserTeam push/destroy scoring + lava/trigger destroy + voluntary +use drop, fix maxdist=150 and balance defaults, add carried-key orbit, and revive the dead bot role (item_kh_key classname + GtCarrier read).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/KeyHunt.cs",
-      "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs",
+      "src/VortexArena.Server/Bot/BotObjectiveRoles.cs"
      ]
     },
     {
@@ -62,10 +62,10 @@
      "self_contained": false,
      "headline": "Resolve onslaught_link map entities into graph edges (the mode is unplayable without this \u2014 every node stays shielded), then emit capture/build/under-attack/destroy sounds+notifications, CaptureShield push entity, proximity-decap, spawn_choose/teleport, generator/control-point CSQC models + damage states + death-cam, and an attackable/neighbor-filtered bot role.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs",
-      "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Server/Bot/BotObjectiveRoles.cs"
      ]
     },
     {
@@ -83,9 +83,9 @@
      "self_contained": false,
      "headline": "Make Assault actually END the match: wire the second-round role swap (StartSecondRound/FirstRoundDestroyTime), defender timelimit win (TimeLimitReached), and campaign single-round end via the round handler; then send attacking/defending/objective-destroyed notifications, objective waypoint sprites + health bars, func_assault_wall toggling, turret roundstart team-swap, destructible heal, and warmup-disable.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Assault.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/Assault.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -103,11 +103,11 @@
      "self_contained": false,
      "headline": "Wire Domination pps mod-icon end-to-end (server set_dom_state -> GametypeStatusBlock Domination Kind + DOM_PPS fields -> NetGame case -> SetDominationPps), play DOM_CLAIM capture sound + INFO_DOMINATION_CAPTURE_TIME, enforce roundbased 5-cap match limit, add control-point waypoint sprites + model, the 0.3s recapture guard, and fix the bot team-read (GtPointTeam vs Entity.Team).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs",
-      "src/XonoticGodot.Net/GametypeStatusBlock.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/Domination.cs",
+      "src/VortexArena.Net/GametypeStatusBlock.cs",
       "game/net/NetGame.cs",
       "game/hud/ModIconsPanel.cs",
-      "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs"
+      "src/VortexArena.Server/Bot/BotObjectiveRoles.cs"
      ]
     },
     {
@@ -125,9 +125,9 @@
      "self_contained": false,
      "headline": "Make frozen players damage-immune (frag_damage=0 + g_frozen_force) \u2014 chip damage currently re-kills the HP=1 body; add revive_auto_reducible (shoot frozen enemy speeds thaw), the time-to-score revive model (speed_t2s 0.25 / no-clear), spawnshield + soft-kill/nade-revive, ApplyStartItems wiring, FT-specific round predicates (frozen=eliminated), ice model + Frozen/Reviving waypoints + freeze/revive notifications, full-screen overlay, and feed the dead crosshair thaw ring.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs",
+      "src/VortexArena.Server/GameWorld.cs",
       "game/client/ClientWorld.cs",
       "game/hud/CrosshairPanel.cs"
      ]
@@ -147,10 +147,10 @@
      "self_contained": false,
      "headline": "Restore CA's defining traits: 200/200 + full-ammo start loadout (wire SetStartItems / ApplyStartItems) and the 'most' weapon arena (dead SetWeaponArena chain), wire the live round handler to CA's CheckWinner/PreventStalemate predicates + 10s grace + weapon-fire lockout + ROUNDS_PL award, fire round-outcome/ALONE notifications, the damage2score accrual, no-pickups FilterItem, and INGAME_JOINING late-join observer state.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs"
      ]
     },
     {
@@ -170,9 +170,9 @@
      "self_contained": false,
      "headline": "Make Keepaway playable: add the host-side procedural ball spawner (SpawnBall has zero callers \u2014 no ball exists, so no scoring ever fires), wire use-key/disconnect/observe drop paths, MoveToRandomMapLocation respawn, pickup/drop/touch sounds + notifications, the KA_CARRYING mod-icon + carrier waypoints/radar, the possession damage matrix consult, carrier highspeed, and fix bot FindBall class string (keepaway_ball vs keepawayball).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Server/Bot/BotObjectiveRoles.cs"
      ]
     },
     {
@@ -192,9 +192,9 @@
      "self_contained": false,
      "headline": "Make Team Keepaway playable AND a true team mode: add the host-side ball spawner (SpawnBall dead \u2014 no ball, no scoring), implement g_tka_score_team (any teammate's kill scores while team holds the ball \u2014 the distinguishing TKA rule) + DIFF_TEAM team-kill exclusion + a per-frame Tick for bctime/timepoints, fix the WRONG cvar family (reads g_keepaway_* not g_tka_*), wire drop hooks, the unique per-team-taken mod-icon (TKA_BALLSTATUS) + team-colored carrier waypoints, the damage matrix subscribe + force getter, and team-aware bot rating.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Server/Bot/BotObjectiveRoles.cs"
      ]
     },
     {
@@ -214,8 +214,8 @@
      "self_contained": false,
      "headline": "Implement the core Nexball interactions: the BallStealer ball-launcher weapon (primary launch + power meter + secondary tackle/safe-pass) so a basketball carrier can shoot, football kick physics (footballs are currently unmovable), ball lifecycle thinks (delay_start release / idle reset / glide ResetBall / delay_goal), per-frame carry layer (view-ball, carrier slowdown, NB_CARRYING), drop-on-disconnect/observe, goal/bounce/shoot sounds, and the carrying-icon + power-meter HUD.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs",
+      "src/VortexArena.Server/GameWorld.cs",
       "game/hud/ModIconsPanel.cs"
      ]
     },
@@ -234,9 +234,9 @@
      "self_contained": false,
      "headline": "Fix Invasion's co-op character: stop monsters attacking players (monster_attack=false / clear bot_attack / Bot_ForbidAttack), cancel PvP damage, disable regen, ROUND 200/200 start items; wire the round handler with Invasion predicates (warmup + 120s round timelimit) instead of dead CA defaults; add PickMonster type-filter (no flying Wyvern) + zombies-only + spawnpoint de-weighting + final-round miniboss; and send supermonster/round-over/round-winner notifications + monsters_total/killed HUD.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs"
      ]
     },
     {
@@ -254,9 +254,9 @@
      "self_contained": false,
      "headline": "Wire Survival's headline timeout win: EndRoundTimedOut has no caller and the round handler never tests RoundEndTime, so 'survive until time runs out' never fires (a hiding prey leaves the round unending); also add the dual-handler de-desync, teamkill punishment (mirror-kill + frag dock), Bot_ForbidAttack (bots currently attack allies), role/win/ALONE notifications + green/red player coloring, and add Survival to GameWorld.MatchEnded.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs",
-      "src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -274,9 +274,9 @@
      "self_contained": false,
      "headline": "Convert LMS from the wrong round-elimination model to Base's continuous per-lives match (EnableRounds with CA predicates is degenerate in FFA): drive respawn/elimination from lives (RESPAWN_SILENT at 0) not the round gate; add the LMS loadout (200/200 + most weapon-arena + no regen + no item pickups), the leader anti-hiding waypoint+glow+visibility-window + HUD mod-icon + notifications, dynamic respawn delay + dynamic vampire, late-join lives gate, forfeit rank reshuffle, extra-life pickups, no-throw/spectate lockout, and map-reset.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/LastManStanding.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Server/ClientManager.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Server/ClientManager.cs",
       "game/hud/ModIconsPanel.cs"
      ]
     },
@@ -295,8 +295,8 @@
      "self_contained": false,
      "headline": "Feed the fully-built Race HUD (split timer panel #8, checkpoint splits #27, PB/server-best mod-icon, rankings column are all dead for lack of a net feed) and fire RACE_FINISHED/ABANDONED/NEW_RECORD notifications (LastRecord unconsumed); add the global race_completing/abandon win latch, qualifying-then-race transition (dead caller) + qualifying checkpoint records, race_place grid + respawn-at-last-checkpoint, force-keyboard movement quantization + deterministic race_movetime clock, bot race role, and speed awards.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/Race.cs",
+      "src/VortexArena.Server/GameWorld.cs",
       "game/hud/RaceTimerPanel.cs",
       "game/hud/CheckpointsPanel.cs"
      ]
@@ -315,8 +315,8 @@
      "self_contained": false,
      "headline": "Add CTS combat rules (suppress self/fall damage, restrict to Shotgun via WantWeapon, forbid weapon throw/drop), feed the dead Race timer HUD + fire RACE_NEW_SET/IMPROVED/BROKEN/FINISHED notifications (LastRecord unconsumed) + race_SendStatus medal trigger, force-keyboard movement quantization + deterministic race_movetime clock, instant CTS respawn (RESPAWN_FORCE), intermediate/defrag checkpoints, per-player connect/spawn/observe bookkeeping, GetRecords listing, and a CTS bot role.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs",
+      "src/VortexArena.Server/GameWorld.cs",
       "game/hud/RaceTimerPanel.cs"
      ]
     },
@@ -332,7 +332,7 @@
      "self_contained": true,
      "headline": "Credit per-player SP_SCORE in TDM (every player's scoreboard Score reads 0 today \u2014 Tdm.OnDeath only adds the team total, unlike Deathmatch/Ctf/CA), resolve the g_tdm_point_limit -1 'use mapinfo 50' sentinel (stock TDM never ends on frags), seed the TDM timelimit=15 default, restore the GtKillCount spree bump, and add the remaining-frags team announcer.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs"
      ]
     },
     {
@@ -347,7 +347,7 @@
      "self_contained": true,
      "headline": "Add the remaining-frags announcer (1/2/3 frags left \u2014 assets exist, fragsleft never computed), check leadlimit / leadlimit_and_fraglimit in the DM win condition, and present the computed 10-9-8 respawn countdown (Player.RespawnCountdown has no reader).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs"
      ]
     },
     {
@@ -364,9 +364,9 @@
      "self_contained": false,
      "headline": "Enforce the 1v1 cap (Duel.PlayerLimit=2 has no reader \u2014 a 3rd client can join AND bot-fill reads g_maxplayers), wire the powerup FilterItem into the MutatorHooks chain (dead \u2014 powerups still spawn at default), and call the duel 'A vs B' centerprint title (SetDuelTitle exists, no caller).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs",
-      "src/XonoticGodot.Server/ClientManager.cs",
-      "src/XonoticGodot.Server/Bot/BotPopulation.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs",
+      "src/VortexArena.Server/ClientManager.cs",
+      "src/VortexArena.Server/Bot/BotPopulation.cs",
       "game/hud/CenterPrintPanel.cs"
      ]
     },
@@ -382,8 +382,8 @@
      "self_contained": false,
      "headline": "Wire the dead SetWeaponArena chain so Mayhem players spawn with the full arsenal (most_available) instead of only the Blaster (no .Call site anywhere), and apply the timelimit=15 gametype default on select.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Mayhem.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -398,8 +398,8 @@
      "self_contained": false,
      "headline": "Wire the dead SetWeaponArena chain so Team Mayhem players spawn with the full arsenal (most_available) instead of only the Blaster, and apply the timelimit=20 gametype default on select (mitigated by the global cvar default already being 20).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/TeamMayhem.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     }
    ],
@@ -729,7 +729,7 @@
      "self_contained": false,
      "headline": "Wire reload through clip-aware DecreaseAmmo + forced/secondary reload branches + clip CheckAmmo term; secondary fire sound; emit tr_rifle tracer + casing + ricochet; HITTYPE_SECONDARY hail kill-msg; accuracy FIRED credit; wr_resetplayer accumulator reset",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Rifle.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Rifle.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -748,7 +748,7 @@
      "self_contained": false,
      "headline": "Draw the rail beam (CSQC cylindric beam) + muzzle/impact fx + neximpact sound; fix RM cvar fallbacks to Base + WEP_DEVASTATOR/WEP_ELECTRO deathtypes + RM rapid ladder; non-instagib ammo path; yoda/impressive achievements; fire-sound 0.8 volume",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -767,8 +767,8 @@
      "self_contained": false,
      "headline": "Spread style 4 (gauss-2D) for pellet scatter; melee_delay wind-up think loop + no_doubleslap; HITTYPE_SECONDARY slap kill-msg; ricochet sound + woosh + casing; out-of-ammo auto-melee + alt triple-shot timing; g_ballistics_mindistance 2; bot wr_aim",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -785,7 +785,7 @@
      "self_contained": false,
      "headline": "Fix Strength lookup name (buff_strength->strength) + force 3; trajectory-preview polyline; complete touch decision tree (slick/noimpact/creature/not-owner/wireframe gates) + per-branch sounds; death/respawn cleanup (W_Porto_Remove); porto_forbidden setter/ticker; lifetime fail cleanup",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Porto.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -804,7 +804,7 @@
      "self_contained": true,
      "headline": "Missile smart world-avoidance (missile_smart trace blend); seekerexp random explosion sound; tag dedupe (W_Seeker_Tagged_Info) + te_knightspike + tag-impact; volley controller ammo/switch self-destruct gates + rate factor; FLAC hagar muzzleflash; missile shoot-down",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Seeker.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Seeker.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -823,7 +823,7 @@
      "self_contained": false,
      "headline": "Networked bolt/orb model+trail+electro_fly loop (invisible in flight); orb shoot-down-into-combo via ProjectileDamage; SND_ELECTRO_IMPACT/_COMBO on all detonations; combo_speed seed 2000 + thruwall LOS; orb bounce values; electrobitch announce",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Electro.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Electro.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -841,8 +841,8 @@
      "self_contained": false,
      "headline": "Draw the hook rope line (ENT_CLIENT_HOOK stream + cylindric line); tarzan=2 elastic rubber-band reel + player-pull (unblocks vampirehook); keep latched hook visible (MoveType.None drops from snapshot); offhand +hook input button; grapple cvars from g_balance_grapplehook_*; HOOK_IMPACT particle",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs",
-      "src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Hook.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -860,7 +860,7 @@
      "self_contained": false,
      "headline": "HITTYPE_SOUND on blast (so tuba never hurts teammates) + instrument/secondary deathtype bits; wire reload->Tuba.Reload instrument cycle (Tuba/Accordion/Klein Bottle) + WrSetup reset; sustained pitched note sound (correct per-pitch .ogg assets, fade, networking); smoke ring; melody recognition; bot wr_aim",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -878,7 +878,7 @@
      "self_contained": false,
      "headline": "Network vortex_charge to client so the dead crosshair charge ring fills; charge-scale (sqrt) + team-tint the beam; player-model charge glow (wr_glow); yoda/impressive achievements; nexwhoosh fly-by + overcharge volume ramp",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/Vortex.cs",
       "game/hud/CrosshairPanel.cs"
      ],
      "cross_unit_dep": "none"
@@ -898,7 +898,7 @@
      "self_contained": false,
      "headline": "HITTYPE_SECONDARY on burst+mode0 snipe (so SNIPE obituary fires not SPRAY); bullet ricochet sound; casing ejection; g_norecoil gate on Recoil; bot wr_aim distance switch; fix C# Configure fallback literals (crouchmod/burst_spread/spread_decay)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Machinegun.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Machinegun.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -918,7 +918,7 @@
      "self_contained": false,
      "headline": "Assign mine.Team (fix dead proximity team-filter arming on teammates); placed-mine model (invisible); mine shoot-down via ProjectileDamage; WEAPON_MINELAYER_LIMIT notif + UNAVAILABLE sound on over-limit; frozen-owner detonate; remote-detonate sound semantics; bot wr_aim",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Minelayer.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Minelayer.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -936,7 +936,7 @@
      "self_contained": true,
      "headline": "Fix primary impact sound (uses crylink_impact2/small for both modes); convergence join-explode think + CRYLINK_JOINEXPLODE at the right trigger; WouldHitFriendly gate on secondary linkexplode; link-explode trigger reorder; HITTYPE_SECONDARY+BOUNCE bits + bounce owner-null; wait-release ammo guard",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Crylink.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -956,7 +956,7 @@
      "self_contained": false,
      "headline": "Networked grenade model/trail (invisible in flight, primary vs bouncing); grenade shoot-down via ProjectileDamage; airshot achievement; HAGAR_BOUNCE bounce particle; per-entity bounce values; seed RemoteDetonatePrimary/RemoteMinBounceCount from cvars; directHit to RadiusDamage",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Mortar.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Mortar.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -976,7 +976,7 @@
      "self_contained": false,
      "headline": "Rocket shoot-down via ProjectileDamage (with HP subtract not insta-explode); airshot achievement; W_WeaponSpeedFactor on flight accel; ROCKET_GUIDE first-tick effect; rocket-jump remote variant; W_Devastator_Unregister multi-slot lastrocket clear + wr_resetplayer; HITTYPE splash/direct kill-msg; bot wr_aim; muzzle flash model",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -995,8 +995,8 @@
      "self_contained": true,
      "headline": "Primary 5-frame charge-up windup (prefire sound + pre-muzzleflash); fix burn DOT model (frametime-scaled fire_damagepersec + Fire_AddDamage combine math, currently frame-rate-coupled); BFG sweep gates (!cnt, DIFF_TEAM, post-blast owner-survived); per-victim BFG/laser/sphere fx; firemine silent-impact + owner-decouple; obituary FIREMINE/BLAST split; bot wr_aim",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs",
-      "src/XonoticGodot.Common/Gameplay/StatusEffects.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs",
+      "src/VortexArena.Common/Gameplay/StatusEffects.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1013,7 +1013,7 @@
      "self_contained": true,
      "headline": "Reset misc_bulletcounter on a fresh primary trigger pull (signature feather-the-trigger spread recovery is broken); g_norecoil gate on punchangle; HITTYPE_SECONDARY bit on secondary bolts; clip-OR ammo term; bot wr_aim; green->blaster fx fallback",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Hlac.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Hlac.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1032,7 +1032,7 @@
      "self_contained": false,
      "headline": "Real cylindric bezier beam render (currently a wrong spark-particle trail; arc_beam mis-classified isTrail) + muzzle/hit lights + per-beam_type thickness; fix beam CheckAmmo (cells>0 not >=6, auto-switches away); Arc_Smoke/overheat fx + loop sound; heat-% HUD stat; burst-beam latch; bolt shoot-down; heal clamp + pauserot refresh; heat drop/pickup migration",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Arc.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1050,8 +1050,8 @@
      "self_contained": false,
      "headline": "Bot wr_aim lead + bot_dodge of incoming bolts; networked PROJECTILE_BLASTER flying-bolt trail; g_projectiles_interact projectile-vs-projectile knockback; offhand-blaster refire W_WeaponRateFactor scaling",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs",
-      "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1071,7 +1071,7 @@
      "self_contained": false,
      "headline": "Loaded-secondary hold-to-charge state machine (currently fires full 4-rocket salvo instantly; needs per-tick held-button input) + load/beep/warning sounds; feed dead HUD load ring; HAGAR_BOUNCE particle; rocket shoot-down HP subtract; burst/spray + suicide kill messages",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/Hagar.cs",
       "game/hud/CrosshairPanel.cs"
      ],
      "cross_unit_dep": "none"
@@ -1092,11 +1092,11 @@
      "self_contained": true,
      "headline": "Muzzle flash / casings / punchangle recoil + client impact particles & ricochet/impact sounds for all 5 OK weapons; okhmg_nadesupport (nade self-damage 10%); okrpc CSQC chainsaw missile render + bot_dodge + damagedbycontents lava-detonate; oknex yoda/impressive announces",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/OkMachinegun.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/OkHmg.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/OkNex.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/OkRpc.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/OkShotgun.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/OkMachinegun.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/OkHmg.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/OkNex.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/OkRpc.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/OkShotgun.cs"
      ],
      "cross_unit_dep": "none"
     }
@@ -1120,8 +1120,8 @@
      "self_contained": false,
      "headline": "Add per-effect m_tick dispatch (burning frame-rate-correct dps + DEATH_FIRE deathtype + water/frozen self-extinguish; EF_FLAME/SHOCK/ADDITIVE flags; PERSISTENT recompute via SetPersistent; frozen ice block + grapple-detach) and the removeall/clearall lifecycle hooks + removal/countdown sounds",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/StatusEffects.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs"
+      "src/VortexArena.Common/Gameplay/StatusEffects.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1139,8 +1139,8 @@
      "self_contained": false,
      "headline": "Emit EFFECT_SMOKE_RING at the wall contact, route jump voice through PlayerPlayerSound (not the dead player/jump.wav path), add animdecide JUMP + oldvelocity stash, fix zero-cvar override guards, and predict the impulse client-side",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1156,8 +1156,8 @@
      "self_contained": false,
      "headline": "Implement the base weapon-arena loadout expansion (g_weaponarena all/most/list -> start_weapons) so the random pool is non-degenerate, and add the warmup-vs-normal pool branch in GiveFragsForKill",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/WeaponArenaRandomMutator.cs",
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ],
      "cross_unit_dep": "needs the g_weaponarena loadout expansion unit (shared with instagib/melee_only/overkill arena gating)"
     },
@@ -1175,8 +1175,8 @@
      "self_contained": false,
      "headline": "Fix the edgedamage zero-cvar guard (cfg 0 vs hardcoded 20), emit EFFECT_EXPLOSION_SMALL, move the impact sound to CH_TRIGGER, and wire DEATH_TOUCHEXPLODE (pass deathTag + register the deathtype)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/TouchExplodeMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/TouchExplodeMutator.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1195,8 +1195,8 @@
      "self_contained": false,
      "headline": "Wire the entirely-dead WaypointSprites manager API (deploy personal/here/danger + team HELP-ME impulses), add per-gametype CollectWaypoints (Dom/Ons/KH/Assault/Keepaway/Nexball/Race/FreezeTag/itemstime/monster/turret), honor SPRITERULE_DEFAULT/SPECTATOR visibility + the inert client tuning cvars/fades/blink/radar-ping",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs",
-      "src/XonoticGodot.Common/Gameplay/GameplayBases.cs",
+      "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs",
+      "src/VortexArena.Common/Gameplay/GameplayBases.cs",
       "game/client/WaypointSpriteLayer.cs",
       "game/net/ServerNet.cs"
      ],
@@ -1215,7 +1215,7 @@
      "self_contained": true,
      "headline": "Add the missing spawn-shield guard to the heal-on-damage hook, honor g_vampire_factor 0 and live per-event cvar reads, and add the !instagib enable exclusion",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/VampireMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/VampireMutator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1232,8 +1232,8 @@
      "self_contained": false,
      "headline": "Make the latched grapple follow its toucher (set Aiment) in Hook.cs so the drain becomes reachable, fix the warmup-start entry gate (game_starttime vs GameStopped), route heal through Heal()'s guards + dead-target floor, fix DamageRate fallback",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs",
-      "src/XonoticGodot.Common/Gameplay/Mutators/VampireHookMutator.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Hook.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/VampireHookMutator.cs"
      ],
      "cross_unit_dep": "needs Hook.cs latch-follow fix (the grapple weapon, not the mutator)"
     },
@@ -1249,7 +1249,7 @@
      "self_contained": true,
      "headline": "Honor explicit-zero tunable cvars (bonus_asymptote/cooldown_factor) and contribute the :StaleMoveNegation active-mutator string",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/StaleMoveNegationMutator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1269,7 +1269,7 @@
      "self_contained": false,
      "headline": "Build the entire Super Spectate mutator: g_superspectate registration, per-client option bitfields + persistence, auto-spectate on pickup/killer (ItemTouch/PlayerDies), spectator console commands, and the missing-UID notification",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/SuperSpecMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs"
      ],
      "cross_unit_dep": "needs the shared ItemTouch + SV_ParseClientCommand mutator-hook chains and a spectator target-switch API"
     },
@@ -1287,8 +1287,8 @@
      "self_contained": false,
      "headline": "Implement item-registry enumeration for health/armor/resource/powerup picks, fix the weapon-prob cvar name (g_..._weapon_<name>_probability), wire FilterItem map replacement + ItemTouch re-randomize, fix loot to use StartItem.SpawnLoot (pickup-able), and add the mod-injection hook + recursion-guard/ok_item flags",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs",
+      "src/VortexArena.Common/Gameplay/Items/StartItem.cs"
      ],
      "cross_unit_dep": "needs the shared entity-level FilterItem + ItemTouch hook chains (also blocks overkill/instagib/buffs item replacement)"
     },
@@ -1307,8 +1307,8 @@
      "self_contained": false,
      "headline": "Route spawn-facing through FixAngle (currently writes only Angles, overwritten), implement expr_evaluate so the overkill-ruleset string gates correctly, add the sky/lava/water/hurt-trigger/nade relocate rejects, use death_origin for closetodeath, and add the checkpvs/weaponLocked/chat gates",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs",
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ],
      "cross_unit_dep": "needs SpawnSystem to expose a mutator-writable spawn-facing channel"
     },
@@ -1331,9 +1331,9 @@
      "self_contained": false,
      "headline": "Apply Strength/Shield EF_BLUE/EF_RED glow, fire pickup/powerdown notifications + strength-fire sound + countdown beep, implement drop-on-death (default on) with countdown waypoint, complete invisibility stealth (radar/monster/bot) and Speed attack-rate on all per-weapon refire paths",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/PowerupsMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/StatusEffects.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/PowerupsMutator.cs",
+      "src/VortexArena.Common/Gameplay/StatusEffects.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs"
      ],
      "cross_unit_dep": "shares the per-effect m_tick dispatch seam with status_effects"
     },
@@ -1354,9 +1354,9 @@
      "self_contained": false,
      "headline": "Re-tag the RM explosion (devastator) and laser bolts (electro) so the no-self-damage/force-gib hooks fire, add the laser rapid-fire ramp + g_rm_laser==2 mode, network/render the laser as a projectile (model/trail/team color), add the sky-gate/accuracy/HITTYPE_SPLASH, fix the mode-0 sound, add the instagib out-of-cells downgrade branch + electrobitch achievement",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs",
-      "src/XonoticGodot.Common/Gameplay/Mutators/RocketMinstaMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/RocketMinstaMutator.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs"
      ],
      "cross_unit_dep": "downgrade branch lives in instagib's AmmoCheck"
     },
@@ -1374,8 +1374,8 @@
      "self_contained": false,
      "headline": "Add the offhand/+hook input bit + wire writes to Entity.OffhandFirePressed (currently never assigned) so the offhand fire becomes reachable, add W_WeaponRateFactor scaling + vehicle/weaponUseForbidden suppression, the :offhand_blaster mutator string, and the gameplay-tips line",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs",
-      "src/XonoticGodot.Net/InputCommand.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs",
+      "src/VortexArena.Net/InputCommand.cs"
      ],
      "cross_unit_dep": "shares the dead offhand-input wire with hook and nades"
     },
@@ -1395,7 +1395,7 @@
      "self_contained": false,
      "headline": "Build the entire server-side sandbox backend the Tools dialog drives: g_sandbox mutator + object spawn/edit/scale/attach/remove/duplicate/claim/info commands, per-object think/touch material FX, drag/grab carry, readonly/Sandbox_* gating hooks, and per-map auto-save/load storage",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/SandboxMutator.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs",
       "game/menu/dialogs/DialogSandboxTools.cs"
      ],
      "cross_unit_dep": "none"
@@ -1415,7 +1415,7 @@
      "self_contained": false,
      "headline": "Add the time<game_starttime pre-match gate (using StartItem.GameStartTimeProvider) and the round-handler pre-round gate, model cvar_settemp restore of sv_gravity, and the :RandomGravity active-mutator string",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs"
      ],
      "cross_unit_dep": "round-gate needs a global round-state accessor (shared with rocketminsta/campcheck)"
     },
@@ -1432,9 +1432,9 @@
      "self_contained": false,
      "headline": "Add a SetDefaultAlpha() world-init driver that fires the dead MutatorHooks.SetDefaultAlpha chain and seeds default_player_alpha/default_weapon_alpha, and make player-spawn/corpse/exterior-weapon read those defaults + network/render the alpha (player invisible, gun visible)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/RunningGunsMutator.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/RunningGunsMutator.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ],
      "cross_unit_dep": "shares the SetDefaultAlpha driver + entity-alpha-net seam with cloaked"
     },
@@ -1451,8 +1451,8 @@
      "self_contained": false,
      "headline": "Port the Devastator remote-jump system (remote_jump_* damage/force/radius/velocity blast) + the AllowRocketJumping force-on sub-hook, and the :RocketFlying active-mutator string",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs"
      ],
      "cross_unit_dep": "needs the Devastator remote-jump blast (weapon-devastator)"
     },
@@ -1469,8 +1469,8 @@
      "self_contained": false,
      "headline": "Fix the throw spread distribution (Prandom.Vec cube vs Base unit-ball) and add the :Pinata active-mutator string; use ExprEvaluate for g_pinata to match the sibling mutators",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/PinataMutator.cs",
-      "src/XonoticGodot.Common/Math/Prandom.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/PinataMutator.cs",
+      "src/VortexArena.Common/Math/Prandom.cs"
      ],
      "cross_unit_dep": "Prandom.Vec fix is shared with buffs/random_items and the held-weapon death drop"
     },
@@ -1492,8 +1492,8 @@
      "self_contained": false,
      "headline": "Implement MUTATOR_ONADD item-block + g_overkill_items, the FilterItem health/armor filter + Strength/Shield->HMG/RPC superweapon replacement, fix player loot drop to run the item pipeline (currently non-collectible), add monster loot, wire countdown-blaster (PlayerPreThink) + the dead SetWeaponArena/ForbidRandomStartWeapons chains + item-respawn waypoints",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs",
+      "src/VortexArena.Common/Gameplay/Items/StartItem.cs"
      ],
      "cross_unit_dep": "shares FilterItem + MonsterDropItem + the dead arena/random-start chains with instagib/melee_only/random_items"
     },
@@ -1517,9 +1517,9 @@
      "self_contained": false,
      "headline": "Wire the dead throw input (offhand +hook / weapon_drop -> OffhandFirePressed) so the entire nade subsystem (prime/charge/toss/11 booms/bonus/pickup) becomes reachable, add the lifecycle-cleanup + MonsterDies-bonus + FreezeTag-revive seams, the melee/Nade_Damage damage branches, napalm damageforcescale, pokenade lifetime, and all client presentation",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Nades/NadesMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Nades/NadeThrow.cs",
-      "src/XonoticGodot.Net/InputCommand.cs",
+      "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs",
+      "src/VortexArena.Common/Gameplay/Nades/NadeThrow.cs",
+      "src/VortexArena.Net/InputCommand.cs",
       "game/client/DamageTextLayer.cs"
      ],
      "cross_unit_dep": "shares the dead offhand/+hook input wire with hook and offhand_blaster"
@@ -1537,7 +1537,7 @@
      "self_contained": false,
      "headline": "Implement the physics-ghost item entity (MOVETYPE_PHYSICS/SOLID_CORPSE + hide real item) and the think/touch/damage reset+hazard-snap-home callbacks; requires both an Item_Spawn hook and a rigid-body integrator the port lacks",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/PhysicalItemsMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/PhysicalItemsMutator.cs"
      ],
      "cross_unit_dep": "blocked on a physics-engine substrate that does not exist in the port"
     },
@@ -1555,8 +1555,8 @@
      "self_contained": false,
      "headline": "Implement the primary map weapon-entity replacement (SetWeaponreplace hook + per-entity new_toys key + auto-mapping) which is entirely unported, fix RANDOM start-items to OR both bits + cover the warmup loadout, and wire the New-Toys pickup roflsound",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs",
+      "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs"
      ],
      "cross_unit_dep": "needs a SetWeaponreplace seam on the weapon spawn path"
     },
@@ -1573,8 +1573,8 @@
      "self_contained": false,
      "headline": "Implement the per-client cl_multijump opt-in/out/cap (and g_multijump_client default), fix the maxspeed gate to 3D speed, network multijump_count for prediction, and add the :multijump active-mutator string",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/MultijumpMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/MultijumpMutator.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1596,7 +1596,7 @@
      "self_contained": false,
      "headline": "Subscribe PlayerDamage_SplitHealthArmor (so armor-as-lives isn't 70%-absorbed), wire FilterItem item conversion/replacement + the VaporizerCells/ExtraLife item defs/spawnfuncs + ItemTouch full-heal/extra-life, add friendlyfire/contents/friendlypush/yoda branches, complete the countdown announcer ladder + rm-downgrade, and the MatchEnd/observer/monster/string hooks",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs"
      ],
      "cross_unit_dep": "shares FilterItem + ItemTouch + MonsterDropItem chains with overkill/random_items"
     },
@@ -1616,7 +1616,7 @@
      "self_contained": false,
      "headline": "Network item respawn times to remote clients (currently host-only), register STAT(ITEMSTIME), fix the inverted panel enable-gate (spectator/warmup/mode-2 vs always-on), add per-player send tiers + sync hooks, and the spectator respawn waypoint sprites",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs",
       "game/hud/ItemsTimePanel.cs",
       "game/net/NetGame.cs"
      ],
@@ -1635,7 +1635,7 @@
      "self_contained": false,
      "headline": "Add the bot bunnyhop-disable on spawn (bot_moveskill=0 via a PlayerSpawn hook; bots currently hug ground and stay shielded), honor zero damagemultiplier/shieldtime cvars + live re-read, fix ShieldTime default 0.5->0.3, and the :midair active-mutator string",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1654,7 +1654,7 @@
      "self_contained": false,
      "headline": "Wire the dead SetWeaponArena hook (so melee_only+g_weaponarena doesn't wrongly suppress all medium/large/ammo pickups) and ForbidRandomStartWeapons, add the !instagib/!ok/!weaponarena enable exclusion, and the :MeleeOnly mutator strings",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/MeleeOnlyMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/MeleeOnlyMutator.cs"
      ],
      "cross_unit_dep": "shares the dead SetWeaponArena/ForbidRandomStartWeapons chains with instagib/overkill"
     },
@@ -1672,8 +1672,8 @@
      "self_contained": false,
      "headline": "Enforce the punishment severity switch (the Server Bans.cs substrate exists but the Common mutator never calls it: kick/ban/play-ban+observe), add the warmup_stage gate + per-client startplaytime denominator, and send the correct severity-dependent notifications (QUIT_PLAYBAN_TEAMKILL on the default path)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/KickTeamkillerMutator.cs",
-      "src/XonoticGodot.Server/Bans.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/KickTeamkillerMutator.cs",
+      "src/VortexArena.Server/Bans.cs"
      ],
      "cross_unit_dep": "needs a Common->Server kick/ban/observe bridge"
     },
@@ -1693,8 +1693,8 @@
      "self_contained": false,
      "headline": "Wire the +hook input bit + writes to Entity.OffhandFirePressed (never assigned) so the offhand grapple becomes castable (currently entirely dead), add expr_evaluate grammar, the vehicle/forbidden suppression, warmup_start_ammo_fuel, the :grappling_hook string, and the gameplay tip",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs",
-      "src/XonoticGodot.Net/InputCommand.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs",
+      "src/VortexArena.Net/InputCommand.cs"
      ],
      "cross_unit_dep": "shares the dead offhand/+hook input wire with offhand_blaster and nades"
     },
@@ -1720,8 +1720,8 @@
      "self_contained": false,
      "headline": "Add the item_buff spawnfunc + compat classnames + lifecycle/respawn/relocate (buffs are unobtainable on stock maps) and the FilterItem powerup-replace path; make Jump-buff velocity readable by PlayerPhysics; implement Inferno + Swapper buffs; complete Disability (fire-rate/projectile/monster slows); add carrier glow/trail/waypoint, drop, cleanup hooks and pickup/loss notifications+sounds",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs",
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs",
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "shares the FilterItem hook with random_items/instagib/overkill and the per-effect status dispatch with status_effects"
     },
@@ -1739,8 +1739,8 @@
      "self_contained": false,
      "headline": "Make the EditProjectile health-zeroing observable by dispatching per-projectile ProjectileDamage shoot-down from the damage pipeline (currently never invoked for non-player targets), and add the :InvincibleProjectiles active-mutator string + client MUT_ detection",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/InvincibleProjectilesMutator.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs"
      ],
      "cross_unit_dep": "needs the damage pipeline to dispatch projectile shoot-down (weapons/damage gap)"
     },
@@ -1760,8 +1760,8 @@
      "self_contained": false,
      "headline": "Add the post-write AddedPlayerScore recompute hook + ClientDisconnect/MakePlayerObserver triggers (handicap currently goes stale on cap/objective scores and roster changes), gate off CTS/RACE, and network handicap_level for the scoreboard icon + the :handicap string",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs",
+      "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs"
      ],
      "cross_unit_dep": "needs a post-write score-delta hook and roster-change mutator hooks"
     },
@@ -1777,7 +1777,7 @@
      "self_contained": true,
      "headline": "Include dead players (corpses) in the knockback spread to match Base classname-only IS_PLAYER, and add the :GlobalForces active-mutator string",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/GlobalForcesMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/GlobalForcesMutator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1797,8 +1797,8 @@
      "self_contained": false,
      "headline": "Bridge live movement input onto Entity.MovementForward/MovementRight (never written) so the double-tap detector can fire (currently entirely dead, also affects multijump/bugrigs), add frozen dodging + clientselect opt-in + the MakePlayerObserver reset + the jump animation action",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs",
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs",
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "the MovementForward/Right input bridge is shared with multijump and bugrigs"
     },
@@ -1816,7 +1816,7 @@
      "self_contained": false,
      "headline": "Network damage text to remote clients (currently host-only) with sv_damagetext 1/3 visibility tiers, implement the 2D placement heuristics (close-range/out-of-view/spectating/overlap/2D fade+shrink), render color codes via the HUD font, fix world-drift to the view basis, and add the ClientDisconnect clear + settings menu tab",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/DamagetextMutator.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/DamagetextMutator.cs",
       "game/client/DamageTextLayer.cs",
       "game/net/NetGame.cs"
      ],
@@ -1838,8 +1838,8 @@
      "self_contained": false,
      "headline": "Register the 'camp' deathtype so camp kills get DEATH_SELF_CAMP obituary (currently generic), exempt bots (Base IS_REAL_CLIENT) + typing players, add the round-start/pre-match grace reset, and clear the 'Don't camp!' centerprint on death",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs"
      ],
      "cross_unit_dep": "round reset shares the global round-state accessor with random_gravity/rocketminsta"
     },
@@ -1857,7 +1857,7 @@
      "self_contained": false,
      "headline": "Force the 3rd-person chase camera on join (Base stuffcmds chase_active 1; bugrigs is unplayable in 1st person), set disableclientprediction, and add the :bugrigs active-mutator strings; the RaceCarPhysics drive model is otherwise faithful",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/BugrigsMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/BugrigsMutator.cs"
      ],
      "cross_unit_dep": "needs a ClientConnect mutator-hook + a way to stuff client cvars"
     },
@@ -1876,9 +1876,9 @@
      "self_contained": false,
      "headline": "Build the alpha infrastructure: a SetDefaultAlpha() world-init driver that fires the dead hook + seeds default_player_alpha (0.25 under cloaked), spawn/death/weapon/vehicle-exit reads of it, the Invisibility-powerup restore composition, plus a per-entity Alpha net channel + transparent player render (none exist), and the ', Cloaked' string",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/CloakedMutator.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Net/NetEntity.cs",
+      "src/VortexArena.Common/Gameplay/Mutators/CloakedMutator.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Net/NetEntity.cs",
       "game/client/PlayerModel.cs"
      ],
      "cross_unit_dep": "shares the SetDefaultAlpha driver + entity-alpha-net + render seam with running_guns"
@@ -1895,7 +1895,7 @@
      "self_contained": true,
      "headline": "Add the active-mutator signalling (:bloodloss / , Blood loss + MUT_BLOODLOSS HUD icon) and optionally live-reread the threshold; the rot/crouch/jump-block core is faithful and live",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/BloodlossMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/BloodlossMutator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -1911,8 +1911,8 @@
      "self_contained": true,
      "headline": "Fix the FFA self-break bug (Teams.SameTeam lacks the non-teamplay attacker!=owner case, so shooting your own hook in FFA self-punishes), and live-reread g_breakablehook_owner mid-match",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/BreakablehookMutator.cs",
-      "src/XonoticGodot.Common/Gameplay/Teams.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/BreakablehookMutator.cs",
+      "src/VortexArena.Common/Gameplay/Teams.cs"
      ],
      "cross_unit_dep": "the DiffTeam helper would also fix vampirehook/nade orb team checks"
     },
@@ -1928,7 +1928,7 @@
      "self_contained": true,
      "headline": "Replace the simplified bool ExprEvaluate with Base's full expr_evaluate grammar (empty-string -> true, +/- prefixes, cvar comparison tokens); the spawn-demote core is faithful and live",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs"
      ],
      "cross_unit_dep": "expr_evaluate is shared across hook/melee_only/midair/spawn_near_teammate/etc."
     },
@@ -1944,7 +1944,7 @@
      "self_contained": true,
      "headline": "Add the per-player DOUBLEJUMP stat via Physics_ClientOption (only matters under the default-off g_physics_clientselect); the jump grant/clip core is faithful and live",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/DoublejumpMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/DoublejumpMutator.cs"
      ],
      "cross_unit_dep": "belongs to the broader g_physics_clientselect feature"
     }
@@ -2182,8 +2182,8 @@
      "self_contained": true,
      "headline": "RadiusDamage never OR's HITTYPE_SPLASH onto indirect victims' deathtype (DeathTypes.AddHitType(Splash) call missing) so splash-vs-direct kill classification is lost; also MIN_DAMAGEEXTRARADIUS per-target dist shrink not applied",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2197,11 +2197,11 @@
      "self_contained": true,
      "headline": "Fire DoT: unify the inconsistent per-source ignition Strength convention (fireball/napalm pass raw dps, wyvern frametime-corrects), port the QC LEMMA overlap-merge instead of overwrite, add Fire_ApplyDamage fire-transfer (0.8/0.9) to adjacent entities, and carry real fire_deathtype/inflictor for kill attribution",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/StatusEffects.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs",
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/Fireball.cs",
-      "src/XonoticGodot.Common/Gameplay/Nades/Booms/NadeNapalmBoom.cs"
+      "src/VortexArena.Common/Gameplay/StatusEffects.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs",
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs",
+      "src/VortexArena.Common/Gameplay/Nades/Booms/NadeNapalmBoom.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2217,7 +2217,7 @@
      "self_contained": false,
      "headline": "Add a central Heal(targ,inflictor,amount,limit) dispatcher (game_stopped/dead/frozen reject + event_heal hook + limit cap) and route the ad-hoc per-item/regen healing through it",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs"
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2233,7 +2233,7 @@
      "self_contained": false,
      "headline": "Wire the team-kill complaint sound (teamkill_soundtime/teamkill_complain), apply g_teamdamage_resetspeed decay of dmg_team, and fix in-code fallbacks (teamplay_mode 2->4, g_friendlyfire_virtual_force 0->1) for headless/no-cfg runs",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs"
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2250,7 +2250,7 @@
      "self_contained": false,
      "headline": "Wire IsTypeFrag detection (PHYS_INPUT_BUTTON_CHAT unbound, always false) to drive the TYPEFRAG kill message/announce path; port bot-aim damage shake (v_angle jitter)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs"
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2266,7 +2266,7 @@
      "self_contained": false,
      "headline": "Port the cl_autoswitch / CTS-autoswitch weapon re-selection block inline in Item_GiveTo (capture _switchweapon, force-switch to w_getbestweapon after a better-weapon give); send CENTER_ITEM_FUELREGEN_GOT / _JETPACK_GOT center-prints on first grant",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs"
+      "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2282,7 +2282,7 @@
      "self_contained": true,
      "headline": "Add the ItemTouch/ItemTouched mutator hook chain (currently absent per port comment) so pickup-redirecting mutators fire; add the Q3SURFACEFLAG_SKY loot-kill surface test on touch",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs"
+      "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2299,7 +2299,7 @@
      "self_contained": false,
      "headline": "Item_RespawnCountdown: spawn+ping the WP_Item/WP_Weapon waypoint sprite and play the per-second ITEMRESPAWNCOUNTDOWN sound to nearby clients for long-respawn items",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs"
+      "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2313,7 +2313,7 @@
      "self_contained": true,
      "headline": "Set/honor ITS_ALLOWSI (sv_simple_items, Base default 1) and EF_NODEPTHTEST (g_nodepthtestitems) status bits, and confirm EF_ADDITIVE glow render for powerup ITS_GLOW + g_fullbrightitems",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs"
+      "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs"
      ],
      "cross_unit_dep": "needs the client simple-item render path (items-pickups.presentation) to consume ITS_ALLOWSI"
     },
@@ -2327,8 +2327,8 @@
      "self_contained": true,
      "headline": "Wire the team-item random selection branch (Item_FindTeam) so teamed map items spawn one-at-a-time; apply q3compat item origin offset (z += -15 - mins.z) and item_armor1->ArmorSmall on Quake3-format maps",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs",
-      "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs"
+      "src/VortexArena.Common/Gameplay/Items/StartItem.cs",
+      "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2343,7 +2343,7 @@
      "headline": "Client item-FX pass: add the distance alpha-fade (g_items_maxdist 4500 / cl_items_fadedist 500) so far items fade not pop; add simple-item sprite swap (sv_simple_items/cl_simple_items) and stay-weapon (cl_weapon_stay_alpha/color) + vehicle-hud tints",
      "files": [
       "game/client/ClientWorld.cs",
-      "src/XonoticGodot.Common/Gameplay/Items/ItemBobAnim.cs",
+      "src/VortexArena.Common/Gameplay/Items/ItemBobAnim.cs",
       "game/EntityNode.cs"
      ],
      "cross_unit_dep": "simple-item swap pairs with items-pickups.show.visibility's ITS_ALLOWSI bit"
@@ -2358,7 +2358,7 @@
      "self_contained": true,
      "headline": "Model hidebig (hud_panel_itemstime_hidebig) so Big Health/Armor can be excluded from the timed set (port always includes them)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2374,8 +2374,8 @@
      "self_contained": false,
      "headline": "Add the 10 missing PlayerRegen hook tuning slots (max_mod/regen_mod/rot_mod/limit_mod inert) and gate fuel regen on ITEM_FuelRegen ownership + skip the whole fuel block under IT_UNLIMITED_AMMO (currently runs unconditionally)",
      "files": [
-      "src/XonoticGodot.Server/PlayerFrameLogic.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/PlayerFrameLogic.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2389,7 +2389,7 @@
      "self_contained": true,
      "headline": "Add the TakeResource mutator hook (MUTATOR_CALLHOOK(TakeResource)) and port TakeResourceWithLimit (SVQC clamp-to -limit form); latent \u2014 no shipped mutator subscribes",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Items/Resources.cs"
+      "src/VortexArena.Common/Gameplay/Items/Resources.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2403,7 +2403,7 @@
      "self_contained": true,
      "headline": "Fire the GiveResourceWithLimit mutator hook (port delegates to GiveResource, skipping its own WithLimit chain); latent",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Items/Resources.cs"
+      "src/VortexArena.Common/Gameplay/Items/Resources.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2417,7 +2417,7 @@
      "self_contained": true,
      "headline": "Let the SetResource hook rewrite res_type as well as amount (port's CallSetResource only carries ref amount, M_ARGV(8) entity fixed); latent",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Items/Resources.cs"
+      "src/VortexArena.Common/Gameplay/Items/Resources.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2431,7 +2431,7 @@
      "self_contained": true,
      "headline": "On spawn during warmup countdown, extend each primed pause timer by (game_starttime - time) so timers don't elapse while frozen pre-match",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2447,7 +2447,7 @@
      "self_contained": true,
      "headline": "Compute fragsleft = limit - topscore (and leadlimit) at the win-condition check and Send REMAINING_FRAG_{1,2,3} (ids+announcer sounds registered but no caller; REMAINING_MIN already live)",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2461,8 +2461,8 @@
      "self_contained": true,
      "headline": "ClanArena.AddDamageScore is fully dead (zero call sites): wire it from the CA damage pipeline AND replace its truncation with a shared float2int accumulate-and-carry helper (per-player decimal_field, emit floor(counter+0.5))",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs",
-      "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs"
+      "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs",
+      "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs"
      ],
      "cross_unit_dep": "needs the CA damage pipeline to invoke AddDamageScore per damage event (the dead caller)"
     },
@@ -2476,8 +2476,8 @@
      "self_contained": false,
      "headline": "Make the central game_stopped score clamp live: assign GameScores.GameStopped from the server (GameWorld) so AddToPlayer/AddToTeam uniformly drop post-match/warmup-end deltas (currently the static is never set; only per-call-site MatchEnded guards exist)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -2491,8 +2491,8 @@
      "self_contained": true,
      "headline": "Wire g_score_resetonjoin (currently a no-op): gate ClearPlayer on the cvar (0/-1/1) on a spec-out/rejoin so a rejoining player's score is cleared per the setting",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs",
-      "src/XonoticGodot.Server/Scores.cs"
+      "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs",
+      "src/VortexArena.Server/Scores.cs"
      ],
      "cross_unit_dep": "none"
     }
@@ -2572,9 +2572,9 @@
      "self_contained": false,
      "headline": "Port the monster sound system (.sounds table, idle/melee/spawn cues, msound_delay/g_monsters_sounds), the WP_Monster healthbar sprite, monster_setupcolors skill/team colormap+glowmod, miniboss EF_RED red glow, the dead round-restart Entity.Reset sweep, and enemy-retention LOS/frozen/alpha drops + crouch range scaling.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs",
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs",
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -2593,8 +2593,8 @@
      "self_contained": false,
      "headline": "Port the Webbed player move-speed slow (PlayerPhysics hook, signature CC), fix the web projectile to render as electro orb (PROJECTILE_ELECTRO catalog entry), emit EFFECT_ELECTRO_IMPACT on web explode, and the spider mr_pain/mr_death/mr_anim frame groups.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs",
-      "src/XonoticGodot.Common/Gameplay/PlayerPhysics.cs"
+      "src/VortexArena.Common/Gameplay/Monsters/Spider.cs",
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ]
     },
     {
@@ -2612,9 +2612,9 @@
      "self_contained": false,
      "headline": "Remove fabricated electro_fire2 lightning cue, emit EFFECT_EXPLOSION_MEDIUM (smash) + EFFECT_ELECTRO_IMPACT (lightning explode), fix per-swing melee animtime 0.5\u21920.8, golem mr_pain window 0.34\u21920.5, and real-item loot drop.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs",
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs",
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs"
+      "src/VortexArena.Common/Gameplay/Monsters/Golem.cs",
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs",
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs"
      ]
     },
     {
@@ -2631,8 +2631,8 @@
      "self_contained": true,
      "headline": "Fix the shield damage-reduction bug (port cuts ~80% on top of the faithful ~0.8% armor block \u2014 ~100x too tanky; remove the double-count), fix self-heal eligibility (all skins, toward max 400 not skin-0/100), port the 40% teleport random-relocation branch, fix spike inline-default constants, and remove invented mage_sight/mage_heal cues + add spike impact sound.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Monsters/Mage.cs",
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs"
+      "src/VortexArena.Common/Gameplay/Monsters/Mage.cs",
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs"
      ]
     },
     {
@@ -2650,8 +2650,8 @@
      "self_contained": false,
      "headline": "Stop playing zombie pain + block(melee) sounds Base leaves silent (route via .sounds table), fix block armor-restore fallback 0.6\u21920.5, and drive the 14 mr_anim frame groups (currently Frame pinned 0).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs",
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs"
+      "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs",
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs"
      ]
     },
     {
@@ -2668,8 +2668,8 @@
      "self_contained": true,
      "headline": "Override mr_death to fling the corpse (400r-200 / 100r+100 scatter) so a killed wyvern tumbles, fix the pain window 0.34\u21920.5, emit EFFECT_FIREBALL_EXPLODE on detonation, and add the firemine in-flight visual + mr_deadthink die2 swap.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs",
-      "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs"
+      "src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs",
+      "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs"
      ]
     },
     {
@@ -2688,9 +2688,9 @@
      "self_contained": false,
      "headline": "Wire the dead TurretAI.Damage onto the live damage path (GtEventDamage), fix targetscan_maxdelay 0.6\u21921 + add g_turrets_nofire gate, remove the unintended death-blast (Base commented out), add the cvar-backed per-unit table, the death two-step + turret_heal + HEADSHAKE, and the whole turret networking + client presentation layer.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs"
      ]
     },
     {
@@ -2708,9 +2708,9 @@
      "self_contained": false,
      "headline": "Remove the unconditional uzi_fire.wav cue (Base turret path is silent), remove the death RadiusDamage blast (Base commented out), drop the extra SelectAngleLimits/zPredict flags + add checkpvs, and add the fire-time LOS trace (port currently fires through walls).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/MachinegunTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretCombat.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/MachinegunTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretCombat.cs"
      ]
     },
     {
@@ -2727,8 +2727,8 @@
      "self_contained": false,
      "headline": "Fix instagib values (port 800dmg/0force \u2192 Base 1e10dmg/800force), pass the per-unit select biases (0.5/0.01/0.25) + track accel/blendrate to MakeParams, fix shot_spread 0.0125\u21920.015, drop the extra zPredict, and remove the unintended death blast.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs"
      ]
     },
     {
@@ -2745,9 +2745,9 @@
      "self_contained": false,
      "headline": "Implement TFL_DMG_HEADSHAKE (head not jolted on hit), remove the unintended death blast, pass per-unit biases (0.2/0.4/0.4) + override target_range_optimal (500\u21921000) + track accel/blendrate, fix shot_spread 0.0125\u21920.015, and the head-frame wheel anim.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs"
      ]
     },
     {
@@ -2764,8 +2764,8 @@
      "self_contained": false,
      "headline": "Implement VOLLYALWAYS burst-completion (port aborts the 6-rocket burst the instant the target is lost), pass the per-unit target-select biases (all defaulting to 1.0), fix target_range_optimal 1500\u2192500, aim_maxpitch 30\u219220, shot_spread 0.0125\u21920.05, the fuse-floor 500\u2192125 radius, and HEADSHAKE + ammo-gauge head frame.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/MlrsTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/MlrsTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs"
      ]
     },
     {
@@ -2783,9 +2783,9 @@
      "self_contained": false,
      "headline": "Fix the missile blast radius 500\u219280 (and the knock-on proximity 100\u219216 / stray 2500\u2192400 thresholds), pass the per-unit biases (0.7/0.01/0.01/0) + range_optimal 3000\u21924500 + track accel/blend, fix guidance accel/decel constants, respawntime 60\u219290, launch spread 0.08, the AFF firecheck, and remove the unintended death blast.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs"
      ]
     },
     {
@@ -2802,7 +2802,7 @@
      "self_contained": false,
      "headline": "Fix respawntime 60\u2192120, remove the discharge electro_fire.wav cue (Base turret is silent), set chain damage force to zero (Base toast force '0 0 0', port shoves at 400), add the realowner-skip branch, and the head spin-up + idle crackle arc.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/TeslaTurret.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/TeslaTurret.cs"
      ]
     },
     {
@@ -2821,8 +2821,8 @@
      "self_contained": false,
      "headline": "Fix the framerate-scaled body-yaw turn (port turns ~6x slower than Base per-frame), port idle roam/wander + last-seen pursuit + waypoint path-following + the missing 6 gaits (swim/jump/land/pain/strafe/turn), fix track_type STEPMOTOR vs FluidInertia, lead shot-speed 34920\u219218000, and the rocket launch sound hagar_fire.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/WalkerTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/WalkerTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs"
      ]
     },
     {
@@ -2840,8 +2840,8 @@
      "self_contained": false,
      "headline": "Fix all inflated drive speeds (700/500/320/100 \u2192 500/150/50/25) + body turnrate 90\u2192200 + add aim-error speed gating, fix target_range_optimal 1500\u2192900, head clamps (maxrot 360\u219220, maxpitch 20\u219245) + track_type STEPMOTOR, respawntime 60\u219230, shot_spread 0.0125\u21920.025, and waypoint path following.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs"
      ]
     },
     {
@@ -2858,9 +2858,9 @@
      "self_contained": false,
      "headline": "Pass the per-unit biases (0.5/0.01/0.1 \u2014 samebias 100x too sticky at default 1.0), fix shot_speed_turnrate 0.1\u21920.25 + accel/decel constants (1.05/1.1/0.85 \u2192 1.025/1.05/0.9), fix fuel-out to go inert (dud) not detonate, add enemy-lost re-seek scan, target_range_optimal 3000\u21925000, aim_maxpitch 30\u219220, respawntime 60\u219290, and external target reception.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/HkTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/HkTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs"
      ]
     },
     {
@@ -2876,8 +2876,8 @@
      "self_contained": false,
      "headline": "Fix aim_maxpitch 90\u219235 (port acquires missiles outside the real flak cone), pass per-unit biases (rangebias 0.25/anglebias 0.5) + track accel/blend, remove the unintended death blast, fix respawntime 60\u219290, shot_spread 0.0125\u21920.02, target_range_optimal 2000\u21921250, the fuse-time derivation, and drop the extra zPredict.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs",
-      "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs"
+      "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs",
+      "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs"
      ]
     },
     {
@@ -2896,9 +2896,9 @@
      "self_contained": false,
      "headline": "Wire vehicles_damage/vehicles_heal onto the live damage path (install event_damage/event_heal \u2014 currently a shot vehicle takes player ARMOR/HEALTH-split damage and never ejects/dies via damage), port vehicles_touch crush + vehicles_impact fall-damage + vehicles_painframe smoke/jitter + vehicles_setreturn return-waypoint + vehicle_use map activation + VehicleInit/VehicleTouch hook dispatch + g_vehicles_steal + the dead in-vehicle HUD/camera.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs",
-      "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs",
+      "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs",
+      "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs",
       "game/hud/VehicleHud.cs"
      ]
     },
@@ -2917,8 +2917,8 @@
      "self_contained": false,
      "headline": "Fix the per-frame controller timing magnitude error (head/body slew + gravity ~6x slower than Base), reattach a carried CTF flag to the head on enter, add the landing sound, average both hardpoint tags for head aim, and the death gib entities / burn FX.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs",
-      "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs"
+      "src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs",
+      "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs"
      ]
     },
     {
@@ -2936,8 +2936,8 @@
      "self_contained": false,
      "headline": "Port vr_impact ram/collision fall-damage + bouncefactor/bouncestop, the water air-meter (racer_air_finished) + post-water downforce ramp (racer_watertime), fix the homing-rocket obstacle-avoid climb step + timeout-detonation deathtag (VhWakiRocket), the flag-carrier reposition, and the engine move/idle sound state machine + booster FX.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs",
-      "src/XonoticGodot.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs"
+      "src/VortexArena.Common/Gameplay/Vehicles/Racer.cs",
+      "src/VortexArena.Common/Gameplay/Vehicles/VehiclePhysicsHelpers.cs"
      ]
     },
     {
@@ -2954,7 +2954,7 @@
      "self_contained": false,
      "headline": "Port vr_impact crash-pain/shake + bouncefactor/bouncestop/mass + liquid-sink mask, fix bomblet touch detonation to stagger (random*0.4s) + the bomblet_alt clear-fall early-burst, clear buttons during takeoff, and the rotor/anim/CSQC-projectile FX + engine fly sound.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs"
+      "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs"
      ]
     },
     {
@@ -2973,9 +2973,9 @@
      "self_contained": false,
      "headline": "The entire bumblebee (pilot, both gunners, raygun, death, respawn) is faithful but DEAD \u2014 wire the +use\u2192UseKey boarding dispatch and the DamageVehicle damage routing, then add the networked BRG_* heal/damage beam, the multi-seat HUD/crosshairs, gib toss + blowup FX, dead-touch, and the +0 0 25 spawn lift.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Vehicles/Bumblebee.cs",
-      "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleBoarding.cs",
-      "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs"
+      "src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs",
+      "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs",
+      "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs"
      ]
     }
    ],
@@ -3216,8 +3216,8 @@
      "self_contained": true,
      "headline": "Fix warpzone crossing gate to plane-side test (with view_ofs) instead of velocity-direction; add same-frame re-teleport guard (finishtime) + WarpZone_Projectile_Touch impact filter + frame-back re-trace",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs",
-      "src/XonoticGodot.Engine/Simulation/TriggerTouch.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs",
+      "src/VortexArena.Engine/Simulation/TriggerTouch.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3231,7 +3231,7 @@
      "self_contained": true,
      "headline": "Fire SUB_UseTargets on BOTH this and partner zone with the QC skip-bitmasks, not just the trigger",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3245,7 +3245,7 @@
      "self_contained": true,
      "headline": "Align portal splash falloff to transformed blast-to-zone distance + per-victim nearest-point-on-AABB + is_pure blacklist",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs"
+      "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3261,8 +3261,8 @@
      "self_contained": false,
      "headline": "Render the warpzone surface as a live camera view through the seam (SubViewport+Camera3D), not a dark mirror placeholder",
      "files": [
-      "game/client/NetGame.cs",
-      "src/XonoticGodot.Common/Gameplay/Effects/HeroMaterials.cs"
+      "game/net/NetGame.cs",
+      "game/loaders/HeroMaterials.cs"
      ],
      "cross_unit_dep": "needs warpzones server zone state (already live)"
     },
@@ -3278,7 +3278,7 @@
      "self_contained": false,
      "headline": "Port WarpZone_FixView/FixNearClip/View_Inside/FixPMove so crossing a warpzone is visually seamless",
      "files": [
-      "game/client/NetGame.cs"
+      "game/net/NetGame.cs"
      ],
      "cross_unit_dep": "pairs with warpzones.client.render"
     },
@@ -3294,8 +3294,8 @@
      "self_contained": false,
      "headline": "Send warpzone_teleported + FixVAngle on a server crossing; client rotates view/input (CL_RotateMoves) so the view carries through the seam",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs",
-      "game/client/NetGame.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs",
+      "game/net/NetGame.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3311,7 +3311,7 @@
      "self_contained": false,
      "headline": "Client-predict warpzone crossings so they are seamless instead of arriving as a rubber-band correction",
      "files": [
-      "src/XonoticGodot.Engine/Simulation/TriggerTouch.cs"
+      "src/VortexArena.Engine/Simulation/TriggerTouch.cs"
      ],
      "cross_unit_dep": "pairs with warpzones.client.fixview/render"
     },
@@ -3327,8 +3327,8 @@
      "self_contained": false,
      "headline": "Implement func_camera / func_warpzone_camera (fixed dpcamera security-camera view of a target position)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs",
-      "game/client/NetGame.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs",
+      "game/net/NetGame.cs"
      ],
      "cross_unit_dep": "shares the SubViewport render seam with warpzones.client.render"
     },
@@ -3342,7 +3342,7 @@
      "self_contained": true,
      "headline": "Port trigger_warpzone_reconnect + WarpZone_Think for runtime/moving-warpzone re-link (re-derive transforms each frame for spawnflag-1 movers)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3356,7 +3356,7 @@
      "self_contained": true,
      "headline": "Port WarpZone_StartFrame per-frame observer/SOLID_NOT-client warp so spectators can pass through warpzones",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3372,7 +3372,7 @@
      "self_contained": false,
      "headline": "Port WarpZone_TraceToss (ballistic toss prediction through portals, for bot grenade aim) + WarpZone_TrailParticles",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs"
+      "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3388,13 +3388,13 @@
      "self_contained": false,
      "headline": "Wire the dead map-object round-restart reset: doors/plats/buttons/breakable/rotating/secret + all logic-gate/relay/teleporter .reset callbacks",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Doors.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Buttons.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Breakable.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MovingBrushes.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs"
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/Doors.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/Buttons.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/Breakable.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/MovingBrushes.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs"
      ],
      "cross_unit_dep": "unblocks the dormant .reset bodies in mapobject-triggers logic-gates/relays + mapobject-target.speaker + movers-platforms.plat.reset"
     },
@@ -3411,7 +3411,7 @@
      "self_contained": false,
      "headline": "Door NOSPLASH spawnflag (splash-immune shootable door), `sounds`-key sound-pack selection, and .message centerprint",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Doors.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Doors.cs"
      ],
      "cross_unit_dep": "shares sounds-key + centerprint seams with plat/secret/button/keylock"
     },
@@ -3425,7 +3425,7 @@
      "self_contained": true,
      "headline": "Port DOOR_ROTATING_BIDIR / BIDIR_IN_DOWN trigger-side reverse-open (door_use trigger_reverse path: lip=666 + pos2 flip) so bidirectional rotating doors open toward the trigger",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Doors.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Doors.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3441,7 +3441,7 @@
      "self_contained": false,
      "headline": "Show CENTER_DOOR_UNLOCKED / DOOR_LOCKED_NEED / DOOR_LOCKED_ALSONEED key-door center notifications (with item_keys_keylist text)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Doors.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Doors.cs"
      ],
      "cross_unit_dep": "depends on mapobject-misc.keys.item_key (keys must spawn to be usable)"
     },
@@ -3457,7 +3457,7 @@
      "self_contained": false,
      "headline": "Fix INVERTED DONTACCUMULATEDMG (fire iff single hit >= health, no accumulation), honor NOSPLASH, and health==-1 (fire on any/damageless attack)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Buttons.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Buttons.cs"
      ],
      "cross_unit_dep": "shares the event_damage seam with door/breakable shootable paths"
     },
@@ -3473,7 +3473,7 @@
      "self_contained": false,
      "headline": "Read the `sounds` map key (1=plat1/2, 2=medplat) + legacy sound1/sound2 for func_plat sound-pack selection",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3487,7 +3487,7 @@
      "self_contained": true,
      "headline": "Port TRAIN_NEEDACTIVATION intermediate-corner re-arm (train_wait re-installs train_use + parks the think to wait for re-triggering)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MovingBrushes.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/MovingBrushes.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3501,7 +3501,7 @@
      "self_contained": true,
      "headline": "func_rotating_init_for_player late-joiner ambient resend + start/stop ambient on RotatingSetActive toggle",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MovingBrushes.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/MovingBrushes.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3517,7 +3517,7 @@
      "self_contained": false,
      "headline": "Honor NOSPLASH + team friendly-fire guard on breakable; fix DebrisTimeJitter default; carry killing-hit force; (waypoint/bot-attack/colormod out of scope)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Breakable.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Breakable.cs"
      ],
      "cross_unit_dep": "shares the event_damage seam with button/door"
     },
@@ -3534,7 +3534,7 @@
      "self_contained": false,
      "headline": "door_secret `sounds`-key medieval/metal soundpack selection + .message centerprint",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3548,7 +3548,7 @@
      "self_contained": true,
      "headline": "Use exact-trigger plane overlap (not AABB) for conveyor/ladder volume tagging; func_ladder bot waypoint tracetest",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapVolumes.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/MapVolumes.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3576,7 +3576,7 @@
      "self_contained": true,
      "headline": "Bake attach_sameorigin tag-relative origin/angle (gettaginfo/gettagindex + AnglesTransform basis change) so a tag-attached entity sits at the exact tag pose",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Follow.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Follow.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3590,7 +3590,7 @@
      "self_contained": true,
      "headline": "Path-following dynlight should walk the path_corner chain (install a train_next-style think) instead of parking on the first corner",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3606,7 +3606,7 @@
      "self_contained": false,
      "headline": "Add a realtime dynamic-light render consumer so authored/moving/pulsing map lights actually emit visible light",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/DynamicLight.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/DynamicLight.cs",
       "game/client/"
      ],
      "cross_unit_dep": "needs dynlight server state (already live)"
@@ -3621,8 +3621,8 @@
      "self_contained": true,
      "headline": "Port item_key* pickup keys (spawnfunc, touch, MF_ROTATE model, DropToFloor, grant itemkeys bits) \u2014 without keys, key-gated doors/keylocks are unopenable",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/"
+      "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/"
      ],
      "cross_unit_dep": "unblocks mapobject-func.door.keys + mapobject-triggers.keylock consumers"
     },
@@ -3638,7 +3638,7 @@
      "self_contained": false,
      "headline": "PathCornerSetup must call set_platmovetype so a corner's per-corner ease/turn override is honored",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MovingBrushes.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/MovingBrushes.cs"
      ],
      "cross_unit_dep": "tightly coupled to mapobject-misc.subs.calcmove default-easing fix"
     },
@@ -3654,7 +3654,7 @@
      "self_contained": false,
      "headline": "Fix default easing: PlatMoveStart/End default must be 0/0 (smoothstep -2t^3+3t^2) not 1/1 (forced linear) \u2014 every long door/plat/train move is currently uneased",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs"
      ],
      "cross_unit_dep": "pairs with mapobject-misc.corner.path_corner + movers-platforms.subs.platmovetype_parse"
     },
@@ -3670,7 +3670,7 @@
      "self_contained": false,
      "headline": "Port bgmscript ADSR envelope so func_clientwall/func_pointparticles animate to the map music (no stock map depends \u2014 low priority)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs",
       "game/client/"
      ],
      "cross_unit_dep": "none"
@@ -3687,7 +3687,7 @@
      "self_contained": false,
      "headline": "Consume Entity.ColorMapOverride to actually team-tint a colormapped prop on screen",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs",
       "game/client/"
      ],
      "cross_unit_dep": "none"
@@ -3704,8 +3704,8 @@
      "self_contained": false,
      "headline": "Apply func_clientwall distance-fade alpha + PVS cull (stored but unrendered) and the antiwall g_clientmodel_use solid/visible toggle relay",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapModels.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/MapModels.cs",
       "game/client/"
      ],
      "cross_unit_dep": "none"
@@ -3722,8 +3722,8 @@
      "self_contained": false,
      "headline": "Consume per-entity bouncefactor/bouncestop (currently dropped \u2192 wrong restitution+settle for grenades/casings/balls/spider/vehicle projectiles); use signed Dot for bounce-down-slopes",
      "files": [
-      "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs",
-      "src/XonoticGodot.Engine/Entity.cs"
+      "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs",
+      "src/VortexArena.Common/Framework/Entity.cs"
      ],
      "cross_unit_dep": "producers (MonsterAI/Spider/Golem/weapon projectiles) already pass the values \u2014 needs the consumer fields"
     },
@@ -3737,7 +3737,7 @@
      "self_contained": true,
      "headline": "Route MOVETYPE_STEP through the full Walk integrator (slide+stair) like Base's step->walk alias, not freefall-only FlyMove(stepHeight 0); drop the non-Base hardcoded misc/hitground.wav",
      "files": [
-      "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs"
+      "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3751,7 +3751,7 @@
      "self_contained": true,
      "headline": "Fix non-player Walk tunables: sv_stepheight 18\u219231, sv_gameplayfix_stepdown 1\u21922 (SET_ONGROUND on down-step landing), add stepdown_maxspeed 400 gate; fix CheckWater-gated gravity skip",
      "files": [
-      "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs"
+      "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs"
      ],
      "cross_unit_dep": "depends on physics-movetypes.checkwater return-value fix for the gravity gate"
     },
@@ -3767,8 +3767,8 @@
      "self_contained": false,
      "headline": "Port MatchTicrate sub-tick interpolation for gibs/casings/projectiles/trains (may be masked by the separate render interp layer)",
      "files": [
-      "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs",
-      "src/XonoticGodot.Engine/Entity.cs"
+      "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs",
+      "src/VortexArena.Common/Framework/Entity.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3782,7 +3782,7 @@
      "self_contained": true,
      "headline": "Add the MOVETYPE_PHYSICS rider fast-path (translate-only, skip PushEntity/blocked) to PushMove",
      "files": [
-      "src/XonoticGodot.Engine/Simulation/FlyMove.cs"
+      "src/VortexArena.Engine/Simulation/FlyMove.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3796,7 +3796,7 @@
      "self_contained": true,
      "headline": "Fix CheckWater return-value bug (return WaterLevel>1 / swimming, not >=1 / wetfeet) feeding WalkMove gravity; route CheckWaterTransition through a .contentstransition callback (water_out cue + lava/slime contact damage) instead of a hardcoded water_in.wav",
      "files": [
-      "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs"
+      "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs"
      ],
      "cross_unit_dep": "feeds physics-movetypes.walk.stepmove gravity gate"
     },
@@ -3812,7 +3812,7 @@
      "self_contained": false,
      "headline": "Verify the Warsow-bunny air-accel path under a real non-default physics preset (code ported & faithful but unproven \u2014 DEAD at stock)",
      "files": [
-      "src/XonoticGodot.Common/Physics/PMAccelerate.cs"
+      "src/VortexArena.Common/Physics/PMAccelerate.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3826,7 +3826,7 @@
      "self_contained": true,
      "headline": "Gate the jump grunt on autocvar_g_jump_grunt (stock 0 = silent; port always plays player/jump.wav) + drive ANIMACTION_JUMP",
      "files": [
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3840,7 +3840,7 @@
      "self_contained": true,
      "headline": "Port the viewloc (1D-rail) water sub-cases (wishvel.z=-160 + separate plain-addspeed accel path); confirm swim liveness on a real water map",
      "files": [
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3854,7 +3854,7 @@
      "self_contained": true,
      "headline": "Compute func_water waterlevel-from-volume override in LadderMove (clamp to ladder.speed, set watertype, waterlevel from origin.z vs ladder maxs.z) + viewloc ladder sub-case",
      "files": [
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3868,7 +3868,7 @@
      "self_contained": true,
      "headline": "Read g_jetpack_* tunables from cvars via FromCvars (currently hardcoded constants \u2014 server retune is ignored); confirm jetpack liveness",
      "files": [
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3882,7 +3882,7 @@
      "self_contained": true,
      "headline": "Port viewloc force-crouch + have-hook/in-vehicle force-uncrouch sub-cases in UpdateCrouch (edge cases on stock maps)",
      "files": [
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3896,7 +3896,7 @@
      "self_contained": true,
      "headline": "Honor autocvar_g_footsteps master gate; jitter footstep cadence (0.3+random()*0.1); add ladder/active-hook bail to CheckHitground",
      "files": [
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3910,7 +3910,7 @@
      "self_contained": true,
      "headline": "Port PM_check_specialcommand (xwxw... button cheat-code \u2192 CHIMPULSE_GIVE_ALL) \u2014 cheat-only, low impact",
      "files": [
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3926,7 +3926,7 @@
      "self_contained": false,
      "headline": "Add the MISSING team-gate (this.team/INVERT_TEAMS) + pressedkeys gate to MultiTouch; per-client CTS/Race .wait buffers; NOSPLASH + team-attacker gate on the shootable path",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs"
      ],
      "cross_unit_dep": "shares event_damage seam with button/door/breakable"
     },
@@ -3942,7 +3942,7 @@
      "self_contained": false,
      "headline": "Gate non-creature trigger_hurt on toucher.damagedbytriggers (port damages every non-creature toucher every touch)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs"
      ],
      "cross_unit_dep": "shares damagedbytriggers field with mapobject-target.kill.use"
     },
@@ -3956,7 +3956,7 @@
      "self_contained": true,
      "headline": "Honor HEAL_SOUND_ALWAYS spawnflag (play heal sound even when topped off)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3973,7 +3973,7 @@
      "self_contained": false,
      "headline": "Jumppad: centerprint(message), ANIMACTION_JUMP pose, jumppadcount/jumppadsused kill-credit bookkeeping",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Jumppads.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Jumppads.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -3989,8 +3989,8 @@
      "self_contained": false,
      "headline": "Make swamp slowdown actually slow the player (dead: SwampSlug stamped but no movement reader) + use DeathTypes.Swamp not Void for the obituary",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs",
-      "src/XonoticGodot.Common/Physics/PlayerPhysics.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs",
+      "src/VortexArena.Common/Physics/PlayerPhysics.cs"
      ],
      "cross_unit_dep": "needs a PlayerPhysics reader of the stamped SwampSlowdown"
     },
@@ -4006,7 +4006,7 @@
      "self_contained": false,
      "headline": "Show CENTER_SEQUENCE_COMPLETED/_COUNTER/_FEWMORE countdown text and REMOVE the invented misc/talk.wav (Base MSG_CENTER carries no sound)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4022,7 +4022,7 @@
      "self_contained": false,
      "headline": "Wire GameStartTime from the host countdown so trigger_gamestart wait>0 fires at the real start, not t=0",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs"
      ],
      "cross_unit_dep": "needs host to stamp GameStartTime"
     },
@@ -4038,7 +4038,7 @@
      "self_contained": false,
      "headline": "Wire trigger_magicear into a chat/say pipeline (string-match core is faithful but DEAD \u2014 no caller)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs"
      ],
      "cross_unit_dep": "needs the missing chat say pipeline"
     },
@@ -4054,7 +4054,7 @@
      "self_contained": false,
      "headline": "Show CENTER_DOOR_LOCKED_NEED/_ALSONEED (item_keys_keylist text) + the 'Unlocked!' centerprint (sound + fire already faithful)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Triggers.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs"
      ],
      "cross_unit_dep": "depends on mapobject-misc.keys.item_key (keys must spawn)"
     },
@@ -4070,7 +4070,7 @@
      "self_contained": false,
      "headline": "Add the client 2.5D side-scroller camera that consumes player.ViewLoc (server stamps it each frame but it goes nowhere visible)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/ViewLocation.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs",
       "game/client/"
      ],
      "cross_unit_dep": "needs viewloc physics sub-cases (swim/ladder/crouch viewloc) for full fidelity"
@@ -4085,7 +4085,7 @@
      "self_contained": true,
      "headline": "Refine music fade curve to QC's per-source frametime/fade_time(in)/fade_rate(out) easing instead of the A/B crossfade approximation",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs",
       "game/client/MusicPlayer.cs"
      ],
      "cross_unit_dep": "none"
@@ -4103,8 +4103,8 @@
      "self_contained": false,
      "headline": "Wire dead target_changelevel: fix CHANGELEVEL_MULTIPLAYER bit (1\u21922, one-line bug), bind chmap/gametype keys, assign the host seams so end-of-level actually ends/switches the match",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ],
      "cross_unit_dep": "shares the host-seam + key-binder seams with target_levelwarp + target_spawn"
     },
@@ -4120,8 +4120,8 @@
      "self_contained": false,
      "headline": "Assign CampaignLevelWarpHandler/IsCampaign on the live path so campaign level-warp triggers work (logic faithful, host seam test-only)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ],
      "cross_unit_dep": "shares host-seam seam with target_changelevel"
     },
@@ -4138,7 +4138,7 @@
      "self_contained": false,
      "headline": "target_spawn is a dead no-op (SpawnEntityHandler unassigned + $-templating cut) \u2014 wire the minimal seam and decide whether to port the templating engine",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs"
      ],
      "cross_unit_dep": "shares host-seam seam with changelevel/levelwarp"
     },
@@ -4154,7 +4154,7 @@
      "self_contained": false,
      "headline": "target_speaker ACTIVATOR plays to ALL not just the triggering real client; *-voice sample randomization unimplemented; channel mapped to Body not CH_TRIGGER_SINGLE",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetSpeaker.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetSpeaker.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4170,7 +4170,7 @@
      "self_contained": false,
      "headline": "target_music is listen-server-only + GLOBAL (not per-activator); port the net path + per-round reset/kill/restore plumbing",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs",
       "game/client/MusicPlayer.cs"
      ],
      "cross_unit_dep": "none"
@@ -4187,7 +4187,7 @@
      "self_contained": false,
      "headline": "trigger_music is listen-server-only; fix first-vs-last overlap pick; always install the toggle use-handler even when untargeted",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetMusic.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetMusic.cs",
       "game/client/MusicPlayer.cs"
      ],
      "cross_unit_dep": "shares the music net seam with target_music"
@@ -4204,7 +4204,7 @@
      "self_contained": false,
      "headline": "target_items: spawnflag-prefixed (max/min/minus) re-serialization grammar + GetResource resource serialization + loot-toucher delete branch + centerprint",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4220,7 +4220,7 @@
      "self_contained": false,
      "headline": "Toggle EF_TELEPORT_BIT (player-model dissolve/flash) on teleport + set player.istypefrag for the kill-credit window",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4237,7 +4237,7 @@
      "self_contained": false,
      "headline": "Add the missing telefrag suppression (!g_race && !g_cts && !round-pre-start) so telefrags don't fire in Race/CTS or during the round countdown; model TELEPORT_FLAG_FORCE_TDEATH",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "needs round_handler IsActive/IsRoundStarted (S2) for the round-countdown gate"
     },
@@ -4253,8 +4253,8 @@
      "self_contained": false,
      "headline": "Register g_telefrags_teamplay + fix its inverted sense (Base name = 'never telefrag teammates'; an explicit value currently flips the wrong way)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs",
-      "src/XonoticGodot.Server/Cvars.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs",
+      "src/VortexArena.Server/Cvars.cs"
      ],
      "cross_unit_dep": "shares telefrag-cvars seam with telefrag + telefrag_cvars"
     },
@@ -4270,8 +4270,8 @@
      "self_contained": false,
      "headline": "Register g_telefrags / g_telefrags_avoid so server overrides take effect (currently inert hardcoded fallbacks)",
      "files": [
-      "src/XonoticGodot.Server/Cvars.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Server/Cvars.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "shares telefrag-cvars seam with telefrag + telefrag_teamplay"
     },
@@ -4285,7 +4285,7 @@
      "self_contained": true,
      "headline": "Apply the team gate (this.team + INVERT_TEAMS BIT(2)) in authoritative TeleportActive \u2014 a team-owned teleporter currently relocates any-team players server-side",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4301,7 +4301,7 @@
      "self_contained": false,
      "headline": "Call RemoveGrapplingHooks on teleport (a hooked player currently keeps the hook through a teleporter)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4315,7 +4315,7 @@
      "self_contained": true,
      "headline": "Guard the team claim with if(teamplay) in TeleportUse (and it is moot until the active_gate team gate exists)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "inert until teleporters.trigger.active_gate adds the team gate"
     },
@@ -4329,7 +4329,7 @@
      "self_contained": true,
      "headline": "Reproduce target_teleporter spawn-time disambiguation (target_teleporter_checktarget self-target .enemy=this case)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4343,7 +4343,7 @@
      "self_contained": true,
      "headline": "Emit the exit flash at to+v_forward*32 (32u ahead) not the exit origin; couple the particle to the 0.2s pushltime debounce like Base",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4357,7 +4357,7 @@
      "self_contained": true,
      "headline": "Use CH_TRIGGER channel + teleporter.noise random-word override for the teleport sound",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4373,7 +4373,7 @@
      "self_contained": false,
      "headline": "Porto OnTouch: orient the portal to the real surface normal (currently faces back along velocity) + slick/noimpact reflection + porto_v_angle held-angle capture",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Porto.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4390,8 +4390,8 @@
      "self_contained": false,
      "headline": "Porto portals are realised as permanent indestructible warpzones \u2014 port the real portal entity (health, 15s lifetime/fade, model/skins/EF glow, explode/expire sounds, independent-player hiding)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/Porto.cs"
      ],
      "cross_unit_dep": "a portal model edict is a networked entity (S1-class projectile/model net)"
     },
@@ -4408,7 +4408,7 @@
      "self_contained": false,
      "headline": "Portal: ANNCE_ACHIEVEMENT_AMAZING (telefrag within 1s of creation), portal_activatetime self-skip, independent-player gating, portal-owner kill-credit, TELEPORT_FLAGS_PORTAL force-tdeath",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs"
      ],
      "cross_unit_dep": "depends on portals.entity.lifecycle (teleport_time/creation tracking) + the Amazing announcer (S4)"
     },
@@ -4424,8 +4424,8 @@
      "self_contained": false,
      "headline": "Portal pair lifecycle: re-shooting an in-portal must replace/clear the prior pair, and Portal_ClearAll on death/disconnect \u2014 currently warpzone portals accumulate permanently (exploit)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs",
-      "src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/Porto.cs"
      ],
      "cross_unit_dep": "depends on portals.entity.lifecycle"
     },
@@ -4441,7 +4441,7 @@
      "self_contained": false,
      "headline": "Portal_WillHitPlane predict-ahead crossing (so fast movers don't tunnel) + teleport the active grappling hook through + exclude item_flag_team from portalling",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs"
      ],
      "cross_unit_dep": "depends on portals.entity.lifecycle"
     },
@@ -4457,7 +4457,7 @@
      "self_contained": false,
      "headline": "Apply the message2 ('was squished by') default in PlatSetup + read the `sounds`/sound1/sound2 keys for plat sound-pack selection",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs"
      ],
      "cross_unit_dep": "none"
     },
@@ -4473,8 +4473,8 @@
      "self_contained": false,
      "headline": "Port Q3/Q3DF func_plat compat defaults (speed 200/lip 8/dmg 2, spawnflags zeroing, medplat sounds, CPMA sound_start/sound_end probe) \u2014 dormant until a Q3 map loads",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/CompatRemaps.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/CompatRemaps.cs"
      ],
      "cross_unit_dep": "unblocks plat.reset Q3 plat_target_use fork + plat.outside_target_use"
     },
@@ -4490,7 +4490,7 @@
      "self_contained": false,
      "headline": "Add the Q3COMPAT targeted-plat fork in PlatReset (install plat_target_use vs plat_trigger_use) \u2014 needs a q3compat flag",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs"
      ],
      "cross_unit_dep": "depends on q3compat-flag + plat.outside_target_use (plat_target_use)"
     },
@@ -4506,7 +4506,7 @@
      "self_contained": false,
      "headline": "Implement plat_outside_touch (mapper-wired outside trigger sends a topped plat down) + plat_target_use (STATE_TOP refresh / else go_up)",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs"
      ],
      "cross_unit_dep": "plat_target_use is consumed by plat.reset Q3 fork"
     },
@@ -4522,8 +4522,8 @@
      "self_contained": false,
      "headline": "Port set_platmovetype (parse the `platmovetype` spawn key into PlatMoveStart/End + cubic_speedfunc_is_sane reverse-curve reject) \u2014 same seam as mapobject-misc.subs.calcmove",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MovingBrushes.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/MovingBrushes.cs"
      ],
      "cross_unit_dep": "same seam as mapobject-misc.subs.calcmove + mapobject-misc.corner.path_corner"
     }
@@ -4825,7 +4825,7 @@
      "self_contained": false,
      "headline": "Network wepent charge/clip/heat fields and feed CrosshairPanel charge/load/reload/heat rings (currently dead setters).",
      "files": [
-      "src/XonoticGodot.Net/NetEntity.cs",
+      "src/VortexArena.Net/NetEntity.cs",
       "game/net/ServerNet.cs",
       "game/net/ClientNet.cs",
       "game/hud/CrosshairPanel.cs"
@@ -4843,7 +4843,7 @@
      "self_contained": false,
      "headline": "Add ent_cs public/private field mask: stop sending every player's origin/health/armor to enemies (anti-cheat relevant).",
      "files": [
-      "src/XonoticGodot.Net/NetEntity.cs",
+      "src/VortexArena.Net/NetEntity.cs",
       "game/net/ServerNet.cs"
      ]
     },
@@ -4859,7 +4859,7 @@
      "self_contained": false,
      "headline": "Network wepent switch/alpha/gunalign/porto/tuba/skin so remote weapon-swap animation, weapon fade, and tuba/porto viewmodels reproduce.",
      "files": [
-      "src/XonoticGodot.Net/NetEntity.cs",
+      "src/VortexArena.Net/NetEntity.cs",
       "game/net/ServerNet.cs",
       "game/net/ClientNet.cs",
       "game/net/ViewEntityRenderer.cs"
@@ -4878,9 +4878,9 @@
      "self_contained": false,
      "headline": "Network the discrete upper/lower-body anim ACTION state (attack/pain/jump torso overlays) instead of client-side LocomotionBlend approximation.",
      "files": [
-      "src/XonoticGodot.Net/NetEntity.cs",
+      "src/VortexArena.Net/NetEntity.cs",
       "game/net/ServerNet.cs",
-      "src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs"
+      "src/VortexArena.Engine/Simulation/LocomotionBlend.cs"
      ]
     },
     {
@@ -4907,7 +4907,7 @@
      "self_contained": true,
      "headline": "Check friend-color collision against the full team list (network team list) not just the local team.",
      "files": [
-      "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs"
+      "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs"
      ]
     },
     {
@@ -4937,8 +4937,8 @@
      "self_contained": false,
      "headline": "Wire the dead target_levelwarp / target_changelevel campaign-win handlers (CampaignLevelWarpHandler/NextLevelHandler/IsCampaign/ForceWin never assigned).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs",
-      "src/XonoticGodot.Server/Campaign.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs",
+      "src/VortexArena.Server/Campaign.cs",
       "game/net/NetGame.cs"
      ]
     },
@@ -4954,7 +4954,7 @@
      "self_contained": false,
      "headline": "Apply MapInfo_SwitchGameType when target_changelevel sets a .gametype for the next map (currently log-only stub).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/MapObjects/TargetUtilities.cs"
+      "src/VortexArena.Common/Gameplay/MapObjects/TargetUtilities.cs"
      ]
     },
     {
@@ -4969,8 +4969,8 @@
      "self_contained": false,
      "headline": "Read g_campaign_forceteam to force the player onto a given team in a campaign team-mode level (registered but never read).",
      "files": [
-      "src/XonoticGodot.Server/Cvars.cs",
-      "src/XonoticGodot.Server/Teamplay.cs"
+      "src/VortexArena.Server/Cvars.cs",
+      "src/VortexArena.Server/Teamplay.cs"
      ]
     },
     {
@@ -4983,8 +4983,8 @@
      "self_contained": true,
      "headline": "Add Campaign_Invalid: revalidate resolved map/gametype match the loaded level, else CampaignBailout.",
      "files": [
-      "src/XonoticGodot.Server/Campaign.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/Campaign.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -4999,8 +4999,8 @@
      "self_contained": false,
      "headline": "Wire campaign_bots_may_start into the round-handler / monster move+think / campcheck / LMS start gates (currently only bot movement honors it).",
      "files": [
-      "src/XonoticGodot.Server/Campaign.cs",
-      "src/XonoticGodot.Server/RoundHandler.cs"
+      "src/VortexArena.Server/Campaign.cs",
+      "src/VortexArena.Server/RoundHandler.cs"
      ]
     },
     {
@@ -5015,7 +5015,7 @@
      "self_contained": false,
      "headline": "Network the campaign level number (Campaign_GetLevelNum) into the welcome/info dialog ('Level N').",
      "files": [
-      "src/XonoticGodot.Server/Campaign.cs"
+      "src/VortexArena.Server/Campaign.cs"
      ]
     },
     {
@@ -5030,8 +5030,8 @@
      "self_contained": false,
      "headline": "NextLevel omits VoteReset, centerprint-kill (NOTIF_ALL), WeaponStats_Shutdown, DumpStats, MatchEnd mutator hooks, and sv_hook_gameend.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Server/Intermission.cs"
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Server/Intermission.cs"
      ]
     },
     {
@@ -5046,7 +5046,7 @@
      "self_contained": false,
      "headline": "Add the +10s input-grace window before the vote/exit and the per-player 'press fire to skip' early-exit.",
      "files": [
-      "src/XonoticGodot.Server/Intermission.cs"
+      "src/VortexArena.Server/Intermission.cs"
      ]
     },
     {
@@ -5061,7 +5061,7 @@
      "self_contained": false,
      "headline": "Wire the dead Intermission.RequestExit to player fire/jump/atck2/hook/use input so players can skip the scoreboard (and an empty server can advance).",
      "files": [
-      "src/XonoticGodot.Server/Intermission.cs",
+      "src/VortexArena.Server/Intermission.cs",
       "game/net/ServerNet.cs"
      ]
     },
@@ -5077,7 +5077,7 @@
      "self_contained": false,
      "headline": "Add DoNextMapOverride quit_when_empty / quit_and_redirect / lastlevel branches (single-player show-menu, server redirect).",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5093,8 +5093,8 @@
      "self_contained": false,
      "headline": "Make the map vote castable: it runs server-side but no net opcode/impulse path lets players vote (g_maplist_votable=6 makes it the DEFAULT end path, so every vote closes with zero real votes).",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
+      "src/VortexArena.Server/MapVoting.cs",
+      "src/VortexArena.Server/GameWorld.cs",
       "game/net/ServerNet.cs"
      ]
     },
@@ -5128,7 +5128,7 @@
      "self_contained": false,
      "headline": "Broadcast the queued next map to clients so ScoreboardPanel.NextMap ('Next map: \u2026') stops being blank.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs",
+      "src/VortexArena.Server/GameWorld.cs",
       "game/hud/ScoreboardPanel.cs"
      ]
     },
@@ -5171,7 +5171,7 @@
      "self_contained": false,
      "headline": "Add server-forced end-of-match autoscreenshot stuffcmd (sv_autoscreenshot + cl_autoscreenshot_screenshot).",
      "files": [
-      "src/XonoticGodot.Server/Intermission.cs"
+      "src/VortexArena.Server/Intermission.cs"
      ]
     },
     {
@@ -5184,7 +5184,7 @@
      "self_contained": true,
      "headline": "Stop map music at match end (target_music_kill) + sv_intermission_cdtrack random intermission-track switch.",
      "files": [
-      "src/XonoticGodot.Server/Intermission.cs",
+      "src/VortexArena.Server/Intermission.cs",
       "game/net/NetGame.cs"
      ]
     },
@@ -5198,7 +5198,7 @@
      "self_contained": true,
      "headline": "Replace closed-form ballistic-drop approximation with the QC 10-trace tracetoss search + per-weaponentity shot speed (W_WeaponSpeedFactor) for lobbed-weapon aim.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotAim.cs"
+      "src/VortexArena.Server/Bot/BotAim.cs"
      ]
     },
     {
@@ -5211,7 +5211,7 @@
      "self_contained": true,
      "headline": "Add sticky-enemy tracking window, see-through-transparent + misc_breakablemodel target passes, and SUPERBOT health/distance target rating.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5224,7 +5224,7 @@
      "self_contained": true,
      "headline": "Port the QC far/mid/close ordered weapon-priority lists + bot_ai_weapon_combo + bot_rangepreference instead of the coarse hitscan/splash highest-impulse bucket.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5237,7 +5237,7 @@
      "self_contained": true,
      "headline": "Add idle-reload behaviour (skill>=2 held-weapon reload, skill>=5 inventory pre-reload) so bots don't run dry mid-combat.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5252,7 +5252,7 @@
      "self_contained": false,
      "headline": "Drive per-weapon wr_aim each think (secondary fire, charge-up/release, projectile detonation, combos) \u2014 currently only primary attack fires, ButtonAttack2 hardcoded false.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5265,9 +5265,9 @@
      "self_contained": true,
      "headline": "Rate goals by waypoint-cost (Dijkstra path length) not straight-line distance, restore per-call rangebias + skill-scaled time-item lead + moving-target interval.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotRoles.cs",
-      "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs",
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/BotRoles.cs",
+      "src/VortexArena.Server/Bot/BotObjectiveRoles.cs",
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5280,7 +5280,7 @@
      "self_contained": true,
      "headline": "Port havocbot_dodge (sidestep specific incoming projectiles by flight path) + SUPERBOT combat jitter instead of the invented strafe-flip + HP-bias.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5293,8 +5293,8 @@
      "self_contained": true,
      "headline": "Add jetpack navigation (take off / fly / brake-land) + skill>6 trigger_hurt escape (jetpack up / Devastator rocketjump).",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotNavigation.cs",
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotNavigation.cs",
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5307,7 +5307,7 @@
      "self_contained": true,
      "headline": "Derive step/jump heights from sv_stepheight/sv_jumpvelocity/sv_gravity (not hardcoded 34/48) + fuller teleport/ladder/water waypoint traversal.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotNavigation.cs"
+      "src/VortexArena.Server/Bot/BotNavigation.cs"
      ]
     },
     {
@@ -5320,8 +5320,8 @@
      "self_contained": true,
      "headline": "Replace brake-only danger response with the QC lateral evadedanger sidestep vector + per-waypoint danger-cost accumulation.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotDanger.cs",
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotDanger.cs",
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5334,7 +5334,7 @@
      "self_contained": true,
      "headline": "Add keyboard-movement emulation (quantized wish-move below skill 10) for the stock low-skill bot feel.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotNavigation.cs"
+      "src/VortexArena.Server/Bot/BotNavigation.cs"
      ]
     },
     {
@@ -5349,7 +5349,7 @@
      "self_contained": false,
      "headline": "Port the bot scripting command queue (bot_cmd / scripting.qc) so map/console bot scripts and waypoint-editor bot driving work.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5362,7 +5362,7 @@
      "self_contained": true,
      "headline": "Add autoskill/skill_auto auto-tune-to-best-human (the per-bot 12-column model is an intended single-knob divergence).",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotPopulation.cs"
+      "src/VortexArena.Server/Bot/BotPopulation.cs"
      ]
     },
     {
@@ -5375,8 +5375,8 @@
      "self_contained": true,
      "headline": "Add the bot_aggresskill modifier to the long-range fire-hesitation chance (port uses skill only, loses per-bot aggression variance).",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotAim.cs",
-      "src/XonoticGodot.Server/Bot/BotBrain.cs"
+      "src/VortexArena.Server/Bot/BotAim.cs",
+      "src/VortexArena.Server/Bot/BotBrain.cs"
      ]
     },
     {
@@ -5389,7 +5389,7 @@
      "self_contained": true,
      "headline": "Parse the skin/shirt/pants + team-forcing columns of bots.txt (currently name+model only).",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotPopulation.cs"
+      "src/VortexArena.Server/Bot/BotPopulation.cs"
      ]
     },
     {
@@ -5402,7 +5402,7 @@
      "self_contained": true,
      "headline": "Fix link travel-cost: skill-dependent bunnyhop speedup, the unused JUMP-source fall-cost variant, and the half-path water/crouch averaging.",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5417,7 +5417,7 @@
      "self_contained": false,
      "headline": "Add per-waypoint danger bias (.dmg) to the A* route cost + expanding multi-seed nearest search so routes detour around lava/rocket zones.",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5430,7 +5430,7 @@
      "self_contained": true,
      "headline": "Add PVS cull before tracewalk, the crouch<->normal 100qu short-link cap, and per-direction box/JUMP/SUPPORT link forbidding (auto-relink only path).",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5443,7 +5443,7 @@
      "self_contained": true,
      "headline": "Inject runtime item/teleporter waypoints on shipped (.waypoints-bearing) maps + honor g_waypoints_for_items + tracedown floor-snap.",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5456,7 +5456,7 @@
      "self_contained": true,
      "headline": "Add warpzone-angle src/dest projection + oblique-warpzone JUMP flag + jumppad push-time cost for auto teleporter waypoints.",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5469,7 +5469,7 @@
      "self_contained": true,
      "headline": "Add .waypoints/.cache/.hardwired file writers (dev tooling; port is read-only).",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5482,7 +5482,7 @@
      "self_contained": true,
      "headline": "Port steerlib primitives (flock/swarm/traceavoid trident-funnel/beamsteer) for richer obstacle avoidance.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotNavigation.cs"
+      "src/VortexArena.Server/Bot/BotNavigation.cs"
      ]
     },
     {
@@ -5495,7 +5495,7 @@
      "self_contained": false,
      "headline": "Add the in-game waypoint editor (place/remove/hardwire/mirror + visualization) and runtime auto-waypointing/pruning (dev tooling).",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5508,7 +5508,7 @@
      "self_contained": true,
      "headline": "Add teleport-goal forcing + moving-target shortcut (strategyinterval_movingtarget 5.5) to route building.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotNavigation.cs"
+      "src/VortexArena.Server/Bot/BotNavigation.cs"
      ]
     },
     {
@@ -5521,7 +5521,7 @@
      "self_contained": true,
      "headline": "Add per-bot bot_moveskill to the bunnyhop skill gate and suppress bunnyhop when evadedanger/do_break is set this frame.",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotNavigation.cs"
+      "src/VortexArena.Server/Bot/BotNavigation.cs"
      ]
     },
     {
@@ -5534,7 +5534,7 @@
      "self_contained": true,
      "headline": "Add jumppad-fallback + walk-to vs walk-from direction distinction to nearest-waypoint query.",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5547,7 +5547,7 @@
      "self_contained": true,
      "headline": "Enforce the 32-link-per-waypoint sorted cap on the file-load link path (currently uncapped/unsorted).",
      "files": [
-      "src/XonoticGodot.Server/Bot/Waypoint.cs"
+      "src/VortexArena.Server/Bot/Waypoint.cs"
      ]
     },
     {
@@ -5560,8 +5560,8 @@
      "self_contained": true,
      "headline": "Fix g_warmup_limit default (-1 -> 180 per xonotic-server.cfg) and add g_warmup>1 min-N-players + map_minplayers warmup modes.",
      "files": [
-      "src/XonoticGodot.Server/WarmupController.cs",
-      "src/XonoticGodot.Server/Cvars.cs"
+      "src/VortexArena.Server/WarmupController.cs",
+      "src/VortexArena.Server/Cvars.cs"
      ]
     },
     {
@@ -5576,7 +5576,7 @@
      "self_contained": false,
      "headline": "Add the serverflags global (ALLOW_FULLBRIGHT / FORBID_PICKUPTIMER from readlevelcvars) and network it so the client can gate fullbright rendering / hide the pickup timer.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5591,7 +5591,7 @@
      "self_contained": false,
      "headline": "Fix ready-up majority to count humans only (rint, min factor 0.5), add minplayers/badteams/timeout gates + COUNTDOWN_STOP notifications (warmup may never end on a bot-filled server).",
      "files": [
-      "src/XonoticGodot.Server/WarmupController.cs"
+      "src/VortexArena.Server/WarmupController.cs"
      ]
     },
     {
@@ -5604,8 +5604,8 @@
      "self_contained": true,
      "headline": "Fix RESTART_COUNTDOWN (5->10s, campaign 3s), implement sv_ready_restart_after_countdown (default invert 1->0), add team-lock/spectate-demote/wants_join/allowed_timeouts reset.",
      "files": [
-      "src/XonoticGodot.Server/WarmupController.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/WarmupController.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5618,7 +5618,7 @@
      "self_contained": true,
      "headline": "Drive the full entity .reset/.reset2 ordered pass (movers/items/team_saved) + per-client accuracy/powerup/inventory reset on restart (currently projectile-only delete).",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5633,7 +5633,7 @@
      "self_contained": false,
      "headline": "Add WinningCondition_RanOutOfSpawns, leadlimit/leadlimit_and_fraglimit semantics, the 'N frags remaining' ANNCE_REMAINING_FRAG announcer, and the CheckRules_World mutator hook.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5648,8 +5648,8 @@
      "self_contained": false,
      "headline": "Network STAT(OVERTIMES) so the persistent HUD OVERTIME / overtime-count banner shows (decision logic already faithful).",
      "files": [
-      "src/XonoticGodot.Server/OverTimeManager.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/OverTimeManager.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5664,7 +5664,7 @@
      "self_contained": false,
      "headline": "Add the RandomSeed shared server->client RNG broadcast (ENT_CLIENT_RANDOMSEED) so client-side random effects stay deterministic with the server.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5679,7 +5679,7 @@
      "self_contained": false,
      "headline": "Add PingPLReport: round-robin server->client ping/packet-loss report feeding the scoreboard ping column and playerstats latency.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5692,7 +5692,7 @@
      "self_contained": true,
      "headline": "Install the 12 named animated lightstyles (flicker/pulse/candle/strobe) + style 63 at worldspawn so style-driven map lights animate.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5705,8 +5705,8 @@
      "self_contained": true,
      "headline": "Add g_start_delay pre-match join window (15s on dedicated) so the match doesn't start immediately with warmup off.",
      "files": [
-      "src/XonoticGodot.Server/WarmupController.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/WarmupController.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5719,7 +5719,7 @@
      "self_contained": true,
      "headline": "Recompute max_shot_distance per-map from world bounds (min(230000, world diagonal)) instead of the fixed 32768qu constant.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs"
      ]
     },
     {
@@ -5734,7 +5734,7 @@
      "self_contained": false,
      "headline": "Add RedirectionThink server-redirect / mass-reconnect command (admin convenience).",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5747,7 +5747,7 @@
      "self_contained": true,
      "headline": "Make GameWorld.Shutdown do the QC teardown: slowmo-reset-on-active-timeout, unfinished-match PlayerStats_GameReport(false), bot_endgame (currently near no-op).",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5760,7 +5760,7 @@
      "self_contained": true,
      "headline": "Use the QC matchid format (<counter>.<unixtime>.<rand6>) for eventlog correlation instead of just the map name.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5775,8 +5775,8 @@
      "self_contained": false,
      "headline": "Enforce playban on the live join path: CmdJoin/ClientManager join must reject a play-banned client with CENTER_JOIN_PLAYBAN (currently deferred \u2014 a banned player just re-joins).",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
-      "src/XonoticGodot.Server/ClientManager.cs"
+      "src/VortexArena.Server/Commands.cs",
+      "src/VortexArena.Server/ClientManager.cs"
      ]
     },
     {
@@ -5791,9 +5791,9 @@
      "self_contained": false,
      "headline": "Make CmdPlayBan run the real observer transition (not just the FragsStatus sentinel), add connect-time re-apply + minigame active-removal, and fix g_playban_minigames default (1->0).",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Server/Cvars.cs"
+      "src/VortexArena.Server/Commands.cs",
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Server/Cvars.cs"
      ]
     },
     {
@@ -5806,7 +5806,7 @@
      "self_contained": true,
      "headline": "Re-apply chat-mute at connect (read g_chatban_list in InfraClientConnect) so a muted player who reconnects stays muted.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5819,8 +5819,8 @@
      "self_contained": true,
      "headline": "Add the one-shot .ban_checked flag + first-command ban re-check (Base Ban_MaybeEnforceBanOnce) on top of the connect-time enforce.",
      "files": [
-      "src/XonoticGodot.Server/Bans.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/Bans.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5833,8 +5833,8 @@
      "self_contained": true,
      "headline": "Add a shutdown Ban_SaveBans to refresh persisted seconds-remaining at session end (currently saved only on Insert/Delete).",
      "files": [
-      "src/XonoticGodot.Server/Bans.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/Bans.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5847,7 +5847,7 @@
      "self_contained": true,
      "headline": "Add the timeout_status guard (only 'timein' callable during a timeout) + sv_vote_gamestart pre-match gate to vote-call.",
      "files": [
-      "src/XonoticGodot.Server/VoteController.cs"
+      "src/VortexArena.Server/VoteController.cs"
      ]
     },
     {
@@ -5860,7 +5860,7 @@
      "self_contained": true,
      "headline": "Fix vote parse: register timelimit_min/max (5/60) bound, run ValidateMap/MapInfo_FixName/recent-map block, per-command arg restriction, movetoX/allready-warmup parse, QC kick/kickban index form.",
      "files": [
-      "src/XonoticGodot.Server/VoteController.cs"
+      "src/VortexArena.Server/VoteController.cs"
      ]
     },
     {
@@ -5873,8 +5873,8 @@
      "self_contained": false,
      "headline": "Wire VoteController.IsPlayer in GameWorld so sv_vote_nospectators 2 drops spectator ballots (currently defaults to true => spectator-exclusion dead) + IS_PLAYER||INGAME union.",
      "files": [
-      "src/XonoticGodot.Server/VoteController.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/VoteController.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -5889,7 +5889,7 @@
      "self_contained": false,
      "headline": "Make timeout pause slowmo=0.0001 (inching) not a hard freeze + add ANNCE_TIMEOUT/PREPARE + per-second CENTER_TIMEOUT countdown.",
      "files": [
-      "src/XonoticGodot.Server/TimeoutController.cs"
+      "src/VortexArena.Server/TimeoutController.cs"
      ]
     },
     {
@@ -5902,7 +5902,7 @@
      "self_contained": true,
      "headline": "Use random() for cointoss instead of the deterministic sim-clock LSB (predictable/biased flip).",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -5915,7 +5915,7 @@
      "self_contained": true,
      "headline": "Honor sv_vote_master_ids (crypto-fingerprint auto-login) + add the master-vote-call timeout_status guard.",
      "files": [
-      "src/XonoticGodot.Server/VoteController.cs"
+      "src/VortexArena.Server/VoteController.cs"
      ]
     },
     {
@@ -5928,8 +5928,8 @@
      "self_contained": true,
      "headline": "Add the ping/packetloss/jointime/crypto_id columns + sv_status_privacy to 'who', and the framestart/realtime/uptime/localtime readouts to 'time'.",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
-      "src/XonoticGodot.Server/CommandReplies.cs"
+      "src/VortexArena.Server/Commands.cs",
+      "src/VortexArena.Server/CommandReplies.cs"
      ]
     },
     {
@@ -5942,7 +5942,7 @@
      "self_contained": true,
      "headline": "Randomize shuffleteams (FOREACH_CLIENT_RANDOM) + read timelimit_increment/decrement for extend/reducematchtime (currently fixed 60s).",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -5955,7 +5955,7 @@
      "self_contained": true,
      "headline": "Register the missing admin/debug sv_cmd verbs (radarmap/gettaginfo/trace/stuffto/adminmsg/anticheat/delrec/database/printstats etc.).",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -5968,7 +5968,7 @@
      "self_contained": true,
      "headline": "Make SelectSpawnPoint read Entity.SpawnPointTarg (target_spawnpoint forced-spawn redirection) before scoring + clear it in PutPlayerInServer (setter live, reader dead).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -5981,7 +5981,7 @@
      "self_contained": true,
      "headline": "Add relocate_spawnpoint move-out-of-solid (g_spawnpoints_auto_move_out_of_solid) at link time so embedded spots are nudged out, not dropped.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -5994,7 +5994,7 @@
      "self_contained": true,
      "headline": "Add the emergency targetcheck=false re-filter and the anypoint/useallspawns weighted-over-all path before the prio-0 in-solid fallback.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -6009,7 +6009,7 @@
      "self_contained": false,
      "headline": "Port the race_spawns requirement + assault/race spawn_evalfunc target chain that biases/vetoes spawn scores (race-checkpoint + assault spawn redirection).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -6024,7 +6024,7 @@
      "self_contained": false,
      "headline": "Play the SND_SPAWN audio cue (bit1 of g_spawn_alloweffects) + team-color the spawn burst (currently particle-only, untinted).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs",
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs",
       "game/client/EffectSystem.cs"
      ]
     },
@@ -6040,7 +6040,7 @@
      "self_contained": false,
      "headline": "Set EF_TELEPORT_BIT | EF_RESTARTANIM_BIT on respawn (teleport sparkle + anim restart) + the pre-match countdown shield/pause extension.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -6055,7 +6055,7 @@
      "self_contained": false,
      "headline": "Drive spawnpoint_use/setactive/reset + the some_spawn_has_been_used latch from control-point capture (Onslaught/Assault) \u2014 SpawnActive read but never flipped.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -6068,7 +6068,7 @@
      "self_contained": true,
      "headline": "Multiply spot.cnt into the spawn weight (mapper cluster weighting; default cnt=1 so stock maps unaffected).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -6081,7 +6081,7 @@
      "self_contained": true,
      "headline": "Add the sky/lava/trigger_hurt/nade per-offset rejects to the spawn_near_teammate relocation branch (currently a permissive superset; off by default).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs"
+      "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs"
      ]
     },
     {
@@ -6107,8 +6107,8 @@
      "self_contained": true,
      "headline": "Add the 0.5s think throttle + 1s winner-reveal-before-changelevel delay to the map-vote loop.",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/MapVoting.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -6121,8 +6121,8 @@
      "self_contained": false,
      "headline": "Seed player suggestions + an abstain slot + per-candidate mapvote_rng tiebreak into the ballot at build (currently rotation-only).",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/MapVoting.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -6135,7 +6135,7 @@
      "self_contained": true,
      "headline": "During the vote, force health=2342 + send SVC_FINALE once + zero impulse each tick to hide the scoreboard.",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs"
+      "src/VortexArena.Server/MapVoting.cs"
      ]
     },
     {
@@ -6151,8 +6151,8 @@
      "self_contained": false,
      "headline": "Wire dead MapVoting.CastVote: route a client vote impulse to it (DispatchImpulse currently drops all impulses during intermission, so every vote finishes with zero votes).",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs",
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/MapVoting.cs",
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -6167,7 +6167,7 @@
      "self_contained": false,
      "headline": "Wire dead MapVoting.Abstain + append the abstain slot to the ballot (off by default but mechanism dead).",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs"
+      "src/VortexArena.Server/MapVoting.cs"
      ]
     },
     {
@@ -6180,7 +6180,7 @@
      "self_contained": true,
      "headline": "Use the per-candidate mapvote_rng tiebreak (not a per-Finish reservoir) + the running-gametype 0-vote tiebreak.",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs"
+      "src/VortexArena.Server/MapVoting.cs"
      ]
     },
     {
@@ -6193,7 +6193,7 @@
      "self_contained": true,
      "headline": "Match Base's unbeatable-leader inequality (voters_real < 2*leader) + 'all abstained' branch (currently a reformulation; moot until votes castable).",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs"
+      "src/VortexArena.Server/MapVoting.cs"
      ]
     },
     {
@@ -6208,8 +6208,8 @@
      "self_contained": false,
      "headline": "Implement ballot reduce/keep-two mid-vote pruning (rename misnamed g_maplist_votable_keeptwotime -> _reduce_time, register _reduce_count).",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs",
-      "src/XonoticGodot.Server/Cvars.cs"
+      "src/VortexArena.Server/MapVoting.cs",
+      "src/VortexArena.Server/Cvars.cs"
      ]
     },
     {
@@ -6224,8 +6224,8 @@
      "self_contained": false,
      "headline": "Port the server-side gametype vote (GameTypeVote ballot/finish/SetGametype + MapInfo_SwitchGameType + maplist reset); add missing 'ca' option + reduce/detail/default-current cvars.",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs",
-      "src/XonoticGodot.Server/Cvars.cs"
+      "src/VortexArena.Server/MapVoting.cs",
+      "src/VortexArena.Server/Cvars.cs"
      ]
     },
     {
@@ -6238,8 +6238,8 @@
      "self_contained": false,
      "headline": "Seed CmdSuggestMap output into the ballot + apply recency/gametype-support checks + register g_maplist_votable_show_suggester.",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
-      "src/XonoticGodot.Server/MapVoting.cs"
+      "src/VortexArena.Server/Commands.cs",
+      "src/VortexArena.Server/MapVoting.cs"
      ]
     },
     {
@@ -6254,7 +6254,7 @@
      "self_contained": false,
      "headline": "Build the mapvote net entity: send the ballot/mask/live tallies/own-vote/winner (and level-shot transfer) to clients \u2014 without it the panel has nothing to show.",
      "files": [
-      "src/XonoticGodot.Server/MapVoting.cs",
+      "src/VortexArena.Server/MapVoting.cs",
       "game/net/ServerNet.cs",
       "game/net/ClientNet.cs"
      ]
@@ -6304,9 +6304,9 @@
      "self_contained": false,
      "headline": "Add forced teams: .team_forced field, connect-time g_forced_team_red/blue/yellow/pink/otherwise parsing + force-spectate-unlisted (entirely unported).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs",
-      "src/XonoticGodot.Server/ClientManager.cs",
-      "src/XonoticGodot.Server/Cvars.cs"
+      "src/VortexArena.Server/Teamplay.cs",
+      "src/VortexArena.Server/ClientManager.cs",
+      "src/VortexArena.Server/Cvars.cs"
      ]
     },
     {
@@ -6319,8 +6319,8 @@
      "self_contained": true,
      "headline": "Block manual mid-match switching to the larger/stronger team (reject teams not in FindBestTeams); cvar currently only gates the autobalance timer.",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
-      "src/XonoticGodot.Server/Teamplay.cs"
+      "src/VortexArena.Server/Commands.cs",
+      "src/VortexArena.Server/Teamplay.cs"
      ]
     },
     {
@@ -6335,9 +6335,9 @@
      "self_contained": false,
      "headline": "Fire Player_ChangeTeam (can block) + Player_ChangedTeam mutator hooks around team changes (port sets Entity.Team directly with no dispatch).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs",
-      "src/XonoticGodot.Server/ClientManager.cs",
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/Teamplay.cs",
+      "src/VortexArena.Server/ClientManager.cs",
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -6353,8 +6353,8 @@
      "self_contained": false,
      "headline": "Compute + network the unbalanced-teams nag (sv_teamnagger) and hold warmup open while teams are unbalanced (entirely missing).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/Teamplay.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -6367,8 +6367,8 @@
      "self_contained": false,
      "headline": "Ban teams so bots take one side and humans the other in bot_vs_human (count math faithful, the team segregation half is missing).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs",
-      "src/XonoticGodot.Server/Bot/BotPopulation.cs"
+      "src/VortexArena.Server/Teamplay.cs",
+      "src/VortexArena.Server/Bot/BotPopulation.cs"
      ]
     },
     {
@@ -6381,8 +6381,8 @@
      "self_contained": true,
      "headline": "Add the size->strength->RANDOM tiebreak + m_num_players_net (humans, deduct leavable bots) to AssignBestTeam and the gametype JoinSmallestTeam callers.",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs",
-      "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs"
+      "src/VortexArena.Server/Teamplay.cs",
+      "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs"
      ]
     },
     {
@@ -6397,7 +6397,7 @@
      "self_contained": false,
      "headline": "Wire a real TrueSkill mu/var provider + unranked-factor + significance threshold + score-ratio strength ramp (weighting currently reduces to a plain count).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs"
+      "src/VortexArena.Server/Teamplay.cs"
      ]
     },
     {
@@ -6410,8 +6410,8 @@
      "self_contained": true,
      "headline": "Trigger bot autobalance synchronously on every human team change (not a 3s timer), use SP_SCORE, and run it unconditionally (not gated on g_balance_teams).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/Teamplay.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -6424,8 +6424,8 @@
      "self_contained": true,
      "headline": "Auto-lock teams on ready-restart when teamplay_lockonrestart is set (cvar unregistered, hook absent).",
      "files": [
-      "src/XonoticGodot.Server/WarmupController.cs",
-      "src/XonoticGodot.Server/Cvars.cs"
+      "src/VortexArena.Server/WarmupController.cs",
+      "src/VortexArena.Server/Cvars.cs"
      ]
     },
     {
@@ -6438,7 +6438,7 @@
      "self_contained": true,
      "headline": "Add the g_balance_teams_queue join queue (deficit-filling tag-in); WantsJoin exists but is never consulted (default off).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs"
+      "src/VortexArena.Server/Teamplay.cs"
      ]
     },
     {
@@ -6453,7 +6453,7 @@
      "self_contained": false,
      "headline": "Add g_balance_teams_remove: move the newest joiner on the overfull team to spectators after a 10s countdown nag (default off).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs"
+      "src/VortexArena.Server/Teamplay.cs"
      ]
     },
     {
@@ -6468,8 +6468,8 @@
      "self_contained": false,
      "headline": "Honor bot_forced_team (5th arg of addbot) so a config can pin a bot to a team (currently always auto-balanced).",
      "files": [
-      "src/XonoticGodot.Server/Bot/BotPopulation.cs",
-      "src/XonoticGodot.Server/Teamplay.cs"
+      "src/VortexArena.Server/Bot/BotPopulation.cs",
+      "src/VortexArena.Server/Teamplay.cs"
      ]
     },
     {
@@ -6482,7 +6482,7 @@
      "self_contained": true,
      "headline": "Port the clientcolors pants+shirt color model + SV_ChangeTeam team-from-color derivation (the 'color' command non-teamplay re-color is absent).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs"
+      "src/VortexArena.Server/Teamplay.cs"
      ]
     },
     {
@@ -6497,7 +6497,7 @@
      "self_contained": false,
      "headline": "Emit the :team: event-log line + INFO_JOIN_PLAY_TEAM notification on a team change (kill+score-clear core already faithful).",
      "files": [
-      "src/XonoticGodot.Server/Teamplay.cs"
+      "src/VortexArena.Server/Teamplay.cs"
      ]
     },
     {
@@ -6513,7 +6513,7 @@
      "self_contained": false,
      "headline": "Route minigame impulses (MinigameSessionManager.Impulse) before weapon impulses + add the round-not-started drop/reload/use gate + the cheat-impulse branch.",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -6526,8 +6526,8 @@
      "self_contained": true,
      "headline": "Make priority impulses 200-229 cycle the per-group cl_weaponpriority0..9 lists (replicated but unread); PriorityHandle ignores the group number and only reads the main list.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs",
-      "src/XonoticGodot.Common/Gameplay/Inventory.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs",
+      "src/VortexArena.Common/Gameplay/Inventory.cs"
      ]
     },
     {
@@ -6543,7 +6543,7 @@
      "self_contained": false,
      "headline": "Route impulse 21 (use) + fire the PlayerUseKey mutator hook (door/objective/button use) \u2014 only the vehicle enter/exit half is wired via the +use button edge.",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
+      "src/VortexArena.Server/Commands.cs",
       "game/net/ServerNet.cs"
      ]
     },
@@ -6557,7 +6557,7 @@
      "self_contained": true,
      "headline": "Add the weaponLocked (frozen-player) gate to ReloadHandle so a frozen player can't reload (predicate exists nearby but uncalled).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs"
      ]
     },
     {
@@ -6573,7 +6573,7 @@
      "self_contained": false,
      "headline": "Implement+route waypoint-sprite impulses 30-48 (personal/here/danger/helpme/clear) \u2014 entirely unported.",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -6586,7 +6586,7 @@
      "self_contained": true,
      "headline": "Make next/prev_bygroup (18/19) cycle weaponorder_byimpulse not the priority-list fallback.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Inventory.cs"
+      "src/VortexArena.Common/Gameplay/Inventory.cs"
      ]
     },
     {
@@ -6602,8 +6602,8 @@
      "self_contained": false,
      "headline": "Route cheat impulses 99/140-148 (give-all + clone/speedrun/teleport/r00t) \u2014 currently no CheatImpulse dispatch from DispatchImpulse.",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
-      "src/XonoticGodot.Server/Cheats.cs"
+      "src/VortexArena.Server/Commands.cs",
+      "src/VortexArena.Server/Cheats.cs"
      ]
     },
     {
@@ -6618,7 +6618,7 @@
      "self_contained": false,
      "headline": "Antilag the W_SetupShot trueaim + shotorg traces (every weapon, hitscan AND projectile) \u2014 currently plain present-position traces, so high-ping aim/launch direction is off.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs",
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs",
       "game/net/ServerNet.cs"
      ]
     },
@@ -6634,7 +6634,7 @@
      "self_contained": false,
      "headline": "Lag-compensate the Arc beam per-frame damage trace (plain trace now; high-ping Arc fails on strafing targets).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Arc.cs"
      ]
     },
     {
@@ -6649,7 +6649,7 @@
      "self_contained": false,
      "headline": "Lag-compensate the Shotgun melee secondary swing trace (plain trace now).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs"
      ]
     },
     {
@@ -6675,7 +6675,7 @@
      "self_contained": true,
      "headline": "Temporarily add CORPSE to the shooter's hit-contents mask around the antilag trace so hitscan can hit corpse/gibbed bodies.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs"
      ]
     },
     {
@@ -6701,7 +6701,7 @@
      "self_contained": true,
      "headline": "Implement g_antilag modes 1 (verified client-side) and 3 (prydon cursor) aim-correction (port treats anything != 2 as no-rewind).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs"
+      "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs"
      ]
     },
     {
@@ -6714,8 +6714,8 @@
      "self_contained": true,
      "headline": "Register + allowlist the 'usetarget' cheat command (Cheats.Command case exists but is unreachable \u2014 not Register()ed nor in the client allowlist).",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
-      "src/XonoticGodot.Server/ClientCommandRegistry.cs"
+      "src/VortexArena.Server/Commands.cs",
+      "src/VortexArena.Server/ClientCommandRegistry.cs"
      ]
     },
     {
@@ -6728,8 +6728,8 @@
      "self_contained": true,
      "headline": "Register + allowlist the 'killtarget' cheat command (same dead-case issue as usetarget).",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs",
-      "src/XonoticGodot.Server/ClientCommandRegistry.cs"
+      "src/VortexArena.Server/Commands.cs",
+      "src/VortexArena.Server/ClientCommandRegistry.cs"
      ]
     },
     {
@@ -6744,7 +6744,7 @@
      "self_contained": false,
      "headline": "Route cheat impulse 99 (GIVE_ALL) to Cheats.GiveAll (the function exists + is tested but has no live caller).",
      "files": [
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -6757,7 +6757,7 @@
      "self_contained": true,
      "headline": "Add the cheat-refusal bprintf logging (Base logs the refused cheat attempt) + the sv_clones clone-allowance branch.",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs"
+      "src/VortexArena.Server/Cheats.cs"
      ]
     },
     {
@@ -6773,7 +6773,7 @@
      "self_contained": false,
      "headline": "Add the CLONE_MOVING/STANDING cheat impulses (CopyBody corpse clones) + read sv_clones (no CopyBody primitive in the port).",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs"
+      "src/VortexArena.Server/Cheats.cs"
      ]
     },
     {
@@ -6788,7 +6788,7 @@
      "self_contained": false,
      "headline": "Add SPEEDRUN_INIT/SPEEDRUN personal-waypoint snapshot+restore cheat (origin/velocity/resources/weapons/timers) for race/CTS.",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs"
+      "src/VortexArena.Server/Cheats.cs"
      ]
     },
     {
@@ -6803,7 +6803,7 @@
      "self_contained": false,
      "headline": "Add the TELEPORT cheat impulse (info_autoscreenshot path + MoveToRandomMapLocation) \u2014 both helpers missing.",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs"
+      "src/VortexArena.Server/Cheats.cs"
      ]
     },
     {
@@ -6820,7 +6820,7 @@
      "self_contained": false,
      "headline": "Add the R00T cheat impulse (random-enemy RadiusDamage 1000 + rocket-explode effect + impact sound).",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs"
+      "src/VortexArena.Server/Cheats.cs"
      ]
     },
     {
@@ -6833,8 +6833,8 @@
      "self_contained": true,
      "headline": "Add the teleporttotarget cheat command (cheattriggerteleport + teleport_findtarget + Simple_TeleportPlayer).",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs",
-      "src/XonoticGodot.Server/Commands.cs"
+      "src/VortexArena.Server/Cheats.cs",
+      "src/VortexArena.Server/Commands.cs"
      ]
     },
     {
@@ -6849,7 +6849,7 @@
      "self_contained": false,
      "headline": "Add the pointparticles/trailparticles/make/penalty cheat commands (effect spawners + func_breakable spawn + race penalty).",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs"
+      "src/VortexArena.Server/Cheats.cs"
      ]
     },
     {
@@ -6864,7 +6864,7 @@
      "self_contained": false,
      "headline": "Add CheatFrame + Drag (pick up/carry/throw entities, te_lightning1 beam, g_grab_range) + the dragbox/dragpoint race map editor.",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs"
+      "src/VortexArena.Server/Cheats.cs"
      ]
     },
     {
@@ -6877,8 +6877,8 @@
      "self_contained": true,
      "headline": "Add the info_autoscreenshot spawnfunc (TELEPORT cheat destination) + fix g_max_info_autoscreenshot default (60->3).",
      "files": [
-      "src/XonoticGodot.Server/Cheats.cs",
-      "src/XonoticGodot.Server/Cvars.cs"
+      "src/VortexArena.Server/Cheats.cs",
+      "src/VortexArena.Server/Cvars.cs"
      ]
     },
     {
@@ -6893,7 +6893,7 @@
      "self_contained": false,
      "headline": "Build the server->client welcome/cvar-push channel: FixClientCvars, MOTD, clientversion request, _teams_available, ClientInit_misc constants (entirely missing; replicated-cvar table is a physics-only stand-in).",
      "files": [
-      "src/XonoticGodot.Server/ClientManager.cs",
+      "src/VortexArena.Server/ClientManager.cs",
       "game/net/ServerNet.cs"
      ]
     },
@@ -6910,7 +6910,7 @@
      "self_contained": false,
      "headline": "Expand joinAllowed gates: version-mismatch, forced-spectator, playban, g_maxping, g_maxplayers/nJoinAllowed capacity + the CENTER_JOIN_PREVENT* centerprints (only MIN_SPEC_TIME+lockteams enforced now).",
      "files": [
-      "src/XonoticGodot.Server/ClientManager.cs"
+      "src/VortexArena.Server/ClientManager.cs"
      ]
     },
     {
@@ -6926,7 +6926,7 @@
      "self_contained": false,
      "headline": "Add the join queue/team-selection ordering (queued-team dibs two-pass), the campaign bot-start ReadyRestart trigger, and the join notifications (INFO_JOIN_PLAY / CENTER_JOIN_PLAY_TEAM / ANNCE_BEGIN).",
      "files": [
-      "src/XonoticGodot.Server/ClientManager.cs"
+      "src/VortexArena.Server/ClientManager.cs"
      ]
     },
     {
@@ -6941,7 +6941,7 @@
      "self_contained": false,
      "headline": "Wire ShowRespawnCountdown: decrement Player.RespawnCountdown (already computed) and play the 10-9-8 CNT_RESPAWN announcer from DeadPlayerThink.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -6954,7 +6954,7 @@
      "self_contained": true,
      "headline": "Gate fuel REGEN on the IT_FUEL_REGEN item flag + skip the whole fuel block under IT_UNLIMITED_AMMO (port regenerates fuel with no fuel-regen pickup).",
      "files": [
-      "src/XonoticGodot.Server/PlayerFrameLogic.cs"
+      "src/VortexArena.Server/PlayerFrameLogic.cs"
      ]
     },
     {
@@ -6969,7 +6969,7 @@
      "self_contained": false,
      "headline": "Set + network the PRESSED_KEYS stat server-side so a SPECTATED player's held keys feed the strafe/pressedkeys panel (local player already works client-side).",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs",
+      "src/VortexArena.Server/GameWorld.cs",
       "game/hud/PressedKeysPanel.cs"
      ]
     },
@@ -6985,8 +6985,8 @@
      "self_contained": false,
      "headline": "Add sv_maxidle idle-kick / move-to-spectator + the idle countdown bangs + parm_idlesince afk alivetime gate (entirely missing).",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Server/ClientManager.cs"
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Server/ClientManager.cs"
      ]
     },
     {
@@ -7002,7 +7002,7 @@
      "self_contained": false,
      "headline": "Complete PutObserverInServer: SelectObservePoint placement, despawn EFFECT_SPAWN, vote/ready recount, SPECTATE_WARNING block, RES_ARMOR=g_balance_armor_start.",
      "files": [
-      "src/XonoticGodot.Server/ClientManager.cs"
+      "src/VortexArena.Server/ClientManager.cs"
      ]
     },
     {
@@ -7017,8 +7017,8 @@
      "self_contained": false,
      "headline": "Add the sv_spectate-disabled spectator kick (SPECTATE_WARNING then INFO_QUIT_KICK_SPECTATING past g_maxplayers_spectator_blocktime).",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs",
-      "src/XonoticGodot.Server/ClientManager.cs"
+      "src/VortexArena.Server/GameWorld.cs",
+      "src/VortexArena.Server/ClientManager.cs"
      ]
     },
     {
@@ -7031,7 +7031,7 @@
      "self_contained": true,
      "headline": "Apply the (time < game_starttime) countdown extension to spawn shield + armor/health rot + regen pauses (player spawning during pre-match countdown loses protection early).",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     },
     {
@@ -7047,7 +7047,7 @@
      "self_contained": false,
      "headline": "Add the superweapon pickup/lost/broken centerprints + INFO_SUPERWEAPON_PICKUP + SND_POWEROFF countdown, MF_ROCKET jetpack modelflag, EF_NODEPTHTEST/FULLBRIGHT, powerups_remove_all-on-death.",
      "files": [
-      "src/XonoticGodot.Server/PlayerFrameLogic.cs"
+      "src/VortexArena.Server/PlayerFrameLogic.cs"
      ]
     },
     {
@@ -7062,7 +7062,7 @@
      "self_contained": false,
      "headline": "Play playersound_gasp when a player surfaces after running out of air (DrownPlayer surface branch only resets the air timer).",
      "files": [
-      "src/XonoticGodot.Server/PlayerFrameLogic.cs"
+      "src/VortexArena.Server/PlayerFrameLogic.cs"
      ]
     },
     {
@@ -7078,7 +7078,7 @@
      "self_contained": false,
      "headline": "Add UpdateChatBubble (typing/minigame-busy bubble), SetZoomState net stat, and the teamkill/taunt voice-sound timers from a lifecycle PreThink.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -7093,7 +7093,7 @@
      "self_contained": false,
      "headline": "Add version-nag INFO notifications, sv_name_maxlength truncation + invisible-name replacement (Player#<id>), and INFO_GODMODE_OFF.",
      "files": [
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -7108,7 +7108,7 @@
      "self_contained": false,
      "headline": "Add SpectatePrev/camera-cycle (impulse 12/16/19/220-229), the IMP_weapon_drop CAMERA_SPECTATOR cycle, minigame impulse handling, the +use clippedspectating toggle, sv_spectate 2 block.",
      "files": [
-      "src/XonoticGodot.Server/ClientManager.cs"
+      "src/VortexArena.Server/ClientManager.cs"
      ]
     },
     {
@@ -7123,7 +7123,7 @@
      "self_contained": false,
      "headline": "Add Player_DetermineForcedTeam / forced-team-otherwise spectator routing at connect + the version_nagtime arm (team currently pre-assigned via AssignBestTeam only).",
      "files": [
-      "src/XonoticGodot.Server/ClientManager.cs"
+      "src/VortexArena.Server/ClientManager.cs"
      ]
     },
     {
@@ -7136,8 +7136,8 @@
      "self_contained": false,
      "headline": "Complete ClientDisconnect teardown: portal/hook clear, chatbubble/killindicator/personal-wp delete, vehicle exit, minigame part, ReadyCount/VoteCount-on-leave, RemoveExcessPlayers, sv_hook_lastleave.",
      "files": [
-      "src/XonoticGodot.Server/ClientManager.cs",
-      "src/XonoticGodot.Server/GameWorld.cs"
+      "src/VortexArena.Server/ClientManager.cs",
+      "src/VortexArena.Server/GameWorld.cs"
      ]
     },
     {
@@ -7150,8 +7150,8 @@
      "self_contained": false,
      "headline": "Run in-spawn team assignment (bot_forced_team / wants_join / JoinBestTeam) + SUB_UseTargets(spot) spawn-target firing + per-client model (port pre-assigns team at connect only).",
      "files": [
-      "src/XonoticGodot.Server/ClientManager.cs",
-      "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs"
+      "src/VortexArena.Server/ClientManager.cs",
+      "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs"
      ]
     }
    ],
@@ -7498,8 +7498,8 @@
      "self_contained": false,
      "headline": "Wire dead centerprint title driver (gametype-name title + duel 'A vs B' title) and broadcast COUNTDOWN_ROUNDSTOP; read cl_announcer/_antispam cvars + AnnouncerOption mutator hook.",
      "files": [
-      "src/XonoticGodot.Server/AnnouncerController.cs",
-      "src/XonoticGodot.Server/GameWorld.cs",
+      "src/VortexArena.Server/AnnouncerController.cs",
+      "src/VortexArena.Server/GameWorld.cs",
       "game/hud/HudNotifications.cs",
       "game/hud/CenterPrintPanel.cs"
      ],
@@ -7521,9 +7521,9 @@
      "files": [
       "game/hud/CenterPrintPanel.cs",
       "game/hud/HudNotifications.cs",
-      "src/XonoticGodot.Server/Chat.cs",
-      "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs",
-      "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs"
+      "src/VortexArena.Server/Chat.cs",
+      "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs",
+      "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs"
      ],
      "cross_unit_dep": "durcnt duration + MSG_CENTER_KILL are shared with fx-notifications (center.durcnt / net.kill); title drivers shared with cl-announcer."
     },
@@ -7542,9 +7542,9 @@
      "self_contained": false,
      "headline": "Network the CSQCMODEL extra-properties contract (colormod for ALL entities, scale, alpha, modelflags, traileffect, v_angle, anim_state/upper/lower_action+time) and port animdecide (8-direction + duck locomotion + upper-body actions); wire MF_* trails + jetpack loop; force-model (cl_forceplayermodels); real _lodN swap.",
      "files": [
-      "src/XonoticGodot.Common/Framework/Entity.cs",
+      "src/VortexArena.Common/Framework/Entity.cs",
       "game/client/ClientWorld.cs",
-      "src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs",
+      "src/VortexArena.Engine/Simulation/LocomotionBlend.cs",
       "game/client/CsqcModelEffects.cs",
       "game/client/PlayerModel.cs"
      ],
@@ -7704,8 +7704,8 @@
      "self_contained": true,
      "headline": "Add the missing SelectSpecial branches: NADE family (nade/nade_ice/heal/darkness/napalm -> DEATH_*_NADE, LIVE under g_nades), KILL->DEATH_SELF_SUICIDE, MIRRORDAMAGE->DEATH_SELF_BETRAYAL (both LIVE), TEAMCHANGE/AUTOTEAMCHANGE self lines + death_team f1 arg (LIVE), HURTTRIGGER msg_from_ent + DEATH_CUSTOM; add CTS /kill obituary suppression + BOTLIKE achievement announce.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs",
-      "src/XonoticGodot.Server/Scores.cs"
+      "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs",
+      "src/VortexArena.Server/Scores.cs"
      ],
      "cross_unit_dep": "none \u2014 notif rows already registered; the defect is purely in the deathtype->message selector + EmitObituary suicide branch."
     },
@@ -7722,9 +7722,9 @@
      "self_contained": false,
      "headline": "Carry per-notification centerprint durcnt duration on the wire (currently fixed 3s; item_centerprinttime=1.5 ignored); wire GentleMode setter (cl_gentle/sv_gentle) so gentle text is selected; add spectator-follow recipients in NotificationReaches (IS_SPEC/to.enemy clauses); implement Kill_Notification/MSG_CENTER_KILL server->client group-clear; fix CvarBool fallback polarities (location/specialonly) + item_wepammo name.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Notifications/Notification.cs",
-      "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs",
-      "src/XonoticGodot.Common/Gameplay/Notifications/NotificationTokens.cs",
+      "src/VortexArena.Common/Gameplay/Notifications/Notification.cs",
+      "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs",
+      "src/VortexArena.Common/Gameplay/Notifications/NotificationTokens.cs",
       "game/net/ServerNet.cs",
       "game/net/ClientNet.cs"
      ],
@@ -7757,9 +7757,9 @@
      "self_contained": true,
      "headline": "Fix the broken player/voice body-sound path: parse the .sounds manifest (key->file, e.g. pain50 -> sound/player/espeak/player/pain50) instead of treating sound/player/default.sounds as a directory \u2014 currently ALL pain/death/drown/taunt/team-radio are silent; fix hitsound sample misc/hitconfirm->misc/hit; add GlobalSound_pitch model-scale shift, sound_allowed owner-walk/bot_sound_monopoly, play2/play2team/spamsound, per-recipient cl_voice_directional/cl_autotaunt.",
      "files": [
-      "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs",
-      "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs",
-      "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs",
+      "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs",
+      "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs",
+      "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs",
       "game/client/HitSound.cs"
      ],
      "cross_unit_dep": "none for the core manifest/hitsound fix \u2014 the registered sound cues already exist; this is the dispatch/path-resolution side of S3 (sound-cue-dispatch) but edits stay within this unit's files."

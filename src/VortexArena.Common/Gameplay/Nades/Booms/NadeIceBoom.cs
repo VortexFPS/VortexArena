@@ -8,10 +8,10 @@
 // Render-only pieces omitted: the muzzleflash/icefield particle gate, the timer model on the explode variant.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The ice nade detonation — port of <c>nade_ice_boom</c>.</summary>
 public sealed class NadeIceBoom : INadeBoom

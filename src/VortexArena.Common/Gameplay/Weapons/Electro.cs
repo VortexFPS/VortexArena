@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Electro — port of common/weapons/weapon/electro.{qh,qc}. A splash/combo weapon. Primary fires a
@@ -89,6 +89,7 @@ public sealed class Electro : Weapon
     public Electro()
     {
         NetName = "electro";
+        BotPickupBaseValue = 5000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Cells;   // QC ammo_type
         DisplayName = "Electro";
         Impulse = 5;

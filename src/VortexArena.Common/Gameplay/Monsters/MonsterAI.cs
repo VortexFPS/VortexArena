@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Common.Gameplay.Damage;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using VortexArena.Common.Gameplay.Damage;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Shared monster AI — the Godot-free core of <c>common/monsters/sv_monsters.qc</c>. This is the
@@ -371,9 +371,6 @@ public static class MonsterAI
     // Team / skill colors (monster_setupcolors / monster_changeteam, sv_monsters.qc:172/200)
     // ====================================================================================
 
-    /// <summary>RENDER_COLORMAPPED (BIT(10)) — the render flag the csqcmodel reads to apply a colormap tint.</summary>
-    private const int RenderColormapped = 1 << 10;
-
     /// <summary>
     /// Port of <c>monster_setupcolors</c> (sv_monsters.qc:172): pick the monster's <c>.colormap</c> by team (in
     /// teamplay), by owner (a player-spawned monster), else by skill tier so monsters are tinted by difficulty.
@@ -389,7 +386,7 @@ public static class MonsterAI
         if (IsTeamplay && e.Team != 0f)
             colormap = 1024 + ((int)e.Team - 1) * 17;
         else if (owner is not null && (owner.Flags & EntFlags.Client) != 0)
-            colormap = owner.ColorMapOverride & ~RenderColormapped; // inherit the player's colormap value
+            colormap = owner.ColorMapOverride & ~Entity.RenderColormapped; // inherit the player's colormap value
         else if (st.Skill <= MonsterSkill.Easy)
             colormap = 1126;
         else if (st.Skill <= MonsterSkill.Medium)
@@ -405,7 +402,7 @@ public static class MonsterAI
 
         // QC stores the bare colormap; the port's render seam expects RENDER_COLORMAPPED set when a colormap is
         // present (mirrors g_model_setcolormaptoactivator / MapModels.SetColormapToActivator).
-        e.ColorMapOverride = colormap > 0 ? (colormap | RenderColormapped) : 0;
+        e.ColorMapOverride = colormap > 0 ? (colormap | Entity.RenderColormapped) : 0;
     }
 
     /// <summary>
@@ -2295,7 +2292,7 @@ public static class MonsterAI
     public const int EfNodepthtest = 8192;
 
     // SUPERCONTENTS_* bits for the monster's dphitcontentsmask (QC Monster_Spawn:1479/1488). Common can't
-    // reference XonoticGodot.Engine.Collision.SuperContents, so they are mirrored here EXACTLY as Invasion.cs /
+    // reference VortexArena.Engine.Collision.SuperContents, so they are mirrored here EXACTLY as Invasion.cs /
     // Nexball.cs / LagComp.cs do (DPCONTENTS_* values; TraceService honors Entity.DpHitContentsMask).
     private const int SuperContentsSolid       = 0x00000001; // QC DPCONTENTS_SOLID
     private const int SuperContentsBody        = 0x02000000; // QC DPCONTENTS_BODY

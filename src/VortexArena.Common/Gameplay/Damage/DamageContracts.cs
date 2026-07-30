@@ -1,7 +1,7 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay.Damage;
+namespace VortexArena.Common.Gameplay.Damage;
 
 /// <summary>
 /// A damage event (QC <c>Damage(targ, inflictor, attacker, damage, deathtype, hitloc, force)</c>,
@@ -89,8 +89,8 @@ public static class Combat
 
         // QC damage.qc:952: STAT(FROZEN, targ) — frozen players cannot receive heals (they must be thawed first).
         bool isFrozen = target.FrozenStat != 0
-            || (XonoticGodot.Common.Gameplay.StatusEffectsCatalog.Frozen is { } fz
-                && XonoticGodot.Common.Gameplay.StatusEffectsCatalog.Has(target, fz));
+            || (VortexArena.Common.Gameplay.StatusEffectsCatalog.Frozen is { } fz
+                && VortexArena.Common.Gameplay.StatusEffectsCatalog.Has(target, fz));
         if (isFrozen)
             return false;
 

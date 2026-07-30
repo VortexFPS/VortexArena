@@ -1,14 +1,14 @@
 using Godot;
-using XonoticGodot.Common.Framework;   // MoveFilter
-using XonoticGodot.Common.Gameplay;    // Entity, WeaponFiring
-using XonoticGodot.Common.Services;    // Api, TraceResult
+using VortexArena.Common.Framework;   // MoveFilter
+using VortexArena.Common.Gameplay;    // Entity, WeaponFiring
+using VortexArena.Common.Services;    // Api, TraceResult
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The reusable crosshair forward world-trace + screen-projection primitive shared by the true-aim
-/// classifier (<see cref="XonoticGodot.Game.Hud.CrosshairPanel"/>) and the <c>crosshair_chase</c>
+/// classifier (<see cref="VortexArena.Game.Hud.CrosshairPanel"/>) and the <c>crosshair_chase</c>
 /// camera variant (QC crosshair.qc:259-301).
 ///
 /// <para>Pure client-side presentation — there is no networking here. Every trace runs against the live

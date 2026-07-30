@@ -5,18 +5,18 @@ using System.Globalization;
 using System.IO;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Server.Bot;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Server.Bot;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Ad-hoc performance benchmark for the bot navigation hot path (T33 GC/alloc perf pass) — loads the REAL
@@ -25,12 +25,12 @@ namespace XonoticGodot.Tests;
 /// <see cref="BotNavigation.SetGoal"/>, A* <see cref="WaypointNetwork.FindPath"/>). Not a CI assertion — it
 /// no-ops where the content checkout is missing and writes a breakdown to a temp file + the test output.
 ///
-/// Run: dotnet test tests/XonoticGodot.Tests --filter BotPerfBench -l "console;verbosity=detailed"
+/// Run: dotnet test tests/VortexArena.Tests --filter BotPerfBench -l "console;verbosity=detailed"
 /// </summary>
 [Collection("GlobalState")]
 public class BotPerfBench
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
     private const string Map = "atelier";
     private const string ReportPath = @"C:\Users\Bryan\AppData\Local\Temp\botbench.txt";
 
@@ -47,9 +47,11 @@ public class BotPerfBench
 
         // --- load the real map: BSP collision + entity lump + the shipped waypoints/cache ---
         using var vfs = new VirtualFileSystem();
-        Assert.True(vfs.MountGameDir(DataDir));
+        Assert.True(vfs.MountContentRoot(DataDir));
         string bspPath = $"maps/{Map}.bsp";
-        Assert.True(vfs.Exists(bspPath), $"missing {bspPath}");
+        // Compiled maps are fetched, not committed (restructure D7) — skip rather than fail when
+        // they are absent. Run tools/data/fetch-maps.py to benchmark against real map geometry.
+        if (!vfs.Exists(bspPath)) return;
         BspData bsp = BspReader.Read(vfs.ReadBytes(bspPath));
         CollisionWorld world = BspCollisionBuilder.Build(bsp).World;
 

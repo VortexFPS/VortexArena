@@ -1,9 +1,9 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-// Alias the animdecide unit so the call sites read unambiguously (it lives flat in XonoticGodot.Common.Gameplay).
-using AnimDecideUnit = XonoticGodot.Common.Gameplay.AnimDecide;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+// Alias the animdecide unit so the call sites read unambiguously (it lives flat in VortexArena.Common.Gameplay).
+using AnimDecideUnit = VortexArena.Common.Gameplay.AnimDecide;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The weapon-side of the fire driver: the C# successor to QuakeC's <c>weapon_prepareattack</c> +

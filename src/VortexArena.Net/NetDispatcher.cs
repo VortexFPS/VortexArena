@@ -1,4 +1,4 @@
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Handler invoked when a message of a given id arrives and has been deserialized. The

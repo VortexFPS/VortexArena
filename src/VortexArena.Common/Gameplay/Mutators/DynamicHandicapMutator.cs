@@ -1,12 +1,12 @@
 // Port of common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc
 
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Dynamic Handicap mutator — port of common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc.

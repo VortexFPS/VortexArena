@@ -1,7 +1,7 @@
 # Nexball — parity spec
 
 **Base refs:** `common/gametypes/gametype/nexball/{nexball,sv_nexball,cl_nexball,sv_weapon,weapon}.{qc,qh}`
-· **Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Nexball.cs`, `src/XonoticGodot.Server/GameWorld.cs` (Activate/WireObjectiveSpawns arms), `src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs` (spawnfuncs)
+· **Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Nexball.cs`, `src/VortexArena.Server/GameWorld.cs` (Activate/WireObjectiveSpawns arms), `src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs` (spawnfuncs)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -175,7 +175,7 @@ and nothing else.
 - `ball_redgoal`→blue / `ball_bluegoal`→red compat swap is faithfully preserved (matches QC).
 
 ## Verification
-- `tests/XonoticGodot.Tests/NexballSpawnTests.cs`: goal/ball spawnfuncs register with correct
+- `tests/VortexArena.Tests/NexballSpawnTests.cs`: goal/ball spawnfuncs register with correct
   team/sentinels; ball-into-enemy-goal scores +1 and resets; own-goal credits other team; out
   returns ball; ball_redgoal/bluegoal swap. (Goal-scoring logic + spawn wiring = verified faithful/live.)
 - Source read of `Nexball.cs` confirms absence of weapon, meter, football kick, lifecycle thinks,

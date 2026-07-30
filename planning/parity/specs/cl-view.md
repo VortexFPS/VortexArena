@@ -1,7 +1,7 @@
 # cl-view — parity spec
 
 **Base refs:** `client/view.qc`, `client/view.qh`, `lib/csqcmodel/cl_player.qc` (CalcRefdef / bobbing / smoothing / chase / deathtilt / idle), `client/hud/crosshair.qc:DrawReticle`
-**Port refs:** `game/client/FirstPersonView.cs`, `game/client/ViewEffects.cs`, `game/client/ViewModel.cs`, `game/client/ReticleOverlay.cs`, `game/net/NetGame.cs` (host wiring), `src/XonoticGodot.Net/FaithfulViewSmoothing.cs`, `src/XonoticGodot.Common/Physics/PlayerPhysics.cs:CheckPunch`
+**Port refs:** `game/client/FirstPersonView.cs`, `game/client/ViewEffects.cs`, `game/client/ViewModel.cs`, `game/client/ReticleOverlay.cs`, `game/net/NetGame.cs` (host wiring), `src/VortexArena.Net/FaithfulViewSmoothing.cs`, `src/VortexArena.Common/Physics/PlayerPhysics.cs:CheckPunch`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

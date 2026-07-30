@@ -9,15 +9,15 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Server;
+using VortexArena.Common;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 [Collection("GlobalState")]
 public sealed class AssaultSpawnTests
@@ -262,15 +262,15 @@ public sealed class AssaultSpawnTests
         GameWorld world = BootAssaultMap();
         var aslt = (Assault)world.GameType!;
 
-        XonoticGodot.Common.Framework.Entity wall1 = Api.Entities.FindByClass("func_assault_destructible")
+        VortexArena.Common.Framework.Entity wall1 = Api.Entities.FindByClass("func_assault_destructible")
             .First(w => aslt.DestructibleFor(w) is { } d && d.Target == "dec1");
         Assault.Objective core1 = aslt.Objectives.First(o => o.Name == "core1");
 
         var red = new Player { NetName = "red", Team = Teams.Red, Health = 100f };
 
         // Shell the wall (100hp) to 0 through the shared damage pipeline.
-        XonoticGodot.Common.Gameplay.Damage.Combat.Damage(wall1, null, red, 100f,
-            XonoticGodot.Common.Gameplay.Damage.DeathTypes.Generic, wall1.Origin, System.Numerics.Vector3.Zero);
+        VortexArena.Common.Gameplay.Damage.Combat.Damage(wall1, null, red, 100f,
+            VortexArena.Common.Gameplay.Damage.DeathTypes.Generic, wall1.Origin, System.Numerics.Vector3.Zero);
 
         // The wall broke → its decreaser fired → core1 (dmg 150 > 100hp) destroyed → core2 activates.
         Assert.True(aslt.DestructibleFor(wall1)!.Destroyed);

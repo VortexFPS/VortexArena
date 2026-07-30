@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Terms of Service dialog — a faithful C# port of <c>XonoticToSDialog_fill</c>
@@ -10,7 +10,7 @@ namespace XonoticGodot.Game.Menu;
 /// <c>_termsofservice_accepted</c> and saves the config; declining quits the game.
 ///
 /// INERT (faithful UI, no backend): QC loads the body via <c>url_single_fopen(termsofservice_url, …)</c> and
-/// fills <c>me.textBox</c> from the HTTP response (<c>XonoticToS_OnGet</c>). XonoticGodot has no ToS-fetch backend,
+/// fills <c>me.textBox</c> from the HTTP response (<c>XonoticToS_OnGet</c>). VortexArena has no ToS-fetch backend,
 /// so the scrollable body shows a short honest placeholder instead of live ToS text. The surrounding controls
 /// are faithful:
 ///   * Accept writes <c>_termsofservice_accepted</c> (QC stores the version int <c>_Nex_ExtResponseSystem_NewToS</c>;

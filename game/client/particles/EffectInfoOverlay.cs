@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Game.Client;   // EffectInfoEmitter, EiType/EiBlend/EiOrientation (game/client/EffectInfoParticle.cs)
+using VortexArena.Game.Client;   // EffectInfoEmitter, EiType/EiBlend/EiOrientation (game/client/EffectInfoParticle.cs)
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  EffectInfoOverlay — parser for the PORT-SIDE authoring overlay file `effectinfo_xg.txt`
@@ -127,7 +127,7 @@ public sealed class EffectInfoOverlay
         }
 
         // 2) direct disk read from the resolved content directory — same convention as EffectInfo so the
-        //    in-tree assets/data tree is found (res:// rooted at the project dir).
+        //    in-tree data/ tree is found (res:// rooted at the project dir).
         foreach (string abs in CandidateDiskPaths(vpath))
         {
             try

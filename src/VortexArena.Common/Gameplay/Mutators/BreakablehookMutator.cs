@@ -1,11 +1,11 @@
 // Port of common/mutators/mutator/breakablehook/sv_breakablehook.qc
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Breakable Hook mutator — port of common/mutators/mutator/breakablehook/sv_breakablehook.qc. Makes the

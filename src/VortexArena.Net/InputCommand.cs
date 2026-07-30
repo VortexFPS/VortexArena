@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Button bits sampled into an <see cref="InputCommand"/>. Mirrors the QC <c>input_buttons</c> bitfield
@@ -127,7 +127,7 @@ public struct InputCommand
 /// Owner-replicated player state — the C# successor to the Xonotic *stat set* (<c>qcsrc/lib/stats.qh</c>),
 /// modelling the stat *definitions* (health/armor/ammo/movevars) as plain typed fields. Per the
 /// networking spec we deliberately <b>drop</b> the engine's fixed 256-slot stat array and the
-/// <c>MAGIC_STATS</c> reserved-index mechanism — there is no such cap in XonoticGodot; this is just the data
+/// <c>MAGIC_STATS</c> reserved-index mechanism — there is no such cap in VortexArena; this is just the data
 /// the server replicates to the owning client (and the prediction reads movement vars from).
 ///
 /// This is intentionally not the full stat catalogue — it is the movement/HUD-critical subset needed by

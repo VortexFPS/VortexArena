@@ -2,7 +2,7 @@
 //      + DEATH_ISMONSTER/ISTURRET/ISVEHICLE macros).
 using System.Collections.Generic;
 
-namespace XonoticGodot.Common.Gameplay.Damage;
+namespace VortexArena.Common.Gameplay.Damage;
 
 /// <summary>
 /// The category an "extra" deathtype message carries (QC <c>.message</c> on a registered deathtype,

@@ -3,10 +3,10 @@
 //       + qcsrc/common/gametypes/gametype/keyhunt/sv_keyhunt.qc (kh_update_state → STAT(OBJECTIVE_STATUS))
 //       + qcsrc/common/gametypes/gametype/survival/sv_survival.qc (SurvivalStatuses_SendEntity)
 //       + qcsrc/server/elimination.qc (EliminatedPlayers_SendEntity)
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Server→client replication of the per-mode round/objective HUD status (T53) — the C# successor to four QC

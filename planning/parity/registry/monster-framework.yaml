@@ -20,8 +20,8 @@ features:
       - "common/monsters/sv_monsters.qc:1388 (Monster_Spawn)"
       - "common/monsters/sv_monsters.qc:1414 (MONSTERSKILL_NOT* cull)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:424 (SpawnFromMap)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:625 (ShouldCullForSkill)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:424 (SpawnFromMap)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:625 (ShouldCullForSkill)"
     constants:
       - { name: "g_monsters", base: "1 (0 on ruleset-XPM)", port: "1 (MasterSwitchEnabled !autocvar semantics)", match: true }
       - { name: "MONSTERSKILL_NOTEASY/MEDIUM/HARD", base: "BIT(8)/BIT(9)/BIT(10)", port: "1<<8 / 1<<9 / 1<<10", match: true }
@@ -49,9 +49,9 @@ features:
       - "common/monsters/sv_monsters.qc:1364 (Monster_Sound spawn cue)"
       - "common/monsters/sv_monsters.qc:1445 (engine field stamping)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:224 (Setup)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:341 (Setup spawn-cue MonsterSound)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:282 (EF_FULLBRIGHT / EF_NODEPTHTEST cheat flags — Wave-8e)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:224 (Setup)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:341 (Setup spawn-cue MonsterSound)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:282 (EF_FULLBRIGHT / EF_NODEPTHTEST cheat flags — Wave-8e)"
     constants:
       - { name: "g_monsters_target_range", base: "2000", port: "2000", match: true }
       - { name: "g_monsters_attack_range", base: "120", port: "120", match: true }
@@ -86,9 +86,9 @@ features:
     base_refs:
       - "common/monsters/sv_monsters.qc:521 (Monster_Miniboss_Setup)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:266 (Setup miniboss block)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:274 (Effects |= EfRed)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1875 (Respawn EF_RED re-apply)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:266 (Setup miniboss block)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:274 (Effects |= EfRed)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1875 (Respawn EF_RED re-apply)"
     constants:
       - { name: "g_monsters_miniboss_chance", base: "5", port: "0 fallback (reads cvar; cfg default 5)", match: true }
       - { name: "g_monsters_miniboss_healthboost", base: "100", port: "100", match: true }
@@ -120,9 +120,9 @@ features:
       - "common/monsters/sv_monsters.qc:598 (Monster_Use)"
       - "common/monsters/sv_monsters.qc:510 (Monster_Touch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:441 (appear defer + use)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:496 (Use = acquire attacker)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1231 (Touch)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:441 (appear defer + use)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:496 (Use = acquire attacker)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1231 (Touch)"
     constants:
       - { name: "MONSTERFLAG_APPEAR", base: "BIT(1)", port: "1<<1", match: true }
     status:
@@ -147,9 +147,9 @@ features:
       - "common/monsters/sv_monsters.qc:101 (Monster_ValidTarget)"
       - "common/monsters/sv_monsters.qc:70 (monster_facing)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:648 (ValidTarget + MatchHalted + typefrag gate)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:702 (MonsterFacing)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1933 (MatchHalted -> VehicleCommon.GameStopped)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:648 (ValidTarget + MatchHalted + typefrag gate)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:702 (MonsterFacing)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1933 (MatchHalted -> VehicleCommon.GameStopped)"
     constants:
       - { name: "g_monsters_lineofsight", base: "1", port: "1", match: true }
       - { name: "g_monsters_target_infront", base: "0", port: "0", match: true }
@@ -184,9 +184,9 @@ features:
       - "common/monsters/sv_monsters.qc:137 (Monster_FindTarget)"
       - "common/monsters/sv_monsters.qc:1243 (Monster_Enemy_Check)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:722 (FindTarget + crouch range scale)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:754 (IsCrouching = e.ButtonCrouch)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:802 (EnemyCheck + LOS-retrace + frozen drop)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:722 (FindTarget + crouch range scale)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:754 (IsCrouching = e.ButtonCrouch)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:802 (EnemyCheck + LOS-retrace + frozen drop)"
     constants:
       - { name: "crouch range scale", base: "*0.75", port: "*0.75 (now LIVE: IsCrouching reads e.ButtonCrouch)", match: true }
       - { name: "enemy recheck cadence", base: "time + 1 (1s)", port: "Now + 1f", match: true }
@@ -220,11 +220,11 @@ features:
       - "common/monsters/sv_monsters.qc:624 (Monster_Move_Target)"
       - "common/monsters/sv_monsters.qc:605 (Monster_WanderTarget)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:855 (Move)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:889 (MatchHalted brake-and-idle halt + CampaignMovementHeld)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:900 (follow-prune diff-team/spectator)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:912 (idle voice)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:987 (MoveTarget) + 1033 (WanderTarget)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:855 (Move)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:889 (MatchHalted brake-and-idle halt + CampaignMovementHeld)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:900 (follow-prune diff-team/spectator)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:912 (idle voice)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:987 (MoveTarget) + 1033 (WanderTarget)"
     constants:
       - { name: "speed cap", base: "bound(0, base*SKILLMOD, base*2.5)", port: "Bound(0, base*SkillMod, base*2.5)", match: true }
       - { name: "yaw turn clamp", base: "+-25 deg/frame (shortangle_f)", port: "Clamp(ShortAngle, -25, 25)", match: true }
@@ -256,8 +256,8 @@ features:
     base_refs:
       - "common/monsters/sv_monsters.qc:711 (Monster_CheckDanger)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:290 (CheckDanger)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:343 (HitsTriggerHurt — danger code 4)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:290 (CheckDanger)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:343 (HitsTriggerHurt — danger code 4)"
     constants:
       - { name: "lethal fall threshold", base: "1024 chasing / 100 wandering", port: "1024 / 100", match: true }
       - { name: "danger codes", base: "1 sky / 2 fall / 3 lava-slime / 4 hurt-trigger", port: "1 / 2 / 3 / 4 (all ported)", match: true }
@@ -284,9 +284,9 @@ features:
       - "common/monsters/sv_monsters.qc:468 (monstersound_melee on hit)"
       - "common/monsters/sv_monsters.qc:85 (monster_makevectors)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1102 (AttackCheck)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1113 (FaceTarget)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1315 (MeleeAttack melee voice cue)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1102 (AttackCheck)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1113 (FaceTarget)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1315 (MeleeAttack melee voice cue)"
     constants: []
     status:
       logic: faithful
@@ -314,10 +314,10 @@ features:
       - "common/monsters/sv_monsters.qc:414 (Monster_Attack_Leap_Check / Leap)"
       - "common/monsters/sv_monsters.qc:243 (Monster_Delay)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1315 (MeleeAttack)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1347 (Leap) + 1378 (TraceToss)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1400 (QueueDelayedAttack) / 1417 (QueueCombo) / 1451 (SpawnProjectile)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:108 (HomeProjectile) + 179 (ChainedZaps)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1315 (MeleeAttack)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1347 (Leap) + 1378 (TraceToss)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1400 (QueueDelayedAttack) / 1417 (QueueCombo) / 1451 (SpawnProjectile)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:108 (HomeProjectile) + 179 (ChainedZaps)"
     constants:
       - { name: "melee damage scale", base: "damg * MONSTER_SKILLMOD", port: "damage * SkillMod", match: true }
     status:
@@ -346,9 +346,9 @@ features:
       - "common/monsters/sv_monsters.qc:1036 (Monster_Dead)"
       - "common/monsters/sv_monsters.qc:1018 (Monster_Dead_Damage)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1708 (MonsterEventDamage)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1561 (MarkPain + throttled pain cue, PainAuto) + 1624 (MarkDead death cue + RollDeathVariant)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1743 (MonsterDeadDamage)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1708 (MonsterEventDamage)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1561 (MarkPain + throttled pain cue, PainAuto) + 1624 (MarkDead death cue + RollDeathVariant)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1743 (MonsterDeadDamage)"
     constants:
       - { name: "monster RES_ARMOR block", base: "armor stored as small fraction; block=RES_ARMOR/100 (zombie RES_ARMOR=g_monsters_armor_blockpercent 0.5)", port: "armorBlock = ArmorValue/100", match: true }
       - { name: "pain window", base: "(per-monster mr_pain, e.g. zombie 0.34)", port: "PainFinished = Now + 0.34f", match: true }
@@ -374,7 +374,7 @@ features:
     verification:
       - { kind: code, ref: "MonsterEventDamage dispatches live-vs-corpse on DeadState; armor split, gib thresholds (-100/-50), corpse lifetime +5, SUB_UseTargets, MonsterDies bonus all present", result: pass }
       - { kind: code, ref: "Pain cue now fires via MonsterSound(pain,1.2,delaytoo) — the 1.2s self-spam throttle is now honoured (was an ungated Sound.Play that could machine-gun); death cue via MonsterSound(death,0,false)", result: pass }
-      - { kind: test, ref: "tests/XonoticGodot.Tests/MonsterDamageDeathTests.cs", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/MonsterDamageDeathTests.cs", result: pass }
     confidence: high
     notes: "WAVE-2 FIX: the pain voice now respects the 1.2s msound_delay throttle (was un-throttled). Damage/death rules + values still faithful; the double-push and direct-heal are intended divergences; the SND_BODYIMPACT1 body-impact placeholder + extra gib splashes remain unported."
 
@@ -384,9 +384,9 @@ features:
     base_refs:
       - "common/monsters/sv_monsters.qc:40 (monster_dropitem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:205 (DropItem)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:238 (ItemRandomFromList — Item_RandomFromList)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1631 (live call from MarkDead, QC Monster_Dead:1042)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:205 (DropItem)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:238 (ItemRandomFromList — Item_RandomFromList)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1631 (live call from MarkDead, QC Monster_Dead:1042)"
     constants:
       - { name: "g_monsters_drop_time", base: "10 (<=0 disables loot)", port: "10 (Cvar default 10f; <=0 returns)", match: true }
       - { name: "loot velocity", base: "randomvec()*175 + '0 0 325'", port: "Prandom.Vec()*175 + (0,0,325)", match: true }
@@ -415,7 +415,7 @@ features:
     base_refs:
       - "common/monsters/sv_monsters.qc:1161 (Monster_Move_2D)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1255 (Move2D)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1255 (Move2D)"
     constants:
       - { name: "forward trace distance", base: "32u", port: "32u", match: true }
       - { name: "ledge down-trace distance", base: "32u", port: "32u", match: true }
@@ -447,12 +447,12 @@ features:
       - "common/monsters/sv_monsters.qc:999 (Monster_Reset)"
       - "common/monsters/sv_monsters.qc:1049 (score_kill / monsters_killed)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1826 (RespawnCheck) + 1838 (Respawn)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:1771 (Reset) + 1800 (ResetAll)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:331 (e.Reset = Reset installed at Setup)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/EntityMonsterReset.cs:19 (Entity.Reset delegate)"
-      - "src/XonoticGodot.Server/GameWorld.cs:3887 (ResetMapObjects — calls e.Reset?.Invoke per entity)"
-      - "src/XonoticGodot.Server/GameWorld.cs:3826 (ResetMap -> ResetMapObjects; wired to Warmup.ResetMap / Rounds.OnRoundReset)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1826 (RespawnCheck) + 1838 (Respawn)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:1771 (Reset) + 1800 (ResetAll)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:331 (e.Reset = Reset installed at Setup)"
+      - "src/VortexArena.Common/Gameplay/Monsters/EntityMonsterReset.cs:19 (Entity.Reset delegate)"
+      - "src/VortexArena.Server/GameWorld.cs:3887 (ResetMapObjects — calls e.Reset?.Invoke per entity)"
+      - "src/VortexArena.Server/GameWorld.cs:3826 (ResetMap -> ResetMapObjects; wired to Warmup.ResetMap / Rounds.OnRoundReset)"
     constants:
       - { name: "g_monsters_respawn", base: "1", port: "1", match: true }
       - { name: "g_monsters_respawn_delay", base: "20", port: "20", match: true }
@@ -484,10 +484,10 @@ features:
       - "common/monsters/sv_spawner.qc:6 (spawner_use / monster_spawner)"
       - "common/monsters/sv_monsters.qc:34 (monsters_setstatus)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:520 (SpawnMonster)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:49 (MonsterSpawner) + 72 (SpawnerUse)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:209 (spawnfunc registration: monster_zombie/golem/spawner/...)"
-      - "src/XonoticGodot.Server/GameWorld.cs (SpawnFuncs.TrySpawn live loop)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:520 (SpawnMonster)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterSpawnFuncs.cs:49 (MonsterSpawner) + 72 (SpawnerUse)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:209 (spawnfunc registration: monster_zombie/golem/spawner/...)"
+      - "src/VortexArena.Server/GameWorld.cs (SpawnFuncs.TrySpawn live loop)"
       - "game/net/NetGame.cs (scoreboard MonstersTotal/Killed feed)"
     constants:
       - { name: "g_monsters_owners", base: "1", port: "1", match: true }
@@ -517,9 +517,9 @@ features:
       - "common/monsters/sv_monsters.qc:172 (monster_setupcolors)"
       - "common/monsters/sv_monsters.qc:200 (monster_changeteam)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:361 (SetupColors)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:393 (ChangeTeam)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:493 (live SetupColors call in SpawnFromMap)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:361 (SetupColors)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:393 (ChangeTeam)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:493 (live SetupColors call in SpawnFromMap)"
     constants:
       - { name: "skill colormaps", base: "1126/1075/1228/1092/1160 by skill tier (else team/owner color)", port: "1126/1075/1228/1092/1160 by skill tier (team 1024+(team-1)*17 / owner colormap)", match: true }
       - { name: "team radar icon", base: "RADARICON_DANGER, Team_ColorRGB / '1 0 0'", port: "ChangeTeam updates sprite radar via UpdateTeamRadar (MonsterAI.cs:430); spawn-time radar via SpawnHealthbar RADARICON_DANGER", match: true }
@@ -550,14 +550,14 @@ features:
       - "common/monsters/sv_monsters.qc:368 (Monster_Sound)"
       - "common/monsters/sv_monsters.qc:1212 (Monster_Anim / CSQCMODEL_AUTOUPDATE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:765 (MonsterSound: g_monsters_sounds gate + msound_delay throttle + per-monster SoundCues cue gate + SoundDir/SoundExt/variant suffix)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:107 (MSoundDelay state field) + 126 (AnimVariant) + 1206 (DriveAnimFrame -> AnimFrame(phase,die2,variant)) + 1673 (RollDeathVariant at MarkDead)"
-      - "src/XonoticGodot.Common/Gameplay/EntityClasses.cs:25 (Monster.SoundCues — null=play-all, set=.sounds-defined cues) + :32 SoundDir + :37 SoundExt + :44 SoundCueCount + :84 RollDeathVariant"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Zombie.cs:45 (SoundCues={death,sight,idle}, .ogg, bit-faithful to zombie.dpm_0.sounds; RollDeathVariant random die1/die2)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Golem.cs:88 (SoundCues={death,sight,melee,pain,idle} + SoundCueCount; melee/pain anim variants)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/Spider.cs:43 + Mage.cs:62 + Wyvern.cs:62 (SoundCues=empty set — silent, Base ships NO spider/mage/wyvern .sounds; Mage/Wyvern null->empty Wave-16 b3a9c06)"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:446 (SpawnHealthbar WP_Monster) + 470 (UpdateHealthbar) + 1871 (UpdateHealthbar on pain) + 1963 (Kill on death) + 727 (Kill on remove); :487 ApplySize (quake_resize x1.3) + :244-246 Setup DpHitContentsMask (playerclip)"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:160 (WP 'Monster' registered) + :217/:223 (Team/Health fields) + game/client/WaypointSpriteLayer.cs:207 (DrawHealthBar); src/XonoticGodot.Engine/Collision/TraceService.cs:562 (DpHitContentsMask honored)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:765 (MonsterSound: g_monsters_sounds gate + msound_delay throttle + per-monster SoundCues cue gate + SoundDir/SoundExt/variant suffix)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:107 (MSoundDelay state field) + 126 (AnimVariant) + 1206 (DriveAnimFrame -> AnimFrame(phase,die2,variant)) + 1673 (RollDeathVariant at MarkDead)"
+      - "src/VortexArena.Common/Gameplay/EntityClasses.cs:25 (Monster.SoundCues — null=play-all, set=.sounds-defined cues) + :32 SoundDir + :37 SoundExt + :44 SoundCueCount + :84 RollDeathVariant"
+      - "src/VortexArena.Common/Gameplay/Monsters/Zombie.cs:45 (SoundCues={death,sight,idle}, .ogg, bit-faithful to zombie.dpm_0.sounds; RollDeathVariant random die1/die2)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Golem.cs:88 (SoundCues={death,sight,melee,pain,idle} + SoundCueCount; melee/pain anim variants)"
+      - "src/VortexArena.Common/Gameplay/Monsters/Spider.cs:43 + Mage.cs:62 + Wyvern.cs:62 (SoundCues=empty set — silent, Base ships NO spider/mage/wyvern .sounds; Mage/Wyvern null->empty Wave-16 b3a9c06)"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:446 (SpawnHealthbar WP_Monster) + 470 (UpdateHealthbar) + 1871 (UpdateHealthbar on pain) + 1963 (Kill on death) + 727 (Kill on remove); :487 ApplySize (quake_resize x1.3) + :244-246 Setup DpHitContentsMask (playerclip)"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:160 (WP 'Monster' registered) + :217/:223 (Team/Health fields) + game/client/WaypointSpriteLayer.cs:207 (DrawHealthBar); src/VortexArena.Engine/Collision/TraceService.cs:562 (DpHitContentsMask honored)"
     constants:
       - { name: "g_monsters_healthbars", base: "0", port: "0 (Cvar default 0, gated at SpawnFromMap MonsterAI.cs:604 + Respawn:2166)", match: true }
       - { name: "g_monsters_sounds", base: "1", port: "1 (gated in MonsterSound)", match: true }

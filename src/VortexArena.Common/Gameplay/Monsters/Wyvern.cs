@@ -1,12 +1,12 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Common.Gameplay.Damage;
-using static XonoticGodot.Common.Gameplay.Effects;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using VortexArena.Common.Gameplay.Damage;
+using static VortexArena.Common.Gameplay.Effects;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Wyvern — port of common/monsters/monster/wyvern.{qh,qc}. A fragile flying reptile that glides after

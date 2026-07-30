@@ -1,0 +1,118 @@
+{
+  "$comment": [
+    "Pins the engine template the Windows release export must be built from (restructure item 29, G10).",
+    "Two independent jobs, because the failure they guard has two ends:",
+    "  'patches' pins the SOURCE \u2014 the patch files on disk, by sha256, so a silent edit to a patch is",
+    "    caught before anyone rebuilds a template from it.",
+    "  'binary_markers' pins the RESULT \u2014 byte sequences that must (or must not) appear in the exported",
+    "    game binary, which is the only check that speaks to what actually shipped.",
+    "Verify with tools/verify-engine-template.py; see tools/engine-patches/README.md for the rebuild recipe."
+  ],
+  "engine": {
+    "version": "4.6.3",
+    "channel": "stable",
+    "dotnet": true,
+    "upstream_tag": "4.6.3-stable",
+    "scons": "platform=windows target=template_release arch=x86_64 module_mono_enabled=yes d3d12=no"
+  },
+  "patches": [
+    {
+      "file": "godot-4.6.3-pr109639-mouse-input-backport.patch",
+      "sha256": "be0a415f19f50223d4e20a0189c2cd1ad694718a0eeb22a502f321108ffa1cd5",
+      "bytes": 17879,
+      "upstream": "https://github.com/godotengine/godot/pull/109639",
+      "drop_at_engine": "4.8",
+      "$comment": [
+        "Hash is over the LF form. .gitattributes pins *.patch to eol=lf precisely so this value is",
+        "the same on Windows and on the Linux runner \u2014 without that rule the file checks out CRLF",
+        "under core.autocrlf and this hash fails on whichever platform did not write it."
+      ]
+    }
+  ],
+  "binary_markers": {
+    "$comment": [
+      "Applies to the windows-client preset only; the other presets use stock templates by design and",
+      "have custom_template/release empty legitimately.",
+      "",
+      "Chosen by MEASURING all three candidates against both real templates rather than by reading the",
+      "patch, because two of the three do not discriminate:",
+      "  GetRawInputBuffer  stock 0  patched 1   <- the only usable marker",
+      "  GetRawInputData    stock 2  patched 1   <- present in BOTH; the backport REPLACES per-message",
+      "                                            calls with the buffered path, so the count falls.",
+      "                                            A presence check here passes on a stock build.",
+      "  RAWINPUTHEADER     stock 0  patched 0   <- a struct type name; compile-time only, never in the",
+      "                                            binary. A presence check here fails on a GOOD build.",
+      "Both wrong choices are silent in the direction that matters, which is why this list is short."
+    ],
+    "windows-client": {
+      "required": [
+        "GetRawInputBuffer"
+      ],
+      "forbidden": [
+        "engine.lock.json"
+      ],
+      "$comment": [
+        "forbidden is a CONTAMINATION CANARY, and it exists because the required-marker check defeated itself.",
+        "Godot's export was baking tools/ into the game pck, and this very lockfile contains the literal string",
+        "'GetRawInputBuffer' several times over. So an exported binary contained the marker whether or not the",
+        "PATCHED TEMPLATE was used - the count went 1x -> 3x purely from shipped text - and a stock-template",
+        "export would have passed the check.",
+        "Fixed primarily by excluding dev material (tools/, planning/, tests/, docs/, ci/, .github/) from the",
+        "export, which a shipped game pck has no business carrying anyway. This canary is the belt: if anything",
+        "ever re-includes this file in a build, the check fails LOUDLY instead of silently becoming a tautology."
+      ]
+    }
+  },
+  "template": {
+    "$comment": [
+      "Published 2026-07-30 as a PRERELEASE at tag engine-4.6.3-stable-vortex1. Prerelease is load-bearing, not tidiness:",
+      "GitHub resolves releases/latest to the newest non-prerelease, and the launcher's primary update feed",
+      "is /releases/latest/download/latest.json. A full release here would 404 that manifest and drop every",
+      "client onto the unauthenticated API at 60 req/hr, quietly.",
+      "",
+      "ONLY the windows template differs from stock. The patch set touches platform/windows/ exclusively, so",
+      "linux and macos carry none of it and are stock-equivalent in behaviour; they are pinned here for",
+      "provenance - a template built from known inputs whose hash we can verify - not because they fix",
+      "anything. macos is universal (arm64 + x86_64 lipo'd); a single-arch macOS template would refuse to",
+      "run on half the Mac fleet, which no marker check can see.",
+      "",
+      "sha256 means THIS EXACT PUBLISHED ARTIFACT, which is what a fetcher needs to verify a download. It is",
+      "NOT a reproducibility claim: Godot does not build reproducibly across toolchain versions, so",
+      "rebuilding from these same pinned inputs yields a different hash and that must not be read as",
+      "tampering. Measured: the first CI windows build and the dev-box build had identical CONFIGURATION and",
+      "different bytes. The reproducible pin is patches[] + engine.upstream_tag; binary_markers is what",
+      "proves the RESULT carries them.",
+      "",
+      "Every hash below was verified by downloading the published asset and hashing it, not taken from the",
+      "API - the value that causes a hard failure should be checked against what a fetcher actually gets."
+    ],
+    "tag": "engine-4.6.3-stable-vortex1",
+    "release_url": "https://github.com/VortexFPS/VortexArena/releases/tag/engine-4.6.3-stable-vortex1",
+    "platforms": {
+      "windows": {
+        "filename": "godot.windows.template_release.x86_64.mono.exe",
+        "url": "https://github.com/VortexFPS/VortexArena/releases/download/engine-4.6.3-stable-vortex1/godot.windows.template_release.x86_64.mono.exe",
+        "sha256": "ab7535661c3e51f8bc73833afe5e77519e1279762f1c701f69522c81d7940a73",
+        "bytes": 66842624,
+        "preset": "windows-client",
+        "patched": true
+      },
+      "linux": {
+        "filename": "godot.linuxbsd.template_release.x86_64.mono",
+        "url": "https://github.com/VortexFPS/VortexArena/releases/download/engine-4.6.3-stable-vortex1/godot.linuxbsd.template_release.x86_64.mono",
+        "sha256": "a5efb7020881695bc467b76491d003c5bd8e1488ff8c8b9c0255d9410b2e820e",
+        "bytes": 87089704,
+        "preset": "linux-client",
+        "patched": false
+      },
+      "macos": {
+        "filename": "godot.macos.template_release.universal.mono",
+        "url": "https://github.com/VortexFPS/VortexArena/releases/download/engine-4.6.3-stable-vortex1/godot.macos.template_release.universal.mono",
+        "sha256": "b0cba97cd41ca2adf53a183b847b8f3f3aec8a52f970474f482e7bf3c2657667",
+        "bytes": 149612968,
+        "preset": "macos-client",
+        "patched": false
+      }
+    }
+  }
+}

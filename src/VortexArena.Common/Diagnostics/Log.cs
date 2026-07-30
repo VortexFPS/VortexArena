@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Diagnostics;
+namespace VortexArena.Common.Diagnostics;
 
 /// <summary>The seven Xonotic log levels (<c>lib/log.qh</c>), in the file's declaration order.</summary>
 public enum LogLevel
@@ -70,7 +70,7 @@ public readonly struct LogEntry
 /// <summary>
 /// The game-code logging facade — the C# successor to Xonotic's <c>lib/log.qh</c> (<c>LOG_INFO</c> /
 /// <c>LOG_TRACE</c> / <c>LOG_DEBUG</c> / <c>LOG_WARN</c> / <c>LOG_SEVERE</c> / <c>LOG_FATAL</c> /
-/// <c>LOG_HELP</c>) layered over the <c>print</c>/<c>dprint</c> builtins. Lives in <c>XonoticGodot.Common</c> so
+/// <c>LOG_HELP</c>) layered over the <c>print</c>/<c>dprint</c> builtins. Lives in <c>VortexArena.Common</c> so
 /// both the headless server core and the Godot client/menu call one API; it never references Godot.
 ///
 /// <para><b>Verbosity gate.</b> Exactly mirrors QC's <c>autocvar_developer</c>:

@@ -1,4 +1,4 @@
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// A tiny process-wide latch the visual-capture path (<see cref="ScreenshotHook"/>) waits on, so a windowed

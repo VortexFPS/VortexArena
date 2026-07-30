@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Server-side rules for Push-Pull — port of common/minigames/minigame/pp.qc (pp_server_event, pp_move,
 // pp_valid_move, pp_winning_piece, pp_setup_pieces, pp_valid_tile, pp_next_match). Two teams on a 7x7

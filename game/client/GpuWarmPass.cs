@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The offscreen GPU pipeline warm pass (planning/PERFORMANCE_REPORT.md §1.1 Plan A2). Godot compiles a material's
@@ -168,7 +168,7 @@ public partial class GpuWarmPass : Node
     {
         if (--_framesLeft > 0)
             return;
-        XonoticGodot.Common.Diagnostics.Prof.Event($"warm: GPU warm pass done ({_instances.Count} instances)");
+        VortexArena.Common.Diagnostics.Prof.Event($"warm: GPU warm pass done ({_instances.Count} instances)");
         if (_returnInstances)
         {
             // WarmNodes mode: hand the (now pipeline-warm) nodes back to the caller instead of freeing them.

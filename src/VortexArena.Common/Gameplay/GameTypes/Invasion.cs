@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Invasion gametype — port of <c>CLASS(Invasion, Gametype)</c>
@@ -75,7 +75,7 @@ public sealed class Invasion : GameType
     private const float  DefaultSpawnpointDelay = 0.5f;                      // gametypes-server.cfg 0.5
 
     // ----- QC MUTATOR_HOOKFUNCTION(inv, MonsterSpawn): mon.dphitcontentsmask = SOLID|BODY|BOTCLIP|MONSTERCLIP -----
-    // SUPERCONTENTS_* bits (must match XonoticGodot.Engine.Collision.SuperContents — Common can't reference Engine,
+    // SUPERCONTENTS_* bits (must match VortexArena.Engine.Collision.SuperContents — Common can't reference Engine,
     // so they are mirrored here exactly as LagComp.cs / Projectiles.cs / Nexball.cs do). Stamping this makes an
     // invasion monster's own movement trace honor bot-clip + monster-clip AI hint brushes (a SlideBox monster
     // already gets SOLID|BODY|MONSTERCLIP by default; the BOTCLIP bit is the part Base adds on top).
@@ -753,7 +753,7 @@ public sealed class Invasion : GameType
         int chosen = n - 1;
         if (totalRating > 0f)
         {
-            float r = XonoticGodot.Common.Math.Prandom.Range(0f, totalRating);
+            float r = VortexArena.Common.Math.Prandom.Range(0f, totalRating);
             float acc = 0f;
             for (int i = 0; i < n; i++)
             {
@@ -783,7 +783,7 @@ public sealed class Invasion : GameType
             // try a handful of draws so a stray bad name doesn't abort the spawn.
             for (int attempt = 0; attempt < list.Length; attempt++)
             {
-                string name = list[XonoticGodot.Common.Math.Prandom.RangeInt(0, list.Length)];
+                string name = list[VortexArena.Common.Math.Prandom.RangeInt(0, list.Length)];
                 Monster? m = Monsters.ByName(name);
                 if (m is not null) return m;
             }
@@ -805,9 +805,9 @@ public sealed class Invasion : GameType
             // No eligible monster (e.g. zombies_only with no undead in the catalog) — fall back to the whole
             // catalog so a wave is never silently empty, mirroring QC's RandomSelection returning *something*.
             int all = Monsters.Count;
-            return all > 0 ? Monsters.All[XonoticGodot.Common.Math.Prandom.RangeInt(0, all)] : null;
+            return all > 0 ? Monsters.All[VortexArena.Common.Math.Prandom.RangeInt(0, all)] : null;
         }
-        return pool[XonoticGodot.Common.Math.Prandom.RangeInt(0, pool.Count)];
+        return pool[VortexArena.Common.Math.Prandom.RangeInt(0, pool.Count)];
     }
 
     // ---- QC monster type-flag classification (invasion_PickMonster spawnflag tests) --------------------------

@@ -16,9 +16,9 @@ features:
       - "common/mutators/mutator/walljump/walljump.qc:REGISTER_MUTATOR"
       - "common/stats.qh:322"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
-      - "src/XonoticGodot.Server/GameWorld.cs:631"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Server/GameWorld.cs:631"
       - "game/net/NetGame.cs:1120"
     constants:
       - { name: "g_walljump", base: "0", port: "0 (mutators.cfg:485)", match: true }
@@ -43,7 +43,7 @@ features:
     base_refs:
       - "common/mutators/mutator/walljump/walljump.qc:PlayerTouchWall"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:PlayerTouchWall"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:PlayerTouchWall"
     constants:
       - { name: "dist", base: "10", port: "10", match: true }
       - { name: "max_normal", base: "0.2", port: "0.2", match: true }
@@ -71,7 +71,7 @@ features:
     base_refs:
       - "common/mutators/mutator/walljump/walljump.qc:40-46"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:82-91"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:82-91"
     constants: []
     status:
       logic: faithful
@@ -96,9 +96,9 @@ features:
       - "common/mutators/mutator/walljump/walljump.qc:70"
       - "common/physics/player.qc:481"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:98-105"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:53-58"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:1086-1097"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:98-105"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:53-58"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:1086-1097"
     constants:
       - { name: "g_walljump_force", base: "300", port: "300 (mutators.cfg:487); C# field default 300", match: true }
       - { name: "g_walljump_velocity_xy_factor", base: "1.15", port: "1.15 (mutators.cfg:488); C# field default 1.05 but cfg wins", match: true }
@@ -132,8 +132,8 @@ features:
       - "common/mutators/mutator/walljump/walljump.qc:36-60"
     port_refs:
       - "game/net/NetGame.cs:1120 (BootClientFacade -> MutatorActivation.Apply)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:1091 (Predicted = input.Predicted)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:115 (if (!args.Predicted) SVQC-only block)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:1091 (Predicted = input.Predicted)"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:115 (if (!args.Predicted) SVQC-only block)"
     constants: []
     status:
       logic: faithful
@@ -157,9 +157,9 @@ features:
     base_refs:
       - "common/mutators/mutator/walljump/walljump.qc:65"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:127"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:244"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:Emit"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:127"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:244"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:Emit"
     constants:
       - { name: "EFFECT_SMOKE_RING count", base: "5 (Send_Effect EFFECT_SMOKE_RING, trace_endpos, plane_normal, 5)", port: "5 (EffectEmitter.Emit(\"SMOKE_RING\", hitPos, planeNormal, 5))", match: true }
     status:
@@ -184,9 +184,9 @@ features:
     base_refs:
       - "common/mutators/mutator/walljump/walljump.qc:66"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:133"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundSystem.cs:335"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/GameSound.cs:195"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:133"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundSystem.cs:335"
+      - "src/VortexArena.Common/Gameplay/Sounds/GameSound.cs:195"
       - "game/loaders/PlayerSoundResolver.cs:Install"
       - "game/net/NetGame.cs:401"
     constants:
@@ -204,7 +204,7 @@ features:
     gaps:
       - "Minor channel divergence: Base plays on CH_PLAYER; SoundSystem.PlayPlayerSound hardcodes SoundChannel.VoiceAuto (CH_VOICE, SoundSystem.cs:342). Audible and per-model-correct otherwise; channel only affects which slot the cue occupies/cuts. UNCHANGED."
     verification:
-      - { kind: code, ref: "WalljumpMutator.cs:133 SoundSystem.PlayPlayerSound(player,\"jump\",Sounds.ModelSoundsFile(player.Model,(int)player.Skin),VolBase,AttenNorm) INSIDE the if(!args.Predicted) block (matching Base #ifdef SVQC). PlayPlayerSound -> resolver maps `jump -> sound/player/<pack>/player/jump`; asset assets/data/xonotic-data.pk3dir/sound/player/espeak/player/jump.ogg EXISTS (re-confirmed on disk this pass; 20+ per-model jump.ogg shipped). Plays on SoundChannel.VoiceAuto. RE-VERIFIED 2026-06-27.", result: pass }
+      - { kind: code, ref: "WalljumpMutator.cs:133 SoundSystem.PlayPlayerSound(player,\"jump\",Sounds.ModelSoundsFile(player.Model,(int)player.Skin),VolBase,AttenNorm) INSIDE the if(!args.Predicted) block (matching Base #ifdef SVQC). PlayPlayerSound -> resolver maps `jump -> sound/player/<pack>/player/jump`; asset Base/data/xonotic-data.pk3dir/sound/player/espeak/player/jump.ogg EXISTS (re-confirmed on disk this pass; 20+ per-model jump.ogg shipped). Plays on SoundChannel.VoiceAuto. RE-VERIFIED 2026-06-27.", result: pass }
       - { kind: code, ref: "resolver is LIVE: PlayerSoundResolver.Install(_vfs) is called in NetGame._Ready (NetGame.cs:401) when a VFS is mounted, installing Sounds.ModelSoundResolver = Resolve. ModelSounds.ParseEntries faithfully parses the id/path/variant lines (last-wins, //comments skipped), matching QC LoadPlayerSounds.", result: pass }
     confidence: high
     notes: "RE-VERIFIED 2026-06-27. liveness live: the cue is networked from the server (the !Predicted gate keeps it server-only, exactly matching Base's #ifdef SVQC PlayerSound — it was never meant to play in CSQC prediction). Only the CH_PLAYER vs CH_VOICE channel choice remains as a residual (values/channel match:false). Call line moved 126->133; resolver Install ref 398->401."
@@ -216,8 +216,8 @@ features:
       - "common/mutators/mutator/walljump/walljump.qc:64"
       - "common/mutators/mutator/walljump/walljump.qc:67"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:123"
-      - "src/XonoticGodot.Common/Gameplay/Vehicles/VehicleCommon.cs:85"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:123"
+      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:85"
     constants: []
     status:
       logic: faithful
@@ -241,7 +241,7 @@ features:
     base_refs:
       - "common/mutators/mutator/walljump/walljump.qc:77-85"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs:41-44 (GuideDescription override — 2-paragraph describe text)"
+      - "src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs:41-44 (GuideDescription override — 2-paragraph describe text)"
       - "game/menu/dialogs/DialogMediaGuide.cs:140-146 (Mutators topic enumerates Mutators.All, lists those with GuideDescription)"
       - "game/menu/dialogs/DialogMediaGuide.cs:184-185 (selected mutator renders its GuideDescription in the description pane)"
     constants:

@@ -2,9 +2,9 @@
 // (common/mutators/mutator/damagetext/cl_damagetext.qc). The shipped defaults are kept as the fallbacks.
 
 using Godot;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// A snapshot of the <c>cl_damagetext_*</c> client cvars driving the floating damage numbers

@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using Godot;
-using XonoticGodot.Net;
+using VortexArena.Net;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// One row in the server browser. C# successor to QC's <c>entity</c>-per-server <c>ServerList</c> entries
@@ -65,7 +65,7 @@ public sealed class MatchConfig
 ///
 /// Both the LAN sweep and the internet query speak the real Darkplaces connectionless (out-of-band)
 /// protocol via <see cref="MasterServerProtocol"/>: a 4×<c>0xFF</c> marker + ASCII command, so the probe
-/// matches exactly what a XonoticGodot server's <c>getinfo</c> handler answers. The internet path is async —
+/// matches exactly what a VortexArena server's <c>getinfo</c> handler answers. The internet path is async —
 /// <see cref="Refresh"/> kicks the queries off and returns; UDP replies arrive over the following frames,
 /// so the menu must pump <see cref="Poll"/> each frame for the rows to fill in.
 ///
@@ -79,7 +79,7 @@ public sealed class ServerBrowser : IDisposable
     /// <summary>Favorites persist alongside the menu settings file (<c>~/XonData/favorites.cfg</c> by default).</summary>
     private static string FavoritesPath => UserPaths.Resolve("favorites.cfg");
 
-    /// <summary>The default XonoticGodot game port (DP <c>port</c> 26000) — the Connect default.</summary>
+    /// <summary>The default VortexArena game port (DP <c>port</c> 26000) — the Connect default.</summary>
     public const int LanDiscoveryPort = 26000;
 
     /// <summary>
@@ -358,7 +358,7 @@ public sealed class ServerBrowser : IDisposable
         if (info.TryGetValue("sv_maxclients", out string? m) && int.TryParse(m, out int max))
             entry.MaxPlayers = max;
 
-        // A XonoticGodot server answers getinfo on a SIDE socket and reports its real game port in the
+        // A VortexArena server answers getinfo on a SIDE socket and reports its real game port in the
         // infostring ("port") — re-key the row to the connectable address (and fold any duplicate row).
         if (info.TryGetValue("port", out string? p) && int.TryParse(p, out int gamePort) && gamePort > 0)
         {
@@ -408,7 +408,7 @@ public sealed class ServerBrowser : IDisposable
     /// <summary>
     /// Best-effort LAN discovery: broadcast the real DP <c>getinfo</c> probe and collect immediate replies.
     /// Returns whatever answered within a short, non-blocking poll window. The probe is the exact wire
-    /// format a XonoticGodot server's getinfo handler answers — a 4×<c>0xFF</c> marker + <c>"getinfo rebirth"</c>
+    /// format a VortexArena server's getinfo handler answers — a 4×<c>0xFF</c> marker + <c>"getinfo rebirth"</c>
     /// (via <see cref="MasterServerProtocol.EncodeGetInfo"/>) — and replies are decoded with
     /// <see cref="MasterServerProtocol.ParseInfoResponse"/>, so a server only has to answer the standard
     /// getinfo to show up. Any networking error is swallowed (discovery is strictly best-effort).

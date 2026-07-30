@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// [A5 #5] Voice-message routing: <see cref="SoundSystem.GlobalSound"/> → <c>_GlobalSound</c> (the C# port of

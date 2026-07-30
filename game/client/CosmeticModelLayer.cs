@@ -13,11 +13,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Game.Loaders;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Game.Loaders;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Per-entity cosmetic-model manager driven by decoded status effects. For each entity it decides which
@@ -51,7 +51,7 @@ public sealed class CosmeticModelLayer
     private readonly Dictionary<int, int> _iceFrame = new();
 
     private readonly Func<AssetSystem?> _assets;
-    private readonly Func<string, XonoticGodot.Formats.Md3.Md3Data?>? _md3Loader;
+    private readonly Func<string, VortexArena.Formats.Md3.Md3Data?>? _md3Loader;
     private readonly Func<string, int, Node3D?>? _modelLoader;
 
     /// <summary>
@@ -63,7 +63,7 @@ public sealed class CosmeticModelLayer
     /// </summary>
     public CosmeticModelLayer(
         Func<AssetSystem?> assets,
-        Func<string, XonoticGodot.Formats.Md3.Md3Data?>? md3Loader = null,
+        Func<string, VortexArena.Formats.Md3.Md3Data?>? md3Loader = null,
         Func<string, int, Node3D?>? modelLoader = null)
     {
         _assets = assets ?? throw new ArgumentNullException(nameof(assets));

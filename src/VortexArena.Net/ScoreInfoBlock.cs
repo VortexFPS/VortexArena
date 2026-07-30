@@ -1,7 +1,7 @@
 // Port of qcsrc/server/scores.qc (ScoreInfo_SendEntity) + qcsrc/client/main.qc (NET_HANDLE ENT_CLIENT_SCORES_INFO)
-using XonoticGodot.Common.Gameplay.Scoring;
+using VortexArena.Common.Gameplay.Scoring;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Server→client replication of the ACTIVE score LAYOUT — the C# successor to QuakeC's

@@ -1,7 +1,7 @@
 # Survival — parity spec
 
 **Base refs:** `common/gametypes/gametype/survival/{survival,sv_survival,cl_survival}.qc` + `.qh`, `server/round_handler.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Survival.cs`, `src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs`, `src/XonoticGodot.Server/RoundHandler.cs`, `src/XonoticGodot.Server/GameWorld.cs`, `src/XonoticGodot.Net/GametypeStatusBlock.cs`, `game/net/NetGame.cs`, `game/hud/ModIconsPanel.cs`, `game/hud/ScoreboardPanel.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Survival.cs`, `src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs`, `src/VortexArena.Server/RoundHandler.cs`, `src/VortexArena.Server/GameWorld.cs`, `src/VortexArena.Net/GametypeStatusBlock.cs`, `game/net/NetGame.cs`, `game/hud/ModIconsPanel.cs`, `game/hud/ScoreboardPanel.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -187,10 +187,10 @@ to the players when the round resolves. The registered defaults are `timelimit=2
   on the disclosure invariant; not flagged as a bug.
 
 ## Verification
-- `tests/XonoticGodot.Tests/SurvivalRolesTests.cs` — role assignment (live-only count, bound formula, random
+- `tests/VortexArena.Tests/SurvivalRolesTests.cs` — role assignment (live-only count, bound formula, random
   pick, <2-player guard). Pass.
-- `tests/XonoticGodot.Tests/SurvivalScoringTests.cs` — banked-kill award, timed-out reward, anonymization. Pass.
-- `tests/XonoticGodot.Tests/GametypeStatusTests.cs` — hunter-id anti-cheat disclosure invariant. Pass.
+- `tests/VortexArena.Tests/SurvivalScoringTests.cs` — banked-kill award, timed-out reward, anonymization. Pass.
+- `tests/VortexArena.Tests/GametypeStatusTests.cs` — hunter-id anti-cheat disclosure invariant. Pass.
 - Code-trace: `GameWorld.ActivateGameType` (Survival arm + `EnableRounds()`), `DriveGametypeFrame` (Survival
   arm), `GametypeStatusBlock.Capture`, `NetGame.UpdateModIcons`, `ModIconsPanel.DrawSurvival`. The missing
   callers (EndRoundTimedOut, win notifications, punish-teamkill, Bot_ForbidAttack, MatchEnded) verified by

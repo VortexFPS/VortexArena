@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Localization;
+using VortexArena.Common.Localization;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Exercises <see cref="Ctx"/> — the Godot-free port of i18n.qh's <c>CTX</c> (the msgctxt-prefix strip) and the

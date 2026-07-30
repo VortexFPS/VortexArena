@@ -1,12 +1,12 @@
 using System;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Strafe-jump helper bar — the C# successor to Xonotic's StrafeHUD (HUD panel #25, by Juhu), ported from

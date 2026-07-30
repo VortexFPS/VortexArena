@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the lag-compensation (antilag) history ported from <c>server/antilag.qc</c>:

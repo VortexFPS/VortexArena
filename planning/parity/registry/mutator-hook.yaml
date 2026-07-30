@@ -19,9 +19,9 @@ features:
       - "common/mutators/mutator/hook/sv_hook.qc:REGISTER_MUTATOR"
       - "lib/cvar.qh:48:expr_evaluate"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:ExprEvaluate"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:ExprToken"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:ExprEvaluate"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:ExprToken"
     constants:
       - { name: "g_grappling_hook", base: "\"0\" (string, mutators.cfg:418)", port: "GetString(g_grappling_hook) via ExprEvaluate", match: true }
       - { name: "expr_evaluate grammar", base: "+/- prefix + var>=x/var<=x/var>/var</var==/var!=/var===/var!== over tokenize_console (lib/cvar.qh:48-100)", port: "full grammar ported (ExprEvaluate +/- prefix; ExprToken all 8 BINOP tokens + bare literal/cvar with '!' invert)", match: true }
@@ -49,9 +49,9 @@ features:
     base_refs:
       - "common/mutators/mutator/hook/sv_hook.qc:REGISTER_MUTATOR"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:Hook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:UseAmmo"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:Hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:UseAmmo"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerPreThink"
     constants:
       - { name: "g_grappling_hook_useammo", base: "false (bool, mutators.cfg:419)", port: "GetFloat(g_grappling_hook_useammo)!=0", match: true }
       - { name: "WEP_HOOK.ammo_factor", base: "1 -> 0 on add, restored to 1 on rollback/remove", port: "no ammo_factor; fuel topped to Primary.Ammo+1 each think", match: false }
@@ -78,7 +78,7 @@ features:
     base_refs:
       - "common/mutators/mutator/hook/sv_hook.qc:MUTATOR_HOOKFUNCTION(hook, PlayerSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerSpawn"
     constants: []
     status:
       logic: faithful
@@ -104,13 +104,13 @@ features:
       - "common/weapons/weapon/hook.qh:OffhandHook.offhand_think"
       - "server/weapons/weaponsystem.qc:608-628"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerPreThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Hook.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame"
-      - "src/XonoticGodot.Net/InputCommand.cs:InputButtons.Hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Hook.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame"
+      - "src/VortexArena.Net/InputCommand.cs:InputButtons.Hook"
       - "game/net/NetGame.cs:4690"
       - "game/net/ServerNet.cs:1571"
-      - "src/XonoticGodot.Server/GameWorld.cs:1717"
+      - "src/VortexArena.Server/GameWorld.cs:1717"
       - "game/console/BindInput.cs:46"
     constants: []
     status:
@@ -137,7 +137,7 @@ features:
     base_refs:
       - "common/mutators/mutator/hook/sv_hook.qc:MUTATOR_HOOKFUNCTION(hook, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:OnSetStartItems"
     constants:
       - { name: "g_balance_fuel_rotstable", base: "100 (balance-xonotic.cfg:187)", port: "GetFloat(g_balance_fuel_rotstable)", match: true }
       - { name: "warmup_start_ammo_fuel", base: "max(.., rotstable)", port: "l.WarmupAmmoFuel = max(l.WarmupAmmoFuel, rotstable) (HookMutator.cs:130)", match: true }
@@ -165,7 +165,7 @@ features:
     base_refs:
       - "common/mutators/mutator/hook/sv_hook.qc:MUTATOR_HOOKFUNCTION(hook, FilterItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:OnFilterItemDefinition"
     constants: []
     status:
       logic: faithful
@@ -191,12 +191,12 @@ features:
       - "common/mutators/mutator/hook/sv_hook.qc:MUTATOR_HOOKFUNCTION(hook, BuildMutatorsString)"
       - "common/mutators/mutator/hook/sv_hook.qc:MUTATOR_HOOKFUNCTION(hook, BuildMutatorsPrettyString)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:BuildMutatorsPrettyString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsPrettyString"
-      - "src/XonoticGodot.Server/GameWorld.cs:1068"
-      - "src/XonoticGodot.Server/GameWorld.cs:1079"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Server/GameWorld.cs:1068"
+      - "src/VortexArena.Server/GameWorld.cs:1079"
       - "game/net/ServerNet.cs:607"
     constants:
       - { name: "info token", base: "\":grappling_hook\"", port: "s + \":grappling_hook\" (HookMutator.cs:115)", match: true }
@@ -224,8 +224,8 @@ features:
     base_refs:
       - "common/mutators/mutator/hook/cl_hook.qc:MUTATOR_HOOKFUNCTION(cl_hook, BuildGameplayTipsString)"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:1239"
-      - "src/XonoticGodot.Engine/Console/BindTable.cs:CommandKey"
+      - "src/VortexArena.Server/GameWorld.cs:1239"
+      - "src/VortexArena.Engine/Console/BindTable.cs:CommandKey"
     constants:
       - { name: "tip text", base: "\"^3grappling hook^8 is enabled, press ^3%s^8 to use it\" (cl_hook.qc:11)", port: "$\"^3grappling hook^8 is enabled, press ^3{hookKey}^8 to use it\" (GameWorld.cs:1247)", match: true }
       - { name: "key resolve", base: "getcommandkey(_(\"offhand hook\"), \"+hook\")", port: "BindTable.CommandKey(\"offhand hook\", \"+hook\") (GameWorld.cs:1242)", match: true }
@@ -278,10 +278,10 @@ features:
       - "common/mutators/mutator/hook/hook.qc:describe (overridden by offhand_blaster)"
       - "common/mutators/mutator/offhand_blaster/sv_offhand_blaster.qc:MUTATOR_HOOKFUNCTION(offhand_blaster, PlayerSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Framework/Registry.cs:Sort"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/Mutators/HookMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Framework/Registry.cs:Sort"
     constants: []
     status:
       logic: faithful

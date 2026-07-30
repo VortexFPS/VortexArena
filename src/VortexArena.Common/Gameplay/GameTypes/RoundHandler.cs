@@ -6,7 +6,7 @@
 // roundStart. We reproduce that driver headlessly as a plain object the gametype owns and ticks; it is
 // Godot-free and depends only on the engine clock via the gametype's own time source.
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The round-elimination driver — the Godot-free port of QuakeC's <c>round_handler</c> (server/round_handler.qc).

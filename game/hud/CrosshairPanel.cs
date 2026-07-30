@@ -1,12 +1,12 @@
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Game.Client;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using VortexArena.Game.Client;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Center crosshair — port of the core of Base/.../qcsrc/client/hud/crosshair.qc. The QC crosshair has
@@ -326,9 +326,9 @@ public partial class CrosshairPanel : HudPanel
     /// Auto-invoked by reflection from <c>HudConfig.RegisterDefaults</c>. These are the engine <c>crosshair_*</c>
     /// cvars (not <c>hud_panel_crosshair_*</c>) so a console/menu <c>set crosshair_*</c> takes effect live.
     /// </summary>
-    public static void RegisterDefaults(XonoticGodot.Engine.Simulation.CvarService c)
+    public static void RegisterDefaults(VortexArena.Engine.Simulation.CvarService c)
     {
-        const XonoticGodot.Common.Services.CvarFlags save = XonoticGodot.Common.Services.CvarFlags.Save;
+        const VortexArena.Common.Services.CvarFlags save = VortexArena.Common.Services.CvarFlags.Save;
 
         // crosshairs.cfg core
         c.Register("crosshair_enabled", "1", save);
@@ -1138,7 +1138,7 @@ public partial class CrosshairPanel : HudPanel
         // _Process (it runs every frame — an unhandled throw would spam the log and stall HUD repaint); degrade
         // to HitWorld (the QC default) so the crosshair stays at full strength.
         // (perf) scope the two world traces so they are never invisible in proc:other again.
-        using var _trueAimScope = XonoticGodot.Game.Client.FrameProfiler.Scope("hud.trueaim");
+        using var _trueAimScope = VortexArena.Game.Client.FrameProfiler.Scope("hud.trueaim");
         try
         {
             // 1) Aim line: where is the player pointing? (QC traceline(traceorigin, ... view_forward * max_shot_distance)).

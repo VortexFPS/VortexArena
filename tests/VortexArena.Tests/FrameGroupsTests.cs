@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — first coverage for the <see cref="FrameGroups"/> sidecar parser (port of Darkplaces
@@ -17,7 +17,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class FrameGroupsTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     [Fact]
     public void FourTokenLine_ParsesAllFields()
@@ -168,7 +168,7 @@ public class FrameGroupsTests
     {
         if (!Directory.Exists(DataDir)) return; // skip-if-missing
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         string? path = vfs.Find("models/", "framegroups").FirstOrDefault();
         if (path is null) return;

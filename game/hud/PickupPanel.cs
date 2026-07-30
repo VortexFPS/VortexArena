@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Recent item-pickup feed (HUD panel #26) — port of
@@ -178,7 +178,7 @@ public partial class PickupPanel : HudPanel
         // serverflags is the server's published bitfield (GameWorld.ReadLevelCvars → the `serverflags` cvar,
         // read here from the shared store on a listen server).
         bool forbidTimer = (Mathf.RoundToInt(GlobalF("serverflags", 0f))
-            & XonoticGodot.Common.Gameplay.ServerFlags.ForbidPickupTimer) != 0;
+            & VortexArena.Common.Gameplay.ServerFlags.ForbidPickupTimer) != 0;
         float showTimerRaw = CvarF("showtimer", 1f);
         int showTimer = float.IsFinite(showTimerRaw) ? Mathf.RoundToInt(showTimerRaw) : 1;
         if (showTimer != 0 && ((showTimer == 1 && !forbidTimer) || Spectating))

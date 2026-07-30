@@ -2,7 +2,7 @@
 
 **Base refs:** `common/monsters/monster/wyvern.qc` · `common/monsters/monster/wyvern.qh`
 (framework: `common/monsters/sv_monsters.qc`, `monster.qh`, `monsters.cfg`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Monsters/Wyvern.cs` · `MonsterAI.cs` · `MonsterFramework.cs` · `MonsterSpawnFuncs.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Monsters/Wyvern.cs` · `MonsterAI.cs` · `MonsterFramework.cs` · `MonsterSpawnFuncs.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

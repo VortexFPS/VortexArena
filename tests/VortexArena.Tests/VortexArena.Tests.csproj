@@ -2,8 +2,8 @@
   <!-- xUnit tests for the Godot-free libraries: framework, physics math, collision, net round-trips,
        asset parsers. The fidelity/golden-trace harnesses (planning/process/testing-strategy.md) grow here. -->
   <PropertyGroup>
-    <TargetFramework>$(XonoticGodotTfm)</TargetFramework>
-    <RootNamespace>XonoticGodot.Tests</RootNamespace>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -12,16 +12,16 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <!-- Drives the registry source generator in-memory (SourceGenTests). Pin to the same Roslyn
-         version as src/XonoticGodot.SourceGen to avoid analyzer/driver version skew. -->
+         version as src/VortexArena.SourceGen to avoid analyzer/driver version skew. -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\XonoticGodot.Common\XonoticGodot.Common.csproj" />
-    <ProjectReference Include="..\..\src\XonoticGodot.Engine\XonoticGodot.Engine.csproj" />
-    <ProjectReference Include="..\..\src\XonoticGodot.Net\XonoticGodot.Net.csproj" />
-    <ProjectReference Include="..\..\src\XonoticGodot.Formats\XonoticGodot.Formats.csproj" />
-    <ProjectReference Include="..\..\src\XonoticGodot.Server\XonoticGodot.Server.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.Common\VortexArena.Common.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.Engine\VortexArena.Engine.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.Net\VortexArena.Net.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.Formats\VortexArena.Formats.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.Server\VortexArena.Server.csproj" />
     <!-- Normal (non-analyzer) reference: SourceGenTests instantiate RegistryGenerator directly. -->
-    <ProjectReference Include="..\..\src\XonoticGodot.SourceGen\XonoticGodot.SourceGen.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.SourceGen\VortexArena.SourceGen.csproj" />
   </ItemGroup>
 </Project>

@@ -7,9 +7,9 @@
 // ported in EffectsList.cs (the order/hash must match the engine). The richer effectinfo.txt particle
 // *parameters* (color/size/type) are a client-render concern resolved by name, not part of this registry.
 
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// One named particle effect, enrolled into <see cref="Effects"/>. Mirrors QuakeC's

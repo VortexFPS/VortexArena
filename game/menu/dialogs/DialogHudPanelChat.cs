@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Chat" panel config dialog — a faithful C# port of <c>XonoticHUDChatDialog_fill</c>
@@ -9,7 +9,7 @@ namespace XonoticGodot.Game.Menu;
 /// successor to QC <c>dialog_hudpanel_main_checkbox</c> + <c>dialog_hudpanel_main_settings</c>), then the
 /// chat-specific rows the .qc declares: chat size, chat lifetime, and the chat-beep checkbox.
 ///
-/// FAITHFUL UI NOW: this dialog drives the in-game HUD editor / chat panel backend XonoticGodot has not wired up
+/// FAITHFUL UI NOW: this dialog drives the in-game HUD editor / chat panel backend VortexArena has not wired up
 /// yet, but every cvar binding here is REAL — the widgets read/write the shared <see cref="MenuState.Cvars"/>
 /// store the running game reads. There is no live HUD preview to render, so we don't fabricate one.
 /// </summary>

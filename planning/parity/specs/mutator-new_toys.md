@@ -1,7 +1,7 @@
 # New Toys — parity spec
 
 **Base refs:** `common/mutators/mutator/new_toys/{new_toys.qc,new_toys.qh,sv_new_toys.qc}` · `server/weapons/spawning.qc:W_Apply_Weaponreplace`/`weapon_defaultspawnfunc` · `mutators.cfg:336-340`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs` · `src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems` · `src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs` · `game/menu/dialogs/DialogMutators.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs` · `src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems` · `src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs` · `game/menu/dialogs/DialogMutators.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -92,7 +92,7 @@ sound. Activation condition: `g_new_toys != 0` (default 1) AND not instagib AND 
 | Menu checkbox + autoreplace radios | `game/menu/dialogs/DialogMutators.cs:188-204` (CheckBox + 3 RadioButtons) | live (menu) |
 | "(Mutator weapon)" priority-list suffix | `game/menu/framework/WeaponPriorityList.cs:85-87` (" *" for MutatorBlocked) | live (menu) |
 | `METHOD(MutatorNewToys, describe)` info page | NOT IMPLEMENTED (general menu-describe gap; mutator-new_toys.menu.describe_page) | missing |
-| Cvar defaults | `assets/data/.../mutators.cfg:338-340` mirror Base exactly | faithful |
+| Cvar defaults | `Base/data/.../mutators.cfg:338-340` mirror Base exactly | faithful |
 
 ## Parity assessment
 

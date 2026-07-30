@@ -1,7 +1,7 @@
 # Domination — parity spec
 
 **Base refs:** `common/gametypes/gametype/domination/{sv_domination.qc,cl_domination.qc,domination.qc,*.qh}`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Domination.cs` · `src/XonoticGodot.Server/GameWorld.cs` (ActivateGameType/objective sink/tick) · `src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs` · `game/hud/ModIconsPanel.cs` · `game/net/NetGame.cs` (UpdateModIcons)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Domination.cs` · `src/VortexArena.Server/GameWorld.cs` (ActivateGameType/objective sink/tick) · `src/VortexArena.Server/Bot/BotObjectiveRoles.cs` · `game/hud/ModIconsPanel.cs` · `game/net/NetGame.cs` (UpdateModIcons)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

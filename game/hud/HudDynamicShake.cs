@@ -20,9 +20,9 @@
 
 using System;
 using System.Numerics;
-using XonoticGodot.Game.Menu; // MenuState.Cvars — the shared menu/console store (live console `set` reaches it)
+using VortexArena.Game.Menu; // MenuState.Cvars — the shared menu/console store (live console `set` reaches it)
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The damage-keyed whole-HUD shake (QC <c>Hud_Dynamic_Frame</c> shake block + <c>Hud_Shake_Update</c>). Holds

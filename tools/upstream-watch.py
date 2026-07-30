@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upstream contribution harvester for Vortex Arena (XonoticGodot).
+"""Upstream contribution harvester for Vortex Arena (VortexArena).
 
 Surfaces new upstream Xonotic work worth triaging: every commit that has landed
 on the `master` branch of the two source repositories since a cutoff date, plus
@@ -52,9 +52,22 @@ DEFAULT_SINCE = "2026-06-01"
 # MR or recent activity is the real "open contribution" signal. Override with --branch-since / --all-branches.
 DEFAULT_BRANCH_LOOKBACK_DAYS = 365
 
-# tools/ lives in the port repo; Base is a sibling of the port repo root.
+# tools/ lives in the port repo; the upstream reference checkout is a sibling of the port repo root.
+#
+# THE NAME MATTERS, and it is not VA_BASE_DIR. There are two different levels in play and they are one
+# directory apart, which is exactly how this went wrong before:
+#
+#   VA_UPSTREAM_ROOT  = <parent>/Base        the CHECKOUT ROOT, holding data/ AND darkplaces/
+#   VA_BASE_DIR       = <parent>/Base/data   the upstream CONTENT dir (TestPaths.cs, and the parity
+#                                            resolvers in .claude/workflows/)
+#
+# This tool needs the root because it reaches into both siblings below. Renaming it to VA_BASE_DIR - the
+# obvious-looking sweep - would have produced Base/data/data/xonotic-data.pk3dir and Base/data/darkplaces,
+# and upstream-watch would then have reported "no new commits" forever while silently finding no repos at
+# all. Distinct names, each saying which level it means, so the next sweep cannot conflate them.
 PORT_ROOT = Path(__file__).resolve().parents[1]
-BASE_DIR = Path(os.environ.get("XG_BASE_DIR", PORT_ROOT.parent / "Base"))
+UPSTREAM_ROOT = Path(os.environ.get("VA_UPSTREAM_ROOT", PORT_ROOT.parent / "Base"))
+BASE_DIR = UPSTREAM_ROOT  # kept as the local alias the REPOS table below reads
 
 WATCH_DIR = PORT_ROOT / "planning" / "upstream-watch"
 LEDGER = WATCH_DIR / "LEDGER.yaml"
@@ -103,6 +116,27 @@ def git(repo: Path, *args: str, check: bool = True) -> str:
             f"git {' '.join(args)} failed in {repo}:\n{res.stderr.strip()}"
         )
     return res.stdout.strip()
+
+
+def branch_refspec_is_narrow(repo: Path) -> str | None:
+    """Return the configured fetch refspec if it CANNOT see branches other than master.
+
+    A clone made with --single-branch (or a submodule init) carries
+    `+refs/heads/master:refs/remotes/origin/master`. With that refspec the whole
+    branch/MR half of the harvest silently reports "0 branches, 0 hidden" — which
+    reads identically to "upstream has no open contributions". Never silent: detect
+    it and tell the operator how to widen it.
+    """
+    res = subprocess.run(
+        ["git", "-C", str(repo), "config", "--get-all", "remote.origin.fetch"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    specs = [s.strip() for s in res.stdout.splitlines() if s.strip()]
+    if not specs:
+        return None  # no remote configured; harvest_repo reports that separately
+    if any("refs/heads/*" in s for s in specs):
+        return None
+    return "; ".join(specs)
 
 
 def load_ledger_keys() -> set[str]:
@@ -155,6 +189,16 @@ def harvest_repo(key: str, cfg: dict, since: str, branch_since: str, ledger_keys
         print(f"  ! {key}: repo not found at {repo}; skipping.", file=sys.stderr)
         return {"repo": key, "error": f"not found at {repo}",
                 "master_commits": [], "branches": []}
+
+    narrow = branch_refspec_is_narrow(repo)
+    if narrow:
+        print(f"  ! {key}: fetch refspec is branch-blind ({narrow}) — the branch/MR stream can only "
+              f"see '{branch}'. Widen it with:\n"
+              f"      git -C {repo} config --unset-all remote.origin.fetch\n"
+              f"      git -C {repo} config --add remote.origin.fetch "
+              f"'+refs/heads/*:refs/remotes/origin/*'\n"
+              f"      git -C {repo} fetch --prune origin",
+              file=sys.stderr)
 
     if do_fetch:
         print(f"  fetching {key} ({cfg['gl_project']}) …")
@@ -263,7 +307,7 @@ def harvest_repo(key: str, cfg: dict, since: str, branch_since: str, ledger_keys
     return {"repo": key, "gl_project": cfg["gl_project"],
             "master_commits": master, "branches": branches, "mr_api": bool(mrs),
             "stale_skipped": stale_skipped, "branch_since": branch_since,
-            "translations_dropped": translations_dropped}
+            "translations_dropped": translations_dropped, "narrow_refspec": narrow}
 
 
 def write_worklist(results: list[dict], since: str, run_date: str) -> tuple[Path, Path]:
@@ -281,7 +325,7 @@ def write_worklist(results: list[dict], since: str, run_date: str) -> tuple[Path
                  f"**{n_branches} branch/MR candidate(s)** not yet in the ledger.")
     lines.append("")
     lines.append("Next: run the analysis pass (`Workflow { name: \"upstream-watch\", "
-                 f"args: {{ worklist: \"{json_path.as_posix().split('XonoticGodot/')[-1]}\" }} }}`) "
+                 f"args: {{ worklist: \"{json_path.as_posix().split('VortexArena/')[-1]}\" }} }}`) "
                  "or hand this file to Claude. See ../README.md §6.")
     lines.append("")
 
@@ -293,6 +337,13 @@ def write_worklist(results: list[dict], since: str, run_date: str) -> tuple[Path
         if not r.get("mr_api", True):
             lines.append("\n> ⚠ GitLab MR API not reached — open-MR signal missing; "
                          "branch list is ahead-of-master only.\n")
+        if r.get("narrow_refspec"):
+            lines.append(f"\n> ⚠ **Branch stream is blind** — this clone's fetch refspec is "
+                         f"`{r['narrow_refspec']}`, so only `master` is mirrored locally and the "
+                         "branches-ahead-of-master list below is NOT trustworthy (only fork MRs "
+                         "surfaced via the GitLab API appear). Widen with "
+                         "`git config --add remote.origin.fetch "
+                         "'+refs/heads/*:refs/remotes/origin/*'` then re-fetch.\n")
 
         mc = r["master_commits"]
         td = r.get("translations_dropped", 0)
@@ -334,6 +385,14 @@ def write_worklist(results: list[dict], since: str, run_date: str) -> tuple[Path
 
 
 def main() -> int:
+    # Windows consoles default to cp1252, which cannot encode the status glyphs below — and the
+    # one that crashed was on the "nothing new" path, i.e. the quiet-week path we hit most often.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass  # already-wrapped or non-reconfigurable stream: fall through harmlessly
+
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--since", default=DEFAULT_SINCE, help=f"master-commit cutoff (default {DEFAULT_SINCE})")

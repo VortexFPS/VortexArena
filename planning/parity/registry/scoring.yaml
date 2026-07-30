@@ -19,9 +19,9 @@ features:
       - "common/scores.qh:REGISTER_SP"
       - "common/scores.qh:SFL_LOWER_IS_BETTER..SFL_NOT_SORTABLE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:RegisterAll"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/ScoreField.cs:ScoreFlags"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/ScoreField.cs:ScoreField"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:RegisterAll"
+      - "src/VortexArena.Common/Gameplay/Scoring/ScoreField.cs:ScoreFlags"
+      - "src/VortexArena.Common/Gameplay/Scoring/ScoreField.cs:ScoreField"
     constants:
       - { name: "MAX_SCORE", base: "64", port: "registry size (dynamic)", match: true }
       - { name: "SFL bit layout (LOWER_IS_BETTER..NOT_SORTABLE)", base: "BIT0..BIT7", port: "1<<0..1<<7", match: true }
@@ -50,10 +50,10 @@ features:
       - "server/scores_rules.qc:ScoreRules_basics"
       - "common/gametypes/sv_rules.qh:GameRules_scoring"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ScoreRulesBasics"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:TeamRulesBasics"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:DeclareColumn"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:SetSortKeys"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ScoreRulesBasics"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:TeamRulesBasics"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:DeclareColumn"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:SetSortKeys"
     constants:
       - { name: "common columns (kills/deaths/suicides/teamkills/score/dmg/dmgtaken)", base: "set per teams/score_enabled", port: "same set + same flags", match: true }
       - { name: "sv_showskill", base: "0", port: "not gating a live skill column", match: false }
@@ -80,11 +80,11 @@ features:
       - "server/scores.qc:PlayerScore_Add"
       - "server/scores.qc:PlayerScore_Set"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:AddToPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:SetPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:AddPlayerScoreHook"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:AddedPlayerScoreHook"
-      - "src/XonoticGodot.Server/Scores.cs:Add"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:AddToPlayer"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:SetPlayer"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:AddPlayerScoreHook"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:AddedPlayerScoreHook"
+      - "src/VortexArena.Server/Scores.cs:Add"
     constants:
       - { name: "SendFlags |= BIT(m_id%16) when labeled", base: "yes", port: "ScoreDirty |= 1<<(id&31) when label!=\"\"", match: true }
       - { name: "AddPlayerScore mutator hook + claimed/game_stopped semantics", base: "!mutator_returnvalue && game_stopped => 0", port: "forced=claimed; GameStopped&&!forced => 0", match: true }
@@ -112,9 +112,9 @@ features:
       - "server/scores.qc:ScoreInfo_SetLabel_TeamScore"
       - "common/scores.qh:MAX_TEAMSCORE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:AddToTeam"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:SetTeamLabel"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:TeamRulesBasics"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:AddToTeam"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:SetTeamLabel"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:TeamRulesBasics"
     constants:
       - { name: "MAX_TEAMSCORE", base: "2", port: "MaxTeamScore=2", match: true }
       - { name: "ST_SCORE slot", base: "0", port: "TeamSlotScore=0", match: true }
@@ -144,10 +144,10 @@ features:
       - "server/scores.qc:TeamScore_Compare"
       - "server/scores.qc:PlayerScore_Sort"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:CompareValues"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ComparePlayers"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:CompareTeams"
-      - "src/XonoticGodot.Server/Scores.cs:Sorted"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CompareValues"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ComparePlayers"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CompareTeams"
+      - "src/VortexArena.Server/Scores.cs:Sorted"
     constants:
       - { name: "compare order", base: "primary, secondary, registration-order others, playerid", port: "primary, secondary, registry-order labeled non-prio, 0", match: false }
       - { name: "ZERO_IS_WORST / LOWER_IS_BETTER handling", base: "ScoreField_Compare", port: "CompareValues (same)", match: true }
@@ -176,10 +176,10 @@ features:
       - "server/world.qc:WinningCondition_Scores"
       - "server/world.qc:GetWinningCode"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:CheckWinningCondition"
-      - "src/XonoticGodot.Server/OverTimeManager.cs:ResolveWinningCode"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:Leader"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:LeaderTeam"
+      - "src/VortexArena.Server/GameWorld.cs:CheckWinningCondition"
+      - "src/VortexArena.Server/OverTimeManager.cs:ResolveWinningCode"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:Leader"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:LeaderTeam"
     constants:
       - { name: "fraglimit_reached", base: "limit && topscore>=limit", port: "MatchEnded latch via primary key", match: true }
       - { name: "leadlimit_reached / leadlimit_and_fraglimit AND-OR", base: "modeled", port: "OverTimeManager.ResolveWinningCode + per-gametype RecomputeLeader/UpdateLeaderAndCheckLimit", match: true }
@@ -208,16 +208,16 @@ features:
       - "server/world.qc:WinningCondition_Scores"
       - "server/mutators/events.qh:Scores_CountFragsRemaining"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ResetFragsRemaining"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Deathmatch.cs:314"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Tdm.cs:389"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs:687"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:905"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/FreezeTag.cs:1116"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs:265"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Race.cs:1273"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/TeamKeepaway.cs:731"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ResetFragsRemaining"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:314"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:389"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:687"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:905"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:1116"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:265"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:1273"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:731"
     constants:
       - { name: "announce thresholds", base: "fragsleft == 1 / 2 / 3 (once via fragsleft_last)", port: "fragsleft 1/2/3 once via _fragsLeftLast", match: true }
       - { name: "fragsleft = limit - topscore; leadingfragsleft = second + leadlimit - top", base: "world.qc:1592-1604", port: "same formula", match: true }
@@ -248,11 +248,11 @@ features:
       - "server/scores.qc:PlayerScore_Clear"
       - "server/scores.qc:Score_ClearAll"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ClearPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ClearPlayerOnJoin"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ClearAll"
-      - "src/XonoticGodot.Server/ClientManager.cs:294"
-      - "src/XonoticGodot.Server/Scores.cs:ClearAll"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ClearPlayer"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ClearPlayerOnJoin"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ClearAll"
+      - "src/VortexArena.Server/ClientManager.cs:294"
+      - "src/VortexArena.Server/Scores.cs:ClearAll"
     constants:
       - { name: "g_score_resetonjoin", base: "0 (0/-1/1)", port: "read by ClearPlayerOnJoin (mode 0/-1/1 + PreferPlayerScore_Clear hook), now invoked live on join", match: true }
       - { name: "resetonjoin == -1 needs !PreferPlayerScore_Clear", base: "yes", port: "ClearPlayerOnJoin consults MutatorHooks.FirePreferPlayerScore_Clear + optional preferClear delegate", match: true }
@@ -282,10 +282,10 @@ features:
       - "lib/counting.qh:count_ordinal"
       - "common/util.qh:TIME_FACTOR"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ScoreString"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:CountOrdinal"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:TimeEncodedToString"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:TimeEncode"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ScoreString"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CountOrdinal"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:TimeEncodedToString"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:TimeEncode"
     constants:
       - { name: "TIME_FACTOR", base: "100 (hundredths)", port: "TimeEncode floor(t*100+0.5)", match: true }
       - { name: "hide-zero set", base: "HIDE_ZERO|RANK|TIME", port: "same mask", match: true }
@@ -314,10 +314,10 @@ features:
       - "server/scores.qc:PlayerScore_SendEntity"
       - "server/scores.qc:TeamScore_SendEntity"
     port_refs:
-      - "src/XonoticGodot.Net/ScoreInfoBlock.cs"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:LayoutGeneration"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:Version"
+      - "src/VortexArena.Net/ScoreInfoBlock.cs"
+      - "src/VortexArena.Net/ScoreboardBlock.cs"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:LayoutGeneration"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:Version"
     constants:
       - { name: "int24 score quantization", base: "WriteInt24_t for >127/<=-128, else char", port: "WriteInt24_t", match: true }
       - { name: "layout change-gate", base: "ScoreInfo_Init SendFlags|=1 on mode switch", port: "Hash() over LayoutGeneration", match: true }
@@ -346,9 +346,9 @@ features:
       - "common/playerstats.qc:PlayerStats_GameReport_Init"
       - "common/playerstats.qc:PlayerStats_GameReport_FinalizePlayer"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerStats.cs"
-      - "src/XonoticGodot.Server/GameWorld.cs:681"
-      - "src/XonoticGodot.Server/GameWorld.cs:1923"
+      - "src/VortexArena.Server/PlayerStats.cs"
+      - "src/VortexArena.Server/GameWorld.cs:681"
+      - "src/VortexArena.Server/GameWorld.cs:1923"
     constants:
       - { name: "DB enabled iff g_playerstats_gamereport_uri != \"\"", base: "yes", port: "Enabled = uri set", match: true }
       - { name: "warmup suppresses accumulation", base: "yes", port: "IsWarmup guard", match: true }
@@ -377,9 +377,9 @@ features:
       - "common/gametypes/sv_rules.qc:_GameRules_scoring_add_float2int"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:PlayerDamage_SplitHealthArmor"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:AddScoreFloat2Int"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnSplitHealthArmor"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:468"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:AddScoreFloat2Int"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnSplitHealthArmor"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:468"
     constants:
       - { name: "carry remainder across calls", base: "decimal_field accumulates; emit floor(counter+0.5); subtract emitted", port: "_scoreDecimal[scorer] carry; whole=floor(carry+0.5); carry-=whole", match: true }
       - { name: "g_ca_damage2score", base: "100", port: "DefaultDamage2Score 100", match: true }
@@ -409,10 +409,10 @@ features:
       - "server/scores.qc:PlayerScore_Add"
       - "server/scores.qc:TeamScore_AddToTeam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:GameStopped"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:AddToPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:AddToTeam"
-      - "src/XonoticGodot.Server/GameWorld.cs:2567"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:GameStopped"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:AddToPlayer"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:AddToTeam"
+      - "src/VortexArena.Server/GameWorld.cs:2567"
     constants:
       - { name: "game_stopped => delta 0 (unless mutator claimed)", base: "yes, central in PlayerScore_Add/TeamScore_AddToTeam", port: "static GameScores.GameStopped published live each tick (OnEndFrame); the central clamp fires", match: true }
     status:
@@ -440,10 +440,10 @@ features:
       - "server/scores.qc:Score_NicePrint_Spectators"
       - "server/command/common.qc:CommonCommand_teamstatus"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdTeamStatus"
-      - "src/XonoticGodot.Server/Commands.cs:NicePrintTeamHeader"
-      - "src/XonoticGodot.Server/Commands.cs:NicePrintPlayer"
-      - "src/XonoticGodot.Server/Commands.cs:NicePrintItemColor"
+      - "src/VortexArena.Server/Commands.cs:CmdTeamStatus"
+      - "src/VortexArena.Server/Commands.cs:NicePrintTeamHeader"
+      - "src/VortexArena.Server/Commands.cs:NicePrintPlayer"
+      - "src/VortexArena.Server/Commands.cs:NicePrintItemColor"
     constants:
       - { name: "NAMEWIDTH / SCORESWIDTH", base: "22 / 58", port: "NicePrintNameWidth=22 / NicePrintScoresWidth=58", match: true }
       - { name: "per-column width", base: "bound(6, floor(SCORESWIDTH/t - 1), 9)", port: "Math.Clamp(floor(58/labeled - 1), 6, 9)", match: true }
@@ -475,12 +475,12 @@ features:
       - "server/scores.qc:GetTeamScoreString"
       - "server/scores.qc:GetScoreLogLabel"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:DumpStats"
-      - "src/XonoticGodot.Server/Commands.cs:GetPlayerScoreString"
-      - "src/XonoticGodot.Server/Commands.cs:GetTeamScoreString"
-      - "src/XonoticGodot.Server/Commands.cs:GetScoreLogLabel"
-      - "src/XonoticGodot.Server/Commands.cs:CmdPrintStats"
-      - "src/XonoticGodot.Server/GameWorld.cs:3960"
+      - "src/VortexArena.Server/Commands.cs:DumpStats"
+      - "src/VortexArena.Server/Commands.cs:GetPlayerScoreString"
+      - "src/VortexArena.Server/Commands.cs:GetTeamScoreString"
+      - "src/VortexArena.Server/Commands.cs:GetScoreLogLabel"
+      - "src/VortexArena.Server/Commands.cs:CmdPrintStats"
+      - "src/VortexArena.Server/GameWorld.cs:3960"
     constants:
       - { name: ":labels:player: / :player:see-labels: / :teamscores: log lines (console/eventlog/sv_logscores file)", base: "DumpStats writes the formatted score-log via GetPlayerScoreString/GetTeamScoreString", port: "DumpStats emits :scores:/:status: + :labels:player: + :player:see-labels: + :teamscores: + :end", match: true }
       - { name: "GetScoreLogLabel suffixes (< lower-is-better, !! primary, ! secondary)", base: "server/scores.qc:599", port: "GetScoreLogLabel appends </!!/!", match: true }
@@ -513,15 +513,15 @@ features:
       - "server/weapons/accuracy.qc:accuracy_canbegooddamage"
       - "server/weapons/accuracy.qh:accuracy_hit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:Add"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:IsGoodDamage"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:CanBeGoodDamage"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:AccuracyByte"
-      - "src/XonoticGodot.Server/Scores.cs:OnAccuracyAdd"
-      - "src/XonoticGodot.Server/Scores.cs:RecordWeaponKill"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:151"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:259"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:602"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:Add"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:IsGoodDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:CanBeGoodDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponAccuracyEvents.cs:AccuracyByte"
+      - "src/VortexArena.Server/Scores.cs:OnAccuracyAdd"
+      - "src/VortexArena.Server/Scores.cs:RecordWeaponKill"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:151"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:259"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:602"
     constants:
       - { name: "accuracy_byte encoding (0 never fired / 1+rint(n*100/d) / 255 when hit>fired)", base: "accuracy.qc:17-24", port: "AccuracyByte with MidpointRounding.AwayFromZero (DP rint)", match: true }
       - { name: "cnt_hit/cnt_fired once per server frame (fired_time / STAT(HIT_TIME) guards)", base: "accuracy.qc:115-123", port: "acc.HitTime/FiredTime != Api.Clock.Time guards (Scores.cs:440-449)", match: true }
@@ -541,7 +541,7 @@ features:
       - "QC's dead-target exception (damage in the exact frame the target died still counts: IS_DEAD && time > death_time) is replaced by a plain not-dead test; documented in-code as behaviourally identical because every port credit site evaluates the gate BEFORE Damage() while the target is alive. Holds today; any future post-damage credit site would silently diverge."
     verification:
       - { kind: code_read, ref: "WeaponAccuracyEvents.Add/IsGoodDamage/CanBeGoodDamage/AccuracyByte vs accuracy.qc:17-157 line-by-line; tally half in Scores.OnAccuracyAdd (Scores.cs:426-453) incl. the two once-per-frame guards + the accuracy_byte change detection; LIVE: Scores.SubscribeToDeaths wires WeaponAccuracyEvents.Added at Scores.cs:1135, called from GameWorld.cs:608; credit sites live on the fire/hit/real paths (WeaponFiring.cs:151/390/566, WeaponSplash.cs:259, DamageSystem.cs:602-603)", result: pass }
-      - { kind: code_read, ref: "tests/XonoticGodot.Tests/WeaponAccuracyTests.cs exercises the byte encoding + gates", result: pass }
+      - { kind: code_read, ref: "tests/VortexArena.Tests/WeaponAccuracyTests.cs exercises the byte encoding + gates", result: pass }
     confidence: high
     notes: "added 2026-07-02 (coverage fold). Faithful split port: pure logic in WeaponAccuracyEvents (bus), tallies in Server Scores (subscriber) — no subscriber = no-op, like QC with no accuracy entity. GameScores.GameStopped read by IsGoodDamage is live-published (see scoring.lifecycle.game_stopped). AccuracyTargetValid mutator hook ported as TargetValidProvider (Invasion installs it so monster hits count)."
 
@@ -553,8 +553,8 @@ features:
       - "server/weapons/accuracy.qh:autocvar_sv_accuracy_data_share"
     port_refs:
       - "game/net/ServerNet.cs:2858"
-      - "src/XonoticGodot.Server/Scores.cs:AccuracyBytes"
-      - "src/XonoticGodot.Server/Scores.cs:AccuracyGeneration"
+      - "src/VortexArena.Server/Scores.cs:AccuracyBytes"
+      - "src/VortexArena.Server/Scores.cs:AccuracyGeneration"
       - "game/net/ClientNet.cs:1031"
       - "game/net/NetGame.cs:4947"
     constants:
@@ -588,10 +588,10 @@ features:
       - "server/weapons/accuracy.qc:accuracy_reset"
       - "server/weapons/accuracy.qc:accuracy_resend"
     port_refs:
-      - "src/XonoticGodot.Server/Scores.cs:134"
-      - "src/XonoticGodot.Server/Scores.cs:88"
-      - "src/XonoticGodot.Server/Scores.cs:113"
-      - "src/XonoticGodot.Server/ClientManager.cs:858"
+      - "src/VortexArena.Server/Scores.cs:134"
+      - "src/VortexArena.Server/Scores.cs:88"
+      - "src/VortexArena.Server/Scores.cs:113"
+      - "src/VortexArena.Server/ClientManager.cs:858"
       - "game/net/ServerNet.cs:256"
     constants:
       - { name: "reset zeros all six per-weapon counters", base: "accuracy_reset (real/frags/hit/fired/cnt_hit/cnt_fired)", port: "WeaponAccuracy.Clear() in PlayerScoreRow.Clear/ClearForTeamChange", match: true }
@@ -618,9 +618,9 @@ features:
       - "server/weapons/accuracy.qh:accuracy_frags"
       - "common/playerstats.qc:PlayerStats_GameReport_Accuracy"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerStats.cs:63"
-      - "src/XonoticGodot.Server/PlayerStats.cs:111"
-      - "src/XonoticGodot.Server/PlayerStats.cs:272"
+      - "src/VortexArena.Server/PlayerStats.cs:63"
+      - "src/VortexArena.Server/PlayerStats.cs:111"
+      - "src/VortexArena.Server/PlayerStats.cs:272"
     constants:
       - { name: "event id strings acc-<netname>-{real,hit,fired,cnt-hit,cnt-fired,frags}", base: "playerstats.qc accuracy event ids", port: "PlayerStats.cs:111-116 registers identical ids", match: true }
     status:
@@ -647,10 +647,10 @@ features:
       - "server/scores.qh:PlayerScore_Detach"
       - "server/scores.qc:PlayerScore_Attach"
     port_refs:
-      - "src/XonoticGodot.Server/Scores.cs:Register"
-      - "src/XonoticGodot.Server/Scores.cs:Unregister"
-      - "src/XonoticGodot.Server/Scores.cs:Row"
-      - "src/XonoticGodot.Server/ClientManager.cs:858"
+      - "src/VortexArena.Server/Scores.cs:Register"
+      - "src/VortexArena.Server/Scores.cs:Unregister"
+      - "src/VortexArena.Server/Scores.cs:Row"
+      - "src/VortexArena.Server/ClientManager.cs:858"
     constants:
       - { name: "one score row per connected player, dropped on disconnect", base: "scorekeeper entity attach/detach", port: "_rows dict Register/Unregister; Row() attaches on demand (idempotent)", match: true }
     status:
@@ -701,9 +701,9 @@ features:
       - "server/scores_rules.qc:ScoreRules_basics_end"
       - "server/scores_rules.qc:NumTeams"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:902"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:913"
-      - "src/XonoticGodot.Net/ScoreInfoBlock.cs"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:902"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:913"
+      - "src/VortexArena.Net/ScoreInfoBlock.cs"
     constants:
       - { name: "layout (re)broadcast after a mode declares its columns", base: "explicit ScoreInfo_Init -> SendFlags|=1", port: "implicit: every SetLabel/SetTeamLabel change bumps LayoutGeneration (InvalidateLayout, GameScores.cs:902) and the ScoreInfo block re-sends on the stamp", match: true }
       - { name: "NumTeams bitmask -> team count -> Team_InitTeams", base: "scores_rules.qc:12-15,27-30", port: "team init handled by the teamplay path in GameWorld/Teamplay, not by the scoring finalize", match: false }

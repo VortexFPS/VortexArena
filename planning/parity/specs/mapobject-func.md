@@ -10,7 +10,7 @@
 > claim that `func_rotating` X/Y_AXIS are bits 64/128 — they are BIT(2)/BIT(3) (4/8); the port is correct.
 
 **Base refs:** `common/mapobjects/func/{door,door_rotating,door_secret,button,plat,train,rotating,bobbing,pendulum,breakable,conveyor,ladder,fourier,vectormamamam}.qc` (+ `platforms.qc`, `subs.qc` for the shared mover driver)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/MapObjects/{Doors,Buttons,Platforms,MovingBrushes,Breakable,AdvancedMovers,MapVolumes,MapObjectsCommon}.cs`; engine sim `src/XonoticGodot.Engine/Simulation/{FlyMove.cs (PushMove),MoveTypePhysics.cs}`
+**Port refs:** `src/VortexArena.Common/Gameplay/MapObjects/{Doors,Buttons,Platforms,MovingBrushes,Breakable,AdvancedMovers,MapVolumes,MapObjectsCommon}.cs`; engine sim `src/VortexArena.Engine/Simulation/{FlyMove.cs (PushMove),MoveTypePhysics.cs}`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

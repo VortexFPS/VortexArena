@@ -1,16 +1,16 @@
 using Godot;
-using XonoticGodot.Common.Framework;   // MoveFilter
-using XonoticGodot.Common.Math;        // QMath, Coords
-using XonoticGodot.Common.Services;    // Api, TraceResult, PointContents
+using VortexArena.Common.Framework;   // MoveFilter
+using VortexArena.Common.Math;        // QMath, Coords
+using VortexArena.Common.Services;    // Api, TraceResult, PointContents
 using NVec3 = System.Numerics.Vector3;
 using GVec3 = Godot.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Port of qcsrc/client/view.qc (CSQC_UpdateView: zoom, eventchase, FOV) — the SINGLE first-person view
-/// driver shared by BOTH the local <see cref="XonoticGodot.Game.PlayerController"/> (the GameDemo path) and the
-/// networked <see cref="XonoticGodot.Game.Net.NetGame"/> (the menu Start / Create-Game play path).
+/// driver shared by BOTH the local <see cref="VortexArena.Game.PlayerController"/> (the GameDemo path) and the
+/// networked <see cref="VortexArena.Game.Net.NetGame"/> (the menu Start / Create-Game play path).
 ///
 /// Xonotic has ONE first-person path; the port had drifted into two partial re-implementations (the FULL
 /// view logic in PlayerController + a STRIPPED copy in NetGame). This factors the view subsystem out so both
@@ -64,7 +64,7 @@ public sealed class FirstPersonView
         /// <summary>True while the local player is in Nexball and is NOT carrying the ball (QC
         /// <c>cl_nexball.qc:WantEventchase</c> — <c>cl_eventchase_nexball</c> engages the third-person cam when the
         /// player is a nexball participant but not the current ball-carrier). Set each frame by
-        /// <see cref="XonoticGodot.Game.Net.NetGame"/> from the decoded NexBall status block.</summary>
+        /// <see cref="VortexArena.Game.Net.NetGame"/> from the decoded NexBall status block.</summary>
         public bool IsNexBallNonCarrier;
 
         /// <summary>The view-origin recoil kick in Quake space (QC <c>view_punchvector</c>, decayed 30u/s). Added to
@@ -99,7 +99,7 @@ public sealed class FirstPersonView
     public bool Spectating { get; set; }
 
     /// <summary>True while the local player is seated in a vehicle (QC <c>hud != HUD_NORMAL</c> / the
-    /// TE_CSQC_VEHICLESETUP cockpit). Set each frame by <see cref="XonoticGodot.Game.Net.NetGame"/> from the
+    /// TE_CSQC_VEHICLESETUP cockpit). Set each frame by <see cref="VortexArena.Game.Net.NetGame"/> from the
     /// decoded <c>VehicleViewState.IsActive</c>. With <c>cl_eventchase_vehicle</c> set this engages the vehicle
     /// chase/cockpit camera (QC <c>WantEventchase</c> vehicle branch, <see cref="ChaseCamera.ApplyVehicle"/>);
     /// when off the view stays the seated first-person eye (the seated origin already sits in the cockpit, ViewOfs
@@ -486,7 +486,7 @@ public sealed class FirstPersonView
         bool insideZone = false;
         if (!ChaseActive)
             WarpzoneFixView.Apply(
-                XonoticGodot.Common.Gameplay.WarpzoneTrace.AmbientManager,
+                VortexArena.Common.Gameplay.WarpzoneTrace.AmbientManager,
                 ref camQuake, ref viewAngles, _lastDt, out insideZone);
         InsideWarpzone = insideZone;
 

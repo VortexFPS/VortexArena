@@ -2,12 +2,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Engine.Collision;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the per-gametype map-entity filter (<see cref="MapEntityFilter"/>) — the port of DP's
@@ -18,7 +18,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class MapEntityFilterTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private static readonly MapEntityFilter.GametypeContext Dm = new("dm", TeamPlay: false, HaveTeamSpawns: false);
     private static readonly MapEntityFilter.GametypeContext Ctf = new("ctf", TeamPlay: true, HaveTeamSpawns: true);
@@ -170,7 +170,7 @@ public class MapEntityFilterTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         if (!vfs.Exists("maps/stormkeep.bsp")) return;
 
         BspData bsp = BspReader.Read(vfs.ReadBytes("maps/stormkeep.bsp"));

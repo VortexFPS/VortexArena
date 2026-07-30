@@ -1,10 +1,10 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
-/// Coordinate/angle/time quantization primitives for the XonoticGodot wire format.
+/// Coordinate/angle/time quantization primitives for the VortexArena wire format.
 ///
 /// We reuse the *quantization schemes* from Darkplaces <c>com_msg.c</c> (Coord13i/16i/32f,
 /// Angle8i/16i/32f) and the nonlinear "approx past time" + Int24 encodings from Xonotic's
@@ -156,7 +156,7 @@ public static class Quantize
         return ApproxPastTimeK * (d / (256f - d));
     }
 
-    // Local clamp to avoid taking a dependency on XonoticGodot.Common.Math here (this file is leaf-level).
+    // Local clamp to avoid taking a dependency on VortexArena.Common.Math here (this file is leaf-level).
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static float QMathClamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
 }

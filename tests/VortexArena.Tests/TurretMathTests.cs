@@ -1,11 +1,11 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — first coverage for <see cref="TurretMath"/> (ports of QC <c>anglemods</c> /

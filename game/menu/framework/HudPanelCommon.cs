@@ -1,7 +1,7 @@
 using System.Globalization;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The common opening block every HUD-panel config dialog shares — the single C# successor to QC

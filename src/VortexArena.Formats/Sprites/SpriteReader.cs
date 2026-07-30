@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Sprites;
+namespace VortexArena.Formats.Sprites;
 
 /// <summary>
 /// Parses Quake-family sprite files into <see cref="SpriteData"/>. Faithful to Darkplaces

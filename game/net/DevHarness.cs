@@ -1,10 +1,10 @@
 using Godot;
-using XonoticGodot.Common.Framework;       // MoveFilter
-using XonoticGodot.Common.Services;        // Api (trace)
-using XonoticGodot.Game.Client;            // ClientWorld
+using VortexArena.Common.Framework;       // MoveFilter
+using VortexArena.Common.Services;        // Api (trace)
+using VortexArena.Game.Client;            // ClientWorld
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// Dev/CI visual-capture helpers that ride on a live <see cref="ClientWorld"/> — the survivors of GameDemo's
@@ -67,9 +67,9 @@ public sealed partial class DevHarness : Node
 
         // If the configured effect is a TRAIL/beam (nex_beam, arc_beam, TR_ROCKET…), also sweep it across the
         // view as a line so a capture can verify the trail-along-the-segment path (the vortex beam line).
-        XonoticGodot.Common.Gameplay.Effect? eff =
-            XonoticGodot.Common.Gameplay.Effects.ByEffectInfoName(FxDemoEffect)
-            ?? XonoticGodot.Common.Gameplay.Effects.ByName(FxDemoEffect);
+        VortexArena.Common.Gameplay.Effect? eff =
+            VortexArena.Common.Gameplay.Effects.ByEffectInfoName(FxDemoEffect)
+            ?? VortexArena.Common.Gameplay.Effects.ByName(FxDemoEffect);
         if (eff?.IsTrail == true)
             Render.Effects.Spawn(FxDemoEffect, eyeQuake + forwardQuake * 20f + new NVec3(0f, 0f, 10f),
                 eyeQuake + forwardQuake * 600f + new NVec3(0f, 0f, 10f));

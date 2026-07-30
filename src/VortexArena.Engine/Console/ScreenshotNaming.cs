@@ -1,6 +1,6 @@
 using System;
 
-namespace XonoticGodot.Engine.Console;
+namespace VortexArena.Engine.Console;
 
 /// <summary>The three on-disk image formats DarkPlaces' <c>screenshot</c> command writes (cl_screen.c).</summary>
 public enum ScreenshotFormat
@@ -18,7 +18,7 @@ public enum ScreenshotFormat
 /// <summary>
 /// The Godot-free filename algorithm behind the client <c>screenshot</c> command — a faithful port of the naming
 /// logic in DarkPlaces' <c>SCR_ScreenShot_f</c> (cl_screen.c). The Godot capture/encode glue lives in
-/// <c>XonoticGodot.Game.Client.ScreenshotService</c>; the file-naming + format-selection is isolated here so it
+/// <c>VortexArena.Game.Client.ScreenshotService</c>; the file-naming + format-selection is isolated here so it
 /// is unit-testable without a viewport or a real filesystem (the existence probe is injected).
 ///
 /// <para>DP has two auto-naming modes, selected by <c>scr_screenshot_timestamp</c>:

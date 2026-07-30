@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using VortexArena.Common.Diagnostics;
 using VortexArena.Common.Gameplay;
@@ -99,6 +100,22 @@ public partial class Shell : Node
         _chatPrompt.Open(team);
     }
 
+    /// <summary>
+    /// DP <c>commandmode</c> (the <c>/</c> prompt): open the same input line, but the typed text is submitted as
+    /// a raw COMMAND rather than chat, optionally prefilled. Base's interactive scoreboard uses it for Ctrl+T
+    /// (<c>commandmode tell "&lt;player&gt;^7"</c>) so the player only has to type the message.
+    /// </summary>
+    private void OpenCommandPrompt(string prefill)
+    {
+        if (!MatchRunning || ConsoleState.IsOpen)
+        {
+            if (!MatchRunning)
+                VortexArena.Common.Diagnostics.Log.Help("commandmode: not connected — start a match first.");
+            return;
+        }
+        _chatPrompt.Open(team: false, commandMode: true, prefill: prefill ?? "");
+    }
+
     /// <summary>Apply any <c>--cvar NAME VALUE</c> command-line overrides into the shared store (repeatable; each
     /// <c>--cvar</c> token consumes the next two args). For test/automation/A-B runs that need to pin a cvar at
     /// boot — e.g. <c>vid_vsync</c> / <c>cl_frameprofiler</c> — without touching a config file.</summary>
@@ -167,6 +184,11 @@ public partial class Shell : Node
         chatLayer.AddChild(_chatPrompt);
         MenuState.Interp!.RegisterCommand("messagemode", _ => OpenChatPrompt(team: false));
         MenuState.Interp!.RegisterCommand("messagemode2", _ => OpenChatPrompt(team: true));
+        // DP commandmode [prefill…]: the raw-command variant of messagemode (see OpenCommandPrompt).
+        MenuState.Interp!.RegisterCommand("commandmode",
+            a => OpenCommandPrompt(a.Count >= 2 ? string.Join(' ', a.Skip(1)) : ""));
+        // Direct hook for callers that must preserve exact quoting in the prefill (the scoreboard's Ctrl+T tell).
+        Menu.MenuCommand.OpenCommandPrompt = OpenCommandPrompt;
 
         // The client-side `screenshot` command (DP CF_CLIENT, bound to F12 by binds-xonotic.cfg): a Godot node that
         // grabs the next rendered frame and writes it to user://screenshots/. Registered on the SHARED interpreter
@@ -176,6 +198,22 @@ public partial class Shell : Node
         var screenshots = new Client.ScreenshotService { Name = "ScreenshotService" };
         AddChild(screenshots);
         screenshots.RegisterCommand(MenuState.Interp!, MenuState.Cvars);
+
+        // Editable-map-format commands (vmap_import/_info/_list): local authoring actions, so they register
+        // client-side on the shared interpreter and never route to the server. The asset system is passed so a
+        // .map import can resolve real texture sizes for its texel-based texdefs.
+        if (MenuState.Vfs is { } vfs)
+        {
+            var vmaps = new Vmap.VmapService(vfs, MenuState.SharedAssets?.Assets);
+            vmaps.RegisterCommands(MenuState.Interp!);
+        }
+
+        // Editor view aids: the world-space alignment grid's cvars + its `editor_grid` / `editor_grid_size`
+        // commands. Client-side and bindable; the grid node itself lives in the match scene (NetGame).
+        Vmap.EditorGrid.RegisterDefaults(MenuState.Cvars);
+        Vmap.EditorGrid.RegisterCommands(MenuState.Interp!, MenuState.Cvars);
+        Vmap.EditorController.RegisterDefaults(MenuState.Cvars);
+        Vmap.EditorOrthoView.RegisterDefaults(MenuState.Cvars);
 
         // Dev/CI: `--menu-screen nexposee:<Title>` opens that panel inside the nexposee on boot (vs the plain
         // `--menu-screen settings` which pushes a framed dialog). Consumed by MainMenu; clear it so the
@@ -222,10 +260,29 @@ public partial class Shell : Node
         else if (!string.IsNullOrWhiteSpace(DebugScreen))
             OpenDebugScreen(DebugScreen!);
         else
+        {
             // Plain menu boot (the real launch path): warm the map-independent eager asset set into the shared
             // cache in the background NOW, so the first match's precache is a cache hit and the map loads fast.
             // Skipped above for a direct --map/--host/--connect boot — that match runs its own precache.
             StartMenuAssetWarm();
+            // …and, on this path only, the development-release disclaimer over the main menu. Deliberately NOT
+            // on the boot-into-match / --menu-screen branches: automation and CI must never have a modal to
+            // dismiss (see MaybeShowStartupDisclaimer).
+            MaybeShowStartupDisclaimer();
+        }
+    }
+
+    /// <summary>
+    /// Push the development-release disclaimer (<see cref="Menu.DialogDisclaimer"/>) over the freshly-shown main
+    /// menu, unless the player has turned it off. Gated on <c>cl_startup_disclaimer</c> (default 1); the dialog's
+    /// "Don't show this again" checkbox writes 0 and its OK button persists that to config.cfg, so the next
+    /// launch goes straight to the menu. `set cl_startup_disclaimer 1` in the console brings it back.
+    /// </summary>
+    private void MaybeShowStartupDisclaimer()
+    {
+        if (MenuState.Cvars.GetFloat("cl_startup_disclaimer") == 0f)
+            return;
+        _menu.Push(new DialogDisclaimer());
     }
 
     /// <summary>
@@ -277,6 +334,7 @@ public partial class Shell : Node
             "hudpanels" => new DialogHudPanels(),
             "hudweapons" => new DialogHudPanelWeapons(),
             "cvarlist" => new DialogCvarList(),
+            "disclaimer" => new DialogDisclaimer(),
             "sandbox" => new DialogSandboxTools(),
             _ => null,
         };
@@ -314,6 +372,7 @@ public partial class Shell : Node
         // QC `map`/`devmap`: in a running match this is a changelevel (keep mode + bots); at the menu it starts a
         // fresh listen server on the map then self-connects (the real "start a game" path).
         MenuCommand.StartMap = ChangeLevel;
+        MenuCommand.StartEditor = EditorMap;
         MenuCommand.Connect = OnConnect;
 
         // --- T50: the menu nav verbs + the live-match gameplay-command channel ---
@@ -448,6 +507,12 @@ public partial class Shell : Node
             _chatPrompt.Close();
             return;
         }
+        //   1b. the interactive scoreboard: Escape closes it, and Escape WHILE the scoreboard key is held opens
+        //       it (QC main.qc:545-551 checks S_TAB before falling through to the menu). Must be claimed here —
+        //       Godot runs _UnhandledKeyInput before _UnhandledInput, and this method marks both Escape edges
+        //       handled, so the play path's own handler never sees the key.
+        if (Menu.MenuCommand.ScoreboardEscape?.Invoke() == true)
+            return;
         //   2. the live HUD editor (no menu dialog up) opens its setup-exit dialog — QC menu_showhudexit —
         //      instead of the pause menu; with a dialog already up (_paused) fall through so Escape pops it.
         if (!_paused && MenuState.Cvars.GetFloat("_hud_configure") != 0f)
@@ -538,6 +603,7 @@ public partial class Shell : Node
         _menu.ShowScreen(new PauseMenu());
         _menu.Visible = true;
         _paused = true;
+        MouseCapture.MenuWantsCursor = true; // survives NetGame's per-frame reassert on an unpaused tree
         MouseCapture.SetWantCapture(false);
         SyncAutoPause(); // freeze the sim iff this is a solo local listen game
     }
@@ -549,6 +615,7 @@ public partial class Shell : Node
             return;
         _menu.Visible = false;
         _paused = false;
+        MouseCapture.MenuWantsCursor = false; // clear BEFORE SetWantCapture so recapture lands this frame
         MouseCapture.SetWantCapture(true);
         SyncAutoPause();
     }
@@ -593,6 +660,11 @@ public partial class Shell : Node
                 MouseCapture.SetFocused(osFocused);
             }
         }
+
+        // The menu layer (main or pause) always owns the pointer: re-sync the MouseCapture menu override off
+        // menu visibility every frame (not just the Open/Resume edges) so any other path that shows/hides the
+        // menu keeps the cursor state consistent — same reassert-not-edge-latch reasoning as NetGame's cursor block.
+        MouseCapture.MenuWantsCursor = _menu.Visible;
 
         // Per-frame so console open/close and a remote client joining/leaving (which changes eligibility) are
         // picked up even without a discrete edge — e.g. a remote joins while the host sits in the menu → release
@@ -641,6 +713,11 @@ public partial class Shell : Node
             _netGame.Shutdown();
             _netGame.QueueFree();
             _netGame = null;
+
+            // --observe is a one-session boot capture: disarm when that session ENDS (not on the boot-path
+            // TeardownGame that runs before the first session exists), so a later menu-created game
+            // auto-joins normally and doesn't inherit a camera pinned at the previous map's coordinates.
+            Net.ObserverCamera.Disarm();
         }
     }
 
@@ -890,14 +967,36 @@ public partial class Shell : Node
     /// match), start a fresh listen server on it. A pure <c>--connect</c> client has no local server to changelevel
     /// (the real server owns the map), so this no-ops there.
     /// </summary>
-    private void ChangeLevel(string map)
+    private void ChangeLevel(string map) => ChangeLevel(map, null);
+
+    /// <param name="gametype">Gametype to switch to, or null to keep the current one.</param>
+    private void ChangeLevel(string map, string? gametype)
     {
         if (string.IsNullOrWhiteSpace(map))
             return;
         if (_netGame is { ServerWorld: not null })
-            _netGame.RequestMapChange(map);                                  // in a match → server-side changelevel
+            _netGame.RequestMapChange(map, gametype);                        // in a match → server-side changelevel
         else if (_netGame is null)
-            StartListenServer(new MatchConfig { Map = map, Gametype = "dm" }); // at the menu → start a game on it
+            StartListenServer(new MatchConfig { Map = map, Gametype = gametype ?? "dm" });
+    }
+
+    /// <summary>
+    /// <c>editor [map]</c> — the map editor as a destination, alongside <c>map</c> and <c>devmap</c>.
+    ///
+    /// With no argument it re-hosts the map already running, which is the point: you are looking at
+    /// something you want to change, and getting to the editor should not mean quitting to the menu and
+    /// starting over. The gametype rides the same changelevel path every map switch uses.
+    /// </summary>
+    private void EditorMap(string map)
+    {
+        string target = !string.IsNullOrWhiteSpace(map) ? map!
+            : _netGame?.CurrentMap ?? BootMap ?? "";
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            _console.Print("editor: no map running — use `editor <map>`.");
+            return;
+        }
+        ChangeLevel(target, "editor");
     }
 
     /// <summary>

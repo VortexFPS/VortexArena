@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Hidden / dev player-fired HK weapon — port of <c>common/turrets/turret/hk_weapon.qh</c>

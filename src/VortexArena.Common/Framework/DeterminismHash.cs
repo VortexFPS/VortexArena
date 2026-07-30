@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// An order-sensitive FNV-1a checksum over the <b>exact bit patterns</b> of the values fed to it — the tool

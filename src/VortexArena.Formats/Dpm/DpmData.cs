@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Dpm;
+namespace VortexArena.Formats.Dpm;
 
 /// <summary>
 /// Engine-neutral, Godot-free representation of a DarkPlaces Model (DPM, id

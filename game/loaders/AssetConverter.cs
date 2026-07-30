@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The offline asset-conversion path from the migration plan: a batch helper that walks every model and map

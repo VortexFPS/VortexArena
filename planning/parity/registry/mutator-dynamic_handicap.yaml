@@ -16,7 +16,7 @@ features:
     base_refs:
       - "common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc:DynamicHandicap_UpdateHandicap"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:UpdateHandicap (139-178)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:UpdateHandicap (139-178)"
     constants:
       - { name: "g_dynamic_handicap_scale", base: "0.2", port: "0.2 (read from cvar in Hook; C# field initializer is 1 but overwritten)", match: true }
       - { name: "g_dynamic_handicap_exponent", base: "1", port: "1", match: true }
@@ -48,7 +48,7 @@ features:
     base_refs:
       - "common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc:DynamicHandicap_ClampHandicap"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:ClampHandicap (181-186)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:ClampHandicap (181-186)"
     constants:
       - { name: "g_dynamic_handicap_min", base: "0", port: "0", match: true }
       - { name: "g_dynamic_handicap_max", base: "0", port: "0", match: true }
@@ -76,11 +76,11 @@ features:
       - "server/player.qc:243-249"
       - "server/handicap.qc:Handicap_GetTotalHandicap"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:PlayerDamage handicap block(416-425)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:HandicapTotal(945-953)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:VoluntaryHandicapProvider"
-      - "src/XonoticGodot.Server/Commands.cs:409-425 (VoluntaryHandicapProvider wiring)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageEntityState.cs:HandicapGive(56),HandicapTake(58)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:PlayerDamage handicap block(416-425)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:HandicapTotal(945-953)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:VoluntaryHandicapProvider"
+      - "src/VortexArena.Server/Commands.cs:409-425 (VoluntaryHandicapProvider wiring)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageEntityState.cs:HandicapGive(56),HandicapTake(58)"
     constants:
       - { name: "gate", base: "!DEATH_ISSPECIAL(deathtype)", port: "!DeathTypes.IsSpecial(deathType)", match: true }
       - { name: "victim_scale", base: "damage *= GetTotalHandicap(this,true)", port: "damage *= HandicapTotal(targ,true)", match: true }
@@ -113,10 +113,10 @@ features:
       - "common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc:86"
       - "server/handicap.qh:57 (HANDICAP_DISABLED == IS_GAMETYPE(CTS) || IS_GAMETYPE(RACE))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:IsEnabled (69-72)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:HandicapDisabled/HandicapDisabledProvider (60-76)"
-      - "src/XonoticGodot.Common/Gameplay/Handicap.cs:DisabledProvider/Disabled (30-33)"
-      - "src/XonoticGodot.Server/Commands.cs:402 (HandicapDisabledProvider = () => GameType is Cts or Race)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:IsEnabled (69-72)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:HandicapDisabled/HandicapDisabledProvider (60-76)"
+      - "src/VortexArena.Common/Gameplay/Handicap.cs:DisabledProvider/Disabled (30-33)"
+      - "src/VortexArena.Server/Commands.cs:402 (HandicapDisabledProvider = () => GameType is Cts or Race)"
     constants:
       - { name: "g_dynamic_handicap", base: "0", port: "0", match: true }
       - { name: "HANDICAP_DISABLED gate", base: "IS_GAMETYPE(CTS) || IS_GAMETYPE(RACE)", port: "Handicap.Disabled == (GameType is Cts or Race), wired in Commands ctor", match: true }
@@ -144,12 +144,12 @@ features:
       - "common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc:98-120 (ClientDisconnect, PutClientInServer, MakePlayerObserver, AddedPlayerScore)"
       - "server/scores.qc:377 (MUTATOR_CALLHOOK(AddedPlayerScore) — post-write event)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:Hook(84-107),OnPlayerSpawn/OnPlayerDies/OnMakePlayerObserver/OnClientDisconnect/OnAddedPlayerScore(118-129)"
-      - "src/XonoticGodot.Server/ClientManager.cs:772 (PlayerSpawn.Call — live, PutPlayerInServer)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:687 (PlayerDies.Call — live)"
-      - "src/XonoticGodot.Server/ClientManager.cs:564 (MakePlayerObserver.Call — live, PutObserverInServer)"
-      - "src/XonoticGodot.Server/ClientManager.cs:855 (ClientDisconnect.Call — live)"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:441 (AddedPlayerScoreHook?.Invoke — post-write in AddToPlayer, live)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:Hook(84-107),OnPlayerSpawn/OnPlayerDies/OnMakePlayerObserver/OnClientDisconnect/OnAddedPlayerScore(118-129)"
+      - "src/VortexArena.Server/ClientManager.cs:772 (PlayerSpawn.Call — live, PutPlayerInServer)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:687 (PlayerDies.Call — live)"
+      - "src/VortexArena.Server/ClientManager.cs:564 (MakePlayerObserver.Call — live, PutObserverInServer)"
+      - "src/VortexArena.Server/ClientManager.cs:855 (ClientDisconnect.Call — live)"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:441 (AddedPlayerScoreHook?.Invoke — post-write in AddToPlayer, live)"
     constants:
       - { name: "trigger_count", base: "4 functional (ClientDisconnect, PutClientInServer, MakePlayerObserver, AddedPlayerScore=SP_SCORE)", port: "4 functional + PlayerDies (PlayerSpawn=PutClientInServer, ClientDisconnect, MakePlayerObserver, AddedPlayerScore SP_SCORE)", match: true }
       - { name: "score_field_filter", base: "if (M_ARGV(0,entity) != SP_SCORE) return", port: "if (!ReferenceEquals(field, GameScores.Score)) return", match: true }
@@ -176,7 +176,7 @@ features:
     base_refs:
       - "server/handicap.qc:81-94 (Handicap_SetForcedHandicap: error() if value <= 0)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Handicap.cs:SetForcedHandicap(69-77)"
+      - "src/VortexArena.Common/Gameplay/Handicap.cs:SetForcedHandicap(69-77)"
     constants:
       - { name: "on_value<=0", base: "error() — hard fault", port: "Log.Fatal('Handicap_SetForcedHandicap: Invalid handicap value.')", match: true }
       - { name: "HANDICAP_DISABLED early-return", base: "if (HANDICAP_DISABLED()) return", port: "if (Disabled) return (Handicap.cs:71)", match: true }
@@ -205,12 +205,12 @@ features:
       - "common/ent_cs.qc:180-182 (ENTCS_PROP HANDICAP_LEVEL, WriteByte/ReadByte)"
       - "client/hud/panel/scoreboard.qc:1003-1009 (player_handicap icon tint '1 0 0' + '0 1 1' * ((16-lvl)/15))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Handicap.cs:UpdateHandicapLevel(84-96),MapBoundRanges(110-115),MaxLevelEquivalent(36)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageEntityState.cs:HandicapLevel(66)"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:HandicapLevel(35),CaptureRows(100),Serialize(126),Deserialize(read-side)"
+      - "src/VortexArena.Common/Gameplay/Handicap.cs:UpdateHandicapLevel(84-96),MapBoundRanges(110-115),MaxLevelEquivalent(36)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageEntityState.cs:HandicapLevel(66)"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:HandicapLevel(35),CaptureRows(100),Serialize(126),Deserialize(read-side)"
       - "game/hud/ScoreboardPanel.cs:HandicapLevel(62,270),DrawRow icon(1165-1178, real player_handicap texture + square fallback)"
       - "game/hud/TextureCache.cs:Get(42)+VfsResolver(33) — wired to AssetLoader.LoadTexture for the pk3 art lookup"
-      - "assets/data/xonotic-data.pk3dir/gfx/scoreboard/player_handicap.tga (asset present)"
+      - "Base/data/xonotic-data.pk3dir/gfx/scoreboard/player_handicap.tga (asset present)"
     constants:
       - { name: "HANDICAP_MAX_LEVEL_EQUIVALENT", base: "2.0", port: "2.0 (Handicap.MaxLevelEquivalent)", match: true }
       - { name: "level_range", base: "0..16 via floor(map_bound_ranges((take+give)/2, 1, 2.0, 0, 16))", port: "(int)floor(MapBoundRanges((total_take+total_give)/2, 1, 2.0, 0, 16))", match: true }
@@ -233,7 +233,7 @@ features:
       - { kind: read, ref: "ScoreboardBlock.cs: CaptureRows stamps p.HandicapLevel (100); Serialize WriteByte (126); read-side ReadByte — matches ent_cs.qc:180-182 WriteByte/ReadByte", result: pass }
       - { kind: read, ref: "ScoreboardPanel.cs:1165-1178 draws icon when HandicapLevel!=0: loads REAL gfx/scoreboard/player_handicap via TextureCache.Get and DrawTextureRect tinted Color(1,t,t), t=(16-lvl)/15 — exactly Base scoreboard.qc:1007 '1 0 0' + '0 1 1' * ((16-handicap_lvl)/15); DrawRect square only when texture unresolved", result: pass }
       - { kind: read, ref: "TextureCache.Get(42) -> VfsResolver(33) seam wired to AssetLoader.LoadTexture (ResolveImage extension search), the same path that draws all other real HUD art (crosshairs/weapon icons)", result: pass }
-      - { kind: file, ref: "assets/data/xonotic-data.pk3dir/gfx/scoreboard/player_handicap.tga present in mounted game data, so the resolver hits (square fallback unreached in normal play)", result: pass }
+      - { kind: file, ref: "Base/data/xonotic-data.pk3dir/gfx/scoreboard/player_handicap.tga present in mounted game data, so the resolver hits (square fallback unreached in normal play)", result: pass }
       - { kind: read, ref: "HANDICAP_MAX_LEVEL_EQUIVALENT=2.0 (handicap.qh:66) == Handicap.MaxLevelEquivalent (Handicap.cs:36)", result: pass }
     confidence: high
     notes: "FULLY FIXED. Prior audit had presentation:partial (real level/network/tint but a colored-square marker, no gfx path). Wave 16/17 added the real-texture draw: ScoreboardPanel.cs:1172-1176 resolves gfx/scoreboard/player_handicap via TextureCache.Get/VfsResolver (same seam proven for all HUD art) and DrawTextureRect's it with the exact Base tint; the .tga asset is confirmed present, so the colored square is now only a resolver-miss fallback. RUNTIME-VISUAL CAVEAT: code-faithful + asset-confirmed at read level; the icon was not observed rendering in a live run this audit. Confidence high on the code path (VfsResolver is the established, working HUD-art mechanism)."
@@ -244,11 +244,11 @@ features:
     base_refs:
       - "common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc:88-96"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:BuildMutatorsString(133),BuildMutatorsPrettyString(136)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsString(108-114),BuildMutatorsPrettyString(121-127)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1161 (BuildMutatorsString — gamelog init, live)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1172 (BuildMutatorsPrettyString — 'modifications' serverinfo at match start, live)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1453 SendMutatorsWelcome (BuildMutatorsPrettyString — per-join in-game 'modifications' line to the connecting client via chat sink, called at GameWorld.cs:1338, live)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:BuildMutatorsString(133),BuildMutatorsPrettyString(136)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:BuildMutatorsString(108-114),BuildMutatorsPrettyString(121-127)"
+      - "src/VortexArena.Server/GameWorld.cs:1161 (BuildMutatorsString — gamelog init, live)"
+      - "src/VortexArena.Server/GameWorld.cs:1172 (BuildMutatorsPrettyString — 'modifications' serverinfo at match start, live)"
+      - "src/VortexArena.Server/GameWorld.cs:1453 SendMutatorsWelcome (BuildMutatorsPrettyString — per-join in-game 'modifications' line to the connecting client via chat sink, called at GameWorld.cs:1338, live)"
       - "game/net/ServerNet.cs:613 (BuildMutatorsPrettyString — DP browser infostring 'modifications' key, live)"
     constants:
       - { name: "string_token", base: '":handicap"', port: '":handicap" (DynamicHandicapMutator.cs:133)', match: true }

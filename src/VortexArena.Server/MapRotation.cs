@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The server map rotation + next-map selection — the Godot-free essence of server/intermission.qc's maplist

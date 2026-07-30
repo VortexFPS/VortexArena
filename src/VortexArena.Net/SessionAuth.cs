@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Modern public-key player identity and the server-side challenge-response that authenticates it,
 /// replacing Darkplaces' <c>d0_blind_id</c> blind-signature handshake (dropped in
-/// <see href="ADR-0011">ADR-0011</see>; it only existed for DP interop, which XonoticGodot deliberately
+/// <see href="ADR-0011">ADR-0011</see>; it only existed for DP interop, which VortexArena deliberately
 /// forgoes).
 ///
 /// <para><b>Scheme.</b> Each player owns a long-lived ECDSA keypair on the NIST P-256 curve

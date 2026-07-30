@@ -2,13 +2,13 @@
 //   - strdecolorize  (DP string builtin; strips ^N and ^xRGB color codes)
 //   - the menu filter glob ("*foo*" / "foo?") the screenshot list builds
 //
-// These live in XonoticGodot.Common (ADR-0008: no Godot) so the data sources stay
+// These live in VortexArena.Common (ADR-0008: no Godot) so the data sources stay
 // headless-testable. The Godot-side menu already has an equivalent color stripper
 // (MenuColorCodes.Strip); this is the same algorithm, in the Godot-free assembly.
 
 using System.Text;
 
-namespace XonoticGodot.Common.Menu;
+namespace VortexArena.Common.Menu;
 
 /// <summary>Small Godot-free text helpers shared by the menu <see cref="DataSource"/> backends.</summary>
 public static class MenuTextFormat

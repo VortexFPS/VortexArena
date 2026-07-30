@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// A self-contained Targa (.tga) decoder producing a Godot <see cref="Image"/> in

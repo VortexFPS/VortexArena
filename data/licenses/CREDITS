@@ -1,0 +1,639 @@
+Content attribution
+===================
+
+The game content Vortex Arena redistributes was authored by the Xonotic project and its
+contributors, listed below. Vortex Arena is a fork of Xonotic; this credit is for the
+upstream work the content comes from, and is reproduced from the game's own credits roll.
+
+Licence terms for that content are in COPYING.xonotic, GPL-3 and GPL-2 beside this file.
+Vortex Arena's own source code is covered by COPYING at the repository root.
+
+GENERATED FILE -- do not edit by hand.
+Source: game/menu/CreditsScreen.cs   Regenerate: python tools/gen-credits.py
+
+
+Core Team
+---------
+  Ant "Antibody" Zucaro
+  Antonio "terencehill" Piu
+  bones_was_here
+  Merlijn Hofstra
+  Rudolf "divVerent" Polzer
+  Ruszkai "CuBe0wL" Ákos
+  Tyler "-z-" Mulligan
+
+Extended Team
+-------------
+  AsciiWolf
+  Dr. Jaska
+  Freddy
+  Halogene
+  Jan "zykure" Behrens
+  k9er
+  Morosophos
+  MrBougo
+  nilyt/nyov
+  Nitroxis
+  packer
+  Severin "sev" Meyer
+  Thomas "illwieckz" Debesse
+  Victor "LegendGuard" Jaume
+  Yannick "SpiKe" Le Guen
+  z411
+
+Website:
+  Ant "Antibody" Zucaro (web)
+  Freddy
+  Merlijn Hofstra
+  Tyler "-z-" Mulligan (web / game)
+
+Stats:
+  Ant "Antibody" Zucaro
+  Jan "zykure" Behrens
+
+Art:
+  KingPimpCommander
+  Pearce "theShadow" Michal
+  Peter "Morphed" Pielak
+  Sahil "DiaboliK" Singhal
+  Sam "LJFHutch" Hutchinson
+  Severin "sev" Meyer
+
+Animation:
+  nifrek
+  Sahil "DiaboliK" Singhal
+
+Campaign:
+  Dr. Jaska
+  Marvin "Mirio" Beck
+  Yannick "SpiKe" Le Guen
+
+Level Design:
+  Amadeusz "amade/proraide" Sławiński
+  Ben "MooKow" Banker
+  cityy
+  Cortez
+  Cuinn "Cuinnton" Herrick
+  Debugger
+  Hugo "Calinou" Locurcio
+  Jakob "tZork" Markström Gröhn
+  Konrad "Justin" Slawinski
+  L0
+  Łukasz "kuniu the frogg" Polek
+  Maddin
+  Maik "SavageX" Merten
+  Marvin "Mirio" Beck
+  MintOX
+  packer
+  Pearce "theShadow" Michal
+  Rasmus "FruitieX" Eskola
+  Ruszkai "CuBe0wL" Ákos
+  Severin "sev" Meyer
+  ShadoW
+  t0uYK8Ne
+  Yannick "SpiKe" Le Guen
+
+Music / Sound FX:
+  AquaNova (Archer)
+  blkrbt
+  chooksta
+  Independent.nu
+  Lea "TheAudioMonkey" Edwards
+  [master]mind
+  Merlijn Hofstra
+  Mick Rippon
+  Nick "bitbomb" Lucca
+  remaxim
+  Saulo "mand1nga" Gil
+  {SC0RP} - Ian "ID" Dorrell
+  Stephan
+  unfa
+
+Game Code:
+  Antonio "terencehill" Piu
+  bones_was_here
+  Des
+  Dr. Jaska
+  Jakob "tZork" Markström Gröhn
+  Juhu
+  k9er
+  martin-t
+  Matthias "matthiaskrgr" Krüger
+  Mattia "Melanosuchus" Basaglia
+  Rasmus "FruitieX" Eskola
+  Rudolf "divVerent" Polzer
+  Samual "Ares" Lenks
+  TimePath
+  Victor "LegendGuard" Jaume
+  z411
+  Zac "Mario" Jardine
+
+Marketing / PR:
+  Ruszkai "CuBe0wL" Ákos
+  Samual "Ares" Lenks
+  Saulo "mand1nga" Gil
+  Tyler "-z-" Mulligan
+
+Legal:
+  Merlijn Hofstra
+  Rudolf "divVerent" Polzer
+
+Game Engine
+-----------
+
+DarkPlaces:
+  Ashley Rose "LadyHavoc" Hale
+
+Engine Additions:
+  bones_was_here
+  David "Cloudwalk" Knapp
+  Rudolf "divVerent" Polzer
+  Samual "Ares" Lenks
+
+Compiler
+--------
+
+GMQCC:
+  Dale "graphitemaster" Weiler
+  Wolfgang "Blub\0" Bumiller
+
+Translators
+-----------
+
+Asturian:
+  enolp
+  Llumex03
+  Tornes "Tornes.Llume" Ḷḷume
+  Ximielga
+
+Belarusian:
+  Mihail "meequz" Varantsou
+  Pavel "Pashok11" Mordachev
+
+Bulgarian:
+  Alexander "alex4o" Bonin
+  DelianST
+  ifohancroft
+  Krasimir "kmikov" Mikov
+  lokster
+  Nik "cozmo" Dim
+  set_killer
+  ubone
+  С Станев
+
+Chinese (China):
+  Antonidas
+  Armcoon
+  CodingJellyfish
+  EricChen1
+  kalawore
+  Largee
+  Liang "dxkliu" Liu
+  Losier "losierb" Blackheath
+  Matthew "wjjmatthew" Wu
+  moetale
+  NaitLee
+  Richard "seedship" Nai
+  sapphireliu
+  yujiff
+  韬 "jiegushijia" 刘
+
+Chinese (Hong Kong):
+  Antonidas
+  CodingJellyfish
+  Largee
+  kalawore
+  Liang "dxkliu" Liu
+  Losier "losierb" Blackheath
+  Matthew "wjjmatthew" Wu
+  moetale
+  NaitLee
+  sapphireliu
+  韬 "jiegushijia" 刘
+
+Chinese (Taiwan):
+  Alisha
+  Antonidas
+  Armcoon
+  CodingJellyfish
+  EricChen1
+  Jeff "s8321414" Huang
+  Largee
+  Liang "dxkliu" Liu
+  Losier "losierb" Blackheath
+  kalawore
+  Matthew "wjjmatthew" Wu
+  msn1018927464
+  NaitLee
+  sapphireliu
+  Simon "XMLSDK" Chow
+  韬 "jiegushijia" 刘
+  黃柏諺
+
+Czech:
+  Adam "Admi335" Říha
+  Adam "SakDrakken" Krasa
+  Aleš "ramses1" Svoboda
+  fasdasd "kitfildom" sdasd
+  gamingforyou875
+  Jan "kockahonza" Kocka
+  Jiří "Havro" Vrána
+  martin-t
+  Martin Krámský
+  shogun assassin/woky
+  Superovoce
+  Tomáš "CZHeron" Volavka
+  woky
+
+Dutch:
+  Alexander "freefang" van Dam
+  Contijn "Sojiro84" Buijs
+  Joeke "Mappack" de Graaf
+  Jonathan "Jonakeys" van der Steege
+  joostruis
+  PinkRobot
+  vegiburger
+
+English (Australia):
+  Ben Dundon
+  k9er
+  Laurene "sunflowers" Albrand
+  Matthew "wjjmatthew" Wu
+  Stuart "Cefiar" Young
+  Zac "Mario" Jardine
+
+English (United Kingdom):
+  arduinoisgreat
+  k9er
+
+Finnish:
+  Dr. Jaska
+  Heidi Wenger
+  Henry "Exitium" Sanmark
+  irisxerno
+  Jaakko Saarikko
+  Jonas "PowaTree" Sahlberg
+  LINUX SAUNA
+  Oftox
+  Oi Suomi On!
+  Rasmus "FruitieX" Eskola
+  ZakkeX
+
+French:
+  _biloute
+  Aodren "Gwlanbzh" Le Gloanec
+  adrien "VRad" vigneron
+  Adgenodux
+  Gwlanbzh
+  HelloWorld42404
+  Hugo "Calinou" Locurcio
+  Iso "coughingmouse" Lee
+  Maxime "Taximus" Paradis
+  Marvin "Mirio" Beck
+  Nicolas "signed" Formichella
+  RedGuff
+  Thomas "illwieckz" Debesse
+  Yannick "SpiKe" Le Guen
+
+Galician:
+  Nin "ninjum" Him
+  Victor "LegendGuard" Jaume
+
+German:
+  Alex "tiprogrammierer.alex" Progger
+  BL4NKY
+  cvcxc
+  diacriticalhit
+  Erik "Ablu" Schilling
+  Iwan "qubodup" Gabovitch
+  Jope "Sless" Withers
+  Larson "skps" März
+  Logan "norsvenska" Zerfass
+  Markus "Skoppes" Erhard
+  Paul "Snapper"
+  Robert "HbmMods" Katzinsky
+  Rudolf "divVerent" Polzer
+  TheTrueBrot
+  Wuzzy
+  Yepoleb
+
+Greek:
+  Αντώνιος "antonis97apple" Τσίγκας
+  Γιώργος Καρδάμης
+  Hector "The_Smasher_1992" Champipis
+  Konstantinos "LDinos" Mihalenas
+  MasterWord
+  Marinus "Savvoritias" Savoritias
+  Mensious
+  Pandelis "pandem6nium" Biltiroglou
+  Vindex
+  Yannis "Evropi" Anthymidis
+
+Hungarian:
+  Ács "acszoltan111" Zoltán
+  Ákos Ruszkai
+  Barnabás "lordgalimow" Klemens
+  MmAaXx500
+  Peter "fpeterhu" Ferenczy
+  Ruszkai "CuBe0wL" Ákos
+  Titusz "diduuz" Érsek
+  Rob "xaN1C4n3"
+  Zsolt "Yellowberry" Zitting
+
+Indonesian:
+  Angeline Meilia
+  Ariesandy Hidayat
+  red koala
+
+Irish:
+  Kevin "kscanne" Scannell
+
+Italian:
+  amedeo463
+  Antonio "terencehill" Piu
+  Costa
+  Felice "MaidenBeast" Sallustio
+  Giovanni "rizzogianni73" Rizzello
+  Jessica Amoruso
+  stdi
+  XCostaX
+
+Japanese:
+  Antoni Das
+  Lento
+  Space Ace
+  Ryu "ryusho2523" N.
+  Victor "LegendGuard" Jaume
+  z411
+  堀川 "bapuru524" 健康
+
+Kazakh:
+  Артем "bystrov.arterm" Быстров
+
+Korean:
+  BYEONGJIN "ahnkoon" AN
+  Jisoo "LimJiSoo0719" Lim
+  Iso "coughingmouse" Lee
+  Seokho Son
+
+Latin:
+  oblector o
+
+Polish:
+  4m
+  Alex "tiprogrammierer.alex" Progger
+  Amadeusz "amade/proraide" Sławiński
+  Artur "artur9010" Motyka
+  Cris "Kshyso" Sus
+  David Agzo
+  Eryk "ewm" Michalak
+  Jakub "_Mpcs" Niklas
+  Jakub "KubeQ11" Pędziszewski
+  John "Myran" Smith
+  Kacper "kacperski1" Herchel
+  Karol "kRkk" Kosek
+  Kriss "Kriss7475" Chr
+  Lukasz Sekalski
+  Marcin "mpnogaj" Nogaj
+  Oliwier Jaszczyszyn
+  Paweł "siwyi" Goca
+  Piotr "vipkoza" Kozica
+  qqiLMFjv1iBfT3p6TNxjUThsaTVIXhQc
+  Rafał "Okava" Szymański
+  Robert "Szkodnix" Wolniak
+  Saikuru "saikuru0" Zero
+  Sertomas
+  SFS Atlas
+  tasopis
+  theQuos
+  Wojciech "g_host" Sikora
+
+Portuguese:
+  Ivan Paulos "greylica" Tomé
+  Jean Trindade "Muleke_Trairao" Pereira
+  lecalam
+  NotThatPrivate
+  Pedrada19
+  Ricardo Manuel "hellgardia" da Cruz Coelho da Silva
+  Rui "xendez"
+  xXxCHAOTICxXx
+
+Portuguese (Brazil):
+  Arno "Bleyom" Heinrich
+  Ivan Paulos "greylica" Tomé
+  Jean Trindade "Muleke_Trairao" Pereira
+  NotThatPrivate
+  Ricardo Manuel "hellgardia" da Cruz Coelho da Silva
+  Rui "xendez"
+  yy0zz
+  zerowhy
+
+Romanian:
+  Adrian-Ciprian "adrian.tinjala" Tînjală
+  busterdbk
+  Cuzenco "andonis1616" Andrei Robert
+  Daniel "dasj" Șerbănescu
+  Edward205
+  Iulian "ElektroBoom" Oancea
+  Mircea "Taoki" Kitsune
+  Sorin "unic_sorin" Botirla
+  Tudor "TropiKo" Ionel
+
+Russian:
+  Alex "alextalker7" Talker
+  Alexandr "zrg"
+  Alexei "PlasmaSheep" B.
+  Andrei "adem4ik" Stepanov
+  Andrey "dekrY" P.
+  Artem "skybon" Vorotnikov
+  Александр ABATAPA
+  Артём "Temak" Котлубай
+  Blueberryy
+  Dmitro "Gamebot" Sokhin
+  gravicappa
+  HelloWorld42404
+  Hot Dog
+  jusio
+  Lord Canistra
+  Mikita "rudzik8" Wiśniewski
+  Morosophos
+  Nikoli
+  Pavel "Pashok11" Mordachev
+  Plato "SemperPeritus" Efimov
+  Sergej "Clearness High" Lutsyk
+  Simple88
+  Темак
+  Пидарасенька
+
+Serbian:
+  Саша "salepetronije" Петровић
+  Marko M. Kostić
+  Nikola "asd222" Dundjerski
+  Pendulla
+  Rafael "Ristovski"
+
+Spanish:
+  0000simon
+  Alan "aagp" Garcia
+  Antonio "Antoniosirc" Sirera
+  Ari_tent
+  Belén "BelenVM" Velasco
+  brunodeleo
+  Damian "starfire24680" Kurek
+  Excruciatus "crucesignatus" X
+  Juan "Perju" Perez
+  Kammy
+  Lorenzo "lololailo" Soriano
+  Luciano "NeonKnightOA" Balducchi
+  roader_gentoo
+  Rodrigo Mouton Laudin
+  Roi Asher Gerszkoviez
+  SouL
+  Starfire24680
+  Victor "LegendGuard" Jaume
+  Vitama Piru Leta
+  Yllelder
+  Yotta Mxt
+  z411
+
+Swedish:
+  Gustaf "Hanicef" Alhäll
+  Karl-Oskar "machine" Rikås
+  Logan "norsvenska" Zerfass
+  marcus256
+  Hampus "xunz" Kreitz
+
+Turkish:
+  Abdurrahman "akkus12345" AKKUŞ
+  aggbhh20
+  Ahmet "ahmetlii"
+  Çağlar "caglarturali" Turalı
+  Bekir "bkrucarci"
+  Demiray "tulliana" Muhterem
+  Efeospt "Efeisot" KMR
+  Gokdeniz.Kucukali
+  ibra kap
+  Lucifer "Lucifer25x" Morningstar
+  Mehmet Ali "bluedream1381" Kaplan
+  Tan Siret "yutyocraft" Akıncı
+  xe1st
+
+Ukrainian:
+  BakerDoge
+  Dmitro "Gamebot" Sokhin
+  Ihor "iRomanyshyn" Romanyshyn
+  Ihor "uandreew" Andreev
+  Illia "imbirWIthSugar" Serediuk
+  Oleh "BlaXpirit" Prypin
+  Vasyl "CHUVACK" Kushniruk
+  Vasyl "Harmata" Melnyk
+  Yuriy "herrniemand" Ackermann
+
+Past Contributors
+-----------------
+  Akari
+  Alexander "motorsep" Zubov
+  Alexander "naryl" Suhoverhov
+  Amos "torus" Dudley
+  Andreas "Black" Kirsch
+  Attila "WW3" Houtkooper
+  BigMac
+  Braden "meoblast001" Walters
+  Brain Younds
+  BuddyFriendGuy
+  Chris "amethyst7" Matz
+  Christian Ice
+  Clinton "Kaziganthe" Freeman
+  Dan "Digger" Korostelev
+  Dan "Wazat" Hale
+  Diomedes
+  Dokujisan
+  Donkey
+  dstrek
+  Dustin Geeraert
+  Edgenetwork
+  Edward "Ed" Holness
+  Eric "Munyul Verminard" Sambach
+  Erik "Ablu" Schilling
+  Fabien "H. Reaper" Tschirhart
+  Florian Paul "lda17h" Schmidt
+  FrikaC
+  Garth "Zombie" Hendy
+  GATTS
+  Gerd "Elysis" Raudenbusch
+  Gottfried "Toddd" Hofmann
+  Henning "Tymo" Janssen
+  Innovati
+  Jeff
+  JH0nny
+  Jitspoe
+  Jody Gallagher
+  Jope "Sless" Withers
+  Jubilant
+  Juergen "LowDragon" Timm
+  KadaverJack
+  Kevin "Tyrann" Shanahan
+  Kristian "morfar" Johansson
+  Kurt Dereli
+  lcatlnx
+  Lee David Ash
+  Lee Vermeulen
+  leileilol
+  Lyberta
+  magorian
+  Marius "GreEn`mArine" Shekow
+  Marko "Urre" Permanto
+  Marvin "Mirio" Beck
+  Mathieu "Elric" Olivier
+  Mattrew "Tronyn" Rye
+  MauveBib
+  Mephisto
+  Mepper
+  michaelb
+  Michael "Tenshihan" Quinn
+  Mircea "Taoki" Kitsune
+  Munyul
+  Netzwerg
+  NoelCower
+  Oleh "BlaXpirit" Prypin
+  Parapraxis
+  parasti
+  Paul Scott
+  Paul "Strahlemann" Evers
+  Penguinum
+  Petithomme
+  PlasmaSheep
+  Przemysław "atheros" Grzywacz
+  Q1 Retexturing Project
+  Qantourisc
+  Rick "Rat" Kelley
+  Robert "ai" Kuroto
+  Ronan
+  Sajt
+  Samual "Ares" Lenks
+  Saulo "mand1nga" Gil
+  Shaggy
+  Shank
+  s1lence
+  Simon O’Callaghan
+  slava
+  Soelen
+  SomeGuy
+  SoulKeeper_p
+  Spike
+  Spirit
+  Stephan "esteel" Stahl
+  Steve Vermeulen
+  Supajoe
+  Sydes
+  Tei
+  The player with the unnecessarily long name
+  Tomaz
+  Ulrich Galbraith
+  Vortex
+  William Libert
+  William "Willis" Weilep
+  Yves "EviLair" Allaire
+  Zac "Mario" Jardine
+  Zenex
+  ... and a goat

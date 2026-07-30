@@ -1,11 +1,11 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using GS = XonoticGodot.Common.Gameplay.Scoring.GameScores; // T7: alias the static score table for the per-mode ScoreRules
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using GS = VortexArena.Common.Gameplay.Scoring.GameScores; // T7: alias the static score table for the per-mode ScoreRules
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Nexball gametype — port of <c>CLASS(NexBall, Gametype)</c>
@@ -158,7 +158,7 @@ public sealed class Nexball : GameType
 
     /// <summary>
     /// QC SpawnBall (+ spawnfunc nexball_basketball/football): create the world ball entity at
-    /// <paramref name="origin"/> through the shared <see cref="global::XonoticGodot.Common.Gameplay.BallEntity"/>
+    /// <paramref name="origin"/> through the shared <see cref="global::VortexArena.Common.Gameplay.BallEntity"/>
     /// framework so it gets the bbox / movetype / glow defaults, then install Nexball's own touch + the
     /// <see cref="BallThink"/> state machine (delay_start release → idle reset → 4-step glide-home). The ball
     /// stands on its spawn origin for <see cref="DelayStart"/> before InitBall releases it (QC nextthink =
@@ -177,7 +177,7 @@ public sealed class Nexball : GameType
             RespawnTime = DelayIdle,                              // QC g_nexball_delay_idle
             Effects = basketball ? EffectsDefault : 0,            // QC basketball_effects_default (EF_DIMLIGHT); football none
         };
-        Entity? e = global::XonoticGodot.Common.Gameplay.BallEntity.SpawnForGametype(
+        Entity? e = global::VortexArena.Common.Gameplay.BallEntity.SpawnForGametype(
             basketball ? BallKind.NexballBasketball : BallKind.NexballFootball, origin, cfg);
 
         BallEntity = e;
@@ -289,7 +289,7 @@ public sealed class Nexball : GameType
         if (BallEntity is Entity e)
         {
             // QC GiveBall: setorigin to plyr.origin + view_ofs, MOVETYPE_NONE, settouch func_null, scale down.
-            global::XonoticGodot.Common.Gameplay.BallEntity.AttachToCarrier(e, player, player.ViewOfs);
+            global::VortexArena.Common.Gameplay.BallEntity.AttachToCarrier(e, player, player.ViewOfs);
             e.Team = BallTeam;
             e.Touch = null;          // QC settouch(ball, func_null) — held ball isn't picked up by touch
             e.Velocity = Vector3.Zero;

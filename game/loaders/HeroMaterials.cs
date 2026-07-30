@@ -1,8 +1,8 @@
 using System;
 using Godot;
-using XonoticGodot.Formats.Materials;
+using VortexArena.Formats.Materials;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The "hero material" override table: a small set of named-and-keyworded Quake 3 / Darkplaces shaders
@@ -134,7 +134,7 @@ internal static class HeroMaterials
         return mat;
     }
 
-    private const string WaterShaderCode = @"// XonoticGodot hero water shader (Q3 surfaceparm water / dpwater). Generated in C#.
+    private const string WaterShaderCode = @"// VortexArena hero water shader (Q3 surfaceparm water / dpwater). Generated in C#.
 shader_type spatial;
 render_mode cull_disabled, blend_mix, depth_draw_opaque, specular_schlick_ggx;
 

@@ -9,17 +9,56 @@ export const meta = {
   ],
 }
 
-const PORT = 'C:/Users/Bryan/Projects/Xonotic/XonoticGodot'
-const WATCH = `${PORT}/planning/upstream-watch`
-const DATA = 'C:/Users/Bryan/Projects/Xonotic/Base/data/xonotic-data.pk3dir'
-const DP = 'C:/Users/Bryan/Projects/Xonotic/Base/darkplaces'
 const pad = n => `UW-${String(n).padStart(4, '0')}`
+
+// ---- Resolve the three roots (never hardcode them) ---------------------------
+// These were `C:/Users/Bryan/Projects/Xonotic/...` literals until the tree moved to Projects/Vortex/,
+// which killed all three. The damage is not a clean crash: an analyst whose `git -C <dead-path> show`
+// fails still owes this workflow a filled-in ANALYSIS_SCHEMA, so it answers from the commit TITLE
+// alone — and the result is a ledger row that looks reviewed but never saw the diff. Resolve and
+// verify before any analyst runs.
+const ROOTS_SCHEMA = {
+  type: 'object', required: ['port', 'data', 'darkplaces', 'ok'], additionalProperties: false,
+  properties: {
+    port: { type: 'string' }, data: { type: 'string' }, darkplaces: { type: 'string' },
+    ok: { type: 'boolean' }, note: { type: 'string' },
+  },
+}
+const roots = await agent(`Resolve three absolute filesystem roots and return them. Do NOT analyze any
+commits — this is a path-resolution task only.
+
+port = the Vortex Arena repo root: \`git rev-parse --show-toplevel\` (you start inside it).
+Then locate the upstream reference checkouts. Let BASE be the first of these that exists:
+  1. $VA_BASE_DIR            (only if VA_BASE_DIR is set in the environment)
+  2. <parent of port>/Base/data
+(that order mirrors tests/VortexArena.Tests/TestPaths.cs, the existing contract for where the
+reference checkout lives). Then:
+  data        = BASE/xonotic-data.pk3dir
+  darkplaces  = the sibling darkplaces checkout — BASE/../darkplaces, else BASE/darkplaces
+
+Both data and darkplaces must be real GIT CLONES, not just directories, because the analysts diff
+them with \`git -C <path> show\` and \`git -C <path> diff origin/master...\`. Verify each with
+\`git -C <path> rev-parse --git-dir\` AND confirm an origin/master ref exists
+(\`git -C <path> rev-parse --verify origin/master\`). Set ok=true only if all three resolve and both
+git checks pass on both repos; otherwise ok=false and say in note which check failed where.`,
+  { label: 'resolve-roots', phase: 'Load', agentType: 'Explore', effort: 'low', schema: ROOTS_SCHEMA })
+
+if (!roots || !roots.ok) {
+  throw new Error(`upstream-watch: cannot resolve the upstream checkouts, so the analysts would be `
+    + `triaging commits they cannot read — producing ledger rows written from commit titles alone. `
+    + `Resolver said: ${roots ? roots.note || '(no note)' : 'the resolver agent returned nothing'}. `
+    + `Fix: clone xonotic-data.pk3dir and darkplaces under <parent>/Base/, or set VA_BASE_DIR.`)
+}
+const PORT = roots.port
+const WATCH = `${PORT}/planning/upstream-watch`
+const DATA = roots.data
+const DP = roots.darkplaces
 
 const worklist = (args && args.worklist)
   ? (args.worklist.startsWith('/') || /^[A-Za-z]:/.test(args.worklist) ? args.worklist : `${PORT}/${args.worklist}`)
   : null
 
-log(`upstream-watch analysis: worklist=${worklist || '(latest in _inbox)'}`)
+log(`upstream-watch analysis: worklist=${worklist || '(latest in _inbox)'} · data=${DATA} dp=${DP}`)
 
 // ---- Load: worklist candidates + ledger high-water mark ---------------------
 const LOAD_SCHEMA = {

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using XonoticGodot.Common.Menu;
-using XonoticGodot.Formats.Sidecars;
+using VortexArena.Common.Menu;
+using VortexArena.Formats.Sidecars;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Pins the two src-level helpers behind the landing view-bob / idle-sway work:

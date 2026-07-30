@@ -14,9 +14,9 @@ features:
     base_refs:
       - "common/mutators/mutator/new_toys/sv_new_toys.qc:78 REGISTER_MUTATOR(nt, expr_evaluate(cvar_string(\"g_new_toys\")) && !MUTATOR_IS_ENABLED(mutator_instagib) && !MUTATOR_IS_ENABLED(ok))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:49 IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
-      - "src/XonoticGodot.Server/GameWorld.cs:614 (MutatorActivation.Apply call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:49 IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Server/GameWorld.cs:614 (MutatorActivation.Apply call)"
     constants:
       - { name: "g_new_toys", base: "1 (mutators.cfg:338)", port: "1 (assets/.../mutators.cfg:338)", match: true }
       - { name: "exclude when instagib active", base: "!MUTATOR_IS_ENABLED(mutator_instagib)", port: "g_instagib == 0", match: true }
@@ -45,10 +45,10 @@ features:
       - "common/mutators/mutator/new_toys/sv_new_toys.qc:92 MUTATOR_ONROLLBACK_OR_REMOVE"
       - "common/mutators/mutator/new_toys/new_toys.qc:6 nt_IsNewToy"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:68 Hook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:84 Unhook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:99 SetNewToyBlocked"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:62 IsNewToy"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:68 Hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:84 Unhook"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:99 SetNewToyBlocked"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:62 IsNewToy"
     constants:
       - { name: "new-toy weapon set", base: "WEP_SEEKER, WEP_MINE_LAYER, WEP_HLAC, WEP_RIFLE, WEP_ARC", port: "seeker, minelayer/mine_layer, hlac, rifle, arc", match: true }
       - { name: "ONADD time>1 runtime guard", base: "error('cannot be added at runtime')", port: "none (no time-guard)", match: false }
@@ -76,8 +76,8 @@ features:
       - "common/mutators/mutator/new_toys/sv_new_toys.qc:117 nt_GetFullReplacement"
       - "common/mutators/mutator/new_toys/sv_new_toys.qc:129 nt_GetReplacement"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:110 GetFullReplacement"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:123 GetReplacement"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:110 GetFullReplacement"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:123 GetReplacement"
     constants:
       - { name: "hagar -> seeker", base: "yes", port: "yes", match: true }
       - { name: "devastator -> minelayer", base: "yes", port: "yes", match: true }
@@ -107,9 +107,9 @@ features:
     base_refs:
       - "common/mutators/mutator/new_toys/sv_new_toys.qc:141 MUTATOR_HOOKFUNCTION(nt, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:133 OnSetStartItems"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:930 ComputeStartItems (fires SetStartItems.Call at cs:984)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs SetStartItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:133 OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:930 ComputeStartItems (fires SetStartItems.Call at cs:984)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs SetStartItems"
     constants:
       - { name: "RANDOM mode result", base: "OR BOTH core+newtoy bits (player gets BOTH)", port: "OR BOTH tokens into the resolved set (NewToysMutator.cs:146-152)", match: true }
       - { name: "ALWAYS mode result", base: "newtoy bit only (core dropped)", port: "newtoy token only (resolved set drops core)", match: true }
@@ -140,11 +140,11 @@ features:
       - "server/weapons/spawning.qc:weapon_defaultspawnfunc"
       - "server/weapons/spawning.qc:W_Apply_Weaponreplace"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:161 OnSetWeaponreplace"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:303 WeaponSpawn (fires FireSetWeaponreplace at cs:320)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs SetWeaponreplace / FireSetWeaponreplace"
-      - "src/XonoticGodot.Server/GameWorld.cs:4254 (parses map \"new_toys\" key onto Entity.NewToys)"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:375 W_Apply_Weaponreplace"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:161 OnSetWeaponreplace"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:303 WeaponSpawn (fires FireSetWeaponreplace at cs:320)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs SetWeaponreplace / FireSetWeaponreplace"
+      - "src/VortexArena.Server/GameWorld.cs:4254 (parses map \"new_toys\" key onto Entity.NewToys)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:375 W_Apply_Weaponreplace"
     constants:
       - { name: "per-entity .new_toys map key", base: "ret = wep.new_toys", port: "GameWorld.cs:4254 parses BSP \"new_toys\" -> Entity.NewToys; OnSetWeaponreplace cs:171 reads args.Item.NewToys", match: true }
       - { name: "auto replacement fallback", base: "nt_GetReplacement(wepinfo.netname, autoreplace)", port: "GetReplacement(args.Weapon.NetName, AutoReplace) (cs:173)", match: true }
@@ -175,10 +175,10 @@ features:
     base_refs:
       - "common/mutators/mutator/new_toys/sv_new_toys.qc:210 MUTATOR_HOOKFUNCTION(nt, FilterItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NewToysMutator.cs:181 OnFilterItem"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:105 (fires FilterItemDefinition)"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemPickupRules.cs:847 PlayPickupSound (consumes ItemPickupSoundOverride)"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs:73 (WEAPONPICKUP_NEW_TOYS)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NewToysMutator.cs:181 OnFilterItem"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:105 (fires FilterItemDefinition)"
+      - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:847 PlayPickupSound (consumes ItemPickupSoundOverride)"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs:73 (WEAPONPICKUP_NEW_TOYS)"
     constants:
       - { name: "g_new_toys_use_pickupsound", base: "0 (false) (mutators.cfg:340)", port: "0 (assets mutators.cfg:340), now READ in OnFilterItem (cs:190)", match: true }
       - { name: "SND_WEAPONPICKUP_NEW_TOYS", base: "weaponpickup_new_toys roflsound", port: "WEAPONPICKUP_NEW_TOYS (SoundsList.cs:73 -> 'weaponpickup_new_toys'), stamped via ItemPickupSoundOverride", match: true }

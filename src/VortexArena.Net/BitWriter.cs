@@ -3,12 +3,12 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Selects coordinate/angle precision for a write/read, mirroring the Darkplaces protocol tiers
 /// (<c>com_msg.c</c>): low = 13i coords (1/8 unit) + 8i angles (1.40625°), high = 16i coords +
-/// 16i angles, full = raw 32-bit float. The XonoticGodot wire format picks per-field; this enum lets the
+/// 16i angles, full = raw 32-bit float. The VortexArena wire format picks per-field; this enum lets the
 /// vector/angle helpers share one code path with a precision argument.
 /// </summary>
 public enum NetPrecision : byte
@@ -22,7 +22,7 @@ public enum NetPrecision : byte
 }
 
 /// <summary>
-/// Byte-oriented message writer over a growable buffer. The XonoticGodot analogue of a Darkplaces
+/// Byte-oriented message writer over a growable buffer. The VortexArena analogue of a Darkplaces
 /// <c>sizebuf_t</c> writer + the Xonotic <c>net.qh</c> Write* wrappers, but we own the layout
 /// (<see href="ADR-0011"/>): little-endian integers via <see cref="BinaryPrimitives"/>,
 /// length-prefixed UTF-8 strings, quantization delegated to <see cref="Quantize"/>.
@@ -152,7 +152,7 @@ public sealed class BitWriter
 
     /// <summary>
     /// Overwrite the 16-bit little-endian unsigned value at byte offset <paramref name="offset"/> (which must
-    /// already have been reserved by a prior <see cref="WriteUShort"/>). The XonoticGodot analogue of writing a
+    /// already have been reserved by a prior <see cref="WriteUShort"/>). The VortexArena analogue of writing a
     /// placeholder count, appending a variable number of records, then patching the real count in — used by
     /// the snapshot/event bundlers where the record count isn't known until after the loop. No-op (and a
     /// debug-time guard) if the range is out of the written region.

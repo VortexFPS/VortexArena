@@ -10,15 +10,15 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Server;
+using VortexArena.Common;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 [Collection("GlobalState")]
 public sealed class NexballSpawnTests
@@ -26,7 +26,7 @@ public sealed class NexballSpawnTests
     // The gametype is a registry SINGLETON, so a prior test's match leaves the unified GameScores team table
     // populated; Nexball.Activate() only zeroes it on the FIRST activation (the _deathHandler guard skips a
     // re-activate). Reset the team-score table before each test so goal tallies start clean regardless of order.
-    public NexballSpawnTests() => XonoticGodot.Common.Gameplay.Scoring.GameScores.ResetTeams();
+    public NexballSpawnTests() => VortexArena.Common.Gameplay.Scoring.GameScores.ResetTeams();
 
     private static EntityDict Dict(string cls, Vector3 origin = default)
         => new() { ClassName = cls, Origin = origin };

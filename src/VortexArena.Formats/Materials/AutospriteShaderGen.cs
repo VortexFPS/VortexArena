@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace XonoticGodot.Formats.Materials;
+namespace VortexArena.Formats.Materials;
 
 /// <summary>
 /// Generates the GDShader source for a Q3 <c>deformVertexes autosprite</c>/<c>autosprite2</c> surface —
@@ -35,7 +35,7 @@ public static class AutospriteShaderGen
     public static string Generate(ShaderDef def, ShaderStage stage, bool axial)
     {
         var sb = new StringBuilder(1536);
-        sb.Append("// XonoticGodot autosprite").Append(axial ? "2" : "").Append(" deform shader for '")
+        sb.Append("// VortexArena autosprite").Append(axial ? "2" : "").Append(" deform shader for '")
           .Append(Sanitize(def.Name)).Append("'. Generated in C#.\n");
         sb.Append("shader_type spatial;\n");
         // skip_vertex_transform: VERTEX/NORMAL are assigned in VIEW space by our vertex() below.

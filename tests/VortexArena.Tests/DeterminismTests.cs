@@ -1,13 +1,13 @@
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Cross-architecture / cross-run DETERMINISM validation (REMAINING-WORK §6 — "Cross-architecture determinism
@@ -47,9 +47,9 @@ public class DeterminismTests
         var world = FlatWorld();
         var clock = new MutableClock();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         float vx0 = 200f;
         for (int i = 0; i < perturbVelX; i++) vx0 = MathF.BitIncrement(vx0);
@@ -95,9 +95,9 @@ public class DeterminismTests
         var world = AnalyticWorld.FromPlanes(System.Array.Empty<(int, float[])>()); // open air, no geometry
         var clock = new MutableClock();
         Api.Services = new MovementTestServices(world, clock);
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
 
         float vx0 = 320f;
         for (int i = 0; i < perturbVelX; i++) vx0 = MathF.BitIncrement(vx0);
@@ -257,29 +257,46 @@ public class DeterminismTests
         };
         string[] dirs =
         {
-            RepoPath("src", "XonoticGodot.Common", "Physics"),
-            RepoPath("src", "XonoticGodot.Common", "Math"),
-            RepoPath("src", "XonoticGodot.Engine", "Simulation"),
+            RepoPath("src", "VortexArena.Common", "Physics"),
+            RepoPath("src", "VortexArena.Common", "Math"),
+            RepoPath("src", "VortexArena.Engine", "Simulation"),
         };
+        // A scanner that finds nothing must FAIL, not pass. These directory names carry the project's old
+        // codename, and the Tier-1 rename relocates all three (src/VortexArena.* -> src/VortexArena.*).
+        // With the old `if (!Directory.Exists(dir)) continue;` the loop would then skip every directory,
+        // `offenders` would be empty, and this test would report green while scanning zero files - the same
+        // failure mode that hid a broken TestPaths.HasMaps probe. Assert the directories resolve.
+        var missing = dirs.Where(d => !System.IO.Directory.Exists(d)).ToList();
+        Assert.True(
+            missing.Count == 0,
+            "the simulation source directories this guard scans do not exist, so it would pass without "
+                + "checking anything. They were probably renamed - update the list.\n  missing: "
+                + string.Join("\n           ", missing));
+
         var offenders = new List<string>();
+        int scanned = 0;
         foreach (string dir in dirs)
         {
-            if (!System.IO.Directory.Exists(dir)) continue;
             foreach (string file in System.IO.Directory.EnumerateFiles(dir, "*.cs", System.IO.SearchOption.AllDirectories))
             {
                 if (file.Contains(System.IO.Path.DirectorySeparatorChar + "obj" + System.IO.Path.DirectorySeparatorChar)) continue;
+                scanned++;
                 string text = System.IO.File.ReadAllText(file);
                 foreach (string bad in forbidden)
                     if (text.Contains(bad))
                         offenders.Add($"{System.IO.Path.GetFileName(file)}: {bad}");
             }
         }
+
+        // Belt and braces: the directories could exist and be empty, which is the same vacuous pass.
+        Assert.True(scanned > 20, $"only {scanned} simulation source files scanned - too few to be a real "
+                                  + "check; the scan roots are probably wrong");
         Assert.True(offenders.Count == 0, "non-deterministic API in the simulation source: " + string.Join(", ", offenders));
     }
 
     private static string RepoPath(params string[] parts)
     {
-        // tests/XonoticGodot.Tests/<thisdir> -> repo root is two levels up.
+        // tests/VortexArena.Tests/<thisdir> -> repo root is two levels up.
         string testsDir = SourceDir();
         string root = System.IO.Directory.GetParent(System.IO.Directory.GetParent(testsDir)!.FullName)!.FullName;
         return System.IO.Path.Combine(new[] { root }.Concat(parts).ToArray());

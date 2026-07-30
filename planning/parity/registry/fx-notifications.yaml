@@ -17,9 +17,9 @@ features:
       - "common/notifications/all.qh:704 (REGISTRY(Notifications, BITS(11)))"
       - "common/notifications/all.inc (MSG_*_NOTIF macro table)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/Notification.cs (MsgType enum: Annce/Info/Center/Multi/Choice + CenterKill/CenterTitle/CenterDuelTitle/CenterRaw)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:43 (RegisterAll)"
-      - "src/XonoticGodot.Common/GameInit.cs:23 (Notifications.RegisterAll)"
+      - "src/VortexArena.Common/Gameplay/Notifications/Notification.cs (MsgType enum: Annce/Info/Center/Multi/Choice + CenterKill/CenterTitle/CenterDuelTitle/CenterRaw)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:43 (RegisterAll)"
+      - "src/VortexArena.Common/GameInit.cs:23 (Notifications.RegisterAll)"
     constants:
       - { name: "Base all.inc macro invocations", base: "80 ANNCE + 237 INFO + 197 CENTER + 166 MULTI + 13 CHOICE + 82 TEAM/MULTITEAM", port: "n/a (different structuring)", match: false }
       - { name: "port builder invocations (incl. loops/team expansion)", base: "~727 effective", port: "715 explicit builder calls + loop/team expansions (>= Base in INFO/CENTER/MULTI/CHOICE counts)", match: true }
@@ -50,8 +50,8 @@ features:
       - "common/notifications/all.qc:1646 (Send_Notification_Core)"
       - "common/notifications/all.qh:243 (ENUMCLASS(NOTIF))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:130 (Send)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:365 (SplitArgs)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:130 (Send)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:365 (SplitArgs)"
     constants:
       - { name: "arg-count check", base: "stringcount+floatcount==count", port: "args.Length==StringCount+FloatCount", match: true }
       - { name: "NOTIF broadcast modes", base: "6 (ONE/ONE_ONLY/TEAM/TEAM_EXCEPT/ALL/ALL_EXCEPT)", port: "6 (NotifBroadcast)", match: true }
@@ -136,8 +136,8 @@ features:
       - "common/notifications/all.qh:486 (KILL_SPREE_LIST)"
       - "common/notifications/all.qh:294 (autocvar defaults: show_location=false, show_sprees=true, show_sprees_info=3)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationTokens.cs (ResolveOne case table; race/key-bind/hash tokens; ShowLocation/ShowSprees/CvarBool; KeyBindSentinel)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs (FormatTokens/Sprintf)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationTokens.cs (ResolveOne case table; race/key-bind/hash tokens; ShowLocation/ShowSprees/CvarBool; KeyBindSentinel)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs (FormatTokens/Sprintf)"
       - "game/hud/HudNotifications.cs:177 (SubstituteKeyBinds), :203 (ResolveKeyBind -> BindTable.CommandKey) — client-side key-bind sentinel resolution"
     constants:
       - { name: "KILL_SPREE_LIST milestones", base: "3/5/10/15/20/25/30", port: "3/5/10/15/20/25/30 (SpreeList)", match: true }
@@ -161,7 +161,7 @@ features:
       - "Tokens are resolved SERVER-side reading the SERVER's notification_show_location / _show_sprees* cvars; in Base these are CSQC-side per-client, so the port loses per-client control of location/spree display (direct consequence of server-side formatting — see fx-notifications.net.protocol intended divergence). This is the ONLY residual on the token path — every QC NOTIF_ARGUMENT_LIST token is now resolved (race/key-bind/hash included)."
     verification:
       - { kind: code, ref: "NotificationTokens.ResolveOne case table vs NOTIF_ARGUMENT_LIST: s1-4/s*loc/f*/spree/frag/location/ordinal/time/item_wepname/item_buffname/item_wepammo/death_team ALL present; race tokens f1/f2/f3race_time (:99-101 -> GameScores.TimeEncodedToString), race_col (:104), race_diff (:106 -> RaceDiff) now resolved; s3#s2/#s2 hash-replace (:125-126) resolved; pass_key/nade_key/join_key (:132-134) emit a recoverable sentinel", result: pass }
-      - { kind: code, ref: "key-bind sentinel round-trips: NotifTokens.KeyBindSentinel (server, ARG_CS) -> wire WriteString -> HudNotifications.SubstituteKeyBinds (:177) -> ResolveKeyBind (:203) -> BindTable.CommandKey('drop flag','+use')/('throw nade','weapon_drop')/('jump','+jump') (verified BindTable.CommandKey exists, src/XonoticGodot.Engine/Console/BindTable.cs:64)", result: pass }
+      - { kind: code, ref: "key-bind sentinel round-trips: NotifTokens.KeyBindSentinel (server, ARG_CS) -> wire WriteString -> HudNotifications.SubstituteKeyBinds (:177) -> ResolveKeyBind (:203) -> BindTable.CommandKey('drop flag','+use')/('throw nade','weapon_drop')/('jump','+jump') (verified BindTable.CommandKey exists, src/VortexArena.Engine/Console/BindTable.cs:64)", result: pass }
       - { kind: code, ref: "CvarBool defaults match Base — show_location fallback false (Base 0, :145), both specialonly fallback true (Base 1, :215/:239); item_wepammo returns the real ammo type via AmmoType switch (:287)", result: pass }
       - { kind: code, ref: "RaceTime delegates to the shared, verified Scoring.GameScores.TimeEncodedToString (compact) — same clockedtime_tostring port used by CommandReplies; Common project builds clean", result: pass }
       - { kind: test, ref: "NotificationPolishTests (token formatting), HeadshotTests", result: pass }
@@ -175,7 +175,7 @@ features:
       - "common/notifications/all.qc:1297 (Local_Notification MSG_MULTI)"
       - "common/notifications/all.qc:594 (Create_Notification_Entity_Multi)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:287 (DispatchMulti/TryDispatchSub)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:287 (DispatchMulti/TryDispatchSub)"
     constants:
       - { name: "sub arg-count clamp", base: "max(info,center) stringcount/floatcount", port: "Slice to sub.StringCount/FloatCount", match: true }
     status:
@@ -203,10 +203,10 @@ features:
       - "common/notifications/all.qc:1577 (Send_Notification MSG_CHOICE recursion)"
       - "common/notifications/all.qh:882 (ReplicateVars), all.qc:707 (Notification_GetCvars)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:325 (DispatchChoice)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationChoiceState.cs (replicate, ChoiceCvarName)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/Notification.cs (ChoiceIdx + NotificationChoiceIndexer)"
-      - "src/XonoticGodot.Server/Commands.cs:206 (RegisteredChoiceCvarNames gate); game/net/ClientNet.cs:681 (notification_<name> replicate list)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:325 (DispatchChoice)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationChoiceState.cs (replicate, ChoiceCvarName)"
+      - "src/VortexArena.Common/Gameplay/Notifications/Notification.cs (ChoiceIdx + NotificationChoiceIndexer)"
+      - "src/VortexArena.Server/Commands.cs:206 (RegisteredChoiceCvarNames gate); game/net/ClientNet.cs:681 (notification_<name> replicate list)"
     constants:
       - { name: "challow levels", base: "0 never / 1 warmup / 2 always", port: "NotifAllowed Never/Warmup/Always", match: true }
       - { name: "choice value", base: "0 off / 1 optiona / 2 optionb", port: "0 suppress / 1 A / 2 B (ChoiceValues, DefaultChoiceValue=1)", match: true }
@@ -263,8 +263,8 @@ features:
       - "common/notifications/all.qh:310 (notification_item_centerprinttime=1.5)"
       - "common/notifications/all.qh:462 (item_centime token)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/Notification.cs:119 (Durcnt field), :259 (Center builder durcnt param)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:79 (CenterDurcnt table — 36 Base all.inc specs), :120 (ApplyCenterDurcnt called from RegisterAll:66)"
+      - "src/VortexArena.Common/Gameplay/Notifications/Notification.cs:119 (Durcnt field), :259 (Center builder durcnt param)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:79 (CenterDurcnt table — 36 Base all.inc specs), :120 (ApplyCenterDurcnt called from RegisterAll:66)"
       - "game/hud/HudNotifications.cs:183 (ResolveDurcnt), :208 (ResolveDurcnt impl), :225 (ResolveDurcntToken: item_centime/fN/literal)"
       - "game/net/ClientNet.cs:1155 (Notifications.ById recovers notif so notif.Durcnt is readable client-side)"
     constants:
@@ -358,9 +358,9 @@ features:
       - "client/announcer.qc:58 (Announcer_Countdown), :127 (Announcer_Gamestart)"
       - "common/util.qc:1924 (Announcer_PickNumber)"
     port_refs:
-      - "src/XonoticGodot.Server/AnnouncerController.cs:81 (Tick), :137 (CheckMinute), :192 (PickCountdownNumber)"
-      - "src/XonoticGodot.Server/{WarmupController,RoundHandler}.cs (OnCountdownTick)"
-      - "src/XonoticGodot.Server/GameWorld.cs (BroadcastGameStartCountdown, OnCountdownTick wiring)"
+      - "src/VortexArena.Server/AnnouncerController.cs:81 (Tick), :137 (CheckMinute), :192 (PickCountdownNumber)"
+      - "src/VortexArena.Server/{WarmupController,RoundHandler}.cs (OnCountdownTick)"
+      - "src/VortexArena.Server/GameWorld.cs (BroadcastGameStartCountdown, OnCountdownTick wiring)"
     constants:
       - { name: "cl_announcer_maptime", base: "3 (0/1/2/3 off/1min/5min/both)", port: "3 (AnnouncerMapTime, server config)", match: true }
       - { name: "CHECKMINUTE window", base: "timeleft < m*60 && > m*60-1", port: "same (CheckMinute)", match: true }
@@ -390,9 +390,9 @@ features:
       - "common/notifications/all.qc:567 (GENTLE selection in Create_Notification_Entity_InfoCenter)"
       - "common/notifications/all.qh (GENTLE macro, gentle string per notif)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:116 (GentleMode), :358 (SelectTemplate)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs (gentle arg captured per Info/Center)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1849 (GentleMode = sv_gentle != 0, per-tick StartFrame)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:116 (GentleMode), :358 (SelectTemplate)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs (gentle arg captured per Info/Center)"
+      - "src/VortexArena.Server/GameWorld.cs:1849 (GentleMode = sv_gentle != 0, per-tick StartFrame)"
     constants:
       - { name: "cl_gentle / sv_gentle source", base: "GENTLE (cl_gentle/sv_gentle)", port: "GentleMode <- sv_gentle (GameWorld.cs:1716), per-tick", match: true }
     status:
@@ -420,13 +420,13 @@ features:
       - "common/notifications/all.qc:1372 (MSG_CENTER_KILL handler -> centerprint_Kill / centerprint_KillAll)"
       - "common/notifications/all.qh:273 (Kill_Notification decl)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:210 (SendCenterKill)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/Notification.cs:40 (MsgType.CenterKill)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:210 (SendCenterKill)"
+      - "src/VortexArena.Common/Gameplay/Notifications/Notification.cs:40 (MsgType.CenterKill)"
       - "game/net/ServerNet.cs:2782 (WriteNotification writes WireType)"
       - "game/hud/HudNotifications.cs:126 (CenterKill case -> CenterPrint.Kill / ClearAll)"
-      - "src/XonoticGodot.Server/GameWorld.cs:864 (warmup abort -> CPID_ROUND), :1914 (idle warning clear -> CPID_IDLING), :3810/:4491 (world reset -> KillAll)"
-      - "src/XonoticGodot.Server/Teamplay.cs:1080 (team change -> CPID_REMOVE)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:200 (on death -> CPID_CAMPCHECK), InstagibMutator.cs:392 (find-ammo cleared -> CPID_INSTAGIB_FINDAMMO)"
+      - "src/VortexArena.Server/GameWorld.cs:864 (warmup abort -> CPID_ROUND), :1914 (idle warning clear -> CPID_IDLING), :3810/:4491 (world reset -> KillAll)"
+      - "src/VortexArena.Server/Teamplay.cs:1080 (team change -> CPID_REMOVE)"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:200 (on death -> CPID_CAMPCHECK), InstagibMutator.cs:392 (find-ammo cleared -> CPID_INSTAGIB_FINDAMMO)"
     constants:
       - { name: "empty cpid -> KillAll", base: "CPID_Null -> centerprint_KillAll (all.qc:1389)", port: "empty/null text -> CenterPrint.ClearAll (HudNotifications.cs:129)", match: true }
     status:
@@ -454,11 +454,11 @@ features:
       - "client/announcer.qc:45 (centerprint_SetDuelTitle in Announcer_Duel)"
       - "client/hud/panel/centerprint.qc:154 (centerprint_SetDuelTitle), :161 (centerprint_SetTitle)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:234 (SendCenterTitle), :250 (SendCenterDuelTitle)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/Notification.cs:46 (MsgType.CenterTitle), :52 (CenterDuelTitle)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:234 (SendCenterTitle), :250 (SendCenterDuelTitle)"
+      - "src/VortexArena.Common/Gameplay/Notifications/Notification.cs:46 (MsgType.CenterTitle), :52 (CenterDuelTitle)"
       - "game/hud/HudNotifications.cs:134 (CenterTitle case), :142 (CenterDuelTitle case)"
       - "game/hud/CenterPrintPanel.cs:162 (SetTitle), :174 (SetDuelTitle), :183 (ClearTitle)"
-      - "src/XonoticGodot.Server/GameWorld.cs:2581 (BroadcastCountdownTitle), :2607 (^BG title), :2599 (duel pair), :867/:2538/:2628 (title clear)"
+      - "src/VortexArena.Server/GameWorld.cs:2581 (BroadcastCountdownTitle), :2607 (^BG title), :2599 (duel pair), :867/:2538/:2628 (title clear)"
     constants:
       - { name: "gametype title prefix", base: "strcat(\"^BG\", MapInfo_Type_ToText(gametype))", port: "\"^BG\" + name (GameWorld.cs:1659)", match: true }
       - { name: "duel title source", base: "top two non-spectator players (Announcer_Duel)", port: "top two non-observer/non-spectator players (GameWorld.cs BroadcastCountdownTitle)", match: true }
@@ -486,10 +486,10 @@ features:
       - "client/hud/panel/centerprint.qc (centerprint_Add / centerprint_AddStandard for raw centerprint())"
       - "server: chat private centerprint (cmsgstr), trigger/target .message, target_print, MOTD"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:267 (SendCenterRaw)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/Notification.cs:59 (MsgType.CenterRaw)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:267 (SendCenterRaw)"
+      - "src/VortexArena.Common/Gameplay/Notifications/Notification.cs:59 (MsgType.CenterRaw)"
       - "game/hud/HudNotifications.cs:146 (CenterRaw case -> CenterPrint.Add)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:801 (.message text), src/XonoticGodot.Server/Mutators/SuperSpecMutator.cs:231"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:801 (.message text), src/VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs:231"
     constants:
       - { name: "no cpid group", base: "raw centerprint has no cpid (centerprint_AddStandard)", port: "CenterPrint.Add (no Id) (HudNotifications.cs:150)", match: true }
     status:

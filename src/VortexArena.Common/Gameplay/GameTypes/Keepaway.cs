@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
-using GS = XonoticGodot.Common.Gameplay.Scoring.GameScores; // T7: alias the static score table for the per-mode ScoreRules
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
+using GS = VortexArena.Common.Gameplay.Scoring.GameScores; // T7: alias the static score table for the per-mode ScoreRules
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Keepaway — port of <c>CLASS(Keepaway, Gametype)</c>
@@ -345,7 +345,7 @@ public sealed class Keepaway : GameType
         // Attach the ball entity to the carrier (QC ka_TouchEvent setattachment + SOLID_NOT + carried-ball think).
         if (BallEntity is Entity e)
         {
-            global::XonoticGodot.Common.Gameplay.BallEntity.AttachToCarrier(e, player, Vector3.Zero);
+            global::VortexArena.Common.Gameplay.BallEntity.AttachToCarrier(e, player, Vector3.Zero);
             e.Think = null;        // carried-ball orbit is driven from Tick, not the loose-ball relocate think
             e.NextThink = 0f;      // carried ball has no respawn think
             SoundSystem.PlayOn(e, Sounds.ByName("KA_PICKEDUP")); // QC SND_KA_PICKEDUP, ATTEN_NONE
@@ -372,7 +372,7 @@ public sealed class Keepaway : GameType
         // re-arm the relocate timer (QC ka_DropEvent: setattachment NULL + '0 0 200'+crandom + wait/previous_owner).
         if (BallEntity is Entity e)
         {
-            global::XonoticGodot.Common.Gameplay.BallEntity.DropFromCarrier(e, RespawnTime, takesDamage: true);
+            global::VortexArena.Common.Gameplay.BallEntity.DropFromCarrier(e, RespawnTime, takesDamage: true);
             e.Think = RespawnBallThink;
         }
 
@@ -406,13 +406,13 @@ public sealed class Keepaway : GameType
             Touch = BallTouchEntity,
             RespawnTime = RespawnTime,
         };
-        Entity? e = global::XonoticGodot.Common.Gameplay.BallEntity.SpawnForGametype(BallKind.KeepawayBall, origin, cfg);
+        Entity? e = global::VortexArena.Common.Gameplay.BallEntity.SpawnForGametype(BallKind.KeepawayBall, origin, cfg);
         return AdoptBall(e);
     }
 
     /// <summary>
     /// Adopt a ball created by the host's round-drive seam (QC ka_Handler_CheckBall → ka_SpawnBalls) as THIS
-    /// gametype's single ball. The shared <see cref="global::XonoticGodot.Common.Gameplay.BallEntity"/> spawner
+    /// gametype's single ball. The shared <see cref="global::VortexArena.Common.Gameplay.BallEntity"/> spawner
     /// builds + relocates the edict; the gametype records it and clears any carrier. Returns the same entity.
     /// </summary>
     public Entity? AdoptBall(Entity? e)
@@ -448,7 +448,7 @@ public sealed class Keepaway : GameType
         // and the new spot (Send_Effect(EFFECT_KA_BALL_RESPAWN, oldballorigin, ...) + at this.origin).
         Vector3 oldBallOrigin = e.Origin;
         // QC ka_RespawnBall: MoveToRandomMapLocation (with the SelectSpawnPoint fallback) + '0 0 200' kick + arm.
-        global::XonoticGodot.Common.Gameplay.BallEntity.Relocate(e, RespawnTime);
+        global::VortexArena.Common.Gameplay.BallEntity.Relocate(e, RespawnTime);
         e.Think = RespawnBallThink;
         // QC ka_RespawnBall: Send_Effect(EFFECT_KA_BALL_RESPAWN, oldballorigin, '0 0 0', 1);
         //                    Send_Effect(EFFECT_KA_BALL_RESPAWN, this.origin, '0 0 0', 1);
@@ -469,7 +469,7 @@ public sealed class Keepaway : GameType
             if (p.IsDead)
                 return;
             // QC ka_DropEvent self-recapture lockout: a carrier who just dropped can't instantly re-grab it.
-            if (global::XonoticGodot.Common.Gameplay.BallEntity.IsRecaptureLocked(self, p))
+            if (global::VortexArena.Common.Gameplay.BallEntity.IsRecaptureLocked(self, p))
                 return;
             PickUp(p);
             return;
@@ -570,7 +570,7 @@ public sealed class Keepaway : GameType
         // so cnt=chainCount=1). Keeps the ball entity riding the carrier so the model/glow tracks them.
         if (BallEntity is Entity e)
         {
-            Vector3 pos = global::XonoticGodot.Common.Gameplay.BallEntity.CarryOrbit(
+            Vector3 pos = global::VortexArena.Common.Gameplay.BallEntity.CarryOrbit(
                 carrier.Origin, GametypeEntities.Now, cnt: 1, chainCount: 1);
             GametypeEntities.SetOrigin(e, pos);
             // QC also syncs the ball alpha to the carrier's invisibility (this.alpha = this.owner.alpha); the

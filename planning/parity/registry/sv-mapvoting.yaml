@@ -17,8 +17,8 @@ features:
       - "server/mapvoting.qc:MapVote_Start"
       - "server/mapvoting.qc:MapVote_Think"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
-      - "src/XonoticGodot.Server/MapVoting.cs:Tick"
+      - "src/VortexArena.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
+      - "src/VortexArena.Server/MapVoting.cs:Tick"
     constants:
       - { name: "think_cadence_s", base: "0.5", port: "0.5 (ThinkCadenceSeconds, self-throttled in Tick)", match: true }
       - { name: "winner_to_changelevel_delay_s", base: "1", port: "1 (WinnerToChangeLevelDelaySeconds — consulted by GameWorld via ReadyToChangeLevel)", match: true }
@@ -46,9 +46,9 @@ features:
       - "server/mapvoting.qc:MapVote_AddVotableMaps"
       - "server/mapvoting.qc:MapVote_AddVotable"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs:Start"
-      - "src/XonoticGodot.Server/MapVoting.cs:AddVotable"
-      - "src/XonoticGodot.Server/GameWorld.cs:StartMapVoteOrRotation"
+      - "src/VortexArena.Server/MapVoting.cs:Start"
+      - "src/VortexArena.Server/MapVoting.cs:AddVotable"
+      - "src/VortexArena.Server/GameWorld.cs:StartMapVoteOrRotation"
     constants:
       - { name: "g_maplist_votable", base: "6", port: "6", match: true }
       - { name: "MAPVOTE_COUNT", base: "20", port: "30 (MaxCandidates, panel only); server nmax = g_maplist_votable", match: false }
@@ -79,7 +79,7 @@ features:
       - "server/world.qc:DoNextMapOverride"
       - "server/world.qc:GotoNextMap"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
+      - "src/VortexArena.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
     constants:
       - { name: "samelevel", base: "0", port: "read via Cvars.Bool(\"samelevel\")", match: true }
     status:
@@ -131,8 +131,8 @@ features:
     base_refs:
       - "server/mapvoting.qc:MapVote_Tick"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs:CastVote"
-      - "src/XonoticGodot.Server/Commands.cs:DispatchImpulse"
+      - "src/VortexArena.Server/MapVoting.cs:CastVote"
+      - "src/VortexArena.Server/Commands.cs:DispatchImpulse"
       - "game/net/NetGame.cs:CastMapVote"
     constants: []
     status:
@@ -159,8 +159,8 @@ features:
       - "server/mapvoting.qc:MapVote_AddVotable"
       - "server/mapvoting.qc:MapVote_CheckRules_decide"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs:Abstain"
-      - "src/XonoticGodot.Server/Commands.cs:DispatchImpulse"
+      - "src/VortexArena.Server/MapVoting.cs:Abstain"
+      - "src/VortexArena.Server/Commands.cs:DispatchImpulse"
     constants:
       - { name: "g_maplist_votable_abstain", base: "0", port: "0", match: true }
     status:
@@ -186,9 +186,9 @@ features:
       - "server/mapvoting.qc:MapVote_CheckRules_count"
       - "server/mapvoting.qc:MapVote_ranked_cmp"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs:RecountFromBallots"
-      - "src/XonoticGodot.Server/MapVoting.cs:RankCandidates"
-      - "src/XonoticGodot.Server/MapVoting.cs:Finish"
+      - "src/VortexArena.Server/MapVoting.cs:RecountFromBallots"
+      - "src/VortexArena.Server/MapVoting.cs:RankCandidates"
+      - "src/VortexArena.Server/MapVoting.cs:Finish"
     constants: []
     status:
       logic: faithful
@@ -213,8 +213,8 @@ features:
     base_refs:
       - "server/mapvoting.qc:MapVote_CheckRules_decide"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs:CheckRulesDecide"
-      - "src/XonoticGodot.Server/MapVoting.cs:LeaderIsUnbeatable"
+      - "src/VortexArena.Server/MapVoting.cs:CheckRulesDecide"
+      - "src/VortexArena.Server/MapVoting.cs:LeaderIsUnbeatable"
     constants:
       - { name: "g_maplist_votable_timeout", base: "30", port: "30", match: true }
     status:
@@ -239,8 +239,8 @@ features:
     base_refs:
       - "server/mapvoting.qc:MapVote_CheckRules_decide"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs:CheckRulesDecide"
-      - "src/XonoticGodot.Server/MapVoting.cs:ReduceRemoveThis"
+      - "src/VortexArena.Server/MapVoting.cs:CheckRulesDecide"
+      - "src/VortexArena.Server/MapVoting.cs:ReduceRemoveThis"
       - "game/net/NetGame.cs:UpdateMapVotePanel"
     constants:
       - { name: "g_maplist_votable_reduce_time", base: "15", port: "15 (REGISTERED, Cvars.cs)", match: true }
@@ -269,8 +269,8 @@ features:
       - "server/mapvoting.qc:MapVote_Finished"
       - "server/mapvoting.qc:MapVote_Winner"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs:Finish"
-      - "src/XonoticGodot.Server/GameWorld.cs:ApplyMapChange"
+      - "src/VortexArena.Server/MapVoting.cs:Finish"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyMapChange"
       - "game/net/NetGame.cs:UpdateMapVotePanel"
     constants: []
     status:
@@ -300,9 +300,9 @@ features:
       - "server/mapvoting.qc:GameTypeVote_SetGametype"
       - "server/mapvoting.qc:GameTypeVote_AddVotable"
     port_refs:
-      - "src/XonoticGodot.Server/MapVoting.cs:StartGametype"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
-      - "src/XonoticGodot.Server/GameWorld.cs:ApplyGametypeSwitch"
+      - "src/VortexArena.Server/MapVoting.cs:StartGametype"
+      - "src/VortexArena.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyGametypeSwitch"
       - "game/net/NetGame.cs:UpdateMapVotePanel"
     constants:
       - { name: "sv_vote_gametype", base: "0", port: "0", match: true }
@@ -338,9 +338,9 @@ features:
     base_refs:
       - "server/mapvoting.qc:MapVote_Suggest"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdSuggestMap"
-      - "src/XonoticGodot.Server/MapVoting.cs:Start"
-      - "src/XonoticGodot.Server/GameWorld.cs:StartMapVoteOrRotation"
+      - "src/VortexArena.Server/Commands.cs:CmdSuggestMap"
+      - "src/VortexArena.Server/MapVoting.cs:Start"
+      - "src/VortexArena.Server/GameWorld.cs:StartMapVoteOrRotation"
     constants:
       - { name: "g_maplist_votable_suggestions", base: "2", port: "2", match: true }
       - { name: "g_maplist_votable_suggestions_override_mostrecent", base: "0", port: "0", match: true }

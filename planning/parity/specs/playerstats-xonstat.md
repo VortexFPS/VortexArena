@@ -1,7 +1,7 @@
 # PlayerStats / XonStat — parity spec
 
 **Base refs:** `common/playerstats.qc` + `.qh` · `lib/urllib.qc` + `.qh` · `lib/json.qc` + `.qh` (feeds: `server/damage.qc`, `server/scores.qc`, `server/anticheat.qc`, `server/client.qc`, `server/player.qc`, `common/state.qc`, `server/world.qc`)
-**Port refs:** `src/XonoticGodot.Server/PlayerStats.cs` · `src/XonoticGodot.Server/GameWorld.cs` · `game/menu/dialogs/DialogMultiplayerProfile.cs`
+**Port refs:** `src/VortexArena.Server/PlayerStats.cs` · `src/VortexArena.Server/GameWorld.cs` · `game/menu/dialogs/DialogMultiplayerProfile.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-07-02
 
 > Scope note: the prompt-era path `server/playerstats.qc` does not exist at this rev — playerstats
@@ -123,7 +123,7 @@ unimplemented TODO); ints reject leading zeros. Consumers: playerbasic handler, 
 
 | Base | Port | State |
 |---|---|---|
-| GameReport accumulator (`_Init/_AddPlayer/_AddTeam/_AddEvent/_Event/_Reset_All`) | `src/XonoticGodot.Server/PlayerStats.cs` (Init 93, AddPlayer 157, AddTeam 177, AddEvent 146, Event 191, ResetAll 132); wired `GameWorld.cs:1256/1443/4662` | **Faithful + live** |
+| GameReport accumulator (`_Init/_AddPlayer/_AddTeam/_AddEvent/_Event/_Reset_All`) | `src/VortexArena.Server/PlayerStats.cs` (Init 93, AddPlayer 157, AddTeam 177, AddEvent 146, Event 191, ResetAll 132); wired `GameWorld.cs:1256/1443/4662` | **Faithful + live** |
 | Consent gating (uidtracking/uid2name/uidranking, `r` line) | none — `AddPlayer` uses `PersistentId` unconditionally; `_netname` unconditional; `_ranked` never written. Menu checkboxes exist (`DialogMultiplayerProfile.cs:121-133`); server cvar-read plumbing exists (`GameWorld.cs:3190`, race records) | **Missing gate** |
 | Feed: kills-\<id\> / achievements / total- / scoreboard- / team Q / acc-* | not fed. `EventTeam` (PlayerStats.cs:204) zero callers; `AccuracyProvider`/`ScoreColumnsProvider`/`PingProvider` never wired (`GameWorld.cs:1250-1255` wires 6 of 9). `WeaponAccuracy` (Scores.cs:176) tracks the data but isn't bridged | **Dead slots** |
 | Feed: rank / scoreboardpos / wins / matches / joins / handicap / anticheat | wired (`GameWorld.cs:1250-1255`, `AntiCheat.cs:337/348`) | **Live** |
@@ -159,7 +159,7 @@ unimplemented TODO); ints reject leading zeros. Consumers: playerbasic handler, 
 
 ## Verification
 
-- `tests/XonoticGodot.Tests/ServerInfraTests.cs:444-490` — disabled-without-uri, accumulate+build,
+- `tests/VortexArena.Tests/ServerInfraTests.cs:444-490` — disabled-without-uri, accumulate+build,
   warmup-discard (pass; covers the accumulator row).
 - Code reads with line refs as cited per row: grep sweeps for `EventPlayer/EventTeam` emitters,
   `allow_uid`, `g_playerstats_gametype` (single read, zero writes), `urllib|HttpClient|crypto_uri`

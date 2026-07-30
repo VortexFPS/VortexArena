@@ -1,11 +1,11 @@
 // Port of common/mutators/mutator/globalforces/sv_globalforces.qc
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Global Forces mutator — port of common/mutators/mutator/globalforces/sv_globalforces.qc. Knockback no

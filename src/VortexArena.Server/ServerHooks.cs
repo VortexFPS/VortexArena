@@ -1,10 +1,10 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
-/// Server-side mutator hook chains that have no home in <c>XonoticGodot.Common</c>'s
+/// Server-side mutator hook chains that have no home in <c>VortexArena.Common</c>'s
 /// <see cref="MutatorHooks"/> yet — chiefly <c>SV_StartFrame</c>. In QuakeC <c>MUTATOR_CALLHOOK(SV_StartFrame)</c>
 /// fires once per server frame from <c>StartFrame()</c> (server/main.qc) after the bot/anticheat frame and
 /// before the per-client PostThink/PlayerFrame pass; server-side mutators (e.g. the round-based modes,

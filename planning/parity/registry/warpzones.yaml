@@ -21,7 +21,7 @@ features:
       - "lib/warpzone/common.qc:WarpZone_TransformOrigin"
       - "lib/warpzone/common.qc:WarpZone_TransformVelocity"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneTransform"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneTransform"
     constants:
       - { name: "transform_encoding", base: "AnglesTransform Euler-vector (transform+shift)", port: "explicit fwd/right/up basis", match: false }
       - { name: "180deg turn (in->out direction flip)", base: "AnglesTransform_TurnDirectionFR", port: "inFwd->-outFwd, inRight->-outRight, inUp->outUp", match: true }
@@ -46,7 +46,7 @@ features:
       - "lib/warpzone/common.qc:WarpZone_Accumulator_AddTransform"
       - "lib/warpzone/anglestransform.qc:AnglesTransform_Multiply_GetPostShift"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs:WarpzoneTransformChain"
+      - "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs:WarpzoneTransformChain"
     constants: []
     status:
       logic: faithful
@@ -71,10 +71,10 @@ features:
       - "lib/warpzone/server.qc:spawnfunc(misc_warpzone_position)"
       - "lib/warpzone/util_server.qc:WarpZoneLib_ExactTrigger_Init"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneSpawns"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.AddMapZone"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:114"
-      - "src/XonoticGodot.Server/GameWorld.cs:453"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneSpawns"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.AddMapZone"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:114"
+      - "src/VortexArena.Server/GameWorld.cs:453"
     constants:
       - { name: "scale default", base: "this.scale || modelscale || 1 (server.qc:662-665)", port: "ScaleFactor || ModelScale || 1 (Warpzone.cs:741-743), trigger sized mins*scale..maxs*scale (Warpzone.cs:766-772)", match: true }
       - { name: "solid / movetype", base: "SOLID_TRIGGER / MOVETYPE_NONE", port: "Solid.Trigger / MoveType.None", match: true }
@@ -103,7 +103,7 @@ features:
     base_refs:
       - "lib/warpzone/server.qc:WarpZone_InitStep_UpdateTransform"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.DerivePlaneFromBrush"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.DerivePlaneFromBrush"
     constants:
       - { name: "non-planar threshold", base: "vdist(norm, <, 0.99)", port: "norm.Length() < 0.99", match: true }
       - { name: "trigger texture skip", base: "textures/common/trigger | trigger", port: "same", match: true }
@@ -129,10 +129,10 @@ features:
       - "lib/warpzone/server.qc:WarpZone_InitStep_FinalizeTransform"
       - "lib/warpzone/server.qc:WarpZone_StartFrame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.Link"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.InitMapZones"
-      - "src/XonoticGodot.Server/GameWorld.cs:782"
-      - "src/XonoticGodot.Server/Cvars.cs:105"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.Link"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.InitMapZones"
+      - "src/VortexArena.Server/GameWorld.cs:782"
+      - "src/VortexArena.Server/Cvars.cs:105"
     constants:
       - { name: "sv_warpzone_allow_selftarget", base: "0", port: "0", match: true }
     status:
@@ -157,8 +157,8 @@ features:
       - "lib/warpzone/server.qc:WarpZone_Teleport"
       - "lib/warpzone/server.qc:WarpZone_TeleportPlayer"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.Teleport"
-      - "src/XonoticGodot.Engine/Simulation/TriggerTouch.cs:Run"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.Teleport"
+      - "src/VortexArena.Engine/Simulation/TriggerTouch.cs:Run"
     constants:
       - { name: "cross-into-plane gate", base: "WarpZone_PlaneDist(this, origin+view_ofs) >= 0 -> skip (server.qc:193)", port: "Dot((origin+view_ofs) - InOrigin, InForward) >= 0 -> skip (Warpzone.cs:316)", match: true }
       - { name: "same-frame re-teleport guard", base: "time <= warpzone_teleport_finishtime -> return (server.qc:186,355)", port: "_teleportFinishTime[e]; now <= finish -> return (Warpzone.cs:274-278), stamped now+FrameTime (Warpzone.cs:334)", match: true }
@@ -188,8 +188,8 @@ features:
     base_refs:
       - "lib/warpzone/server.qc:WarpZone_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:Teleport"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:UseTargetsEx"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:Teleport"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:UseTargetsEx"
     constants:
       - { name: "this skip mask", base: "SUB_UseTargets_SkipTargets(this, ..., BIT(1)|BIT(3)) (server.qc:218)", port: "UseTargetsEx(trig, e, trig, SkipTarget1|SkipTarget3)", match: true }
       - { name: "partner (this.enemy) skip mask", base: "SUB_UseTargets_SkipTargets(this.enemy, ..., BIT(1)|BIT(2)) (server.qc:219)", port: "UseTargetsEx(partnerTrig, e, e, SkipTarget1|SkipTarget2)", match: true }
@@ -215,9 +215,9 @@ features:
       - "lib/warpzone/common.qc:WarpZone_TraceBox_ThroughZone"
       - "lib/warpzone/common.qc:WarpZone_TraceLine"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs:WarpzoneTrace.TraceLineWarpzone"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:195"
-      - "src/XonoticGodot.Engine/Collision/TraceServiceWarpzoneExt.cs:TraceServiceWarpzoneBridge"
+      - "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs:WarpzoneTrace.TraceLineWarpzone"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:195"
+      - "src/VortexArena.Engine/Collision/TraceServiceWarpzoneExt.cs:TraceServiceWarpzoneBridge"
     constants:
       - { name: "chained-zone cap", base: "i = 16", port: "MaxZoneDepth = 16", match: true }
     status:
@@ -242,8 +242,8 @@ features:
       - "lib/warpzone/common.qc:WarpZone_FindRadius_Recurse"
       - "lib/warpzone/common.qc:WarpZoneLib_BadEntity"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs:FindRadiusWarpzone"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:86"
+      - "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs:FindRadiusWarpzone"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:86"
     constants:
       - { name: "radius recurse clamp", base: "bound(0, rad - vlen(org_new-org0_new), rad - 8)", port: "Clamp(rad - dist_to_zone_plane, 0, rad - 8)", match: false }
       - { name: "blacklist classnames", base: "is_pure + weaponentity/exteriorweaponentity/sprite_waypoint/waypoint/spawnfunc/weaponchild/chatbubbleentity/buff_model + target_*/info_*", port: "same; Wave-2 added a partial is_pure approx (Solid.Not && empty classname) but no Entity.PureData flag yet", match: false }
@@ -273,12 +273,12 @@ features:
       - "server/portals.qc:Portal_ClearWithID (:614)"
       - "server/portals.qc:Portal_ClearAll_PortalsOnly (:579)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:PlacePortoPortal"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:LinkPair"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.Teleport (ActivateTime self-skip + Pusher/PushLTime/IsTypeFrag kill-credit)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:ClearPortoPortal"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:ClearAllPortoPortals"
-      - "src/XonoticGodot.Server/GameWorld.cs:437"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:PlacePortoPortal"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:LinkPair"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.Teleport (ActivateTime self-skip + Pusher/PushLTime/IsTypeFrag kill-credit)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:ClearPortoPortal"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:ClearAllPortoPortals"
+      - "src/VortexArena.Server/GameWorld.cs:437"
     constants:
       - { name: "porto trigger bounds", base: "weapon-defined", port: "+/-48 box (PortoMins/Maxs, Warpzone.cs:502-503)", match: false }
       - { name: "portal_activatetime grace", base: "time + 0.1 (portals.qc:304,646)", port: "now + 0.1f (ActivateTime; set Warpzone.cs:551, slid Warpzone.cs:287)", match: true }
@@ -392,7 +392,7 @@ features:
       - "lib/warpzone/client.qc:WarpZone_FixPMove"
       - "lib/warpzone/server.qc:WarpZone_Teleport"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/TriggerTouch.cs:PredictWarpzonesAmbient"
+      - "src/VortexArena.Engine/Simulation/TriggerTouch.cs:PredictWarpzonesAmbient"
       - "game/net/EntityMovementStep.cs:110"
       - "game/net/NetGame.cs:1135"
     constants: []
@@ -446,12 +446,12 @@ features:
       - "lib/warpzone/server.qc:WarpZone_Think"
       - "lib/warpzone/server.qc:WarpZones_Reconnect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.ThinkMovingZones"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.Reconnect / ReconnectByTarget / OnReconnectUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneSpawns.TriggerWarpzoneReconnectSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:120"
-      - "src/XonoticGodot.Server/GameWorld.cs:456"
-      - "src/XonoticGodot.Server/GameWorld.cs:1807"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.ThinkMovingZones"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.Reconnect / ReconnectByTarget / OnReconnectUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneSpawns.TriggerWarpzoneReconnectSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:120"
+      - "src/VortexArena.Server/GameWorld.cs:456"
+      - "src/VortexArena.Server/GameWorld.cs:1807"
     constants:
       - { name: "spawnflag 1 -> per-frame Think", base: "moving-warpzone re-derive when org/angles change (server.qc:716-728)", port: "Warpzone.Moving = spawnflags&1; ThinkMovingZones self-gates on SaveOrigin/_Angles/_EOrigin/_EAngles", match: true }
       - { name: "reconnect spawnflag 1 (skip visible zones)", base: "!(spawnflags&1 && visible_to_some_client(e)) (server.qc:790)", port: "no client-visibility test (reconnects regardless; conservative)", match: false }
@@ -477,9 +477,9 @@ features:
     base_refs:
       - "lib/warpzone/server.qc:WarpZone_StartFrame"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.WarpObservers"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.FindOverlapping / TeleportNoTargets"
-      - "src/XonoticGodot.Server/GameWorld.cs:1812"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.WarpObservers"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneManager.FindOverlapping / TeleportNoTargets"
+      - "src/VortexArena.Server/GameWorld.cs:1812"
     constants:
       - { name: "observer gate", base: "IS_OBSERVER(it) || it.solid == SOLID_NOT (server.qc:756)", port: "it.Solid == Solid.Not || Player.IsObserver (Warpzone.cs:930-931)", match: true }
       - { name: "plane-side gate", base: "WarpZone_PlaneDist(e, origin+view_ofs) <= 0 -> warp (server.qc:764)", port: "Dot(point-InOrigin, InForward) > 0 -> skip (Warpzone.cs:937)", match: true }

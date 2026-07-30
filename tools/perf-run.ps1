@@ -10,7 +10,7 @@
 # for later -Baseline use). Release export is the DEFAULT because debug censuses are not
 # representative (the profiler watermarks them too).
 #
-# Captures run on an ISOLATED scratch profile (_scratch\perf-userdir via XONOTIC_USERDIR), not the
+# Captures run on an ISOLATED scratch profile (_scratch\perf-userdir via VORTEX_USERDIR), not the
 # daily ~/XonData one: runs used to mutate the real config.cfg and inherit whatever the last playtest
 # left configured (perf-next-steps-2026-07-03 item 21). Pass -UserDir real for the old behavior.
 #
@@ -40,15 +40,15 @@ $outDir = Join-Path $root "_scratch"
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir | Out-Null }
 $stdout = Join-Path $outDir "perf_$Label.out"
 
-# --- isolated capture profile (XONOTIC_USERDIR, honored by UserPaths.cs) -----------------------
+# --- isolated capture profile (VORTEX_USERDIR, honored by UserPaths.cs) -----------------------
 if ($UserDir -eq "real") {
-    Remove-Item Env:XONOTIC_USERDIR -ErrorAction SilentlyContinue
+    Remove-Item Env:VORTEX_USERDIR -ErrorAction SilentlyContinue
     $baseDir = Join-Path $env:USERPROFILE "XonData"
 } else {
     if ($UserDir -eq "") { $UserDir = Join-Path $outDir "perf-userdir" }
     if (-not (Test-Path $UserDir)) { New-Item -ItemType Directory -Path $UserDir | Out-Null }
-    $env:XONOTIC_USERDIR = (Resolve-Path $UserDir).Path   # inherited by Start-Process + the report
-    $baseDir = $env:XONOTIC_USERDIR
+    $env:VORTEX_USERDIR = (Resolve-Path $UserDir).Path   # inherited by Start-Process + the report
+    $baseDir = $env:VORTEX_USERDIR
 }
 $logDir = Join-Path $baseDir "logs"
 
@@ -58,7 +58,7 @@ if ($DebugBuild) {
     $exeArgs = @("--path", $root)
     if (-not (Test-Path $exe)) { throw "Godot console binary not found at $exe (see docs/RUNNING.md)" }
 } else {
-    $exe = Join-Path $root "dist\windows-client\XonoticGodot.exe"
+    $exe = Join-Path $root "dist\windows-client\VortexArena.exe"
     $exeArgs = @()
     if (-not (Test-Path $exe)) {
         throw "release export missing at $exe - export the windows-client preset first (or use -DebugBuild for a non-representative debug run)"
@@ -66,7 +66,7 @@ if ($DebugBuild) {
 }
 
 # --- clean strays (an orphaned host keeps UDP 26000 bound) -----------------------------------
-Get-Process Godot*, XonoticGodot* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process Godot*, VortexArena* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 $before = Get-ChildItem $logDir -Filter "session-*.log" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1

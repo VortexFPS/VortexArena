@@ -1,14 +1,14 @@
 using System.Collections.Generic;
 using System.IO;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Config;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Unit tests for the Darkplaces-faithful <see cref="ConfigInterpreter"/> — the cfg/alias/exec grammar in
@@ -193,7 +193,7 @@ public class ConfigInterpreterTests
 /// </summary>
 public class ConfigRealDataTests
 {
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
 
     /// <summary>A file-reader that resolves a config path relative to the pk3dir root (DP gamedir search).</summary>
     private static Func<string, string?> DiskReader => path =>

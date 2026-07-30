@@ -15,7 +15,7 @@ features:
       - "lib/math.qh:mean_accumulate"
       - "lib/math.qh:mean_evaluate"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:Mean"
+      - "src/VortexArena.Server/AntiCheat.cs:Mean"
     constants:
       - { name: "geometric_branch (m==0): acc*=value**weight, acc0=1", base: "yes", port: "yes", match: true }
       - { name: "additive_branch (m!=0): acc+=value**m*weight, acc0=0", base: "yes", port: "yes", match: true }
@@ -32,7 +32,7 @@ features:
     divergence_rationale: "Mean uses double internally vs QC float; verdicts are threshold-coarse so precision is immaterial. Deliberate."
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:AntiCheat_Mean_PowerMean", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:AntiCheat_Mean_PowerMean", result: pass }
       - { kind: code, ref: "AntiCheat.cs:25-39 matches lib/math.qh mean_accumulate/mean_evaluate bodies branch-for-branch (re-verified 2026-06-25; unchanged)", result: pass }
     confidence: high
     notes: "Exponents 1/2/3/4/5/7/10 all match; every anticheat statistic is non-zero exponent so the additive path is live."
@@ -43,7 +43,7 @@ features:
     base_refs:
       - "server/anticheat.qc:movement_oddity"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:MovementOddity"
+      - "src/VortexArena.Server/AntiCheat.cs:MovementOddity"
     constants:
       - { name: "0.5 - 0.5*cos(cosangle^2 * 4*PI)", base: "yes", port: "yes", match: true }
       - { name: "normalize(0)=0 (Quake semantics)", base: "yes", port: "QMath.Normalize->zero", match: true }
@@ -59,7 +59,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: test, ref: "tests/XonoticGodot.Tests/ServerInfraTests.cs:AntiCheat_MovementOddity_BotlikeReversalScoresHigh", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:AntiCheat_MovementOddity_BotlikeReversalScoresHigh", result: pass }
       - { kind: code, ref: "AntiCheat.cs:296-301 == anticheat.qc:58-65 (re-verified 2026-06-25)", result: pass }
     confidence: high
     notes: "Fed by anticheat_physics strafebot_old; uses QMath.Pi = M_PI. Live via Physics() at GameWorld.cs:1657/1667."
@@ -72,9 +72,9 @@ features:
       - "server/anticheat.qc:anticheat_prethink"
       - "server/client.qc:2880"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:Physics"
-      - "src/XonoticGodot.Server/AntiCheat.cs:PreThink"
-      - "src/XonoticGodot.Server/GameWorld.cs:1538"
+      - "src/VortexArena.Server/AntiCheat.cs:Physics"
+      - "src/VortexArena.Server/AntiCheat.cs:PreThink"
+      - "src/VortexArena.Server/GameWorld.cs:1538"
     constants:
       - { name: "triangle wave f = |delta-floor-0.5|*2", base: "yes", port: "yes", match: true }
       - { name: "evade_offset = servertime + sys_frametime*(3f-1)", base: "yes", port: "yes", match: true }
@@ -102,7 +102,7 @@ features:
     base_refs:
       - "server/anticheat.qc:anticheat_physics"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:Physics"
+      - "src/VortexArena.Server/AntiCheat.cs:Physics"
     constants:
       - { name: "gated by forward_prev!=0 AND time>fixangle_endtime", base: "yes", port: "yes", match: true }
       - { name: "angle=acos(clamp(cos,-1,1)); accumulate angle/PI m=5", base: "yes", port: "yes", match: true }
@@ -131,7 +131,7 @@ features:
     base_refs:
       - "server/anticheat.qc:anticheat_physics"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:Physics"
+      - "src/VortexArena.Server/AntiCheat.cs:Physics"
     constants:
       - { name: "movetime accum via frametime floor/frac", base: "yes", port: "yes", match: true }
       - { name: "accumulate max(0, delta-offset) m=5", base: "yes", port: "yes", match: true }
@@ -158,7 +158,7 @@ features:
     base_refs:
       - "server/anticheat.qc:anticheat_physics"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:Physics"
+      - "src/VortexArena.Server/AntiCheat.cs:Physics"
     constants:
       - { name: "falloff", base: "0.2", port: "0.2f", match: true }
       - { name: "accu *= exp(-dt*falloff); accu += frametime*falloff", base: "yes", port: "yes", match: true }
@@ -188,10 +188,10 @@ features:
       - "server/main.qc:373"
       - "server/world.qc:2505"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:StartFrame"
-      - "src/XonoticGodot.Server/AntiCheat.cs:EndFrame"
-      - "src/XonoticGodot.Server/GameWorld.cs:1441"
-      - "src/XonoticGodot.Server/GameWorld.cs:1798"
+      - "src/VortexArena.Server/AntiCheat.cs:StartFrame"
+      - "src/VortexArena.Server/AntiCheat.cs:EndFrame"
+      - "src/VortexArena.Server/GameWorld.cs:1441"
+      - "src/VortexArena.Server/GameWorld.cs:1798"
     constants:
       - { name: "evasion_delta += frametime*(0.5+random()) twice per frame", base: "yes (startframe + endframe)", port: "yes (StartFrame + EndFrame)", match: true }
     status:
@@ -217,11 +217,11 @@ features:
       - "server/anticheat.qc:anticheat_endframe"
       - "common/mapobjects/teleporters.qc:310"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:FixAngle"
-      - "src/XonoticGodot.Server/AntiCheat.cs:EndFrame"
-      - "src/XonoticGodot.Server/GameWorld.cs:1214"
-      - "src/XonoticGodot.Server/GameWorld.cs:1004"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs:396"
+      - "src/VortexArena.Server/AntiCheat.cs:FixAngle"
+      - "src/VortexArena.Server/AntiCheat.cs:EndFrame"
+      - "src/VortexArena.Server/GameWorld.cs:1214"
+      - "src/VortexArena.Server/GameWorld.cs:1004"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs:396"
     constants:
       - { name: "fixangle_endtime = servertime + ANTILAG_LATENCY + 0.2 (formula)", base: "min(0.4,ping*0.001)+0.2", port: "min(0.4,ping*0.001)+0.2", match: true }
       - { name: "applied on spawn (PutPlayerInServer)", base: "yes", port: "yes (GameWorld.cs:1214, InfraClientSpawn)", match: true }
@@ -253,8 +253,8 @@ features:
       - "server/anticheat.qc:anticheat_init"
       - "common/state.qc:59"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:Init"
-      - "src/XonoticGodot.Server/GameWorld.cs:1140"
+      - "src/VortexArena.Server/AntiCheat.cs:Init"
+      - "src/VortexArena.Server/GameWorld.cs:1140"
     constants:
       - { name: "speedhack_offset = 0; jointime = servertime", base: "yes", port: "yes", match: true }
     status:
@@ -279,8 +279,8 @@ features:
       - "server/anticheat.qc:anticheat_report_to_eventlog"
       - "common/state.qc:88"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:ReportToEventLog"
-      - "src/XonoticGodot.Server/GameWorld.cs:1253"
+      - "src/VortexArena.Server/AntiCheat.cs:ReportToEventLog"
+      - "src/VortexArena.Server/GameWorld.cs:1253"
     constants:
       - { name: "gated by autocvar_sv_eventlog", base: "default 0", port: "gated at call site: if (Cvars.Bool(\"sv_eventlog\")) (GameWorld.cs:1252)", match: true }
       - { name: ":anticheat:_time:<playerid>:<elapsed> then per-detector line", base: "yes", port: "yes (format faithful)", match: true }
@@ -306,8 +306,8 @@ features:
       - "server/command/sv_cmd.qc:248"
       - "server/anticheat.qc:anticheat_report_to_eventlog"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdAnticheat"
-      - "src/XonoticGodot.Server/Commands.cs:691"
+      - "src/VortexArena.Server/Commands.cs:CmdAnticheat"
+      - "src/VortexArena.Server/Commands.cs:691"
     constants:
       - { name: "anticheat <client> resolves by entity-number or name, runs anticheat_report_to_eventlog", base: "GetIndexedEntity + VerifyClientEntity then report", port: "FindPlayerByNameOrId then ReportToEventLog gated on sv_eventlog", match: true }
     status:
@@ -332,8 +332,8 @@ features:
       - "server/anticheat.qc:anticheat_report_to_playerstats"
       - "common/playerstats.qc:206"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:ReportToPlayerStats"
-      - "src/XonoticGodot.Server/GameWorld.cs:1032"
+      - "src/VortexArena.Server/AntiCheat.cs:ReportToPlayerStats"
+      - "src/VortexArena.Server/GameWorld.cs:1032"
     constants:
       - { name: "anticheat-_time + anticheat-<name> per detector", base: "PLAYERSTATS_ANTICHEAT prefix 'anticheat-'", port: "'anticheat-' + name", match: true }
     status:
@@ -358,8 +358,8 @@ features:
       - "server/anticheat.qc:anticheat_register_to_playerstats"
       - "common/playerstats.qc:339"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:RegisterPlayerStats"
-      - "src/XonoticGodot.Server/PlayerStats.cs:128"
+      - "src/VortexArena.Server/AntiCheat.cs:RegisterPlayerStats"
+      - "src/VortexArena.Server/PlayerStats.cs:128"
     constants:
       - { name: "AddEvent('anticheat-_time') + AddEvent('anticheat-<name>') per detector at GameReport init", base: "yes", port: "yes (AntiCheat.RegisterPlayerStats(AddEvent) called from PlayerStats.Init, PlayerStats.cs:128; constructs the exact same ids as ReportToPlayerStats)", match: true }
     status:
@@ -384,8 +384,8 @@ features:
       - "server/anticheat.qc:anticheat_display"
       - "server/anticheat.qc:ANTICHEATS"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:Display"
-      - "src/XonoticGodot.Server/AntiCheat.cs:Detectors"
+      - "src/VortexArena.Server/AntiCheat.cs:Display"
+      - "src/VortexArena.Server/AntiCheat.cs:Detectors"
     constants:
       - { name: ":N if f<=mi, :Y if f>=ma, else :- (and only when t>=tmin)", base: "yes", port: "yes", match: true }
       - { name: "18 detector rows with (tmin,mi,ma)", base: "speedhack(240,0,9999), m1..m5(240,1.01,1.25), strafebot_old(120,0.15,0.4), strafebot_new(120,0.25,0.8), evade(120,0.2,0.5), snapaim*(120,0,9999), snapback(120,0,9999)", port: "identical", match: true }
@@ -413,9 +413,9 @@ features:
       - "server/anticheat.qc:anticheat_spectatecopy"
       - "server/client.qc:1837"
     port_refs:
-      - "src/XonoticGodot.Server/AntiCheat.cs:SpectateCopy"
-      - "src/XonoticGodot.Server/GameWorld.cs:1091"
-      - "src/XonoticGodot.Server/ClientManager.cs:153"
+      - "src/VortexArena.Server/AntiCheat.cs:SpectateCopy"
+      - "src/VortexArena.Server/GameWorld.cs:1091"
+      - "src/VortexArena.Server/ClientManager.cs:153"
     constants:
       - { name: "viewer.angles = spectatee.anticheat_div0_evade_v_angle", base: "yes", port: "yes (logic)", match: true }
     status:

@@ -44,13 +44,13 @@
 //     sv_eventlog). The S/I codes ride that :items=/:victimitems= field.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using static XonoticGodot.Common.Gameplay.Items;
-using XonoticGodot.Common.Gameplay.Waypoints;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using static VortexArena.Common.Gameplay.Items;
+using VortexArena.Common.Gameplay.Waypoints;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Powerups consumer mutator — applies the gameplay effects of the strength / shield / speed /

@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// Server-side port of the <c>kill</c> / team-change countdown from <c>qcsrc/server/clientkill.qc</c>

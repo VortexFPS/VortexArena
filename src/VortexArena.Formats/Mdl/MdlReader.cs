@@ -2,7 +2,7 @@ using System;
 using System.Buffers.Binary;
 using System.Numerics;
 
-namespace XonoticGodot.Formats.Mdl;
+namespace VortexArena.Formats.Mdl;
 
 /// <summary>
 /// Parses a Quake1 MDL ("IDPO", <see cref="Version"/> 6) alias model from a raw byte buffer into

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using XonoticGodot.Server;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for <see cref="CampaignCatalog"/> — the menu-side campaign reader. The load surface that matters most

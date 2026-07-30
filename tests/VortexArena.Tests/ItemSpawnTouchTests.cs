@@ -1,15 +1,15 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for T35 — the world-item spawn + touch pipeline (port of qcsrc/server/items/items.qc + spawning.qc):

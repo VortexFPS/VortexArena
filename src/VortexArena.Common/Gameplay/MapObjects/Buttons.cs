@@ -16,12 +16,12 @@
 // fires every map entity's .Reset on a round/match restart (QC reset_map_global).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary><c>func_button</c> — a press-to-fire BSP button. Registered as a spawnfunc (<see cref="ButtonSetup"/>).</summary>
 public static class Buttons

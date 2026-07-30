@@ -1,7 +1,7 @@
 using Godot;
-using XonoticGodot.Net;
+using VortexArena.Net;
 
-namespace XonoticGodot.Game.Net;
+namespace VortexArena.Game.Net;
 
 /// <summary>
 /// A minimal crosshair + health/armor readout for the networked client, drawn straight from the live
@@ -16,7 +16,7 @@ namespace XonoticGodot.Game.Net;
 /// so this is no longer the only HUD on the net path; it layers on top as the crosshair + a guaranteed
 /// health/armor readout.</para>
 ///
-/// The crosshair mirrors the vector fallback of <see cref="XonoticGodot.Game.Hud.CrosshairPanel"/> (a center gap,
+/// The crosshair mirrors the vector fallback of <see cref="VortexArena.Game.Hud.CrosshairPanel"/> (a center gap,
 /// four ticks, a dot) and pulses a transient ring on fire (<see cref="PulseFire"/>), so firing reads on screen.
 /// </summary>
 public sealed partial class NetHud : Control
@@ -26,7 +26,7 @@ public sealed partial class NetHud : Control
 
     /// <summary>
     /// When true, this lightweight HUD suppresses its OWN crosshair + health/armor readout, deferring to the
-    /// full skinned HUD's <see cref="XonoticGodot.Game.Hud.CrosshairPanel"/> / <see cref="XonoticGodot.Game.Hud.HealthArmorPanel"/>.
+    /// full skinned HUD's <see cref="VortexArena.Game.Hud.CrosshairPanel"/> / <see cref="VortexArena.Game.Hud.HealthArmorPanel"/>.
     /// The net layer sets this true while a local server <c>Player</c> is present (a <c>--host</c> listen server),
     /// so the skinned panels render instead — avoiding a DOUBLE crosshair/health. On a pure <c>--connect</c> client
     /// (no local Player) it stays false so this remains the always-on fallback. The firing ring still pulses (it's
@@ -72,7 +72,7 @@ public sealed partial class NetHud : Control
 
     public override void _Process(double delta)
     {
-        using var _nhScope = XonoticGodot.Game.Client.FrameProfiler.Scope("nethud"); // [profiling] NetHud per-frame
+        using var _nhScope = VortexArena.Game.Client.FrameProfiler.Scope("nethud"); // [profiling] NetHud per-frame
         if (_fireRing > 0f)
             _fireRing = Mathf.Max(0f, _fireRing - (float)delta / FireDecay);
 

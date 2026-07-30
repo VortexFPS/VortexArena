@@ -14,9 +14,9 @@ features:
       - "common/turrets/turret/phaser.qc:spawnfunc(turret_phaser)"
       - "common/turrets/sv_turrets.qc:turret_initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Phaser"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RegisterAll"
-      - "src/XonoticGodot.Server/GameWorld.cs:SpawnMapEntities"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Phaser"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RegisterAll"
+      - "src/VortexArena.Server/GameWorld.cs:SpawnMapEntities"
     constants: []
     status:
       logic: faithful
@@ -39,8 +39,8 @@ features:
     base_refs:
       - "common/turrets/turret/phaser.qh:PhaserTurret"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:ctor"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:ctor"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "health", base: "500", port: "500", match: true }
       - { name: "m_mins", base: "'-32 -32 0'", port: "(-32,-32,0)", match: true }
@@ -69,8 +69,8 @@ features:
     base_refs:
       - "common/turrets/turret/phaser.qc:tr_setup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Spawn"
     constants:
       - { name: "ammo_flags", base: "ENERGY|RECHARGE|RECIEVE", port: "ammo pool (max/recharge modeled)", match: true }
       - { name: "aim_flags", base: "TFL_AIM_LEAD only", port: "lead only (shotTimeCompensate/zPredict at false defaults)", match: true }
@@ -99,7 +99,7 @@ features:
     base_refs:
       - "common/turrets/turret/phaser.qc:turret_phaser_firecheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:BeamThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:BeamThink"
     constants: []
     status:
       logic: faithful
@@ -127,7 +127,7 @@ features:
     base_refs:
       - "common/turrets/turret/phaser_weapon.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Attack"
     constants:
       - { name: "shot_speed (beam DURATION)", base: "4", port: "4 (ShotSpeed)", match: true }
       - { name: "shot_dmg (total over burn)", base: "100", port: "100 (ShotDamage)", match: true }
@@ -153,7 +153,7 @@ features:
     base_refs:
       - "common/turrets/turret/phaser_weapon.qc:beam_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:BeamThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:BeamThink"
     constants:
       - { name: "shot_radius (beam half-thickness)", base: "8", port: "8 (ShotRadius)", match: true }
       - { name: "shot_force", base: "5", port: "5 (ShotForce)", match: true }
@@ -180,7 +180,7 @@ features:
     base_refs:
       - "common/turrets/util.qc:FireImoBeam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:BeamThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:BeamThink"
     constants:
       - { name: "f_velfactor (slow)", base: "0.75", port: "0.75 (VelFactor)", match: true }
     status:
@@ -211,8 +211,8 @@ features:
     base_refs:
       - "common/turrets/turret/phaser_weapon.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Attack"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:HavocbotDodge"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Attack"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:HavocbotDodge"
     constants:
       - { name: "bot_dodge", base: "true", port: "true (beam.BotDodge = true)", match: true }
       - { name: "bot_dodgerating", base: "shot_dmg (per-tick = shot_dmg/(shot_speed/frametime))", port: "perTickDamage (== ShotDamage/(ShotSpeed/FrameTime))", match: true }
@@ -245,8 +245,8 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_select_target"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
     constants:
       - { name: "target_select_rangebias", base: "0.85", port: "0.85 (rangeBias passed)", match: true }
       - { name: "target_select_anglebias", base: "0.25", port: "0.25 (angleBias passed)", match: true }
@@ -274,7 +274,7 @@ features:
     base_refs:
       - "common/turrets/util.qc:FireImoBeam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:ApplySlow"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:ApplySlow"
     constants: []
     status:
       logic: faithful
@@ -298,8 +298,8 @@ features:
       - "common/turrets/turret/phaser_weapon.qc:wr_think"
       - "common/turrets/turret/phaser_weapon.qc:beam_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:BeamThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:BeamThink"
     constants:
       - { name: "beam sound", base: "SND_TUR_PHASER (turrets/phaser)", port: "turrets/phaser (SndPhaser)", match: true }
       - { name: "beam sound channel", base: "CH_SHOTS_SINGLE (4)", port: "SoundChannel.Body (4)", match: true }
@@ -336,9 +336,9 @@ features:
       - "common/turrets/turret/phaser_weapon.qc:wr_think"
       - "common/turrets/turret/phaser.qc:tr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:TrThinkHeadAnim"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:FireFlag"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:TrThinkHeadAnim"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:FireFlag"
     constants:
       - { name: "beam scale", base: "vlen(shotorg-trace_endpos)/256", port: "vlen(start-beamEnd)/256 (ScaleFactor, per-frame)", match: true }
       - { name: "beam model", base: "MDL_TUR_PHASER_BEAM (models/turrets/phaser_beam.md3)", port: "models/turrets/phaser_beam.md3 (asset present)", match: true }
@@ -387,8 +387,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_track"
       - "turrets.cfg:317-320"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
     constants:
       - { name: "track_type", base: "3 (fluid inertia)", port: "3 (TrackFluidInertia, passed)", match: true }
       - { name: "track_accel_pitch", base: "0.5", port: "0.5 (trackAccelPitch passed)", match: true }
@@ -416,10 +416,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_die"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PhaserTurret.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
     constants:
       - { name: "respawntime", base: "90 (turrets.cfg:287)", port: "90 (RespawnTime const passed to TurretSpawn.Init)", match: true }
     status:

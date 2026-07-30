@@ -1,7 +1,7 @@
 # Buffs mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/buffs/{buffs,sv_buffs,cl_buffs}.qc` + `buffs/buff/*.qc` · built on `common/mutators/mutator/status_effects/`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/BuffsMutator.cs` · `src/XonoticGodot.Common/Gameplay/StatusEffects.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs` · `src/VortexArena.Common/Gameplay/StatusEffects.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

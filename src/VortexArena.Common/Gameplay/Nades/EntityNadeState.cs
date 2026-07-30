@@ -11,7 +11,7 @@
 // NADE entity (NadeTimePrimed/NadeLifetime), and NadeBonusType/NadesSmall are read on both — they all
 // share the one partial-Entity namespace as in QC.
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {

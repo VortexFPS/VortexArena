@@ -1,8 +1,8 @@
 using System.Globalization;
 using Godot;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The "Exit HUD setup" dialog — a faithful C# port of <c>XonoticHUDExitDialog_fill</c>
@@ -235,7 +235,7 @@ public partial class DialogHudSetupExit : MenuScreen
         return slider;
     }
 
-    /// <summary>Run an action the QC backed with a HUD-editor/skin command XonoticGodot lacks; log it honestly.</summary>
+    /// <summary>Run an action the QC backed with a HUD-editor/skin command VortexArena lacks; log it honestly.</summary>
     private static void OnInert(string what)
         => GD.Print($"[DialogHudSetupExit] {what}: HUD editor / skin-list backend pending — inert.");
 

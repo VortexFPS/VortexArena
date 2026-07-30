@@ -10,14 +10,14 @@
 // bounds"); here we return a plain bool from <see cref="TryGetEntry"/> and surface the
 // name/icon via out params, which is the same contract minus the entity bookkeeping.
 //
-// ADR-0008: XonoticGodot.Common must not reference Godot, so the file-scan sources take an
+// ADR-0008: VortexArena.Common must not reference Godot, so the file-scan sources take an
 // <see cref="IFileEnumerator"/> seam (the menu host wires a Godot-VFS adapter; tests pass a
 // fake), keeping the whole abstraction headless-testable.
 
 using System;
 using System.Collections.Generic;
 
-namespace XonoticGodot.Common.Menu;
+namespace VortexArena.Common.Menu;
 
 /// <summary>
 /// One enumerated row, the C# stand-in for the QC <c>returns(string name, string icon)</c> callback

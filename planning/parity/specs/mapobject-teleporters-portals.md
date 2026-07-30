@@ -1,7 +1,7 @@
 # Teleporters & Portals — parity spec
 
 **Base refs:** `common/mapobjects/teleporters.qc` · `common/mapobjects/trigger/teleport.qc` · `common/mapobjects/misc/teleport_dest.qc` · `server/portals.qc` · `common/weapons/weapon/porto.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/MapObjects/Teleporters.cs` · `src/XonoticGodot.Common/Gameplay/Weapons/Porto.cs` · `src/XonoticGodot.Common/Gameplay/MapObjects/Warpzone.cs` (PlacePortoPortal) · `src/XonoticGodot.Engine/Simulation/TriggerTouch.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/MapObjects/Teleporters.cs` · `src/VortexArena.Common/Gameplay/Weapons/Porto.cs` · `src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs` (PlacePortoPortal) · `src/VortexArena.Engine/Simulation/TriggerTouch.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

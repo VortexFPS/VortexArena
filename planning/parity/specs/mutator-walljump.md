@@ -1,7 +1,7 @@
 # Wall Jump mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/walljump/walljump.qc`, `walljump.qh`, `common/stats.qh` (STAT registrations), `mutators.cfg` (cvar defaults)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/WalljumpMutator.cs`, `EntityMutatorState.cs` (`Entity.LastWallJumpTime`), `MutatorHooks.cs` (`PlayerJump`), `Physics/PlayerPhysics.cs` (live dispatch)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/WalljumpMutator.cs`, `EntityMutatorState.cs` (`Entity.LastWallJumpTime`), `MutatorHooks.cs` (`PlayerJump`), `Physics/PlayerPhysics.cs` (live dispatch)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -153,7 +153,7 @@ not a deliberate gameplay change, so it is logged as a gap (low impact).
 - **Port mapping + liveness:** read `WalljumpMutator.cs`, `EntityMutatorState.cs`, `MutatorHooks.cs`,
   `MutatorActivation.cs`, `PlayerPhysics.cs:796-905`; grepped the dispatch + activation call sites. Static
   trace only.
-- **Values:** confirmed `assets/data/.../mutators.cfg` ships Base defaults and `EngineServices.GetFloat`
+- **Values:** confirmed `Base/data/.../mutators.cfg` ships Base defaults and `EngineServices.GetFloat`
   returns the stored cvar value.
 - **No runtime/in-game check performed.** No unit test exists for walljump (grep of tests = none).
 

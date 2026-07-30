@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Net;
 
-namespace XonoticGodot.Tests.Camera;
+namespace VortexArena.Tests.Camera;
 
 /// <summary>
 /// Deterministic model of the LISTEN-SERVER per-frame loop (apparatus for the bhop/movement-inconsistency

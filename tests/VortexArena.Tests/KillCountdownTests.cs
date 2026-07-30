@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Server;
+using VortexArena.Common.Gameplay;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Wave-5 parity: the deferred <c>kill</c> / team-change countdown (QC server/clientkill.qc

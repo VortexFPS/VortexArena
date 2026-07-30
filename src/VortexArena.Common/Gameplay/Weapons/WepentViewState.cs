@@ -1,13 +1,13 @@
 using System;
 
-// port: the per-player wepent HUD view-state DATA block. It lives in XonoticGodot.Common (not .Net) because the
+// port: the per-player wepent HUD view-state DATA block. It lives in VortexArena.Common (not .Net) because the
 // authoritative producer — WepentResolver, also in .Common — constructs and returns it, and .Common cannot
 // reference .Net (the dependency runs .Net -> .Common). The WIRE codec (Write/Read, which needs BitWriter/
-// BitReader from .Net) lives separately in XonoticGodot.Net/WepentViewCodec.cs as a static helper, so the two
-// never drift. The NAMESPACE is deliberately kept as XonoticGodot.Net so every existing reference
-// (ServerNet/ClientEntityView/NetEntity/tests use XonoticGodot.Net.WepentViewState) resolves unchanged — a
+// BitReader from .Net) lives separately in VortexArena.Net/WepentViewCodec.cs as a static helper, so the two
+// never drift. The NAMESPACE is deliberately kept as VortexArena.Net so every existing reference
+// (ServerNet/ClientEntityView/NetEntity/tests use VortexArena.Net.WepentViewState) resolves unchanged — a
 // type's namespace is independent of the assembly it is compiled into.
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The per-player wepent HUD view-state wire block — the single source of truth for the layout, a mirror of

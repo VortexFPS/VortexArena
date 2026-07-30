@@ -1,10 +1,10 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Formats.Materials;
-using XonoticGodot.Formats.Md3;
+using VortexArena.Formats.Materials;
+using VortexArena.Formats.Md3;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// The blaster/electro bolt "flattened" parity fix (playtest #38 residual —

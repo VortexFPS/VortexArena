@@ -7,16 +7,16 @@
 // Items/EntityResources.cs and MapObjects/MapObjectsCommon.cs — we promote those fields here in a NEW file
 // without editing Entity.cs, and add the shared spawn/sound/scoring shims the gametype code reuses.
 //
-// The deterministic simulation (XonoticGodot.Engine) runs the entities' Think/Touch the same way the QC engine
+// The deterministic simulation (VortexArena.Engine) runs the entities' Think/Touch the same way the QC engine
 // did; this file is Godot-free and depends only on the engine-services facade (Api.*).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     /// <summary>
     /// The extra edict fields the QuakeC gametype objectives stored as flat <c>.field</c>s. Promoted here
@@ -174,7 +174,7 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
     /// <summary>
     /// Shared helpers for the gametype-objective entities (CTF flags, KH keys, KA/NB balls, Domination

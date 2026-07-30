@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Engine.Effects;
+namespace VortexArena.Engine.Effects;
 
 // =====================================================================================================
 //  Parsed effectinfo.txt data model — the C# successor to Darkplaces' particleeffectinfo_t and its
@@ -224,10 +224,10 @@ public sealed class EffectInfoEmitter
 /// The effectinfo.txt parse core — the Godot-free portion of the C# successor to Darkplaces'
 /// <c>CL_Particles_ParseEffectInfo</c> (Base/darkplaces/cl_particles.c). Extracted here so the xUnit
 /// test project can exercise the tokeniser, keyword table and baseline defaults without a Godot runtime.
-/// The I/O wrapper (VFS/disk loading and the <c>XonoticGodot.Game.Client.EffectInfo</c> catalog object)
+/// The I/O wrapper (VFS/disk loading and the <c>VortexArena.Game.Client.EffectInfo</c> catalog object)
 /// stays in the Godot host and delegates its inner loop here.
 ///
-/// Callers: <c>XonoticGodot.Game.Client.EffectInfo.Parse</c> (the live catalog), and directly from the
+/// Callers: <c>VortexArena.Game.Client.EffectInfo.Parse</c> (the live catalog), and directly from the
 /// xUnit test suite.
 /// </summary>
 public static class EffectInfoParser

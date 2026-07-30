@@ -25,9 +25,9 @@ features:
       - "server/round_handler.qc:round_handler_Init"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qh:REGISTER_MUTATOR(ca)"
     port_refs:
-      - "src/XonoticGodot.Server/RoundHandler.cs:Think (the LIVE handler, GameWorld.Rounds)"
-      - "src/XonoticGodot.Server/GameWorld.cs:EnableRounds (CA passes CheckTeams/CheckWinner + g_ca cvars, GameWorld.cs:2763-2777)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ActivateGameType (case ClanArena, GameWorld.cs:2756)"
+      - "src/VortexArena.Server/RoundHandler.cs:Think (the LIVE handler, GameWorld.Rounds)"
+      - "src/VortexArena.Server/GameWorld.cs:EnableRounds (CA passes CheckTeams/CheckWinner + g_ca cvars, GameWorld.cs:2763-2777)"
+      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (case ClanArena, GameWorld.cs:2756)"
     constants:
       - { name: "countdown_count_s", base: "10 (g_ca_warmup, gametypes-server.cfg:263)", port: "10 (EnableRounds countdown: Cvars.FloatOr(\"g_ca_warmup\",5); shipped gametypes-server.cfg:263 sets 10, loaded live via LoadServerConfig)", match: true }
       - { name: "end_delay_s", base: "0 (g_ca_round_enddelay, gametypes-server.cfg:266)", port: "0 (EnableRounds endDelay: Cvars.FloatOr(\"g_ca_round_enddelay\",5); shipped cfg:266 = 0)", match: true }
@@ -53,8 +53,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:CA_CheckTeams"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:CheckTeams (ClanArena.cs:490)"
-      - "src/XonoticGodot.Server/GameWorld.cs:EnableRounds canStart = ca.CheckTeams (GameWorld.cs:2763)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:CheckTeams (ClanArena.cs:490)"
+      - "src/VortexArena.Server/GameWorld.cs:EnableRounds canStart = ca.CheckTeams (GameWorld.cs:2763)"
     constants: []
     status:
       logic: faithful
@@ -79,8 +79,8 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:CA_count_alive_players"
       - "server/teamplay.qc:Team_GetWinnerAliveTeam"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:CheckWinner (ClanArena.cs:520)"
-      - "src/XonoticGodot.Server/GameWorld.cs:EnableRounds canEnd = ()=>ca.CheckWinner()!=0 (GameWorld.cs:2763)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:CheckWinner (ClanArena.cs:520)"
+      - "src/VortexArena.Server/GameWorld.cs:EnableRounds canEnd = ()=>ca.CheckWinner()!=0 (GameWorld.cs:2763)"
     constants:
       - { name: "ST_CA_ROUNDS_award", base: "+1 to winner team slot (TeamScore_AddToTeam)", port: "+1 GameScores.AddToTeam(winner, TeamSlotSecondary)", match: true }
     status:
@@ -105,9 +105,9 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:CA_CheckWinner"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:CA_PreventStalemate"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:CheckWinner (timeUp branch, ClanArena.cs:549)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:PreventStalemate (ClanArena.cs:615)"
-      - "src/XonoticGodot.Server/GameWorld.cs:MirrorRoundTiming (mirrors RoundEndTime into ca.Handler, GameWorld.cs:4760)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:CheckWinner (timeUp branch, ClanArena.cs:549)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:PreventStalemate (ClanArena.cs:615)"
+      - "src/VortexArena.Server/GameWorld.cs:MirrorRoundTiming (mirrors RoundEndTime into ca.Handler, GameWorld.cs:4760)"
     constants:
       - { name: "g_ca_prevent_stalemate", base: "0 (bitmask b0 survivors, b1 health; gametypes-server.cfg:270)", port: "0 live, read by PreventStalemate via PreventStalemateMode", match: true }
       - { name: "g_ca_round_enddelay", base: "0 (gametypes-server.cfg:266)", port: "0 (passed to live EnableRounds endDelay)", match: true }
@@ -133,8 +133,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, Damage_Calculate)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnDamageCalculate (ClanArena.cs:243)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs (MutatorHooks.DamageCalculate.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnDamageCalculate (ClanArena.cs:243)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs (MutatorHooks.DamageCalculate.Call)"
     constants: []
     status:
       logic: faithful
@@ -157,7 +157,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, GiveFragsForKill, CBC_ORDER_FIRST)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnDeath (ClanArena.cs:307)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnDeath (ClanArena.cs:307)"
     constants:
       - { name: "frags_per_kill", base: "0 (M_ARGV(2)=0)", port: "0", match: true }
     status:
@@ -181,11 +181,11 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, PlayerDamage_SplitHealthArmor)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnSplitHealthArmor (ClanArena.cs:330)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:AddScoreFloat2Int (decimal carry, ClanArena.cs:386)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs (GameHooks.PlayerDamageSplitHealthArmor.Call)"
-      - "src/XonoticGodot.Server/GameWorld.cs:MirrorRoundTiming (mirrors IsRoundStarted + GameStartTime into ca.Handler, GameWorld.cs:4760)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs:MirrorRoundStarted"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnSplitHealthArmor (ClanArena.cs:330)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:AddScoreFloat2Int (decimal carry, ClanArena.cs:386)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs (GameHooks.PlayerDamageSplitHealthArmor.Call)"
+      - "src/VortexArena.Server/GameWorld.cs:MirrorRoundTiming (mirrors IsRoundStarted + GameStartTime into ca.Handler, GameWorld.cs:4760)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs:MirrorRoundStarted"
     constants:
       - { name: "g_ca_damage2score", base: "100 (dmg per point; gametypes-server.cfg:264)", port: "100 (Damage2Score; live cvar)", match: true }
     status:
@@ -209,9 +209,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, SetStartItems)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnSetStartItems (ClanArena.cs:405)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems (fires SetStartItems hook)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ApplyStartLoadout (live spawn path)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnSetStartItems (ClanArena.cs:405)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems (fires SetStartItems hook)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ApplyStartLoadout (live spawn path)"
     constants:
       - { name: "start_health", base: "200 (g_ca_start_health, sv_clanarena.qc:7)", port: "200 (StartHealth, live cvar)", match: true }
       - { name: "start_armor", base: "200 (g_ca_start_armor, sv_clanarena.qc:8)", port: "200 (StartArmor, live cvar)", match: true }
@@ -237,9 +237,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, SetWeaponArena)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnSetWeaponArena (ClanArena.cs:427)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems (fires SetWeaponArena)"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:ExpandWeaponArena (case 'most')"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnSetWeaponArena (ClanArena.cs:427)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ComputeStartItems (fires SetWeaponArena)"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ExpandWeaponArena (case 'most')"
     constants:
       - { name: "g_ca_weaponarena", base: '"most" (sv_clanarena.qh:17 / gametypes-server.cfg:271)', port: '"most" (CvarWeaponArena default + live cvar)', match: true }
     status:
@@ -263,8 +263,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, FilterItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnFilterItemDefinition (ClanArena.cs:440)"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs (MutatorHooks.FilterItemDefinition.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnFilterItemDefinition (ClanArena.cs:440)"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs (MutatorHooks.FilterItemDefinition.Call)"
     constants:
       - { name: "g_pickup_items", base: "-1 (use gametype default; <=0 removes all items)", port: "-1 live (Cvar(g_pickup_items,0)<=0 -> filter; matches QC `autocvar_g_pickup_items <= 0`)", match: true }
       - { name: "g_powerups", base: "-1 (<=0 removes powerups)", port: "-1 live (Cvar(g_powerups,0)<=0 -> filter powerups)", match: true }
@@ -290,8 +290,8 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qh:REGISTER_MUTATOR(ca) (GameRules_limit_score/lead)"
       - "common/gametypes/gametype/clanarena/clanarena.qh:gametype_init (pointlimit=10 leadlimit=6)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:UpdateLeaderAndCheckLimit (ClanArena.cs:738)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:RoundLimit / LeadLimit (ClanArena.cs:127/137)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:UpdateLeaderAndCheckLimit (ClanArena.cs:738)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:RoundLimit / LeadLimit (ClanArena.cs:127/137)"
     constants:
       - { name: "round_limit", base: "10 (pointlimit / legacydefaults)", port: "10", match: true }
       - { name: "lead_limit", base: "6", port: "6", match: true }
@@ -317,8 +317,8 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:CA_count_alive_players (STAT REDALIVE..PINKALIVE)"
       - "common/gametypes/gametype/clanarena/cl_clanarena.qc:HUD_Mod_CA / DrawCAItem"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:AliveCount (ClanArena.cs:728)"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:Capture (Kind.ClanArena) -> WriteAliveCounts"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:AliveCount (ClanArena.cs:728)"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:Capture (Kind.ClanArena) -> WriteAliveCounts"
       - "game/net/NetGame.cs:UpdateModIcons"
       - "game/hud/ModIconsPanel.cs"
     constants:
@@ -345,8 +345,8 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:ca_isEliminated"
       - "server/elimination.qc:EliminatedPlayers_SendEntity"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:IsEliminatedPlayer (ClanArena.cs:880 — p.IsDead || _joiningMidRound.Contains(p))"
-      - "src/XonoticGodot.Net/GametypeStatusBlock.cs:WriteIdList (eliminated, GametypeStatusBlock.cs:91)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:IsEliminatedPlayer (ClanArena.cs:880 — p.IsDead || _joiningMidRound.Contains(p))"
+      - "src/VortexArena.Net/GametypeStatusBlock.cs:WriteIdList (eliminated, GametypeStatusBlock.cs:91)"
       - "game/net/NetGame.cs:UpdateScoreboard"
     constants: []
     status:
@@ -371,8 +371,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, SpectateSet/SpectateNext/SpectatePrev)"
     port_refs:
-      - "src/XonoticGodot.Server/SpectatorRules.cs:CanSpectate / CycleSpectatee / SpectateEnemiesMode"
-      - "src/XonoticGodot.Server/ClientManager.cs (spectate cycling)"
+      - "src/VortexArena.Server/SpectatorRules.cs:CanSpectate / CycleSpectatee / SpectateEnemiesMode"
+      - "src/VortexArena.Server/ClientManager.cs (spectate cycling)"
     constants:
       - { name: "g_ca_spectate_enemies", base: "0 (teammates only; gametypes-server.cfg:262)", port: "0 default/live", match: true }
     status:
@@ -398,10 +398,10 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:CA_CheckWinner (Send_Notification ROUND_TEAM_WIN/TIED/OVER)"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:ca_LastPlayerForTeam_Notify (CENTER_ALONE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:CheckWinner (Sends ROUND_TEAM_WIN_*/TIED/OVER, ClanArena.cs:565-576)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnDeath (calls NotifyLastPlayerForTeam(victim,_roster), ClanArena.cs:315; subscribed to Combat.Death in Activate, ClanArena.cs:195-196)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:NotifyLastPlayerForTeam (ALONE; ClanArena.cs:593)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs (ROUND_TEAM_WIN_*/ROUND_TIED/ROUND_OVER/ALONE registered)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:CheckWinner (Sends ROUND_TEAM_WIN_*/TIED/OVER, ClanArena.cs:565-576)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnDeath (calls NotifyLastPlayerForTeam(victim,_roster), ClanArena.cs:315; subscribed to Combat.Death in Activate, ClanArena.cs:195-196)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:NotifyLastPlayerForTeam (ALONE; ClanArena.cs:593)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs (ROUND_TEAM_WIN_*/ROUND_TIED/ROUND_OVER/ALONE registered)"
     constants: []
     status:
       logic: faithful
@@ -427,10 +427,10 @@ features:
       - "server/weapons/weaponsystem.qc:weaponUseForbidden (round_handler_IsActive() && !round_handler_IsRoundStarted())"
       - "server/round_handler.qh:round_handler_IsRoundStarted (!wait && !cnt)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:WeaponUseForbidden (invokes RoundFireForbidden)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:RoundFireForbidden (host-wired predicate)"
-      - "src/XonoticGodot.Server/GameWorld.cs:EnableRounds sets RoundFireForbidden = _ => Rounds is {IsRoundStarted:false} (GameWorld.cs:1621); cleared in ActivateGameType (GameWorld.cs:2710)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Frame calls WeaponFireDriver.Frame per client per tick"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:WeaponUseForbidden (invokes RoundFireForbidden)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:RoundFireForbidden (host-wired predicate)"
+      - "src/VortexArena.Server/GameWorld.cs:EnableRounds sets RoundFireForbidden = _ => Rounds is {IsRoundStarted:false} (GameWorld.cs:1621); cleared in ActivateGameType (GameWorld.cs:2710)"
+      - "src/VortexArena.Server/GameWorld.cs:Frame calls WeaponFireDriver.Frame per client per tick"
     constants:
       - { name: "grace_seconds", base: "10 (g_ca_warmup countdown)", port: "10 countdown (g_ca_warmup live); fire is BLOCKED during the whole countdown+end-delay grace window", match: true }
     status:
@@ -455,10 +455,10 @@ features:
     base_refs:
       - "server/round_handler.qc:round_handler_Think (FOREACH_CLIENT(IS_PLAYER||INGAME) GameRules_scoring_add(it, ROUNDS_PL, 1) at f==0)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:AwardRoundStartScore (ClanArena.cs:267)"
-      - "src/XonoticGodot.Server/RoundHandler.cs:OnRoundCounted (fired at f==0)"
-      - "src/XonoticGodot.Server/GameWorld.cs:CA branch sets caRounds.OnRoundCounted = ca.AwardRoundStartScore (GameWorld.cs:2773) + _roundPrep = ca.SetRoster(Clients.Players) (GameWorld.cs:2776)"
-      - "src/XonoticGodot.Common/Gameplay/Scoring/GameScores.cs:ROUNDS_PL field + AddToPlayer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:AwardRoundStartScore (ClanArena.cs:267)"
+      - "src/VortexArena.Server/RoundHandler.cs:OnRoundCounted (fired at f==0)"
+      - "src/VortexArena.Server/GameWorld.cs:CA branch sets caRounds.OnRoundCounted = ca.AwardRoundStartScore (GameWorld.cs:2773) + _roundPrep = ca.SetRoster(Clients.Players) (GameWorld.cs:2776)"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ROUNDS_PL field + AddToPlayer"
     constants:
       - { name: "rounds_pl_per_round", base: "+1 per present player when the round starts", port: "+1 per roster player (AwardRoundStartScore: GameScores.AddToPlayer(p, ROUNDS_PL, 1) for each _roster member)", match: true }
     status:
@@ -485,9 +485,9 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, CalculateRespawnTime)"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnPlayerRegen (ClanArena.cs:455)"
-      - "src/XonoticGodot.Server/PlayerFrameLogic.cs (MutatorHooks.PlayerRegen.Call)"
-      - "src/XonoticGodot.Server/GameWorld.cs:DeadPlayerThink (round-gated respawn)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnPlayerRegen (ClanArena.cs:455)"
+      - "src/VortexArena.Server/PlayerFrameLogic.cs (MutatorHooks.PlayerRegen.Call)"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink (round-gated respawn)"
     constants: []
     status:
       logic: faithful
@@ -513,10 +513,10 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, PutClientInServer)"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, Bot_FixCount)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:CanJoin (ClanArena.cs:104) — LIVE (force-observe mid-round)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnJoinLate (ClanArena.cs:111; adds to _joiningMidRound + sends CA_JOIN_LATE) — now LIVE via GametypeOnJoinRefused"
-      - "src/XonoticGodot.Server/GameWorld.cs:GametypeJoinGate = ca.CanJoin(p, Rounds.IsRoundStarted) (GameWorld.cs:2856); GametypeOnJoinRefused = if(round started) ca.OnJoinLate (GameWorld.cs:2863); GametypeOnJoin = null (GameWorld.cs:2864)"
-      - "src/XonoticGodot.Server/ClientManager.cs:JoinAllowed (refuses on GametypeJoinGate, invokes GametypeOnJoinRefused?.Invoke(p) on the refusal branch, ClientManager.cs:356-362)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:CanJoin (ClanArena.cs:104) — LIVE (force-observe mid-round)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnJoinLate (ClanArena.cs:111; adds to _joiningMidRound + sends CA_JOIN_LATE) — now LIVE via GametypeOnJoinRefused"
+      - "src/VortexArena.Server/GameWorld.cs:GametypeJoinGate = ca.CanJoin(p, Rounds.IsRoundStarted) (GameWorld.cs:2856); GametypeOnJoinRefused = if(round started) ca.OnJoinLate (GameWorld.cs:2863); GametypeOnJoin = null (GameWorld.cs:2864)"
+      - "src/VortexArena.Server/ClientManager.cs:JoinAllowed (refuses on GametypeJoinGate, invokes GametypeOnJoinRefused?.Invoke(p) on the refusal branch, ClientManager.cs:356-362)"
     constants: []
     status:
       logic: faithful
@@ -540,8 +540,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, ForbidThrowCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnForbidThrowCurrentWeapon (ClanArena.cs:452)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponThrowing.cs (MutatorHooks.ForbidThrowCurrentWeapon.Call)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnForbidThrowCurrentWeapon (ClanArena.cs:452)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponThrowing.cs (MutatorHooks.ForbidThrowCurrentWeapon.Call)"
     constants: []
     status:
       logic: faithful
@@ -565,11 +565,11 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, ClientDisconnect) (ca_LastPlayerForTeam_Notify, line 393)"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, MakePlayerObserver) (ca_LastPlayerForTeam_Notify, line 406)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnMakePlayerObserver (ClanArena.cs:465; subscribed ClanArena.cs:229-230)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnClientDisconnect (ClanArena.cs:479; subscribed ClanArena.cs:234-235)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:NotifyLastPlayerForTeam (ClanArena.cs:593)"
-      - "src/XonoticGodot.Server/ClientManager.cs:PutObserverInServer (MutatorHooks.MakePlayerObserver.Call, ClientManager.cs:542)"
-      - "src/XonoticGodot.Server/ClientManager.cs:ClientDisconnect (MutatorHooks.ClientDisconnect.Call, ClientManager.cs:832)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnMakePlayerObserver (ClanArena.cs:465; subscribed ClanArena.cs:229-230)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnClientDisconnect (ClanArena.cs:479; subscribed ClanArena.cs:234-235)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:NotifyLastPlayerForTeam (ClanArena.cs:593)"
+      - "src/VortexArena.Server/ClientManager.cs:PutObserverInServer (MutatorHooks.MakePlayerObserver.Call, ClientManager.cs:542)"
+      - "src/VortexArena.Server/ClientManager.cs:ClientDisconnect (MutatorHooks.ClientDisconnect.Call, ClientManager.cs:832)"
     constants: []
     status:
       logic: faithful
@@ -592,8 +592,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, MatchEnd_BeforeScores) (MatchEnd_RestoreSpectatorAndTeamStatus(prev_team))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnMatchEndBeforeScores (ClanArena.cs:707; subscribed ClanArena.cs:299-300)"
-      - "src/XonoticGodot.Server/GameWorld.cs:FireMatchEndBeforeScores (GameWorld.cs:3954)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnMatchEndBeforeScores (ClanArena.cs:707; subscribed ClanArena.cs:299-300)"
+      - "src/VortexArena.Server/GameWorld.cs:FireMatchEndBeforeScores (GameWorld.cs:3954)"
     constants: []
     status:
       logic: partial
@@ -617,9 +617,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, ClientCommand_Spectate) (MUT_SPECCMD_FORCE + INFO_CA_LEAVE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnSpectateCommand (ClanArena.cs:721; sends CA_LEAVE) — now LIVE"
-      - "src/XonoticGodot.Server/ClientManager.cs:GametypeSpectateCommand (ClientManager.cs:530 → ca.OnSpectateCommand)"
-      - "src/XonoticGodot.Server/Commands.cs:CmdSpectate (the registered `spectate` command, Commands.cs:808/1561) calls GametypeSpectateCommand(p) (Commands.cs:1594)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnSpectateCommand (ClanArena.cs:721; sends CA_LEAVE) — now LIVE"
+      - "src/VortexArena.Server/ClientManager.cs:GametypeSpectateCommand (ClientManager.cs:530 → ca.OnSpectateCommand)"
+      - "src/VortexArena.Server/Commands.cs:CmdSpectate (the registered `spectate` command, Commands.cs:808/1561) calls GametypeSpectateCommand(p) (Commands.cs:1594)"
     constants: []
     status:
       logic: faithful
@@ -644,9 +644,9 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, SV_ParseServerCommand) (shuffleteams_on_reset_map = !allowed_to_spawn)"
       - "server/command/sv_cmd.qc:GameCommand_shuffleteams (defers when shuffleteams_on_reset_map set)"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:CmdShuffleTeams (Commands.cs:1395; registered 'shuffleteams' Commands.cs:760)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ShuffleTeamsOnResetMap flag (GameWorld.cs:116) consumed in ResetMap (GameWorld.cs:4636-4639)"
-      - "src/XonoticGodot.Server/GameWorld.cs:Rounds.OnRoundReset = ResetMap (GameWorld.cs:1647)"
+      - "src/VortexArena.Server/Commands.cs:CmdShuffleTeams (Commands.cs:1395; registered 'shuffleteams' Commands.cs:760)"
+      - "src/VortexArena.Server/GameWorld.cs:ShuffleTeamsOnResetMap flag (GameWorld.cs:116) consumed in ResetMap (GameWorld.cs:4636-4639)"
+      - "src/VortexArena.Server/GameWorld.cs:Rounds.OnRoundReset = ResetMap (GameWorld.cs:1647)"
     constants: []
     status:
       logic: faithful
@@ -670,8 +670,8 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, reset_map_players)"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, reset_map_global)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:ResetMapPlayers (ClanArena.cs:689; clears _joiningMidRound, zeroes killcount, snapshots _prevTeam)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ResetMap switch `case ClanArena ca: ca.ResetMapPlayers(Clients.Players)` (GameWorld.cs:4642)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:ResetMapPlayers (ClanArena.cs:689; clears _joiningMidRound, zeroes killcount, snapshots _prevTeam)"
+      - "src/VortexArena.Server/GameWorld.cs:ResetMap switch `case ClanArena ca: ca.ResetMapPlayers(Clients.Players)` (GameWorld.cs:4642)"
     constants: []
     status:
       logic: faithful
@@ -696,9 +696,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, PlayerSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:OnPlayerSpawn (ClanArena.cs:567; subscribed to MutatorHooks.PlayerSpawn ClanArena.cs:291-292)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/ClanArena.cs:_scoreDecimal (also cleared on Activate/Deactivate, ClanArena.cs:245/364)"
-      - "src/XonoticGodot.Server/ClientManager.cs:PutPlayerInServer (MutatorHooks.PlayerSpawn.Call, ClientManager.cs:772)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnPlayerSpawn (ClanArena.cs:567; subscribed to MutatorHooks.PlayerSpawn ClanArena.cs:291-292)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:_scoreDecimal (also cleared on Activate/Deactivate, ClanArena.cs:245/364)"
+      - "src/VortexArena.Server/ClientManager.cs:PutPlayerInServer (MutatorHooks.PlayerSpawn.Call, ClientManager.cs:772)"
     constants: []
     status:
       logic: faithful

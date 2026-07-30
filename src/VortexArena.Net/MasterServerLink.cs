@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// The UDP socket layer for the connectionless master-server / server-info protocol — the C# successor to DP's

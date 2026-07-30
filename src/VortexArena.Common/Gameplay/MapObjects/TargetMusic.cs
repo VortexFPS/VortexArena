@@ -13,10 +13,10 @@
 // For the listen-server path (the current primary play path), target_music and trigger_music state is
 // read directly by the client MusicPlayer each frame (no networking needed — shared process).
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// <c>target_music</c> and <c>trigger_music</c> — map-entity music overrides. Registered by

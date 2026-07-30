@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Scoring;
+namespace VortexArena.Common.Gameplay.Scoring;
 
 /// <summary>
 /// The unified, networked score table — the C# successor to QuakeC's scoring layer (common/scores.qh's SP_*
@@ -634,7 +634,7 @@ public static class GameScores
         // global hook chain (the gametype that wants to keep score, e.g. TKA, returns true), keeping the optional
         // preferClear delegate as an extra override so either path can veto the wipe.
         bool veto = (preferClear is not null && preferClear(p))
-            || XonoticGodot.Common.Gameplay.MutatorHooks.FirePreferPlayerScore_Clear(p);
+            || VortexArena.Common.Gameplay.MutatorHooks.FirePreferPlayerScore_Clear(p);
         if (mode == 0 || (mode == -1 && !veto))
             return false;
         ClearPlayer(p);
@@ -859,7 +859,7 @@ public static class GameScores
     }
 
     // =====================================================================================
-    //  Networking change-set (consumed by XonoticGodot.Net's scoreboard codec)
+    //  Networking change-set (consumed by VortexArena.Net's scoreboard codec)
     // =====================================================================================
 
     /// <summary>

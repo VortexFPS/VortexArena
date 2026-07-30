@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// Shared entity fields that two concurrently-written port files each assumed the other would declare.

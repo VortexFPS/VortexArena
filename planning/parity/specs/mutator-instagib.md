@@ -1,6 +1,6 @@
 # InstaGib mutator — parity spec
 
-**Base refs:** `common/mutators/mutator/instagib/{instagib,sv_instagib,items}.qc/.qh` · **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs`
+**Base refs:** `common/mutators/mutator/instagib/{instagib,sv_instagib,items}.qc/.qh` · **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

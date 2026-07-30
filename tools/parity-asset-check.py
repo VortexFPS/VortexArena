@@ -10,8 +10,8 @@ Method:
   1. Collect literal asset-path strings from src/**/*.cs + game/**/*.cs (prefixes: models/ sound/
      sounds/ gfx/ textures/ particles/ maps/ env/ cubemaps/ scripts/). Interpolated/concatenated
      paths can't be checked statically and are skipped (counted).
-  2. Build the VFS view the game actually mounts: every assets/data/*.pk3dir directory tree plus
-     every assets/data/*.pk3 zip.
+  2. Build the VFS view the game actually mounts: every data/*.pk3dir tree and data/*.pk3 zip, PLUS
+     data/maps/*.pk3 — the per-map packs, which sit one level down and were being missed entirely.
   3. Resolve each reference with DarkPlaces' fallback rules: images try .tga/.png/.jpg[/.dds],
      sounds try .wav<->.ogg, env/ skyboxes try the 6 _ft.._dn side suffixes.
   4. For model hits, sniff the magic: IDP3 (md3) / IQM / DPM ok; IDPO (quake .mdl) and other
@@ -32,7 +32,10 @@ except ImportError:
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "planning" / "parity"
-DATA = ROOT / "assets" / "data"
+# The COMMITTED port content. Was ROOT/"assets"/"data", which on a dev box is a junction to the
+# pristine upstream reference — so this checker validated UPSTREAM content while its docstring claimed
+# to model "the VFS view the game actually mounts". Same root cause as the cvar differ's self-compare.
+DATA = ROOT / "data"
 KNOWN_FILE = OUT / "asset-check-known.yaml"
 
 PREFIXES = ("models/", "sound/", "sounds/", "gfx/", "textures/", "particles/", "maps/",
@@ -47,26 +50,51 @@ SKY_SUFFIXES = ("_ft", "_bk", "_lf", "_rt", "_up", "_dn")
 
 
 class Vfs:
-    """Union view over the pk3dir trees + pk3 zips under assets/data (case-insensitive)."""
+    """Union view over the packs the game mounts, case-insensitive.
+
+    Mirrors VirtualFileSystem.MountContentRoot: the per-map packs under data/maps/ AND the packs at the
+    data root. Missing the maps/ level was why this tool reported "mounts=6" and a pile of phantom
+    missing refs on a fully-populated tree — the six .pk3dir at the root were all it could see, so every
+    map-carried texture, shader and model looked absent.
+
+    Precedence: setdefault means FIRST writer wins, and the root packs are indexed first, so core content
+    outranks a map pack that happens to carry the same path. That matches MountGameDir's prepend
+    semantics (the game mounts maps/ first, then the root, and later mounts win), so a map cannot shadow
+    core content in either place.
+    """
 
     def __init__(self, data: pathlib.Path):
         self.index: dict[str, tuple[str, object]] = {}  # lower-path -> (mount label, dir-Path or (zip, member))
         self.mounts: list[str] = []
-        for d in sorted(data.glob("*.pk3dir")):
+
+        def add_dir(d: pathlib.Path) -> None:
             self.mounts.append(d.name)
             for p in d.rglob("*"):
                 if p.is_file():
-                    rel = p.relative_to(d).as_posix().lower()
-                    self.index.setdefault(rel, (d.name, p))
-        for z in sorted(data.glob("*.pk3")):
+                    self.index.setdefault(p.relative_to(d).as_posix().lower(), (d.name, p))
+
+        def add_zip(z: pathlib.Path) -> None:
             self.mounts.append(z.name)
             try:
                 zf = zipfile.ZipFile(z)
             except (OSError, zipfile.BadZipFile):
-                continue
+                return
             for member in zf.namelist():
                 if not member.endswith("/"):
                     self.index.setdefault(member.lower(), (z.name, (zf, member)))
+
+        # Root packs first (core outranks maps — see the precedence note above).
+        for d in sorted(data.glob("*.pk3dir")):
+            add_dir(d)
+        for z in sorted(data.glob("*.pk3")):
+            add_zip(z)
+        # Then the per-map packs, in whichever form fetch-maps.py left them.
+        maps = data / "maps"
+        if maps.is_dir():
+            for d in sorted(maps.glob("*.pk3dir")):
+                add_dir(d)
+            for z in sorted(maps.glob("*.pk3")):
+                add_zip(z)
 
     def exists(self, path: str) -> bool:
         return path.lower() in self.index
@@ -153,7 +181,8 @@ def collect_refs() -> tuple[dict[str, list[str]], int]:
 
 def main():
     if not DATA.is_dir():
-        sys.exit(f"assets/data not found: {DATA}")
+        sys.exit(f"content tree not found: {DATA}\n"
+                 f"       core content is committed; for maps run tools/data/fetch-maps.py")
     known: list[tuple[str, str]] = []
     if KNOWN_FILE.exists():
         for e in (yaml.safe_load(KNOWN_FILE.read_text(encoding="utf-8")) or {}).get("known") or []:

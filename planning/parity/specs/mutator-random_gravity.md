@@ -1,7 +1,7 @@
 # Random Gravity mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/random_gravity/sv_random_gravity.qc` (+ `.qh`, `_mod.inc`) · `mutators.cfg:184-190`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/RandomGravityMutator.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/RandomGravityMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -137,7 +137,7 @@ behavioral change — it is a NOTEd gap (gravity may not be restored at match en
   gates). Default-value diff of `mutators.cfg:184-190` (port vs Base) — identical.
 - **Liveness:** code-read of the caller chain `GameWorld.cs:511` (`MutatorActivation.Apply`) and `:943`
   (`MutatorHooks.FireStartFrame`), plus `MovementParameters.cs:190` / `PlayerPhysics.cs:132` for the live read.
-- **Tests:** `tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs`:
+- **Tests:** `tests/VortexArena.Tests/MutatorBatchT19Tests.cs`:
   `RandomGravity_SetsSvGravityWithinBounds` (every roll clamped in `[min,max]`) and `RandomGravity_RespectsDelay`
   (no re-roll inside the delay window). Both assert via `FireStartFrame`. Not run in this audit (code-read pass).
 - **Gate gap:** code-read — port `OnStartFrame` (RandomGravityMutator.cs:55-89) has only `game_stopped`

@@ -1,7 +1,7 @@
 # Vampire mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/vampire/{sv_vampire.qc, vampire.qc, vampire.qh, sv_vampire.qh, _mod.inc, _mod.qh}` · cvars in `mutators.cfg`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/VampireMutator.cs` · menu `game/menu/dialogs/DialogMutators.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/VampireMutator.cs` · menu `game/menu/dialogs/DialogMutators.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -79,10 +79,10 @@ from the `BUFF_VAMPIRE` buff (a temporary, weaker version); enabling `g_vampire`
     against the target's current Health/Armor, picks `damageTake` (total vs health-only), and guards on
     attacker-is-client / alive / not-frozen / not-self / `damageTake > 0`, then
     `attacker.GiveResource(Health, Factor * damageTake)`.
-- **Live caller chain:** `GameWorld.Boot` (`src/XonoticGodot.Server/GameWorld.cs:511`) calls
+- **Live caller chain:** `GameWorld.Boot` (`src/VortexArena.Server/GameWorld.cs:511`) calls
   `MutatorActivation.Apply()`, which `Add()`s every `[Mutator]` whose `IsEnabled` holds → `Hook()` runs
   → handler subscribed. The damage pipeline fires the chain at
-  `src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:401`
+  `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:401`
   (`GameHooks.PlayerDamageSplitHealthArmor.Call(ref hook)`), with `DamageTake = take`, `DamageSave = save`
   computed at that point. **The mutator is LIVE.**
 - **Buff interaction:** `BuffsMutator.cs:165` — `if (n == "vampire" && Api.Cvars.GetFloat("g_vampire") != 0f) return false;`

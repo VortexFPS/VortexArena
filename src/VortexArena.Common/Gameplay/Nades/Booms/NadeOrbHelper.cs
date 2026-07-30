@@ -11,10 +11,10 @@
 // stand-in for the QC `teamplay` global) so heal_foe / entrap-slow / veil-friend behave correctly in both
 // FFA and team modes. This file is owned by T11 (the Nades subsystem); it does not touch Teams.cs.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Scoring;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Scoring;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>Team/liveness predicates shared by the orb + field nade booms (faithful SAME_TEAM/DIFF_TEAM).</summary>
 internal static class NadeOrbHelper

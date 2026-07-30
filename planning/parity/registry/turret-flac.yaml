@@ -42,11 +42,11 @@ features:
       - "common/turrets/turret/flac.qc:spawnfunc(turret_flac)"
       - "common/turrets/sv_turrets.qc:turret_initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:FlacTurret(),Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Flac"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:233"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:TossDeathGibs(1207,1225) (head-gib consumer of HeadModel)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:FlacTurret(),Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Flac"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:233"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:TossDeathGibs(1207,1225) (head-gib consumer of HeadModel)"
     constants:
       - { name: "m_mins", base: "-32 -32 0", port: "-32 -32 0", match: true }
       - { name: "m_maxs", base: "32 32 64", port: "32 32 64", match: true }
@@ -78,9 +78,9 @@ features:
       - "common/turrets/turret/flac.qc:spawnfunc(turret_flac)"
       - "common/turrets/sv_turrets.qc:turret_link (setthink turret_think, nextthink=time)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Spawn,Flac"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:233"
-      - "src/XonoticGodot.Common/GameInit.cs:21"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Spawn,Flac"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:233"
+      - "src/VortexArena.Common/GameInit.cs:21"
     constants:
       - { name: "g_turrets master switch", base: "1 (on; turrets.cfg)", port: "MasterSwitchEnabled default-on (turrets.cfg sets 1)", match: true }
     status:
@@ -106,8 +106,8 @@ features:
       - "common/turrets/turret/flac.qc:METHOD(Flac, tr_setup)"
       - "common/turrets/sv_turrets.qc:turret_validate_target,turret_select_target"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:Select,ValidTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ValidTarget,SelectTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:Select,ValidTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ValidTarget,SelectTarget"
     constants:
       - { name: "target_select_flags", base: "default + NOTURRETS + MISSILESONLY", port: "RangeLimits|TeamCheck|Missiles|MissilesOnly|NoTurrets", match: true }
       - { name: "target_range", base: "4000", port: "4000", match: true }
@@ -134,8 +134,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_targetscore_generic"
       - "turrets.cfg:73-77 (g_turrets_unit_flac_target_select_*bias)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:23-46,77-83 (bias consts -> TurretParams)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget(300-333),SelectTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:23-46,77-83 (bias consts -> TurretParams)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget(300-333),SelectTarget"
     constants:
       - { name: "rangebias", base: "0.25", port: "0.25 (RangeBias const, passed)", match: true }
       - { name: "anglebias", base: "0.5", port: "0.5 (AngleBias const, passed)", match: true }
@@ -164,8 +164,8 @@ features:
       - "common/turrets/turret/flac.qc:tr_setup (aim_flags = LEAD|SHOTTIMECOMPENSATE)"
       - "common/turrets/sv_turrets.qc:turret_aim_generic"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:Think (lead:true, shotTimeCompensate:true; zPredict NOT set)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:Think (lead:true, shotTimeCompensate:true; zPredict NOT set)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
     constants:
       - { name: "aim_flags", base: "TFL_AIM_LEAD | TFL_AIM_SHOTTIMECOMPENSATE", port: "lead + shotTimeCompensate (zPredict default false)", match: true }
     status:
@@ -190,8 +190,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_track"
       - "turrets.cfg:83-90 (aim_speed/maxrot/maxpitch/track_*)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:35,48-51,79-83 (aimMaxPitch/track consts -> TurretParams)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Track(456-522)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:35,48-51,79-83 (aimMaxPitch/track consts -> TurretParams)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Track(456-522)"
     constants:
       - { name: "aim_speed", base: "200", port: "200", match: true }
       - { name: "aim_maxrot", base: "360", port: "360", match: true }
@@ -223,9 +223,9 @@ features:
       - "common/turrets/turret/flac_weapon.qc:turret_flac_projectile_think_explode"
       - "common/turrets/sv_turrets.qc:turret_projectile,turret_fire,turret_do_updates (tur_impacttime sv_turrets.qc:523)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Fire,RunCombat,UpdateImpact(725-750)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Fire,RunCombat,UpdateImpact(725-750)"
     constants:
       - { name: "shot_dmg", base: "20", port: "20", match: true }
       - { name: "shot_radius", base: "100", port: "100", match: true }
@@ -271,10 +271,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_die(166),turret_hide,turret_respawn (nextthink = time + respawntime - 0.2, line 162)"
       - "turrets.cfg:58 (g_turrets_unit_flac_respawntime 90)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die(739-771),Respawn,EnsureDeathHook,EventDamage(710-732)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:Spawn (respawnTime: RespawnTime=90)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init (st.RespawnTime=respawnTime), GtEventDamage shim"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:280,324-334 (EventDamage routes non-player edicts via GtEventDamage)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die(739-771),Respawn,EnsureDeathHook,EventDamage(710-732)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:Spawn (respawnTime: RespawnTime=90)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init (st.RespawnTime=respawnTime), GtEventDamage shim"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:280,324-334 (EventDamage routes non-player edicts via GtEventDamage)"
     constants:
       - { name: "respawntime", base: "90", port: "90 (FlacTurret.Spawn passes respawnTime: RespawnTime)", match: true }
       - { name: "respawn net delay", base: "respawntime exactly (turret_die nextthink=time+0.2 -> turret_hide nextthink=time+respawntime-0.2; the 0.2 cancels)", port: "now + respawntime (from Die)", match: true }
@@ -304,8 +304,8 @@ features:
       - "common/turrets/turret/flac_weapon.qc:turret_flac_projectile_think_explode (projectiledeathtype = DEATH_TURRET_FLAC)"
       - "common/notifications/all.inc:DEATH_TURRET_FLAC / DEATH_SELF_TURRET_FLAC"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs:266 (TurretFlac=\"turret_flac\"),359 (Reg -> DEATH_SELF_TURRET_FLAC)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:186 (TURRET_FLAC),1083 (DEATH_SELF_TURRET_FLAC)"
+      - "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs:266 (TurretFlac=\"turret_flac\"),359 (Reg -> DEATH_SELF_TURRET_FLAC)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:186 (TURRET_FLAC),1083 (DEATH_SELF_TURRET_FLAC)"
     constants:
       - { name: "deathtype", base: "DEATH_TURRET_FLAC", port: "DeathTypes.TurretFlac (\"turret_flac\")", match: true }
       - { name: "self/suicide line", base: "DEATH_SELF_TURRET_FLAC", port: "DEATH_SELF_TURRET_FLAC", match: true }
@@ -333,7 +333,7 @@ features:
       - "common/turrets/turret/flac_weapon.qh:CLASS(FlacAttack)"
       - "common/turrets/turret/flac_weapon.qc:METHOD(FlacAttack, wr_think) (IS_PLAYER branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:FlacWeapon(188-289) (class FlacWeapon : Weapon; ctor + WrThink + AnimtimeFor + RefireFor)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:FlacWeapon(188-289) (class FlacWeapon : Weapon; ctor + WrThink + AnimtimeFor + RefireFor)"
     constants:
       - { name: "impulse", base: "5", port: "5 (Impulse = 5)", match: true }
       - { name: "spawnflags", base: "WEP_FLAG_SPECIALATTACK | WEP_FLAG_HIDDEN", port: "WeaponFlags.SpecialAttack | WeaponFlags.Hidden", match: true }
@@ -368,9 +368,9 @@ features:
       - "common/turrets/turret/flac.qc:METHOD(Flac, tr_setup) (damage_flags |= TFL_DMG_HEADSHAKE)"
       - "common/turrets/sv_turrets.qc:turret_damage (228-234, TFL_DMG_HEADSHAKE head jolt)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/FlacTurret.cs:Spawn (TurretSpawn.Init call — headShake: true passed, FlacTurret.cs:79)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init (headShake param -> st.HeadShake, TurretSpawn.cs:79)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage (HeadShake-gated head jolt, TurretAI.cs:893-897)"
+      - "src/VortexArena.Common/Gameplay/Turrets/FlacTurret.cs:Spawn (TurretSpawn.Init call — headShake: true passed, FlacTurret.cs:79)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init (headShake param -> st.HeadShake, TurretSpawn.cs:79)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage (HeadShake-gated head jolt, TurretAI.cs:893-897)"
     constants:
       - { name: "damage_flags TFL_DMG_HEADSHAKE", base: "set (flac.qc:15 tr_setup)", port: "set for Flac (FlacTurret.Spawn passes headShake: true -> st.HeadShake true)", match: true }
       - { name: "head jolt magnitude", base: "+= (random()-0.5)*damage on pitch+yaw (post-FF-scaled take; sv_turrets.qc:230-231)", port: "(Prandom.Float()-0.5)*take on pitch+yaw (TurretAI.cs:895-896)", match: true }

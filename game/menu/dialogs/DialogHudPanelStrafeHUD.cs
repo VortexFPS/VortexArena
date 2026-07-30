@@ -1,7 +1,7 @@
 using Godot;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "StrafeHUD" panel config dialog — a faithful C# port of <c>XonoticHUDStrafeHUDDialog_fill</c>
@@ -20,7 +20,7 @@ namespace XonoticGodot.Game.Menu;
 /// the eight colour cvars to their defaults via the store's GetDefault (the C# <c>cvar_defstring</c>); it is
 /// a real local state change, not routed through a console command.
 ///
-/// FAITHFUL UI NOW: the strafe HUD is drawn by the HUD backend XonoticGodot hasn't wired up; all cvar bindings are
+/// FAITHFUL UI NOW: the strafe HUD is drawn by the HUD backend VortexArena hasn't wired up; all cvar bindings are
 /// real (they write the shared store the game reads). No live strafe preview is fabricated.
 /// </summary>
 public partial class DialogHudPanelStrafeHUD : MenuScreen

@@ -1,7 +1,7 @@
 # Tesla Coil Turret — parity spec
 
 **Base refs:** `common/turrets/turret/tesla.qc` · `tesla.qh` · `tesla_weapon.qc` · `tesla_weapon.qh` · `common/turrets/sv_turrets.qc` (shared framework) · `turrets.cfg` (balance, block `#11`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/TeslaTurret.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretAI.cs` · `Effects/EffectEmitter.cs` · `Damage/DeathTypes.cs` · `MapObjects/MapObjectsRegistry.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/TeslaTurret.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretAI.cs` · `Effects/EffectEmitter.cs` · `Damage/DeathTypes.cs` · `MapObjects/MapObjectsRegistry.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

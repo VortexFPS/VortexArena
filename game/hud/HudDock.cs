@@ -1,7 +1,7 @@
 using Godot;
-using XonoticGodot.Game.Menu;   // MenuState.Cvars — the shared menu/console store
+using VortexArena.Game.Menu;   // MenuState.Cvars — the shared menu/console store
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The HUD dock background — port of the dock-draw block in Base/.../qcsrc/client/hud/hud.qc

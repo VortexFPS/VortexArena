@@ -1,0 +1,47 @@
+Font licensing — INCOMPLETE, needs the upstream licence texts added
+===================================================================
+
+The four font packs in this content tree are third-party works. They are NOT covered
+by COPYING.xonotic's blanket "GPL version 3 or any later version" grant: Team Xonotic
+redistributes them, it does not own them, and it cannot relicense them.
+
+Verified 2026-07-29 by reading what each pack actually ships:
+
+  font-xolonium.pk3dir    COVERED. fonts/README.txt carries the full notice:
+                          "special GPL version of the Xolonium font, intended for
+                          Xonotic", GPL version 2 or any later version,
+                          Copyright 2011-2020 Severin Meyer <sev.ch@web.de>.
+                          Public release: https://gitlab.com/sev/xolonium
+
+  font-unifont.pk3dir     PARTIAL. fonts/README names the work (GNU Unifont 7.0.06,
+                          http://unifoundry.com/unifont.html) but carries no licence
+                          text. GNU Unifont is distributed under the GPL with a font
+                          embedding exception; that exception text is NOT in this tree
+                          and needs adding from unifoundry.com.
+
+  font-dejavu.pk3dir      MISSING. Ships DejaVuSans-Bold.ttf and DejaVuSansMono.ttf
+                          with no notice of any kind. The DejaVu fonts are released
+                          under the Bitstream Vera Fonts Copyright with the Arev Fonts
+                          Copyright addition — a permissive licence, NOT the GPL, which
+                          requires the copyright notice and permission notice to be
+                          included in all copies. Source: https://dejavu-fonts.github.io/
+
+  font-nimbussansl.pk3dir MISSING. Ships n019004l.pfb/.pfm/.afm with no notice. These
+                          are URW++ Nimbus Sans L. Needs the URW++ notice as shipped by
+                          the upstream font package.
+
+What to do
+----------
+
+For each MISSING/PARTIAL entry, obtain the licence text from the font project itself and
+add it here as FONTS.<name>. Do not paraphrase or reconstruct licence text from memory —
+these are legal documents and only the authoritative copy is any use.
+
+Nothing here blocks development. It does want closing before a public release that ships
+these fonts, because two of the four are currently distributed with no notice at all, and
+in the DejaVu case the licence specifically requires one.
+
+Context: before the repo restructure this content was fetched at build time and never
+committed, so the notices lived in the upstream checkout and travelled with nothing. This
+file exists because that changed. See planning/repo-restructure-2026-07-29.md D1/D2 and
+section 10.

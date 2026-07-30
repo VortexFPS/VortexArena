@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server.Bot;
+namespace VortexArena.Server.Bot;
 
 /// <summary>
 /// Per-bot navigation: the goal stack and path follower — the C# port of the navigation half of

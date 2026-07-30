@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Sidecars;
+namespace VortexArena.Formats.Sidecars;
 
 /// <summary>
 /// One entry of a model <c>.sounds</c> sidecar (e.g. <c>soldier.iqm_0.sounds</c>): a named voice/effect

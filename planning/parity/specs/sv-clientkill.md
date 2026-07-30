@@ -1,7 +1,7 @@
 # sv-clientkill — parity spec
 
 **Base refs:** `server/clientkill.qc` · `server/clientkill.qh` · callers in `server/command/cmd.qc`, `server/impulse.qc`, `server/player.qc`; mutator hooks in `common/gametypes/gametype/{cts,race,freezetag}/sv_*.qc`; announcer in `common/util.qc:Announcer_PickNumber`
-**Port refs:** `src/XonoticGodot.Server/Commands.cs` (`CmdKill`, `CmdSelectTeam`, `CmdSpectate`) · `src/XonoticGodot.Server/Teamplay.cs:KillPlayerForTeamChange` · `src/XonoticGodot.Common/Gameplay/GameTypes/Cts.cs` (finish retract) · `src/XonoticGodot.Server/ClientCommandRegistry.cs`
+**Port refs:** `src/VortexArena.Server/Commands.cs` (`CmdKill`, `CmdSelectTeam`, `CmdSpectate`) · `src/VortexArena.Server/Teamplay.cs:KillPlayerForTeamChange` · `src/VortexArena.Common/Gameplay/GameTypes/Cts.cs` (finish retract) · `src/VortexArena.Server/ClientCommandRegistry.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

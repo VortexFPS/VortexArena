@@ -1,7 +1,7 @@
 using System;
-using XonoticGodot.Formats.Materials;
+using VortexArena.Formats.Materials;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// Resolves a Q3 shader's <c>surfaceparm</c> set into the gameplay/collision side-channel the
@@ -12,8 +12,8 @@ namespace XonoticGodot.Game.Loaders;
 /// great many Xonotic surfaces declare their gameplay intent only in the <c>.shader</c> via
 /// <c>surfaceparm</c> (e.g. <c>nodraw</c>, <c>nonsolid</c>, <c>playerclip</c>, <c>lava</c>,
 /// <c>nolightmap</c>), and model shaders have no BSP entry at all. <see cref="SurfaceFlags"/> turns
-/// those parms into the same flag vocabulary the engine uses (<see cref="XonoticGodot.Engine.Collision.Q3SurfaceFlags"/>
-/// and <see cref="XonoticGodot.Engine.Collision.SuperContents"/>) so a builder can OR them onto whatever the
+/// those parms into the same flag vocabulary the engine uses (<see cref="VortexArena.Engine.Collision.Q3SurfaceFlags"/>
+/// and <see cref="VortexArena.Engine.Collision.SuperContents"/>) so a builder can OR them onto whatever the
 /// BSP supplied — these are <b>gameplay</b> bits and must never be dropped (asset-pipeline.md §4).
 ///
 /// The mapping mirrors q3map2 / Darkplaces <c>Mod_Q3BSP_LoadShaders</c> surfaceparm handling:
@@ -24,7 +24,7 @@ namespace XonoticGodot.Game.Loaders;
 /// </summary>
 public static class SurfaceFlags
 {
-    // Local aliases for the engine flag tables (XonoticGodot.Engine.Collision.*). Re-declared as constants
+    // Local aliases for the engine flag tables (VortexArena.Engine.Collision.*). Re-declared as constants
     // here so this file has no compile-time edge into the engine's internal layout beyond the two
     // public static classes; the values are the canonical Q3/DP bit definitions.
     // SUPERCONTENTS_* (Brush.cs SuperContents):

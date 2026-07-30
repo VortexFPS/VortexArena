@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Sidecars;
+namespace VortexArena.Formats.Sidecars;
 
 /// <summary>
 /// A player model's <c>.txt</c> model-info sidecar (Xonotic <c>get_model_parameters</c>, read by

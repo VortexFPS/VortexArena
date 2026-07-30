@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// One candidate in the end-of-match map vote — the C# successor to the parallel QC arrays

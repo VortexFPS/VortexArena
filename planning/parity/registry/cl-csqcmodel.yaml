@@ -74,9 +74,9 @@ features:
     base_refs:
       - "client/csqcmodel_hooks.qc:CSQCPlayer_ModelAppearance_Apply"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:ResolveForcedColormap"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:ForcePlayerColorsEnabled"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:UniqueColormap"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:ResolveForcedColormap"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:ForcePlayerColorsEnabled"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:UniqueColormap"
       - "game/client/ClientWorld.cs:ResolveForcedColormap"
       - "game/net/NetGame.cs:BuildAppearanceContext"
     constants:
@@ -111,12 +111,12 @@ features:
     base_refs:
       - "client/csqcmodel_hooks.qc:CSQCPlayer_ModelAppearance_Apply"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:ColormapPaletteColor"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:DeathGlowFactor"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:BaseGlowmod"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:GuardGlowmodZero"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:ApplyHdrGlowClamp"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:RespawnGhostClearsColors"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:ColormapPaletteColor"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:DeathGlowFactor"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:BaseGlowmod"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:GuardGlowmodZero"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:ApplyHdrGlowClamp"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:RespawnGhostClearsColors"
       - "game/client/ModelTint.cs:ApplyAppearance"
       - "game/client/ClientWorld.cs:IsDeadModel"
     constants:
@@ -152,8 +152,8 @@ features:
     base_refs:
       - "client/csqcmodel_hooks.qc:CSQCModel_LOD_Apply"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelLod.cs:SelectLodIndex"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelLod.cs:NearestPointOnBox"
+      - "src/VortexArena.Engine/Simulation/CsqcModelLod.cs:SelectLodIndex"
+      - "src/VortexArena.Engine/Simulation/CsqcModelLod.cs:NearestPointOnBox"
       - "game/client/ClientWorld.cs:ApplyLod"
     constants:
       - { name: "cl_playerdetailreduction", base: "4", port: "4", match: true }
@@ -187,7 +187,7 @@ features:
       - "client/player_skeleton.qc:skeleton_loadinfo"
       - "client/player_skeleton.qc:skeleton_markbones"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/PlayerSkeleton.cs:FromFrames"
+      - "src/VortexArena.Engine/Simulation/PlayerSkeleton.cs:FromFrames"
       - "game/client/PlayerModel.cs:Pose"
     constants:
       - { name: "upper body plays frames 1+3, lower plays 2+4 (lerpfrac juggle)", base: "yes", port: "Lerp/Lerp3/Lerp4 doubled split", match: true }
@@ -221,12 +221,12 @@ features:
       - "common/animdecide.qc:animdecide_setaction"
       - "common/animdecide.qc:animdecide_load_if_needed"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs:SelectLegsDirectional"
-      - "src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs:ImplicitDirection"
-      - "src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs:SelectTorsoAction"
-      - "src/XonoticGodot.Common/Gameplay/Player/AnimDecide.cs:GetUpperAnim"
-      - "src/XonoticGodot.Common/Gameplay/Player/AnimDecide.cs:SetAction"
-      - "src/XonoticGodot.Common/Gameplay/Player/AnimDecide.cs:SpecFor"
+      - "src/VortexArena.Engine/Simulation/LocomotionBlend.cs:SelectLegsDirectional"
+      - "src/VortexArena.Engine/Simulation/LocomotionBlend.cs:ImplicitDirection"
+      - "src/VortexArena.Engine/Simulation/LocomotionBlend.cs:SelectTorsoAction"
+      - "src/VortexArena.Common/Gameplay/Player/AnimDecide.cs:GetUpperAnim"
+      - "src/VortexArena.Common/Gameplay/Player/AnimDecide.cs:SetAction"
+      - "src/VortexArena.Common/Gameplay/Player/AnimDecide.cs:SpecFor"
       - "game/client/PlayerModel.cs:Pose"
       - "game/client/PlayerModel.cs:BuildClipTable"
     constants:
@@ -265,7 +265,7 @@ features:
     base_refs:
       - "client/csqcmodel_hooks.qc:CSQCPlayer_FallbackFrame"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/CsqcFallbackFrame.cs:Remap"
+      - "src/VortexArena.Engine/Simulation/CsqcFallbackFrame.cs:Remap"
       - "game/client/ModelAnimator.cs:FrameDuration"
       - "game/client/PlayerModel.cs:BuildClipTable"
     constants:
@@ -325,8 +325,8 @@ features:
       - "client/csqcmodel_hooks.qc:CSQCModel_Effects_Apply"
     port_refs:
       - "game/client/CsqcModelEffects.cs:Apply"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelEffectFlags.cs"
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs:ComposeForcedAppearance"
+      - "src/VortexArena.Engine/Simulation/CsqcModelEffectFlags.cs"
+      - "src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs:ComposeForcedAppearance"
       - "game/client/ClientWorld.cs:DriveCsqcModelHooks"
     constants:
       - { name: "EF_BRIGHTLIGHT light", base: "400 / '3 3 3'", port: "400 / (3,3,3)", match: true }
@@ -375,7 +375,7 @@ features:
     port_refs:
       - "game/client/CsqcModelEffects.cs:DriveJetpackLoop"
       - "game/net/ServerNet.cs:BuildEntitySet"
-      - "src/XonoticGodot.Net/NetEntity.cs:NetEntityFlags.UsingJetpack"
+      - "src/VortexArena.Net/NetEntity.cs:NetEntityFlags.UsingJetpack"
       - "game/net/ClientEntityView.cs"
     constants:
       - { name: "SND_JETPACK_FLY on CH_TRIGGER_SINGLE(=3), looping", base: "yes", port: "JETPACK_FLY on channel 3 loop", match: true }
@@ -403,8 +403,8 @@ features:
     base_refs:
       - "common/csqcmodel_settings.qh:CSQCMODEL_EXTRAPROPERTIES"
     port_refs:
-      - "src/XonoticGodot.Common/Framework/Entity.cs"
-      - "src/XonoticGodot.Net/NetEntity.cs"
+      - "src/VortexArena.Common/Framework/Entity.cs"
+      - "src/VortexArena.Net/NetEntity.cs"
       - "game/net/ServerNet.cs:QuantizeAlpha"
       - "game/net/ServerNet.cs:BuildEntitySet"
       - "game/net/ClientEntityView.cs"
@@ -455,8 +455,8 @@ features:
       - "common/anim.qc:anim_set"
       - "common/anim.qc:anim_update"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame"
-      - "src/XonoticGodot.Common/Gameplay/EntityClasses.cs:AnimFrame"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:DriveAnimFrame"
+      - "src/VortexArena.Common/Gameplay/EntityClasses.cs:AnimFrame"
       - "game/client/ModelAnimator.cs"
       - "game/client/ViewModel.cs:PlayReload"
     constants:
@@ -520,7 +520,7 @@ features:
       - "game/net/ClientEntityView.cs:193 (IsDucked <- NetEntityFlags.Crouched)"
       - "game/net/ClientEntityView.cs:207 (DeadState <- NetEntityFlags.Dead)"
       - "game/client/ClientWorld.cs:1090-1092 (FrozenHold)"
-      - "src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs:SelectLegsDirectional"
+      - "src/VortexArena.Engine/Simulation/LocomotionBlend.cs:SelectLegsDirectional"
     constants:
       - { name: "ANIMSTATE_DUCK -> duckwalk/duckjump/duckidle variants", base: "BIT(2) in the networked anim_state", port: "NetEntityFlags.Crouched -> e.IsDucked -> SelectLegsDirectional ducked switch", match: true }
       - { name: "ANIMSTATE_DEAD1 vs DEAD2 (die1/die2 base frames)", base: "BIT(0)/BIT(1)", port: "single Dead flag (DeadFlag.Dead) for the legs; the die1/die2 VARIANT reaches the client only via the torso UpperAction (Die1/Die2)", match: false }
@@ -549,7 +549,7 @@ features:
     base_refs:
       - "client/csqcmodel_hooks.qh"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/CsqcModelEffectFlags.cs"
+      - "src/VortexArena.Engine/Simulation/CsqcModelEffectFlags.cs"
       - "game/client/ClientWorld.cs:1548-1549"
       - "game/client/ShowNamesLayer.cs:628-631"
     constants:
@@ -579,7 +579,7 @@ features:
     base_refs:
       - "client/player_skeleton.qh"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/PlayerSkeleton.cs:14-44 (PlayerSkeletonConfig)"
+      - "src/VortexArena.Engine/Simulation/PlayerSkeleton.cs:14-44 (PlayerSkeletonConfig)"
       - "game/client/PlayerModel.cs:396 (_boneWeaponIndex -> tag_weapon marker)"
     constants:
       - { name: "field set: bone_upperbody, bone_weapon, bone_aim[]/bone_aimweight[], fixbone", base: "player_skeleton.qh:10-14", port: "PlayerSkeletonConfig.BoneUpperBody + AimBones (bone,weight) list + FixBone; bone_weapon = PlayerModel._boneWeaponIndex driving the _tagWeapon marker", match: true }

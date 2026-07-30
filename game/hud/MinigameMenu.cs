@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// The in-game minigame menu — the Godot successor to CSQC's <c>HUD_MinigameMenu_*</c>

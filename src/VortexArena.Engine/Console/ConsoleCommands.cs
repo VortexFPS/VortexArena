@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Config;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Engine.Console;
+namespace VortexArena.Engine.Console;
 
 /// <summary>
 /// The console/cvar builtins layered onto the shared <see cref="ConfigInterpreter"/> — the C# successor to the
@@ -229,7 +229,7 @@ public sealed class ConsoleCommands
                 _print($"no command or cvar named \"{name}\"");
             return;
         }
-        _print("XonoticGodot console — type a command or `cvar value`. Try: cmdlist, cvarlist [filter], search <text>,");
+        _print("VortexArena console — type a command or `cvar value`. Try: cmdlist, cvarlist [filter], search <text>,");
         _print("bind <key> <command>, exec <file.cfg>, toggle <cvar>, connect <addr>, disconnect, quit.");
     }
 

@@ -3,10 +3,10 @@
 using System;
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Gameplay;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The HSL image color picker — a faithful C# port of the two QC colorpicker widgets. It draws the

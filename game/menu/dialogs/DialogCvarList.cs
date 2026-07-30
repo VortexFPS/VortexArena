@@ -1,7 +1,7 @@
 using Godot;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// "Advanced settings" — the raw cvar list editor, a faithful C# port of <c>XonoticCvarsDialog</c>
@@ -14,7 +14,7 @@ namespace XonoticGodot.Game.Menu;
 ///   * and a detail panel for the selected row: Setting (name), Type, an editable Value box, a
 ///     "Reset to default" button (QC <c>CvarList_Revert_Click</c>), and a Description.
 ///
-/// FAITHFUL UI NOW: the full scrolling cvar TABLE needs a list/enumeration widget backend XonoticGodot's menu does
+/// FAITHFUL UI NOW: the full scrolling cvar TABLE needs a list/enumeration widget backend VortexArena's menu does
 /// not have yet, so the live list area is rendered with an honest note instead of a fabricated row set. The
 /// rest is REAL against the shared <see cref="MenuState.Cvars"/> store: the two filter checkboxes are bound
 /// cvars; the "Filter:" box is live; and the detail panel is a working by-name editor — type a cvar name to
@@ -68,7 +68,7 @@ public partial class DialogCvarList : MenuScreen
         foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
             listPad.AddThemeConstantOverride(side, 16);
         var listNote = MakeLabel(
-            "(live cvar list — the scrolling cvar table needs a list-widget backend XonoticGodot's menu does not " +
+            "(live cvar list — the scrolling cvar table needs a list-widget backend VortexArena's menu does not " +
             "have yet. Use the editor below to inspect or change a cvar by name.)");
         listNote.AddThemeColorOverride("font_color", new Color(0.70f, 0.72f, 0.78f));
         listNote.AutowrapMode = TextServer.AutowrapMode.WordSmart;

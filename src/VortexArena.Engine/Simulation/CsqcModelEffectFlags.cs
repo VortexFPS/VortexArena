@@ -6,12 +6,12 @@
 // (csqcmodel_hooks.qc:611-632).
 //
 // This is a SEPARATE client-side constant set, intentionally numerically identical to
-// XonoticGodot.Common.Framework.EffectFlags for the bits they share (FullBright=512, Additive=32, NoDraw=16,
+// VortexArena.Common.Framework.EffectFlags for the bits they share (FullBright=512, Additive=32, NoDraw=16,
 // NoShadow=4096, Stardust=2048) — kept apart so the server-side mutator file stays untouched (T35/T40 own it).
 // NOTE: the server file's EffectFlags.FullBright=8 / NoShadow=8192 are WRONG vs the engine; the canonical
 // engine values are used here (FullBright=512, NoShadow=4096). See CsqcModelHooksTests for the assertions.
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// The DarkPlaces engine <c>EF_*</c> entity-effect bits and the CSQC <c>MF_*</c> model-flag bits, plus the

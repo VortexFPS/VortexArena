@@ -9,10 +9,10 @@
 // csqcmodel render-mirror fields (UpperAction/SwitchWeapon/WepAlpha/GunAlign in EntityGameplayState.cs) for
 // cohesion — same proxy, same decode path, same lifetime.
 //
-// The namespace is XonoticGodot.Common.Framework to match the rest of the partial Entity declarations (the
+// The namespace is VortexArena.Common.Framework to match the rest of the partial Entity declarations (the
 // partial type's namespace is fixed regardless of the physical Gameplay/ folder location).
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -27,10 +27,10 @@ namespace XonoticGodot.Common.Framework
 
         /// <summary>QC wepent view-state block (vortex/oknex charge, clip/heat, viewmodel frame, beam state)
         /// decoded onto this client render proxy from <c>NetEntityState.WepentView</c>. Initialised to
-        /// <see cref="XonoticGodot.Net.WepentViewState.None"/> (all-default, <c>IsActive == false</c>); a player
+        /// <see cref="VortexArena.Net.WepentViewState.None"/> (all-default, <c>IsActive == false</c>); a player
         /// with no charge / no clip never sets the wire bit, so it stays None. Read by the Phase-1 wepent ring
         /// renderer (and the Phase-2 viewmodel/beam consumers); the server sim never reads it.</summary>
-        public XonoticGodot.Net.WepentViewState WepentView = XonoticGodot.Net.WepentViewState.None;
+        public VortexArena.Net.WepentViewState WepentView = VortexArena.Net.WepentViewState.None;
 
         // =====================================================================================
         //  [vehicleview] vehicle HUD / chase-cam render-proxy slice
@@ -45,11 +45,11 @@ namespace XonoticGodot.Common.Framework
         /// <summary>QC vehicle view-state block (HUD health/shield/energy/ammo + reload, vehicle kind,
         /// weapon2 mode, lock strength + flags) decoded onto this client render proxy from
         /// <c>NetEntityState.VehicleView</c>. Initialised to
-        /// <see cref="XonoticGodot.Net.VehicleViewState.None"/> (all-default, <c>IsActive == false</c>): a
+        /// <see cref="VortexArena.Net.VehicleViewState.None"/> (all-default, <c>IsActive == false</c>): a
         /// player on foot / observing never sets the wire bit, so it stays None. A remote pilot reads its own
         /// block off <c>ClientNet.LocalState</c>; a spectator following a pilot reads it off the entity stream
         /// onto this proxy. Read by the vehicle HUD + vehicle chase camera; the server sim never reads it.</summary>
-        public XonoticGodot.Net.VehicleViewState VehicleView = XonoticGodot.Net.VehicleViewState.None;
+        public VortexArena.Net.VehicleViewState VehicleView = VortexArena.Net.VehicleViewState.None;
 
         // =====================================================================================
         //  [objstream] turret / objective render-proxy slice

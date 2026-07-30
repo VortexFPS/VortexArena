@@ -26,11 +26,11 @@
 // When there is no activator (ambient loop, null entity), the *-name resolves to silence (QC SND(Null)
 // fallback), exactly as before.
 
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// <c>target_speaker</c> — ambient/environmental and triggered sound emitter. Each setup method is a
@@ -196,11 +196,11 @@ public static class TargetSpeaker
     }
 
     /// <summary>
-    /// Host seam (XonoticGodot.Server): QC <c>soundto(MSG_ONE, …)</c> — play a sound ONLY to one client.
+    /// Host seam (VortexArena.Server): QC <c>soundto(MSG_ONE, …)</c> — play a sound ONLY to one client.
     /// When assigned, <see cref="SpeakerUseActivator"/> routes through this instead of the broadcast
     /// <c>ISoundService.Play</c>, making the ACTIVATOR speaker byte-faithful: only the triggering human hears
     /// the sound, exactly as Base's <c>target_speaker_use_activator</c> does via <c>soundto MSG_ONE</c>.
-    /// The host (XonoticGodot.Server) wires this to its per-client sound-packet path; null = fall back to
+    /// The host (VortexArena.Server) wires this to its per-client sound-packet path; null = fall back to
     /// the broadcast play (audible to all clients — acceptable on a listen server with one human).
     /// <para>Parameters: (client entity, emitter entity, channel, sample, volume, attenuation).</para>
     /// </summary>

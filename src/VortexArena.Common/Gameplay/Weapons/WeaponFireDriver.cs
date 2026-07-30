@@ -1,8 +1,8 @@
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The per-tick weapon-fire driver — the C# successor to QuakeC's <c>W_WeaponFrame</c> +
@@ -137,7 +137,7 @@ public static class WeaponFireDriver
             // (perf 2.1) wf.* stage scopes: the census's 90-146 ms mp.weapon melts needed the stage named
             // (switch vs scheduled think vs the WrThink fire path) — see the perf-campaign doc.
             Weapon? weapon;
-            using (XonoticGodot.Common.Diagnostics.Prof.Sample("wf.switch"))
+            using (VortexArena.Common.Diagnostics.Prof.Sample("wf.switch"))
                 weapon = DriveWeaponSwitch(player, slot, st);
 
             // No weapon equipped in this slot -> nothing to fire (QC m_weapon == WEP_Null branch).
@@ -167,7 +167,7 @@ public static class WeaponFireDriver
                 var think = st.WeaponThink;
                 st.WeaponThink = null;
                 st.WeaponNextThink = 0f;
-                using (XonoticGodot.Common.Diagnostics.Prof.Sample("wf.sched"))
+                using (VortexArena.Common.Diagnostics.Prof.Sample("wf.sched"))
                     think(player, slot);
             }
 
@@ -190,8 +190,8 @@ public static class WeaponFireDriver
             // persist across maps too (cl_persist_asset_cache). A second map's first fire is already warm,
             // so re-arming this per match would just add a line with nothing behind it.
             if (buttonAtck && _firstFireLogged.Add(weapon.RegistryId))
-                XonoticGodot.Common.Diagnostics.Log.Info($"[wf] first attack this session: {weapon.NetName}");
-            using (XonoticGodot.Common.Diagnostics.Prof.Sample(WfScopeName(weapon)))
+                VortexArena.Common.Diagnostics.Log.Info($"[wf] first attack this session: {weapon.NetName}");
+            using (VortexArena.Common.Diagnostics.Prof.Sample(WfScopeName(weapon)))
             {
                 weapon.WrThink(player, slot, FireMode.Primary);
                 if (buttonAtck2)

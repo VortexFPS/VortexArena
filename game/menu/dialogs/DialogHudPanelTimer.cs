@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Timer" panel config dialog — a faithful C# port of <c>XonoticHUDTimerDialog_fill</c>
@@ -15,7 +15,7 @@ namespace XonoticGodot.Game.Menu;
 /// THEN the panel-specific rows the .qc declares: "Show elapsed time" and the 3-way "Secondary timer" radio.
 ///
 /// FAITHFUL UI NOW: these cvar bindings are real (they write the shared store the in-game HUD reads). There is
-/// no in-game HUD editor/preview wired into XonoticGodot yet, so nothing here previews live; the controls simply
+/// no in-game HUD editor/preview wired into VortexArena yet, so nothing here previews live; the controls simply
 /// edit the same <c>hud_panel_*</c> cvars the HUD will consume.
 /// </summary>
 public partial class DialogHudPanelTimer : MenuScreen

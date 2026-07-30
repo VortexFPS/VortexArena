@@ -4,9 +4,9 @@
 // gains/waste. The port keeps the resource math in Resources.cs and exposes these typed hook chains here
 // (kept in the Items folder so the resource subsystem owns them); mutators subscribe via Hook()/Unhook().
 
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The resource hook chains (QC sv_resources.qc MUTATOR_CALLHOOK points). Empty by default — a handler is

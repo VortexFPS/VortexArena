@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Net;
+using VortexArena.Net;
 
-namespace XonoticGodot.Tests.Camera;
+namespace VortexArena.Tests.Camera;
 
 /// <summary>
 /// Shared helpers for the camera-drift apparatus: the exact rendered-eye composition the net path uses

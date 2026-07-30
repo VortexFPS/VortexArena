@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Dpm;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Formats.Mdl;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Formats.Sprites;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Game.Loaders.Models; // IqmBuilder / DpmBuilder / Md3Builder
+using VortexArena.Common.Diagnostics;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Dpm;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Md3;
+using VortexArena.Formats.Mdl;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Formats.Sprites;
+using VortexArena.Formats.Vfs;
+using VortexArena.Game.Loaders.Models; // IqmBuilder / DpmBuilder / Md3Builder
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The unified, host-side asset entry point for the Godot port: one object that owns a
@@ -37,7 +37,7 @@ namespace XonoticGodot.Game.Loaders;
 /// positions, and a parsed POCO is cheap to re-build). Maps are not cached (a level is loaded once).</para>
 ///
 /// All file reads go through the VFS, so a missing or malformed asset throws an
-/// <see cref="XonoticGodot.Formats.AssetParseException"/> that callers can catch to skip the asset rather than crash.
+/// <see cref="VortexArena.Formats.AssetParseException"/> that callers can catch to skip the asset rather than crash.
 /// </summary>
 public sealed class AssetLoader
 {
@@ -204,7 +204,7 @@ public sealed class AssetLoader
     /// <c>shot</c>/<c>tag_shot</c> tag transformed THROUGH the h_ rig's <c>weapon</c>/<c>tag_weapon</c> attach
     /// bone; else fall back to the h_ rig's OWN shot tag; else null. Both files are magic-dispatched (extensions
     /// lie: v_*.md3 are often IQM, h_*.iqm are DPM) onto the Godot-free
-    /// <see cref="XonoticGodot.Formats.MuzzleTag.ComputeShotOrigin"/>. (In stock content every v_ model is
+    /// <see cref="VortexArena.Formats.MuzzleTag.ComputeShotOrigin"/>. (In stock content every v_ model is
     /// tag-less, so this always resolves to the h_ rig's own shot tag — but the composition is here and correct
     /// for any future weapon that ships a v_ shot tag.) Returns null when neither model carries a shot tag — the
     /// caller then keeps the generic muzzle fallback. Cached per normalized (v,h) vpath pair.
@@ -227,21 +227,21 @@ public sealed class AssetLoader
         // weapon silently fell back to the generic CENTERED muzzle (the "blaster fires from screen center, not
         // the gun" regression — the old single-arg path read the h_ rig directly with no Exists check). A
         // genuinely-absent file just yields Model.None here.
-        XonoticGodot.Formats.MuzzleTag.Model vModel = TryLoadMuzzleModel(vKey);
-        XonoticGodot.Formats.MuzzleTag.Model hRig = TryLoadMuzzleModel(hKey);
-        System.Numerics.Vector3? offset = XonoticGodot.Formats.MuzzleTag.ComputeShotOrigin(vModel, hRig);
+        VortexArena.Formats.MuzzleTag.Model vModel = TryLoadMuzzleModel(vKey);
+        VortexArena.Formats.MuzzleTag.Model hRig = TryLoadMuzzleModel(hKey);
+        System.Numerics.Vector3? offset = VortexArena.Formats.MuzzleTag.ComputeShotOrigin(vModel, hRig);
         _muzzleOffsetCache[cacheKey] = offset;
         return offset;
     }
 
-    /// <summary>Parse a model into a <see cref="XonoticGodot.Formats.MuzzleTag.Model"/>, or <c>None</c> on any
+    /// <summary>Parse a model into a <see cref="VortexArena.Formats.MuzzleTag.Model"/>, or <c>None</c> on any
     /// failure (empty key, missing file, unparsable) — so one model's absence never nulls the muzzle result.</summary>
-    private XonoticGodot.Formats.MuzzleTag.Model TryLoadMuzzleModel(string key)
+    private VortexArena.Formats.MuzzleTag.Model TryLoadMuzzleModel(string key)
     {
         if (key.Length == 0)
-            return XonoticGodot.Formats.MuzzleTag.Model.None;
+            return VortexArena.Formats.MuzzleTag.Model.None;
         try { return LoadMuzzleModel(key); }
-        catch { return XonoticGodot.Formats.MuzzleTag.Model.None; }
+        catch { return VortexArena.Formats.MuzzleTag.Model.None; }
     }
 
     /// <summary>
@@ -270,8 +270,8 @@ public sealed class AssetLoader
         bool? result = null;
         try
         {
-            XonoticGodot.Formats.MuzzleTag.Model rig = LoadMuzzleModel(key);
-            result = XonoticGodot.Formats.MuzzleTag.IsInvisibleHandRig(rig);
+            VortexArena.Formats.MuzzleTag.Model rig = LoadMuzzleModel(key);
+            result = VortexArena.Formats.MuzzleTag.IsInvisibleHandRig(rig);
         }
         catch (Exception ex)
         {
@@ -281,19 +281,19 @@ public sealed class AssetLoader
         return result;
     }
 
-    /// <summary>Read+magic-dispatch a single model file into a Godot-free <see cref="XonoticGodot.Formats.MuzzleTag.Model"/>
+    /// <summary>Read+magic-dispatch a single model file into a Godot-free <see cref="VortexArena.Formats.MuzzleTag.Model"/>
     /// (or the empty model on a missing/unknown file). Extensions lie, so dispatch is by on-disk magic.</summary>
-    private XonoticGodot.Formats.MuzzleTag.Model LoadMuzzleModel(string key)
+    private VortexArena.Formats.MuzzleTag.Model LoadMuzzleModel(string key)
     {
         ReadOnlySpan<byte> bytes = ReadModelBytes(key);
         string magic = ReadMagic(bytes);
         if (magic.StartsWith(MagicIqm, StringComparison.Ordinal))
-            return XonoticGodot.Formats.MuzzleTag.Model.Of(IqmReader.Read(bytes));
+            return VortexArena.Formats.MuzzleTag.Model.Of(IqmReader.Read(bytes));
         if (magic.StartsWith(MagicDpm, StringComparison.Ordinal))
-            return XonoticGodot.Formats.MuzzleTag.Model.Of(DpmReader.Read(bytes));
+            return VortexArena.Formats.MuzzleTag.Model.Of(DpmReader.Read(bytes));
         if (magic.StartsWith(MagicMd3, StringComparison.Ordinal))
-            return XonoticGodot.Formats.MuzzleTag.Model.Of(Md3Reader.Read(bytes));
-        return XonoticGodot.Formats.MuzzleTag.Model.None;
+            return VortexArena.Formats.MuzzleTag.Model.Of(Md3Reader.Read(bytes));
+        return VortexArena.Formats.MuzzleTag.Model.None;
     }
 
     /// <summary>
@@ -365,7 +365,7 @@ public sealed class AssetLoader
         //     models/train.zym in xonotic-maps.pk3dir) render as placeholders until a reader lands.
         //   • MD2 ("IDP2", Mod_IDP2_Load) / PSK ("ACTRHEAD", Mod_PSKMODEL_Load): no shipped Base content today —
         //     mod / custom-map compat only.
-        // Implement any of them by mirroring the MDL importer (src/XonoticGodot.Formats/Mdl + models/MdlBuilder).
+        // Implement any of them by mirroring the MDL importer (src/VortexArena.Formats/Mdl + models/MdlBuilder).
         GD.PrintErr($"[AssetLoader] '{key}' is not a known model (magic \"{Printable(magic)}\").");
         return null;
     }
@@ -476,7 +476,7 @@ public sealed class AssetLoader
     public static List<string> EffectiveMaterials(SkeletalModelParse parse)
     {
         var mats = new List<string>(4);
-        foreach (XonoticGodot.Formats.Iqm.IqmMesh sub in parse.Iqm.Meshes)
+        foreach (VortexArena.Formats.Iqm.IqmMesh sub in parse.Iqm.Meshes)
         {
             string? name = IqmBuilder.EffectiveMaterialName(sub, parse.Skin, out _);
             if (name is not null && !mats.Contains(name))

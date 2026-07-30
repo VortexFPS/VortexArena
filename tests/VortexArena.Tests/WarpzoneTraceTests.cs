@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for T45 — warpzone COMBAT TRAVERSAL (lib/warpzone/common.qc WarpZone_TraceBox/_TraceLine recursion +
@@ -280,17 +280,17 @@ public class WarpzoneTraceTests
     [Fact]
     public void Stormkeep_HitscanTrace_CrossesTheRealWarpzone()
     {
-        const string dataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+        string dataDir = TestPaths.Data;
         if (!System.IO.Directory.Exists(dataDir)) return;
-        using var vfs = new XonoticGodot.Formats.Vfs.VirtualFileSystem();
+        using var vfs = new VortexArena.Formats.Vfs.VirtualFileSystem();
         if (!vfs.MountGameDir(dataDir)) return;
         string? path = System.Linq.Enumerable.FirstOrDefault(
             vfs.Find("maps/", "bsp"), p => p.Contains("stormkeep"));
         if (path is null) return;   // map not in this checkout — skip
 
-        XonoticGodot.Formats.Bsp.BspData bsp = XonoticGodot.Formats.Bsp.BspReader.Read(vfs.ReadBytes(path));
-        var trace = new XonoticGodot.Engine.Collision.TraceService(
-            XonoticGodot.Engine.Collision.BspCollisionBuilder.Build(bsp).World);
+        VortexArena.Formats.Bsp.BspData bsp = VortexArena.Formats.Bsp.BspReader.Read(vfs.ReadBytes(path));
+        var trace = new VortexArena.Engine.Collision.TraceService(
+            VortexArena.Engine.Collision.BspCollisionBuilder.Build(bsp).World);
 
         // The REAL zone pair (BSP ground truth, entities *5/*6): A's window plane at (1216,208,32) facing +Y
         // (the room north of it), B's at (-592,224,80) facing -X (the room west of it). POJO zones (no trigger

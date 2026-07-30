@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Monster-tools cheat dialog — a faithful C# port of <c>XonoticMonsterToolsDialog_fill</c>
@@ -11,7 +11,7 @@ namespace XonoticGodot.Game.Menu;
 ///
 /// FAITHFUL UI NOW: the cvar bindings are real (they write the shared <see cref="MenuState.Cvars"/> store),
 /// but the command buttons (<c>spawnmob</c>, <c>killmob</c>, <c>editmob …</c>) drive the server-side monster
-/// cheat backend XonoticGodot does not have yet, so they route through <see cref="MenuCommand"/> and are logged
+/// cheat backend VortexArena does not have yet, so they route through <see cref="MenuCommand"/> and are logged
 /// inert until that backend exists. The QC "OK" button just closed the dialog (<c>Dialog_Close</c>); here that
 /// is the standard Back.
 /// </summary>

@@ -1,4 +1,4 @@
-# Xonotic ↔ XonoticGodot Parity System
+# Xonotic ↔ VortexArena Parity System
 
 This directory is the **single source of truth** for how faithfully the Godot/C# port
 reproduces the original Xonotic gameplay and presentation, and where it falls short.
@@ -14,8 +14,8 @@ machine-checkable process**, not a one-off audit. Each prior ad-hoc audit
 - **Pinned reference revision:** `v0.8.6-1779-g863cd3e84` (from `csprogs-xonotic-v0.8.6-1779-g863cd3e84.pk3`)
   — this is the **data submodule's** checkout; the outer `../Base` umbrella repo describes as
   `xonotic-v0.8.6-151-*`, which is a *different repo's* numbering. Never derive the pin from `git describe`.
-- **Subject under test:** this repo — gameplay in `src/XonoticGodot.Common/Gameplay/**` and
-  `src/XonoticGodot.Server/**`; presentation/client in `game/**` and `src/XonoticGodot.Engine/**`.
+- **Subject under test:** this repo — gameplay in `src/VortexArena.Common/Gameplay/**` and
+  `src/VortexArena.Server/**`; presentation/client in `game/**` and `src/VortexArena.Engine/**`.
 
 The QuakeC is authoritative. When the port disagrees with Base, the port is wrong **unless**
 the row is explicitly marked `intended_divergence: true` with a rationale.
@@ -127,3 +127,34 @@ present in the code yet **never called on the live path** (gibs that never spawn
 `ModelLoader`). A single done/not-done flag hides exactly the bugs we care about, so every
 feature is scored independently on: **logic, values, timing, presentation, audio, liveness**.
 See `SCHEMA.md`.
+
+## Nine stale `port_refs` (recorded 2026-07-30, not fixed)
+
+Found while repointing the registry after the Tier-1 rename. These paths do not resolve, and **did not
+resolve before the rename either** — the rename only changed the prefix, not whether the file is there.
+Six moved within `src/`; three are not under `src/` at all:
+
+| cited as | actually |
+| --- | --- |
+| `VortexArena.Common/Gameplay/MinigameSessionManager.cs` | `…/Gameplay/Minigames/MinigameSessionManager.cs` |
+| `VortexArena.Common/Gameplay/PlayerPhysics.cs` | `…/Physics/PlayerPhysics.cs` |
+| `VortexArena.Common/Gameplay/RoundHandler.cs` | `…/Gameplay/GameTypes/RoundHandler.cs` |
+| `VortexArena.Engine/Entity.cs` | `VortexArena.Common/Framework/Entity.cs` |
+| `VortexArena.Server/GameScores.cs` | `VortexArena.Common/Gameplay/Scoring/GameScores.cs` |
+| `VortexArena.Server/Mutators/SuperSpecMutator.cs` | `VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs` |
+| `VortexArena.Common/Gameplay/Damage/Combat.cs` | not in `src/` |
+| `VortexArena.Common/Gameplay/Effects/HeroMaterials.cs` | not in `src/` |
+| `VortexArena.Common/Gameplay/Waypoints/WaypointSprites.cs` | not in `src/` |
+
+Left as-is deliberately: correcting a `port_refs` pointer means re-verifying that the row's recorded parity
+status still holds against the code at the *new* location, and a pointer silently redirected without that
+re-audit is worse than one that visibly fails to resolve. The three not under `src/` are the interesting
+ones — they may have moved to `game/`, been renamed, or been folded into another file, and each answer
+implies something different about the row above it.
+
+Detect with:
+
+```bash
+git ls-files 'planning/parity/**' | xargs grep -ho 'src/VortexArena\.[A-Za-z]*/[A-Za-z0-9_/.-]*\.cs' \
+  | sort -u | while read -r r; do [ -f "$r" ] || echo "$r"; done
+```

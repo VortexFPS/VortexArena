@@ -152,13 +152,38 @@ jobs:
 
       # Step 1 of Godot's mono sequence. The editor exists here ONLY to generate the glue — it is not
       # shipped and not uploaded.
+      # Parse the ENTIRE argument line without compiling anything. `--help` makes Godot's SConstruct
+      # configure the environment, print its options and exit 0; a malformed line exits 2 with the
+      # reason. That covers what the JOBS check above cannot: the SHELL QUOTING at the call site,
+      # which is what actually broke twice here. Verified locally against the real 4.6.3 tree — a good
+      # line exits 0, and `-j$env:JOBS` passed through literally exits 2 with
+      # "option -j: invalid integer value". Costs under a minute against a multi-hour build.
+      - name: Preflight the scons argument line
+        working-directory: godot
+        shell: pwsh
+        run: |
+          scons platform=windows target=editor ${{ env.SCONS_COMMON }} `
+            "cache_path=${{ github.workspace }}/.scons-cache" cache_limit=4 "-j$env:JOBS" --help > $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error::scons rejected the argument line (exit $LASTEXITCODE) before any"
+            Write-Output "::error::compilation. Check the flags and the PowerShell quoting on -j."
+            exit 1
+          }
+          Write-Output "scons accepts the argument line"
+
+      # `"-j$env:JOBS"` is QUOTED for a reason that is not obvious and cost two failed dispatches.
+      # PowerShell does not expand variables in an unquoted token that begins with `-`: it reads
+      # `-j$env:JOBS` as a parameter-like literal and passes the string through verbatim, so scons
+      # reported `option -j: invalid integer value: '$env:JOBS'` even with JOBS=4 in the environment.
+      # Verified by echoing argv for each candidate form: bare `-j$env:JOBS` yields ['-j$env:JOBS'],
+      # while "-j$env:JOBS", -j"$env:JOBS", "-j${env:JOBS}" and --jobs=$env:JOBS all yield ['-j4'].
+      # Do not "tidy up" these quotes.
       - name: Build the editor (required to generate the C# glue)
         working-directory: godot
         shell: pwsh
         run: |
           scons platform=windows target=editor ${{ env.SCONS_COMMON }} `
-            cache_path="${{ github.workspace }}/.scons-cache" cache_limit=4 `
-            -j$env:JOBS
+            "cache_path=${{ github.workspace }}/.scons-cache" cache_limit=4 "-j$env:JOBS"
 
       - name: Generate the C# glue
         working-directory: godot
@@ -173,8 +198,7 @@ jobs:
         shell: pwsh
         run: |
           scons platform=windows target=template_release ${{ env.SCONS_COMMON }} `
-            cache_path="${{ github.workspace }}/.scons-cache" cache_limit=4 `
-            -j$env:JOBS
+            "cache_path=${{ github.workspace }}/.scons-cache" cache_limit=4 "-j$env:JOBS"
 
       # The whole point of the exercise. Reads the required markers out of engine.lock.json rather than
       # hardcoding them, so the template build and the export-time check in release.yml cannot drift

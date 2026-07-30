@@ -1558,6 +1558,12 @@ cannot be diffed against its baseline. Upstream already carries most of this: ea
 `maps/<name>.map.options` holds the flags (`-bsp -light -vis -minimap -sRGB`) and a
 `Version: 12g` line, so `build/q3map2.toolchain` is largely a matter of lifting what is there.
 
+**What "the same sources produce the same maps" means here.** The recipe is *one pinned q3map2 version*
+plus *each map's own `.map.options` flags*. The per-map flags are deliberate authoring decisions and get
+passed through, not normalised — see §8.3.1. So `build/q3map2.toolchain` pins the compiler and records
+the per-map flags, and the release manifest carries the toolchain hash. Two builds from the same sources
+with the same pinned compiler agree; that is the property worth having.
+
 **Scope: this covers the 31 stock maps only.** `.vmap` maps are baked by the game's own baker, not
 q3map2 (§9.2), so their reproducibility question is a different one — the bake is content-addressed by
 the hash of the truth sections, and a mismatch regenerates rather than needing a pinned external
@@ -1592,12 +1598,19 @@ would bite first. Source size is no guide here: catharsis's `.map` is only 2.8 M
 so a locally-built or self-hosted-built archive publishes through the identical path. **Take the
 self-hosted runner as a contingency for specific maps, not as a prerequisite for the pipeline.**
 
-> **Found while checking this: the stock maps were not all built with the same q3map2.**
-> `catharsis.map.options` records `Version: 5e`, `stormkeep.map.options` records `Version: 12g`. So
-> §8.3's "pin the q3map2 version" is not one version — pinning a single compiler will not reproduce
-> every stock lightmap byte-for-byte. Either record the version per map (the `.map.options` files
-> already do, which is the cheap answer) or accept that a rebuild diverges from the shipped baseline and
-> say so where the baseline is used for comparison.
+> **Per-map compile settings are the design, not drift.** Each map ships a `.map.options` holding its
+> own flags — `catharsis` wants `-scale 0.9`, `erbium` wants `-samplesize 6 -bouncescale 1.15 -exposure
+> 225 -areascale 1.25 -pointscale 1.5`, ten maps want the plain `-bsp -light -vis -minimap -sRGB`. A
+> mapper tunes lighting per map because maps differ; there is nothing to normalise. **`build-map.py`
+> reads each map's own `.map.options` and passes those flags through**, which is also what upstream's
+> `xonotic-map-compiler` does.
+>
+> The `Version:` line in each file is a different thing: a record of which q3map2 the author happened to
+> have (29 distinct versions across the set, spanning years). It is provenance, not configuration. Build
+> every map with one current q3map2 using its own flags, publish those builds as the pinned artifacts,
+> and *that* set becomes the baseline the lockfile hashes — reproducible from then on as one compiler
+> version plus per-map flags. Whether a fresh build's lightmaps match the 2023 release byte-for-byte is
+> not interesting, because the 2023 release is not what we ship.
 
 ### 8.4 Drift detection
 

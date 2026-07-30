@@ -28,6 +28,32 @@ Created 2026-06-05 from `REBIRTH_FEATURE_COMPLETENESS.md` Part III (P0–P3), in
 
 ---
 
+## 🚧 Open blockers for a public release
+
+**TODO-FONTS — two bundled font families ship with no licence notice.** Added 2026-07-29 during the
+repo restructure, when `data/` became committed content (D1/D2) and the licence texts stopped living in
+an upstream checkout that travelled with nothing.
+
+The four font packs are third-party works. `COPYING.xonotic`'s blanket "GPL v3 or later" grant does not
+cover them, because Team Xonotic redistributes them without owning them and cannot relicense them.
+Verified by reading what each pack actually ships:
+
+| pack | state |
+|---|---|
+| `font-xolonium.pk3dir` | **OK** — `fonts/README.txt` carries the full GPLv2+ notice, © 2011–2020 Severin Meyer |
+| `font-unifont.pk3dir` | **partial** — names the work + URL, no licence text. Needs the GPL font-embedding exception from unifoundry.com |
+| `font-dejavu.pk3dir` | **missing** — 2 `.ttf` with no notice at all. Bitstream Vera / Arev licence, which is permissive but *specifically requires* the notice in all copies |
+| `font-nimbussansl.pk3dir` | **missing** — URW++ Nimbus Sans L, no notice |
+
+**What to do:** fetch the authoritative licence text from each font project and add it as
+`data/licenses/FONTS.<name>`. Do **not** paraphrase or reconstruct from memory — these are legal
+documents and only the real copy is any use. Details and sources: [`data/licenses/FONTS`](../data/licenses/FONTS).
+
+Does not block development. Does block a public release that ships these fonts, since two of the four
+currently carry no notice and one of those licences demands one.
+
+---
+
 ## How this is managed (orchestrated fan-out, no per-item locks)
 
 A **single coordinator** (an orchestrator session, or a `Workflow` run) assigns disjoint slices of work to

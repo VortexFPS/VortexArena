@@ -18,14 +18,14 @@ namespace XonoticGodot.Tests.Perf;
 ///
 /// <para>Reports, per map: the worst remaining deviation from the render tessellation, and the triangle count
 /// against what fixed levels would produce — because "accurate" is only the answer if it is also affordable.
-/// Run with <c>XG_BENCH=1</c>.</para>
+/// Run with <c>VA_BENCH=1</c>.</para>
 /// </summary>
 [Collection("GlobalState")]
 public class PatchCollisionAccuracyBench
 {
     private static readonly string DataDir = TestPaths.Data;
 
-    private static bool Enabled => Environment.GetEnvironmentVariable("XG_BENCH") is { Length: > 0 };
+    private static bool Enabled => Environment.GetEnvironmentVariable("VA_BENCH") is { Length: > 0 };
 
     /// <summary>Must match BspCollisionBuilder.PatchCollisionTolerance.</summary>
     private const float Tolerance = 1.0f;
@@ -39,7 +39,7 @@ public class PatchCollisionAccuracyBench
     [Fact]
     public void Benchmark_AdaptivePatchSubdivision()
     {
-        if (!Enabled) { _out.WriteLine("bench — set XG_BENCH=1 to run"); return; }
+        if (!Enabled) { _out.WriteLine("bench — set VA_BENCH=1 to run"); return; }
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
         void Line(string s) => _out.WriteLine(s);
 
@@ -51,7 +51,7 @@ public class PatchCollisionAccuracyBench
              + $"| {"tris@3",8} {"tris@adapt",11} {"tris@8",9}");
         Line(new string('-', 92));
 
-        foreach (string map in (Environment.GetEnvironmentVariable("XG_MAPS") ?? "stormkeep,fuse,catharsis")
+        foreach (string map in (Environment.GetEnvironmentVariable("VA_MAPS") ?? "stormkeep,fuse,catharsis")
                  .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             string bspPath = $"maps/{map}.bsp";

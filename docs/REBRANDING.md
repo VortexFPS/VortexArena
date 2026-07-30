@@ -148,7 +148,7 @@ These ship as *defaults* and end up baked into servers' listings and users' save
 | G2 | `game/net/NetGame.cs` | 74, 386, 399 | `"XonoticGodot Listen Server"` (×3) | `"Vortex Arena Listen Server"` | Scoreboard/server-info default |
 | G3 | `game/Shell.cs` | 614 | `"XonoticGodot Listen Server"` | `"Vortex Arena Listen Server"` | Fallback when `hostname` is empty |
 | G4 | `campaign.cfg` | 1 | `set g_campaignxonoticbeta_index 1` | **rename** → e.g. `g_campaignvortexbeta_index` | Campaign id `xonoticbeta` is baked into the cvar **name**; progress persists as `g_campaignxonoticbeta_index` in `config.cfg`. **Decision 3 — renaming.** Pre-release, resetting progress is acceptable; otherwise add a one-time cvar-copy migration. Rename the campaign data file/dir it points at too. See [Decision 3](#decision-3--internal-id-rename-scope) |
-| G5 | `game/UserPaths.cs` | 29 | user data dir `~/XonData` | keep `XonData`; rename env var | Folder `XonData` is already de-Xonoticized — fine. The **env-var override `XONOTIC_USERDIR`** → `VORTEX_USERDIR` (Tier 0, dev/CI only; update CI scripts + tests that set it) |
+| G5 | `game/UserPaths.cs` | 29 | user data dir `~/XonData` | keep `XonData`; rename env var | Folder `XonData` is already de-Xonoticized — fine. The **env-var override `VORTEX_USERDIR`** → `VORTEX_USERDIR` (Tier 0, dev/CI only; update CI scripts + tests that set it) |
 
 > **G-note (config path coupling):** Godot's `user://` location is derived from
 > `project.godot`'s `config/name`. `UserPaths.cs` already redirects real user data to
@@ -285,7 +285,7 @@ wide cost range, so the real decision is *how far to go now*. Two tiers:
 - **`gamename`** → `"VortexArena"` (this *is* part of Decision 1). (H1/H3)
 - **hostname / listen-server defaults** (G1–G3, A2).
 - **macOS bundle id** `org.xonoticgodot.client` → `org.vortexarena.client` (B5).
-- **env var** `XONOTIC_USERDIR` → `VORTEX_USERDIR` (dev/CI; update CI + tests). (G5)
+- **env var** `VORTEX_USERDIR` → `VORTEX_USERDIR` (dev/CI; update CI + tests). (G5)
 - **your own config filenames** (`xonotic-client.cfg`, `xonotic-server.cfg`,
   `binds-xonotic.cfg`) → `va-*` / `vortex-*`, updating the code that loads them by name.
   *Caveat:* keep it clear which cfgs mirror upstream defaults, so the parity-diff tooling that

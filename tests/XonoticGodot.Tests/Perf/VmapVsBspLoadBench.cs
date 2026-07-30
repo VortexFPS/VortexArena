@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests.Perf;
 ///
 /// <para>Reports, per map: the two collision builds, the surface build, and the batch/triangle counts each
 /// path produces — because equal batching is what makes the load-time-only claim true. Skips without the
-/// content checkout (<c>VA_DATA_DIR</c>); <c>XG_MAPS</c> overrides the map list.</para>
+/// content checkout (<c>VA_DATA_DIR</c>); <c>VA_MAPS</c> overrides the map list.</para>
 /// </summary>
 [Collection("GlobalState")]
 public class VmapVsBspLoadBench
@@ -30,12 +30,12 @@ public class VmapVsBspLoadBench
     /// <summary>
     /// Explicit opt-in — an experiment, not an assertion, and the default content path is ABSOLUTE,
     /// so on a machine with the assets checked out this would otherwise run in full on every
-    /// <c>ci.sh</c>. Run with <c>XG_BENCH=1</c>.
+    /// <c>ci.sh</c>. Run with <c>VA_BENCH=1</c>.
     /// </summary>
-    private static bool Enabled => Environment.GetEnvironmentVariable("XG_BENCH") is { Length: > 0 };
+    private static bool Enabled => Environment.GetEnvironmentVariable("VA_BENCH") is { Length: > 0 };
 
     private static string[] Maps =>
-        (Environment.GetEnvironmentVariable("XG_MAPS") ?? "stormkeep,fuse,catharsis")
+        (Environment.GetEnvironmentVariable("VA_MAPS") ?? "stormkeep,fuse,catharsis")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private readonly ITestOutputHelper _out;
@@ -58,7 +58,7 @@ public class VmapVsBspLoadBench
     [Fact]
     public void Benchmark_VmapBuildVsBspLoad()
     {
-        if (!Enabled) { _out.WriteLine("bench — set XG_BENCH=1 to run"); return; }
+        if (!Enabled) { _out.WriteLine("bench — set VA_BENCH=1 to run"); return; }
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
 
         using var vfs = new VirtualFileSystem();

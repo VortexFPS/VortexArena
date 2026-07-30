@@ -26,19 +26,19 @@ namespace XonoticGodot.Tests;
 /// <see cref="Prof"/> per-scope breakdown of the worst tick, so it attributes the spike.
 ///
 /// <para>Parameterised by env vars so it doubles as an experiment harness — change something, re-run, compare:
-/// <c>XG_BOTS</c> (default 6), <c>XG_MAP</c> (stormkeep), <c>XG_TICKS</c> (72*30). Run:
-/// <c>XG_BOTS=8 dotnet test tests/XonoticGodot.Tests --filter BotTickPerfBench -l "console;verbosity=detailed"</c>.
+/// <c>VA_BOTS</c> (default 6), <c>VA_MAP</c> (stormkeep), <c>VA_TICKS</c> (72*30). Run:
+/// <c>VA_BOTS=8 dotnet test tests/XonoticGodot.Tests --filter BotTickPerfBench -l "console;verbosity=detailed"</c>.
 /// Skips without the content checkout (<c>VA_DATA_DIR</c> overrides the path).</para>
 /// </summary>
 [Collection("GlobalState")]
 public class BotTickPerfBench
 {
     private static readonly string DataDir = TestPaths.Data;
-    private static string Map => Environment.GetEnvironmentVariable("XG_MAP") ?? "stormkeep";
+    private static string Map => Environment.GetEnvironmentVariable("VA_MAP") ?? "stormkeep";
     private static int BotCount =>
-        int.TryParse(Environment.GetEnvironmentVariable("XG_BOTS"), out int n) ? n : 6;
+        int.TryParse(Environment.GetEnvironmentVariable("VA_BOTS"), out int n) ? n : 6;
     private static int BenchTicks =>
-        int.TryParse(Environment.GetEnvironmentVariable("XG_TICKS"), out int n) ? n : 72 * 30;
+        int.TryParse(Environment.GetEnvironmentVariable("VA_TICKS"), out int n) ? n : 72 * 30;
 
     private readonly ITestOutputHelper _out;
     public BotTickPerfBench(ITestOutputHelper output) => _out = output;

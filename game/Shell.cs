@@ -58,7 +58,7 @@ public partial class Shell : Node
     /// <summary>Bot count for the <c>--host</c> listen server (CLI <c>--bots N</c>); 0 = no bots.</summary>
     public int BootBots { get; set; }
 
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
     /// <summary>Bot-player harness (CLI <c>--bot-player</c>): drive the LOCAL player from a bot brain so an
     /// unattended run exercises the real player pipeline. Compile-gated — see Directory.Build.props.</summary>
     public bool BootBotPlayer { get; set; }
@@ -231,7 +231,7 @@ public partial class Shell : Node
         MouseCapture.SetWantCapture(false); // at the menu the cursor is free
 
         // Optional: boot straight into a match (smoke test / dev), bypassing the menu.
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
         // Bot-player harness: latch the request before any match starts, so NetGame binds the brain as soon
         // as the local player exists. Compile-gated — see Directory.Build.props.
         XonoticGodot.Game.Net.BotPlayerMode.Requested = BootBotPlayer;

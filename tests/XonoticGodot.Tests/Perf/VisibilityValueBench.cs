@@ -31,8 +31,8 @@ namespace XonoticGodot.Tests.Perf;
 /// small enough makes the question moot before any occluder work starts.</item>
 /// </list>
 ///
-/// <para>Skips without the content checkout (<c>VA_DATA_DIR</c>). <c>XG_MAP</c>, <c>XG_BOTS</c>,
-/// <c>XG_TICKS</c> parameterise it.</para>
+/// <para>Skips without the content checkout (<c>VA_DATA_DIR</c>). <c>VA_MAP</c>, <c>VA_BOTS</c>,
+/// <c>VA_TICKS</c> parameterise it.</para>
 /// </summary>
 [Collection("GlobalState")]
 public class VisibilityValueBench
@@ -43,15 +43,15 @@ public class VisibilityValueBench
     /// Explicit opt-in, because these are experiments rather than assertions and the default content path is
     /// ABSOLUTE — on a machine with the assets checked out they would otherwise run in full on every
     /// <c>ci.sh</c>, which is minutes of gate time to re-measure something nobody asked about.
-    /// Run with <c>XG_BENCH=1</c>.
+    /// Run with <c>VA_BENCH=1</c>.
     /// </summary>
-    private static bool Enabled => Environment.GetEnvironmentVariable("XG_BENCH") is { Length: > 0 };
+    private static bool Enabled => Environment.GetEnvironmentVariable("VA_BENCH") is { Length: > 0 };
 
-    private static string Map => Environment.GetEnvironmentVariable("XG_MAP") ?? "stormkeep";
+    private static string Map => Environment.GetEnvironmentVariable("VA_MAP") ?? "stormkeep";
     private static int BotCount =>
-        int.TryParse(Environment.GetEnvironmentVariable("XG_BOTS"), out int n) ? n : 8;
+        int.TryParse(Environment.GetEnvironmentVariable("VA_BOTS"), out int n) ? n : 8;
     private static int BenchTicks =>
-        int.TryParse(Environment.GetEnvironmentVariable("XG_TICKS"), out int n) ? n : 72 * 20;
+        int.TryParse(Environment.GetEnvironmentVariable("VA_TICKS"), out int n) ? n : 72 * 20;
 
     private readonly ITestOutputHelper _out;
     public VisibilityValueBench(ITestOutputHelper output) => _out = output;
@@ -61,7 +61,7 @@ public class VisibilityValueBench
     [Fact]
     public void Benchmark_GameplayPvsValue()
     {
-        if (!Enabled) { _out.WriteLine("bench — set XG_BENCH=1 to run"); return; }
+        if (!Enabled) { _out.WriteLine("bench — set VA_BENCH=1 to run"); return; }
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
         void Line(string s) => _out.WriteLine(s);
 
@@ -100,7 +100,7 @@ public class VisibilityValueBench
     [Fact]
     public void Benchmark_PvsRejectionRate()
     {
-        if (!Enabled) { _out.WriteLine("bench — set XG_BENCH=1 to run"); return; }
+        if (!Enabled) { _out.WriteLine("bench — set VA_BENCH=1 to run"); return; }
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
         void Line(string s) => _out.WriteLine(s);
 
@@ -111,7 +111,7 @@ public class VisibilityValueBench
         Line($"{"map",-12} {"points",7} {"pairs",9} {"rejected",9} {"rate",7}");
         Line(new string('-', 48));
 
-        foreach (string map in (Environment.GetEnvironmentVariable("XG_MAPS") ?? "stormkeep,fuse,catharsis")
+        foreach (string map in (Environment.GetEnvironmentVariable("VA_MAPS") ?? "stormkeep,fuse,catharsis")
                  .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             string bspPath = $"maps/{map}.bsp";
@@ -225,7 +225,7 @@ public class VisibilityValueBench
     [Fact]
     public void Benchmark_RenderInstanceCount()
     {
-        if (!Enabled) { _out.WriteLine("bench — set XG_BENCH=1 to run"); return; }
+        if (!Enabled) { _out.WriteLine("bench — set VA_BENCH=1 to run"); return; }
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
         void Line(string s) => _out.WriteLine(s);
 
@@ -236,7 +236,7 @@ public class VisibilityValueBench
         Line($"{"map",-12} {"instances",10} {"cells",7} {"materials",10} {"tris",10} {"tris/inst",10}");
         Line(new string('-', 64));
 
-        foreach (string map in (Environment.GetEnvironmentVariable("XG_MAPS") ?? "stormkeep,fuse,catharsis")
+        foreach (string map in (Environment.GetEnvironmentVariable("VA_MAPS") ?? "stormkeep,fuse,catharsis")
                  .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             string bspPath = $"maps/{map}.bsp";

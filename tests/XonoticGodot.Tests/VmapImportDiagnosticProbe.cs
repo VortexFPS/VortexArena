@@ -8,7 +8,7 @@ namespace XonoticGodot.Tests;
 
 /// <summary>
 /// Diagnostic probe comparing what a compiled BSP actually DRAWS against what the vmap importer regenerates
-/// from the same file's brush lump. Opt-in via <c>XG_PROBE_BSP</c> (a path to a .bsp) because it needs real
+/// from the same file's brush lump. Opt-in via <c>VA_PROBE_BSP</c> (a path to a .bsp) because it needs real
 /// map data; skipped everywhere else.
 ///
 /// The editor's render path is "re-derive polygons from planes", which is only trustworthy if it lands on the
@@ -25,7 +25,7 @@ public class VmapImportDiagnosticProbe
     [Fact]
     public void CompareBspRenderFacesAgainstVmapSurfaces()
     {
-        string? path = Environment.GetEnvironmentVariable("XG_PROBE_BSP");
+        string? path = Environment.GetEnvironmentVariable("VA_PROBE_BSP");
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return;
 

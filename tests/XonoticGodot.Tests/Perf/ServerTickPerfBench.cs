@@ -141,8 +141,8 @@ public class ServerTickPerfBench
 
         // (P9 2026-07-03) Loose budget gates: catch a 2×+ tick regression (the 2026-07-02 bot-strategy melt
         // class) before a human feels it, without tripping on machine noise — the thresholds are ~4-5× the
-        // 2026-06-09 Debug baselines documented above. A slower box can opt out with XG_PERF_ASSERT=0.
-        if (Environment.GetEnvironmentVariable("XG_PERF_ASSERT") != "0")
+        // 2026-06-09 Debug baselines documented above. A slower box can opt out with VA_PERF_ASSERT=0.
+        if (Environment.GetEnvironmentVariable("VA_PERF_ASSERT") != "0")
         {
             Assert.True(_emptyMsPerTick < 1.0,
                 $"empty-world server tick regressed: {_emptyMsPerTick:F4} ms/tick (budget 1.0, baseline 0.118)");

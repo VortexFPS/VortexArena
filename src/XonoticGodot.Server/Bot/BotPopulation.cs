@@ -857,9 +857,9 @@ public sealed class BotPopulation
         return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v * weight : 0f;
     }
 
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
     // =============================================================================================
-    //  BOT-PLAYER HARNESS (compile-gated — see Directory.Build.props / XgBotPlayer)
+    //  BOT-PLAYER HARNESS (compile-gated — see Directory.Build.props / VaBotPlayer)
     //
     //  A brain bound to the LOCAL HUMAN player so an unattended run drives the real player pipeline.
     //  The player is NOT a bot: IsBot stays false, so GameWorld keeps sourcing its command from the net

@@ -12,7 +12,7 @@ namespace XonoticGodot.Game;
 /// location (<c>%APPDATA%\Godot\app_userdata\XonoticGodot</c> on Windows, <c>~/.local/share/godot/…</c> on
 /// Linux, <c>~/Library/Application Support/Godot/…</c> on macOS) that a player can't easily find. We instead
 /// store everything under a single, discoverable home-directory subfolder: <c>~/XonData</c>. Set the
-/// <c>XONOTIC_USERDIR</c> environment variable to an absolute path to override it — used by tests/CI to keep
+/// <c>VORTEX_USERDIR</c> environment variable to an absolute path to override it — used by tests/CI to keep
 /// the real home directory clean.</para>
 ///
 /// <para>Every call site that previously used a <c>user://…</c> path now resolves through <see cref="Resolve"/>,
@@ -23,7 +23,7 @@ namespace XonoticGodot.Game;
 public static class UserPaths
 {
     /// <summary>The environment variable that overrides the base dir (absolute path). Empty/unset → <c>~/XonData</c>.</summary>
-    public const string OverrideEnvVar = "XONOTIC_USERDIR";
+    public const string OverrideEnvVar = "VORTEX_USERDIR";
 
     /// <summary>The default subfolder name created under the OS home directory.</summary>
     public const string DefaultFolderName = "XonData";
@@ -32,7 +32,7 @@ public static class UserPaths
 
     /// <summary>
     /// The absolute base directory all user data lives under — <c>~/XonData</c> by default, or the
-    /// <c>XONOTIC_USERDIR</c> override when set. Computed once and cached; the directory is created on first
+    /// <c>VORTEX_USERDIR</c> override when set. Computed once and cached; the directory is created on first
     /// access so the very first save (config.cfg etc., which Godot's writers do NOT auto-create a parent for)
     /// always has somewhere to land.
     /// </summary>

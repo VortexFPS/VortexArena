@@ -54,13 +54,46 @@ Five mechanical transformations, all scriptable:
 | T4 | all twelve `XG_*` / `Xg*` env vars and MSBuild properties → `VA_*` / `Va*`, `XONOTIC_USERDIR` → `VORTEX_USERDIR`, artifact filenames | scattered |
 | T5 | `bryankruman/VortexArena` → `VortexFPS/VortexArena` in URLs | 6 files |
 
-T4 is the one most often done half-way. The full set is `XG_DATA_DIR`, `XG_BENCH`, `XG_BOTPLAYER`,
-`XG_BOTS`, `XG_MAPS`, `XG_TICKS`, `XG_PERF_ASSERT`, `XG_MAP`, `XG_PROBE_BSP`, `XG_BASE_DIR`, plus the
-MSBuild properties `XgBotPlayer` and `XgDebugUnoptimized`. Sweep with:
+T4 is the one most often done half-way. **Done on `main` 2026-07-30**; a branch that predates it needs
+the same mapping applied. One of these is NOT a straight prefix swap — see the note below the table.
+
+| old | new |
+| --- | --- |
+| `XG_DATA_DIR` | `VA_DATA_DIR` |
+| `XG_BENCH` | `VA_BENCH` |
+| `XG_BOTPLAYER` | `VA_BOTPLAYER` (also the `DefineConstants` symbol and every `#if`) |
+| `XG_BOTS` | `VA_BOTS` |
+| `XG_MAPS` | `VA_MAPS` |
+| `XG_TICKS` | `VA_TICKS` |
+| `XG_PERF_ASSERT` | `VA_PERF_ASSERT` |
+| `XG_MAP` | `VA_MAP` |
+| `XG_PROBE_BSP` | `VA_PROBE_BSP` |
+| `XG_BASE_DIR` | **`VA_UPSTREAM_ROOT`** — not `VA_BASE_DIR`. See below. |
+| `XgBotPlayer` (MSBuild) | `VaBotPlayer` |
+| `XgDebugUnoptimized` (MSBuild) | `VaDebugUnoptimized` |
+| `XONOTIC_USERDIR` | `VORTEX_USERDIR` |
+
+**`XG_BASE_DIR` is the trap.** It means the upstream **checkout root** (`<parent>/Base`), and
+`tools/upstream-watch.py` reaches into two siblings below it — `data/xonotic-data.pk3dir` and
+`darkplaces`. But `VA_BASE_DIR`, already in use by `tests/TestPaths.cs` and the parity resolvers, means
+the upstream **content dir** (`<parent>/Base/data`). They are one directory apart, so the obvious-looking
+rename yields `Base/data/data/xonotic-data.pk3dir` — and upstream-watch would then report "no new
+commits" forever while finding no repositories at all. Hence the distinct name.
+
+`XONOTIC_USERDIR` is only the **override** knob. The default user-data location is `~/XonData`
+(`UserPaths.DefaultFolderName`) and is deliberately NOT renamed: changing it would orphan every existing
+player profile, which is a Tier-0 decision with a migration cost, not part of this sweep.
+
+Sweep with:
 
 ```bash
-git ls-files | xargs grep -ohE '\bXG_[A-Z_]+|\bXg[A-Z][A-Za-z]+' | sort -u
+git ls-files | xargs grep -IohE '\bXG_[A-Z_]+|\bXg[A-Z][A-Za-z]+' | sort -u
 ```
+
+`-I` skips binaries — without it, random byte sequences in `data/**` textures and `.ogg` tracks match the
+pattern and bury the real hits. The result is **not** expected to be empty: this file and the dated
+reports under `planning/` name the old symbols on purpose, the reports because they record commands as
+they were actually run. Only code, scripts, workflows and live docs should come back clean.
 
 None of them is a semantic change. That is the whole basis of the strategy below.
 

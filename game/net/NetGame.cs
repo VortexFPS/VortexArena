@@ -11190,7 +11190,7 @@ public sealed partial class NetGame : Node3D
         return XonoticGodot.Common.Gameplay.Resources.GetResource(p, w.AmmoType) > 0f;
     }
 
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
     private bool _botPlayerAttached;
 
     /// <summary>
@@ -11215,7 +11215,7 @@ public sealed partial class NetGame : Node3D
 
     private InputCommand SampleInput()
     {
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
         // Bot-player harness: synthesise this tick's command from the brain bound to the local player. Sits
         // exactly where the camera-trace scripted input sits — the command below is indistinguishable from a
         // human's, so prediction/encode/reconcile all run for real. Inert unless --bot-player was passed.

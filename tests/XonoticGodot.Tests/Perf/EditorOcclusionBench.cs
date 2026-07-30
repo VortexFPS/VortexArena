@@ -18,17 +18,17 @@ namespace XonoticGodot.Tests.Perf;
 /// what fraction of the boxes the test actually hides — a hit rate near zero would mean the feature is paying
 /// for nothing.
 ///
-/// <para>Skips without the content checkout (<c>VA_DATA_DIR</c>) and without <c>XG_BENCH=1</c>.</para>
+/// <para>Skips without the content checkout (<c>VA_DATA_DIR</c>) and without <c>VA_BENCH=1</c>.</para>
 /// </summary>
 [Collection("GlobalState")]
 public class EditorOcclusionBench
 {
     private static readonly string DataDir = TestPaths.Data;
 
-    private static bool Enabled => Environment.GetEnvironmentVariable("XG_BENCH") is { Length: > 0 };
+    private static bool Enabled => Environment.GetEnvironmentVariable("VA_BENCH") is { Length: > 0 };
 
     private static string[] Maps =>
-        (Environment.GetEnvironmentVariable("XG_MAPS") ?? "stormkeep,fuse,catharsis")
+        (Environment.GetEnvironmentVariable("VA_MAPS") ?? "stormkeep,fuse,catharsis")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>The controller's own per-frame budget, mirrored so the frames-per-refresh figure is honest.</summary>
@@ -40,7 +40,7 @@ public class EditorOcclusionBench
     [Fact]
     public void Benchmark_EntityOcclusionSweep()
     {
-        if (!Enabled) { _out.WriteLine("bench — set XG_BENCH=1 to run"); return; }
+        if (!Enabled) { _out.WriteLine("bench — set VA_BENCH=1 to run"); return; }
         if (!Directory.Exists(DataDir)) { _out.WriteLine("content dir missing — skipped"); return; }
 
         using var vfs = new VirtualFileSystem();

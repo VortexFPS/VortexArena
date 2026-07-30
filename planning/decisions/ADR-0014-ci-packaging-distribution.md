@@ -83,7 +83,7 @@ The named hot paths were **already pooled** (snapshot ring dicts, the ServerNet 
 the TraceService candidates list), so the perf pass produced *benches + baselines*, not forced
 micro-optimizations. Three new bench-as-test harnesses live in `tests/XonoticGodot.Tests/Perf/`
 (BotPerfBench pattern: `Stopwatch` + `GC.GetAllocatedBytesForCurrentThread`, skip-without-assets,
-`XG_DATA_DIR` override; baselines recorded as comments in each file):
+`VA_DATA_DIR` override; baselines recorded as comments in each file):
 
 - **NetSnapshotPerfBench** — 16 clients × 256 entities × 72 Hz: encode 0.115 ms/client-tick,
   ~1 KB/snapshot steady-state, 272 B/client-tick allocated (boxed `IReadOnlyDictionary`

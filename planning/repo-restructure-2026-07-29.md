@@ -1455,14 +1455,34 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
     `custom_template/release` in `export_presets.cfg` (§7.2). Edit both by hand, and add a test that
     pins the three timing values so a future editor save that drops them fails the suite instead of
     shipping a regression nobody can feel until playtest.
-27. Rename the env vars and MSBuild properties, alongside the Tier-0 `XONOTIC_USERDIR` →
-    `VORTEX_USERDIR` rename. **There are twelve, not one** — earlier drafts named only `XG_DATA_DIR`:
-    `XG_DATA_DIR` (26 hits), `XG_BENCH` (14), `XG_BOTPLAYER` (11), `XgBotPlayer` (8, MSBuild),
-    `XG_BOTS` (9), `XG_MAPS` (6), `XG_TICKS` (5), `XG_PERF_ASSERT` (5), `XG_MAP` (5),
-    `XgDebugUnoptimized` (3), `XG_PROBE_BSP` (2), `XG_BASE_DIR` (1). Sweep with
-    `git ls-files | xargs grep -ohE '\bXG_[A-Z_]+|\bXg[A-Z][A-Za-z]+' | sort -u` and expect an empty
-    result afterwards. Note `XG_DATA_DIR` and `XG_BASE_DIR` are already renamed **inside `tests/`** by
-    Stage −1, so this item covers the remaining ten plus the non-test users.
+27. **DONE 2026-07-30.** Rename the env vars and MSBuild properties, alongside the Tier-0
+    `XONOTIC_USERDIR` → `VORTEX_USERDIR` rename. **There are twelve, not one** — earlier drafts named
+    only `XG_DATA_DIR`. The full old→new mapping now lives in `docs/BRANCH-MIGRATION.md` T4, which is
+    where a branch author needs it; 24 files rewritten, `main` is clean of every symbol outside frozen
+    docs.
+
+    Three corrections to this item as written, all found by executing it:
+
+    - **The counts were stale.** Measured immediately before the sweep: `XG_BENCH` 16 (not 14),
+      `XG_BOTPLAYER` 14 (not 11), `XgBotPlayer` 13 (not 8), `XG_BOTS` 11 (not 9), **`XG_BASE_DIR` 11
+      (not 1)**, `XG_MAPS` 8 (not 6), `XG_TICKS`/`XG_PERF_ASSERT`/`XG_MAP` 7 each (not 5),
+      `XgDebugUnoptimized` 6 (not 3), `XG_PROBE_BSP` 4 (not 2). `XG_DATA_DIR` fell to 11 (from 26) and
+      had **no functional uses left at all** — Stage −1 took all of them; what remained was documentation.
+    - **The sweep command needs `-I`.** Without it, random byte sequences inside `data/**` textures and
+      `.ogg` tracks match `\bXg[A-Z][A-Za-z]+` and bury the real hits under ~120 binary-file lines.
+    - **"Expect an empty result" cannot hold**, and never could: this plan document and
+      `docs/BRANCH-MIGRATION.md` both name the old symbols deliberately, as does every dated report under
+      `planning/`. Those reports are frozen on purpose — they record commands as they were actually run,
+      so renaming them would falsify the record. The correct criterion is that *code, scripts, workflows
+      and live docs* come back clean.
+
+    Also deliberately NOT renamed: `UserPaths.DefaultFolderName` (`XonData`). `XONOTIC_USERDIR` is only
+    the override knob, so renaming it moves nothing, but renaming the default folder would orphan every
+    existing player profile — a Tier-0 decision with a migration cost, out of scope here.
+
+    Verified: normal build clean, `-p:VaBotPlayer=true` builds clean (so the `DefineConstants` rename and
+    every `#if VA_BOTPLAYER` agree), `upstream-watch.py`'s two repo paths both resolve to real git
+    checkouts, and 3931 tests pass.
     - **TRAP, found 2026-07-29: `XG_BASE_DIR` and `VA_BASE_DIR` are one directory level apart.**
       `tools/upstream-watch.py:57` defaults `XG_BASE_DIR` to `<parent>/Base` and line 65 appends
       `data/xonotic-data.pk3dir` to it — so it means the **Base repo root**. `TestPaths.cs`'s

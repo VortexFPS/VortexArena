@@ -52,9 +52,22 @@ DEFAULT_SINCE = "2026-06-01"
 # MR or recent activity is the real "open contribution" signal. Override with --branch-since / --all-branches.
 DEFAULT_BRANCH_LOOKBACK_DAYS = 365
 
-# tools/ lives in the port repo; Base is a sibling of the port repo root.
+# tools/ lives in the port repo; the upstream reference checkout is a sibling of the port repo root.
+#
+# THE NAME MATTERS, and it is not VA_BASE_DIR. There are two different levels in play and they are one
+# directory apart, which is exactly how this went wrong before:
+#
+#   VA_UPSTREAM_ROOT  = <parent>/Base        the CHECKOUT ROOT, holding data/ AND darkplaces/
+#   VA_BASE_DIR       = <parent>/Base/data   the upstream CONTENT dir (TestPaths.cs, and the parity
+#                                            resolvers in .claude/workflows/)
+#
+# This tool needs the root because it reaches into both siblings below. Renaming it to VA_BASE_DIR - the
+# obvious-looking sweep - would have produced Base/data/data/xonotic-data.pk3dir and Base/data/darkplaces,
+# and upstream-watch would then have reported "no new commits" forever while silently finding no repos at
+# all. Distinct names, each saying which level it means, so the next sweep cannot conflate them.
 PORT_ROOT = Path(__file__).resolve().parents[1]
-BASE_DIR = Path(os.environ.get("XG_BASE_DIR", PORT_ROOT.parent / "Base"))
+UPSTREAM_ROOT = Path(os.environ.get("VA_UPSTREAM_ROOT", PORT_ROOT.parent / "Base"))
+BASE_DIR = UPSTREAM_ROOT  # kept as the local alias the REPOS table below reads
 
 WATCH_DIR = PORT_ROOT / "planning" / "upstream-watch"
 LEDGER = WATCH_DIR / "LEDGER.yaml"

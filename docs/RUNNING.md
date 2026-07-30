@@ -168,7 +168,7 @@ an aimbot, so the gate is the compiler, not a cvar a config or server could set.
 unless you ask for it, and even then it stays dormant until the CLI flag is passed:
 
 ```bash
-dotnet build XonoticGodot.csproj -c Debug -p:XgBotPlayer=true
+dotnet build XonoticGodot.csproj -c Debug -p:VaBotPlayer=true
 ```
 
 ```bash
@@ -190,7 +190,7 @@ dotnet build XonoticGodot.csproj -c Debug -p:XgBotPlayer=true
   really made the round trip through prediction, the wire, and server physics. `deaths`/`respawns` tracking
   each other is the proof the respawn cycle is turning over.
 
-Never define `XgBotPlayer` for a release or export build. Keep every use inside `#if XG_BOTPLAYER`.
+Never define `VaBotPlayer` for a release or export build. Keep every use inside `#if VA_BOTPLAYER`.
 
 Known limitation: the brain switches weapons server-side (as it does for bots), so the client's
 weapon-switch prediction is not driven by this; movement, aim, firing and the reconcile all are.
@@ -286,7 +286,7 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - **User data dir.** All writable per-user data — `config.cfg` (cvars + keybinds), `settings.cfg`,
   `favorites.cfg`, the `sdfcache/`, and the profiler dumps — lives under **`~/XonData/`** (resolved by
   `game/UserPaths.cs`, the writable-side counterpart to `DataPaths`), *not* Godot's hidden `user://` dir. Set
-  the `XONOTIC_USERDIR` env var to an absolute path to override it (tests/CI use this to keep `~` clean).
+  the `VORTEX_USERDIR` env var to an absolute path to override it (tests/CI use this to keep `~` clean).
   `MenuState.Boot` does a one-time copy of an existing `user://` `config.cfg`/`settings.cfg`/`favorites.cfg`
   into `~/XonData` on first run, so an upgrade keeps the player's saved prefs.
 - **In-game:** Escape opens the pause menu (`Shell` pauses the tree; Disconnect returns to the main menu).
@@ -424,7 +424,7 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   4 players), plus the older `BotPerfBench` (bot nav). Run them with
   `dotnet test tests/XonoticGodot.Tests --filter PerfBench -l "console;verbosity=detailed"` — each prints a
   ms + B/op table; measured baselines are recorded as comments atop each file (update them when numbers move
-  materially). They skip without assets; point `XG_DATA_DIR` at a content dir to override the default path.
+  materially). They skip without assets; point `VA_DATA_DIR` at a content dir to override the default path.
 - **Live-process GC profiling:** the headless benches can't reach client-side per-frame paths
   (`EffectSystem._Process`, HUD rebuilds). Attach `dotnet-counters` to the running game instead:
   `dotnet tool install -g dotnet-counters`, launch the game windowed, then

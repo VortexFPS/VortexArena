@@ -65,10 +65,21 @@
   },
   "template": {
     "$comment": [
-      "PENDING: needs a published prebuilt template to point at, which is a hosting decision (which repo,",
-      "which release) plus item 30's build-engine-template.yml workflow. Until these are filled in,",
-      "custom_template/release stays an absolute dev-box path and only the dev box can export Windows.",
-      "fetch-engine-template.py must refuse to run while url/sha256 are null rather than guess a URL."
+      "PENDING PUBLICATION: url/sha256 stay null until the template is published as a release asset, which is",
+      "a deliberate gate - fetch-engine-template.py must refuse to run rather than guess a URL.",
+      "",
+      "First CI build succeeded 2026-07-30 (run 30514508233, 91 min: editor 51, glue <1, assemblies 3,",
+      "template 35). Verified locally after download: GetRawInputBuffer 1x, contamination canary 0x.",
+      "  ci build    66,842,624 B  sha256 c7f0e5c012932953bd4cbde36d742ac42151d2fab1648d97759c5f6f33175bd0",
+      "  dev-box     67,325,952 B  sha256 cc0660d5b969054d...  (the one validated in actual play)",
+      "",
+      "THOSE DIFFER, and the difference is expected rather than a fault: Godot does not build reproducibly",
+      "across MSVC toolchain versions, and the runner's differs from the dev box's. Both are correctly",
+      "patched - identical CONFIGURATION, different BYTES.",
+      "So sha256 here means 'this exact published artifact', which is what a fetcher needs to verify a",
+      "download. It is NOT a reproducibility claim: rebuilding from the same pinned inputs will produce a",
+      "different hash, and that must not be read as tampering. The reproducible pin is the patches[] hash",
+      "plus engine.upstream_tag; binary_markers is what proves the RESULT carries them."
     ],
     "filename": "godot.windows.template_release.x86_64.mono.exe",
     "url": null,

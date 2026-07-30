@@ -148,3 +148,30 @@ The on-demand `export` job (CI artifacts only, binary-only) is superseded by a d
   `universal` with an `arm64` fallback documented. A macOS failure never blocks the Win/Linux release.
 - **Still cut:** installers, auto-update, code signing/notarization (the macOS unsigned caveat stands),
   Steam/itch — unchanged from the original cut list.
+
+---
+
+## Amendment — 2026-07-30 (repo restructure)
+
+Two statements in this ADR are no longer true, and one was never a good idea.
+
+- **`download-assets.sh` is deleted.** It is no longer the single source of asset truth, because there is
+  no build-time fetch of core content: it is committed under `data/` and arrives with the clone. See
+  [ADR-0016](ADR-0016-content-ownership.md). The `assets` job in `release.yml` — download once, tar,
+  fan out to the build jobs — is gone with it.
+- **The CI cache key moved from `hashFiles('download-assets.sh')` to `hashFiles('data/maps.lock.json')`,**
+  which is strictly better and not merely different: the key now invalidates when the **map set** changes
+  rather than when the fetching *code* changes. The old key would miss a content change that did not touch
+  the script, and churn on a comment edit that changed nothing.
+- **`assets/data` is gone**, along with the dev-box junction that pointed it at a pristine upstream
+  checkout. The content path is `res://data`, and `tools/package.sh` lays `data/` beside the binary.
+  `DataPaths.Resolve` derives the packaged probe from that default, so the two are coupled by
+  construction.
+- **`test -f <output>` after an export is not a sufficient release gate.** This ADR's export step runs
+  `… || true` then checks the file exists. An emptied `custom_template/release` makes Godot produce a
+  complete binary from the *stock* template, so that check goes green on a build missing every engine
+  backport. `release.yml` now also asserts the binary's **content** —
+  [ADR-0017](ADR-0017-engine-patches.md).
+
+Unchanged: the native-runner-per-platform topology (no cross-export), the perf-baseline gate, and the
+`VA_DATA_DIR` override — though that env var is spelled `VA_DATA_DIR` now, not `XG_DATA_DIR`.

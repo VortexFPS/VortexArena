@@ -46,4 +46,16 @@ public sealed record AnnounceRequest
     /// <summary>Lowercase hex sha256 of the runner's public key. Required when
     /// <see cref="AvailableForControl"/> is set. Not a secret.</summary>
     public string? ControlKeyFingerprint { get; init; }
+
+    /// <summary>The server's map pool, as the hash from map-catalog-v1 §2. Optional, and additive to a
+    /// frozen v1 under announce-v1 §9: a master that does not know this field ignores it, and a server
+    /// that does not send it is listed exactly as before.
+    ///
+    /// Absent means "this server does not report a catalog", which is what `sv_master_catalog 0` sends.
+    /// It does not mean the server has no maps, and the master must not render it as an empty pool: an
+    /// empty pool has a hash like any other and is reported as one.
+    ///
+    /// Sent on every announce and cheap because it is the only thing sent. The catalog itself moves
+    /// only when the master answers with a <see cref="AnnounceResponse.CatalogRequest"/>.</summary>
+    public string? MapCatalogHash { get; init; }
 }

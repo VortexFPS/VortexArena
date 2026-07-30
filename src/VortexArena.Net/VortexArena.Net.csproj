@@ -7,6 +7,13 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\VortexArena.Common\VortexArena.Common.csproj" />
+    <!-- Map catalog (map-catalog-v1 §10): MapCatalogScan reads the server's .pk3 files through the same
+         VirtualFileSystem the game mounts them with, and parses the mapinfo inside with the same
+         Vmap.MapInfo reader the editor and the map vote use. A second pk3 reader or a second mapinfo
+         parser is how the catalog would end up describing maps the server does not actually serve.
+         Acyclic (Formats depends only on Common) and free: the only two consumers of this project, the
+         Godot host and the test suite, already reference Formats. -->
+    <ProjectReference Include="..\VortexArena.Formats\VortexArena.Formats.csproj" />
   </ItemGroup>
 
   <!-- DS-7: MasterAnnounce compiles against Conductor.Protocol, which is NOT referenced here. The

@@ -32,6 +32,11 @@ public sealed record AnnounceResponse
     /// <summary>Human-readable. Carries the reason when <see cref="State"/> is
     /// <see cref="ListingState.Rejected"/>.</summary>
     public string? Detail { get; init; }
+
+    /// <summary>Set only when the master wants the server's map catalog uploaded (map-catalog-v1 §3).
+    /// Absent is the steady state and means "send nothing, keep announcing", which is what makes the
+    /// catalog cost 64 bytes on a request that already exists.</summary>
+    public CatalogRequest? CatalogRequest { get; init; }
 }
 
 /// <summary>Error body for every non-2xx response (spec §3).</summary>
@@ -68,4 +73,15 @@ public static class ProtocolErrorCodes
     public const string ListingBanned = "listing_banned";
     public const string ProtocolFloor = "protocol_floor";
     public const string Unavailable = "unavailable";
+
+    // Map catalog (map-catalog-v1). Registered here rather than in a second class, because two
+    // registries of machine-readable codes is how two codes end up spelled the same.
+
+    /// <summary>An uploaded index does not hash to the catalog_hash it carries, or to the one the
+    /// server announced (map catalog §4).</summary>
+    public const string CatalogHashMismatch = "catalog_hash_mismatch";
+
+    /// <summary>The upload token is unknown, expired, already used, or belongs to another server
+    /// (map catalog §8).</summary>
+    public const string InvalidUploadToken = "invalid_upload_token";
 }

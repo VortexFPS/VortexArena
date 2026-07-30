@@ -422,6 +422,18 @@ public static class Cvars
         // rather than read out of the runner's key file, because the game must not know where a launcher
         // keeps its data directory. Empty (a server with no runner beside it) omits the offer entirely.
         new("conductor_control_key", "", "sha256 fingerprint of the runner's control key, written by the runner"),
+        // Map catalog (map-catalog-v1 §10): report which .pk3 packages this server carries, so players can
+        // see and download its map pool from the server browser. Default ON — the announce only ever carries
+        // the 64-byte pool hash, and the pool itself moves only when the master has never seen it, from this
+        // server or any other. 0 omits the field entirely, which the master reads as "does not report a
+        // catalog" and NOT as "has no maps".
+        new("sv_master_catalog", "1", "1 = report this server's .pk3 map pool to the master (map catalog v1)"),
+        // Where a player can fetch this server's packages, e.g. https://maps.example.org — the package's file
+        // name is appended. Empty by default: most operators have nowhere to publish, and the master may
+        // mirror packages into its own content store anyway. Advisory in any case (map catalog §5): the
+        // master never follows this URL, and the client verifies the package hash after downloading, so a
+        // wrong one costs a download attempt and nothing else.
+        new("sv_master_catalog_url", "", "base URL where this server's .pk3 packages can be downloaded ('' = none)"),
 
         // ---- voting (server/command/vote.qc) ----
         new("sv_vote_call", "1", "allow players to call votes"),

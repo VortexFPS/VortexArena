@@ -37,6 +37,18 @@ set sv_public 1                            // 1 = announce to the master (server
 // set conductor_control 0
 // set conductor_control_key ""            // sha256 of the runner's public key (lowercase hex)
 
+// --- map catalog (optional) -----------------------------------------------
+// Report which .pk3 packages this server carries, so players can see and download your map pool from the
+// server browser. ON by default and nearly free: the announce carries only a 64-byte hash of the pool, and
+// the pool itself is uploaded only when the master has never seen it, from you or from anyone else.
+// set sv_master_catalog 1
+// Where players can fetch YOUR packages; the file name is appended. Must be https and must not point at a
+// private address. Leave it empty if you have nowhere to publish — the master may mirror packages itself,
+// and the client verifies each package's hash after downloading in either case.
+// set sv_master_catalog_url "https://maps.example.org/vortex"
+// `sv_master_catalog_refresh` on the console or over rcon rescans after you add or remove a .pk3. The scan
+// runs in the background; it never stalls the match.
+
 // --- slots / gameplay -----------------------------------------------------
 set g_maxplayers 16                        // 0 = engine max
 set minplayers 2                           // bots fill up to this many active players

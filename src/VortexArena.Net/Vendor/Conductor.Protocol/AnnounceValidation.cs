@@ -56,6 +56,12 @@ public static class AnnounceValidation
                     $"expected {AnnounceProtocol.ControlKeyFingerprintLength} lowercase hex characters");
         }
 
+        // Rejecting a malformed value here does not tighten a v1 rule, because the field is new: no
+        // server speaking v1 today sends it at all (announce-v1 §9). Omitting it stays valid forever.
+        var catalogError = MapCatalogValidation.ValidateAnnouncedHash(r.MapCatalogHash);
+        if (catalogError is not null)
+            return catalogError;
+
         return null;
     }
 

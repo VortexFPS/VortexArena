@@ -185,6 +185,17 @@ public sealed class Commands
     public Action? GameEndHookHandler { get; set; }
 
     /// <summary>
+    /// Optional sink the host wires to rescan this server's .pk3 map pool for the master's catalog
+    /// (map-catalog-v1 §10) — backs <c>sv_master_catalog_refresh</c>. Returns the line to print, because the
+    /// interesting outcomes ("started", "already running", "sv_master_catalog is 0") are the host's to know
+    /// and this assembly does not reference the announce lane. When unwired the command says so; a server
+    /// with no modern master lane has no catalog to rebuild.
+    /// <para>The handler must RETURN immediately: the scan itself is seconds of disk work and belongs on a
+    /// worker, which is what the announce lane's cache does with it.</para>
+    /// </summary>
+    public Func<string>? MasterCatalogRefreshHandler { get; set; }
+
+    /// <summary>
     /// The sim-clock deferred-command queue (DP <c>defer</c> / <c>Cbuf_Execute_Deferred</c>). Backs the
     /// <c>defer</c> + <c>nextframe</c> commands; pumped each server tick by <c>GameWorld.OnStartFrame</c>
     /// (<c>Commands.Deferred.Pump(Time, cmd =&gt; Commands.Execute(cmd, isServerConsole: true))</c>). The passed
@@ -915,6 +926,12 @@ public sealed class Commands
         Register("quit", "quit — shut the server down", CmdQuit);
         Register("exit", "exit — shut the server down (alias of quit)", CmdQuit);
 
+        // ---- map catalog (map-catalog-v1 §10) — rescan the .pk3 pool after the operator changed the data
+        //      directory. Server-console / rcon only, like everything else in this block. ----
+        Register("sv_master_catalog_refresh",
+            "sv_master_catalog_refresh — rescan this server's .pk3 map pool for the master's catalog",
+            CmdMasterCatalogRefresh);
+
         // ---- introspection (QC GameCommand help / common/command help/who/teamstatus/time/info) ----
         Register("help", "help [command] — list commands or describe one", CmdHelp);
         Register("status", "status — print match/roster status", CmdStatus);
@@ -1338,6 +1355,20 @@ public sealed class Commands
         }
         ctx.Print("shutting down…");
         QuitHandler();
+        return true;
+    }
+
+    /// <summary>Map catalog §10: recompute the pool hash after a data-directory change, without a restart.
+    /// The host-wired handler starts the rescan on a worker and returns at once — this command must not be
+    /// the thing that blocks the server for the seconds it takes to hash a few hundred packages.</summary>
+    private bool CmdMasterCatalogRefresh(CommandContext ctx)
+    {
+        if (MasterCatalogRefreshHandler is null)
+        {
+            ctx.Print("sv_master_catalog_refresh: this server has no master announce lane (nothing to rebuild)");
+            return false;
+        }
+        ctx.Print(MasterCatalogRefreshHandler());
         return true;
     }
 

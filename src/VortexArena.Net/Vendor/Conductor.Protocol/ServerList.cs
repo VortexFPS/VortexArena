@@ -39,6 +39,12 @@ public sealed record ServerListEntry
     /// is a different proposition from an unmanaged one, and hiding that would be the wrong
     /// default.</summary>
     public bool Orchestrated { get; init; }
+
+    /// <summary>The server's map pool (map catalog §9), so a client can tell two pools apart without
+    /// fetching either. Absent when the server does not report a catalog, which is not the same as
+    /// reporting an empty one. The list itself is at
+    /// <see cref="MapCatalogProtocol.ServerCatalogPath"/>.</summary>
+    public string? MapCatalogHash { get; init; }
 }
 
 /// <summary>Body of GET /api/v1/servers (spec §5).</summary>

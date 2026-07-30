@@ -182,6 +182,9 @@ public sealed class ServerNet : IDisposable
     // Null until EnableMasterAnnounce. Its Tick only compares a clock and hands a value snapshot to a worker,
     // so it is safe on the pump thread; nothing here ever waits on the network.
     private MasterAnnounce? _announce;
+    // The sv_master_catalog_refresh hook we installed on the world's command table, kept so teardown can
+    // remove OURS and only ours (map catalog §10).
+    private System.Func<string>? _catalogRefreshHook;
     // DS-6: the rcon/srcon authenticator, wired to the same OOB socket that answers getinfo. Null until the
     // master link exists (WireRcon). Reads rcon_* cvars live, executes authenticated commands on the server.
     private RconServer? _rcon;
@@ -908,6 +911,17 @@ public sealed class ServerNet : IDisposable
 
         _announce = new MasterAnnounce(() => BuildAnnounceSnapshot(gamePort), msg => GD.Print($"[announce] {msg}"));
 
+        // Map catalog §10: `sv_master_catalog_refresh` after the operator dropped a .pk3 into the data dir.
+        // Runs on this thread (console / rcon dispatch) and returns immediately — the rescan it starts is on
+        // the announce lane's own worker, because hashing a few hundred packages here would stall the world
+        // for as long as it takes to read them.
+        _world.Commands.MasterCatalogRefreshHandler = _catalogRefreshHook = () => _announce!.RefreshCatalog() switch
+        {
+            CatalogRefresh.Started => "rebuilding the map catalog in the background",
+            CatalogRefresh.AlreadyRunning => "map catalog rebuild already in progress",
+            _ => "this server does not report a map catalog (sv_master_catalog 0, or no content mounted)",
+        };
+
         // A map change reboots the listen server onto the new map (NetGame.StartListenServer via
         // Shell's MapChangeRequested handler), so a fresh ServerNet coming up on a map IS the map-change
         // path — the same reason EnableMasterServer arms an immediate dpmaster heartbeat right above.
@@ -943,6 +957,17 @@ public sealed class ServerNet : IDisposable
         if (string.IsNullOrWhiteSpace(masterUrl))
             masterUrl = Conductor.Protocol.AnnounceProtocol.DefaultMasterUrl;
 
+        // Map catalog §10. The package list is sampled HERE, on the world's thread, for the same reason
+        // everything else in this snapshot is: the scan worker must never reach into live state. It is a few
+        // dozen strings, and the expensive part — reading and hashing what they point at — is what the worker
+        // then does with them.
+        // Null when there is no mounted content at all, and that is NOT the same as an empty pool: §3 says
+        // absence means "does not report a catalog", and reporting zero packages because we could not look
+        // is precisely the claim it tells the master not to render.
+        IReadOnlyList<string>? packages =
+            cv.GetFloat("sv_master_catalog") == 1f ? MountedPackagePaths() : null;
+        bool reportCatalog = packages is not null;
+
         return new MasterAnnounce.AnnounceSnapshot(
             MasterUrl: masterUrl,
             Port: port,
@@ -965,7 +990,38 @@ public sealed class ServerNet : IDisposable
             // access story. Reported honestly as false rather than guessed from an unrelated cvar.
             PasswordProtected: false,
             AvailableForControl: offerControl,
-            ControlKeyFingerprint: offerControl ? fingerprint : null);
+            ControlKeyFingerprint: offerControl ? fingerprint : null,
+            ReportCatalog: reportCatalog,
+            PackagePaths: packages ?? System.Array.Empty<string>(),
+            CatalogDownloadUrl: cv.GetString("sv_master_catalog_url"));
+    }
+
+    /// <summary>
+    /// The <c>.pk3</c> files this server actually has loaded, for the map catalog (map-catalog-v1 §10).
+    ///
+    /// Taken from the VFS's own mount list rather than by re-globbing the data directory, so the catalog
+    /// describes what the server is serving instead of a second opinion about where content lives. A pack
+    /// that failed to mount (corrupt, locked) is not in this list and is not reported, which is the right
+    /// answer: a player who downloaded it could not join with it either.
+    ///
+    /// <c>.pk3dir</c> mounts and the gamedir itself are excluded because §10 is about files that can be
+    /// hashed and fetched by hash, and a directory is neither.
+    ///
+    /// <para>Null when nothing is mounted at all — a bare test host, or a data dir that failed to mount.
+    /// The caller turns that into "no catalog reported" rather than into an empty pool.</para>
+    /// </summary>
+    private static IReadOnlyList<string>? MountedPackagePaths()
+    {
+        if (Menu.MenuState.Vfs is not { } vfs)
+            return null;
+
+        var paths = new List<string>();
+        foreach (string mount in vfs.MountedPaths)
+        {
+            if (mount.EndsWith(".pk3", System.StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(mount))
+                paths.Add(mount);
+        }
+        return paths;
     }
 
     /// <summary>The active mutators as wire tokens (QC <c>BuildMutatorsString</c> — the machine-readable list,
@@ -4013,6 +4069,11 @@ public sealed class ServerNet : IDisposable
         // drop the per-player physics resolver only if it is still OURS (a re-host may have installed a new one).
         if (ReferenceEquals(MovementParameters.PresetProvider, _presetProvider))
             MovementParameters.PresetProvider = null;
+        // Unhook before disposing, and only if it is still OURS (same rule as the preset provider above): the
+        // world can outlive this ServerNet, and a sv_master_catalog_refresh landing afterwards would report a
+        // rebuild that a disposed lane cancels on the spot.
+        if (ReferenceEquals(_world.Commands.MasterCatalogRefreshHandler, _catalogRefreshHook))
+            _world.Commands.MasterCatalogRefreshHandler = null;
         // DS-7 first: it joins its in-flight announce (bounded wait) while the transport is still alive, so a
         // map change that tears this down mid-announce does not race the socket out from under the worker.
         _announce?.Dispose();

@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Physics;
+namespace VortexArena.Common.Physics;
 
 /// <summary>
 /// The push-apart half of soft player collision (PORT EXTENSION <c>sv_player_softcollision</c> — the

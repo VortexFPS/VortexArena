@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>Entity movement integrator selector (QC MOVETYPE_*). See planning/specs/determinism-and-physics.md.</summary>
 public enum MoveType

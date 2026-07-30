@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Engine.Collision;
+namespace VortexArena.Engine.Collision;
 
 /// <summary>
 /// The AABB-vs-brush sweep collision service — the C# reimplementation of Darkplaces'
@@ -61,14 +61,14 @@ public sealed class TraceService : ITraceService
 
     /// <summary>
     /// [T45] Wire this world's warpzone manager (QC global <c>g_warpzones</c>) so the warpzone-aware trace
-    /// extensions (<see cref="XonoticGodot.Common.Gameplay.WarpzoneManager"/> via
+    /// extensions (<see cref="VortexArena.Common.Gameplay.WarpzoneManager"/> via
     /// <c>ITraceService.TraceLineWarpzone</c>/<c>TraceBoxWarpzone</c>) can recurse hitscan/projectile traces
     /// through linked portals. Call once after the map's zones are linked (GameWorld.Boot, after InitMapZones).
     /// Passing <c>null</c> (a map with no warpzones, or teardown) reverts every warpzone-aware trace to a plain
     /// trace. Forwarded via <see cref="TraceServiceWarpzoneBridge"/> to the Common-side ambient the warpzone
     /// trace extensions (<c>ITraceService.TraceLineWarpzone</c>/<c>TraceBoxWarpzone</c>) resolve.
     /// </summary>
-    public void SetWarpzoneManager(XonoticGodot.Common.Gameplay.WarpzoneManager? manager)
+    public void SetWarpzoneManager(VortexArena.Common.Gameplay.WarpzoneManager? manager)
         => TraceServiceWarpzoneBridge.Publish(manager);
 
     /// <summary>
@@ -76,7 +76,7 @@ public sealed class TraceService : ITraceService
     /// that loaded the BSP (via <c>new BspPvs(bsp)</c>); null on a non-BSP/test world, where every PVS query is
     /// conservatively visible.
     /// </summary>
-    public XonoticGodot.Formats.Bsp.BspPvs? Pvs { get; set; }
+    public VortexArena.Formats.Bsp.BspPvs? Pvs { get; set; }
 
     // Scratch buffers reused across calls (the sim is single-threaded per world; a trace fires no callbacks
     // mid-sweep, so these are never re-entered within one Trace/PointContents call).
@@ -144,7 +144,7 @@ public sealed class TraceService : ITraceService
         // profiler is off — so don't pay two QueryPerformanceCounter reads per trace during normal play. A
         // bot-heavy tick runs thousands of traces (the strategy pool alone budgets 96/tick), and sv_threaded
         // is the DEFAULT, so this path is the common one. Numbers are unchanged whenever profiling is on.
-        if (!XonoticGodot.Common.Diagnostics.Prof.Enabled)
+        if (!VortexArena.Common.Diagnostics.Prof.Enabled)
         {
             lock (gate)
                 return TraceUnlocked(start, mins, maxs, end, filter, ignore);
@@ -217,7 +217,7 @@ public sealed class TraceService : ITraceService
         object? gate = ConcurrencyGate;
         if (gate is null)
             return PointContentsUnlocked(point);
-        if (!XonoticGodot.Common.Diagnostics.Prof.Enabled)   // see Trace: no clock unless it is read back
+        if (!VortexArena.Common.Diagnostics.Prof.Enabled)   // see Trace: no clock unless it is read back
         {
             lock (gate)
                 return PointContentsUnlocked(point);

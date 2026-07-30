@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Maps the QuakeC dialog <c>name</c> strings (the identifiers <c>menu_cmd directmenu &lt;name&gt;</c> and the
@@ -33,6 +33,9 @@ public static class MenuDialogRegistry
         ["videosettings"]  = () => MakeSettings("Video"),           // QC videosettings → Settings on the Video tab
         ["guide"]       = () => new DialogMediaGuide(),             // QC dialog_multiplayer_media_screenshot's guide → the entry guide
         ["quitdialog"]  = () => new QuitDialog(),                   // QC menu_showquitdialog
+        // QC dialog_teamselect registers .name "TeamSelect"; binds-xonotic.cfg `bind F5 team_selection_show`.
+        // The dialog class existed but was unreachable — nothing registered its QC name, so F5 was a dead key.
+        ["TeamSelect"]  = () => new DialogTeamSelect(),             // QC dialog_teamselect (F5)
         ["hudpanels"]   = () => new DialogHudPanels(),              // HUD-panel config host (menu_showhudoptions)
         // QC dialog_sandboxtools registers .name "SandboxTools"; binds-xonotic.cfg `bind F7 menu_showsandboxtools`
         // aliases (commands.cfg) to `menu_cmd directmenu SandboxTools`, which flows MenuCommand→OpenDialog→

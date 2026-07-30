@@ -1,0 +1,12 @@
+# Never normalize line endings anywhere under the content tree.
+#
+# The binary formats (.png, .dds, .bsp, .ogg) carry NUL bytes early and git detects
+# them correctly, but this tree also holds real text: .shader, .cfg, .skin, .mapinfo,
+# .map. Those would get CRLF on a Windows checkout and LF on Linux, which makes
+# tools/package.sh produce byte-different release zips from the same commit and makes
+# the launcher's content-addressed asset-pack identity wobble.
+#
+# This lives inside the tree rather than as a root-level `data/** -text` pattern so it
+# travels with the directory and cannot be defeated by pattern-precedence surprises.
+# See planning/repo-restructure-2026-07-29.md gotcha G2.
+* -text

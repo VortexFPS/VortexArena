@@ -1,6 +1,6 @@
 # Midair mutator — parity spec
 
-**Base refs:** `common/mutators/mutator/midair/sv_midair.qc` (+ `sv_midair.qh`, `_mod.inc`)  ·  **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/MidairMutator.cs`
+**Base refs:** `common/mutators/mutator/midair/sv_midair.qc` (+ `sv_midair.qh`, `_mod.inc`)  ·  **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/MidairMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -118,7 +118,7 @@ only client-visible piece and it rides on the standard networked `.effects` fiel
 
 ### Values
 - `g_midair_shieldtime` / `g_midair_damagemultiplier` / `g_midair_damageforcescale` are shipped with
-  Base defaults in the port's `assets/data/.../mutators.cfg` (0.3 / 1 / 1.5) and loaded by
+  Base defaults in the port's `Base/data/.../mutators.cfg` (0.3 / 1 / 1.5) and loaded by
   `ConfigLoader`, so the live values match Base.
 - **Defect (edge case):** the port reads these cvars **once at `Hook()`** into fields with a `!= 0`
   override guard: `if (st != 0f) ShieldTime = st;` and `if (dm != 0f) DamageMultiplier = dm;`. A

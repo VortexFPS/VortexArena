@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The lightmap-modulate spatial shader used by IBSP world geometry.
@@ -31,7 +31,7 @@ namespace XonoticGodot.Game.Loaders;
 /// undo <c>lightcolor *= 1/max(0.25, lightnormal.z)</c> AND the directional diffuse
 /// <c>diffuse = possatdot(surfacenormal, lightnormal)</c>. With no per-surface normalmap the surface normal is
 /// the flat tangentspace <c>(0,0,1)</c>, so the final color is <c>albedo * diffuse * lightcolor</c>. The tangent
-/// frame is threaded through the BSP path: <see cref="XonoticGodot.Game.MapLoader"/> generates per-vertex tangents
+/// frame is threaded through the BSP path: <see cref="VortexArena.Game.MapLoader"/> generates per-vertex tangents
 /// for deluxemapped lightmap surfaces.</para>
 ///
 /// <para><b>Vertex lighting.</b> A face with a negative lightmap index (q3map2 vertex-lit, e.g. <c>-3</c>) has no
@@ -98,9 +98,15 @@ public static class LightmapShader
     /// white fallback is used when a texture is unbound. See the type doc for the color-space, deluxemap, and
     /// vertex-lighting details.
     /// </summary>
-    public const string Code = @"// XonoticGodot lightmap-modulate shader (Q3 BSP world surfaces). Generated in C#.
+    public const string Code = @"// VortexArena lightmap-modulate shader (Q3 BSP world surfaces). Generated in C#.
 shader_type spatial;
-render_mode unshaded, cull_back, depth_draw_opaque;
+// NOT `unshaded`, so real-time point lights can reach the world (DP r_shadow_realtime_dlight): a muzzle
+// flash or an explosion should light the wall next to it. The BAKED result is written to EMISSION, which no
+// light touches, so a surface with no dynamic light near it renders byte-identically to the unshaded version;
+// ALBEDO carries the plain diffuse purely so the light() below has something to modulate.
+// `ambient_light_disabled` is essential: the scene's ambient/sky would otherwise be added on top of a
+// lightmap that already accounts for all of it, washing every map out.
+render_mode cull_back, depth_draw_opaque, ambient_light_disabled;
 
 // NOTE: albedo/lightmap are sampled RAW (no source_color) — the stock Xonotic config renders in gamma space.
 // The srgb_color path decodes them explicitly. See LightmapShader's type doc.
@@ -128,10 +134,15 @@ uniform bool use_gloss = false;         // a _gloss page was found for this surf
 uniform float specular_power = 32.0;    // DP r_shadow_glossexponent (× glosstex.a per-texel in the shader).
 uniform float specular_scale = 0.15;    // DP Color_Specular (gloss intensity) — a subtle glint; 0 disables.
 
-// Dynamic whole-map colour tint (XonoticGodot.Game.WorldTint). A GLOBAL shader parameter so one
+// Dynamic whole-map colour tint (VortexArena.Game.WorldTint). A GLOBAL shader parameter so one
 // RenderingServer.GlobalShaderParameterSet re-tints every world surface at once; the strength is folded into the
 // multiplier on the C# side, so this is a trivial final multiply and the registered default (1,1,1) is identity.
 global uniform vec3 map_tint;
+
+// Real-time dynamic-light strength on world surfaces (DP r_shadow_realtime_dlight). Global so one
+// RenderingServer.GlobalShaderParameterSet reaches every world surface; 0 restores the pre-dlight look
+// exactly, since the baked term lives in EMISSION and is unaffected either way.
+global uniform float world_dlight;
 
 // Per-surface tangent frame (DP VectorS/T/R = tangent/binormal/normal), captured in modelspace so the
 // modelspace deluxe light direction can be rotated into it without a view-space mismatch.
@@ -220,12 +231,29 @@ void fragment() {
     combined *= map_tint;   // dynamic whole-map tint (identity (1,1,1) when no tint is active).
     // In sRGB mode combined is linear (let Godot encode it). In the default gamma-space mode it's the
     // display-ready value, so pre-encode it to linear to cancel Godot's linear->sRGB output transform.
-    ALBEDO = srgb_color ? combined : srgb_to_linear(combined);
+    // The baked result goes to EMISSION, not ALBEDO: emission is not affected by lighting, so the static
+    // lightmap look survives exactly as-is and dynamic lights ADD to it rather than replacing it.
+    EMISSION = srgb_color ? combined : srgb_to_linear(combined);
+    // Linear diffuse for the dynamic-light term below. Tinted to match, so a dlight on a tinted map picks up
+    // the tint too.
+    ALBEDO = (srgb_color ? albedo : srgb_to_linear(albedo)) * map_tint;
     // World surfaces are OPAQUE: do NOT write ALPHA. Writing it pushes the material into Godot's transparent
     // pass, which is depth-sorted per-object and doesn't occlude — i.e. you'd see through walls. Masked
     // surfaces (grates/foliage) instead alpha-TEST via discard below, which stays in the opaque pass.
     if (alpha_cutoff > 0.0 && base.a < alpha_cutoff) {
         discard;
+    }
+}
+
+// DP's realtime-dlight model: the baked lightmap is the static term, and dynamic lights add a simple
+// Lambert diffuse on top. DIRECTIONAL lights are deliberately ignored — the scene carries a generic sun for
+// lighting player models, and letting it reach the world would add a second, constant light term to surfaces
+// whose lighting is already fully baked, flattening every map.
+void light() {
+    // Guarded rather than early-returned: Godot rejects `return` inside light().
+    if (!LIGHT_IS_DIRECTIONAL) {
+        float ndotl = clamp(dot(normalize(NORMAL), normalize(LIGHT)), 0.0, 1.0);
+        DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndotl * world_dlight;
     }
 }
 ";
@@ -270,7 +298,7 @@ void fragment() {
     /// <paramref name="deluxemap"/> (optional) is the matching light-direction page on a deluxemapped map;
     /// when supplied, the lightmap is re-modulated by <c>1/max(0.25, lightnormal.z)</c> AND the directional
     /// diffuse <c>clamp(lightnormal.z, 0, 1)</c> (DP MODE_LIGHTDIRECTIONMAP_MODELSPACE + SHADEDIFFUSE). This
-    /// path needs the mesh to carry a TANGENT array — <see cref="XonoticGodot.Game.MapLoader"/> generates one for
+    /// path needs the mesh to carry a TANGENT array — <see cref="VortexArena.Game.MapLoader"/> generates one for
     /// deluxemapped lightmap surfaces. <paramref name="albedoUvScale"/> applies a static Q3 <c>tcMod scale</c>
     /// to the albedo UV only (default <c>(1,1)</c> = no scale).
     ///

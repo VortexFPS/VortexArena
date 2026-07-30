@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Engine.Collision;
+namespace VortexArena.Engine.Collision;
 
 // Port of the Darkplaces collision world (Base/darkplaces/collision.c, world.c).
 //
@@ -19,7 +19,7 @@ namespace XonoticGodot.Engine.Collision;
 
 /// <summary>
 /// SUPERCONTENTS_* bitmask (Base/darkplaces/bspfile.h). Engine traces use these richer masks rather
-/// than the legacy CONTENT_* enum; <see cref="XonoticGodot.Common.Framework.Contents"/> is the QC-facing
+/// than the legacy CONTENT_* enum; <see cref="VortexArena.Common.Framework.Contents"/> is the QC-facing
 /// point-content value. TraceResult.DpHitContents carries the SUPERCONTENTS of the surface hit.
 /// </summary>
 public static class SuperContents

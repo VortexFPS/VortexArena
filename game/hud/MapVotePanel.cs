@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Map-vote panel — port of Base/.../qcsrc/client/mapvoting.qc <c>MapVote_Draw</c> (HUD panel #MAPVOTE,
@@ -200,9 +200,9 @@ public partial class MapVotePanel : HudPanel
     /// <summary>QC <c>MapVote_Draw_Export</c> exports <c>hud_panel_mapvote_highlight_border</c> — the pixel
     /// thickness of the colored border drawn around the own-vote / selected cell. Registered into the SHARED
     /// store so console/menu edits change it live.</summary>
-    public static void RegisterDefaults(XonoticGodot.Engine.Simulation.CvarService c)
+    public static void RegisterDefaults(VortexArena.Engine.Simulation.CvarService c)
     {
-        const XonoticGodot.Common.Services.CvarFlags save = XonoticGodot.Common.Services.CvarFlags.Save;
+        const VortexArena.Common.Services.CvarFlags save = VortexArena.Common.Services.CvarFlags.Save;
         // Base ships hud_panel_mapvote_highlight_border "1" in every HUD skin (hud_luma.cfg etc.);
         // _hud_descriptions.cfg ships it empty (""). Match the shipped skin default of 1.
         c.Register("hud_panel_mapvote_highlight_border", "1", save);

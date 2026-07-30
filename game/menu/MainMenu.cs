@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The root menu screen — a faithful port of Xonotic's <c>Nexposee</c> (item/nexposee.qc + xonotic/mainwindow.qc).
@@ -96,7 +96,7 @@ public partial class MainMenu : MenuScreen
             if (MenuSkin.BoldFont is { } bold) wordmark.AddThemeFontOverride("font", bold);
             brand.AddChild(wordmark);
         }
-        var sub = new Label { Text = "XonoticGodot", HorizontalAlignment = HorizontalAlignment.Right, MouseFilter = MouseFilterEnum.Ignore };
+        var sub = new Label { Text = "VortexArena", HorizontalAlignment = HorizontalAlignment.Right, MouseFilter = MouseFilterEnum.Ignore };
         sub.AddThemeColorOverride("font_color", MenuSkin.Text);
         brand.AddChild(sub);
         _brand = brand;

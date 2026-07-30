@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// Synthesizes the per-tick <see cref="SkeletonAnim"/> that drives <see cref="PlayerSkeleton.FromFrames"/>,

@@ -1,11 +1,11 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The @!#%'n Tuba — port of common/weapons/weapon/tuba.{qh,qc}. A hidden splash weapon that "plays notes"
@@ -70,6 +70,7 @@ public sealed class Tuba : Weapon
     public Tuba()
     {
         NetName = "tuba";
+        BotPickupBaseValue = 2000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         DisplayName = "@!#%'n Tuba";
         Impulse = 1;
         // WEP_FLAG_HIDDEN | WEP_TYPE_SPLASH | WEP_FLAG_NODUAL | WEP_FLAG_NOTRUEAIM

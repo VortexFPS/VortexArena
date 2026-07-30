@@ -17,12 +17,12 @@
 // respawn/spark particles are presentation concerns owned by the client (Wave 3), and are explicitly deferred.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>Which kind of ball the gametype wants (selects the QC defaults — model, bbox, movetype).</summary>
 public enum BallKind

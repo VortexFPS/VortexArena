@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The menu's settings model + persistence + "apply to engine" layer. This is the C# stand-in for the
@@ -29,14 +29,14 @@ public sealed class MenuSettings
 
     /// <summary>
     /// <strong>QUARANTINED (T15).</strong> A parallel keybind store that duplicated the engine bind table. The
-    /// canonical, single source of truth is now <c>XonoticGodot.Engine.Console.BindTable</c>, seeded at boot from
+    /// canonical, single source of truth is now <c>VortexArena.Engine.Console.BindTable</c>, seeded at boot from
     /// <c>binds-xonotic.cfg</c> via <c>BindInput.RegisterBindCommands</c> and persisted through the cvar/config
     /// dump (<c>MenuState.SaveUserConfig</c> → <c>BindInput.WriteBindings</c>). The live input-settings dialog
     /// (<see cref="DialogSettingsInput"/>) edits that table directly; this field is no longer read by any live
     /// path (only the orphaned <see cref="SettingsScreen"/> still touches it) and is kept solely so that legacy
     /// code compiles. Do NOT route new keybind work through here.
     /// </summary>
-    [Obsolete("Keybinds live in XonoticGodot.Engine.Console.BindTable (seeded from binds-xonotic.cfg). Edit via BindInput, persist via MenuState.SaveUserConfig.")]
+    [Obsolete("Keybinds live in VortexArena.Engine.Console.BindTable (seeded from binds-xonotic.cfg). Edit via BindInput, persist via MenuState.SaveUserConfig.")]
     public readonly Dictionary<string, string> Keybinds = new();
 
     // -------------------------------------------------------------------------------------------------
@@ -142,7 +142,7 @@ public sealed class MenuSettings
     // -------------------------------------------------------------------------------------------------
 
     /// <summary>Apply every group to the running engine (video mode, audio buses). Input keybinds are NOT
-    /// applied here (T15 quarantine): the canonical bind table lives in <c>XonoticGodot.Engine.Console.BindTable</c>,
+    /// applied here (T15 quarantine): the canonical bind table lives in <c>VortexArena.Engine.Console.BindTable</c>,
     /// driven by <c>BindInput</c> + the cvar/config dump — not Godot's <see cref="InputMap"/>.</summary>
     public void Apply()
     {
@@ -196,7 +196,7 @@ public sealed class MenuSettings
 
     /// <summary>
     /// <strong>QUARANTINED (T15).</strong> Rebuilt Godot's <see cref="InputMap"/> from the legacy keybind table.
-    /// No longer on any live path: gameplay input is driven by <c>XonoticGodot.Engine.Console.BindTable</c> (sampled
+    /// No longer on any live path: gameplay input is driven by <c>VortexArena.Engine.Console.BindTable</c> (sampled
     /// directly in <c>NetGame.SampleInput</c> / <c>PlayerController</c>), not Godot input actions. Kept only for
     /// the orphaned <see cref="SettingsScreen"/>; not called by <see cref="Apply"/>.
     /// </summary>

@@ -3,15 +3,15 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;          // MoveFilter, Entity
-using XonoticGodot.Common.Gameplay;          // Teams
-using XonoticGodot.Common.Services;           // Api, ITraceService, TraceResult
-using XonoticGodot.Game.Hud;                  // HudPanel.HudFont, HudText
-using XonoticGodot.Game.Net;                  // ClientNet
-using XonoticGodot.Net;                       // NetEntityState / NetEntityKind / NetEntityFlags
+using VortexArena.Common.Framework;          // MoveFilter, Entity
+using VortexArena.Common.Gameplay;          // Teams
+using VortexArena.Common.Services;           // Api, ITraceService, TraceResult
+using VortexArena.Game.Hud;                  // HudPanel.HudFont, HudText
+using VortexArena.Game.Net;                  // ClientNet
+using VortexArena.Net;                       // NetEntityState / NetEntityKind / NetEntityFlags
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The floating player name + health/armor tags drawn above each visible player — the C# port of QuakeC's
@@ -801,8 +801,8 @@ public partial class ShowNamesLayer : Control
 
     private static float CvarF(string name, float fallback)
     {
-        string s = XonoticGodot.Game.Menu.MenuState.Cvars.GetString(name);
-        return string.IsNullOrWhiteSpace(s) ? fallback : XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat(name);
+        string s = VortexArena.Game.Menu.MenuState.Cvars.GetString(name);
+        return string.IsNullOrWhiteSpace(s) ? fallback : VortexArena.Game.Menu.MenuState.Cvars.GetFloat(name);
     }
 
     private static bool CvarBool(string name) => CvarF(name, 0f) != 0f;

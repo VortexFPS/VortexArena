@@ -7,10 +7,10 @@
 // Structurally the mirror of the ice fountain.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The darkness nade detonation — port of <c>nade_darkness_boom</c>.</summary>
 public sealed class NadeDarknessBoom : INadeBoom

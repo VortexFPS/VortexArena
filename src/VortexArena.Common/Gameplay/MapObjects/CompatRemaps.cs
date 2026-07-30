@@ -7,7 +7,7 @@
 //   qcsrc/common/resources/sv_resources.qc  GetAmmoConsumption (231-243)
 //
 // The REMOVAL filter (DoesQ3ARemoveThisEntity) is already ported in
-// XonoticGodot.Engine/Collision/MapEntityFilter.cs; this file is ONLY the ADD side that was missing —
+// VortexArena.Engine/Collision/MapEntityFilter.cs; this file is ONLY the ADD side that was missing —
 // the weapon/ammo/item classname spawnfuncs and the four Q3DF target_* entities. The weapon + item
 // classname aliases are installed by ItemSpawnFuncs.Register() (which calls into AmmoConsumption here for
 // the ammo .count scaling); the Q3 ammo classnames + the target_* spawnfuncs are installed by Register()
@@ -28,10 +28,10 @@
 //    held BuffsMutator buffs with a notification — that buff-drop notification path is not reachable from
 //    this layer and is recorded as a gap (the powerup reset, the load-bearing part, is faithful).
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -41,7 +41,7 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
     /// <summary>
     /// The Q3/QL/CPMA/Q1/Q2/WoP/Q3DF compatibility remaps — the ADD side of server/compat/*.qc. Exposes the

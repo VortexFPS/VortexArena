@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Net;
+using VortexArena.Common.Framework;
+using VortexArena.Net;
 using NVec3 = System.Numerics.Vector3;
-using PType = XonoticGodot.Game.Client.ProjectileCatalog.ProjectileType;
-using BodyFamily = XonoticGodot.Game.Client.ProjectileCatalog.BodyFamily;
+using PType = VortexArena.Game.Client.ProjectileCatalog.ProjectileType;
+using BodyFamily = VortexArena.Game.Client.ProjectileCatalog.BodyFamily;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Renders networked projectile entities — the Godot successor to CSQC's <c>CSQCProjectile</c> /
@@ -48,7 +48,7 @@ public partial class ProjectileRenderer : Node3D
         /// Client clock time the entity is expected to expire (QC <c>death_time</c>) — the anchor for the electro
         /// orb's <c>(ltime-time)</c> shrink pulse. The orb's <c>death_time</c> isn't networked, so it's cached at
         /// spawn as <c>now + g_balance_electro_secondary_lifetime</c> (the orb's <c>NextThink = now + lifetime</c>
-        /// in <see cref="XonoticGodot.Common.Gameplay.Weapons.Electro"/>). 0 = no scale pulse for this visual.
+        /// in <see cref="VortexArena.Common.Gameplay.Weapons.Electro"/>). 0 = no scale pulse for this visual.
         /// </summary>
         public float DeathTime;
     }
@@ -286,7 +286,7 @@ public partial class ProjectileRenderer : Node3D
     /// <summary>Advance every visual toward its entity's current Quake origin (call once per frame).</summary>
     public void Process(float delta)
     {
-        using var _projScope = XonoticGodot.Game.Client.FrameProfiler.Scope("proj"); // [profiling] projectile interp/spin
+        using var _projScope = VortexArena.Game.Client.FrameProfiler.Scope("proj"); // [profiling] projectile interp/spin
         if (_visuals.Count == 0)
             return;
 
@@ -370,28 +370,28 @@ public partial class ProjectileRenderer : Node3D
         }
     }
 
-    /// <summary>Cached world sweep delegate fed to <see cref="XonoticGodot.Net.ProjectilePredictor.Step"/> so
+    /// <summary>Cached world sweep delegate fed to <see cref="VortexArena.Net.ProjectilePredictor.Step"/> so
     /// predicted projectiles collide with the map. World-only (CSQC <c>move_nomonsters = MOVE_WORLDONLY</c>):
     /// a point sweep against map geometry, ignoring entities. On a listen server this is the real BSP; on a
     /// pure client (flat-floor stub / headless) <c>Api.Services</c> is null and it reports no hit (fly straight).</summary>
-    private static readonly XonoticGodot.Net.ProjectileWorldTrace TraceWorldDelegate = TraceWorld;
+    private static readonly VortexArena.Net.ProjectileWorldTrace TraceWorldDelegate = TraceWorld;
 
-    private static XonoticGodot.Net.ProjectileTraceHit TraceWorld(NVec3 start, NVec3 end)
+    private static VortexArena.Net.ProjectileTraceHit TraceWorld(NVec3 start, NVec3 end)
     {
-        if (XonoticGodot.Common.Services.Api.Services is null)
-            return new XonoticGodot.Net.ProjectileTraceHit(false, end, default);
-        XonoticGodot.Common.Services.TraceResult tr = XonoticGodot.Common.Services.Api.Trace.Trace(
+        if (VortexArena.Common.Services.Api.Services is null)
+            return new VortexArena.Net.ProjectileTraceHit(false, end, default);
+        VortexArena.Common.Services.TraceResult tr = VortexArena.Common.Services.Api.Trace.Trace(
             start, NVec3.Zero, NVec3.Zero, end, MoveFilter.WorldOnly, null);
         return tr.Fraction < 1f
-            ? new XonoticGodot.Net.ProjectileTraceHit(true, tr.EndPos, tr.PlaneNormal)
-            : new XonoticGodot.Net.ProjectileTraceHit(false, end, default);
+            ? new VortexArena.Net.ProjectileTraceHit(true, tr.EndPos, tr.PlaneNormal)
+            : new VortexArena.Net.ProjectileTraceHit(false, end, default);
     }
 
     /// <summary>Current client clock time (mirrors <c>ClientWorld.Now</c>): the simulation clock the electro orb's
     /// cached <see cref="Visual.DeathTime"/> is measured against. 0 in a headless/clockless harness — there the
     /// orb's <see cref="Visual.DeathTime"/> is also seeded from this same 0, so the shrink stays inert (factor 1).</summary>
     private static float Now()
-        => XonoticGodot.Common.Services.Api.Services?.Clock?.Time ?? 0f;
+        => VortexArena.Common.Services.Api.Services?.Clock?.Time ?? 0f;
 
     private static void ApplySpin(Node3D body, Vector3 spinDegPerSec, float delta)
     {

@@ -1,11 +1,11 @@
 // Port of common/mutators/mutator/overkill/okhmg.{qh,qc}
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Overkill Heavy MachineGun — port of common/mutators/mutator/overkill/okhmg.{qh,qc}. A SUPERWEAPON
@@ -46,6 +46,7 @@ public sealed class OkHmg : Weapon
     public OkHmg()
     {
         NetName = "okhmg";
+        BotPickupBaseValue = 10000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Bullets;   // QC ammo_type RES_BULLETS
         DisplayName = "Overkill Heavy MachineGun";
         Impulse = 3;

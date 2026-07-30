@@ -16,8 +16,8 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:34 (REGISTER_MUTATOR nix expr)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:45 (IsEnabled)"
-      - "src/XonoticGodot.Server/GameWorld.cs:631 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:45 (IsEnabled)"
+      - "src/VortexArena.Server/GameWorld.cs:631 (MutatorActivation.Apply)"
     constants:
       - { name: "g_nix", base: "0", port: "0 (mutators.cfg:145)", match: true }
     status:
@@ -42,7 +42,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:36 (MUTATOR_ONADD)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:64 (Hook)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:64 (Hook)"
     constants: []
     status:
       logic: faithful
@@ -65,7 +65,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:51 (MUTATOR_ONREMOVE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:97 (Unhook)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:97 (Unhook)"
     constants: []
     status:
       logic: faithful
@@ -88,7 +88,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:75 (NIX_CanChooseWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:194 (CanChooseWeapon)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:194 (CanChooseWeapon)"
     constants: []
     status:
       logic: faithful
@@ -112,7 +112,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:95 (NIX_ChooseNextWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:203 (ChooseNextWeapon)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:203 (ChooseNextWeapon)"
     constants: []
     status:
       logic: faithful
@@ -135,7 +135,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:105 (NIX_GiveCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:228 (GiveCurrentWeapon)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:228 (GiveCurrentWeapon)"
     constants:
       - { name: "g_balance_nix_roundtime", base: "25", port: "25 (cvar, fallback 25)", match: true }
     status:
@@ -161,9 +161,9 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:130-200 (ammo block)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:254 (resync ammo)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:304 (trickle)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:332 (AmmoTypeOf/AmmoStart/AmmoIncr/AmmoPickupMax)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:254 (resync ammo)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:304 (trickle)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:332 (AmmoTypeOf/AmmoStart/AmmoIncr/AmmoPickupMax)"
     constants:
       - { name: "g_balance_nix_ammo_shells", base: "60", port: "60", match: true }
       - { name: "g_balance_nix_ammo_nails", base: "320", port: "320", match: true }
@@ -198,7 +198,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:202-219 (STAT(WEAPONS) rewrite + W_SwitchWeapon guard)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:313 (OwnedWeaponSet + switch guard)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:313 (OwnedWeaponSet + switch guard)"
     constants: []
     status:
       logic: faithful
@@ -222,8 +222,8 @@ features:
       - "common/mutators/mutator/nix/sv_nix.qc:164 (Send_Notification CENTER_NIX_NEWWEAPON)"
       - "common/notifications/all.inc:765 (MSG_CENTER_NOTIF NIX_NEWWEAPON, durcnt 1, item_wepname, CPID_NIX)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:268 (NotificationSystem.Center NIX_NEWWEAPON)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:1032 (register)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:268 (NotificationSystem.Center NIX_NEWWEAPON)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:1032 (register)"
     constants: []
     status:
       logic: faithful
@@ -247,8 +247,8 @@ features:
       - "common/mutators/mutator/nix/sv_nix.qc:181-186 (Send_Notification CENTER_NIX_COUNTDOWN)"
       - "common/notifications/all.inc:764 (MSG_CENTER_NOTIF NIX_COUNTDOWN, durcnt 2, item_wepname, CPID_NIX, args \"1 f2\")"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:295 (NotificationSystem.Center NIX_COUNTDOWN)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:1031 (register)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:295 (NotificationSystem.Center NIX_COUNTDOWN)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:1031 (register)"
     constants: []
     status:
       logic: faithful
@@ -271,8 +271,8 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:237 (FilterItemDefinition)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:144 (OnFilterItemDefinition)"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:106 (FilterItemDefinition.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:144 (OnFilterItemDefinition)"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:106 (FilterItemDefinition.Call)"
     constants:
       - { name: "g_nix_with_healtharmor", base: "0", port: "0 (mutators.cfg:147)", match: true }
       - { name: "g_nix_with_powerups", base: "0", port: "0 (mutators.cfg:148)", match: true }
@@ -298,8 +298,8 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:222 (ForbidThrowCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:162 (OnForbidThrow)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponThrowing.cs:157 (ForbidThrowCurrentWeapon.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:162 (OnForbidThrow)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponThrowing.cs:157 (ForbidThrowCurrentWeapon.Call)"
     constants: []
     status:
       logic: faithful
@@ -322,8 +322,8 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:276 (PlayerSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:171 (OnPlayerSpawn)"
-      - "src/XonoticGodot.Server/ClientManager.cs:772 (PlayerSpawn.Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:171 (OnPlayerSpawn)"
+      - "src/VortexArena.Server/ClientManager.cs:772 (PlayerSpawn.Call)"
       # (PlayerSpawn.Call confirmed at ClientManager.cs:772 @ 2026-06-27 re-verify; was :749)
     constants: []
     status:
@@ -348,7 +348,7 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:271 (ForbidRandomStartWeapons)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:163 (OnForbidRandomStartWeapons)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:163 (OnForbidRandomStartWeapons)"
     constants: []
     status:
       logic: faithful
@@ -372,9 +372,9 @@ features:
     base_refs:
       - "common/mutators/mutator/nix/sv_nix.qc:253 (OnEntityPreSpawn -> delete target_items)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:176 (OnEntityPreSpawn)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:866 (FireOnEntityPreSpawn)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4343 (FireOnEntityPreSpawn caller, map spawn loop)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:176 (OnEntityPreSpawn)"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:866 (FireOnEntityPreSpawn)"
+      - "src/VortexArena.Server/GameWorld.cs:4343 (FireOnEntityPreSpawn caller, map spawn loop)"
     constants: []
     status:
       logic: faithful
@@ -400,12 +400,12 @@ features:
       - "common/mutators/mutator/nix/sv_nix.qc:232 (BuildMutatorsPrettyString , NIX)"
       - "common/mutators/mutator/nix/sv_nix.qc:285 (SetModname NIX)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:401 (BuildMutatorsString override)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:404 (BuildMutatorsPrettyString override)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs:409 (SetModname override)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1161 (MutatorActivation.BuildMutatorsString live consumer, GameLogInit)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1172/1453 + game/net/ServerNet.cs:613 (BuildMutatorsPrettyString live consumers)"
-      - "src/XonoticGodot.Server/GameWorld.cs:638 (MutatorActivation.SetModname live consumer, worldspawn)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:401 (BuildMutatorsString override)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:404 (BuildMutatorsPrettyString override)"
+      - "src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs:409 (SetModname override)"
+      - "src/VortexArena.Server/GameWorld.cs:1161 (MutatorActivation.BuildMutatorsString live consumer, GameLogInit)"
+      - "src/VortexArena.Server/GameWorld.cs:1172/1453 + game/net/ServerNet.cs:613 (BuildMutatorsPrettyString live consumers)"
+      - "src/VortexArena.Server/GameWorld.cs:638 (MutatorActivation.SetModname live consumer, worldspawn)"
     constants: []
     status:
       logic: faithful

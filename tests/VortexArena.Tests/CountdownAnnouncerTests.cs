@@ -1,11 +1,11 @@
 using System.Collections.Generic;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Server;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T40: the pre-match / round-start countdown announcer, driven server-side (the port has no CSQC
@@ -107,7 +107,7 @@ public class CountdownAnnouncerTests : IDisposable
     [Fact]
     public void Round_Countdown_Fires_Each_Second_Down_To_0_Not_Per_Frame()
     {
-        var r = new XonoticGodot.Server.RoundHandler { GameStartTime = 0f };
+        var r = new VortexArena.Server.RoundHandler { GameStartTime = 0f };
         var ticks = new List<int>();
         r.OnCountdownTick = ticks.Add;
         // a round that can always start, never ends (we only watch the countdown).
@@ -127,7 +127,7 @@ public class CountdownAnnouncerTests : IDisposable
     [Fact]
     public void Round_Countdown_Maps_To_RoundStart_Announcers_And_Begin()
     {
-        var r = new XonoticGodot.Server.RoundHandler { GameStartTime = 0f };
+        var r = new VortexArena.Server.RoundHandler { GameStartTime = 0f };
         r.OnCountdownTick = n => RoundStartCountdownBroadcast(r.RoundsPlayed, n);
         r.Spawn(canRoundStart: () => true, canRoundEnd: () => false);
         for (int frame = 0; frame <= 60; frame++) { _clock.Time = frame * 0.1f; r.Think(); }

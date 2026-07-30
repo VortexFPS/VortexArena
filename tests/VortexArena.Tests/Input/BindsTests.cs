@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Config;
+using VortexArena.Engine.Console;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests.Input;
+namespace VortexArena.Tests.Input;
 
 /// <summary>
 /// Tests for the keybind pipeline T15 wires up: the Godot-free runtime bind table
@@ -250,7 +250,7 @@ public class BindsTests
     }
 
     // The real reference checkout (mirrors ConfigRealDataTests): CI-portable — no-op when absent.
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
     private static bool HaveData => File.Exists(Path.Combine(Pk3Dir, "binds-xonotic.cfg"));
     private static Func<string, string?> DiskReader => path =>
     {

@@ -21,10 +21,10 @@ features:
       - "common/mutators/mutator/overkill/okmachinegun.qc:W_OverkillMachineGun_Attack_Auto"
       - "common/mutators/mutator/overkill/okmachinegun.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkMachinegun.cs:AttackAuto"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkMachinegun.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet (falloff+tracer overload)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:EjectCasing/BulletImpactFx"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkMachinegun.cs:AttackAuto"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkMachinegun.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:FireBullet (falloff+tracer overload)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:EjectCasing/BulletImpactFx"
     constants:
       - { name: "primary_ammo", base: "1", port: "1", match: true }
       - { name: "primary_damage", base: "25", port: "25", match: true }
@@ -63,7 +63,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/okhmg.qc:W_OverkillHeavyMachineGun_Attack_Auto"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkHmg.cs:AttackAuto"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkHmg.cs:AttackAuto"
     constants:
       - { name: "primary_ammo", base: "1", port: "1", match: true }
       - { name: "primary_damage", base: "30", port: "30", match: true }
@@ -98,7 +98,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/okhmg.qc:22-28"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkHmg.cs:SuperweaponGate"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkHmg.cs:SuperweaponGate"
     constants: []
     status:
       logic: faithful
@@ -121,7 +121,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/oknex.qc:W_OverkillNex_Attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkNex.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkNex.cs:Attack"
     constants:
       - { name: "primary_ammo", base: "10", port: "10", match: true }
       - { name: "primary_animtime", base: "0.65", port: "0.65", match: true }
@@ -159,7 +159,7 @@ features:
       - "common/mutators/mutator/overkill/oknex.qc:GetPressedKeys (oknex_charge)"
       - "common/mutators/mutator/overkill/oknex.qc:wr_think charge regen"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkNex.cs:WrThink (charge regen)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkNex.cs:WrThink (charge regen)"
     constants:
       - { name: "charge", base: "0 (off)", port: "0 (off)", match: true }
       - { name: "charge_animlimit", base: "0.5", port: "0.5", match: true }
@@ -198,7 +198,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/okshotgun.qc:wr_think (W_Shotgun_Attack)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkShotgun.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkShotgun.cs:Attack"
     constants:
       - { name: "primary_ammo", base: "3", port: "3", match: true }
       - { name: "primary_animtime", base: "0.65", port: "0.65", match: true }
@@ -238,11 +238,11 @@ features:
       - "common/mutators/mutator/overkill/okrpc.qc:W_OverkillRocketPropelledChainsaw_Explode"
       - "common/mutators/mutator/overkill/okrpc.qc:W_OverkillRocketPropelledChainsaw_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkRpc.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkRpc.cs:OnThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkRpc.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable/ShootDown/CheckProjectileDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:280,331 (EventDamage non-player GtEventDamage dispatch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkRpc.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkRpc.cs:OnThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkRpc.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable/ShootDown/CheckProjectileDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:280,331 (EventDamage non-player GtEventDamage dispatch)"
     constants:
       - { name: "primary_ammo", base: "10", port: "10", match: true }
       - { name: "primary_animtime", base: "1", port: "1", match: true }
@@ -293,7 +293,7 @@ features:
       - "common/mutators/mutator/overkill/okhmg.qc:wr_think"
       - "common/mutators/mutator/overkill/okrpc.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkWeapons.cs:FireSecondaryBlasterJump"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkWeapons.cs:FireSecondaryBlasterJump"
     constants:
       - { name: "secondary_refire_type", base: "1 (own jump_interval timer)", port: "1", match: true }
       - { name: "blaster_refire (jump_interval step)", base: "g_balance_blaster_primary_refire 0.7", port: "0.7 fallback", match: true }
@@ -321,8 +321,8 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/okmachinegun.qc:wr_think (reload_ammo branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkMachinegun.cs:WrThink (forced reload)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload/WReload"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkMachinegun.cs:WrThink (forced reload)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WrReload/WReload"
     constants: []
     status:
       logic: faithful
@@ -349,7 +349,7 @@ features:
       - "common/mutators/mutator/overkill/okrpc.qc:wr_checkammo1/2"
       - "common/mutators/mutator/overkill/okshotgun.qc:wr_checkammo1/2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WeaponAmmo.Check (Ok* cases)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WeaponAmmo.Check (Ok* cases)"
     constants: []
     status:
       logic: faithful
@@ -373,9 +373,9 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/okhmg.qc:5-12 (Nade_Damage hook)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnNadeDamage (496-507)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:142 (MutatorHooks.NadeDamage.Add registration)"
-      - "src/XonoticGodot.Common/Gameplay/Nades/NadeProjectile.cs:208 (FireNadeDamage dispatch, hook fires first)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnNadeDamage (496-507)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:142 (MutatorHooks.NadeDamage.Add registration)"
+      - "src/VortexArena.Common/Gameplay/Nades/NadeProjectile.cs:208 (FireNadeDamage dispatch, hook fires first)"
     constants:
       - { name: "nade_damage", base: "max_health * 0.1", port: "Nade.MaxHealth * 0.1f", match: true }
     status:
@@ -404,11 +404,11 @@ features:
       - "common/mutators/mutator/overkill/okrpc.qh"
       - "common/mutators/mutator/overkill/okshotgun.qh"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkHmg.cs:OkHmg()"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkMachinegun.cs:OkMachinegun()"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkNex.cs:OkNex()"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkRpc.cs:OkRpc()"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkShotgun.cs:OkShotgun()"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkHmg.cs:OkHmg()"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkMachinegun.cs:OkMachinegun()"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkNex.cs:OkNex()"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkRpc.cs:OkRpc()"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkShotgun.cs:OkShotgun()"
     constants:
       - { name: "okhmg impulse/ammo", base: "3 / RES_BULLETS", port: "3 / Bullets", match: true }
       - { name: "okmachinegun impulse/ammo", base: "3 / RES_BULLETS", port: "3 / Bullets", match: true }
@@ -441,10 +441,10 @@ features:
       - "common/mutators/mutator/overkill/sv_overkill.qc:SetStartItems"
       - "ruleset-overkill.cfg"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Server/GameWorld.cs:511 (MutatorActivation.Apply)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:IsEnabled"
+      - "src/VortexArena.Server/GameWorld.cs:511 (MutatorActivation.Apply)"
       - "game/net/NetGame.cs:1708 (loadout set when g_overkill)"
-      - "assets/data/xonotic-data.pk3dir/ruleset-overkill.cfg:11 (g_overkill 1)"
+      - "Base/data/xonotic-data.pk3dir/ruleset-overkill.cfg:11 (g_overkill 1)"
     constants:
       - { name: "g_overkill", base: "set by ruleset-overkill.cfg", port: "set by ruleset-overkill.cfg", match: true }
     status:
@@ -475,12 +475,12 @@ features:
       - "common/mutators/mutator/overkill/okrpc.qc:wr_impacteffect"
       - "common/mutators/mutator/overkill/okshotgun.qc:wr_impacteffect"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkMachinegun.cs:AttackAuto (recoil + EjectCasing + RIFLE tracer + muzzle + impact)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkHmg.cs:AttackAuto (recoil + EjectCasing + RIFLE tracer + muzzle + impact)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkShotgun.cs:Attack (EjectCasing(Shell) + muzzle + per-pellet impact)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkNex.cs:Attack (VORTEX_IMPACT + neximpact + muzzle)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkRpc.cs:Attack/Explode (ROCKET_MUZZLEFLASH + ROCKET_EXPLODE + rocket_impact)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:EjectCasing/BulletImpactFx (shared seam)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkMachinegun.cs:AttackAuto (recoil + EjectCasing + RIFLE tracer + muzzle + impact)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkHmg.cs:AttackAuto (recoil + EjectCasing + RIFLE tracer + muzzle + impact)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkShotgun.cs:Attack (EjectCasing(Shell) + muzzle + per-pellet impact)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkNex.cs:Attack (VORTEX_IMPACT + neximpact + muzzle)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkRpc.cs:Attack/Explode (ROCKET_MUZZLEFLASH + ROCKET_EXPLODE + rocket_impact)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:EjectCasing/BulletImpactFx (shared seam)"
     constants: []
     status:
       logic: na
@@ -509,11 +509,11 @@ features:
       - "common/mutators/mutator/overkill/okrpc.qc:wr_aim (bot_aim with speed+lifetime lead)"
       - "common/mutators/mutator/overkill/okshotgun.qc:wr_aim (>bot_range 512 -> ATCK2 blaster poke, else ATCK1)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkMachinegun.cs:BotForbidsFire (range gate)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkHmg.cs:BotForbidsFire (range gate)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkShotgun.cs:BotWantsSecondary (>bot_range)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkRpc.cs:BotAimShotSpeed (lead by speed)"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:145,166,180 (Weapon.BotWantsSecondary/BotForbidsFire/BotAimShotSpeed seams)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkMachinegun.cs:BotForbidsFire (range gate)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkHmg.cs:BotForbidsFire (range gate)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkShotgun.cs:BotWantsSecondary (>bot_range)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkRpc.cs:BotAimShotSpeed (lead by speed)"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:145,166,180 (Weapon.BotWantsSecondary/BotForbidsFire/BotAimShotSpeed seams)"
     constants:
       - { name: "okshotgun bot_range", base: "512", port: "512 (Cvars.BotRange)", match: true }
       - { name: "okmg/okhmg bot range gate", base: "3000 - bound(0,skill,10)*200", port: "3000 - clamp(skill,0,10)*200", match: true }

@@ -1,7 +1,7 @@
 # Hagar — parity spec
 
 **Base refs:** `common/weapons/weapon/hagar.qc` · `common/weapons/weapon/hagar.qh` · `bal-wep-xonotic.cfg` · `common/weapons/calculations.qc` (W_CalculateSpread*, W_SetupProjVelocity*) · `server/weapons/tracing.qc` (W_SetupShot) · `server/damage.qc` (RadiusDamage)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Hagar.cs` · `WeaponFiring.cs` · `WeaponSplash.cs` · `Projectiles.cs` · `WeaponFireGate.cs` · `WeaponFireDriver.cs` · `game/client/ProjectileCatalog.cs` · `game/hud/CrosshairPanel.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Hagar.cs` · `WeaponFiring.cs` · `WeaponSplash.cs` · `Projectiles.cs` · `WeaponFireGate.cs` · `WeaponFireDriver.cs` · `game/client/ProjectileCatalog.cs` · `game/hud/CrosshairPanel.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

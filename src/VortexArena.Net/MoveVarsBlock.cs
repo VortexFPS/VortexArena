@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Server→client replication of the movement cvars (DP's <c>movevars_*</c> / Xonotic's <c>sv_*</c> physics
@@ -19,7 +19,7 @@ public static class MoveVarsBlock
 {
     /// <summary>
     /// The <c>sv_*</c> (and a couple of <c>g_*</c>) movement cvars the deterministic predictor reads, in wire
-    /// order. MUST stay in sync with <c>XonoticGodot.Common.Physics.MovementParameters.FromCvars</c> AND with
+    /// order. MUST stay in sync with <c>VortexArena.Common.Physics.MovementParameters.FromCvars</c> AND with
     /// <c>MovementParameters.FromValues</c> (which decodes this vector positionally). Sent positionally as
     /// floats (covers ints/bools, and NaN for the uncapped jumpspeedcaps). APPEND-ONLY — never reorder
     /// (Apply/FromValues are prefix-stable across versions).
@@ -66,7 +66,7 @@ public static class MoveVarsBlock
     /// AND which decode through <c>FromValues</c>' verbatim <c>Raw</c>/<c>B</c> path (present-slot-is-authoritative).
     ///
     /// WHY this exists (the unregistered-cvar asymmetry): many <c>sv_*</c> movement cvars are NOT registered in the
-    /// port's server cvar table (see <c>XonoticGodot.Server.Cvars.Defaults</c> — only <c>sv_gravity</c> is; the rest
+    /// port's server cvar table (see <c>VortexArena.Server.Cvars.Defaults</c> — only <c>sv_gravity</c> is; the rest
     /// of the per-tick tunables intentionally live only as <c>FromCvars</c> fallbacks). On a default-config server
     /// those cvars are absent, so a bare <c>GetFloat</c> in <see cref="CaptureOne"/> reads <b>0</b>. But the server's
     /// OWN physics reads the SAME absent cvar through <c>FromCvars</c>, which — now that its per-cvar fallback is
@@ -167,7 +167,7 @@ public static class MoveVarsBlock
     /// <summary>
     /// Build a client's preset-RESOLVED movevar vector — the per-player half of QC
     /// <c>Physics_UpdateStats</c> (common/physics/player.qc:44-151): every preset-resolvable entry goes through
-    /// <c>Physics_ClientOption</c> (<see cref="XonoticGodot.Common.Physics.PhysicsPreset.Resolve"/>) with the
+    /// <c>Physics_ClientOption</c> (<see cref="VortexArena.Common.Physics.PhysicsPreset.Resolve"/>) with the
     /// already-captured global value as the <c>autocvar_sv_*</c> fallback; global-only entries (the stats.qh
     /// names WITH a cvar expression — jumpstep, friction_on_land, wallfriction, stepdown_maxspeed, …) are copied
     /// from <paramref name="globalValues"/> verbatim. The maxspd_mod fold is NOT applied here — both sides fold
@@ -185,10 +185,10 @@ public static class MoveVarsBlock
         int n = System.Math.Min(globalValues.Length, v.Length);
         for (int i = 0; i < n; i++)
         {
-            string? option = XonoticGodot.Common.Physics.PhysicsPreset.OptionFor(MovementCvars[i]);
+            string? option = VortexArena.Common.Physics.PhysicsPreset.OptionFor(MovementCvars[i]);
             v[i] = option is null
                 ? globalValues[i]
-                : XonoticGodot.Common.Physics.PhysicsPreset.Resolve(cvars, clPhysics, option, globalValues[i], exists);
+                : VortexArena.Common.Physics.PhysicsPreset.Resolve(cvars, clPhysics, option, globalValues[i], exists);
         }
         return v;
     }

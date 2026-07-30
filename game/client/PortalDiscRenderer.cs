@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq; // IReadOnlyList<Warpzone>.Contains
 using Godot;
-using XonoticGodot.Common.Gameplay;  // WarpzoneTrace, WarpzoneManager, Warpzone
-using XonoticGodot.Common.Math;      // QMath
-using XonoticGodot.Common.Services;  // Api
+using VortexArena.Common.Gameplay;  // WarpzoneTrace, WarpzoneManager, Warpzone
+using VortexArena.Common.Math;      // QMath
+using VortexArena.Common.Services;  // Api
 using NVec3 = System.Numerics.Vector3;
-// Coords (Quake<->Godot axis swap) lives in the parent XonoticGodot.Game namespace — reachable implicitly.
+// Coords (Quake<->Godot axis swap) lives in the parent VortexArena.Game namespace — reachable implicitly.
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// The client-side Quake-style portal DISC cosmetic — the C# stand-in for Base's <c>MDL_PORTAL</c> entity

@@ -1,8 +1,8 @@
-#if XG_BOTPLAYER
-namespace XonoticGodot.Game.Net;
+#if VA_BOTPLAYER
+namespace VortexArena.Game.Net;
 
 /// <summary>
-/// BOT-PLAYER HARNESS — compile-gated, see <c>Directory.Build.props</c> (<c>XgBotPlayer</c>).
+/// BOT-PLAYER HARNESS — compile-gated, see <c>Directory.Build.props</c> (<c>VaBotPlayer</c>).
 ///
 /// <para>Hands the LOCAL HUMAN player slot to a bot brain so an unattended run drives the real player code.
 /// Spectating a bot (<c>cl_bench_spectate</c>) exercises rendering and the sim, but the player pipeline —
@@ -20,7 +20,7 @@ namespace XonoticGodot.Game.Net;
 /// aimbot. A cvar could be set by a config, a server, or a stray console line, so the gate has to be one
 /// that cannot be flipped at runtime at all: the code is simply absent from any build that did not opt in,
 /// and even an opted-in build stays dormant until <c>--bot-player</c> is passed. Never define
-/// <c>XgBotPlayer</c> for a release or export build.</para>
+/// <c>VaBotPlayer</c> for a release or export build.</para>
 /// </summary>
 internal static class BotPlayerMode
 {

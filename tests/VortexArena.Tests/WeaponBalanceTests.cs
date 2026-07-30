@@ -1,13 +1,13 @@
 using System;
 using System.IO;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Config;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Serializes test classes that mutate the process-global registry (<see cref="GameRegistries"/>) or ambient
@@ -107,7 +107,7 @@ public class WeaponBalanceTests
     [Fact]
     public void Real_Balance_Config_Flows_Into_Weapon_Configure()
     {
-        const string pk3 = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+        string pk3 = TestPaths.CorePk3Dir;
         if (!File.Exists(Path.Combine(pk3, "bal-wep-xonotic.cfg"))) return; // CI-portable: no checkout, no-op
 
         var facade = new EngineServices(new CollisionWorld());

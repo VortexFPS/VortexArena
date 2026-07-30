@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Server.Bot;
+namespace VortexArena.Server.Bot;
 
 /// <summary>
 /// Manages the bot population and drives each bot's brain every server frame — the C# port of the bot

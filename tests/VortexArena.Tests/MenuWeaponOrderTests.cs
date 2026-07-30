@@ -1,8 +1,8 @@
 using System.Linq;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Exercises <see cref="WeaponOrder"/> — the C# port of the QuakeC weapon-priority helpers
@@ -17,7 +17,7 @@ public class MenuWeaponOrderTests
     [Fact]
     public void FixPriorityList_Keeps_In_Range_And_Completes()
     {
-        int count = XonoticGodot.Common.Framework.Registry<Weapon>.Count;
+        int count = VortexArena.Common.Framework.Registry<Weapon>.Count;
         Assert.True(count > 3, "need a populated registry");
 
         // FixWeaponOrder("3 1 5", complete:true): 3,1,5 first, then every other id appended descending,
@@ -29,7 +29,7 @@ public class MenuWeaponOrderTests
         Assert.Equal(new[] { 3, 1, 5 }, ids.Take(3).ToArray());           // explicit prefix preserved, in order
         Assert.Equal(ids.Length, ids.Distinct().Count());                 // no duplicates
 
-        int specialAttacks = XonoticGodot.Common.Framework.Registry<Weapon>.All
+        int specialAttacks = VortexArena.Common.Framework.Registry<Weapon>.All
             .Count(w => (w.SpawnFlags & WeaponFlags.SpecialAttack) != 0);
         Assert.Equal(count - specialAttacks, ids.Length);                 // count == registry size minus specials
 
@@ -41,7 +41,7 @@ public class MenuWeaponOrderTests
     [Fact]
     public void FixPriorityList_AllowIncomplete_Drops_OutOfRange_And_NonInteger()
     {
-        int count = XonoticGodot.Common.Framework.Registry<Weapon>.Count;
+        int count = VortexArena.Common.Framework.Registry<Weapon>.Count;
         // 0 and count-1 are valid; count (one past the end), -1, and "x" are dropped; complete:false appends nothing.
         string s = WeaponOrder.FixWeaponOrder($"0 {count} -1 x {count - 1}", complete: false);
         Assert.Equal($"0 {count - 1}", s);
@@ -81,7 +81,7 @@ public class MenuWeaponOrderTests
         string fixedOrder = WeaponOrder.FixWeaponOrder(numbered, complete: false);
         Assert.DoesNotContain(bogus, fixedOrder);                            // dropped by the range filter
         // shotgun's id remains
-        int shotgunId = XonoticGodot.Common.Framework.Registry<Weapon>.ByName("shotgun")!.RegistryId;
+        int shotgunId = VortexArena.Common.Framework.Registry<Weapon>.ByName("shotgun")!.RegistryId;
         Assert.Equal(shotgunId.ToString(), fixedOrder);
     }
 
@@ -108,8 +108,8 @@ public class MenuWeaponOrderTests
         // complete + dedup → a permutation of every registry weapon name MINUS the WEP_FLAG_SPECIALATTACK
         // weapons that QC fixPriorityList drops during completion (e.g. the hidden Hunter-Killer player weapon
         // WEP_HK). The Ball-Stealer is MUTATORBLOCKED|TYPE_OTHER (not SPECIALATTACK), so completion keeps it.
-        int count = XonoticGodot.Common.Framework.Registry<Weapon>.Count;
-        int specialAttacks = XonoticGodot.Common.Framework.Registry<Weapon>.All
+        int count = VortexArena.Common.Framework.Registry<Weapon>.Count;
+        int specialAttacks = VortexArena.Common.Framework.Registry<Weapon>.All
             .Count(w => (w.SpawnFlags & WeaponFlags.SpecialAttack) != 0);
         int completable = count - specialAttacks;
         Assert.Equal(completable, outNames.Length);
@@ -133,7 +133,7 @@ public class MenuWeaponOrderTests
         // so its weapons list can neither show nor append "ballstealer" (no real Base config.cfg contains
         // it), and a stray token wouldn't even resolve to an id there. The port's single registry models
         // that with Weapon.MenuRegistered; the menu widget passes menuRegistryView:true.
-        Weapon? ballstealer = XonoticGodot.Common.Framework.Registry<Weapon>.ByName("ballstealer");
+        Weapon? ballstealer = VortexArena.Common.Framework.Registry<Weapon>.ByName("ballstealer");
         Assert.NotNull(ballstealer);
         Assert.False(ballstealer!.MenuRegistered);
         string id = ballstealer.RegistryId.ToString();
@@ -158,17 +158,17 @@ public class MenuWeaponOrderTests
         // QC W_FixWeaponOrder_ForceComplete: empty order → number the cvar default, then complete.
         const string defaultNames = "shotgun machinegun blaster";
         string result = WeaponOrder.FixWeaponOrderForceComplete("", defaultNames);
-        int count = XonoticGodot.Common.Framework.Registry<Weapon>.Count;
+        int count = VortexArena.Common.Framework.Registry<Weapon>.Count;
         // Completion drops WEP_FLAG_SPECIALATTACK weapons (e.g. the hidden Hunter-Killer WEP_HK), so the
         // completed set is the registry minus those, not the bare registry count.
-        int specialAttacks = XonoticGodot.Common.Framework.Registry<Weapon>.All
+        int specialAttacks = VortexArena.Common.Framework.Registry<Weapon>.All
             .Count(w => (w.SpawnFlags & WeaponFlags.SpecialAttack) != 0);
         int completable = count - specialAttacks;
         int[] ids = result.Split(' ').Select(int.Parse).ToArray();
         Assert.Equal(completable, ids.Length);                            // completed to the full completable set
         Assert.Equal(completable, ids.Distinct().Count());                // dedup'd
         // The three default weapons lead.
-        int Id(string n) => XonoticGodot.Common.Framework.Registry<Weapon>.ByName(n)!.RegistryId;
+        int Id(string n) => VortexArena.Common.Framework.Registry<Weapon>.ByName(n)!.RegistryId;
         Assert.Equal(new[] { Id("shotgun"), Id("machinegun"), Id("blaster") }, ids.Take(3).ToArray());
     }
 }

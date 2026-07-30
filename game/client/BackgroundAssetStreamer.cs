@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
+using VortexArena.Common.Diagnostics;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Background asset streaming pipeline (planning/PERFORMANCE_REPORT.md §5 S1). Turns a synchronous cold asset load (a

@@ -16,7 +16,7 @@ features:
     base_refs:
       - "common/turrets/turret/ewheel.qh:EWheel"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:EWheelTurret"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:EWheelTurret"
     constants:
       - { name: "mins", base: "'-32 -32 0'", port: "(-32,-32,0)", match: true }
       - { name: "maxs", base: "'32 32 48'", port: "(32,32,48)", match: true }
@@ -49,8 +49,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_initialize"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Spawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
     constants:
       - { name: "solid", base: "SOLID_SLIDEBOX", port: "Solid.SlideBox", match: true }
       - { name: "movetype", base: "MOVETYPE_STEP", port: "MoveType.Step", match: true }
@@ -82,9 +82,9 @@ features:
       - "common/turrets/turret/ewheel.qc:134"
       - "common/turrets/sv_turrets.qc:turret_link"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:EWheel"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:215"
-      - "src/XonoticGodot.Common/GameInit.cs:21"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:EWheel"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:215"
+      - "src/VortexArena.Common/GameInit.cs:21"
     constants:
       - { name: "g_turrets master switch", base: "1 (default on)", port: "MasterSwitchEnabled default-on", match: true }
     status:
@@ -111,9 +111,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_firecheck"
       - "common/turrets/sv_turrets.qc:turret_fire"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Fire"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Fire"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Think"
     constants:
       - { name: "targetscan_mindelay", base: "0.1", port: "0.1 (Cvar fallback)", match: true }
       - { name: "targetscan_maxdelay", base: "1", port: "1 (Cvar fallback)", match: true }
@@ -142,9 +142,9 @@ features:
       - "common/turrets/turret/ewheel.qc:140"
       - "common/turrets/turret/ewheel.qc:59"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretMath.cs:SteerArrive"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretMath.cs:MoveSimple"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretMath.cs:SteerArrive"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretMath.cs:MoveSimple"
     constants:
       - { name: "speed_fast", base: "500", port: "500", match: true }
       - { name: "speed_slow", base: "150", port: "150", match: true }
@@ -174,12 +174,12 @@ features:
       - "common/turrets/turret/ewheel.qc:17"
       - "common/turrets/turret/ewheel.qc:111"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:EWheelFindTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:NextCheckpoint"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:CloseToTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Checkpoint"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:233"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:EWheelFindTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:NextCheckpoint"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:CloseToTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Checkpoint"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:233"
     constants:
       - { name: "path_node_proximity", base: "64", port: "64 (PathNodeProximity, CloseToTarget box overlap)", match: true }
       - { name: "path move speed", base: "speed_fast 500", port: "500 (MoveSimple(fwd, SpeedFast))", match: true }
@@ -205,8 +205,8 @@ features:
     base_refs:
       - "common/turrets/turret/ewheel.qc:98"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretMath.cs:BrakeSimple"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretMath.cs:BrakeSimple"
     constants:
       - { name: "speed_stop", base: "25", port: "25", match: true }
       - { name: "idle frame", base: "0 (with TNSF_ANIM)", port: "0 (SetFrame(AnimStop) → networked Entity.Frame)", match: true }
@@ -232,8 +232,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_projectile"
       - "common/turrets/sv_turrets.qc:turret_fire"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
     constants:
       - { name: "shot_dmg", base: "30", port: "30", match: true }
       - { name: "shot_radius", base: "50", port: "50", match: true }
@@ -270,11 +270,11 @@ features:
       - "common/turrets/sv_turrets.qc:turret_die"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Damage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Spawn (OnRespawn)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Damage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Spawn (OnRespawn)"
     constants:
       - { name: "respawntime", base: "30", port: "30", match: true }
       - { name: "MOVE shove (velocity += vforce)", base: "yes (TUR_FLAG_MOVE)", port: "movable=true", match: true }
@@ -302,7 +302,7 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_track"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Track"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Track"
     constants:
       - { name: "aim_speed", base: "90", port: "90", match: true }
       - { name: "aim_maxrot", base: "20", port: "20", match: true }
@@ -328,8 +328,8 @@ features:
     base_refs:
       - "common/turrets/turret/ewheel.qc:220"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectEmitter.cs:TeSpark"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:TeSpark"
     constants:
       - { name: "spark health threshold", base: "127", port: "127 (SparkHealthThreshold)", match: true }
       - { name: "spark chance/frame", base: "0.05", port: "0.05 (SparkChance)", match: true }
@@ -358,9 +358,9 @@ features:
       - "common/turrets/turret/ewheel.qc:95"
       - "common/turrets/sv_turrets.qc:turrets_setframe"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:SetFrame"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
-      - "src/XonoticGodot.Net/NetEntity.cs:113"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:SetFrame"
+      - "src/VortexArena.Common/Gameplay/Turrets/EWheelTurret.cs:Drive"
+      - "src/VortexArena.Net/NetEntity.cs:113"
     constants:
       - { name: "anim frames", base: "stop=0,fwd_slow=1,fwd_fast=2,bck_slow=3,bck_fast=4", port: "AnimStop=0,AnimFwdSlow=1,AnimFwdFast=2,AnimBckSlow=3,AnimBckFast=4", match: true }
       - { name: "frame selection (enemy branch)", base: "fwd_fast@yaw<1, fwd_slow@yaw<2 & else, bck_slow when too close, stop otherwise", port: "identical (fwd_slow reused for both the <2 and else slower branch, exactly as Base)", match: true }

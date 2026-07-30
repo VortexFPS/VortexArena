@@ -1,7 +1,7 @@
 // Port of qcsrc/server/campaign.qc + qcsrc/common/campaign_file.qc + qcsrc/common/campaign_setup.qc
 //
 // End-to-end verification of the single-player campaign server core (T49). The campaign was implemented
-// (src/XonoticGodot.Server/Campaign.cs) but never validated as a flow: Campaign.cs historically had zero
+// (src/VortexArena.Server/Campaign.cs) but never validated as a flow: Campaign.cs historically had zero
 // callers. These tests trace the SERVER half of the flow the live path runs inside GameWorld:
 //   Boot -> Campaign.PreInit (gametype/bots/skill/mutators) -> Campaign.PostInit (frag/time limits)
 //   ... match ... -> Campaign.PreIntermission (win/lose + progress save) -> Campaign.PostIntermission
@@ -13,14 +13,14 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Server;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the campaign server core (<see cref="Campaign"/>) — the C# successor to server/campaign.qc.

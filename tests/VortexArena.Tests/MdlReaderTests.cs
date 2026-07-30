@@ -4,11 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Mdl;
+using VortexArena.Formats;
+using VortexArena.Formats.Mdl;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests <see cref="MdlReader"/> — the Quake1 MDL ("IDPO" v6) importer. The synthetic cases build a minimal
@@ -17,7 +17,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class MdlReaderTests
 {
-    private const string Pk3Dir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data\xonotic-data.pk3dir";
+    private static readonly string Pk3Dir = TestPaths.CorePk3Dir;
 
     // ── Synthetic minimal MDL (no assets needed) ───────────────────────────────────────────────────
 

@@ -1,12 +1,12 @@
 using Godot;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// The render-boundary coordinate bridge between the simulation (Quake convention, Z-up,
 /// <see cref="System.Numerics.Vector3"/>) and Godot (Y-up, <see cref="Godot.Vector3"/>).
 ///
-/// The sim and collision libraries (<c>XonoticGodot.Engine</c>, <c>XonoticGodot.Common.Physics</c>) operate
+/// The sim and collision libraries (<c>VortexArena.Engine</c>, <c>VortexArena.Common.Physics</c>) operate
 /// entirely in Quake units/axes — see planning/specs/determinism-and-physics.md. Geometry stays in
 /// Quake space the whole way through; we only swap axes here, when building/positioning Godot nodes.
 ///

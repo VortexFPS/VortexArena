@@ -17,8 +17,8 @@ features:
       - "server/bot/default/waypoints.qc:waypoint_spawn"
       - "server/bot/api.qh:WAYPOINTFLAG_*"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:Waypoint"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:WaypointFlags"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:Waypoint"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:WaypointFlags"
     constants:
       - { name: "WAYPOINTFLAG_GENERATED", base: "BIT(23)", port: "1<<23", match: true }
       - { name: "WAYPOINTFLAG_ITEM", base: "BIT(22)", port: "1<<22", match: true }
@@ -54,10 +54,10 @@ features:
       - "server/bot/default/waypoints.qc:waypoint_getlinearcost"
       - "server/bot/default/waypoints.qc:waypoint_getlinkcost"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:TravelCost (7-arg overload)"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:LinearCost"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:LinearCostUnderwater"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:LinearCostCrouched"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:TravelCost (7-arg overload)"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:LinearCost"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:LinearCostUnderwater"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:LinearCostCrouched"
     constants:
       - { name: "sv_maxspeed", base: "320", port: "320 (MaxSpeed)", match: true }
       - { name: "sv_gravity", base: "800", port: "800 (Gravity)", match: true }
@@ -92,7 +92,7 @@ features:
       - "server/bot/default/waypoints.qc:waypoint_think"
       - "server/bot/default/waypoints.qc:waypoint_schedulerelinkall"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:AutoLink"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:AutoLink"
     constants:
       - { name: "max_link_dist_xy", base: "1050 (100 for crouch<->normal)", port: "1050; 100 for crouch<->normal pair (Waypoint.cs:325)", match: true }
       - { name: "pvs_cull", base: "checkpvs before tracewalk", port: "Api.Trace.CheckPvs before tracewalk (Waypoint.cs:318)", match: true }
@@ -119,8 +119,8 @@ features:
       - "server/bot/default/waypoints.qc:waypoint_loadall"
       - "server/bot/default/waypoints.qc:GET_GAMETYPE_EXTENSION"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:LoadFromText"
-      - "src/XonoticGodot.Server/GameWorld.cs:LoadWaypointNetwork"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:LoadFromText"
+      - "src/VortexArena.Server/GameWorld.cs:LoadWaypointNetwork"
     constants:
       - { name: "WAYPOINT_VERSION", base: "1.04", port: "parsed (not enforced)", match: false }
       - { name: "gametype_extension", base: ".race in Race else \"\"", port: ".race in Race else \"\" (GameWorld.cs:4617)", match: true }
@@ -146,7 +146,7 @@ features:
     base_refs:
       - "server/bot/default/waypoints.qc:waypoint_load_links"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:LoadLinks"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:LoadLinks"
     constants:
       - { name: "endpoint_match_radius", base: "1 unit (findradius 1)", port: "1 unit (spatial-hash FindAt)", match: true }
     status:
@@ -172,7 +172,7 @@ features:
     base_refs:
       - "server/bot/default/waypoints.qc:waypoint_load_hardwiredlinks"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:LoadHardwiredLinks"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:LoadHardwiredLinks"
     constants:
       - { name: "endpoint_match_radius", base: "5 units (findradius 5)", port: "5 units", match: true }
       - { name: "special_link_marker", base: "leading '*'", port: "leading '*' (stripped, source-type filtered)", match: true }
@@ -200,9 +200,9 @@ features:
       - "server/bot/default/waypoints.qc:waypoint_save_links"
       - "server/bot/default/waypoints.qc:waypoint_save_hardwiredlinks"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:SaveToText"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:SaveLinksToText"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:SaveHardwiredLinksToText"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:SaveToText"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:SaveLinksToText"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:SaveHardwiredLinksToText"
     constants:
       - { name: "WAYPOINT_VERSION", base: "1.04", port: "1.04 (WaypointVersion const, written into headers)", match: true }
       - { name: "vtos_precision", base: "vtos default (1 decimal place)", port: "Vtos {0:0.0} (1 decimal place)", match: true }
@@ -231,8 +231,8 @@ features:
       - "server/bot/default/waypoints.qc:waypoint_spawnforitem"
       - "server/bot/default/waypoints.qc:waypoint_spawnforitem_force"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:GenerateFromEntities"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:FixOrigin"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:GenerateFromEntities"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:FixOrigin"
     constants:
       - { name: "bot_waypoints_for_items", base: "= g_waypoints_for_items cvar gate (0 never / 1 / 2 always)", port: "g_waypoints_for_items honored (Waypoint.cs:426-456); item wps suppressed only when 0 AND spawns exist", match: true }
       - { name: "floor_snap", base: "waypoint_fixorigin tracedown 3000qu + 2 startsolid retries", port: "FixOrigin tracedown 3000qu + 2 startsolid retries (Waypoint.cs:386-401); +24 lift fallback only with no collision world", match: true }
@@ -259,7 +259,7 @@ features:
       - "server/bot/default/waypoints.qc:waypoint_spawnforteleporter"
       - "server/bot/default/waypoints.qc:waypoint_spawnforteleporter_wz"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:GenerateFromEntities"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:GenerateFromEntities"
     constants: []
     status:
       logic: partial
@@ -285,7 +285,7 @@ features:
       - "server/bot/default/navigation.qc:navigation_findnearestwaypoint"
       - "server/bot/default/navigation.qc:navigation_findnearestwaypoint_withdist_except"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:Nearest"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:Nearest"
     constants:
       - { name: "search_dist", base: "1050 (bestdist)", port: "1050 (maxDist)", match: true }
     status:
@@ -311,12 +311,12 @@ features:
       - "server/bot/default/navigation.qc:navigation_markroutes_checkwaypoint"
       - "server/bot/default/navigation.qc:navigation_markroutes_nearestwaypoints"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:NearestSeeds + FindPath(seeds,to) (multi-seed flood — now the LIVE route entry)"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:FindPath (single-source overload — fallback when no seed reachable)"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:ComputeRouteCosts (multi-seed-seeded route-cost field for goal rating)"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:Waypoint.Danger"
-      - "src/XonoticGodot.Server/Bot/Waypoint.cs:UpdateDangerousObjects"
-      - "src/XonoticGodot.Server/Bot/BotPopulation.cs:UpdateDangerousObjects scheduler (~:204-219)"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:NearestSeeds + FindPath(seeds,to) (multi-seed flood — now the LIVE route entry)"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:FindPath (single-source overload — fallback when no seed reachable)"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:ComputeRouteCosts (multi-seed-seeded route-cost field for goal rating)"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:Waypoint.Danger"
+      - "src/VortexArena.Server/Bot/Waypoint.cs:UpdateDangerousObjects"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:UpdateDangerousObjects scheduler (~:204-219)"
     constants:
       - { name: "nearest_seed_increment_onground", base: "750 (max 50000)", port: "750 / max 50000 (NearestSeeds, Waypoint.cs:529-530); LIVE via SetGoal + ComputeRouteCosts", match: true }
       - { name: "nearest_seed_increment_air", base: "500 (max 1500)", port: "500 / max 1500 (NearestSeeds, Waypoint.cs:529-530)", match: true }
@@ -351,9 +351,9 @@ features:
       - "server/bot/default/navigation.qc:navigation_pushroute"
       - "server/bot/default/navigation.qc:navigation_poproute"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:SetGoal"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:PushRoute"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:PopRoute"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:SetGoal"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:PushRoute"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:PopRoute"
     constants:
       - { name: "goalstack_depth", base: "32 (goalcurrent + goalstack01..31)", port: "32 (MaxGoals)", match: true }
       - { name: "strategyinterval_movingtarget", base: "5.5", port: "n/a (moving-target shortcut absent)", match: false }
@@ -380,8 +380,8 @@ features:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_movetogoal"
       - "server/bot/default/havocbot/havocbot.qc:havocbot_checkgoaldistance"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:Steer"
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:CheckGoalProgress"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:Steer"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:CheckGoalProgress"
     constants:
       - { name: "bot_ai_ignoregoal_timeout", base: "3", port: "3 (cvar)", match: true }
       - { name: "stepheight", base: "stepheightvec.z = sv_stepheight (~34)", port: "34 default; read live via Cvars.FloatOr(sv_stepheight) (StepHeightLive)", match: true }
@@ -409,7 +409,7 @@ features:
     base_refs:
       - "server/bot/default/havocbot/havocbot.qc:havocbot_bunnyhop"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotNavigation.cs:Bunnyhop"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:Bunnyhop"
     constants:
       - { name: "bot_ai_bunnyhop_skilloffset", base: "7", port: "7 (cvar)", match: true }
       - { name: "bot_ai_bunnyhop_dir_deviation_max", base: "20", port: "20 (cvar)", match: true }
@@ -440,11 +440,11 @@ features:
       - "common/util.qc:trace_hits_box / trace_hits_box_1d"
       - "common/mapobjects/trigger/hurt.qc:tracebox_hits_trigger_hurt"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotDanger.cs:CheckDanger"
-      - "src/XonoticGodot.Server/Bot/BotDanger.cs:HitsTriggerHurt"
-      - "src/XonoticGodot.Server/Bot/BotDanger.cs:TraceHitsBox"
-      - "src/XonoticGodot.Server/Bot/BotDanger.cs:HitsBox1D"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:Think (danger block)"
+      - "src/VortexArena.Server/Bot/BotDanger.cs:CheckDanger"
+      - "src/VortexArena.Server/Bot/BotDanger.cs:HitsTriggerHurt"
+      - "src/VortexArena.Server/Bot/BotDanger.cs:TraceHitsBox"
+      - "src/VortexArena.Server/Bot/BotDanger.cs:HitsBox1D"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:Think (danger block)"
     constants:
       - { name: "down_probe", base: "3000 (dst_ahead - '0 0 3000')", port: "3000 (DownProbe)", match: true }
       - { name: "cliff_drop", base: "min(feet, goal.z) - 100", port: "min(feetZ, goalZ) - 100", match: true }

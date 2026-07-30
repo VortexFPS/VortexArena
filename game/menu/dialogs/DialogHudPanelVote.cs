@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// HUD "Vote" panel config dialog — a faithful C# port of <c>XonoticHUDVoteDialog_fill</c>
@@ -11,7 +11,7 @@ namespace XonoticGodot.Game.Menu;
 /// <c>hud_panel_vote_bg*</c>), then the single panel-specific row: "Opacity after voting".
 ///
 /// FAITHFUL UI NOW: the binding writes the real <c>hud_panel_vote*</c> cvars the in-game vote panel reads;
-/// there is no live HUD editor/preview in XonoticGodot yet, so nothing previews here.
+/// there is no live HUD editor/preview in VortexArena yet, so nothing previews here.
 /// </summary>
 public partial class DialogHudPanelVote : MenuScreen
 {

@@ -1,15 +1,15 @@
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Server;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T54 client-cvar replication tests: the server-side <c>sentcvar</c> command (QC ClientCommand_sentcvar,
@@ -183,11 +183,11 @@ public class CvarReplicationTests
             Assert.Equal("cpma", world.Commands.GetClientCvar(p, "cl_physics"));
 
             // the same table slot `cmd physics` writes — and what the snapshot's per-peer resolve reads.
-            float[] globals = XonoticGodot.Net.MoveVarsBlock.Capture(world.Services.Cvars);
-            float[] resolved = XonoticGodot.Net.MoveVarsBlock.CaptureResolved(
+            float[] globals = VortexArena.Net.MoveVarsBlock.Capture(world.Services.Cvars);
+            float[] resolved = VortexArena.Net.MoveVarsBlock.CaptureResolved(
                 world.Services.Cvars, world.Commands.GetClientCvar(p, "cl_physics"), globals,
                 world.Services.CvarsImpl.Has);
-            int maxspeedIdx = System.Array.IndexOf(XonoticGodot.Net.MoveVarsBlock.MovementCvars, "sv_maxspeed");
+            int maxspeedIdx = System.Array.IndexOf(VortexArena.Net.MoveVarsBlock.MovementCvars, "sv_maxspeed");
             Assert.Equal(320f, resolved[maxspeedIdx]);
         }
         finally
@@ -344,7 +344,7 @@ public class CvarReplicationTests
             // FromCvars reads the ambient store (the booted world's); Capture+FromValues must agree with it.
             MovementParameters live = MovementParameters.FromCvars();
             MovementParameters wire = MovementParameters.FromValues(
-                XonoticGodot.Net.MoveVarsBlock.Capture(world.Services.Cvars));
+                VortexArena.Net.MoveVarsBlock.Capture(world.Services.Cvars));
             Assert.Equal(live.MaxSpeed, wire.MaxSpeed);
             Assert.Equal(live.Gravity, wire.Gravity);
             Assert.Equal(live.Friction, wire.Friction);

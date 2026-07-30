@@ -613,6 +613,7 @@ public sealed class ClientNet : IDisposable
             case NetControl.RadarLinks: HandleRadarLinks(ref r); break;
             case NetControl.ClientInit: HandleClientInit(ref r); break;
             case NetControl.MapVote: HandleMapVote(ref r); break;
+            case NetControl.EditorOp: HandleEditorOp(ref r); break;
             default: break;
         }
     }
@@ -965,6 +966,50 @@ public sealed class ClientNet : IDisposable
         if (r.BadRead)
             return;
         PrintReceived?.Invoke(text);
+    }
+
+    /// <summary>
+    /// Raised with one applied map-editor op, as a <see cref="VortexArena.Formats.Vmap.VmapOpWire"/> line
+    /// (design doc §11.7). The host decodes and applies it to its editing session — the server has already
+    /// validated it, so a line arriving here is an edit that HAPPENED, not one being proposed.
+    /// </summary>
+    public event Action<string>? EditorOpReceived;
+
+    /// <summary>
+    /// Longest op line we will reassemble. An op that large is not something a mapper produced, and without a
+    /// ceiling a hostile server could grow this buffer for as long as it liked by never clearing the
+    /// more-to-come flag.
+    /// </summary>
+    private const int MaxEditorOpChars = 8 * 1024 * 1024;
+
+    private readonly System.Text.StringBuilder _editorOp = new();
+
+    private void HandleEditorOp(ref BitReader r)
+    {
+        // Arrives in pieces (see ServerNet.BroadcastEditorOp) because the string length field is 16-bit and an
+        // op line is not bounded. Reliable + ordered, so concatenating in arrival order rebuilds the line.
+        bool more = r.ReadByte() != 0;
+        string chunk = r.ReadString();
+        if (r.BadRead)
+        {
+            _editorOp.Clear();
+            return;
+        }
+
+        if (_editorOp.Length + chunk.Length > MaxEditorOpChars)
+        {
+            _editorOp.Clear();
+            VortexArena.Common.Diagnostics.Log.Warn("editor: dropped an oversized replicated op");
+            return;
+        }
+
+        _editorOp.Append(chunk);
+        if (more)
+            return;
+
+        string line = _editorOp.ToString();
+        _editorOp.Clear();
+        EditorOpReceived?.Invoke(line);
     }
 
     private void HandleAccept(ref BitReader r)

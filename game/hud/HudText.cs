@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
 using Godot;
-using XonoticGodot.Game.Menu;   // MenuState.Cvars — live hud_colorset_* for the CCR macro expansion
+using VortexArena.Game.Menu;   // MenuState.Cvars — live hud_colorset_* for the CCR macro expansion
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Xonotic colored-text parsing for the HUD — the modernized successor to QuakeC's <c>drawcolorcodedstring</c>

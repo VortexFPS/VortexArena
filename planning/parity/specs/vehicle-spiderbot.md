@@ -1,7 +1,7 @@
 # Spiderbot vehicle — parity spec
 
 **Base refs:** `common/vehicles/vehicle/spiderbot.qc` · `spiderbot.qh` · `spiderbot_weapons.qc` · `spiderbot_weapons.qh` (shared core in `common/vehicles/sv_vehicles.qc`, `common/physics/movelib.qc`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Vehicles/Spiderbot.cs` · `VehicleCommon.cs` · `VehiclePhysicsHelpers.cs` · `VehicleBoarding.cs` · `VehicleSpawnFuncs.cs` · `game/client/VehicleVisuals.cs` · `game/client/VehicleCatalog.cs` · `game/hud/VehicleHud.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Vehicles/Spiderbot.cs` · `VehicleCommon.cs` · `VehiclePhysicsHelpers.cs` · `VehicleBoarding.cs` · `VehicleSpawnFuncs.cs` · `game/client/VehicleVisuals.cs` · `game/client/VehicleCatalog.cs` · `game/hud/VehicleHud.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -195,7 +195,7 @@ is roughly **6x slower**, not merely "coarser". This is a magnitude error, not a
   barrel spin are implemented client-side.
 
 ## Verification
-- **Liveness / boarding / impulse / projectile-spawn:** `tests/XonoticGodot.Tests/VehicleRuntimeTests.cs`
+- **Liveness / boarding / impulse / projectile-spawn:** `tests/VortexArena.Tests/VehicleRuntimeTests.cs`
   (`Impulse_Spiderbot_SetsAndCyclesRocketMode` boards a spiderbot, asserts default GUIDE, set 1/3, cycle 10/12;
   other tests cover the shared board/drive/exit/projectile-fire path on the sibling vehicles). PASS (code read).
 - **Spawnfunc registration:** `MapObjectsRegistry.cs:221` — code read.

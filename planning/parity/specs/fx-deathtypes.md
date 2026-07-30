@@ -1,7 +1,7 @@
 # fx-deathtypes — parity spec
 
 **Base refs:** `common/deathtypes/all.{qh,qc,inc}` · `server/damage.qc` (Obituary_SpecialDeath / Obituary_WeaponDeath / Obituary) · `common/weapons/weapon/*.qc` (wr_killmessage / wr_suicidemessage) · `common/notifications/all.inc` (DEATH_SELF_* / DEATH_MURDER_* notification rows)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs` · `src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs` · `src/XonoticGodot.Server/Scores.cs` (EmitObituary / BroadcastObituary / SubscribeToDeaths)
+**Port refs:** `src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs` · `src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs` · `src/VortexArena.Server/Scores.cs` (EmitObituary / BroadcastObituary / SubscribeToDeaths)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

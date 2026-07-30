@@ -1,7 +1,7 @@
 using Godot;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Round-trip-latency ("ping") readout — the network sibling of <see cref="FpsPanel"/>, drawn one line above
@@ -12,7 +12,7 @@ namespace XonoticGodot.Game.Hud;
 ///
 /// <list type="bullet">
 ///   <item><b>Source</b> — the value comes from <see cref="PingProvider"/>, which the net layer wires to
-///         <see cref="XonoticGodot.Game.Net.ClientNet.PingMs"/> (ENet's smoothed round-trip estimate to the
+///         <see cref="VortexArena.Game.Net.ClientNet.PingMs"/> (ENet's smoothed round-trip estimate to the
 ///         server). A negative value means "not connected / no net path" and the panel draws nothing.</item>
 ///   <item><b>Format</b> — <c>"%4i ms"</c>, color-banded green→yellow→red by latency like the scoreboard's
 ///         ping column, so a glance reads connection quality.</item>
@@ -27,7 +27,7 @@ namespace XonoticGodot.Game.Hud;
 public partial class PingPanel : HudPanel
 {
     /// <summary>Supplies the current ping in milliseconds (negative = unknown / not connected). The net layer
-    /// sets this to read <see cref="XonoticGodot.Game.Net.ClientNet.PingMs"/>; null on the offline/demo path.</summary>
+    /// sets this to read <see cref="VortexArena.Game.Net.ClientNet.PingMs"/>; null on the offline/demo path.</summary>
     public System.Func<int>? PingProvider { get; set; }
 
     /// <summary>Always animating — ping changes continuously, so redraw each frame while shown.</summary>

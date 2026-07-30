@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Server-side rules for Connect Four — port of common/minigames/minigame/c4.qc (c4_server_event, c4_move,
 // c4_get_lowest_tile, c4_winning_piece, c4_valid_tile). 7 columns x 6 rows, two teams; a move names a

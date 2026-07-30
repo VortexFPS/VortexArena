@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Weapon spawnflags — faithful port of the WEP_TYPE_* / WEP_FLAG_* bit constants in

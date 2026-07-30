@@ -1,10 +1,10 @@
 using System.Numerics;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// The deterministic 72 Hz fixed-tick simulation loop — the C# successor to Darkplaces'
@@ -236,7 +236,7 @@ public sealed class SimulationLoop
         {
             // Forensics: a drop means sim time just fell permanently behind wall clock — the event that (pre-fix)
             // turned a client input burst into standing input latency (see InputQueuePolicy). Visible in hitch dumps.
-            XonoticGodot.Common.Diagnostics.Prof.Event(
+            VortexArena.Common.Diagnostics.Prof.Event(
                 $"sim: backlog dropped ({_accumulator * 1000f:0}ms behind)");
             TimeLostSeconds += _accumulator;
             _accumulator = 0f;
@@ -276,7 +276,7 @@ public sealed class SimulationLoop
                     MoveTypePhysics.CheckVelocity(c);
                     using (Prof.Sample("move.link"))
                         _entities.LinkEdict(c);
-                    // SV_LinkEdict_TouchAreaGrid: the ported player physics (XonoticGodot.Common.PlayerPhysics) does
+                    // SV_LinkEdict_TouchAreaGrid: the ported player physics (VortexArena.Common.PlayerPhysics) does
                     // its OWN slide-move and only dual-dispatches touch on the SOLID it collides with — it can't
                     // see SOLID_TRIGGER volumes (jumppads / teleporters / trigger_hurt / …), which are non-solid
                     // to the sweep. QC fires those via SV_TouchTriggers after the move; reproduce that here so a

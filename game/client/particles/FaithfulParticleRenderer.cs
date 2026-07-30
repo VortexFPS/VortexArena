@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Particles;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Particles;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Client.Particles;
+namespace VortexArena.Game.Client.Particles;
 
 // =====================================================================================================
 //  Faithful particle RENDERER — the draw-side mirror of DarkPlaces' R_DrawParticles /
@@ -536,7 +536,7 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             int cap = Math.Max(InitialInstances, (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)n));
             b.Buffer = new float[cap * FloatsPerInstance];
             b.Mesh.InstanceCount = cap;
-            XonoticGodot.Common.Diagnostics.Prof.Event($"particles: {b.Node.Name} capacity -> {cap} (GPU realloc)");
+            VortexArena.Common.Diagnostics.Prof.Event($"particles: {b.Node.Name} capacity -> {cap} (GPU realloc)");
         }
         b.PeakSinceCheck = Math.Max(b.PeakSinceCheck, n);
         if (time + DecaySeconds < b.NextDecayAt)
@@ -551,7 +551,7 @@ public sealed partial class FaithfulParticleRenderer : Node3D
                 // One quiet realloc back to the recent peak's tier; PeakSinceCheck ≥ n, so target fits n.
                 b.Buffer = new float[target * FloatsPerInstance];
                 b.Mesh.InstanceCount = target;
-                XonoticGodot.Common.Diagnostics.Prof.Event($"particles: {b.Node.Name} capacity decay -> {target}");
+                VortexArena.Common.Diagnostics.Prof.Event($"particles: {b.Node.Name} capacity decay -> {target}");
             }
             b.PeakSinceCheck = 0;
             b.NextDecayAt = time + DecaySeconds;

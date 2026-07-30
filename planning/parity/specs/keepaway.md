@@ -1,7 +1,7 @@
 # Keepaway — parity spec
 
 **Base refs:** `common/gametypes/gametype/keepaway/{sv_keepaway.qc, cl_keepaway.qc, keepaway.qc, keepaway.qh, sv_keepaway.qh}`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Keepaway.cs` · `src/XonoticGodot.Server/GameWorld.cs` (Activate/Tick wiring) · `src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleKeepaway`
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs` · `src/VortexArena.Server/GameWorld.cs` (Activate/Tick wiring) · `src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleKeepaway`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

@@ -14,9 +14,9 @@ features:
     base_refs:
       - "common/mapobjects/func/plat.qc:spawnfunc(func_plat)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatSetup"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:42"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:ApplyPlatSounds"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:42"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:ApplyPlatSounds"
     constants:
       - { name: "speed default (non-q3)", base: "150", port: "150", match: true }
       - { name: "lip default (non-q3)", base: "16", port: "16", match: true }
@@ -53,10 +53,10 @@ features:
     base_refs:
       - "common/mapobjects/func/plat.qc:spawnfunc(func_plat)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatSetup (q3compat = CompatRemaps.IsQ3Compat)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/CompatRemaps.cs:Q3CompatProvider/IsQ3Compat"
-      - "src/XonoticGodot.Server/GameWorld.cs:573-575 (q3compat probe + Q3CompatProvider wire)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:ApplyPlatSounds (q3compat medplat branch)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatSetup (q3compat = CompatRemaps.IsQ3Compat)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/CompatRemaps.cs:Q3CompatProvider/IsQ3Compat"
+      - "src/VortexArena.Server/GameWorld.cs:573-575 (q3compat probe + Q3CompatProvider wire)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:ApplyPlatSounds (q3compat medplat branch)"
     constants:
       - { name: "q3 speed default", base: "200", port: "200 (q3compat true branch — Platforms.cs:69)", match: true }
       - { name: "q3 lip default", base: "8", port: "8 (Platforms.cs:70)", match: true }
@@ -90,7 +90,7 @@ features:
       - "common/mapobjects/platforms.qc:plat_spawn_inside_trigger"
       - "common/mapobjects/func/plat.qc:plat_delayedinit"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:SpawnInsideTrigger"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:SpawnInsideTrigger"
     constants:
       - { name: "tmin inset", base: "absmin + '25 25 0'", port: "AbsMin + (25,25,0)", match: true }
       - { name: "tmax inset", base: "absmax - '25 25 -8'", port: "AbsMax - (25,25,-8)", match: true }
@@ -124,10 +124,10 @@ features:
       - "common/mapobjects/platforms.qc:plat_hit_top"
       - "common/mapobjects/platforms.qc:plat_hit_bottom"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatGoUp"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatGoDown"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatHitTop"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatHitBottom"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatGoUp"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatGoDown"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatHitTop"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatHitBottom"
     constants:
       - { name: "top dwell", base: "ltime + 3 s", port: "LTime + 3 s", match: true }
       - { name: "STATE_* ids (TOP/BOTTOM/UP/DOWN)", base: "0/1/2/3", port: "0/1/2/3", match: true }
@@ -155,7 +155,7 @@ features:
     base_refs:
       - "common/mapobjects/platforms.qc:plat_center_touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatCenterTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatCenterTouch"
     constants:
       - { name: "top-refresh dwell", base: "ltime + 1 s", port: "LTime + 1 s", match: true }
     status:
@@ -180,8 +180,8 @@ features:
       - "common/mapobjects/platforms.qc:plat_trigger_use"
       - "common/mapobjects/platforms.qc:plat_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatTriggerUse"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatTriggerUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatUse"
     constants: []
     status:
       logic: faithful
@@ -204,7 +204,7 @@ features:
     base_refs:
       - "common/mapobjects/platforms.qc:plat_crush"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatCrush"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatCrush"
     constants:
       - { name: "CRUSH dmg", base: "10000", port: "10000", match: true }
       - { name: "dead-gib dmg", base: "10000", port: "10000", match: true }
@@ -232,7 +232,7 @@ features:
     base_refs:
       - "common/mapobjects/platforms.qc:plat_reset"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatReset"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatReset"
     constants: []
     status:
       logic: faithful
@@ -257,8 +257,8 @@ features:
       - "common/mapobjects/platforms.qc:plat_outside_touch"
       - "common/mapobjects/platforms.qc:plat_target_use"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatOutsideTouch"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:PlatTargetUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatOutsideTouch"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:PlatTargetUse"
     constants:
       - { name: "outside_touch refresh", base: "STATE_TOP -> plat_go_down", port: "StateTop -> PlatGoDown", match: true }
       - { name: "target_use top refresh", base: "STATE_TOP -> ltime+1, else !STATE_UP -> plat_go_up", port: "StateTop -> LTime+1, else !StateUp -> PlatGoUp", match: true }
@@ -290,10 +290,10 @@ features:
       - "common/mapobjects/subs.qc:SUB_CalcMoveDone"
       - "lib/math.qh:cubic_speedfunc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMove"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMoveBezier"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMoveControllerThink"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CubicSpeedFunc"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMove"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMoveBezier"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CalcMoveControllerThink"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CubicSpeedFunc"
     constants:
       - { name: "short-anim cutoff", base: "traveltime < 0.15 -> linear", port: "0.15f -> linear (CalcMove)", match: true }
       - { name: "non-positive traveltime clamp", base: "<=0 -> 0.001", port: "<=0 -> 0.001f (CalcMove)", match: true }
@@ -325,11 +325,11 @@ features:
       - "common/mapobjects/platforms.qc:set_platmovetype"
       - "lib/math.qh:cubic_speedfunc_is_sane"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:SetPlatMoveType"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CubicSpeedFuncIsSane"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/Platforms.cs:65 (PlatSetup calls SetPlatMoveType)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MovingBrushes.cs:252,301,372 (train/corner)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs (.platmovetype promoted)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:SetPlatMoveType"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsCommon.cs:CubicSpeedFuncIsSane"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Platforms.cs:65 (PlatSetup calls SetPlatMoveType)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MovingBrushes.cs:252,301,372 (train/corner)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs (.platmovetype promoted)"
     constants:
       - { name: "platmovetype_start default", base: "0 (no key)", port: "0 (no key — SetPlatMoveType returns true, leaves PlatMoveStart=0)", match: true }
       - { name: "one-token sets both ends", base: "end = start", port: "PlatMoveEnd = PlatMoveStart when n<2", match: true }
@@ -362,10 +362,10 @@ features:
     base_refs:
       - "common/mapobjects/subs.qc:InitMovingBrushTrigger"
     port_refs:
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:PhysicsPusher"
-      - "src/XonoticGodot.Engine/Simulation/FlyMove.cs:PushMove"
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:31"
-      - "src/XonoticGodot.Engine/Simulation/SimulationLoop.cs:243"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:PhysicsPusher"
+      - "src/VortexArena.Engine/Simulation/FlyMove.cs:PushMove"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:31"
+      - "src/VortexArena.Engine/Simulation/SimulationLoop.cs:243"
     constants: []
     status:
       logic: faithful

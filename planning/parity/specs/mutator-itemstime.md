@@ -1,7 +1,7 @@
 # Items-time mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/itemstime/itemstime.qc` · `itemstime.qh` · (callers in `server/items/items.qc`, `common/stats.qh`, `client/hud/hud.qh`, `common/mutators/mutator/waypoints/waypointsprites.qc`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/ItemstimeMutator.cs` · `game/hud/ItemsTimePanel.cs` · `game/net/NetGame.cs` (the host feed) · `game/hud/HudManager.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/ItemstimeMutator.cs` · `game/hud/ItemsTimePanel.cs` · `game/net/NetGame.cs` (the host feed) · `game/hud/HudManager.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -82,7 +82,7 @@ and `hud_panel_itemstime` plus `STAT(ITEMSTIME)` (= the live `sv_itemstime` valu
 - **Timed-item set** → `ItemstimeMutator.TimedItemClasses` (classname → key map) + `ClassKeyMap()` adding `weapon_<superweapon>` → "superweapons". Faithful set (mega/big health+armor, strength, shield, superweapons). Always tracks Big items (matches SVQC `hidebig=false`).
 - **Server producer / `it_times`** → `ItemstimeMutator.Recompute()` building `_times` (`CurrentTimes`). It does **not** mirror QC's event-driven `SetTime`/`UpdateTime` calls at pickup/schedule; instead it **re-scans the live world items every server frame** (`OnStartFrame`) and recomputes the min-cooldown / negative-available encoding from each item's `ScheduledRespawnTime`. The resulting table matches QC's; the recompute trigger is an intentional divergence.
 - **Negative "available now" encoding** → faithful (`_times[key] = avail ? -t : t`).
-- **CSQC net message `itemstime`** → **NOT IMPLEMENTED.** There is no net handler anywhere in `XonoticGodot.Net`. The times are fed straight from the local server mutator to the local HUD in `NetGame.cs:2090-2093`, guarded by `if (_server is not null)` — **host-only**.
+- **CSQC net message `itemstime`** → **NOT IMPLEMENTED.** There is no net handler anywhere in `VortexArena.Net`. The times are fed straight from the local server mutator to the local HUD in `NetGame.cs:2090-2093`, guarded by `if (_server is not null)` — **host-only**.
 - **CSQC receive `ItemsTime_time[]` / `availableTime[]`** → `ItemsTimePanel._times` / `_availableTime`, populated by `SetItemTimes`/`SetItemTime` (called only from the host feed).
 - **`HUD_ItemsTime` draw** → `ItemsTimePanel.DrawPanel` + `DrawItemsTimeItem` — a faithful, exhaustive port of the count loop, `HUD_GetRowCount`, dynamic/static layout, color thresholds, blink, checkmark, progress bar, and the expanding flash.
 - **Enable gate** → `ItemsTimePanel` never consults `spectatee_status` / `warmup_stage` / `STAT(ITEMSTIME)` (a grep finds only a doc-comment mention); additionally `NetGame.cs:2092` force-sets `Visible = true` whenever the mutator is enabled. The QC spectatee/warmup/`STAT(ITEMSTIME)==2` gating is absent — the panel is shown to **alive players in normal rounds**, opposite to Base.
@@ -122,9 +122,9 @@ and `hud_panel_itemstime` plus `STAT(ITEMSTIME)` (= the live `sv_itemstime` valu
 - Per-frame world re-scan instead of QC's event-driven `SetTime`/`UpdateTime` — documented in the mutator; same published values, cheaper to wire. `intended_divergence: true`.
 
 ## Verification
-- `tests/XonoticGodot.Tests/MutatorBatchT51Tests.cs:386-426` — `Itemstime_PublishesRespawnTime_ForTimedItem` (absolute time on cooldown), `Itemstime_NegativeEncoding_WhenAnotherCopyAvailable` (`-30`), `Itemstime_Disabled_NoTimes`. Confirms producer logic + negative encoding + `sv_itemstime` gate.
+- `tests/VortexArena.Tests/MutatorBatchT51Tests.cs:386-426` — `Itemstime_PublishesRespawnTime_ForTimedItem` (absolute time on cooldown), `Itemstime_NegativeEncoding_WhenAnotherCopyAvailable` (`-30`), `Itemstime_Disabled_NoTimes`. Confirms producer logic + negative encoding + `sv_itemstime` gate.
 - Source-traced live chain: `GameWorld.cs:511` → `MutatorActivation.Apply` → `ItemstimeMutator.Hook`/`OnStartFrame` → `NetGame.cs:2090` → `ItemsTimePanel.SetItemTimes`/`Visible=true`. Host-only (guarded by `_server is not null`).
-- Enable-gate divergence and the missing net message established by reading `HUD_ItemsTime` (Base) vs `ItemsTimePanel.ResolveVisible` (base default) + the absence of any `itemstime` handler in `XonoticGodot.Net` (grep: no matches).
+- Enable-gate divergence and the missing net message established by reading `HUD_ItemsTime` (Base) vs `ItemsTimePanel.ResolveVisible` (base default) + the absence of any `itemstime` handler in `VortexArena.Net` (grep: no matches).
 - Not behaviorally run in-game for this audit (visual claims about the actual rendered panel are source-level, not screenshot-verified).
 
 ## Open questions

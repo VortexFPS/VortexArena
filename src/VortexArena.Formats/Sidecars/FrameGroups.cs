@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Sidecars;
+namespace VortexArena.Formats.Sidecars;
 
 /// <summary>
 /// One animation range from a <c>.framegroups</c> sidecar file. Vertex-morph models (MD3/MDL) and

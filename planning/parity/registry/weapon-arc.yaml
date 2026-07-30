@@ -16,7 +16,7 @@ features:
     base_refs:
       - "common/weapons/weapon/arc.qh:CLASS(Arc)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:Arc()"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:Arc()"
     constants:
       - { name: "ammo_type", base: "RES_CELLS", port: "ResourceType.Cells", match: true }
       - { name: "impulse", base: "3", port: "3", match: true }
@@ -47,7 +47,7 @@ features:
     base_refs:
       - "common/weapons/weapon/arc.qc:W_Arc_Beam_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamTick"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamTick"
     constants:
       - { name: "beam_damage", base: "100", port: "100", match: true }
       - { name: "beam_nonplayerdamage", base: "80", port: "80", match: true }
@@ -79,7 +79,7 @@ features:
     base_refs:
       - "common/weapons/weapon/arc.qc:W_Arc_Beam_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamTick"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamTick"
     constants:
       - { name: "beam_maxangle", base: "10", port: "10", match: true }
       - { name: "beam_returnspeed", base: "8", port: "8", match: true }
@@ -110,9 +110,9 @@ features:
       - "server/damage.qc:Heal"
       - "server/player.qc:PlayerHeal"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamTick"
-      - "src/XonoticGodot.Common/Gameplay/Items/Resources.cs:GiveResourceWithLimit"
-      - "src/XonoticGodot.Common/Gameplay/Damage/Combat.cs:Heal (objective event_heal path)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamTick"
+      - "src/VortexArena.Common/Gameplay/Items/Resources.cs:GiveResourceWithLimit"
+      - "src/VortexArena.Common/Gameplay/Damage/Combat.cs:Heal (objective event_heal path)"
     constants:
       - { name: "beam_healing_hps", base: "50", port: "50", match: true }
       - { name: "beam_healing_hmax", base: "150", port: "150", match: true }
@@ -144,8 +144,8 @@ features:
       - "common/weapons/weapon/arc.qc:W_Arc_Beam_Think"
       - "lib/math.qh:ExponentialFalloff"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamTick"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ExponentialFalloff"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamTick"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ExponentialFalloff"
     constants:
       - { name: "beam_falloff_halflifedist", base: "0", port: "0", match: true }
       - { name: "beam_falloff_mindist", base: "0", port: "0", match: true }
@@ -172,9 +172,9 @@ features:
       - "common/weapons/weapon/arc.qc:W_Arc_Beam_Think"
       - "common/weapons/weapon/arc.qc:Arc_GetHeat_Percent"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamTick"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamCooldown"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:CooldownSpeed"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamTick"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamCooldown"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:CooldownSpeed"
       - "game/net/NetGame.cs:UpdateCrosshairWeaponRings (arc_heat_percent ring)"
     constants:
       - { name: "beam_heat", base: "0", port: "0", match: true }
@@ -211,8 +211,8 @@ features:
       - "common/weapons/weapon/arc.qc:wr_think"
       - "common/weapons/weapon/arc.qc:W_Arc_Beam_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamTick"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamTick"
     constants:
       - { name: "burst_damage", base: "250", port: "250", match: true }
       - { name: "burst_ammo", base: "15", port: "15", match: true }
@@ -240,8 +240,8 @@ features:
       - "common/weapons/weapon/arc.qc:wr_think"
       - "common/weapons/weapon/arc.qc:W_Arc_Attack_Bolt"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:AttackBoltBurst"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:AttackBoltBurst"
     constants:
       - { name: "bolt", base: "1", port: "true", match: true }
       - { name: "bolt_count", base: "1", port: "1", match: true }
@@ -276,9 +276,9 @@ features:
       - "common/weapons/weapon/arc.qc:W_Arc_Bolt_Explode"
       - "common/weapons/weapon/arc.qc:W_Arc_Bolt_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BoltTouch"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:ExplodeBolt"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BoltTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:ExplodeBolt"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
     constants:
       - { name: "bolt_damage", base: "25", port: "25", match: true }
       - { name: "bolt_edgedamage", base: "12.5", port: "12.5", match: true }
@@ -313,9 +313,9 @@ features:
       - "common/weapons/weapon/arc.qc:wr_checkammo1"
       - "common/weapons/weapon/arc.qc:wr_checkammo2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:CheckAmmoSecondary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs (WeaponAmmo.Check Arc case)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:CheckAmmoSecondary"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs (WeaponAmmo.Check Arc case)"
     constants:
       - { name: "beam_ammo gate", base: "!beam_ammo || cells > 0", port: "Beam.Ammo==0 || cells > 0", match: true }
       - { name: "bolt_ammo gate", base: "cells >= bolt_ammo (1)", port: "cells >= 1", match: true }
@@ -343,9 +343,9 @@ features:
       - "common/weapons/weapon/arc.qc:Draw_ArcBeam"
       - "common/weapons/weapon/arc.qc:NET_HANDLE(ENT_CLIENT_ARC_BEAM)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamTick:558 (EffectEmitter.Emit ARC_BEAM/ARC_BEAM_HEAL trail each tick)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BeamTick:566 (EffectEmitter.Emit ARC_BEAM_LINE/ARC_BEAM_LINE_HEAL cylindric line each tick, tinted Arc m_color / heal-green)"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:51-52,73-74 (ARC_BEAM trail + ARC_BEAM_LINE line, both isTrail:true)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamTick:558 (EffectEmitter.Emit ARC_BEAM/ARC_BEAM_HEAL trail each tick)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BeamTick:566 (EffectEmitter.Emit ARC_BEAM_LINE/ARC_BEAM_LINE_HEAL cylindric line each tick, tinted Arc m_color / heal-green)"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:51-52,73-74 (ARC_BEAM trail + ARC_BEAM_LINE line, both isTrail:true)"
       - "game/client/EffectSystem.cs:492-541 (EffectClass.Beam short-circuit -> Beams.Beam cylinder; width 14 burst / 8 normal+heal selected by effect name :510-521) + :762-769 (ARC_BEAM_LINE* classified Beam)"
       - "game/client/BeamRenderer.cs:56 (Beam(from,to,color,width) cylinder) — wired live ClientWorld.cs:394,398"
     constants:
@@ -382,7 +382,7 @@ features:
       - "common/weapons/weapon/arc.qc:wr_resetplayer"
       - "common/weapons/weapon/arc.qc:wr_playerdeath"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:WrSetup (resetplayer/playerdeath half)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:WrSetup (resetplayer/playerdeath half)"
     constants: []
     status:
       logic: partial
@@ -408,8 +408,8 @@ features:
     base_refs:
       - "common/weapons/weapon/arc.qc:Arc_Smoke"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:ArcSmoke"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:55-57 (ARC_OVERHEAT/ARC_OVERHEAT_FIRE/ARC_SMOKE)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:ArcSmoke"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:55-57 (ARC_OVERHEAT/ARC_OVERHEAT_FIRE/ARC_SMOKE)"
     constants: []
     status:
       logic: faithful
@@ -434,8 +434,8 @@ features:
     base_refs:
       - "common/weapons/weapon/arc.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs:BotWantsSecondary (override => false)"
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary + BotAimAccurate (generic hitscan aim path)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs:BotWantsSecondary (override => false)"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:Weapon.BotWantsSecondary + BotAimAccurate (generic hitscan aim path)"
     constants:
       - { name: "beam_botaimspeed", base: "0", port: "0 (na at stock -> generic hitscan fallback)", match: true }
       - { name: "beam_botaimlifetime", base: "0", port: "0 (na at stock)", match: true }
@@ -463,9 +463,9 @@ features:
       - "common/weapons/weapon/arc.qc:wr_killmessage"
       - "common/weapons/weapon/arc.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectKillMessage (arc case)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectSuicideMessage (arc case)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:1182-1184,1235 (WEAPON_ARC_MURDER / _MURDER_SPRAY / _SUICIDE_BOLT / THINKING_WITH_PORTALS)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectKillMessage (arc case)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectSuicideMessage (arc case)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:1182-1184,1235 (WEAPON_ARC_MURDER / _MURDER_SPRAY / _SUICIDE_BOLT / THINKING_WITH_PORTALS)"
     constants:
       - { name: "kill (primary beam)", base: "WEAPON_ARC_MURDER", port: "WEAPON_ARC_MURDER", match: true }
       - { name: "kill (secondary bolt)", base: "WEAPON_ARC_MURDER_SPRAY", port: "WEAPON_ARC_MURDER_SPRAY", match: true }

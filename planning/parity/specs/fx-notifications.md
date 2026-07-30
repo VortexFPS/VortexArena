@@ -1,7 +1,7 @@
 # fx-notifications — parity spec
 
 **Base refs:** `common/notifications/all.qh`, `common/notifications/all.qc`, `common/notifications/all.inc`, `client/announcer.qc`, `common/util.qc:Announcer_PickNumber`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Notifications/{Notification,NotificationSystem,NotificationTokens,NotificationsList,NotificationChoiceState}.cs`, `src/XonoticGodot.Server/AnnouncerController.cs`, `game/hud/{HudNotifications,CenterPrintPanel,NotifyPanel}.cs`, `game/net/{ServerNet,ClientNet,NetGame}.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Notifications/{Notification,NotificationSystem,NotificationTokens,NotificationsList,NotificationChoiceState}.cs`, `src/VortexArena.Server/AnnouncerController.cs`, `game/hud/{HudNotifications,CenterPrintPanel,NotifyPanel}.cs`, `game/net/{ServerNet,ClientNet,NetGame}.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -61,7 +61,7 @@ The port is a faithful, server-authoritative re-implementation with a real clien
 | `Announcer_Time` + `Announcer_PickNumber` | `AnnouncerController.Tick` + `PickCountdownNumber` (server-side broadcast) |
 | `Announcer_Countdown` (3-2-1-prepare) | `WarmupController`/`RoundHandler.OnCountdownTick` → `GameWorld.BroadcastGameStartCountdown` |
 
-**Layer split:** the registry, send path, token expansion, choice resolution and broadcast routing are in `XonoticGodot.Common`/`Server` (authority/shared). The announcer queue, centerprint, kill-notify panel and announcer audio are in `game/hud` (presentation). Notably the **announcer time/countdown driver runs server-side** in the port (`AnnouncerController`, broadcast to all) rather than CSQC-local as in Base — a deliberate architectural divergence (the port has no CSQC announcer timer).
+**Layer split:** the registry, send path, token expansion, choice resolution and broadcast routing are in `VortexArena.Common`/`Server` (authority/shared). The announcer queue, centerprint, kill-notify panel and announcer audio are in `game/hud` (presentation). Notably the **announcer time/countdown driver runs server-side** in the port (`AnnouncerController`, broadcast to all) rather than CSQC-local as in Base — a deliberate architectural divergence (the port has no CSQC announcer timer).
 
 ## Parity assessment
 
@@ -90,7 +90,7 @@ Announcer queue (`NOTIF_QUEUE_MAX=10`, queuetime 0/-1 semantics), anti-spam wind
 
 ## Verification
 - **Liveness:** call-site grep across `src`/`game` (50+ live `Send`/`Info`/`Center`/`Announce`); wire chain traced `ServerNet.NotificationNetSink → FlushNotifications → ClientNet decode → NetGame.OnNotificationReceived → HudNotifications` (code read). RegisterAll in `GameInit.cs:23`.
-- **Tests:** `NotificationPolishTests`, `CountdownAnnouncerTests`, `ObituaryEmissionTests`, `ClientFeedbackTests`, `CvarReplicationTests`, `HeadshotTests`, `MonsterTurretVehicleObituaryTests` (test files present under `tests/XonoticGodot.Tests/`).
+- **Tests:** `NotificationPolishTests`, `CountdownAnnouncerTests`, `ObituaryEmissionTests`, `ClientFeedbackTests`, `CvarReplicationTests`, `HeadshotTests`, `MonsterTurretVehicleObituaryTests` (test files present under `tests/VortexArena.Tests/`).
 - **Gaps 1-3:** confirmed by code read — no `Durcnt` field anywhere; no `GentleMode =` assignment; `NotificationReaches` switch lacks the IS_SPEC clause.
 - **Counts:** Base `all.inc` macro counts via grep (730 macro invocations); port 680 builder invocations via grep.
 - **Not runtime-verified:** in-game centerprint duration on item pickup; gentle-mode text; spectator-following kill feed.

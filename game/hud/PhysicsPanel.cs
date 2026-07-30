@@ -1,10 +1,10 @@
 using System.Globalization;
 using Godot;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Speedometer / physics panel — feature-complete port of
@@ -128,7 +128,7 @@ public partial class PhysicsPanel : HudPanel
     /// <summary>Register the panel's behaviour-cvar defaults (luma). Auto-invoked by reflection from
     /// <c>HudConfig.RegisterDefaults</c>. The global <c>hud_speed_unit</c> / <c>hud_progressbar_*</c> cvars are
     /// registered by <c>HudConfig</c> itself, so they are NOT (re-)registered here.</summary>
-    public static void RegisterDefaults(XonoticGodot.Engine.Simulation.CvarService c)
+    public static void RegisterDefaults(VortexArena.Engine.Simulation.CvarService c)
     {
         const CvarFlags save = CvarFlags.Save;
         c.Register("hud_panel_physics_speed_unit_show", "1", save);

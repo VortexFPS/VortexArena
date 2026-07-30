@@ -10,10 +10,10 @@
 // a future csqcmodel autoupdate consumer can hang off it. The VISUAL (the EF_STARDUST particle field) is the
 // client's effect renderer reading Entity.Effects; the bit being set is the whole server contract.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary><c>func_stardust</c> — a prop wearing EF_STARDUST (sparkle particles). Registered by <see cref="MapObjectsRegistry"/>.</summary>
 public static class Stardust

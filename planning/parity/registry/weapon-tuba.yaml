@@ -18,10 +18,10 @@ features:
       - "common/weapons/weapon/tuba.qc:wr_think"
       - "common/weapons/weapon/tuba.qc:W_Tuba_NoteOn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:136-139 (same-team sound rule)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:136-139 (same-team sound rule)"
     constants:
       - { name: "damage", base: "5", port: "5", match: true }
       - { name: "edgedamage", base: "0", port: "0", match: true }
@@ -57,10 +57,10 @@ features:
       - "common/weapons/weapon/tuba.qc:wr_killmessage"
       - "common/weapons/weapon/tuba.qc:wr_suicidemessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:94"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:168"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:94"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:168"
     constants:
       - { name: "HITTYPE_SECONDARY when instrument&1 (accordion)", base: "OR'd in W_Tuba_NoteOn (tuba.qc:267-268)", port: "deathTag |= Secondary when TubaInstrument&1 (Tuba.cs:125-126)", match: true }
       - { name: "HITTYPE_BOUNCE when instrument&2 (klein bottle)", base: "OR'd in W_Tuba_NoteOn (tuba.qc:269-270)", port: "deathTag |= Bounce when TubaInstrument&2 (Tuba.cs:127-128)", match: true }
@@ -88,9 +88,9 @@ features:
     base_refs:
       - "common/weapons/weapon/tuba.qc:wr_reload"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:Reload"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs:226 (tuba.Reload dispatch)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:335 (ScheduleThink)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:Reload"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs:226 (tuba.Reload dispatch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:335 (ScheduleThink)"
     constants:
       - { name: "instrument cycle 0->1->2->0", base: "wr_reload switch (tuba.qc:366-380)", port: "(TubaInstrument + 1) % 3 (Tuba.cs:243)", match: true }
       - { name: "WS_READY gate before cycling", base: "early-return if state != WS_READY (tuba.qc:363)", port: "if (st.State != Ready) return (Tuba.cs:239-240)", match: true }
@@ -120,7 +120,7 @@ features:
     base_refs:
       - "common/weapons/weapon/tuba.qc:W_Tuba_GetNote"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:GetNote"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:GetNote"
     constants:
       - { name: "movestate 3x3 note table", base: "from movement.x/.y keys", port: "from horizontal velocity vs facing", match: false }
       - { name: "note table values 1..9", base: "-6,-5,-4,+5,0,+2,+3,+4,-1", port: "-6,-5,-4,+5,0,+2,+3,+4,-1 (identical)", match: true }
@@ -152,8 +152,8 @@ features:
       - "common/weapons/weapon/tuba.qc:W_Tuba_NoteOff"
       - "common/weapons/weapon/tuba.qc:W_Tuba_NoteThink"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteOff"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteOff"
     constants:
       - { name: "keep-alive teleport_time", base: "time + refire*2*W_WeaponRateFactor", port: "time + refire*2 (MaxHealth, no consumer)", match: false }
     status:
@@ -180,8 +180,8 @@ features:
     base_refs:
       - "common/weapons/weapon/tuba.qc:W_Tuba_NoteOn (Send_Effect EFFECT_SMOKE_RING)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
-      - "src/XonoticGodot.Common/Gameplay/Effects/EffectsList.cs:219"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
+      - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs:219"
     constants:
       - { name: "smoke throttle", base: "0.25 s (tuba_smoketime)", port: "0.25 s (st.TubaSmokeTime) (Tuba.cs:175)", match: true }
       - { name: "per-instrument offset (tuba)", base: "v_up*40 + v_right*10 + v_forward*14", port: "up*40 + right*10 + fwd*14 (Tuba.cs:172)", match: true }
@@ -215,11 +215,11 @@ features:
       - "common/weapons/weapon/tuba.qc:NET_HANDLE(ENT_CLIENT_TUBANOTE)"
       - "common/weapons/weapon/tuba.qc:TUBA_STARTNOTE (tuba.qc:430)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteSample"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:PitchStepBaseNote"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteOff"
-      - "src/XonoticGodot.Common/Services/Services.cs:138 (ISoundService.Play loop/pitch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteOn"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteSample"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:PitchStepBaseNote"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteOff"
+      - "src/VortexArena.Common/Services/Services.cs:138 (ISoundService.Play loop/pitch)"
     constants:
       - { name: "asset name scheme", base: "TUBA_STARTNOTE: 'tuba'+(i?ftos(i):'')+'_loopnote'+ftos(n)", port: "'weapons/tuba'+(i!=0?i:'')+'_loopnote'+note+'.wav' (Tuba.cs:371-376)", match: true }
       - { name: "available samples on disk", base: "only notes at cl_tuba_pitchstep=6 multiples in TUBA_MIN..MAX per 3 instruments", port: "PitchStepBaseNote returns the on-disk floor/upper neighbour (multiple of 6) so the lookup hits a REAL file", match: true }
@@ -250,7 +250,7 @@ features:
       - { kind: read, ref: "vol=clamp(VOL_BASE*cl_tuba_volume,0,1), attenuation=cl_tuba_attenuation (TubaVolumeCvar/TubaAttenuationCvar, Tuba.cs:230-231,393-405) — matches tubasound _sound args", result: pass }
       - { kind: read, ref: "NoteOff (Tuba.cs:298-299) Stops BOTH CH_TUBA and CH_TUBA_BLEND; SoundChannel.Tuba=5 / TubaBlend=10 single-channel (Services.cs:121,126) so re-emitting REPLACES rather than stacks", result: pass }
       - { kind: code, ref: "all four cl_tuba_* cvars registered in xonotic-client.cfg:337-340 (attenuation 0.5/fadetime 0.25/pitchstep 6/volume 1)", result: pass }
-      - { kind: build, ref: "XonoticGodot.Common builds clean with the crossfade + SoundChannel.TubaBlend addition (0 warnings / 0 errors)", result: pass }
+      - { kind: build, ref: "VortexArena.Common builds clean with the crossfade + SoundChannel.TubaBlend addition (0 warnings / 0 errors)", result: pass }
       - { kind: read, ref: "SoundService.Play (EngineServices.cs:602-616) broadcasts SoundEvent with Loop+Pitch; loop is keyed by (entity,channel) and replaced by a later loop on the same key. The CLIENT-side render of a pitched looping REPLACEMENT is NOT runtime-observed -> audio dimension unknown", result: unknown }
     confidence: medium
     notes: "FURTHER FIX this wave (crossfade landed); audio fidelity STILL NOT runtime-verified. NoteOn now plays the FULL two-sample cos/sin pitch-step crossfade: floor neighbour on CH_TUBA (vol1=cos, pitch 2^(m/12)) AND, in the in-range branch, the upper neighbour on the NEW CH_TUBA_BLEND channel (vol2=sin, pitch 2^((m-step)/12)); edge/exact branches play a single sample and Stop the blend channel. The baseline 'no upper-neighbour blend' value gap is CLOSED -> values partial->faithful (volume/attenuation/pitchstep/sound7-pitch + the cos/sin weights all honored). audio stays UNKNOWN (headless — the audible result of a pitched looping REPLACEMENT is unobserved; needs a behavioral listen-check). Remaining: cl_tuba_fadetime release ramp (timing partial — needs a CSQC per-frame volume think), ENT_CLIENT_TUBANOTE remote-player networking (presentation partial)."
@@ -262,11 +262,11 @@ features:
       - "common/weapons/weapon/tuba.qc:W_Tuba_HasPlayed"
       - "common/weapons/weapon/tuba.qc:W_Tuba_NoteOff (tuba_lastnotes + magicear bprint)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:HasPlayed"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:NoteOff"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/EntityWeaponState.cs:380-387 (TubaLastNotes ring)"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/LogicGates.cs:548-579 (MagicEarProcessMessage TUBA branch)"
-      - "src/XonoticGodot.Server/GameWorld.cs:663 (TubaMelodyBprint host seam -> Chat.PrintToChatAll)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:HasPlayed"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:NoteOff"
+      - "src/VortexArena.Common/Gameplay/Weapons/EntityWeaponState.cs:380-387 (TubaLastNotes ring)"
+      - "src/VortexArena.Common/Gameplay/MapObjects/LogicGates.cs:548-579 (MagicEarProcessMessage TUBA branch)"
+      - "src/VortexArena.Server/GameWorld.cs:663 (TubaMelodyBprint host seam -> Chat.PrintToChatAll)"
     constants:
       - { name: "MAX_TUBANOTES ring buffer", base: "32", port: "Tuba.MaxTubaNotes = 32; EntityWeaponState.TubaLastNotes = new Vector3[32]", match: true }
       - { name: "instrument filter (instrument<0 = any)", base: "if (instrument >= 0 && tuba_instrument != instrument) return false", port: "same (Tuba.cs:358-359)", match: true }
@@ -296,8 +296,8 @@ features:
     base_refs:
       - "common/weapons/weapon/tuba.qc:wr_setup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:WrSetup"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:273"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:WrSetup"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:273"
     constants:
       - { name: "tuba_instrument reset to 0", base: "wr_setup sets tuba_instrument = 0 (tuba.qc:357)", port: "WrSetup sets WeaponState.TubaInstrument = 0 (Tuba.cs:70)", match: true }
     status:
@@ -324,11 +324,11 @@ features:
       - "common/weapons/weapon/tuba.qc:wr_checkammo1"
       - "common/weapons/weapon/tuba.qc:wr_checkammo2"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:Tuba (ctor)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:BotWantsSecondary (Tuba.cs:128-129)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:406 (live wr_aim dispatch)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponOrder.cs:209"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:282"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:Tuba (ctor)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:BotWantsSecondary (Tuba.cs:128-129)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:406 (live wr_aim dispatch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponOrder.cs:209"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:282"
     constants:
       - { name: "impulse", base: "1", port: "1", match: true }
       - { name: "spawnflags", base: "HIDDEN|TYPE_SPLASH|NODUAL|NOTRUEAIM", port: "Hidden|TypeSplash|NoDual|NoTrueAim", match: true }
@@ -362,7 +362,7 @@ features:
     base_refs:
       - "common/weapons/weapon/tuba.qc:describe (METHOD Tuba, describe — tuba.qc:600-612)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs:GuideDescription"
+      - "src/VortexArena.Common/Gameplay/Weapons/Tuba.cs:GuideDescription"
       - "game/menu/dialogs/DialogMediaGuide.cs:160"
     constants:
       - { name: "guide paragraphs (5 static PARs)", base: "ear-bleeding music + slight knockback, secondary higher pitch, breath-only ammo, close-range only, movement-key pitch (tuba.qc:604-608)", port: "all 5 ported verbatim with the %s name pre-filled '@!#%'n Tuba' (Tuba.cs:67-74)", match: true }

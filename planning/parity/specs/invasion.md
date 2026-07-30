@@ -1,7 +1,7 @@
 # Invasion — parity spec
 
 **Base refs:** `common/gametypes/gametype/invasion/{invasion,sv_invasion,cl_invasion}.{qc,qh}` · `server/round_handler.qc`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Invasion.cs` · `src/XonoticGodot.Server/GameWorld.cs` (ActivateGameType / WireObjectiveSpawns / DriveGametypeFrame)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Invasion.cs` · `src/VortexArena.Server/GameWorld.cs` (ActivateGameType / WireObjectiveSpawns / DriveGametypeFrame)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

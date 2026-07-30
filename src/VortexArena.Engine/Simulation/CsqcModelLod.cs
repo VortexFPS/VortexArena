@@ -6,7 +6,7 @@
 
 using System;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// The CSQC LOD selection (<c>CSQCModel_LOD_Apply</c>). <see cref="SelectLodIndex"/> reproduces the distance

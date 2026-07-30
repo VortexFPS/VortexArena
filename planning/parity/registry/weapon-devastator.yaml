@@ -17,10 +17,10 @@ features:
       - "common/weapons/weapon/devastator.qc:W_Devastator_Attack"
       - "common/weapons/weapon/devastator.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame"
-      - "src/XonoticGodot.Server/GameWorld.cs:WeaponThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireDriver.cs:Frame"
+      - "src/VortexArena.Server/GameWorld.cs:WeaponThink"
     constants:
       - { name: "ammo", base: "4", port: "4", match: true }
       - { name: "refire", base: "1.1 s", port: "1.1 s", match: true }
@@ -53,8 +53,8 @@ features:
     base_refs:
       - "common/weapons/weapon/devastator.qc:W_Devastator_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:OnThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:WeaponSpeedFactor"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:OnThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:WeaponSpeedFactor"
     constants:
       - { name: "speed", base: "1300", port: "1300", match: true }
       - { name: "speedaccel", base: "1300", port: "1300", match: true }
@@ -81,8 +81,8 @@ features:
       - "common/weapons/weapon/devastator.qc:W_Devastator_Think"
       - "common/weapons/weapon/devastator.qc:W_Devastator_SteerTo"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:OnThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:SteerTo"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:OnThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:SteerTo"
     constants:
       - { name: "guiderate", base: "90 deg/s", port: "90 deg/s", match: true }
       - { name: "guideratedelay", base: "0.01 s", port: "0.01 s", match: true }
@@ -113,10 +113,10 @@ features:
       - "common/weapons/weapon/devastator.qc:W_Devastator_Explode"
       - "common/weapons/weapon/devastator.qc:W_Devastator_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:Explode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:OnTouch"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:Unregister"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:Explode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:OnTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:Unregister"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "damage", base: "80", port: "80", match: true }
       - { name: "edgedamage", base: "40", port: "40", match: true }
@@ -149,11 +149,11 @@ features:
       - "common/weapons/weapon/devastator.qc:W_Devastator_RemoteExplode"
       - "common/weapons/weapon/devastator.qc:W_Devastator_DoRemoteExplode"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:RemoteDetonate"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:RemoteExplode"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:DoRemoteExplode"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RocketFlyingMutator.cs:OnAllowRocketJumping"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:FireAllowRocketJumping"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:RemoteDetonate"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:RemoteExplode"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:DoRemoteExplode"
+      - "src/VortexArena.Common/Gameplay/Mutators/RocketFlyingMutator.cs:OnAllowRocketJumping"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:FireAllowRocketJumping"
     constants:
       - { name: "detonatedelay", base: "0.02 s (>=0 timer, <0 proximity)", port: "0.02 s", match: true }
       - { name: "remote_damage", base: "70", port: "70", match: true }
@@ -191,10 +191,10 @@ features:
       - "common/weapons/weapon/devastator.qc:W_Devastator_Damage"
       - "common/weapons/weapon/devastator.qc:W_Devastator_Attack (DAMAGE_YES + SetResource HEALTH)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:CheckProjectileDamage"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeShootable"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:CheckProjectileDamage"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:EventDamage"
     constants:
       - { name: "health", base: "30", port: "30 (subtracted by the MakeShootable shim; explode at hp<=0)", match: true }
       - { name: "W_CheckProjectileDamage exception", base: "-1 (no exceptions)", port: "-1", match: true }
@@ -223,8 +223,8 @@ features:
       - "server/weapons/common.qh:PROJECTILE_MAKETRIGGER"
       - "common/weapons/weapon/devastator.qc:W_Devastator_Attack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Projectiles.cs:MakeTrigger"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Projectiles.cs:MakeTrigger"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:Attack"
     constants:
       - { name: "solid", base: "SOLID_CORPSE", port: "Solid.Corpse", match: true }
       - { name: "dphitcontentsmask", base: "SOLID|BODY|CORPSE", port: "SOLID|BODY|CORPSE", match: true }
@@ -255,11 +255,11 @@ features:
       - "common/weapons/weapon/devastator.qc:wr_setup"
       - "common/weapons/weapon/devastator.qc:wr_killmessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:CheckAmmoPrimary"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:WrSetup"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:WrResetPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:960 (WrResetPlayer per-slot dispatch on respawn)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectKillMessage (devastator branch)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:CheckAmmoPrimary"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:WrSetup"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:WrResetPlayer"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:960 (WrResetPlayer per-slot dispatch on respawn)"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectKillMessage (devastator branch)"
     constants:
       - { name: "reload_ammo", base: "0 (no clip reload)", port: "0 (base ReloadingAmmo)", match: true }
       - { name: "reload_time", base: "2 s", port: "n/a (no clip reload)", match: true }
@@ -293,7 +293,7 @@ features:
     port_refs:
       - "game/client/ProjectileCatalog.cs:Rocket entry"
       - "game/client/ProjectileRenderer.cs:Classify/DescOf"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:Attack (EffectEmitter ROCKET_MUZZLEFLASH)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:Attack (EffectEmitter ROCKET_MUZZLEFLASH)"
     constants:
       - { name: "fly model", base: "models/rocket.md3 scale 2, roll 720 deg/s", port: "rocket.md3 scale 2, spin 720", match: true }
       - { name: "trail", base: "EFFECT_TR_ROCKET smoke + dynamic light", port: "TR_ROCKET smoke + light", match: true }
@@ -324,9 +324,9 @@ features:
       - "common/weapons/weapon/devastator.qc:W_Devastator_Explode (airshot detection)"
       - "common/physics/player.qc:IsFlying"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:Explode (airshot block)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:IsFlying"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:Announce"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:Explode (airshot block)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:IsFlying"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:Announce"
     constants:
       - { name: "airshot test", base: "DAMAGE_AIM + IS_PLAYER + DIFF_TEAM + !IS_DEAD + IsFlying(directhit)", port: "DamageMode.Aim + Flags.Client + !SameTeam + !same + DeadFlag.No + IsFlying", match: true }
       - { name: "IsFlying clearance", base: "24u below, not onground, not swimming (waterlevel<2)", port: "24u down-trace Fraction>=1, !OnGround, WaterLevel<2", match: true }
@@ -352,11 +352,11 @@ features:
     base_refs:
       - "common/weapons/weapon/devastator.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:BotAimShotSpeed"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:BotAimAccurate"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:BotWantsDetonate"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:AimAndDecideFire (BotAimAccurate at :545, BotWantsDetonate at :417)"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:CurrentShotSpeed (BotAimShotSpeed at :802/:814)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:BotAimShotSpeed"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:BotAimAccurate"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:BotWantsDetonate"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:AimAndDecideFire (BotAimAccurate at :545, BotWantsDetonate at :417)"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:CurrentShotSpeed (BotAimShotSpeed at :802/:814)"
     constants:
       - { name: "guide-rate speed scale", base: "spd *= sqrt(guiderate)*(20/9.489) when guiderate>0", port: "spd *= sqrt(GuideRate)*(20/9.489) when GuideRate>0 (BotAimShotSpeed)", match: true }
       - { name: "shot_accurate gate", base: "guiderate < 50", port: "Cvars.GuideRate < 50 (BotAimAccurate)", match: true }
@@ -386,9 +386,9 @@ features:
     base_refs:
       - "common/weapons/weapon/devastator.qc:wr_impacteffect (CSQC)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:Explode (ROCKET_EXPLODE + rocket_impact.wav)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:DoRemoteExplode (ROCKET_EXPLODE + rocket_impact.wav)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:ImpactSound"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:Explode (ROCKET_EXPLODE + rocket_impact.wav)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:DoRemoteExplode (ROCKET_EXPLODE + rocket_impact.wav)"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:ImpactSound"
     constants:
       - { name: "impact effect", base: "EFFECT_ROCKET_EXPLODE at w_org + w_backoff*2", port: "ROCKET_EXPLODE at self.Origin", match: true }
       - { name: "impact sound", base: "weapons/rocket_impact (SND_ROCKET_IMPACT, W_Sound) on CH_SHOTS, gated by !w_issilent", port: "weapons/rocket_impact.wav via WeaponSplash.ImpactSound", match: true }
@@ -415,7 +415,7 @@ features:
     base_refs:
       - "common/weapons/weapon/devastator.qc:describe (MENUQC)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Devastator.cs:GuideDescription"
+      - "src/VortexArena.Common/Gameplay/Weapons/Devastator.cs:GuideDescription"
       - "game/menu/dialogs/DialogMediaGuide.cs:194 (renders Weapon.GuideDescription)"
     constants: []
     status:

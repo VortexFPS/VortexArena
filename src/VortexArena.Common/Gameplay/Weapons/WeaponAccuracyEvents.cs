@@ -2,19 +2,19 @@
 // accuracy_canbegooddamage / accuracy_byte).
 //
 // QC keeps the per-weapon tallies on a per-client `accuracy` sub-entity owned by the server scoring layer;
-// this port keeps the TALLIES in XonoticGodot.Server.Scores (which subscribes to this bus) and only the
+// this port keeps the TALLIES in VortexArena.Server.Scores (which subscribes to this bus) and only the
 // pure logic here, so the weapons folder stays Godot/Server-free. With no subscriber (GameDemo, bare unit
 // tests) every Add is a no-op, exactly like QC with no accuracy entity attached.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Scoring;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Scoring;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The accuracy event bus — the C# seam for QC <c>accuracy_add(this, w, fired, hit, real)</c>
 /// (server/weapons/accuracy.qc:102) plus the <c>accuracy_isgooddamage</c>/<c>accuracy_canbegooddamage</c>
-/// gates every credit site evaluates. Weapons publish; <c>XonoticGodot.Server.Scores</c> subscribes.
+/// gates every credit site evaluates. Weapons publish; <c>VortexArena.Server.Scores</c> subscribes.
 /// </summary>
 public static class WeaponAccuracyEvents
 {

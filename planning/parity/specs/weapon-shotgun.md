@@ -5,7 +5,7 @@
 `common/weapons/calculations.qc` (`W_CalculateSpread`, `W_CalculateSpreadPattern`); balance in
 `bal-wep-xonotic.cfg` (`g_balance_shotgun_*`) + `balance-xonotic.cfg` (`g_weaponspreadfactor`,
 `g_hitscan_spread_style`) + `xonotic-server.cfg` (`g_ballistics_*`, `g_casings`, `g_trueaim_minrange`).
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Shotgun.cs`,
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Shotgun.cs`,
 `.../Weapons/WeaponFiring.cs`, `.../Weapons/WeaponFireDriver.cs`, `.../Weapons/WeaponFireGate.cs`,
 `.../Gameplay/Effects/EffectEmitter.cs`; client render in `game/client/EffectSystem.cs`.
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
@@ -132,7 +132,7 @@ gametype that grants the weapon (standard arenas, default loadout).
 | Melee woosh (EFFECT_SHOTGUN_WOOSH per trace) | NOT EMITTED | `Shotgun.Melee` emits no woosh effect. |
 | Crosshair `gfx/crosshairshotgun` size 0.65 | NOT VERIFIED | Client crosshair attribs not traced. |
 
-**Liveness:** the fire path is LIVE — `GameWorld.WeaponThink` (server tick, `XonoticGodot.Server/GameWorld.cs:1182`) →
+**Liveness:** the fire path is LIVE — `GameWorld.WeaponThink` (server tick, `VortexArena.Server/GameWorld.cs:1182`) →
 `WeaponFireDriver.Frame` → `Shotgun.WrThink` → `Attack`/`Melee`. Effect emissions go through
 `EffectEmitter.Sink`, which is LIVE on both ends in a real match: `ServerNet.cs:287` installs the
 networking `EffectNetSink` and `ClientWorld.cs:352` installs the rendering `RenderSink` (the headless

@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Godot;
-using XonoticGodot.Common.Config;
-using XonoticGodot.Engine.Console;
-using XonoticGodot.Game.Menu;
+using VortexArena.Common.Config;
+using VortexArena.Engine.Console;
+using VortexArena.Game.Menu;
 
-namespace XonoticGodot.Game.Console;
+namespace VortexArena.Game.Console;
 
 /// <summary>
 /// The Godot input glue for the keybind system + the <c>bind</c>/<c>unbind</c>/<c>unbindall</c> sink that the
@@ -188,7 +188,7 @@ public static class BindInput
     /// <summary>
     /// Rebuild <see cref="BindTable"/> from a <see cref="KeyBindings"/> action table (action id → key string).
     /// The canonical bind source is <c>binds-xonotic.cfg</c> ingested at boot via
-    /// <see cref="RegisterBindCommands"/>; this is the fallback path <see cref="XonoticGodot.Game.Menu.MenuState"/>
+    /// <see cref="RegisterBindCommands"/>; this is the fallback path <see cref="VortexArena.Game.Menu.MenuState"/>
     /// uses to seed from <see cref="KeyBindings.Defaults"/> when no data dir is mounted (so a bare/CI run is
     /// still playable). A null map is ignored (don't clobber a table the cfg already filled).
     /// </summary>

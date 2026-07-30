@@ -1,7 +1,7 @@
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for the public-key player-identity challenge-response (<see cref="PlayerIdentity"/> /

@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// A resolved spawn location — the QC spawnpoint edict (info_player_deathmatch / info_player_start /
@@ -745,7 +745,7 @@ public static class SpawnSystem
     }
 
     /// <summary>[R1] The standing eye height (QC PL_VIEW_OFS) used as both endpoints of the LOS sightline.</summary>
-    private static readonly Vector3 StandEye = XonoticGodot.Common.Physics.PlayerPhysics.StandViewOfs;
+    private static readonly Vector3 StandEye = VortexArena.Common.Physics.PlayerPhysics.StandViewOfs;
 
     /// <summary>QC <c>SAME_TEAM</c> for two live players: equal, non-zero team colors.</summary>
     private static bool SameTeamLive(Player a, Player b) => a.Team != Teams.None && a.Team == b.Team;
@@ -837,7 +837,7 @@ public static class SpawnSystem
         string near = float.IsPositiveInfinity(nearest)
             ? "none"
             : nearest.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
-        XonoticGodot.Common.Diagnostics.Log.Info(
+        VortexArena.Common.Diagnostics.Log.Info(
             $"[spawn] player=#{forPlayer.Index} spot=#{chosen.Index} branch={(farBranch ? "far" : "uniform")} " +
             $"nearestEnemy={near} enemyLOS={(seen ? "YES" : "no")}");
     }
@@ -1055,7 +1055,7 @@ public static class SpawnSystem
         // (ViewOfs 0) and W_SetupShot fires ~35u too LOW until the first crouch cycle. Reset the duck state too so
         // it matches the standing hull set above (a respawn while ducked must not carry the crouch eye/hull).
         p.IsDucked = false;
-        p.ViewOfs = XonoticGodot.Common.Physics.PlayerPhysics.StandViewOfs;
+        p.ViewOfs = VortexArena.Common.Physics.PlayerPhysics.StandViewOfs;
 
         // QC nudge: 1 - mins.z - 24 = 1 - (-24) - 24 = 1 qu above the marker, so the hull clears the floor.
         float zNudge = 1f - PlayerMins.Z - 24f;

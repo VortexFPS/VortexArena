@@ -16,7 +16,7 @@
 
 using System.Collections.Generic;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Per-client MSG_CHOICE selections — the C# successor to QC's <c>.msg_choice_choices[NOTIF_CHOICE_MAX]</c>

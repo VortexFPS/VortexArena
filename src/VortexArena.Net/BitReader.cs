@@ -3,11 +3,11 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// Byte-oriented message reader over a <see cref="ReadOnlySpan{T}"/>, the exact inverse of
-/// <see cref="BitWriter"/> (XonoticGodot analogue of the Darkplaces <c>sizebuf_t</c> reader + Xonotic
+/// <see cref="BitWriter"/> (VortexArena analogue of the Darkplaces <c>sizebuf_t</c> reader + Xonotic
 /// <c>net.qh</c> Read* wrappers). A <c>ref struct</c>: it never escapes to the heap, holds the source
 /// span directly, and tracks a read cursor — zero-allocation by construction.
 ///

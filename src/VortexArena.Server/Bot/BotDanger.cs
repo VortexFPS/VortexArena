@@ -1,10 +1,10 @@
 // Port of server/bot/default/havocbot/havocbot.qc havocbot_checkdanger (:401-444)
 // + the bot slice of tracebox_hits_trigger_hurt (server/bot/default/navigation.qh / t_swamp-style box test).
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server.Bot;
+namespace VortexArena.Server.Bot;
 
 /// <summary>
 /// The "is the ground ahead of me deadly?" probe a bot runs every think while moving — the C# port of QC

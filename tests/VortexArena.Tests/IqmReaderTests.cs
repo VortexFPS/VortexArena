@@ -3,12 +3,12 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Iqm;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats;
+using VortexArena.Formats.Iqm;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — direct coverage for <see cref="IqmReader"/> (port of Darkplaces <c>Mod_INTERQUAKEMODEL_Load</c>,
@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class IqmReaderTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     private const int HeaderSize = 124;
     private const int Joint2Size = 48;
@@ -144,7 +144,7 @@ public class IqmReaderTests
     {
         if (!Directory.Exists(DataDir)) return null;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return null;
+        if (!vfs.MountContentRoot(DataDir)) return null;
         string? path = vfs.Find("models/", "iqm").FirstOrDefault();
         return path is null ? null : IqmReader.Read(vfs.ReadBytes(path));
     });

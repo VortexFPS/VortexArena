@@ -4,7 +4,7 @@
 // (the msgid IS the literal, incl. ^ color codes and a CTX^ prefix), so the C# equivalent is
 // Lookup("English literal") -> translated-or-null.
 //
-// Lives in XonoticGodot.Common (ADR-0008: no Godot) so the menu (game/menu/framework/Localization.cs) and the unit
+// Lives in VortexArena.Common (ADR-0008: no Godot) so the menu (game/menu/framework/Localization.cs) and the unit
 // tests share one parser. The faithful behaviors reproduced here:
 //   * C-escapes \a \b \t \r \n \\ \" + octal \NNN (1-3 octal digits)              (PRVM_PO_ParseString)
 //   * msgid/msgstr with consecutive "..." continuation lines, concatenated         (PRVM_PO_Load:1873-1894)
@@ -17,7 +17,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XonoticGodot.Common.Localization;
+namespace VortexArena.Common.Localization;
 
 /// <summary>
 /// A loaded gettext message catalog — the C# successor to darkplaces' <c>po_t</c>. Maps an English source

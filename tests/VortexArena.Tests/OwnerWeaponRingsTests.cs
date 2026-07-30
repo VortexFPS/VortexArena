@@ -1,7 +1,7 @@
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Guards the owner-block weapon-HUD ring scalars (QC the networked wepent.* fields: vortex charge/chargepool,

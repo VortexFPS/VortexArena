@@ -24,7 +24,7 @@ tracer: see **NET-DEBUGGING.md** (`net_input_trace`) and **TROUBLESHOOTING.md**.
    Or in any running game: console → `set cl_frameprofiler 1` (2 = also echo the 5 s snapshots), play,
    quit. Session files land in `<userdir>/logs/session-<stamp>.{log,csv}` (newest ~50 pairs are kept) —
    `~/XonData` for real play; perf-run captures use an **isolated scratch profile**
-   (`_scratch/perf-userdir`, via `XONOTIC_USERDIR`) with a pinned cvar set (`cl_autopause 0`,
+   (`_scratch/perf-userdir`, via `VORTEX_USERDIR`) with a pinned cvar set (`cl_autopause 0`,
    `cl_portal_render 0`, `vid_vsync 2`, `cl_maxfps 0` — your `-Cvar` flags override the pins), so runs
    never mutate the daily config and are config-identical by construction (`-UserDir real` opts out).
 2. **Read the report**:
@@ -80,7 +80,7 @@ session hitch counter; **F11** expands the live scope tree; `set cl_frameprofile
 |---|---|
 | `tools/perf-run.ps1` / `.sh` | One-command capture: launches the **release export** (`-DebugBuild` for the project) on a map + bots with the profiler forced, self-quits, runs the report, writes `_scratch/perf_<label>.json`. |
 | `tools/perf-report.py` | Turns a session pair into percentiles/1%-lows, a primaries-vs-recovery census, hitch **clusters**, top offending scopes, alloc storms, GC/pipeline totals — plus a **post-load block** (`t ≥ 20 s`, `--postload SECS`) so steady-state smoothness is readable without load/join noise (trust the `pl` rows for smoothness A/Bs; the full-session 0.1%-low is pinned by load frames). `--diff <session|json>` compares runs; `--json` writes a baseline. Old (pre-2026-07-03) CSVs had a one-frame ms↔scopes skew — the tool detects and corrects it. |
-| `tools/perf-smoke.ps1` | Pre-merge gate: budget-asserting headless benches (`ServerTickPerfBench` fails on a >4-5× tick regression; opt out with `XG_PERF_ASSERT=0`), `-Live` adds a 30 s capture diffed vs `tools/perf-baselines/`. |
+| `tools/perf-smoke.ps1` | Pre-merge gate: budget-asserting headless benches (`ServerTickPerfBench` fails on a >4-5× tick regression; opt out with `VA_PERF_ASSERT=0`), `-Live` adds a 30 s capture diffed vs `tools/perf-baselines/`. |
 | `cl_frameprofiler_dump 1` | Console: dumps the last ~240 frames (forensic ring) to `frameprofile_ring.csv`. |
 | RenderDoc auto-capture | Run under RenderDoc → sync SURFACE compiles self-capture (≤6/session, after t=28 s) to `<temp>/xonotic_rdoc/`. |
 | `net_input_trace 1` | The input→server→reconcile pipeline tracer — see NET-DEBUGGING.md. |

@@ -4,9 +4,9 @@
 // (QC item.max_armorvalue), set by ItemInit at spawn.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Base for armor pickups — port of common/items/item/armor.{qh,qc} CLASS(Armor, Pickup) and its

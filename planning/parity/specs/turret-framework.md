@@ -1,7 +1,7 @@
 # Turret framework — parity spec
 
 **Base refs:** `common/turrets/sv_turrets.qc` · `sv_turrets.qh` · `turret.qh` · `all.qh` · `util.qc` · `config.qc` · `checkpoint.qc` · `targettrigger.qc` · `cl_turrets.qc` · `turrets.cfg` (framework defaults)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretMath.cs` · `TurretCombat.cs` · `EntityClasses.cs` (Turret base) · `MapObjectsRegistry.cs` · `Damage/DamageSystem.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs` · `TurretSpawn.cs` · `TurretSpawnFuncs.cs` · `TurretMath.cs` · `TurretCombat.cs` · `EntityClasses.cs` (Turret base) · `MapObjectsRegistry.cs` · `Damage/DamageSystem.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

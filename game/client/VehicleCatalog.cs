@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Per-vehicle visual specs — the data the <see cref="VehicleVisuals"/> driver needs to reproduce the

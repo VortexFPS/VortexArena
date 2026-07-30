@@ -1,8 +1,8 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>Primary vs secondary fire (QC weaponentity fire modes).</summary>
 public enum FireMode { Primary = 0, Secondary = 1 }
@@ -70,6 +70,15 @@ public abstract partial class Weapon : IRegistered
     /// <see cref="Weapons"/> registry can map NetName→ammo-type for random-start ammo + pickup logic.
     /// </summary>
     public ResourceType AmmoType = ResourceType.None;
+
+    /// <summary>
+    /// QC <c>bot_pickupbasevalue</c> (the weapon's "rating" ATTRIB, e.g. vortex.qh:17 = 8000): the base bot
+    /// desirability of picking this weapon up, on the BOT_PICKUP_RATING scale (0 for special/starter weapons
+    /// like Blaster/Hook/Porto; 2000-10000 for real pickups). Read by the bot goal-rater's item valuation
+    /// (weapon_pickupevalfunc): unowned → this value discounted by arsenal strength; owned → the ammo value
+    /// plus 10% of this. Concrete weapons set it in their constructor next to the other identity ATTRIBs.
+    /// </summary>
+    public float BotPickupBaseValue;
 
     // model/asset names (resolved by the model/asset services)
     public string? ViewModel;
@@ -420,6 +429,18 @@ public abstract partial class GameType : IRegistered
     ///   • team score modes (TDM/CTF/Dom/KH/TeamMayhem/TeamKeepaway) — top two teams' primary score equal.
     /// <paramref name="roster"/> is the current player list (the FFA modes scan it; team modes read GameScores).
     /// </summary>
+    /// <summary>
+    /// Whether this mode is played against a clock. False makes the match clock a SESSION clock: the time
+    /// limit never ends the match, and the HUD timer counts up instead of down (its existing behaviour when
+    /// there is no limit). The editor is the case — an editing session has no end, and a mapper three hours
+    /// into a level should not be dropped into an intermission screen.
+    ///
+    /// A property rather than forcing <c>timelimit 0</c>, because gametype activation is not the last word on
+    /// that cvar — something later in the boot order writes the gametype default back over it — and because
+    /// the rule belongs to the mode, not to whichever cvar write happens to land last.
+    /// </summary>
+    public virtual bool HasTimeLimit => true;
+
     public virtual bool ReportsTie(System.Collections.Generic.IReadOnlyList<Player> roster) => false;
 
     /// <summary>Rebuild this gametype's OBJECTIVE waypoint sprites (flags / control points / keys …) into

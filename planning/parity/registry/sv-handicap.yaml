@@ -17,9 +17,9 @@ features:
       - "server/player.qc:PlayerDamage"
       - "server/handicap.qc:Handicap_GetTotalHandicap"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:PlayerDamage (~402-413)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:HandicapTotal (~867-875)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageEntityState.cs:HandicapGive/HandicapTake"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:PlayerDamage (~402-413)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:HandicapTotal (~867-875)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageEntityState.cs:HandicapGive/HandicapTake"
     constants:
       - { name: "victim multiply (take)", base: "damage *= total(take)", port: "damage *= HandicapTotal(targ,true)", match: true }
       - { name: "attacker divide (give)", base: "damage /= total(give) if this!=attacker && IS_PLAYER", port: "damage /= HandicapTotal(attacker,false) if give!=0 (same this!=attacker && IsPlayer guards)", match: true }
@@ -47,9 +47,9 @@ features:
     base_refs:
       - "server/handicap.qc:Handicap_GetTotalHandicap"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:HandicapTotal (~867-875)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:VoluntaryHandicapProvider (~859)"
-      - "src/XonoticGodot.Common/Gameplay/Handicap.cs:GetForcedHandicap (~57-62)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:HandicapTotal (~867-875)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:VoluntaryHandicapProvider (~859)"
+      - "src/VortexArena.Common/Gameplay/Handicap.cs:GetForcedHandicap (~57-62)"
     constants:
       - { name: "total formula", base: "forced(dir) * voluntary(dir)", port: "forced (entity field, default 1) * voluntary (VoluntaryHandicapProvider, default 1)", match: true }
     status:
@@ -75,10 +75,10 @@ features:
       - "common/replicate.qh:19-21"
       - "server/client.qh:210-211"
     port_refs:
-      - "src/XonoticGodot.Server/Commands.cs:VoluntaryHandicapProvider (ctor wiring ~400-418)"
-      - "src/XonoticGodot.Server/Commands.cs:RegisterClientCommandCvars (cl_handicap* allowlist)"
-      - "src/XonoticGodot.Server/Commands.cs:ParseHandicapVectorXY"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:VoluntaryHandicapProvider"
+      - "src/VortexArena.Server/Commands.cs:VoluntaryHandicapProvider (ctor wiring ~400-418)"
+      - "src/VortexArena.Server/Commands.cs:RegisterClientCommandCvars (cl_handicap* allowlist)"
+      - "src/VortexArena.Server/Commands.cs:ParseHandicapVectorXY"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:VoluntaryHandicapProvider"
     constants:
       - { name: "bound floor", base: "1.0", port: "1f (Math.Clamp(value,1f,10f))", match: true }
       - { name: "bound ceil", base: "10.0", port: "10f", match: true }
@@ -110,9 +110,9 @@ features:
       - "server/handicap.qc:Handicap_Initialize"
       - "server/client.qc:1240 (PutClientInServer)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Handicap.cs:Initialize (~44-50)"
-      - "src/XonoticGodot.Server/ClientManager.cs:699 (live call on every spawn path)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageEntityState.cs:HandicapGive/HandicapTake"
+      - "src/VortexArena.Common/Gameplay/Handicap.cs:Initialize (~44-50)"
+      - "src/VortexArena.Server/ClientManager.cs:699 (live call on every spawn path)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageEntityState.cs:HandicapGive/HandicapTake"
     constants:
       - { name: "forced give default", base: "1", port: "1f (Handicap.Initialize sets HandicapGive=1)", match: true }
       - { name: "forced take default", base: "1", port: "1f (Handicap.Initialize sets HandicapTake=1)", match: true }
@@ -140,10 +140,10 @@ features:
       - "common/ent_cs.qc:180 (ENTCS_PROP HANDICAP_LEVEL WriteByte/ReadByte)"
       - "lib/math.qh:377 (map_bound_ranges)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Handicap.cs:UpdateHandicapLevel (~84-96)"
-      - "src/XonoticGodot.Common/Gameplay/Handicap.cs:MapBoundRanges (~110-115)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageEntityState.cs:HandicapLevel (~66)"
-      - "src/XonoticGodot.Net/ScoreboardBlock.cs:84,107,151 (capture/WriteByte/ReadByte)"
+      - "src/VortexArena.Common/Gameplay/Handicap.cs:UpdateHandicapLevel (~84-96)"
+      - "src/VortexArena.Common/Gameplay/Handicap.cs:MapBoundRanges (~110-115)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageEntityState.cs:HandicapLevel (~66)"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:84,107,151 (capture/WriteByte/ReadByte)"
     constants:
       - { name: "HANDICAP_MAX_LEVEL_EQUIVALENT", base: "2.0", port: "2.0f (Handicap.MaxLevelEquivalent)", match: true }
       - { name: "level range", base: "floor(map_bound_ranges(total_avg, 1, 2, 0, 16))", port: "(int)floor(MapBoundRanges(total, 1, 2, 0, 16))", match: true }
@@ -202,13 +202,13 @@ features:
       - "common/playerstats.qc:261-265"
       - "server/handicap.qh:71-72"
     port_refs:
-      - "src/XonoticGodot.Server/PlayerStats.cs:107 (AddEvent handicapgiven/handicaptaken)"
-      - "src/XonoticGodot.Server/PlayerStats.cs:243-248 (FinalizePlayer emits the report events)"
-      - "src/XonoticGodot.Server/PlayerStats.cs:76 (HandicapReportProvider seam)"
-      - "src/XonoticGodot.Server/Scores.cs:97-98,157-158 (HandicapAvgGivenSum/TakenSum row fields)"
-      - "src/XonoticGodot.Server/Scores.cs:991-1009 (OnDamageDealtScored/OnDamageTakenScored accumulation)"
-      - "src/XonoticGodot.Server/Scores.cs:821-829 (HandicapReportAverages division)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:GetTotalHandicap (~882 public alias)"
+      - "src/VortexArena.Server/PlayerStats.cs:107 (AddEvent handicapgiven/handicaptaken)"
+      - "src/VortexArena.Server/PlayerStats.cs:243-248 (FinalizePlayer emits the report events)"
+      - "src/VortexArena.Server/PlayerStats.cs:76 (HandicapReportProvider seam)"
+      - "src/VortexArena.Server/Scores.cs:97-98,157-158 (HandicapAvgGivenSum/TakenSum row fields)"
+      - "src/VortexArena.Server/Scores.cs:991-1009 (OnDamageDealtScored/OnDamageTakenScored accumulation)"
+      - "src/VortexArena.Server/Scores.cs:821-829 (HandicapReportAverages division)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:GetTotalHandicap (~882 public alias)"
     constants:
       - { name: "given accumulation", base: "avg_given_sum += score_frame_dmg * total(give)", port: "HandicapAvgGivenSum += realdmg * GetTotalHandicap(p,false), summed per damage event (handicap constant within a frame → identical to score_frame_dmg*h)", match: true }
       - { name: "taken accumulation", base: "avg_taken_sum += score_frame_dmgtaken * total(take)", port: "HandicapAvgTakenSum += realdmg * GetTotalHandicap(p,true)", match: true }
@@ -243,10 +243,10 @@ features:
       - "common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc:DynamicHandicap_UpdateHandicap"
       - "mutators.cfg:527-531"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:UpdateHandicap (~134-173)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:Hook (recompute triggers ~79-102)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:HandicapDisabledProvider (alias of Handicap.DisabledProvider)"
-      - "src/XonoticGodot.Server/Commands.cs:393 (DynamicHandicapMutator.HandicapDisabledProvider wiring)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:UpdateHandicap (~134-173)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:Hook (recompute triggers ~79-102)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs:HandicapDisabledProvider (alias of Handicap.DisabledProvider)"
+      - "src/VortexArena.Server/Commands.cs:393 (DynamicHandicapMutator.HandicapDisabledProvider wiring)"
     constants:
       - { name: "g_dynamic_handicap", base: "0", port: "0 (mutators.cfg)", match: true }
       - { name: "g_dynamic_handicap_scale", base: "0.2", port: "0.2 (mutators.cfg)", match: true }
@@ -274,6 +274,6 @@ features:
       - { kind: code, ref: "DynamicHandicapMutator.cs:134-173 (mean over IS_PLAYER, apply over all client-edicts via Handicap.SetForcedHandicap) vs sv_dynamic_handicap.qc:32-67", result: pass }
       - { kind: code, ref: "DynamicHandicapMutator.cs:79-124 hooks ClientDisconnect/PlayerSpawn/MakePlayerObserver/AddedPlayerScoreHook(SP_SCORE) — all dispatched live (ClientManager.cs:520/779, GameScores.cs:438)", result: pass }
       - { kind: code, ref: "Commands.cs:393 HandicapDisabledProvider = () => GameType is Cts or Race (live ctor); IsEnabled consulted by MutatorActivation.Apply", result: pass }
-      - { kind: config, ref: "assets/data/xonotic-data.pk3dir/mutators.cfg:527-531 matches Base defaults", result: pass }
+      - { kind: config, ref: "Base/data/xonotic-data.pk3dir/mutators.cfg:527-531 matches Base defaults", result: pass }
     confidence: high
     notes: "FIXED since Wave-6: all four Base recompute triggers are now ported live (ClientDisconnect, PlayerSpawn≈PutClientInServer, MakePlayerObserver, AddedPlayerScore filtered to SP_SCORE), the application path now routes through the shared Handicap.SetForcedHandicap (so it tails into Handicap_UpdateHandicapLevel like Base), and the iteration scope matches (mean over live players, apply over all client-edicts — observers keep player class). The CTS/Race gate is wired live. Core compute/clamp math is bit-faithful. Live + default-off."

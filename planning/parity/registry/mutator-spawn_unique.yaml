@@ -14,9 +14,9 @@ features:
       - "common/mutators/mutator/spawn_unique/sv_spawn_unique.qh:3 autocvar_g_spawn_unique"
       - "lib/cvar.qh:48-103 expr_evaluate (full grammar)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:27 IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:78 ExprEvaluate (full port)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:137-193 TryBinop/Cvar/CvarString/Stof/Ftos/TokenizeConsole helpers"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:27 IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:78 ExprEvaluate (full port)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:137-193 TryBinop/Cvar/CvarString/Stof/Ftos/TokenizeConsole helpers"
     constants:
       - { name: "g_spawn_unique (default)", base: "0", port: "0", match: true }
     status:
@@ -30,7 +30,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: value-diff, ref: "Base mutators.cfg:569 (set g_spawn_unique 0) == port assets/data/xonotic-data.pk3dir/mutators.cfg:569 — identical line", result: pass }
+      - { kind: value-diff, ref: "Base mutators.cfg:569 (set g_spawn_unique 0) == port Base/data/xonotic-data.pk3dir/mutators.cfg:569 — identical line", result: pass }
       - { kind: code-read, ref: "Wave-2 rewrote ExprEvaluate from the simplified bool parser into a full port of Base lib/cvar.qh:48-103: leading +/- sign handling, tokenize_console with quoted-span support, all 8 BINOPs (>=,<=,>,<,==,!=,===,!==) in Base's exact strstrofs order (== tested before === so a ===literal is caught by == first, matching the QC quirk), and the bare-term boolean((ftos(f)==k)?f:cvar(k))==b path. boolean(value)=(value!=0) matches the (val!=0f)==b port form (Base lib/bool.qh:9)", result: pass }
       - { kind: code-read, ref: "Empty-string trace: Base expr_evaluate(\"\") -> 0 tokens -> expr_fail=false -> ret=!false=TRUE; port TokenizeConsole(\"\") -> empty array -> exprFail=false -> ret=!false=TRUE. The baseline FALSE-vs-TRUE divergence is now closed", result: pass }
       - { kind: code-read, ref: "Stock-value traces: \"0\" -> bare term f=0, Ftos(0)==\"0\" so val=0, (0!=0)==true is false -> exprFail -> returns false (disabled); \"1\" -> val=1, (1!=0)==true -> ok -> ret=true (enabled). Both agree with Base", result: pass }
@@ -50,7 +50,7 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_unique/sv_spawn_unique.qh:5 .entity su_last_point"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:31 _lastPoint (ConditionalWeakTable<Entity,StrongRef>)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:31 _lastPoint (ConditionalWeakTable<Entity,StrongRef>)"
     constants: []
     status:
       logic: faithful
@@ -79,8 +79,8 @@ features:
       - "server/spawnpoints.qc:298 MUTATOR_CALLHOOK(Spawn_Score, this, spot, spawn_score)"
       - "server/mutators/events.qh:609 EV_Spawn_Score (ARGV0 player, ARGV1 spot, ARGV2 vector in/out: x=prio y=dist)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:53 OnSpawnScore"
-      - "src/XonoticGodot.Common/Gameplay/Player/SpawnSystem.cs:433-436 MutatorHooks.SpawnScore.Call(ref ss)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:53 OnSpawnScore"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:433-436 MutatorHooks.SpawnScore.Call(ref ss)"
     constants:
       - { name: "demoted priority (spawn_score.x)", base: "0.1", port: "0.1", match: true }
     status:
@@ -94,7 +94,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: unit-test, ref: "tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs:514 SpawnUnique_DropsScore_OnLastSpawnPoint (spotA->0.1, spotB stays 10) — present in suite", result: pass }
+      - { kind: unit-test, ref: "tests/VortexArena.Tests/MutatorBatchT19Tests.cs:514 SpawnUnique_DropsScore_OnLastSpawnPoint (spotA->0.1, spotB stays 10) — present in suite", result: pass }
       - { kind: code-read, ref: "SpawnSystem.ScoreSpot fires MutatorHooks.SpawnScore.Call(ref ss) per candidate (SpawnSystem.cs:434), unconditionally inside the live SelectSpawnPoint scoring loop; prio/weight read back from ss after", result: pass }
     confidence: high
     notes: >
@@ -111,8 +111,8 @@ features:
       - "server/client.qc:814 MUTATOR_CALLHOOK(PlayerSpawn, this, spot)"
       - "server/mutators/events.qh:44 EV_PlayerSpawn (ARGV0 player, ARGV1 spot-or-NULL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:62 OnPlayerSpawn"
-      - "src/XonoticGodot.Server/ClientManager.cs:569-570 MutatorHooks.PlayerSpawn.Call(ref args) with PlayerSpawnArgs(p, sp.Value.Source)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs:62 OnPlayerSpawn"
+      - "src/VortexArena.Server/ClientManager.cs:569-570 MutatorHooks.PlayerSpawn.Call(ref args) with PlayerSpawnArgs(p, sp.Value.Source)"
     constants: []
     status:
       logic: faithful
@@ -125,7 +125,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: unit-test, ref: "tests/XonoticGodot.Tests/MutatorBatchT19Tests.cs:525 (PlayerSpawn records spotA via PlayerSpawn.Call) — present in suite", result: pass }
+      - { kind: unit-test, ref: "tests/VortexArena.Tests/MutatorBatchT19Tests.cs:525 (PlayerSpawn records spotA via PlayerSpawn.Call) — present in suite", result: pass }
       - { kind: code-read, ref: "ClientManager.Spawn fires PlayerSpawn.Call(ref args) with PlayerSpawnArgs(p, sp.Value.Source) (ClientManager.cs:569-570). Arg order matches Base ARGV0=player/ARGV1=spot. Source is the same Entity ScoreSpot scored, so ReferenceEquals round-trips across respawns", result: pass }
     confidence: high
     notes: >
@@ -139,7 +139,7 @@ features:
     base_refs:
       - "common/mutators/mutator/spawn_unique/sv_spawn_unique.qc (SVQC-only via _mod.inc #ifdef SVQC; no cl_/CSQC file, no .SendFlags)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/SpawnUniqueMutator.cs (no net/HUD code; _lastPoint is a private server-side table)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnUniqueMutator.cs (no net/HUD code; _lastPoint is a private server-side table)"
     constants: []
     status:
       logic: faithful

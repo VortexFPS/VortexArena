@@ -1,7 +1,7 @@
 # Nades mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/nades/` (`sv_nades.qc`, `nades.qc/.qh`, `cl_nades.qc`, `net.qc`, `nade/*.qc`) + `mutators.cfg:196-322`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Nades/**` (core) + `Nades/Booms/*` (per-type) + `game/hud/CrosshairPanel.cs` (charge ring)
+**Port refs:** `src/VortexArena.Common/Gameplay/Nades/**` (core) + `Nades/Booms/*` (per-type) + `game/hud/CrosshairPanel.cs` (charge ring)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -132,7 +132,7 @@ the ammo-panel bonus-nade icon. The held-nade charge fraction (`NADE_TIMER`) is 
 - The **NadesMutator hooks are live** (`MutatorActivation.Apply()` is called at match start; the PlayerSpawn/PreThink/
   Dies/DamageCalc chains fire each tick), and the entire logic is exercised by **28 unit tests** that call
   `NadeThrow.Prime/Toss`, `NadeBoom.Detonate`, `NadeBonus.*` directly.
-- **BUT the throw input is dead.** `InputCommand.InputButtons` (`src/XonoticGodot.Net/InputCommand.cs:11`) has **no
+- **BUT the throw input is dead.** `InputCommand.InputButtons` (`src/VortexArena.Net/InputCommand.cs:11`) has **no
   nade/offhand/hook/weapon_drop bit** — only Attack/Jump/Attack2/Zoom/Crouch/Use. `Entity.OffhandFirePressed` and
   `Entity.NadeAltButton` are **read** by `NadesMutator.OnPlayerPreThink` but **assigned nowhere** in `src/` (verified by
   grep — same dead-input failure as the offhand hook, ../../TODO.md T11). `NadeThrow.CheckThrow` (the weapon_drop path) has
@@ -198,7 +198,7 @@ the ammo-panel bonus-nade icon. The held-nade charge fraction (`NADE_TIMER`) is 
 - Liveness: `grep OffhandFirePressed=/NadeAltButton=` over the whole repo → reads only, zero assignments;
   `InputCommand.InputButtons` enum inspected (no nade/offhand bit); `NadeThrow.CheckThrow` has no caller;
   `MutatorActivation.Apply()` confirmed called at `GameWorld.cs:511` (so the hooks ARE added when `g_nades!=0`).
-- Tests: `tests/XonoticGodot.Tests/PowerupsAndNadesTests.cs` — 28 facts; they prove the logic but bypass the input layer.
+- Tests: `tests/VortexArena.Tests/PowerupsAndNadesTests.cs` — 28 facts; they prove the logic but bypass the input layer.
 
 ## Open questions
 - Will the input layer gain an offhand/nade button bit (reviving the throw path for nades AND the offhand hook/blaster),

@@ -28,7 +28,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qh:35 REGISTER_MUTATOR(mutator_instagib, autocvar_g_instagib && !MapInfo_LoadedGametype.m_weaponarena)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:82 IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:82 IsEnabled"
     constants:
       - { name: "enable_cvar", base: "g_instagib(0) && !m_weaponarena", port: "g_instagib != 0 && g_weaponarena == 0", match: true }
     status:
@@ -52,7 +52,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:254 MUTATOR_HOOKFUNCTION(mutator_instagib, SetStartItems, CBC_ORDER_LAST)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:706 OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:706 OnSetStartItems"
     constants:
       - { name: "start_health", base: "100", port: "100", match: true }
       - { name: "start_armorvalue", base: "0", port: "0", match: true }
@@ -82,7 +82,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:194-210 Damage_Calculate (WEP_VAPORIZER branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:220 OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:220 OnDamageCalculate"
     constants:
       - { name: "armor_decrement_per_hit", base: "1", port: "1", match: true }
       - { name: "centerprint", base: "CENTER_INSTAGIB_LIVES_REMAINING", port: "INSTAGIB_LIVES_REMAINING", match: true }
@@ -108,7 +108,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:212-226 Damage_Calculate (WEP_BLASTER branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:241 OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:241 OnDamageCalculate"
     constants:
       - { name: "g_instagib_blaster_keepdamage", base: "0", port: "read at Hook()", match: true }
       - { name: "g_instagib_blaster_keepforce", base: "0", port: "read at Hook()", match: true }
@@ -133,7 +133,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:229-243 Damage_Calculate (mirrordamage block)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:255 OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:255 OnDamageCalculate"
     constants:
       - { name: "armor_decrement", base: "1", port: "1", match: true }
       - { name: "hitsound_inc", base: "attacker.hitsound_damage_dealt += frag_mirrordamage", port: "+= args.MirrorDamage (line 264)", match: true }
@@ -157,7 +157,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:181-182 Damage_Calculate (DEATH_FALL)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:205 OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:205 OnDamageCalculate"
     constants: []
     status:
       logic: faithful
@@ -179,7 +179,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:176-177 Damage_Calculate (g_friendlyfire/SAME_TEAM)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:195-199 OnDamageCalculate (first branch)"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:195-199 OnDamageCalculate (first branch)"
     constants:
       - { name: "g_friendlyfire", base: "0 -> zero same-team damage", port: "GetFloat(g_friendlyfire)==0 -> Damage=0", match: true }
     status:
@@ -202,7 +202,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:184-192 Damage_Calculate (DEATH_DROWN/SLIME/LAVA)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:209-214 OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:209-214 OnDamageCalculate"
     constants:
       - { name: "g_instagib_damagedbycontents", base: "1 (default: damage applies)", port: "default true (cfg-loaded)", match: true }
     status:
@@ -225,7 +225,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:197-198 Damage_Calculate (friendlypush, Vaporizer branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:223-224 OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:223-224 OnDamageCalculate"
     constants:
       - { name: "g_instagib_friendlypush", base: "1 (default: push allowed)", port: "default true (cfg-loaded)", match: true }
     status:
@@ -248,8 +248,8 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:245-247 Damage_Calculate (alpha 0<a<1 -> yoda=1)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:274 OnDamageCalculate (sets InstagibAlphaYoda)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Vaporizer.cs:283-287 Announce (reads InstagibAlphaYoda -> ACHIEVEMENT_YODA)"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:274 OnDamageCalculate (sets InstagibAlphaYoda)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:283-287 Announce (reads InstagibAlphaYoda -> ACHIEVEMENT_YODA)"
     constants:
       - { name: "alpha_window", base: "alpha != 0 && alpha < 1", port: "target.Alpha != 0f && target.Alpha < 1f", match: true }
     status:
@@ -272,7 +272,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:371-377 MUTATOR_HOOKFUNCTION(mutator_instagib, PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:281 OnPlayerDies"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:281 OnPlayerDies"
     constants:
       - { name: "gib_damage", base: "1000", port: "1000", match: true }
     status:
@@ -295,7 +295,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:149-153 MUTATOR_HOOKFUNCTION(mutator_instagib, PlayerRegen)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:289 OnPlayerRegen"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:289 OnPlayerRegen"
     constants: []
     status:
       logic: faithful
@@ -317,7 +317,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:155-159 MUTATOR_HOOKFUNCTION(mutator_instagib, PlayerDamage_SplitHealthArmor)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:467 OnPlayerDamageSplitHealthArmor"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:467 OnPlayerDamageSplitHealthArmor"
     constants:
       - { name: "save (armor absorb)", base: "0", port: "0 (DamageSave=0; DamageTake=full)", match: true }
     status:
@@ -340,7 +340,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:51-95 instagib_ammocheck / instagib_countdown / instagib_stop_countdown"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:331 AmmoCheck / 381 Countdown / 370 StopCountdown"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:331 AmmoCheck / 381 Countdown / 370 StopCountdown"
     constants:
       - { name: "cadence_s", base: "1", port: "1", match: true }
       - { name: "dmg_normal", base: "10", port: "10", match: true }
@@ -366,7 +366,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:51-68 instagib_countdown / sv_instagib.qc:43-49 instagib_stop_countdown"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:381 Countdown / 370 StopCountdown / 352-360 rocketminsta DOWNGRADE"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:381 Countdown / 370 StopCountdown / 352-360 rocketminsta DOWNGRADE"
     constants:
       - { name: "terminated_threshold_hp", base: "<=5", port: "<=5", match: true }
       - { name: "findammo_threshold_hp", base: ">80 (FINDAMMO), >90 (MULTI)", port: ">80 FINDAMMO, >90 MULTI", match: true }
@@ -391,7 +391,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:135-140 MUTATOR_HOOKFUNCTION(mutator_instagib, PlayerSpawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:292 OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:292 OnPlayerSpawn"
     constants:
       - { name: "effect_flag", base: "EF_FULLBRIGHT", port: "EffectFlags.FullBright (512)", match: true }
     status:
@@ -416,9 +416,9 @@ features:
       - "common/mutators/mutator/instagib/sv_instagib.qc:314-369 MUTATOR_HOOKFUNCTION(mutator_instagib, FilterItem)"
       - "common/mutators/mutator/instagib/sv_instagib.qc:275-312 instagib_replace_item_with / instagib_replace_item_with_random_powerup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:479 OnFilterItemDefinition"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:538 OnFilterItem"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:628 ReplaceItemWithVaporizerCells / 642 ReplaceItemWithRandomPowerup"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:479 OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:538 OnFilterItem"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:628 ReplaceItemWithVaporizerCells / 642 ReplaceItemWithRandomPowerup"
     constants:
       - { name: "g_instagib_ammo_drop", base: "5", port: "AmmoDrop (5; loot cells-seed + clamp now ported)", match: true }
       - { name: "g_instagib_invisibility_time", base: "30", port: "InvisibilityTime (30)", match: true }
@@ -446,9 +446,9 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:379-413 MUTATOR_HOOKFUNCTION(mutator_instagib, ItemTouch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:416 OnItemTouch"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:440 OnCellsTouch"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:456 OnExtraLifeTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:416 OnItemTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:440 OnCellsTouch"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:456 OnExtraLifeTouch"
     constants:
       - { name: "cells_full_heal_to", base: "100", port: "100", match: true }
       - { name: "g_instagib_extralives", base: "1", port: "ExtraLives (1)", match: true }
@@ -475,8 +475,8 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/items.qh:21-68 VaporizerCells / ExtraLife + SPAWNFUNC_ITEM(item_vaporizer_cells, item_minst_cells, item_extralife)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Items/InstagibItems.cs:23 VaporizerCellsItem / 66 ExtraLifeItem"
-      - "src/XonoticGodot.Common/Gameplay/Items/ItemSpawnFuncs.cs:72-74 (item_vaporizer_cells / item_minst_cells alias / item_extralife)"
+      - "src/VortexArena.Common/Gameplay/Items/InstagibItems.cs:23 VaporizerCellsItem / 66 ExtraLifeItem"
+      - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:72-74 (item_vaporizer_cells / item_minst_cells alias / item_extralife)"
     constants:
       - { name: "vaporizercells_respawntime", base: "45", port: "45 (RespawnTime)", match: true }
       - { name: "vaporizercells_model", base: "a_cells.md3", port: "a_cells.md3", match: true }
@@ -505,7 +505,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:161-165 ForbidThrowCurrentWeapon / sv_instagib.qc:269-273 SetWeaponArena / sv_instagib.qc:130-133 ForbidRandomStartWeapons"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:695 OnForbidThrow / 696 OnForbidRandomStartWeapons / 699 OnSetWeaponArena"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:695 OnForbidThrow / 696 OnForbidRandomStartWeapons / 699 OnSetWeaponArena"
     constants: []
     status:
       logic: faithful
@@ -527,7 +527,7 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:97-100 MatchEnd / sv_instagib.qc:123-128 MakePlayerObserver"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:324 OnMakePlayerObserver / 370 StopCountdown"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:324 OnMakePlayerObserver / 370 StopCountdown"
     constants: []
     status:
       logic: faithful
@@ -550,8 +550,8 @@ features:
     base_refs:
       - "common/mutators/mutator/instagib/sv_instagib.qc:415-429 BuildMutatorsString/BuildMutatorsPrettyString/SetModname; sv_instagib.qc:102-121 RandomItems_GetRandomItemClassName/MonsterDropItem/MonsterSpawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:803 BuildMutatorsString / 807 BuildMutatorsPrettyString / 812 SetModname"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/InstagibMutator.cs:742 OnMonsterDropItem / 752 OnMonsterSpawn / 773 OnRandomItemsGetClassName"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:803 BuildMutatorsString / 807 BuildMutatorsPrettyString / 812 SetModname"
+      - "src/VortexArena.Common/Gameplay/Mutators/InstagibMutator.cs:742 OnMonsterDropItem / 752 OnMonsterSpawn / 773 OnRandomItemsGetClassName"
     constants:
       - { name: "mutators_string_token", base: "':instagib'", port: "':instagib' (line 803)", match: true }
       - { name: "mutators_pretty_token", base: "', InstaGib'", port: "', InstaGib' (line 807)", match: true }

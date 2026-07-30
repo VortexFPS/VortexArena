@@ -1,12 +1,12 @@
 // Port of common/mutators/mutator/overkill/okrpc.{qh,qc}
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Overkill Rocket Propelled Chainsaw — port of common/mutators/mutator/overkill/okrpc.{qh,qc}. A
@@ -55,6 +55,7 @@ public sealed class OkRpc : Weapon
     public OkRpc()
     {
         NetName = "okrpc";
+        BotPickupBaseValue = 10000;  // QC bot_pickupbasevalue ("rating" ATTRIB)
         AmmoType = ResourceType.Rockets;   // QC ammo_type RES_ROCKETS
         DisplayName = "Overkill Rocket Propelled Chainsaw";
         Impulse = 9;

@@ -1,7 +1,7 @@
 # Damage pipeline — parity spec
 
 **Base refs:** `server/damage.qc` (`Damage`, `RadiusDamage`/`RadiusDamageForSource`, `Fire_AddDamage`, `Fire_ApplyDamage`, `GiveFrags`, `Obituary*`, `Heal`) · `server/damage.qh` · `server/player.qc` (`PlayerDamage`, `PlayerCorpseDamage`) · `common/util.qc` (`healtharmor_applydamage`, `healtharmor_maxdamage`) · `common/weapons/calculations.qc` (`damage_explosion_calcpush`, `explosion_calcpush_getmultiplier`) · `common/deathtypes/all.{qh,inc}`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Damage/{DamageSystem,DamageContracts,DeathTypes,DamageEntityState}.cs` · `src/XonoticGodot.Common/Gameplay/Weapons/{WeaponSplash,WeaponFiring}.cs` · `src/XonoticGodot.Common/Gameplay/StatusEffects.cs` (burning tick) · `src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:AddFireDamage` · `src/XonoticGodot.Server/PlayerFrameLogic.cs` (environment-damage live callers)
+**Port refs:** `src/VortexArena.Common/Gameplay/Damage/{DamageSystem,DamageContracts,DeathTypes,DamageEntityState}.cs` · `src/VortexArena.Common/Gameplay/Weapons/{WeaponSplash,WeaponFiring}.cs` · `src/VortexArena.Common/Gameplay/StatusEffects.cs` (burning tick) · `src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:AddFireDamage` · `src/VortexArena.Server/PlayerFrameLogic.cs` (environment-damage live callers)
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview
@@ -85,10 +85,10 @@ The central dispatcher and the per-player resource math are **faithful and live*
 **Liveness:** the pipeline is unambiguously live (installed in GameInit, called from PlayerFrameLogic + every weapon). `Damage_DamageInfo` (the blast-effect network broadcast) is a deliberate headless no-op (presentation/networking is the host's job) — not a gap for an authority audit.
 
 ## Verification
-- `tests/XonoticGodot.Tests/GameplaySystemsTests.cs:Damage_SplitsBetweenArmorAndHealth` — armor 0.7 block split (pass).
-- `tests/XonoticGodot.Tests/SplashDamageSingleApplicationTests.cs:OneBlast_AppliesDamageAndKnockbackExactlyOnce`, `SelfBlasterJump_GetsFullKnockback_OnOpenGround` — single-application + self-jump knockback (pass).
-- `tests/XonoticGodot.Tests/DevastatorForceXyScaleTests.cs` — per-axis force_xyscale (pass).
-- `tests/XonoticGodot.Tests/MonsterDamageDeathTests.cs`, `MonsterTurretVehicleObituaryTests.cs` — death path + deathtype categories (pass).
+- `tests/VortexArena.Tests/GameplaySystemsTests.cs:Damage_SplitsBetweenArmorAndHealth` — armor 0.7 block split (pass).
+- `tests/VortexArena.Tests/SplashDamageSingleApplicationTests.cs:OneBlast_AppliesDamageAndKnockbackExactlyOnce`, `SelfBlasterJump_GetsFullKnockback_OnOpenGround` — single-application + self-jump knockback (pass).
+- `tests/VortexArena.Tests/DevastatorForceXyScaleTests.cs` — per-axis force_xyscale (pass).
+- `tests/VortexArena.Tests/MonsterDamageDeathTests.cs`, `MonsterTurretVehicleObituaryTests.cs` — death path + deathtype categories (pass).
 - HITTYPE_SPLASH-not-set, fire-transfer-missing, and the no-central-Heal gaps are by **code inspection** (no test covers them) — unverified against runtime.
 
 ## Open questions

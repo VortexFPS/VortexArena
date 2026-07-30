@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Items-time panel — port of Base/.../qcsrc/common/mutators/mutator/itemstime/itemstime.qc, the CSQC

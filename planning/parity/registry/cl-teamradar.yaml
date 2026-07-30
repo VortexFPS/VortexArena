@@ -137,7 +137,7 @@ features:
     port_refs:
       - "game/hud/RadarPanel.cs:DrawPanel (waypoint loop)"
       - "game/net/ServerNet.cs:1097"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:RadarIcon"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:RadarIcon"
     constants:
       - { name: "icon sprite", base: "gfx/teamradar_icon_<m_radaricon>; EVERY core RADARICON id is 0 (none) or 1, so the only sprite Base ever draws is gfx/teamradar_icon_1", port: "gfx/teamradar_icon_1 (single fixed name; the prior dead icon_2 selector is gone)", match: true }
       - { name: "icon size", base: "fixed '8 8 0' px centered (-'4 4 0')", port: "const iconPx = 8f, centered (-4,-4)", match: true }
@@ -169,7 +169,7 @@ features:
       - "game/hud/RadarPanel.cs:DrawPingPulse"
       - "game/net/ClientNet.cs:RadarPingTime (bit-7 decode + stamp, lines 615-639)"
       - "game/net/ServerNet.cs:1097 (bit-7 encode via IsPinging)"
-      - "src/XonoticGodot.Common/Gameplay/Waypoints/Waypoints.cs:Ping / IsPinging"
+      - "src/VortexArena.Common/Gameplay/Waypoints/Waypoints.cs:Ping / IsPinging"
     constants:
       - { name: "ping bit", base: "icon byte bit 7 stamps teamradar_times[ring]", port: "ServerNet writes (RadarIcon & 0x7F) | (IsPinging ? 0x80 : 0); client decodes bit 0x80 → _radarPingTimes[id]", match: true }
       - { name: "pulse window", base: "dt in (0,1)s, size '2 2 0'*teamradar_size*dt, alpha (1-dt)*a, DRAWFLAG_ADDITIVE", port: "dt in (0,1)s, sz = 2*iconPx*dt, alpha = (1-dt)*a, additive teamradar_ping draw", match: true }
@@ -199,7 +199,7 @@ features:
       - "client/teamradar.qc:NET_HANDLE(ENT_CLIENT_RADARLINK)"
       - "client/hud/panel/radar.qc:IL_EACH(g_radarlinks ...) (line 301)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:CollectRadarLinks (line 900)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:CollectRadarLinks (line 900)"
       - "game/net/ServerNet.cs:SendRadarLinks (line 1259; called in the per-tick send loop, line 494)"
       - "game/net/ClientNet.cs:HandleRadarLinks (line 719) + RadarLinks list (line 717)"
       - "game/hud/RadarPanel.cs:DrawLinkQuad (line 472) + RadarLinks loop (lines 347-362)"
@@ -263,7 +263,7 @@ features:
     port_refs:
       - "game/hud/RadarPanel.cs:Clickable (maximized && IsOnslaught && hud_panel_radar_mouse) + HandleClick (screen→world unproject, line 767) + hover-glow/prompt (DrawPanel lines 511-541)"
       - "game/net/NetGame.cs:4858-4881 (maximized mouse/key input: motion→SetMousePosition, MOUSE1→HandleClick→'cmd ons_spawn x y z', MOUSE2/ESC→close)"
-      - "src/XonoticGodot.Server/Commands.cs:820 (Register 'ons_spawn') + CmdOnsSpawn → Onslaught.HandleOnsSpawnCommand (server pick, already live per onslaught.yaml)"
+      - "src/VortexArena.Server/Commands.cs:820 (Register 'ons_spawn') + CmdOnsSpawn → Onslaught.HandleOnsSpawnCommand (server pick, already live per onslaught.yaml)"
     constants:
       - { name: "spawn command", base: "localcmd cmd ons_spawn x y z at picked world point", port: "MOUSE1 in clickable rect → HandleClick unprojects to world XY(Z) → _client.SendStringCommand('cmd ons_spawn x y z')", match: true }
       - { name: "hover-glow", base: "within 8px of icon: gfx/teamradar_icon_glow 16x16 at 1.5x brightened color", port: "Clickable loop: waypoint within 8px of mouse → gfx/teamradar_icon_glow 16px at 1.5x-brightened wp.Color", match: true }

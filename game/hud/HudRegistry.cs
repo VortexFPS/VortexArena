@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Reflection-driven panel discovery — the C# successor to QuakeC's <c>REGISTER_HUD_PANEL</c> registry
@@ -26,7 +26,11 @@ public static class HudRegistry
         "radar", "weapons", "ammo", "powerups", "healtharmor", "notify", "timer", "score", "racetimer",
         "vote", "modicons", "pressedkeys", "engineinfo", "infomessages", "physics", "strafehud", "pickup",
         "centerprint", "itemstime", "checkpoints", "crosshair", "vehicle", "fps", "ping", "position",
-        "minigamehelp", "quickmenu", "chat", "mapvote", "scoreboard",
+        // The editor readouts sit above the world-state panels but below the true modal overlays: the action
+        // line rides just over the crosshair, and the context menu must draw over everything it covers or its
+        // rows would be unreadable against a lit wall.
+        "editoraction", "editor", "minigamehelp", "quickmenu", "editormenu", "editordialog",
+        "chat", "mapvote", "scoreboard",
     };
 
     private static List<Type>? _types;

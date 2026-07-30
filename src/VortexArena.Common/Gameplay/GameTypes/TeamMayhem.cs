@@ -10,12 +10,12 @@
 // from Mayhem.cs (Damage_Calculate, PlayerDamage_SplitHealthArmor, PlayerRegen, SetStartItems,
 // SetWeaponArena, FilterItemDefinition, ForbidThrowCurrentWeapon).
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Team Mayhem — port of <c>CLASS(tmayhem, Gametype)</c> + <c>sv_tmayhem.qc</c>. The team variant of

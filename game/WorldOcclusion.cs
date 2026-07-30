@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// (§12.8 A/B) Runtime switch for Godot's native, view-dependent occlusion culling — an experimental
@@ -36,7 +36,7 @@ public sealed partial class WorldOcclusion : Node
         // Escape hatch / A-B toggle. Deliberately NOT archived (no CvarFlags.Save): an experiment pin must not
         // silently persist into the player's config.cfg. Default OFF: the PVS culler stays the shipping path
         // until this is measured. Mirrors WorldPvsCuller's defensive self-registration.
-        XonoticGodot.Game.Menu.MenuState.Cvars.Register("r_occlusion_cull", "0");
+        VortexArena.Game.Menu.MenuState.Cvars.Register("r_occlusion_cull", "0");
 
         _instance = new OccluderInstance3D { Name = "WorldOccluder", Occluder = _occluder };
         AddChild(_instance);
@@ -45,8 +45,8 @@ public sealed partial class WorldOcclusion : Node
 
     public override void _Process(double delta)
     {
-        using var _prof = XonoticGodot.Game.Client.FrameProfiler.Scope("clientmisc");
-        bool enabled = XonoticGodot.Game.Menu.MenuState.Cvars.GetFloat("r_occlusion_cull") != 0f;
+        using var _prof = VortexArena.Game.Client.FrameProfiler.Scope("clientmisc");
+        bool enabled = VortexArena.Game.Menu.MenuState.Cvars.GetFloat("r_occlusion_cull") != 0f;
         if (enabled == _lastEnabled)
             return;
         _lastEnabled = enabled;

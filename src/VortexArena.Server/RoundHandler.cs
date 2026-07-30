@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// The round phases — the C# successor to the implicit state the QC <c>round_handler</c> edict tracks via

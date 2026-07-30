@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Server-side rules for Peg Solitaire — port of common/minigames/minigame/ps.qc (ps_server_event, ps_move,
 // ps_move_piece, ps_winning_piece, ps_setup_pieces, ps_valid_tile, ps_tile_blacklisted, ps_draw).

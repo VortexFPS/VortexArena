@@ -16,11 +16,11 @@
 > convention changes. The scanner reads `src/` and `game/` (`.cs` only), skips
 > `.claude/`, `.godot/`, `obj/`, `bin/`, and the worktree copies.
 
-As of the last run: **2826 distinct cvars**. The count is high because the weapon /
+As of the last run: **2828 distinct cvars**. The count is high because the weapon /
 monster / turret / vehicle **balance** corpus (`g_balance_*`, `g_monsters_*`, …) is
 read by the gameplay code as string literals (e.g.
-[`Vortex.cs`](../../src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs),
-[`Arc.cs`](../../src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs)) — those reads are
+[`Vortex.cs`](../../src/VortexArena.Common/Gameplay/Weapons/Vortex.cs),
+[`Arc.cs`](../../src/VortexArena.Common/Gameplay/Weapons/Arc.cs)) — those reads are
 counted even though most of those cvars are never `Register()`-ed in C# (their
 values come from the shipped `.cfg` tree).
 
@@ -28,18 +28,18 @@ values come from the shipped `.cfg` tree).
 
 There is **no single registry**. Defaults are stamped from several places, and most
 cvars are merely *read* through one facade (`Api.Cvars` / the `Cvars.*` helpers →
-`ICvarService`, [Services.cs](../../src/XonoticGodot.Common/Services/Services.cs)):
+`ICvarService`, [Services.cs](../../src/VortexArena.Common/Services/Services.cs)):
 
 | Site | What it registers |
 |---|---|
-| [`Cvars.Defaults`](../../src/XonoticGodot.Server/Cvars.cs) (`new("name", …)` table) | core server / match / bot / item defaults |
-| [`ParticleCvars`](../../src/XonoticGodot.Engine/Particles/ParticleCvars.cs) + [`ClientSettings`](../../game/menu/framework/ClientSettings.cs) | particle, video, audio, and stock engine-client cvars |
+| [`Cvars.Defaults`](../../src/VortexArena.Server/Cvars.cs) (`new("name", …)` table) | core server / match / bot / item defaults |
+| [`ParticleCvars`](../../src/VortexArena.Engine/Particles/ParticleCvars.cs) + [`ClientSettings`](../../game/menu/framework/ClientSettings.cs) | particle, video, audio, and stock engine-client cvars |
 | ~30 per-subsystem `RegisterDefaults` | every HUD panel, `crosshair_*`, vignette, reticle, chat, frame-profiler, … |
 | read-only (no registration) | the balance corpus + many `sv_*` movement tunables — values come from `.cfg` or `MovementParameters` fallbacks |
 
 **1498 of the 2208 are read but never registered in C#.** Most are intentional (the
 balance corpus and the per-tick `sv_*` movement tunables, whose single source of
-truth is [`MovementParameters.FromCvars`](../../src/XonoticGodot.Common/Physics/MovementParameters.cs)
+truth is [`MovementParameters.FromCvars`](../../src/VortexArena.Common/Physics/MovementParameters.cs)
 fallbacks + the shipped cfgs). `--show-rejects` and the "read but never registered"
 list in the text report are the audit tools for finding genuinely *invisible* ones.
 
@@ -102,19 +102,19 @@ are both normal; see [Cross-boundary cvars](#cross-boundary-cvars).
 
 Cvars cross the client/server line through two deliberate mechanisms:
 
-- **`sv_*` physics flows DOWN.** [`MovementParameters.FromCvars`](../../src/XonoticGodot.Common/Physics/MovementParameters.cs)
+- **`sv_*` physics flows DOWN.** [`MovementParameters.FromCvars`](../../src/VortexArena.Common/Physics/MovementParameters.cs)
   reads ~45 `sv_*` movement cvars and runs on **both** the authoritative server tick
   *and* the client's prediction replay. The server's live values are replicated to
   the client each snapshot via
-  [`MoveVarsBlock`](../../src/XonoticGodot.Net/MoveVarsBlock.cs) (`MovementCvars` is the
+  [`MoveVarsBlock`](../../src/VortexArena.Net/MoveVarsBlock.cs) (`MovementCvars` is the
   wire list), so the client predicts with identical inputs. The StrafeHUD
   ([`StrafeHudPanel.cs`](../../game/hud/StrafeHudPanel.cs)) reads the same set to draw its
   guide. Server-authoritative; client mirrors a replicated copy.
 - **`cl_*` preferences flow UP.** The `sentcvar` system
-  ([`Commands.cs`](../../src/XonoticGodot.Server/Commands.cs)) lets a client push an
+  ([`Commands.cs`](../../src/VortexArena.Server/Commands.cs)) lets a client push an
   **allowlisted** `cl_*` cvar to the server, stored **per-client** (never the world
   store — privilege separation, see
-  [`CvarReplicationTests`](../../tests/XonoticGodot.Tests/CvarReplicationTests.cs)). The
+  [`CvarReplicationTests`](../../tests/VortexArena.Tests/CvarReplicationTests.cs)). The
   allowlist is `cl_weaponpriority`(`0`–`9`), `cl_autoswitch`(`_cts`), `cl_noantilag`,
   `cl_physics`, `cl_movement_track_canjump`, `cl_jetpack_jump`, plus the
   `notification_<CHOICE>` set. Client-authoritative; server reads a replicated copy.
@@ -123,7 +123,7 @@ Cvars cross the client/server line through two deliberate mechanisms:
 
 The scanner flags **71** cvars read in *both* a client-only dir
 (`game/client|hud|menu|console`) and a server/shared dir
-(`src/XonoticGodot.Server|Common|Engine`). They decompose into by-design patterns,
+(`src/VortexArena.Server|Common|Engine`). They decompose into by-design patterns,
 not violations:
 
 1. **`sv_*` movement → client** (StrafeHUD + prediction): `sv_maxspeed`,
@@ -140,7 +140,7 @@ not violations:
    `g_campaign(_skill)`, `sv_gravity` (mutator dialog). ✔ same pattern as (3).
 5. **Tooling caveat (not real cross-boundary)**: `cl_particles*`, `cl_decals`,
    `r_drawparticles_drawdistance` flag because the particle sim lives in
-   `XonoticGodot.Engine` (bucketed "shared"), but that code is **client-side
+   `VortexArena.Engine` (bucketed "shared"), but that code is **client-side
    rendering** — these are client-authoritative. The scanner's dir→scope mapping
    can't tell client-rendering-in-Engine from server-sim-in-Engine.
 
@@ -148,7 +148,7 @@ not violations:
 
 **Genuine fix candidate**
 - **`cl_announcer_maptime`** is read from the server's **global** store
-  ([`GameWorld.cs`](../../src/XonoticGodot.Server/GameWorld.cs)) via `Cvars.FloatOr`, unlike
+  ([`GameWorld.cs`](../../src/VortexArena.Server/GameWorld.cs)) via `Cvars.FloatOr`, unlike
   every other `cl_*` the server consumes (which go per-client through `sentcvar`).
   Either route it per-client, or — if the server truly owns the announcement cadence
   — it shouldn't wear a `cl_` prefix.
@@ -188,7 +188,7 @@ not violations:
   individually listed below (the scanner expands `snd_channel{N}volume` → `0..9` as a
   convenience):
   - `g_physics_<set>_<var>` — physics-preset overrides (e.g. `g_physics_cpma_maxspeed`),
-    built in [`PhysicsPreset`](../../src/XonoticGodot.Common/Physics/PhysicsPreset.cs).
+    built in [`PhysicsPreset`](../../src/VortexArena.Common/Physics/PhysicsPreset.cs).
   - `notification_<CHOICE>` — one per kill-message choice.
 - **Scope buckets** used for the cross-boundary signal: `client` =
   `game/client|hud|menu|console`; `server` = `src/.Server`; `shared` =
@@ -201,9 +201,9 @@ not violations:
 
 <!-- BEGIN GENERATED: python tools/find-cvars.py --markdown -->
 
-_Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
+_Generated by `python tools/find-cvars.py` - 2900 distinct cvars._
 
-### `g_` (1707)
+### `g_` (1708)
 
 - `g_allow_checkpoints`
 - `g_antilag`  _( unregistered )_
@@ -1101,6 +1101,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `g_cts_removeprojectiles`  _( unregistered )_
 - `g_cts_selfdamage`  _( unregistered )_
 - `g_cts_send_rankings_cnt`  _( unregistered )_
+- `g_debug_items_start_unavailable`  _( unregistered )_
 - `g_dm`  _( unregistered )_
 - `g_dmlimit`  _( unregistered )_
 - `g_dodging`  _( unregistered, cross-boundary )_
@@ -1913,7 +1914,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `g_weaponspreadfactor`  _( unregistered )_
 - `g_xonoticversion`  _( unregistered )_
 
-### `hud_panel` (226)
+### `hud_panel` (227)
 
 - `hud_panel_ammo_iconalign`
 - `hud_panel_ammo_maxammo`
@@ -1947,6 +1948,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `hud_panel_checkpoints_align`
 - `hud_panel_checkpoints_flip`
 - `hud_panel_checkpoints_fontscale`
+- `hud_panel_editor`  _( unregistered )_
 - `hud_panel_engineinfo_fps_decimals`  _( unregistered )_
 - `hud_panel_engineinfo_fps_movingaverage`  _( unregistered )_
 - `hud_panel_fg_alpha`
@@ -2418,13 +2420,14 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `vid_vsync`
 - `vid_width`  _( unregistered )_
 
-### `con` (5)
+### `con` (6)
 
 - `con_chatsize`
 - `con_chatsound`
 - `con_chattime`
 - `con_closeontoggleconsole`  _( unregistered )_
 - `con_notify`  _( unregistered )_
+- `con_notifysize`  _( unregistered )_
 
 ### `net` (4)
 
@@ -2498,7 +2501,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `joy_detected`  _( unregistered )_
 - `joy_enable`  _( unregistered )_
 
-### `_ (private/internal)` (17)
+### `_ (private/internal)` (18)
 
 - `_campaign_index`
 - `_campaign_name`
@@ -2515,10 +2518,11 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `_menu_prvm_language`  _( unregistered )_
 - `_menu_vid_height`  _( unregistered )_
 - `_menu_vid_width`  _( unregistered )_
+- `_scoreboard_team_selection`  _( unregistered )_
 - `_teams_available`  _( unregistered )_
 - `_termsofservice_accepted`  _( unregistered )_
 
-### `(bare / no prefix)` (55)
+### `(bare / no prefix)` (56)
 
 - `bgmvolume`
 - `chase_active`  _( unregistered )_
@@ -2548,6 +2552,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `quit_when_empty`
 - `radar_showenemies`  _( unregistered )_
 - `samelevel`
+- `scoreboard_columns`  _( unregistered )_
 - `sensitivity`  _( unregistered )_
 - `serverflags`
 - `showdate`  _( unregistered )_
@@ -2576,7 +2581,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `wz_portal_uvtest`  _( unregistered )_
 - `wz_predict_apply`  _( unregistered )_
 
-### `sv` (177)
+### `sv` (178)
 
 - `sv_accelerate`  _( unregistered, cross-boundary )_
 - `sv_adminnick`  _( unregistered )_
@@ -2676,6 +2681,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `sv_maxidle_slots`
 - `sv_maxidle_slots_countbots`
 - `sv_maxspeed`  _( unregistered, cross-boundary )_
+- `sv_maxvelocity`  _( unregistered )_
 - `sv_minigames`  _( unregistered )_
 - `sv_minigames_observer`  _( unregistered )_
 - `sv_motd`
@@ -2756,7 +2762,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `sv_worldauthor`  _( unregistered )_
 - `sv_worldmessage`  _( unregistered )_
 
-### `cl` (276)
+### `cl` (344)
 
 - `cl_allow_uid2name`  _( unregistered, cross-boundary )_
 - `cl_allow_uidranking`  _( unregistered )_
@@ -2830,6 +2836,71 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `cl_decals_newsystem_immediatebloodstain`  _( unregistered )_
 - `cl_dodging`  _( unregistered )_
 - `cl_dodging_timeout`  _( unregistered )_
+- `cl_editor_autosave`
+- `cl_editor_bake_bounce`  _( unregistered )_
+- `cl_editor_bake_bounces`  _( unregistered )_
+- `cl_editor_bake_cpu`  _( unregistered )_
+- `cl_editor_bake_dirt`  _( unregistered )_
+- `cl_editor_bake_gamma`  _( unregistered )_
+- `cl_editor_bake_luxel`  _( unregistered )_
+- `cl_editor_bake_phong`  _( unregistered )_
+- `cl_editor_bake_scale`  _( unregistered )_
+- `cl_editor_bake_shadows`  _( unregistered )_
+- `cl_editor_blend_texel`  _( unregistered )_
+- `cl_editor_cull_occluded`  _( unregistered )_
+- `cl_editor_deluxe`  _( unregistered )_
+- `cl_editor_entity_occlusion`  _( unregistered )_
+- `cl_editor_gi`  _( unregistered )_
+- `cl_editor_gi_cascades`  _( unregistered )_
+- `cl_editor_gi_cellsize`  _( unregistered )_
+- `cl_editor_gi_energy`  _( unregistered )_
+- `cl_editor_glow`  _( unregistered )_
+- `cl_editor_grab_radius`  _( unregistered )_
+- `cl_editor_grid`  _( unregistered )_
+- `cl_editor_grid_fade_end`  _( unregistered )_
+- `cl_editor_grid_fade_start`  _( unregistered )_
+- `cl_editor_grid_major`  _( unregistered )_
+- `cl_editor_grid_size`  _( unregistered )_
+- `cl_editor_grid_snap`  _( unregistered )_
+- `cl_editor_grid_snap_size`  _( unregistered )_
+- `cl_editor_group_select`  _( unregistered )_
+- `cl_editor_light_ambient`  _( unregistered )_
+- `cl_editor_light_bake`  _( unregistered )_
+- `cl_editor_light_bakemode`  _( unregistered )_
+- `cl_editor_light_falloff`  _( unregistered )_
+- `cl_editor_light_range`  _( unregistered )_
+- `cl_editor_light_scale`  _( unregistered )_
+- `cl_editor_light_shadows`  _( unregistered )_
+- `cl_editor_lighting`  _( unregistered )_
+- `cl_editor_ortho_slab`  _( unregistered )_
+- `cl_editor_ortho_wire_alpha`  _( unregistered )_
+- `cl_editor_ortho_zoom`  _( unregistered )_
+- `cl_editor_overlay_range`  _( unregistered )_
+- `cl_editor_paint_channel`  _( unregistered )_
+- `cl_editor_paint_hardness`  _( unregistered )_
+- `cl_editor_paint_radius`  _( unregistered )_
+- `cl_editor_paint_strength`  _( unregistered )_
+- `cl_editor_patch_shadows`  _( unregistered )_
+- `cl_editor_patch_subdiv`  _( unregistered )_
+- `cl_editor_patch_thickness`  _( unregistered )_
+- `cl_editor_sample_offset`  _( unregistered )_
+- `cl_editor_show_bsp`  _( unregistered )_
+- `cl_editor_show_collision`  _( unregistered )_
+- `cl_editor_show_tool_brushes`  _( unregistered )_
+- `cl_editor_show_vertices`  _( unregistered )_
+- `cl_editor_sky_light`  _( unregistered )_
+- `cl_editor_snap`  _( unregistered )_
+- `cl_editor_snap_radius`  _( unregistered )_
+- `cl_editor_ssao`  _( unregistered )_
+- `cl_editor_ssao_intensity`  _( unregistered )_
+- `cl_editor_ssao_radius`  _( unregistered )_
+- `cl_editor_sun_scale`  _( unregistered )_
+- `cl_editor_sun_shadow_distance`  _( unregistered )_
+- `cl_editor_surface_lights`  _( unregistered )_
+- `cl_editor_texture_lock`  _( unregistered )_
+- `cl_editor_thumb_cache`  _( unregistered )_
+- `cl_editor_thumb_size`  _( unregistered )_
+- `cl_editor_thumbnails`  _( unregistered )_
 - `cl_engine_jitterfix`
 - `cl_eventchase_death`
 - `cl_eventchase_distance`
@@ -2867,6 +2938,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `cl_handicap_damage_taken`  _( unregistered )_
 - `cl_hidewaypoints`  _( unregistered )_
 - `cl_hitsound`  _( unregistered )_
+- `cl_hitsound_antispam_time`  _( unregistered )_
 - `cl_hitsound_max_pitch`  _( unregistered )_
 - `cl_hitsound_min_pitch`  _( unregistered )_
 - `cl_hitsound_nom_damage`  _( unregistered )_
@@ -2971,6 +3043,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `cl_stairsmooth_catchuptime`
 - `cl_stairsmooth_snapspeed`
 - `cl_stairsmoothspeed`
+- `cl_startup_disclaimer`
 - `cl_tracers_teamcolor`  _( unregistered, cross-boundary )_
 - `cl_tuba_attenuation`  _( unregistered )_
 - `cl_tuba_pitchstep`  _( unregistered )_
@@ -3011,6 +3084,7 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `cl_voice_directional`  _( unregistered )_
 - `cl_voice_directional_taunt_attenuation`  _( unregistered )_
 - `cl_warm_at_boot`
+- `cl_weapon_item_colors`
 - `cl_weapon_stay_alpha`  _( unregistered )_
 - `cl_weapon_stay_color`  _( unregistered )_
 - `cl_weapon_switch_fallback_to_impulse`  _( unregistered )_
@@ -3097,6 +3171,5 @@ _Generated by `python tools/find-cvars.py` - 2826 distinct cvars._
 - `bot_usemodelnames`
 - `bot_vs_human`  _( cross-boundary )_
 - `bot_wander_enable`
-
 
 <!-- END GENERATED -->

@@ -8,7 +8,7 @@
 // 0..1 RGB triplets.
 using System;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>An integer grid cell (column = x, row = y). <c>(-1,-1)</c> is the QC <c>'-1 -1 0'</c> invalid sentinel.</summary>
 public readonly record struct PickerCell(int X, int Y)

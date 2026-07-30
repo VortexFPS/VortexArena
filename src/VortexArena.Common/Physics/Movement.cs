@@ -1,7 +1,7 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Physics;
+namespace VortexArena.Common.Physics;
 
 /// <summary>
 /// The per-tick movement input for a player, abstracting QuakeC's <c>PHYS_INPUT_*</c> macros
@@ -99,7 +99,7 @@ public struct MovementInput : IMovementInput
 /// <summary>
 /// The shared player-movement simulation (QC <c>PM_Main</c> / SV_PlayerPhysics, common/physics/).
 /// The SAME implementation runs on client (prediction) and server (authority), so it must be
-/// deterministic (ADR-0010). The implementation lives in <c>XonoticGodot.Common.Physics</c> and is installed
+/// deterministic (ADR-0010). The implementation lives in <c>VortexArena.Common.Physics</c> and is installed
 /// onto <see cref="Movement"/> at boot.
 /// </summary>
 public interface IPlayerPhysics

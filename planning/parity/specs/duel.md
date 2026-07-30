@@ -1,7 +1,7 @@
 # Duel — parity spec
 
 **Base refs:** `common/gametypes/gametype/duel/{duel.qc,duel.qh,sv_duel.qc,sv_duel.qh}` · `common/gametypes/gametype/deathmatch/*` (parent behavior) · `server/client.qc:GetPlayerLimit/nJoinAllowed` · `client/announcer.qc:Announcer_Duel` · `client/hud/panel/centerprint.qc:centerprint_SetDuelTitle` · `client/csqcmodel_hooks.qc` (forced colors)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/GameTypes/Duel.cs` · `src/XonoticGodot.Server/GameWorld.cs` (activate/drive) · `game/net/NetGame.cs` + `game/client/ClientWorld.cs` + `src/XonoticGodot.Engine/Simulation/CsqcModelAppearance.cs` (forced colors) · `game/hud/CenterPrintPanel.cs` (title)
+**Port refs:** `src/VortexArena.Common/Gameplay/GameTypes/Duel.cs` · `src/VortexArena.Server/GameWorld.cs` (activate/drive) · `game/net/NetGame.cs` + `game/client/ClientWorld.cs` + `src/VortexArena.Engine/Simulation/CsqcModelAppearance.cs` (forced colors) · `game/hud/CenterPrintPanel.cs` (title)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

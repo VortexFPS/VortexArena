@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Sprites;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Formats;
+using VortexArena.Formats.Sprites;
+using VortexArena.Formats.Vfs;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// T31 — first-ever coverage for <see cref="SpriteReader"/> (port of Darkplaces <c>Mod_IDSP_Load</c> /
@@ -20,7 +20,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class SpriteReaderTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     // ---------------------------------------------------------------- synthetic builders
 
@@ -242,7 +242,7 @@ public class SpriteReaderTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
 
         // IDSP v1 (models/misc/chatbubble.spr and friends)
         string? sprPath = vfs.Find("models/", "spr").FirstOrDefault();

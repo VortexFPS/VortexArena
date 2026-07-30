@@ -1,6 +1,6 @@
 # NIX (No Items Xonotic) mutator — parity spec
 
-**Base refs:** `common/mutators/mutator/nix/sv_nix.qc`, `nix.qc`, `nix.qh` · **Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/NixMutator.cs`
+**Base refs:** `common/mutators/mutator/nix/sv_nix.qc`, `nix.qc`, `nix.qh` · **Port refs:** `src/VortexArena.Common/Gameplay/Mutators/NixMutator.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -175,7 +175,7 @@ NIX emits no sounds of its own (notifications are center-prints, not annce cues)
 - Code-read: full `sv_nix.qc` vs `NixMutator.cs`, line-by-line on the rotation engine and hooks.
 - Liveness: grepped every `MutatorHooks.<hook>.Call` site — PlayerSpawn/PlayerPreThink/FilterItemDefinition/
   ForbidThrowCurrentWeapon all live; ForbidRandomStartWeapons has zero call sites (dead).
-- Unit test: `tests/XonoticGodot.Tests/FilterItemHookTests.cs` (`Nix_Active_DeletesHealthItem`,
+- Unit test: `tests/VortexArena.Tests/FilterItemHookTests.cs` (`Nix_Active_DeletesHealthItem`,
   `Nix_WithHealthArmor_KeepsHealthItem`, `Nix_Active_DeletesAmmoItem`) verifies the item-filter dimension live.
 - Values: diffed against mutators.cfg + balance-xonotic.cfg.
 - NOT verified at runtime: the weapon-rotation cadence, the center notifications on the live HUD, and the

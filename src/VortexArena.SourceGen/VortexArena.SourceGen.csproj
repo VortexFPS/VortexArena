@@ -3,7 +3,7 @@
        Must target netstandard2.0 (Roslyn analyzer requirement). -->
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <RootNamespace>XonoticGodot.SourceGen</RootNamespace>
+    <RootNamespace>VortexArena.SourceGen</RootNamespace>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <ImplicitUsings>disable</ImplicitUsings>

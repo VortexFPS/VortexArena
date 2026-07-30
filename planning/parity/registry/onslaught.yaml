@@ -66,8 +66,8 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:onslaught_updatelinks"
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_ControlPoint_CanBeLinked"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:UpdateLinks"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:IsAttackable"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:UpdateLinks"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:IsAttackable"
     constants: []
     status:
       logic: faithful
@@ -81,7 +81,7 @@ features:
     gaps:
       - "None on logic: the 3-phase algorithm (reset → flow power outward through same-team captured/linked neighbors → unshield nodes adjacent to a powered ENEMY node) matches sv_onslaught.qc:onslaught_updatelinks. Live: the graph HAS edges because onslaught.links.resolution is wired (ResolveLinks runs post-spawn)."
     verification:
-      - { kind: unit_test, ref: "tests/XonoticGodot.Tests/OnslaughtCombatTests.cs (Link()+UpdateLinks via combat tests)", result: pass }
+      - { kind: unit_test, ref: "tests/VortexArena.Tests/OnslaughtCombatTests.cs (Link()+UpdateLinks via combat tests)", result: pass }
       - { kind: code_read, ref: "Onslaught.cs:385-436 UpdateLinks vs sv_onslaught.qc onslaught_updatelinks (3-phase match)", result: pass }
       - { kind: code_read, ref: "live edges via GameWorld post-spawn ons.ResolveLinks()", result: pass }
     confidence: high
@@ -94,10 +94,10 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:spawnfunc(onslaught_link)"
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_DelayedLinkSetup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:StageLink"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:ResolveLinks"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:NodeByName / AddGenerator(team,name) / AddControlPoint(id,name)"
-      - "src/XonoticGodot.Server/GameWorld.cs:WireObjectiveSpawns (onslaught_generator/controlpoint pass TargetName; onslaught_link → StageLink) + post-spawn ons.ResolveLinks()"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:StageLink"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:ResolveLinks"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:NodeByName / AddGenerator(team,name) / AddControlPoint(id,name)"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns (onslaught_generator/controlpoint pass TargetName; onslaught_link → StageLink) + post-spawn ons.ResolveLinks()"
     constants: []
     status:
       logic: faithful
@@ -124,9 +124,9 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_ControlPoint_Icon_Spawn"
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_ControlPoint_Icon_BuildThink"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:ControlPointTouch"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnIcon"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconBuildThink"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:ControlPointTouch"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnIcon"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconBuildThink"
     constants:
       - { name: "g_onslaught_cp_health", base: "1000", port: "1000 (cvar) / 1000 (DefCpHealth fallback)", match: true }
       - { name: "g_onslaught_cp_buildhealth", base: "100", port: "100", match: true }
@@ -157,7 +157,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_ControlPoint_Icon_Damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconDamage"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconDamage"
     constants: []
     status:
       logic: faithful
@@ -183,7 +183,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_ControlPoint_Icon_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconThink"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconThink"
     constants:
       - { name: "g_onslaught_cp_regen", base: "20", port: "20 (cvar) / 20 (hardcoded fallback, DefCpRegen)", match: true }
       - { name: "regen_delay_after_hit", base: "5 s", port: "5 s", match: true }
@@ -211,11 +211,11 @@ features:
     base_refs:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_ControlPoint_Icon_Heal"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconHeal"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorHeal (QC ons_GeneratorHeal)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageContracts.cs:Combat.Heal (QC server/damage.qc Heal())"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/EntityGametypeState.cs:Entity.GtEventHeal (QC .event_heal)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs (non-player heal beam → Combat.Heal)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconHeal"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorHeal (QC ons_GeneratorHeal)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageContracts.cs:Combat.Heal (QC server/damage.qc Heal())"
+      - "src/VortexArena.Common/Gameplay/GameTypes/EntityGametypeState.cs:Entity.GtEventHeal (QC .event_heal)"
+      - "src/VortexArena.Common/Gameplay/Weapons/Arc.cs (non-player heal beam → Combat.Heal)"
     constants: []
     status:
       logic: faithful
@@ -240,9 +240,9 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_GeneratorDamage"
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_GeneratorSetup"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorDamage"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:DamageGenerator"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorDamage"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:DamageGenerator"
     constants:
       - { name: "g_onslaught_gen_health", base: "2500", port: "2500 (cvar) / 2500 (DefGenHealth fallback)", match: true }
       - { name: "generator_kill_score", base: "100", port: "100", match: true }
@@ -274,10 +274,10 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:Onslaught_RoundStart"
       - "server/round_handler.qc:round_handler_Init"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:Activate"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:Tick"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:CanRoundEndOns"
-      - "src/XonoticGodot.Server/GameWorld.cs:DriveGametypeFrame (ons.Tick)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:CanRoundEndOns"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame (ons.Tick)"
     constants:
       - { name: "round_handler_Init_delay (first round)", base: "5", port: "5", match: true }
       - { name: "round_handler_Init_delay (subsequent rounds)", base: "7", port: "7 (via CanRoundEndOns 5→7 bump)", match: true }
@@ -309,9 +309,9 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:Onslaught_CheckWinner"
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:Onslaught_count_generators"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:CheckWinner"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:BankRoundWin"
-      - "src/XonoticGodot.Server/GameWorld.cs (win latch)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:CheckWinner"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:BankRoundWin"
+      - "src/VortexArena.Server/GameWorld.cs (win latch)"
     constants:
       - { name: "pointlimit", base: "1", port: "1 (cvar)", match: true }
     status:
@@ -337,9 +337,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:Onslaught_CheckWinner (stalemate branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:IsInOvertime"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:DriveOvertime"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:OvertimeDecayTick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:IsInOvertime"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:DriveOvertime"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:OvertimeDecayTick"
     constants:
       - { name: "timelimit_suddendeath", base: "5 (min)", port: "5 (cvar) / 5 (fallback)", match: true }
       - { name: "decay_window_floor", base: "max(30, 60*suddendeath)", port: "max(30, 60*suddendeath)", match: true }
@@ -357,7 +357,7 @@ features:
       - "d = max_health/window scaled by 1 + (#enemy-linked CPs) per second, routed via the self-damage (DEATH_HURTTRIGGER) generator path. Audio emitted: first overtime tick fires OVERTIME_CONTROLPOINT center + ONS_GENERATOR_DECAY (latched once via OvertimeAnnounced)."
       - "NOTE: the enemy-linked-CP acceleration is meaningful (links resolve); the base self-decay still bypasses the shield (selfDamage branch)."
     verification:
-      - { kind: unit_test, ref: "tests/XonoticGodot.Tests/OverTimeManagerTests.cs (overtime decay)", result: pass }
+      - { kind: unit_test, ref: "tests/VortexArena.Tests/OverTimeManagerTests.cs (overtime decay)", result: pass }
       - { kind: code_read, ref: "OnslaughtControlPoint.cs OvertimeDecayTick (window=max(30,60*sd), d=1+enemy-linked CPs, *=max_h/window, Combat.Damage self-inflicted); Onslaught.cs IsInOvertime/DriveOvertime (1s step)", result: pass }
     confidence: high
     notes: "Re-verified unchanged: decay accelerates with enemy-linked CP count; uses gen.MaxHealth/window; 1s cadence; audio faithful."
@@ -368,7 +368,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_ScoreRules"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:Activate"
     constants:
       - { name: "ST_ONS_GENS (team primary)", base: "generators", port: "generators (TeamSlotSecondary)", match: true }
       - { name: "SP_ONS_CAPS / SP_ONS_TAKES", base: "caps / takes", port: "ONS_CAPS / ONS_TAKES", match: true }
@@ -395,10 +395,10 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_CaptureShield_Spawn"
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_CaptureShield_Touch"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnCaptureShield"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:ShieldTouchEntity"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator (calls SpawnCaptureShield generator_shield.md3)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnControlPoint (calls SpawnCaptureShield controlpoint_shield.md3)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnCaptureShield"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:ShieldTouchEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator (calls SpawnCaptureShield generator_shield.md3)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnControlPoint (calls SpawnCaptureShield controlpoint_shield.md3)"
     constants:
       - { name: "g_onslaught_shield_force", base: "100", port: "100 (cvar) / 100 (DefShieldForce fallback)", match: true }
       - { name: "shield_hitbox_scale", base: "1.20", port: "1.20 (ShieldHitboxScale)", match: true }
@@ -430,14 +430,14 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:MUTATOR_HOOKFUNCTION(ons, SV_ParseClientCommand) (ons_spawn)"
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:MUTATOR_HOOKFUNCTION(ons, PlayerUseKey)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:OnPlayerSpawn (MutatorHooks.PlayerSpawn handler)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:OnsTeleport"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:SpawnAtNode"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:HandleOnsSpawnCommand (SETS GtOnsSpawnBy + RESPAWN_FORCE / live teleport)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:HandleUseKey (PlayerUseKey next-to-own-CP gate)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:NearestControlPoint / NearestControlPoint2D / CountSelfControlPoints"
-      - "src/XonoticGodot.Server/Commands.cs:CmdOnsSpawn (Register(\"ons_spawn\", …)) — the live SV_ParseClientCommand ons_spawn hook"
-      - "src/XonoticGodot.Server/Commands.cs:2104-2113 impulse 21 (+use) → ons.HandleUseKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:OnPlayerSpawn (MutatorHooks.PlayerSpawn handler)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:OnsTeleport"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:SpawnAtNode"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:HandleOnsSpawnCommand (SETS GtOnsSpawnBy + RESPAWN_FORCE / live teleport)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:HandleUseKey (PlayerUseKey next-to-own-CP gate)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:NearestControlPoint / NearestControlPoint2D / CountSelfControlPoints"
+      - "src/VortexArena.Server/Commands.cs:CmdOnsSpawn (Register(\"ons_spawn\", …)) — the live SV_ParseClientCommand ons_spawn hook"
+      - "src/VortexArena.Server/Commands.cs:2104-2113 impulse 21 (+use) → ons.HandleUseKey"
     constants:
       - { name: "g_onslaught_teleport_radius", base: "200", port: "200 (CvarTeleportRadius fallback)", match: true }
       - { name: "g_onslaught_teleport_wait", base: "5", port: "5 (CvarTeleportWait fallback)", match: true }
@@ -474,7 +474,7 @@ features:
     base_refs:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_ControlPoint_Icon_Think (proximitydecap branch)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconThink (proximity-decap branch)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:IconThink (proximity-decap branch)"
     constants:
       - { name: "g_onslaught_cp_proximitydecap", base: "0", port: "0 (cvar default OFF, CvarProxDecap)", match: true }
       - { name: "g_onslaught_cp_proximitydecap_distance", base: "512", port: "512 (DefProxDecapDist)", match: true }
@@ -505,10 +505,10 @@ features:
       - "common/gametypes/gametype/onslaught/onslaught.qc:WantEventchase"
       - "client/teamradar.qc:draw_teamradar_link"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator/SpawnControlPoint/SpawnIcon (Entity.Model = generator/pad/icon md3 + EF_LOWPRECISION)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorModelForBucket / IconModelForFraction (progressive damage-model swap) + GeneratorDamage (Frame=10*(1-hp/max)) + IconBuildThink (PAD1->PAD2)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:CollectWaypoints (W16: generator/CP waypoint sprites)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:CollectRadarLinks / RadarLinkSegment (W17: power-graph radar lines)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator/SpawnControlPoint/SpawnIcon (Entity.Model = generator/pad/icon md3 + EF_LOWPRECISION)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorModelForBucket / IconModelForFraction (progressive damage-model swap) + GeneratorDamage (Frame=10*(1-hp/max)) + IconBuildThink (PAD1->PAD2)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:CollectWaypoints (W16: generator/CP waypoint sprites)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:CollectRadarLinks / RadarLinkSegment (W17: power-graph radar lines)"
       - "game/net/ServerNet.cs:SendWaypoints (CollectWaypoints) + SendRadarLinks (CollectRadarLinks) — live per-frame send"
       - "game/net/ClientNet.cs:HandleRadarLinks/RadarLinks + HandleWaypoints/Waypoints; game/hud/RadarPanel.cs:349 DrawLinkQuad; game/client/WaypointSpriteLayer.cs; game/net/ClientEntityView.cs:236 ApplyIdentity (networked .Model -> rendered)"
     constants:
@@ -541,10 +541,10 @@ features:
     base_refs:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc (Send_Notification/sound/play2team calls throughout)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs (emit calls in SpawnIcon/IconBuildThink/IconDamage/GeneratorDamage/GeneratorThink/OvertimeDecayTick)"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/Onslaught.cs:BankRoundWin + Notify/TeamSuffix helpers"
-      - "src/XonoticGodot.Common/Gameplay/Sounds/SoundsList.cs (registered)"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs (registered)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs (emit calls in SpawnIcon/IconBuildThink/IconDamage/GeneratorDamage/GeneratorThink/OvertimeDecayTick)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:BankRoundWin + Notify/TeamSuffix helpers"
+      - "src/VortexArena.Common/Gameplay/Sounds/SoundsList.cs (registered)"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs (registered)"
     constants: []
     status:
       logic: na
@@ -571,8 +571,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:ons_GeneratorThink"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorThink"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator (wires e.Think = GeneratorThink, NextThink = Now + GenThinkRate)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorThink"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator (wires e.Think = GeneratorThink, NextThink = Now + GenThinkRate)"
     constants:
       - { name: "GEN_THINKRATE", base: "1 s (think)", port: "1 s (GenThinkRate)", match: true }
       - { name: "alarm_repeat", base: "5 s (this.wait = time + 5)", port: "5 s (GtAlarmWait = Now + 5)", match: true }
@@ -602,9 +602,9 @@ features:
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:havocbot_goalrating_ons_generator_attack"
       - "common/gametypes/gametype/onslaught/sv_onslaught.qc:havocbot_goalrating_ons_controlpoints_attack"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:RoleOnslaught (181)"
-      - "src/XonoticGodot.Server/Bot/BotObjectiveRoles.cs:NeighborsTeam (255)"
-      - "src/XonoticGodot.Server/Bot/BotRoles.cs (\"ons\"/\"onslaught\" -> RoleOnslaught)"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleOnslaught (181)"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:NeighborsTeam (255)"
+      - "src/VortexArena.Server/Bot/BotRoles.cs (\"ons\"/\"onslaught\" -> RoleOnslaught)"
     constants:
       - { name: "free-point ratingscale multiplier", base: "ratingscale * 2", port: "RatingControlPoint * 2 (touchable)", match: true }
       - { name: "havocbot_role_timeout", base: "120 s (re-evaluation; resets back to offense)", port: "none (no-op behaviorally — defense/assistant are reset-to-offense stubs in Base too)", match: true }

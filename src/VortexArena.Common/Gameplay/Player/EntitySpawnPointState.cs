@@ -6,7 +6,7 @@
 // MapObjectsCommon.cs keeps on its own state object. Defaults match a freshly-spawned info_player_* edict
 // (ACTIVE_ACTIVE, no restriction) so an unconfigured spot scores exactly as before this state existed.
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {

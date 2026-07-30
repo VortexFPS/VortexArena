@@ -7,11 +7,11 @@
 // below then clamps to what the thrower actually had (the QC anti-duplication order).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Weapon tossing — the C# successor to <c>server/weapons/throwing.qc</c>: impulse-17 drops
@@ -233,10 +233,6 @@ public static class WeaponThrowing
     //  helpers
     // =================================================================================================
 
-    /// <summary>RENDER_COLORMAPPED (BIT(10)) — the render flag the csqcmodel reads to apply a colormap tint
-    /// (same constant as MonsterAI/MapModels).</summary>
-    private const int RenderColormapped = 1 << 10;
-
     /// <summary>
     /// QC <c>own.colormap</c> as inherited by the thrown loot (throwing.qc:33). For a player the engine maps
     /// <c>.colormap</c> through <c>.clientcolors</c>, which the csqcmodel resolves to <c>1024 + (shirt&lt;&lt;4) + pants</c>
@@ -250,7 +246,7 @@ public static class WeaponThrowing
         {
             int pants = p.ClientColors & 0x0F;
             int shirt = (p.ClientColors >> 4) & 0x0F;
-            return (1024 + (shirt << 4) + pants) | RenderColormapped;
+            return (1024 + (shirt << 4) + pants) | Entity.RenderColormapped;
         }
         // already-colormapped thrower (monster/turret): re-use its authoritative value, or none.
         return own.ColorMapOverride;

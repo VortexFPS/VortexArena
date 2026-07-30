@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>Ordering bucket for hook handlers (QC CBC_ORDER_FIRST/ANY/LAST).</summary>
 public enum HookOrder

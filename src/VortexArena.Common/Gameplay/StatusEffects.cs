@@ -3,12 +3,12 @@
 //      StatusEffects_update; sv_status_effects.qc m_apply/m_remove/m_tick dirty-marking).
 using System;
 using System.Collections.Generic;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using static XonoticGodot.Common.Gameplay.Sounds;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using static VortexArena.Common.Gameplay.Sounds;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The status-effect networking flags — the C# successor to QC's <c>STATUSEFFECT_FLAG_*</c>
@@ -145,7 +145,7 @@ public static class StatusEffectsCatalog
     /// <summary>
     /// Mirror of the QC <c>StatusEffects</c> registry (REGISTER_STATUSEFFECT across status_effect/, powerups/,
     /// buffs/, monsters/spider). The buffs carry <see cref="StatusEffectDef.IsBuff"/> so BuffsMutator offers
-    /// only those; powerups + core debuffs do not. Names match the XonoticGodot consumers (ItemPickupRules powerup
+    /// only those; powerups + core debuffs do not. Names match the VortexArena consumers (ItemPickupRules powerup
     /// timers use "shield"/"superweapon"; BuffsMutator + DeathTypes use the "buff_" prefix; MonsterFramework
     /// uses "webbed"/"shield"/"spawnshield").
     /// </summary>
@@ -204,7 +204,7 @@ public static class StatusEffectsCatalog
             OnRemove = StunnedRemove,
         });
         // STATUSEFFECT_Superweapon (superweapons.qh): superweapon ammo window (QC netname "superweapons";
-        // XonoticGodot consumers use the singular "superweapon"). m_persistent = IT_UNLIMITED_SUPERWEAPONS
+        // VortexArena consumers use the singular "superweapon"). m_persistent = IT_UNLIMITED_SUPERWEAPONS
         // (so the networked PERSISTENT bit is now set instead of faking it with a 999s timer);
         // m_sound_rm = POWEROFF on the countdown lapse (server/client.qc play_countdown).
         R(new StatusEffectDef("superweapon")
@@ -380,14 +380,32 @@ public static class StatusEffectsCatalog
     //  Fire damage-over-time (QC server/damage.qc Fire_AddDamage / Fire_ApplyDamage)
     // ============================================================================================
 
-    /// <summary>QC <c>StatusEffects_gettime(this, actor)</c> (status_effects.qc:17-28): the effect's end time,
-    /// clamped up to <paramref name="now"/> so an effect whose timer has just lapsed still reads as active
-    /// for the current frame (the burn-stacking math relies on this). Permanent (ExpireTime &lt;= 0) returns now.</summary>
+    /// <summary>QC <c>StatusEffects_gettime(this, actor)</c> (status_effects.qc:17-25): the effect's stored end
+    /// time, or 0 when the effect is not active.
+    /// <para>
+    /// Upstream 916d46a6 (MR !1608 follow-up) changed this contract. It used to clamp the result UP to the
+    /// current time, so an effect whose timer had lapsed but whose tick had not yet removed it still read as
+    /// "ends now". That made a caller doing <c>t = gettime(); apply(t + duration)</c> compute a window starting
+    /// in the past — with <c>g_spawnshieldtime 0</c> a picked-up superweapon was lost the instant it was taken,
+    /// and the same hit stacked powerups. It now returns the RAW stored time (which may be in the past for one
+    /// frame) and callers that need a floor apply their own <c>max(now, …)</c>.
+    /// </para>
+    /// <para>
+    /// Port deviation: <see cref="ActiveStatusEffect.ExpireTime"/> &lt;= 0 is this port's "permanent" convention
+    /// (SuperweaponTimeout persistence, FreezeTag/NadeIce until-thawed) where QC uses <c>m_persistent</c> with a
+    /// stored time that is simply never consulted. A permanent effect is still ACTIVE, so returning its stored
+    /// 0 would read as "inactive" to every caller — it keeps returning <paramref name="now"/> instead, i.e.
+    /// "running, ends no earlier than this frame". Only the expired-but-present case changed.
+    /// </para></summary>
     public static float GetTime(Entity e, StatusEffectDef def, float now)
     {
         foreach (var s in e.StatusEffects)
-            if (s.DefId == def.RegistryId)
-                return (s.ExpireTime > 0f && s.ExpireTime >= now) ? s.ExpireTime : now;
+        {
+            if (s.DefId != def.RegistryId) continue;
+            // QC: if(!StatusEffects_active(this, actor)) return 0;
+            if ((s.Flags & StatusEffectFlags.Active) == 0) return 0f;
+            return s.ExpireTime > 0f ? s.ExpireTime : now;   // (<= 0 == the port's permanent convention)
+        }
         return 0f;
     }
 
@@ -413,7 +431,12 @@ public static class StatusEffectsCatalog
         if (Has(e, Burning))
         {
             float fireEndTime = GetTime(e, Burning, now);
-            float minTime = fireEndTime - now;
+            // Floor the remaining-burn interval at 0. Since upstream 916d46a6 GetTime returns the raw stored
+            // end time, so a burn that lapsed between ticks yields a NEGATIVE minTime here and poisons the
+            // stacking LEMMA below (minDamage goes negative, shrinking the new burn). Upstream leaves this
+            // unclamped and eats a sub-frame shortfall; the clamp costs nothing and keeps the LEMMA's inputs
+            // in their documented domain.
+            float minTime = MathF.Max(0f, fireEndTime - now);
             float maxTime = MathF.Max(minTime, t);
             float minDps = e.FireDamagePerSec;
             float maxDps = MathF.Max(minDps, dps);
@@ -481,16 +504,21 @@ public static class StatusEffectsCatalog
         float dmg = dps * t;
         if (dmg <= 0f) return;
 
-        // QC: preserve hitsound counters (damage.qc:1084-1091) so repeated fire ticks don't multiply the
-        // hitsound beep. The port approximates this: suppress HitsoundDamageDealtTotal accumulation for burn
-        // ticks after the first (fire_hitsound tracks the "already-ticked" state).
-        // (QC saves hi/ty from fire_owner and restores them after Damage if fire_hitsound; in the port the
-        // HitsoundDamageDealtTotal on owner is advanced inside DamageSystem.Apply, so we can't retroactively
-        // undo it. The cue is already rare enough that the missing suppress is low-impact.)
+        // QC Fire_ApplyDamage:1078-1086: only the FIRST burn tick after (re)ignition gives the attacker hit
+        // feedback — save the owner's per-frame hitsound accumulators, let Damage() bank the tick, then
+        // restore them when fire_hitsound says this burn already ticked. Without this, a single napalm hit
+        // keeps beeping every frame for the whole burn (feedback trailing seconds behind the actual hit).
+        float hi = owner?.HitSoundDamageDealt ?? 0f;
+        int ty = owner?.TypeHitSoundCount ?? 0;
 
         string deathType = !string.IsNullOrEmpty(e.FireDeathType) ? e.FireDeathType : DeathTypes.Fire;
         // QC Damage(e, e, fire_owner, d, fire_deathtype, ...): inflictor is the burning entity itself.
         Combat.Damage(e, e, owner, dmg, deathType, e.Origin, System.Numerics.Vector3.Zero);
+        if (e.FireHitSound && owner is not null)
+        {
+            owner.HitSoundDamageDealt = hi;
+            owner.TypeHitSoundCount = ty;
+        }
         e.FireHitSound = true; // QC: fire_hitsound = true after the first tick
 
         // --- QC fire TRANSFER (Fire_ApplyDamage:1094-1104) ---
@@ -685,17 +713,21 @@ public static class StatusEffectsCatalog
                 continue;
             }
 
+            // QC m_tick timeout: time > statuseffect_time -> m_remove(TIMEOUT) (no removal sound).
+            // ORDER MATTERS (upstream 916d46a6): every per-effect m_tick now runs SUPER first and then bails on
+            // `if(!this.m_active(this, actor)) return;`, so the timeout removal happens BEFORE the per-effect
+            // body. The port previously ran the body first, which gave an expiring effect one extra tick on the
+            // frame it lapsed — a bonus burn tick, and a re-set of the EF_ flags that m_remove had just cleared.
+            if (s.ExpireTime > 0f && now >= s.ExpireTime)
+            {
+                Remove(e, def, StatusEffectRemoval.Timeout);
+                continue;   // QC: !m_active -> the per-effect body is skipped
+            }
+
             // Per-effect m_tick body (burning fire damage + water/frozen extinguish, stunned frozen-extinguish).
             // A true return is the per-effect m_remove(NORMAL) request.
             if (def.OnTick != null && def.OnTick(e, s))
-            {
                 Remove(e, def, StatusEffectRemoval.Normal);
-                continue;
-            }
-
-            // QC m_tick timeout: time > statuseffect_time -> m_remove(TIMEOUT) (no removal sound).
-            if (s.ExpireTime > 0f && now >= s.ExpireTime)
-                Remove(e, def, StatusEffectRemoval.Timeout);
         }
     }
 

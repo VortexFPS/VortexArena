@@ -1,11 +1,11 @@
 // Port of common/mutators/mutator/pinata/sv_pinata.qc.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The Piñata mutator — port of <c>sv_pinata.qc</c>. When a player dies they scatter every OTHER weapon

@@ -17,8 +17,8 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qh:REGISTER_MUTATOR(ok)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
     constants:
       - { name: "g_overkill", base: "\"\" (empty string, falsey)", port: "0 (GetFloat != 0)", match: true }
     status:
@@ -41,8 +41,8 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qh:REGISTER_MUTATOR(ok) MUTATOR_ONADD"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:Hook (filter cvar reads)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnFilterItemDefinition (the actual block)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:Hook (filter cvar reads)"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnFilterItemDefinition (the actual block)"
     constants:
       - { name: "g_overkill_filter_healthmega", base: "0", port: "g_overkill_filter_healthmega (default false)", match: true }
       - { name: "g_overkill_filter_armormedium", base: "1", port: "g_overkill_filter_armormedium (ReadFilterCvar dflt true)", match: true }
@@ -71,7 +71,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_weapons.qc:REGISTER_MUTATOR(ok_weapons)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkWeapons.cs"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkWeapons.cs"
     constants:
       - { name: "g_overkill_weapons", base: "0", port: "none", match: false }
     status:
@@ -95,7 +95,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, Damage_Calculate, CBC_ORDER_LAST)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnDamageCalculate"
     constants:
       - { name: "g_overkill_blaster_keepdamage", base: "0", port: "0", match: true }
       - { name: "g_overkill_blaster_keepforce", base: "0", port: "0", match: true }
@@ -120,9 +120,9 @@ features:
       - "common/mutators/mutator/overkill/sv_overkill.qc:ok_DropItem"
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, PlayerDies)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnPlayerDies"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:DropItem"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:SpawnLoot"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnPlayerDies"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:DropItem"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:SpawnLoot"
     constants:
       - { name: "g_overkill_loot_player", base: "armor_small", port: "armor_small", match: true }
       - { name: "g_overkill_loot_player_time", base: "5", port: "5", match: true }
@@ -149,9 +149,9 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, MonsterDropItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnMonsterDropItem"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:DropItem"
-      - "src/XonoticGodot.Common/Gameplay/Monsters/MonsterFramework.cs:DropItem"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnMonsterDropItem"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:DropItem"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterFramework.cs:DropItem"
     constants:
       - { name: "g_overkill_loot_monster", base: "armor_small", port: "armor_small", match: true }
       - { name: "g_overkill_loot_monster_time", base: "5", port: "5", match: true }
@@ -177,9 +177,9 @@ features:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, PlayerDies)"
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, PlayerWeaponSelect)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnPlayerDies"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs:OkLastWeapon"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnPlayerDies"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs:OkLastWeapon"
     constants: []
     status:
       logic: partial
@@ -202,8 +202,8 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, SetStartItems, CBC_ORDER_LAST)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnSetStartItems"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:GiveLoadout"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnSetStartItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:GiveLoadout"
     constants:
       - { name: "base_loadout", base: "OVERKILL_MACHINEGUN|NEX|SHOTGUN", port: "okmachinegun,oknex,okshotgun", match: true }
       - { name: "conditional_rpc_hmg", base: "WEP_OVERKILL_{RPC,HMG}.weaponstart>0", port: "g_weapon_overkill_{rpc,hmg}_weaponstart || g_start_weapon_ok{rpc,hmg} > 0", match: true }
@@ -228,7 +228,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, PlayerPreThink)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnPlayerPreThink"
     constants: []
     status:
       logic: faithful
@@ -242,7 +242,7 @@ features:
     gaps:
       - "Minor: Base iterates all weapon slots and runs each slot's m_weapon.wr_think(...,2); the port runs the secondary WrThink for slot 0's current weapon only (the port's inventory carries a single active weapon on slot 0). Functionally equivalent for OK loadouts. The QC weaponLocked() is approximated by the reachable freeze subset (FrozenStat || STATUSEFFECT_Frozen), same stand-in as WeaponFireDriver/CampcheckMutator."
     verification:
-      - { kind: code, ref: "OnPlayerPreThink (OverkillMutator.cs:515) subscribed to MutatorHooks.PlayerPreThink (Hook cs:143). The chain is LIVE: PlayerPreThink.Call at src/XonoticGodot.Server/GameWorld.cs:2261 (per-tick player frame; re-verified 2026-06-27, prior cite Gameplay/GameWorld.cs:2226 was stale path+line). Guards match Base: bails on Api null / non-player / dead, then requires ButtonAttack2 && !WeaponLocked && RoundHandler.RoundGateBlocks() (== round_handler_IsActive() && !IsRoundStarted()). Runs held weapon's secondary WrThink with ATCK2 set, then consumes player.ButtonAttack2 = false.", result: pass }
+      - { kind: code, ref: "OnPlayerPreThink (OverkillMutator.cs:515) subscribed to MutatorHooks.PlayerPreThink (Hook cs:143). The chain is LIVE: PlayerPreThink.Call at src/VortexArena.Server/GameWorld.cs:2261 (per-tick player frame; re-verified 2026-06-27, prior cite Gameplay/GameWorld.cs:2226 was stale path+line). Guards match Base: bails on Api null / non-player / dead, then requires ButtonAttack2 && !WeaponLocked && RoundHandler.RoundGateBlocks() (== round_handler_IsActive() && !IsRoundStarted()). Runs held weapon's secondary WrThink with ATCK2 set, then consumes player.ButtonAttack2 = false.", result: pass }
     confidence: high
     notes: "FIX (logic/timing missing->faithful, liveness na->live). Since the baseline the port grew OnPlayerPreThink and subscribes the now-live PlayerPreThink chain (GameWorld.cs:2226). During an active-but-not-started round, ATCK2 now runs the OK weapons' secondary blaster-jump and the button is consumed — matching Base. Only matters in round-based gametypes (CA/freezetag) run under Overkill."
   - id: overkill.filter.items_and_powerup_replace
@@ -251,7 +251,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, FilterItem)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnFilterItemDefinition"
     constants:
       - { name: "g_overkill_powerups_replace", base: "1 (mutators.cfg)", port: "g_overkill_powerups_replace (live cvar read)", match: true }
       - { name: "respawntime_superweapon", base: "g_pickup_respawntime_superweapon", port: "g_pickup_respawntime_superweapon", match: true }
@@ -278,8 +278,8 @@ features:
       - "common/mutators/mutator/overkill/sv_overkill.qc:RandomItems_GetRandomOverkillItemClassName"
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, RandomItems_GetRandomItemClassName)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnRandomItemsGetClassName"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/RandomItemsMutator.cs:GetRandomItemClassName"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnRandomItemsGetClassName"
+      - "src/VortexArena.Common/Gameplay/Mutators/RandomItemsMutator.cs:GetRandomItemClassName"
     constants: []
     status:
       logic: partial
@@ -305,9 +305,9 @@ features:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, Item_RespawnCountdown)"
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, Item_ScheduleRespawn)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnItemRespawnCountdown"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnItemScheduleRespawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:HandleItemWaypoints"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnItemRespawnCountdown"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnItemScheduleRespawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:HandleItemWaypoints"
     constants:
       - { name: "g_overkill_itemwaypoints", base: "1", port: "ItemWaypoints (ReadFilterCvar dflt true)", match: true }
     status:
@@ -331,7 +331,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, ForbidThrowCurrentWeapon)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnForbidThrow"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnForbidThrow"
     constants: []
     status:
       logic: faithful
@@ -353,7 +353,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, ForbidRandomStartWeapons)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnForbidRandomStartWeapons"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnForbidRandomStartWeapons"
     constants: []
     status:
       logic: faithful
@@ -375,7 +375,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, SetWeaponArena)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnSetWeaponArena"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnSetWeaponArena"
     constants: []
     status:
       logic: faithful
@@ -400,8 +400,8 @@ features:
       - "common/mutators/mutator/overkill/sv_overkill.qc:MUTATOR_HOOKFUNCTION(ok, SetModname)"
       - "common/mutators/mutator/overkill/cl_overkill.qc:REGISTER_MUTATOR(ok)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:BuildMutatorsPrettyString"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:BuildMutatorsPrettyString"
     constants:
       - { name: "mutator_tag_machine", base: ":OK", port: "\":OK\" (BuildMutatorsString override)", match: true }
       - { name: "mutator_tag_pretty", base: ", Overkill", port: "\", Overkill\" (BuildMutatorsPrettyString override, chain NOW live)", match: true }
@@ -418,7 +418,7 @@ features:
     gaps:
       - "Minor: the client-side cl_overkill cvar_settemp(g_overkill,1) sync (cl_overkill.qc REGISTER_MUTATOR ONADD) is still absent — there is no client mutator-registration seam to settemp g_overkill on the joining client. Server-side reporting (machine token, pretty string, modname) is now fully live; this is the only remaining hole and is client-cosmetic."
     verification:
-      - { kind: code, ref: "OverkillMutator overrides BuildMutatorsString → \":OK\" (cs:468), BuildMutatorsPrettyString → \", Overkill\" (cs:472), and SetModname → (\"Overkill\", true) (cs:477). ALL THREE chains are LIVE (re-verified 2026-06-27 — callers are in src/XonoticGodot.Server/GameWorld.cs, not Gameplay/; line numbers shifted): BuildMutatorsString at GameWorld.cs:1161 (gamelog mutators field); BuildMutatorsPrettyString at GameWorld.cs:1172 (+:1336 welcome message); SetModname at GameWorld.cs:638 (worldspawn modname override). No cl_overkill client sync.", result: pass }
+      - { kind: code, ref: "OverkillMutator overrides BuildMutatorsString → \":OK\" (cs:468), BuildMutatorsPrettyString → \", Overkill\" (cs:472), and SetModname → (\"Overkill\", true) (cs:477). ALL THREE chains are LIVE (re-verified 2026-06-27 — callers are in src/VortexArena.Server/GameWorld.cs, not Gameplay/; line numbers shifted): BuildMutatorsString at GameWorld.cs:1161 (gamelog mutators field); BuildMutatorsPrettyString at GameWorld.cs:1172 (+:1336 welcome message); SetModname at GameWorld.cs:638 (worldspawn modname override). No cl_overkill client sync.", result: pass }
     confidence: high
     notes: "FIX (partial→faithful/live across logic/values/presentation/liveness). Since the prior audit the SetModname hook chain was ADDED and wired (MutatorActivation.SetModname → GameWorld.cs:604-612), and the BuildMutatorsPrettyString chain GAINED a live consumer (GameWorld.cs:1073-1081 sets the 'modifications' serverinfo key per QC PutClientInServer). Overkill's modname now resolves to 'Overkill' and the pretty token ', Overkill' is now emitted. Only the client cl_overkill cvar_settemp sync remains absent (cosmetic). Cosmetic / reporting only; no gameplay impact."
   - id: overkill.okhmg.nade_selfdamage_scale
@@ -427,7 +427,7 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/okhmg.qc:REGISTER_MUTATOR(okhmg_nadesupport) MUTATOR_HOOKFUNCTION(okhmg_nadesupport, Nade_Damage)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OverkillMutator.cs:OnNadeDamage"
+      - "src/VortexArena.Common/Gameplay/Mutators/OverkillMutator.cs:OnNadeDamage"
     constants:
       - { name: "nade_selfdamage_fraction", base: "max_health * 0.1", port: "Nade.MaxHealth * 0.1f", match: true }
       - { name: "weapon_guard", base: "WEP_OVERKILL_HMG", port: "okhmg", match: true }
@@ -451,8 +451,8 @@ features:
     base_refs:
       - "common/mutators/mutator/overkill/oknex.qc:REGISTER_MUTATOR(oknex_charge) MUTATOR_HOOKFUNCTION(oknex_charge, GetPressedKeys)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkNex.cs:WrThink (velocity-charge accumulation, cs:118-127)"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/OkNex.cs:Configure (charge cvar reads, cs:87-91)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkNex.cs:WrThink (velocity-charge accumulation, cs:118-127)"
+      - "src/VortexArena.Common/Gameplay/Weapons/OkNex.cs:Configure (charge cvar reads, cs:87-91)"
     constants:
       - { name: "g_balance_oknex_charge", base: "0 (off)", port: "Cvars.Charge default false (BalBool)", match: true }
       - { name: "charge_velocity_rate", base: "g_balance_oknex_charge_velocity_rate (0)", port: "ChargeVelocityRate (Bal dflt 0)", match: true }

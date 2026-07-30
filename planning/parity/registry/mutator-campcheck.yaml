@@ -16,10 +16,10 @@ features:
       - "common/mutators/mutator/campcheck/campcheck.qc:REGISTER_MUTATOR(campcheck)"
       - "mutators.cfg:328"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:Hook"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
-      - "src/XonoticGodot.Server/GameWorld.cs:626"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:Hook"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Server/GameWorld.cs:626"
     constants:
       - { name: "g_campcheck", base: "0 (string, expr_evaluate truthy)", port: 'ExprEvaluate(GetString("g_campcheck"))', match: true }
       - { name: "g_campcheck_interval", base: "10 s", port: "Interval = GetFloat (10)", match: true }
@@ -47,8 +47,8 @@ features:
     base_refs:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:35"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
-      - "src/XonoticGodot.Server/GameWorld.cs:1294"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Server/GameWorld.cs:1294"
     constants:
       - { name: "distance measured in", base: "vec2(prevorigin-origin) (Z dropped)", port: "delta.Z=0; abs(delta.Length())", match: true }
       - { name: "damage cap", base: "bound(0, damage, health + armor*g_balance_armor_blockpercent + 5)", port: "QMath.Bound(0, Damage, health + armor*blockpercent + 5)", match: true }
@@ -76,7 +76,7 @@ features:
     base_refs:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:62"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
     constants:
       - { name: "vehicle damage", base: "g_campcheck_damage * 2", port: "Damage * 2", match: true }
     status:
@@ -101,8 +101,8 @@ features:
     base_refs:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:23"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:OnDamageCalculate"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:256"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:OnDamageCalculate"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:256"
     constants:
       - { name: "reset value", base: "attacker.traveled = target.traveled = g_campcheck_distance", port: "both = Distance", match: true }
       - { name: "guard", base: "attacker != target && IS_PLAYER(both)", port: "attacker!=null && !ReferenceEquals && IsPlayer(both)", match: true }
@@ -127,8 +127,8 @@ features:
     base_refs:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:91"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerSpawn"
-      - "src/XonoticGodot.Server/ClientManager.cs:749"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerSpawn"
+      - "src/VortexArena.Server/ClientManager.cs:749"
     constants:
       - { name: "spawn grace", base: "nextcheck = time + interval*2", port: "CampcheckNextCheck = time + Interval*2", match: true }
       - { name: "spawn distance", base: "traveled = 0", port: "CampcheckTraveledDistance = 0", match: true }
@@ -154,8 +154,8 @@ features:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:61"
       - "common/notifications/all.inc:574"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:857"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:857"
     constants:
       - { name: "CENTER_CAMPCHECK text", base: '^F2Don''t camp!', port: '^F2Don''t camp!', match: true }
       - { name: "CPID", base: "CPID_CAMPCHECK", port: "CPID_CAMPCHECK", match: true }
@@ -183,12 +183,12 @@ features:
       - "common/notifications/all.inc:658"
       - "common/notifications/all.inc:896"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Damage/DeathTypes.cs:Camp"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:SelectSpecial"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:219"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:508"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:1118"
-      - "src/XonoticGodot.Server/Scores.cs:592"
+      - "src/VortexArena.Common/Gameplay/Damage/DeathTypes.cs:Camp"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:SelectSpecial"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:219"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:508"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:1118"
+      - "src/VortexArena.Server/Scores.cs:592"
     constants:
       - { name: "self obituary line", base: "DEATH_SELF_CAMP -> info '^BG%s^K1 thought they found a nice camping ground%s%s' / center '^K1Die camper!'", port: "SelectSpecial('camp', murder:false) -> 'DEATH_SELF_CAMP'; info NotificationsList.cs:219 '^BG%s^K1 thought they found a nice camping ground%s%s' + center :505 '^K1Die camper!'", match: true }
       - { name: "REGISTER_DEATHTYPE mapping", base: "REGISTER_DEATHTYPE(CAMP, DEATH_SELF_CAMP, NULL, NULL, NULL, \"\")", port: "DeathTypes.Camp='camp' + DeathMessages.SelectSpecial maps Camp->'CAMP' (self DEATH_SELF_CAMP; murder->FRAG since CAMP has no murder line)", match: true }
@@ -215,11 +215,11 @@ features:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:44"
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:45"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:WeaponLocked"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:252"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:WeaponLocked"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:252"
       - "game/net/NetGame.cs:4965"
-      - "src/XonoticGodot.Net/InputCommand.cs:22"
+      - "src/VortexArena.Net/InputCommand.cs:22"
       - "game/net/ServerNet.cs:1626"
     constants:
       - { name: "IS_REAL_CLIENT (bot exempt)", base: "required", port: "gate includes `player is not Player { IsBot: true }`; Player.IsBot set live at ClientManager", match: true }
@@ -248,13 +248,13 @@ features:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:41"
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:51"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
-      - "src/XonoticGodot.Common/Gameplay/Items/StartItem.cs:GameStartTimeProvider"
-      - "src/XonoticGodot.Common/Gameplay/GameTypes/RoundHandler.cs:RoundGateBlocks"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:CampaignBotHold"
-      - "src/XonoticGodot.Server/GameWorld.cs:651"
-      - "src/XonoticGodot.Server/GameWorld.cs:722"
-      - "src/XonoticGodot.Server/GameWorld.cs:1625"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerPreThink"
+      - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:GameStartTimeProvider"
+      - "src/VortexArena.Common/Gameplay/GameTypes/RoundHandler.cs:RoundGateBlocks"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:CampaignBotHold"
+      - "src/VortexArena.Server/GameWorld.cs:651"
+      - "src/VortexArena.Server/GameWorld.cs:722"
+      - "src/VortexArena.Server/GameWorld.cs:1625"
     constants:
       - { name: "live gate", base: "!game_stopped && !warmup_stage && time >= game_starttime", port: "!VehicleCommon.GameStopped only", match: false }
       - { name: "round/campaign reset block", base: "(g_campaign && !campaign_bots_may_start) || time<game_starttime || (round_active && !round_started) -> nextcheck=time+interval*2, traveled=0", port: "ALL THREE portions now wired live: campaignWait via CampaignBotHold (g_campaign && !Campaign.BotsMayStart, GameWorld.cs:707); time<game_starttime via StartItem.GameStartTimeProvider (GameWorld.cs:639); round-active-not-started via RoundHandler.RoundGateBlocks() <- RoundNotStartedProvider (Rounds is {IsRoundStarted:false}, GameWorld.cs:1584). Reset sets nextcheck=time+interval*2, traveled=0", match: true }
@@ -281,10 +281,10 @@ features:
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:83"
       - "common/mutators/mutator/campcheck/sv_campcheck.qc:99"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerDies"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs:BuildMutatorsString"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterKill"
-      - "src/XonoticGodot.Server/GameWorld.cs:1141"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:OnPlayerDies"
+      - "src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs:BuildMutatorsString"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationSystem.cs:SendCenterKill"
+      - "src/VortexArena.Server/GameWorld.cs:1141"
     constants:
       - { name: "PlayerDies clears centerprint", base: "Kill_Notification(NOTIF_ONE, target, MSG_CENTER, CPID_CAMPCHECK)", port: "OnPlayerDies calls NotificationSystem.SendCenterKill(One, target, 'CPID_CAMPCHECK')", match: true }
       - { name: "BuildMutatorsString", base: 'strcat(s, ":CampCheck")', port: "override BuildMutatorsString(s) => s + ':CampCheck'; run via MutatorActivation.BuildMutatorsString chain at GameWorld.cs:1117 (sv_eventlog gamelog init)", match: true }

@@ -1,7 +1,7 @@
 # cl-csqcmodel (CSQC player-model hooks) — parity spec
 
 **Base refs:** `client/csqcmodel_hooks.qc` · `client/player_skeleton.qc` · `common/animdecide.qc/.qh` · `common/csqcmodel_settings.qh`
-**Port refs:** `src/XonoticGodot.Engine/Simulation/Csqc*.cs` · `src/XonoticGodot.Engine/Simulation/{PlayerSkeleton,LocomotionBlend,Skeleton}.cs` · `game/client/{ClientWorld,ModelTint,CsqcModelEffects,PlayerModel,ModelAnimator,ViewEntityRenderer}.cs`
+**Port refs:** `src/VortexArena.Engine/Simulation/Csqc*.cs` · `src/VortexArena.Engine/Simulation/{PlayerSkeleton,LocomotionBlend,Skeleton}.cs` · `game/client/{ClientWorld,ModelTint,CsqcModelEffects,PlayerModel,ModelAnimator,ViewEntityRenderer}.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

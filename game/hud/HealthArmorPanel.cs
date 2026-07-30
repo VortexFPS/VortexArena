@@ -1,8 +1,8 @@
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
 
-namespace XonoticGodot.Game.Hud;
+namespace VortexArena.Game.Hud;
 
 /// <summary>
 /// Health + armor readout — feature-complete port of
@@ -71,9 +71,9 @@ public partial class HealthArmorPanel : HudPanel
 
     /// <summary>Register the panel's behaviour-cvar defaults (luma). Auto-invoked by reflection from
     /// <c>HudConfig.RegisterDefaults</c>.</summary>
-    public static void RegisterDefaults(XonoticGodot.Engine.Simulation.CvarService c)
+    public static void RegisterDefaults(VortexArena.Engine.Simulation.CvarService c)
     {
-        const XonoticGodot.Common.Services.CvarFlags save = XonoticGodot.Common.Services.CvarFlags.Save;
+        const VortexArena.Common.Services.CvarFlags save = VortexArena.Common.Services.CvarFlags.Save;
         c.Register("hud_panel_healtharmor_combined", "0", save);
         c.Register("hud_panel_healtharmor_flip", "0", save);
         c.Register("hud_panel_healtharmor_iconalign", "3", save);

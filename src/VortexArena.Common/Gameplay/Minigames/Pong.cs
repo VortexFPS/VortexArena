@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Server-side state + physics for Pong — port of common/minigames/minigame/pong.qc (pong_server_event,
 // pong_ball_think, pong_paddle_think, pong_paddle_hit/bounce, pong_goal, pong_add_score). Up to 4 players,

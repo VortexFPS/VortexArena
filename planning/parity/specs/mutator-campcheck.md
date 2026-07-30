@@ -1,7 +1,7 @@
 # Camp Check mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/campcheck/sv_campcheck.qc`, `common/mutators/mutator/campcheck/campcheck.qc`, `mutators.cfg` (`g_campcheck*`), `common/notifications/all.inc:574`, `common/deathtypes/all.inc:4`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/CampcheckMutator.cs`, `src/XonoticGodot.Common/Gameplay/Mutators/EntityMutatorState.cs`, `src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/CampcheckMutator.cs`, `src/VortexArena.Common/Gameplay/Mutators/EntityMutatorState.cs`, `src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84`  ·  **Last audited:** 2026-06-22
 
 ## Overview

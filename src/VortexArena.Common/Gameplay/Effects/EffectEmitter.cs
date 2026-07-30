@@ -14,9 +14,9 @@
 // keeps the structured request so headless tests stay readable.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>One queued effect emission — the data Send_Effect_Except would network (effect.qh fields).</summary>
 public readonly struct EffectRequest
@@ -241,7 +241,7 @@ public static class EffectEmitter
         if (!effect.IsTrail && count == 0) return;           // QC: point effect has no count -> drop
         // (perf 2.1) fx.emit: the listen host's in-process effect mirror runs INSIDE the sink — a cold
         // per-effect first-use build here lands in the emitting gameplay scope (the mp.weapon melt hunt).
-        using (XonoticGodot.Common.Diagnostics.Prof.Sample("fx.emit"))
+        using (VortexArena.Common.Diagnostics.Prof.Sample("fx.emit"))
             Sink.Emit(new EffectRequest(effect, effect.NetName, origin, velocity, count, colorMin, colorMax, except));
     }
 

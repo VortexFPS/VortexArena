@@ -1,7 +1,7 @@
 # Raptor (vehicle) — parity spec
 
 **Base refs:** `common/vehicles/vehicle/raptor.qc` · `raptor.qh` · `raptor_weapons.qc` · `raptor_weapons.qh` (shared: `common/vehicles/sv_vehicles.qc`, `cl_vehicles.qc`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Vehicles/Raptor.cs` (+ `VehicleCommon.cs`, `VehiclePhysicsHelpers.cs`, `VehicleBoarding.cs`, `VehicleSpawnFuncs.cs`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs` (+ `VehicleCommon.cs`, `VehiclePhysicsHelpers.cs`, `VehicleBoarding.cs`, `VehicleSpawnFuncs.cs`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -125,7 +125,7 @@ The port lives entirely in `Raptor.cs` (the descriptor) leaning on the shared `V
 
 ## Verification
 - **Liveness — verified by code trace:** spawnfunc registration (`MapObjectsRegistry.cs:220`), generic think pump (`SimulationLoop.cs:281-298`), live +use board (`ServerNet.cs:1257,1363`), per-tick input stash (`GameWorld.cs:1052-1058`), live impulse (`Commands.cs:1324`).
-- **Unit tests** (`tests/XonoticGodot.Tests/VehicleRuntimeTests.cs`): `Impulse_Raptor_SetsBombAndFlareModes` exercises board + mode set/cycle on the raptor; the suite's drive/fire/board/exit/death/hook tests cover the shared seam (racer-driven but the same code path). `MonsterTurretVehicleObituaryTests.cs` and `NotificationPolishTests.cs` cover the raptor death-type strings.
+- **Unit tests** (`tests/VortexArena.Tests/VehicleRuntimeTests.cs`): `Impulse_Raptor_SetsBombAndFlareModes` exercises board + mode set/cycle on the raptor; the suite's drive/fire/board/exit/death/hook tests cover the shared seam (racer-driven but the same code path). `MonsterTurretVehicleObituaryTests.cs` and `NotificationPolishTests.cs` cover the raptor death-type strings.
 - **Values** — verified by direct diff of the inlined defaults vs `raptor.qc`/`raptor_weapons.qh` (exhaustive table above); all match.
 - **Presentation / audio gaps** — verified by the explicit `TODO(port,client)` markers in `Raptor.cs` and absence of any model/effect/HUD/CSQC code; no in-game visual check performed (headless audit).
 

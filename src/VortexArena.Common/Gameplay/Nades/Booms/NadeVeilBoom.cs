@@ -5,10 +5,10 @@
 // real client inside is flagged with nade_veil_time. The restore on lapse (nade_veil_Apply) is already
 // driven by part-A's NadesMutator PlayerPreThink — this file supplies the orb touch only.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The veil nade detonation — port of <c>nade_veil_boom</c>.</summary>
 public sealed class NadeVeilBoom : INadeBoom

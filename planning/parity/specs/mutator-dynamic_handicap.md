@@ -1,7 +1,7 @@
 # Dynamic Handicap mutator — parity spec
 
 **Base refs:** `common/mutators/mutator/dynamic_handicap/sv_dynamic_handicap.qc` (+ `server/handicap.qc`, `server/handicap.qh`, the application site `server/player.qc:243-249`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Mutators/DynamicHandicapMutator.cs` · `src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs` (application) · `src/XonoticGodot.Common/Gameplay/Damage/DamageEntityState.cs` (`HandicapGive`/`HandicapTake`)
+**Port refs:** `src/VortexArena.Common/Gameplay/Mutators/DynamicHandicapMutator.cs` · `src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs` (application) · `src/VortexArena.Common/Gameplay/Damage/DamageEntityState.cs` (`HandicapGive`/`HandicapTake`)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -101,7 +101,7 @@ The formula, sign rule, fold (`+1` vs `1/(|h|+1)`), clamp ordering and condition
 exactly. Verified line-by-line and by `MutatorBatchT51Tests.DynamicHandicap_HandicapsAboveMeanPlayer`.
 
 ### Values — faithful
-cfg defaults match Base exactly (`assets/data/.../mutators.cfg:527-531`: 0 / 0.2 / 1 / 0 / 0). The C#
+cfg defaults match Base exactly (`Base/data/.../mutators.cfg:527-531`: 0 / 0.2 / 1 / 0 / 0). The C#
 field initializers (`Scale=1`, `Exponent=1`) are overwritten from the cvars in `Hook()`, so the live
 values are the cfg values.
 

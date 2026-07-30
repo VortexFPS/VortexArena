@@ -84,7 +84,7 @@
   "unit": "mutator-itemstime",
   "tier": "opus",
   "notes": [
-   "[presentation] mutator-itemstime.net.csqc_sync: No itemstime net message exists in XonoticGodot.Net (REGISTER_NET_TEMP(itemstime) / IT_Write / NET_HANDLE not ported). Item times are fed directly from the local server mutator to the local HUD in NetGame.cs:2286-2300, guarded by `if (_server is not null)` (NetGame.cs:2260). A pure remote client (dedicated/separate server) never receives times and the items-time panel stays empty. STILL OPEN after Waves 1/2/5 (grep of src/XonoticGodot.Net for itemstime/IT_Write -> zero matches; the NetGame feed ",
+   "[presentation] mutator-itemstime.net.csqc_sync: No itemstime net message exists in VortexArena.Net (REGISTER_NET_TEMP(itemstime) / IT_Write / NET_HANDLE not ported). Item times are fed directly from the local server mutator to the local HUD in NetGame.cs:2286-2300, guarded by `if (_server is not null)` (NetGame.cs:2260). A pure remote client (dedicated/separate server) never receives times and the items-time panel stays empty. STILL OPEN after Waves 1/2/5 (grep of src/VortexArena.Net for itemstime/IT_Write -> zero matches; the NetGame feed ",
    "[presentation] mutator-itemstime.waypoints.spectator_sprites: No waypointsprite_itemstime / SPRITERULE_SPECTATOR support in the port: timed (SpectatorOnly) items (mega health/armor) get no spectator/warmup respawn-countdown waypoint sprite (Item_RespawnCountdown sets SPRITERULE_SPECTATOR + WaypointSprite_UpdateBuildFinished at time+ITEM_RESPAWN_TICKS), and the g_waypointsprite_itemstime cvar (default 2) is unregistered. Also depends on the unmodeled networked STAT(ITEMSTIME). STILL OPEN after Waves 1/2/5 (grep across src + game -> no matches)."
   ]
  },
@@ -161,7 +161,7 @@
   "unit": "mutator-rocketflying",
   "tier": "sonnet",
   "notes": [
-   "[presentation] mutator-rocketflying.advertise.mutator_string: BuildMutatorsPrettyString chain runner (MutatorActivation.cs:121) has NO live caller in src/XonoticGodot.Server, so the human-readable ', Rocket Flying' scoreboard/votescreen token is never emitted. The machine ':RocketFlying' token IS live (GameWorld.cs:876 GameLogInit, gated by sv_eventlog like Base GameLogInit). mut_set_active client scoreboard parse (util.qc:299) still has no port counterpart."
+   "[presentation] mutator-rocketflying.advertise.mutator_string: BuildMutatorsPrettyString chain runner (MutatorActivation.cs:121) has NO live caller in src/VortexArena.Server, so the human-readable ', Rocket Flying' scoreboard/votescreen token is never emitted. The machine ':RocketFlying' token IS live (GameWorld.cs:876 GameLogInit, gated by sv_eventlog like Base GameLogInit). mut_set_active client scoreboard parse (util.qc:299) still has no port counterpart."
   ]
  },
  {

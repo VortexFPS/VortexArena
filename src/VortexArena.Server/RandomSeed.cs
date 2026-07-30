@@ -1,19 +1,19 @@
-namespace XonoticGodot.Server;
+namespace VortexArena.Server;
 
 /// <summary>
 /// QC <c>randomseed</c> (server/world.qc:594-614): a tiny networked entity carrying a server-rolled random seed,
 /// re-rolled every 5 seconds and broadcast to every client so a predicting client can reproduce the same
-/// deterministic spread/effect stream the server used (the seed feeds <see cref="XonoticGodot.Common.Math.Prandom"/>
+/// deterministic spread/effect stream the server used (the seed feeds <see cref="VortexArena.Common.Math.Prandom"/>
 /// via <c>psrandom</c>).
 ///
 /// <para>This is the SERVER producer half (QC <c>RandomSeed_Think</c> / <c>RandomSeed_Spawn</c>): a per-instance
 /// <see cref="Current"/> int re-rolled on the 5-second <c>nextthink</c> period, ticked once per server frame from
-/// <see cref="XonoticGodot.Server.GameWorld.OnStartFrame"/> and instantiated in <c>Boot</c>. The wire half rides the
+/// <see cref="VortexArena.Server.GameWorld.OnStartFrame"/> and instantiated in <c>Boot</c>. The wire half rides the
 /// existing <c>SendMatchState</c> packet (ServerNet) — the smallest diff that reaches every accepted peer; the
 /// client consumes it into a per-instance deterministic RNG (ClientNet).</para>
 ///
 /// <para>Per-instance (NOT a static) so a listen server's server-side seed is owned by the server world and never
-/// collides with the client's decoded copy — matching the per-context <see cref="XonoticGodot.Common.Math.Prandom"/>
+/// collides with the client's decoded copy — matching the per-context <see cref="VortexArena.Common.Math.Prandom"/>
 /// split. There is no current client EFFECT consuming the seed (the registry confirms it), so networking it is
 /// additive and has nothing to desync; the seam is shipped now so a future deterministic effect can use it.</para>
 /// </summary>

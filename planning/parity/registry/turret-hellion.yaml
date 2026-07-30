@@ -16,7 +16,7 @@ features:
     base_refs:
       - "common/turrets/turret/hellion.qh:Hellion"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs:HellionTurret"
+      - "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs:HellionTurret"
     constants:
       - { name: "mins", base: "'-32 -32 0'", port: "(-32,-32,0)", match: true }
       - { name: "maxs", base: "'32 32 64'", port: "(32,32,64)", match: true }
@@ -47,8 +47,8 @@ features:
       - "common/turrets/turret/hellion.qc:18"
       - "common/turrets/sv_turrets.qc:turret_initialize"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs:Spawn"
     constants:
       - { name: "aim_flags", base: "TFL_AIM_SIMPLE", port: "aimSimple:true", match: true }
       - { name: "select_flags", base: "LOS|PLAYERS|RANGELIMITS|TEAMCHECK (+MISSILES via TUR_FLAG_MISSILE)", port: "Los|Players|RangeLimits|TeamCheck|Missiles (ANGLELIMITS removed)", match: true }
@@ -79,9 +79,9 @@ features:
       - "common/turrets/turret/hellion.qc:5"
       - "common/turrets/sv_turrets.qc:turret_link"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Hellion"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:210"
-      - "src/XonoticGodot.Common/GameInit.cs:InstallGameplaySystems"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:Hellion"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:210"
+      - "src/VortexArena.Common/GameInit.cs:InstallGameplaySystems"
     constants:
       - { name: "g_turrets master switch", base: "1 (default on)", port: "MasterSwitchEnabled default-on", match: true }
     status:
@@ -107,10 +107,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_firecheck"
       - "common/turrets/sv_turrets.qc:turret_fire"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Fire"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Fire"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
     constants:
       - { name: "aim_simple (point at current pos, missile homes)", base: "yes", port: "AimPoint returns TargetCenter when AimSimple", match: true }
       - { name: "shot_refire", base: "0.2", port: "0.2", match: true }
@@ -155,8 +155,8 @@ features:
       - "common/turrets/turret/hellion_weapon.qc:10"
       - "common/turrets/sv_turrets.qc:turret_projectile"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs:Launch"
+      - "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs:Launch"
     constants:
       - { name: "missile size", base: "6", port: "6", match: true }
       - { name: "missile health (shootable by FLAC)", base: "10", port: "10", match: true }
@@ -188,7 +188,7 @@ features:
     base_refs:
       - "common/turrets/turret/hellion_weapon.qc:46"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs:HellionThink"
+      - "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs:HellionThink"
     constants:
       - { name: "think interval", base: "0.05s", port: "0.05s", match: true }
       - { name: "shot_speed_gain (per-tick accel mult)", base: "1.01", port: "1.01", match: true }
@@ -220,8 +220,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_projectile_touch"
       - "common/turrets/sv_turrets.qc:turret_projectile_damage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs:Launch (Explode closure)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/GuidedProjectile.cs:EnsureDeathHook"
+      - "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs:Launch (Explode closure)"
+      - "src/VortexArena.Common/Gameplay/Turrets/GuidedProjectile.cs:EnsureDeathHook"
     constants:
       - { name: "blast damage (owner.shot_dmg)", base: "50", port: "50", match: true }
       - { name: "blast edge damage", base: "0", port: "0", match: true }
@@ -249,8 +249,8 @@ features:
     base_refs:
       - "common/turrets/turret/hellion.qc:11"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs:Think"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs:Attack"
     constants:
       - { name: "frame cycle", base: "++frame while !=0; wrap at >=7 to 0", port: "Think: if(e.Frame!=0)e.Frame+=1; if(e.Frame>=7)e.Frame=0 (L89-90)", match: true }
       - { name: "kick on shot (++tur_head.frame)", base: "yes (hellion_weapon.qc:42)", port: "turret.Frame += 1f on each Attack (L129)", match: true }
@@ -277,10 +277,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_die"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Damage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Damage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
     constants:
       - { name: "respawntime", base: "90", port: "90 (HellionTurret passes RespawnTime to TurretSpawn.Init)", match: true }
       - { name: "inactive/dead take no damage", base: "yes", port: "yes", match: true }
@@ -308,8 +308,8 @@ features:
       - "common/turrets/turret/hellion.qc:22"
       - "common/turrets/sv_turrets.qc:turret_firecheck"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/HellionTurret.cs:66"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/HellionTurret.cs:66"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
     constants:
       - { name: "firecheck AFF (withhold shot if a teammate is in the line of fire)", base: "TFL_FIRECHECK_AFF set", port: "FireCheckAff set (HellionTurret.cs:67) + honoured in RunCombat L689", match: true }
     status:

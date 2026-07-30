@@ -1,6 +1,6 @@
-using XonoticGodot.Common.Framework;
+using VortexArena.Common.Framework;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>Base monster descriptor (QC CLASS(Monster), common/monsters/). Registered into <see cref="Monsters"/>.</summary>
 public abstract partial class Monster : IRegistered

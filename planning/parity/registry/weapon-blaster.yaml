@@ -16,8 +16,8 @@ features:
       - "common/weapons/weapon/blaster.qh:CLASS(Blaster)"
       - "common/weapons/weapon/blaster.qc:wr_checkammo1"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:Blaster"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:WeaponAmmo.Check"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:Blaster"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:WeaponAmmo.Check"
     constants:
       - { name: "impulse", base: "1", port: "1", match: true }
       - { name: "spawnflags", base: "NORMAL|CANCLIMB|TYPE_SPLASH", port: "Normal|CanClimb|TypeSplash", match: true }
@@ -51,8 +51,8 @@ features:
       - "common/weapons/weapon/blaster.qc:W_Blaster_Attack"
       - "common/weapons/weapon/blaster.qc:wr_think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:WrThink"
     constants:
       - { name: "shotangle (deg)", base: "0", port: "0", match: true }
       - { name: "recoil (punchangle)", base: "3", port: "3", match: true }
@@ -85,7 +85,7 @@ features:
       - "bal-wep-xonotic.cfg:26-43 g_balance_blaster_primary_*"
       - "common/weapons/weapon/blaster.qh:W_PROPS(Blaster)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:Configure"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:Configure"
     constants:
       - { name: "primary_damage", base: "20", port: "20", match: true }
       - { name: "primary_edgedamage", base: "10", port: "10", match: true }
@@ -123,7 +123,7 @@ features:
       - "server/weapons/tracing.qc:W_SetupShot_Dir_ProjectileSize_Range"
       - "server/weapons/tracing.qh:W_SetupShot_Dir"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
     constants:
       - { name: "antilag (blaster)", base: "false", port: "false (projectile, no antilag arg)", match: true }
       - { name: "trueaim_minrange clamp", base: "g_trueaim_minrange (default 44)", port: "applied (WeaponFiring.cs:232-234, cvar g_trueaim_minrange fallback 44)", match: true }
@@ -150,7 +150,7 @@ features:
       - "server/weapons/tracing.qc:W_SetupProjVelocity_Explicit"
       - "server/weapons/tracing.qc:W_CalculateProjectileVelocity"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:ProjectileVelocity"
     constants:
       - { name: "speed", base: "6000", port: "6000", match: true }
       - { name: "spread", base: "0", port: "0", match: true }
@@ -177,8 +177,8 @@ features:
     base_refs:
       - "common/weapons/weapon/blaster.qc:W_Blaster_Think"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:OnThink"
-      - "src/XonoticGodot.Engine/Simulation/MoveTypePhysics.cs:RunEntity"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:OnThink"
+      - "src/VortexArena.Engine/Simulation/MoveTypePhysics.cs:RunEntity"
     constants:
       - { name: "lifetime (s)", base: "5", port: "5", match: true }
       - { name: "movetype", base: "MOVETYPE_FLY", port: "MoveType.Fly", match: true }
@@ -206,8 +206,8 @@ features:
       - "common/weapons/weapon/blaster.qc:W_Blaster_Touch"
       - "server/damage.qc:RadiusDamageForSource"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:OnTouch"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:OnTouch"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponSplash.cs:RadiusDamage"
     constants:
       - { name: "damage / edgedamage", base: "20 / 10", port: "20 / 10", match: true }
       - { name: "radius", base: "60", port: "60", match: true }
@@ -231,7 +231,7 @@ features:
       - "impact particle uses -normalize(velocity) as the w_backoff plane normal (approximation, not the exact surface normal); CSQCProjectile networking of the impact is server-emitted instead of CSQC-rendered."
     verification:
       - { kind: code_read, ref: "blaster.qc:5-42 (incl. interact hack lines 15-22,38-39) vs Blaster.OnTouch (Blaster.cs:204-237): event_damage=func_null reproduced by self.Touch=null (cs:206); g_projectiles_interact==1 + (other.Flags & EntFlags.Item) + other.DamageForceScale==0 -> set DamageForceScale=1 then restore 0 (cs:212-228); force_xyzscale.z (cs:225); center=origin+(mins+maxs)*0.5 (cs:222); directHit=other -- bit-for-bit match", result: pass }
-      - { kind: value_diff, ref: "g_projectiles_interact default: balance-xonotic.cfg:203 set 1 in BOTH Base and assets/data/.../balance-xonotic.cfg -> interact path live under stock play", result: pass }
+      - { kind: value_diff, ref: "g_projectiles_interact default: balance-xonotic.cfg:203 set 1 in BOTH Base and Base/data/.../balance-xonotic.cfg -> interact path live under stock play", result: pass }
       - { kind: code_read, ref: "projectiles set Flags=EntFlags.Item (Devastator/Electro/Mortar/Hagar/etc.) and default DamageForceScale=0 -> the interact predicate is genuinely reachable when a bolt touches another projectile", result: pass }
       - { kind: code_read, ref: "damage.qc RadiusDamageForSource vs WeaponSplash.RadiusDamage: falloff, per-axis force scale, directHit skips LOS, force tracks damage fraction", result: pass }
     confidence: high
@@ -244,8 +244,8 @@ features:
       - "common/weapons/weapon/blaster.qc:wr_think"
       - "server/weapons/weaponsystem.qc:weapon_prepareattack"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/WeaponFireGate.cs:PrepareAttack"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:RefireFor"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFireGate.cs:PrepareAttack"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:RefireFor"
     constants:
       - { name: "refire (s)", base: "0.7", port: "0.7", match: true }
       - { name: "animtime (s)", base: "0.1", port: "0.1", match: true }
@@ -272,8 +272,8 @@ features:
       - "common/weapons/weapon/blaster.qc:wr_think"
       - "server/weapons/selection.qc:W_LastWeapon"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:WrThink"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:LastWeapon"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:LastWeapon"
     constants:
       - { name: "gate", base: "only if m_switchweapon == WEP_BLASTER", port: "only if ActiveWeaponId == RegistryId", match: false }
     status:
@@ -300,9 +300,9 @@ features:
       - "common/weapons/weapon/blaster.qc:OffhandBlaster.offhand_think"
       - "common/mutators/mutator/offhand_blaster/sv_offhand_blaster.qc"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:FireOffhand"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:WeaponRateFactor"
-      - "src/XonoticGodot.Common/Gameplay/Weapons/Blaster.cs:WrThink"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:FireOffhand"
+      - "src/VortexArena.Common/Gameplay/Mutators/OffhandBlasterMutator.cs:WeaponRateFactor"
+      - "src/VortexArena.Common/Gameplay/Weapons/Blaster.cs:WrThink"
     constants:
       - { name: "jump_interval refire", base: "refire * W_WeaponRateFactor(actor)", port: "refire * WeaponRateFactor(actor)", match: true }
       - { name: "slot", base: "weaponentities[1]", port: "slot MaxWeaponSlots (ungated, fired directly)", match: true }
@@ -331,9 +331,9 @@ features:
     base_refs:
       - "common/weapons/weapon/blaster.qc:wr_aim"
     port_refs:
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:AimAndDecideFire"
-      - "src/XonoticGodot.Server/Bot/BotBrain.cs:CurrentShotSpeed"
-      - "src/XonoticGodot.Server/Bot/BotAim.cs:ShotLead"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:AimAndDecideFire"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:CurrentShotSpeed"
+      - "src/VortexArena.Server/Bot/BotAim.cs:ShotLead"
     constants:
       - { name: "bot_aim(speed, 0, lifetime, false, true) lead", base: "leads target for projectile (speed 6000)", port: "generic ShotLead(enemyCenter, enemy.Velocity, CurrentShotSpeed()); blaster speed read from g_balance_blaster_primary_speed (6000)", match: true }
       - { name: "bot_dodge / bot_dodgerating (producer)", base: "missile.bot_dodge=true / bot_dodgerating=damage + IL_PUSH(g_bot_dodge)", port: "missile.BotDodge=true / BotDodgeRating=Primary.Damage (Blaster.cs:169-170); Entity.BotDodge/BotDodgeRating fields exist", match: true }
@@ -363,9 +363,9 @@ features:
       - "common/weapons/weapon/blaster.qc:wr_suicidemessage"
       - "common/weapons/weapon/blaster.qc:wr_killmessage"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:49"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/DeathMessages.cs:126"
-      - "src/XonoticGodot.Common/Gameplay/Notifications/NotificationsList.cs:1182"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:49"
+      - "src/VortexArena.Common/Gameplay/Notifications/DeathMessages.cs:126"
+      - "src/VortexArena.Common/Gameplay/Notifications/NotificationsList.cs:1182"
     constants:
       - { name: "kill notif", base: "WEAPON_BLASTER_MURDER", port: "WEAPON_BLASTER_MURDER", match: true }
       - { name: "suicide notif", base: "WEAPON_BLASTER_SUICIDE", port: "WEAPON_BLASTER_SUICIDE (self->DEATH_SELF_GENERIC)", match: true }

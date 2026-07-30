@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // Snake — a single-player grid game. NOTE: Xonotic ships no Snake minigame (the QC set is nmm/ttt/c4/pong/
 // ps/pp/bd); this is an ORIGINAL implementation written against the same MinigameSession framework as the

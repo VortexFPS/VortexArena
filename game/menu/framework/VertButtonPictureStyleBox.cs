@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The vertical counterpart of <see cref="ButtonPictureStyleBox"/> — a faithful port of the engine's

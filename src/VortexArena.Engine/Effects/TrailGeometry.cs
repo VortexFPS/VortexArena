@@ -1,7 +1,7 @@
 using System;
 using NVec3 = System.Numerics.Vector3;
 
-namespace XonoticGodot.Engine.Effects;
+namespace VortexArena.Engine.Effects;
 
 /// <summary>
 /// Pure geometry for distance-stepped particle TRAILS — the C# port of Darkplaces' trail spawn loop

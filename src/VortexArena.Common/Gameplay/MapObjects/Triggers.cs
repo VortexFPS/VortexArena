@@ -20,12 +20,12 @@
 // (trigger_multiple / multi_trigger CTS branch keyed by Entity.Index via CtsTriggerTimes Dictionary).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>The touch/relay/hurt/heal/gravity/counter/delay/secret/swamp/impulse/keylock trigger entities. Each setup is a spawnfunc.</summary>
 public static class Triggers

@@ -1,7 +1,7 @@
-using XonoticGodot.Net;
+using VortexArena.Net;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Guards the owner-block inventory tail (QC the ammo RES_* STATs + STAT_WEAPONS + IT_UNLIMITED_AMMO + the

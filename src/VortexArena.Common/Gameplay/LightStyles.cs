@@ -11,7 +11,7 @@
 // client lightstyle-animation consumer. Styles 32-62 are assigned at runtime by switchable spawnfunc_light
 // entities (not part of this fixed table).
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// QC the worldspawn lightstyle table (server/world.qc:882-920) — the 12 named animated styles + style 63.

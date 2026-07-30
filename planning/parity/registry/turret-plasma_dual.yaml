@@ -17,10 +17,10 @@ features:
       - "common/turrets/sv_turrets.qc:turret_initialize"
       - "common/turrets/turret/plasma_dual.qh:DualPlasmaTurret"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:PlasmaDual"
-      - "src/XonoticGodot.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:231"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawnFuncs.cs:PlasmaDual"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:231"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Spawn"
     constants:
       - { name: "health", base: "500", port: "500", match: true }
       - { name: "mins", base: "'-32 -32 0'", port: "(-32,-32,0)", match: true }
@@ -53,9 +53,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_firecheck"
       - "common/turrets/sv_turrets.qc:turret_fire"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Fire"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:RunCombat"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Fire"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
     constants:
       - { name: "targetscan_mindelay", base: "0.1", port: "0.1 (Cvar g_turrets_targetscan_mindelay fallback)", match: true }
       - { name: "targetscan_maxdelay", base: "1 (autocvar default; turrets.cfg)", port: "1 (Cvar g_turrets_targetscan_maxdelay fallback)", match: true }
@@ -85,9 +85,9 @@ features:
       - "common/turrets/turret/plasma_weapon.qc:PlasmaAttack.wr_think"
       - "common/turrets/sv_turrets.qc:turret_projectile"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Projectile"
     constants:
       - { name: "shot_dmg", base: "80", port: "80", match: true }
       - { name: "shot_radius", base: "150", port: "150", match: true }
@@ -120,9 +120,9 @@ features:
     base_refs:
       - "common/turrets/turret/plasma_dual.qc:tr_attack (MUTATOR_IS_ENABLED mutator_instagib)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaTurret.cs:FireInstagibBeam"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack (instagib branch)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:FireInstagibBeam"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack (instagib branch)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
     constants:
       - { name: "instagib_rail_damage", base: "1e10 (10000000000 — an instakill)", port: "1e10 (InstagibRailDamage)", match: true }
       - { name: "instagib_force", base: "800", port: "800 (InstagibRailForce)", match: true }
@@ -153,8 +153,8 @@ features:
     base_refs:
       - "turrets.cfg:g_turrets_unit_plasma_dual_* (lines 359-394)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think (direct TurretParams ctor)"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think (direct TurretParams ctor)"
     constants:
       - { name: "shot_refire", base: "0.35", port: "0.35 (DualRefire)", match: true }
       - { name: "target_range", base: "3000", port: "3000 (DualTargetRange)", match: true }
@@ -192,9 +192,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_targetscore_generic"
       - "turrets.cfg:g_turrets_unit_plasma_dual_target_select_* (lines 376-380)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:ScoreTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:SelectTarget"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
     constants:
       - { name: "target_select_rangebias", base: "0.2", port: "0.2 (DualRangeBias)", match: true }
       - { name: "target_select_samebias", base: "0.4", port: "0.4 (DualSameBias)", match: true }
@@ -223,8 +223,8 @@ features:
       - "common/turrets/sv_turrets.qc:turret_aim_generic"
       - "common/turrets/turret/plasma.qc:tr_setup (aim_flags = LEAD|SHOTTIMECOMPENSATE|SPLASH)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:AimPoint"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
     constants:
       - { name: "aim_lead", base: "TFL_AIM_LEAD set", port: "lead:true", match: true }
       - { name: "aim_shottimecompensate", base: "TFL_AIM_SHOTTIMECOMPENSATE set", port: "shotTimeCompensate:true", match: true }
@@ -251,8 +251,8 @@ features:
     base_refs:
       - "common/turrets/sv_turrets.qc:turret_track"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Track"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Track"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think"
     constants:
       - { name: "aim_maxpitch_clamp", base: "30", port: "30", match: true }
       - { name: "aim_maxrot_clamp", base: "360", port: "360", match: true }
@@ -284,12 +284,12 @@ features:
       - "common/turrets/sv_turrets.qc:turret_hide"
       - "common/turrets/sv_turrets.qc:turret_respawn"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Damage"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Die"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init (GtEventDamage wiring)"
-      - "src/XonoticGodot.Common/Gameplay/Damage/DamageSystem.cs:331 (EventDamage routing)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Damage"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Respawn"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init (GtEventDamage wiring)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:331 (EventDamage routing)"
     constants:
       - { name: "respawntime", base: "60", port: "60", match: true }
       - { name: "friendlyfire_scale", base: "g_friendlyfire (default 0 => no team dmg)", port: "g_friendlyfire honored", match: true }
@@ -321,9 +321,9 @@ features:
       - "common/turrets/sv_turrets.qc:turret_damage (TFL_DMG_HEADSHAKE branch, line 226)"
       - "common/turrets/turret/plasma.qc:tr_setup (damage_flags |= TFL_DMG_HEADSHAKE)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretAI.cs:EventDamage (HeadShake branch, lines 1056-1060)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/TurretSpawn.cs:Init:79 (headShake param -> TurretState.HeadShake)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Spawn (headShake: true)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:EventDamage (HeadShake branch, lines 1056-1060)"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretSpawn.cs:Init:79 (headShake param -> TurretState.HeadShake)"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Spawn (headShake: true)"
     constants:
       - { name: "headshake_jitter", base: "tur_head.angles.x/y += (random()-0.5)*damage", port: "stHit.HeadAngles.X/Y += (Prandom.Float()-0.5f)*take", match: true }
     status:
@@ -351,8 +351,8 @@ features:
       - "common/turrets/turret/plasma_dual.qc:tr_attack (++it.tur_head.frame)"
       - "common/turrets/turret/plasma.qc:tr_attack (SUPER: if frame==0 frame=1)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think (Entity.Frame wheel)"
-      - "src/XonoticGodot.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack (frame==0 -> 1; ++Frame)"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Think (Entity.Frame wheel)"
+      - "src/VortexArena.Common/Gameplay/Turrets/PlasmaDualTurret.cs:Attack (frame==0 -> 1; ++Frame)"
     constants:
       - { name: "head_frame_cycle", base: "0..6 (idle at 0 and 3, advance on fire)", port: "Entity.Frame 0..6 (idle at 0 and 3, advance on fire)", match: true }
       - { name: "frame_start_kick", base: "SUPER: if frame==0 frame=1 (non-instagib only)", port: "if (turret.Frame==0) Frame=1 (else branch only)", match: true }

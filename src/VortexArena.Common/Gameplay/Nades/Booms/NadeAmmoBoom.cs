@@ -5,10 +5,10 @@
 // shared NadeBoom.SpawnOrb helper (part A).
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Nades.Booms;
+namespace VortexArena.Common.Gameplay.Nades.Booms;
 
 /// <summary>The ammo nade detonation — port of <c>nade_ammo_boom</c>.</summary>
 public sealed class NadeAmmoBoom : INadeBoom

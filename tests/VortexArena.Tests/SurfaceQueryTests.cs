@@ -1,17 +1,17 @@
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Formats.Bsp;
-using XonoticGodot.Formats.Vfs;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Formats.Bsp;
+using VortexArena.Formats.Vfs;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests the <c>getsurface*</c> mesh-query builtins (<see cref="SurfaceService"/> + <see cref="BspSurfaceBuilder"/>)
@@ -21,7 +21,7 @@ namespace XonoticGodot.Tests;
 /// </summary>
 public class SurfaceQueryTests
 {
-    private const string DataDir = @"C:\Users\Bryan\Projects\Xonotic\XonoticGodot\assets\data";
+    private static readonly string DataDir = TestPaths.Data;
 
     // A unit-ish quad in the YZ plane at x=0, centred on the origin, wound so cross(c-a, b-a) faces +X
     // (matching the +X vertex normals). Triangles are face-local indices, as in a real BSP.
@@ -171,7 +171,7 @@ public class SurfaceQueryTests
     {
         if (!Directory.Exists(DataDir)) return;
         using var vfs = new VirtualFileSystem();
-        if (!vfs.MountGameDir(DataDir)) return;
+        if (!vfs.MountContentRoot(DataDir)) return;
         string? bspPath = vfs.Find("maps/", "bsp").FirstOrDefault();
         if (bspPath is null) return;
 

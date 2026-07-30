@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using Godot;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// An always-available, low-overhead frame-time + GC hitch monitor — the instrument the per-second
@@ -87,7 +87,15 @@ public partial class FrameProfiler : CanvasLayer
           "nadeorbs", "dynlights",
           // the messagemode chat prompt's caret-blink _Process (only ticks while the prompt is open — it disables
           // its own _Process when closed — but scoped so the open-window cost is attributed, not proc:other).
-          "chat" };
+          "chat",
+          // (E2) the editor's world-space alignment grid: a full-screen depth-reconstruction pass. The _Process
+          // side is just cvar->uniform pushes and is inert while the grid is off, but scoped so enabling it
+          // shows up as its own line rather than inflating proc:other.
+          "editorgrid",
+          // (E3/E5) the map editor's per-frame work: crosshair picking + drag tracking, and the line-overlay
+          // rebuild. Both are inert outside an editor session but scoped so an editing session's cost is
+          // attributed rather than inflating proc:other.
+          "editor.ctrl", "editor.gizmos", "editor.world" };
 
     /// <summary>
     /// Open a named timing scope: <c>using (FrameProfiler.Scope("name")) { ... }</c> (or as a one-statement
@@ -1313,7 +1321,7 @@ public partial class FrameProfiler : CanvasLayer
     // ---- cvars -----------------------------------------------------------------------------------------------
     private static CvarService? ClientCvars()
     {
-        CvarService cv = XonoticGodot.Game.Menu.MenuState.Cvars;
+        CvarService cv = VortexArena.Game.Menu.MenuState.Cvars;
         return cv is not null && cv.Has("cl_frameprofiler") ? cv : null;
     }
 
@@ -1321,7 +1329,7 @@ public partial class FrameProfiler : CanvasLayer
     {
         if (_defaultsRegistered)
             return;
-        CvarService cv = XonoticGodot.Game.Menu.MenuState.Cvars;
+        CvarService cv = VortexArena.Game.Menu.MenuState.Cvars;
         if (cv is null)
             return;
         RegisterDefaults(cv);

@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Md3;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Net;
+using VortexArena.Formats.Md3;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Net;
 
-namespace XonoticGodot.Game.Client;
+namespace VortexArena.Game.Client;
 
 /// <summary>
 /// Renders networked <b>weapon entities</b> — primarily the held weapon of a remote player (the third-person

@@ -15,19 +15,19 @@
 // EntityUse(self, activator); the dropped `trigger` is only forwarded as the (unused) downstream trigger.
 //
 // CROSS-LAYER NOTE: target_changelevel / target_levelwarp need server/campaign behavior that lives ABOVE
-// XonoticGodot.Common (XonoticGodot.Server: GameWorld.NextLevel, Commands.ChangeLevelHandler, Campaign.LevelWarp).
-// XonoticGodot.Common cannot reference those, so this file exposes static seam delegates (mirroring
+// VortexArena.Common (VortexArena.Server: GameWorld.NextLevel, Commands.ChangeLevelHandler, Campaign.LevelWarp).
+// VortexArena.Common cannot reference those, so this file exposes static seam delegates (mirroring
 // WarpzoneSpawns.Sink / GametypeObjectiveSpawns.Sink) the host wires up; unwired they degrade to a no-op.
 
 using System.Numerics;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay.Damage;
-using XonoticGodot.Common.Gameplay.Scoring;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The target_* utility entities (kill / speed / spawnpoint / location / changelevel / levelwarp / give /
@@ -272,26 +272,26 @@ public static class TargetUtilities
     public const int ChangeLevelMultiplayer = 1 << 1; // CHANGELEVEL_MULTIPLAYER = BIT(1) (changelevel.qh)
 
     /// <summary>
-    /// Host seam (XonoticGodot.Server): end the current match / advance to the next level (QC <c>NextLevel()</c>),
+    /// Host seam (VortexArena.Server): end the current match / advance to the next level (QC <c>NextLevel()</c>),
     /// optionally flagging a campaign win because a real player triggered it. Null = degrade to a no-op.
     /// </summary>
     public static System.Action<Entity /*actor*/>? NextLevelHandler;
 
     /// <summary>
-    /// Host seam (XonoticGodot.Server): switch to a named map (QC <c>changelevel(chmap)</c>). Null = degrade to a
+    /// Host seam (VortexArena.Server): switch to a named map (QC <c>changelevel(chmap)</c>). Null = degrade to a
     /// no-op (a bare unit test, or a host that hasn't wired the command path).
     /// </summary>
     public static System.Action<string /*chmap*/>? ChangeLevelHandler;
 
     /// <summary>
-    /// Host seam (XonoticGodot.Server): the count of REAL (non-bot) clients + how many have voted for a given
+    /// Host seam (VortexArena.Server): the count of REAL (non-bot) clients + how many have voted for a given
     /// changelevel target — the CHANGELEVEL_MULTIPLAYER fraction needs the whole client list, which lives in the
     /// server. Returns (real-player count, count whose ChLevelTarg == target). Null = treat as a solo trigger.
     /// </summary>
     public static System.Func<Entity /*target*/, (int real, int voted)>? RealPlayerVoteCount;
 
     /// <summary>
-    /// Host seam (XonoticGodot.Server): apply the next map's gametype (QC <c>MapInfo_SwitchGameType</c>) when a
+    /// Host seam (VortexArena.Server): apply the next map's gametype (QC <c>MapInfo_SwitchGameType</c>) when a
     /// <c>target_changelevel</c> carries a <c>.gametype</c> NetName. On the listen server this sets the live
     /// <c>gametype</c> cvar so the rebooted level comes up in that mode. Null = no switch (degrade to no-op).
     /// </summary>
@@ -379,7 +379,7 @@ public static class TargetUtilities
     // ===================================================================
 
     /// <summary>
-    /// Host seam (XonoticGodot.Server): campaign level warp (QC <c>CampaignLevelWarp(n)</c>) — n is the 0-based level
+    /// Host seam (VortexArena.Server): campaign level warp (QC <c>CampaignLevelWarp(n)</c>) — n is the 0-based level
     /// index, or -1 for the next level. Null = degrade to a no-op (not in a campaign, or unwired).
     /// </summary>
     public static System.Action<int /*level*/>? CampaignLevelWarpHandler;
@@ -662,7 +662,7 @@ public static class TargetUtilities
 
     /// <summary>
     /// QC <c>target_items_use</c>'s give (target/items.qc:28): <c>GiveItems(actor, 0, tokenize(netname))</c>.
-    /// Now routes through the shared, op-aware <see cref="XonoticGodot.Common.Gameplay.GiveItems"/> (T35) so the full
+    /// Now routes through the shared, op-aware <see cref="VortexArena.Common.Gameplay.GiveItems"/> (T35) so the full
     /// operator grammar (no/max/min/plus/minus + the all/allweapons/allammo aggregates) and the dual-rep weapon
     /// gives apply identically to the cheat <c>give</c> and <c>target_give</c>. <paramref name="self"/> is the
     /// target_items entity (its seeded powerup-duration fields drive the persistent <c>.items</c> template mode,

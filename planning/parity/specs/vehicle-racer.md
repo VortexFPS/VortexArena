@@ -1,7 +1,7 @@
 # Racer (wakizashi) vehicle — parity spec
 
 **Base refs:** `common/vehicles/vehicle/racer.qc` · `racer.qh` · `racer_weapon.qc` · `racer_weapon.qh` (+ shared `common/vehicles/sv_vehicles.qc`, `vehicles.qc`)
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Vehicles/Racer.cs` · `VehicleCommon.cs` · `VehiclePhysicsHelpers.cs` · `VehicleBoarding.cs` · `VehicleSpawnFuncs.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Vehicles/Racer.cs` · `VehicleCommon.cs` · `VehiclePhysicsHelpers.cs` · `VehicleBoarding.cs` · `VehicleSpawnFuncs.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

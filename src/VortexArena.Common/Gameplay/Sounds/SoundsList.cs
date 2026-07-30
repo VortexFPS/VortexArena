@@ -1,4 +1,4 @@
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 // The sound table — a C# port of QuakeC's SOUND(...) tables and the GlobalSound / PlayerSound / announcer
 // registries. Sources:

@@ -1,8 +1,8 @@
 using System.Globalization;
 using Godot;
-using XonoticGodot.Engine.Simulation;
+using VortexArena.Engine.Simulation;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Sandbox-tools cheat dialog — a faithful C# port of <c>XonoticSandboxToolsDialog_fill</c>

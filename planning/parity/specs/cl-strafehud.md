@@ -1,7 +1,7 @@
 # StrafeHUD panel (#25) — parity spec
 
 **Base refs:** `client/hud/panel/strafehud.qc` (804 ln main) · `client/hud/panel/strafehud.qh` (cvar defaults + enums) · `client/hud/panel/strafehud/{util,draw,draw_core,extra}.qc(+.qh)` · `client/hud/panel/strafehud/_mod.{inc,qh}` (build glue)
-**Port refs:** `game/hud/StrafeHudPanel.cs` (single-file port) · feed: `game/net/NetGame.cs:4382` · gate: `game/hud/HudPanel.cs:108`, `game/hud/HudManager.cs:269`, `game/hud/HudLayoutDefaults.cs:82` · tests: `tests/XonoticGodot.Tests/HudPanelRegistryTests.cs:334`
+**Port refs:** `game/hud/StrafeHudPanel.cs` (single-file port) · feed: `game/net/NetGame.cs:4382` · gate: `game/hud/HudPanel.cs:108`, `game/hud/HudManager.cs:269`, `game/hud/HudLayoutDefaults.cs:82` · tests: `tests/VortexArena.Tests/HudPanelRegistryTests.cs:334`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-07-02
 
 > Supersedes the coarse row `cl-hud.panel.strafehud` in `registry/cl-hud.yaml` ("faithful-to-stock
@@ -158,7 +158,7 @@ IMPLEMENTED (display-only via the never-fed `OnSlick`).
 
 ## Verification
 - Code diff of all 2260 Base lines vs `StrafeHudPanel.cs` (this audit).
-- `tests/XonoticGodot.Tests/HudPanelRegistryTests.cs:334` `StrafeHud_CoreBehaviourCvarDefaults_MatchBase`
+- `tests/VortexArena.Tests/HudPanelRegistryTests.cs:334` `StrafeHud_CoreBehaviourCvarDefaults_MatchBase`
   pins mode/style/range/range_sidestrafe/unit_show/projection/onground_*/timeouts/antiflicker/fps_update.
 - Liveness by grep: `WishDir|JumpHeld|OnSlick|FovX|RaceStartSpeed|RaceCheckpointTime|SpeedUnit` have no
   assignments outside the class; `NetGame.cs:4378-4383` comment confirms Player-only feed by design.

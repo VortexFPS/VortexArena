@@ -19,7 +19,7 @@ features:
       - "common/mapinfo.qc:_MapInfo_Map_Reset"
       - "common/mapinfo.qh:MapInfo_Map_bspname"
     port_refs:
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:Parse (170-260)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:Parse (170-260)"
       - "game/menu/CreateGameScreen.cs:MapInfoCache.Get (563-601)"
       - "game/menu/dialogs/DialogCreateGameMapInfo.cs:47 (live MapInfoBackend constructor)"
     constants:
@@ -49,8 +49,8 @@ features:
     base_refs:
       - "common/mapinfo.qc:MapInfo_Type_FromString"
     port_refs:
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:ResolveGametype (302-329)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ResolveGameType (4928)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:ResolveGametype (302-329)"
+      - "src/VortexArena.Server/GameWorld.cs:ResolveGameType (4928)"
     constants:
       - { name: "remaps", base: "nexball→nb freezetag→ft keepaway→ka invasion→inv assault→as race→rc ffa→dm cctf/oneflag→ctf tourney→duel arena→ca(q3compat only)", port: "MapInfoBackend.ResolveGametype: all 11 (arena→ca unconditional; ft→freezetag port-NetName fixup)", match: true }
     status:
@@ -82,8 +82,8 @@ features:
       - "common/mapinfo.qc:MapInfo_Type_ToText"
       - "common/mapinfo.qc:MapInfo_Type_Description"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/GameplayBases.cs:GameType (367-412: NetName/DisplayName/TeamGame/MenuDescription)"
-      - "src/XonoticGodot.Common/Gameplay/Registries.cs:GameTypes.ByName"
+      - "src/VortexArena.Common/Gameplay/GameplayBases.cs:GameType (367-412: NetName/DisplayName/TeamGame/MenuDescription)"
+      - "src/VortexArena.Common/Gameplay/Registries.cs:GameTypes.ByName"
       - "game/net/NetGame.cs:4969 (m_hidelimits scoreboard gate)"
       - "game/hud/ScoreboardPanel.cs:94 (MapInfo_Type_ToText banner)"
     constants:
@@ -116,8 +116,8 @@ features:
       - "common/mapinfo.qc:_MapInfo_GetDefault"
       - "common/mapinfo.qc:_MapInfo_GetTeamPlayBool"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:3039 (assault timelimit=20 assert)"
-      - "src/XonoticGodot.Server/GameWorld.cs:3109-3115 (survival 20/12 asserts)"
+      - "src/VortexArena.Server/GameWorld.cs:3039 (assault timelimit=20 assert)"
+      - "src/VortexArena.Server/GameWorld.cs:3109-3115 (survival 20/12 asserts)"
     constants:
       - { name: "fraglimit alias set", base: "pointlimit|fraglimit|lives|laplimit|caplimit → fraglimit; teampointlimit|teamlaplimit → teams fraglimit", port: "none", match: false }
     status:
@@ -203,7 +203,7 @@ features:
       - "common/mapinfo.qc:MapInfo_Get_ByName (1386 FOREACH m_isForcedSupported)"
       - "common/mapinfo.qh:Gametype.m_isForcedSupported"
     port_refs:
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:ApplyForcedGametypes (145-165)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:ApplyForcedGametypes (145-165)"
       - "game/menu/CreateGameScreen.cs:MapInfoCache.Get (588-598, the maplist-path duplicate)"
       - "game/menu/dialogs/DialogCreateGameMapInfo.cs:50-53 (cvar wiring)"
     constants:
@@ -236,7 +236,7 @@ features:
       - "common/mapinfo.qc:_MapInfo_FindArenaFile"
       - "common/mapinfo.qc:_MapInfo_CheckArenaFile"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:573-575 (q3compat flag probe — existence only, NOT a parse)"
+      - "src/VortexArena.Server/GameWorld.cs:573-575 (q3compat flag probe — existence only, NOT a parse)"
     constants:
       - { name: "g_mapinfo_q3compat", base: "1 (use .arena/.defi when no .mapinfo; 2/3 = feed the generator)", port: "cvar absent", match: false }
       - { name: "type remaps", base: "team→'tdm ft', ffa→'dm lms ka', tourney→duel; +'ca kh' for big team maps; .defi style→CTS", port: "none", match: false }
@@ -300,7 +300,7 @@ features:
       - "common/mapinfo.qc:MapInfo_RequiredFlags"
       - "common/mapinfo.qc:1195-1215 (hidden/forbidden/frustrating/donotwant/gameversion_min parse)"
     port_refs:
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:219-221 (hidden parsed into MapInfo.Hidden — never consulted)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:219-221 (hidden parsed into MapInfo.Hidden — never consulted)"
     constants:
       - { name: "g_maplist_allow_hidden", base: "0", port: "cvar absent", match: false }
       - { name: "g_maplist_allow_frustrating", base: "0 (>1 = ONLY frustrating)", port: "cvar absent", match: false }
@@ -357,10 +357,10 @@ features:
       - "common/mapinfo.qc:_MapInfo_CheckMap"
       - "common/mapinfo.qc:MapInfo_CurrentGametype"
     port_refs:
-      - "src/XonoticGodot.Server/MapRotation.cs:24-27 (MapExists/MapSupportsGametype pluggable predicates, default true)"
-      - "src/XonoticGodot.Server/GameWorld.cs:1139-1149 (Voting.ValidateMap consults both)"
-      - "src/XonoticGodot.Server/Commands.cs:3198-3211 (suggestmap consults both)"
-      - "src/XonoticGodot.Server/MapRotation.cs:59 (Init filter), :164 (Map_Check)"
+      - "src/VortexArena.Server/MapRotation.cs:24-27 (MapExists/MapSupportsGametype pluggable predicates, default true)"
+      - "src/VortexArena.Server/GameWorld.cs:1139-1149 (Voting.ValidateMap consults both)"
+      - "src/VortexArena.Server/Commands.cs:3198-3211 (suggestmap consults both)"
+      - "src/VortexArena.Server/MapRotation.cs:59 (Init filter), :164 (Map_Check)"
     constants: []
     status:
       logic: stub
@@ -373,7 +373,7 @@ features:
     divergence_rationale: null
     gaps:
       - "The CONSUMER seams are all live and correctly shaped (rotation Init filter, Map_Check, vote-map/nextmap ValidateMap with Base's exact error strings, suggestmap gates) — but the PREDICATES they call are never wired by any host: MapRotation.MapExists and MapSupportsGametype keep their `static _ => true` defaults (grep: only tests assign MapExists; nothing assigns MapSupportsGametype outside tests). Net effect: on a live server every map name 'exists' and 'supports' everything — a typo'd `vmap foo` or an unsupported-gametype rotation entry passes validation and only fails at changelevel."
-      - "A SECOND unwired predicate exists on the console side: ConsoleCommands.MapExists (src/XonoticGodot.Engine/Console/ConsoleCommands.cs:292, nullable Func) gates `maplist add` (:355) and drives `maplist cleanup` (:384-388) — Base's equivalents call MapInfo_CheckMap. It is null on every live host (grep: only GenericCommandsTests.cs:94,128 assign it), so `maplist add <typo>` succeeds and `maplist cleanup` is a no-op."
+      - "A SECOND unwired predicate exists on the console side: ConsoleCommands.MapExists (src/VortexArena.Engine/Console/ConsoleCommands.cs:292, nullable Func) gates `maplist add` (:355) and drives `maplist cleanup` (:384-388) — Base's equivalents call MapInfo_CheckMap. It is null on every live host (grep: only GenericCommandsTests.cs:94,128 assign it), so `maplist add <typo>` succeeds and `maplist cleanup` is a no-op."
       - "MapInfo_CurrentGametype (gamecfg + g_* cvar scan with the changed-cvar-wins rule) is replaced by the port's single `gametype` cvar read at boot — behaviorally adequate for the port's cvar model, but the QC 'newly-set g_<mode> cvar overrides gamecfg' dance is not modeled."
       - "The features arm of _MapInfo_CheckMap is folded into features.has (missing)."
     verification:
@@ -390,8 +390,8 @@ features:
       - "common/mapinfo.qc:MapInfo_SwitchGameType"
       - "common/mapinfo.qh:MapInfo_LoadedGametype"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:554-556 (ResolveGameType from the gametype name + OnInit)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4928 (ResolveGameType: registered-name lookup, DM fallback)"
+      - "src/VortexArena.Server/GameWorld.cs:554-556 (ResolveGameType from the gametype name + OnInit)"
+      - "src/VortexArena.Server/GameWorld.cs:4928 (ResolveGameType: registered-name lookup, DM fallback)"
     constants:
       - { name: "g_mapinfo_allow_unsupported_modes_and_let_stuff_break", base: "0", port: "cvar absent", match: false }
     status:
@@ -418,8 +418,8 @@ features:
     base_refs:
       - "common/mapinfo.qc:MapInfo_LoadMap"
     port_refs:
-      - "src/XonoticGodot.Server/GameWorld.cs:ApplyMapChange (ChangeLevelHandler)"
-      - "src/XonoticGodot.Server/SettempCvars.cs:Restore"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyMapChange (ChangeLevelHandler)"
+      - "src/VortexArena.Server/SettempCvars.cs:Restore"
     constants: []
     status:
       logic: partial
@@ -470,8 +470,8 @@ features:
       - "common/mapinfo.qc:MapInfo_ListAllowedMaps"
       - "common/mapinfo.qc:MapInfo_ListAllAllowedMaps"
     port_refs:
-      - "src/XonoticGodot.Server/CommandReplies.cs:GetLsmaps (106-119)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4273 (gametype-switch maplist: keeps current list, comment documents the gap)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetLsmaps (106-119)"
+      - "src/VortexArena.Server/GameWorld.cs:4273 (gametype-switch maplist: keeps current list, comment documents the gap)"
     constants: []
     status:
       logic: partial
@@ -498,8 +498,8 @@ features:
       - "common/mapinfo.qc:MapInfo_isRedundant"
       - "common/mapinfo.qc:1347-1373 (worldspawn fallback + titlestring composition)"
     port_refs:
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:Finish (263-274) + TitleSansAuthor (334-347)"
-      - "src/XonoticGodot.Server/GameWorld.cs:4630-4631 (worldspawn message/author → sv_worldmessage/sv_worldauthor)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:Finish (263-274) + TitleSansAuthor (334-347)"
+      - "src/VortexArena.Server/GameWorld.cs:4630-4631 (worldspawn message/author → sv_worldmessage/sv_worldauthor)"
     constants:
       - { name: "author separators", base: "' by ' | ' (by ' | ' [by ' | 'Made By '", port: "' by ' only (LastIndexOf, case-insensitive)", match: false }
       - { name: "titlestring", base: "'^2bsp' | '^2title' | '^2bsp ^7// ^2title' via isRedundant", port: "none (Title only; no composite titlestring)", match: false }
@@ -529,7 +529,7 @@ features:
       - "common/mapinfo.qc:1101-1119 (autogen cdtrack from worldspawn music / random g_cdtracks_remaplist)"
     port_refs:
       - "game/net/NetGame.cs:SetupMusic (1345-1397) + ParseMapinfoCdTrack (1399)"
-      - "src/XonoticGodot.Server/GameWorld.cs:ApplyWorldspawn (4633-4642 music/noise → CdTrack)"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyWorldspawn (4633-4642 music/noise → CdTrack)"
       - "game/client/MusicPlayer.cs:CdTrack (33)"
     constants:
       - { name: "priority", base: "trigger_music > target_music > cdtrack", port: "same stack (MusicPlayer.cs:4)", match: true }
@@ -559,7 +559,7 @@ features:
       - "common/mapinfo.qc:1276-1319 (settemp_for_type/clientsettemp_for_type/fog dispatch)"
       - "common/mapinfo.qh:MAPINFO_SETTEMP_ACL_USER"
     port_refs:
-      - "src/XonoticGodot.Server/SettempCvars.cs:Set (the mechanism — live for campaign mutators/commands, never fed by mapinfo)"
+      - "src/VortexArena.Server/SettempCvars.cs:Set (the mechanism — live for campaign mutators/commands, never fed by mapinfo)"
     constants:
       - { name: "MAPINFO_SETTEMP_ACL_SYSTEM", base: "\"-g_mapinfo_* -rcon_* -_* -g_ban* +*\"", port: "none", match: false }
       - { name: "g_mapinfo_settemp_acl", base: "\"+*\" (xonotic-server.cfg:491: allow all user settemps by default; the SYSTEM ACL still blocks g_mapinfo_*/rcon_*/_*/g_ban*)", port: "cvar absent", match: false }
@@ -589,8 +589,8 @@ features:
       - "common/mapinfo.qc:MapReadSizes"
       - "common/mapinfo.qh:map_minplayers"
     port_refs:
-      - "src/XonoticGodot.Server/Cvars.cs:131 (map_minplayers cvar, default 0)"
-      - "src/XonoticGodot.Server/GameWorld.cs:945 (Warmup.MapMinPlayers reads the cvar — live consumer)"
+      - "src/VortexArena.Server/Cvars.cs:131 (map_minplayers cvar, default 0)"
+      - "src/VortexArena.Server/GameWorld.cs:945 (Warmup.MapMinPlayers reads the cvar — live consumer)"
     constants:
       - { name: "file format", base: "maps/<map>.sizes: line1=min line2=max", port: "no reader", match: false }
     status:
@@ -622,7 +622,7 @@ features:
       - "common/mapinfo.qc:MapInfo_Shutdown"
       - "common/mapinfo.qh:MapInfo_Cache_Destroy"
     port_refs:
-      - "src/XonoticGodot.Common/Menu/MapInfoBackend.cs:80 (_cache Dictionary) + ClearCache (168)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:80 (_cache Dictionary) + ClearCache (168)"
       - "game/menu/CreateGameScreen.cs:MapInfoCache.Cache (561)"
     constants: []
     status:

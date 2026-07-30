@@ -1,9 +1,9 @@
 // Port of the porto_ticker mutator — common/weapons/weapon/porto.qc:96-100.
 
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// The porto_ticker mutator — port of <c>REGISTER_MUTATOR(porto_ticker, true)</c> + its SV_StartFrame hook

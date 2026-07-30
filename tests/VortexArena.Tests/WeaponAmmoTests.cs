@@ -1,7 +1,7 @@
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for §4.4: the central weapon NetName→ammo-type / superweapon registry. <c>AmmoType</c> now lives on

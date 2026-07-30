@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using XonoticGodot.Formats.Vfs;            // VirtualFileSystem
-using XonoticGodot.Game.Loaders;           // AssetLoader
-using XonoticGodot.Game.Client;            // PlayerModel
+using VortexArena.Formats.Vfs;            // VirtualFileSystem
+using VortexArena.Game.Loaders;           // AssetLoader
+using VortexArena.Game.Client;            // PlayerModel
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// A standalone, no-net <b>player-model viewer</b> for windowed visual QA — the boot target of the

@@ -10,7 +10,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace XonoticGodot.Common.Localization;
+namespace VortexArena.Common.Localization;
 
 /// <summary>One row of <c>languages.txt</c> — the QC <c>LANGPARM_*</c> tuple (id / English name / localized
 /// name / optional percentage).</summary>

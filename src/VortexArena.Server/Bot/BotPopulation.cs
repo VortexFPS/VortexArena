@@ -3,11 +3,11 @@
 // + the live per-tick input seam of ecs/systems/sv_physics.qc sys_phys_ai (:41-46).
 using System.Globalization;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Physics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Physics;
 
-namespace XonoticGodot.Server.Bot;
+namespace VortexArena.Server.Bot;
 
 /// <summary>
 /// The live bot population manager — the C# port of QC <c>bot_serverframe</c>: it keeps the roster converged
@@ -32,6 +32,28 @@ public sealed class BotPopulation
 
     /// <summary>The shared map waypoint graph (QC g_waypoints), loaded once on the first frame with bots.</summary>
     public WaypointNetwork? Network { get; private set; }
+
+    /// <summary>
+    /// The graph, loading it now if the lazy path has not fired yet.
+    ///
+    /// The waypoint editor needs this because the lazy load is gated on BOTS BEING PRESENT — an editing session
+    /// runs with none, so <see cref="Network"/> would stay null forever and the tool would report an empty map
+    /// on a level with a perfectly good graph. Marks the load done so the bot path does not redo it and discard
+    /// the mapper's edits.
+    /// </summary>
+    public WaypointNetwork? EnsureWaypointNetwork()
+    {
+        if (_waypointsLoaded)
+            return Network;
+
+        _waypointsLoaded = true;
+        Network = _world.LoadWaypointNetwork();
+        foreach (BotBrain b in _brains)
+            b.Network = Network;
+        _itemPrewarmCursor = 0;
+        _itemPrewarmDone = Network is null;
+        return Network;
+    }
 
     /// <summary>Fired when a bot leaves (fixcount removal, console remove, intermission teardown) so the net
     /// host can clean its per-player maps (ServerNet.ForgetPlayer). Fired from the disconnect chain — every
@@ -292,9 +314,9 @@ public sealed class BotPopulation
         // QC MUTATOR_HOOKFUNCTION(lms, Bot_FixCount, CBC_ORDER_EXCLUSIVE) (sv_lms.qc:693): LMS overrides the
         // active-real-player count so that eliminated (out-of-game) players no longer keep a bot slot filled —
         // only INGAME real clients count as activerealplayers. Mirror that by checking OutOfGame on LmsState.
-        bool lmsActive = _world.GameType is XonoticGodot.Common.Gameplay.LastManStanding;
-        XonoticGodot.Common.Gameplay.LastManStanding? lms =
-            lmsActive ? (XonoticGodot.Common.Gameplay.LastManStanding)_world.GameType! : null;
+        bool lmsActive = _world.GameType is VortexArena.Common.Gameplay.LastManStanding;
+        VortexArena.Common.Gameplay.LastManStanding? lms =
+            lmsActive ? (VortexArena.Common.Gameplay.LastManStanding)_world.GameType! : null;
         foreach (ClientManager.ClientInfo c in _world.Clients.Clients)
         {
             if (c.IsBot) continue;
@@ -596,6 +618,9 @@ public sealed class BotPopulation
                 int idx = (_tokenIndex + 1 + step) % n;
                 BotBrain b = _brains[idx];
                 if (b.Bot.IsObserver) continue;               // not in bot_list
+                // QC bot.qc:800 skips a FROZEN bot when handing out the token — it runs no role, so giving it
+                // the token wastes the hold and starves the live bots' re-rating cadence.
+                if (BotBrain.IsFrozen(b.Bot)) continue;
                 if (next < 0) next = idx;                      // pass 2 fallback: first non-observer
                 if (!b.Bot.IsDead && !b.Nav.HasGoal)          // pass 1: first goal-less (skip dead)
                 {
@@ -832,9 +857,9 @@ public sealed class BotPopulation
         return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v * weight : 0f;
     }
 
-#if XG_BOTPLAYER
+#if VA_BOTPLAYER
     // =============================================================================================
-    //  BOT-PLAYER HARNESS (compile-gated — see Directory.Build.props / XgBotPlayer)
+    //  BOT-PLAYER HARNESS (compile-gated — see Directory.Build.props / VaBotPlayer)
     //
     //  A brain bound to the LOCAL HUMAN player so an unattended run drives the real player pipeline.
     //  The player is NOT a bot: IsBot stays false, so GameWorld keeps sourcing its command from the net
@@ -882,7 +907,7 @@ public sealed class BotPopulation
         // nothing. g_forced_respawn auto-respawns at g_respawn_delay_max instead, so an unattended session
         // keeps playing. Set here rather than left to the caller so the harness cannot be run without it.
         Cvars.Set("g_forced_respawn", "1");
-        XonoticGodot.Common.Diagnostics.Log.Info(
+        VortexArena.Common.Diagnostics.Log.Info(
             $"[bot-player] g_forced_respawn 1 (max wait {Cvars.FloatOr("g_respawn_delay_max", 5f):0}s) — "
             + "the harness respawns itself.");
 
@@ -963,7 +988,7 @@ public sealed class BotPopulation
         if (now2 - _botPlayerLastReport >= 5f)
         {
             _botPlayerLastReport = now2;
-            XonoticGodot.Common.Diagnostics.Log.Info(
+            VortexArena.Common.Diagnostics.Log.Info(
                 $"[bot-player] t={now2:0}s travelled={_botPlayerDist:0}qu speed={p.Velocity.Length():0}qu/s "
                 + $"firing-ticks={_botPlayerShots} health={p.Health:0} frags={p.Frags} "
                 + $"deaths={_botPlayerDeaths} respawns={_botPlayerRespawns} "

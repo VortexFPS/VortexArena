@@ -1,7 +1,7 @@
 # sv-impulse — parity spec
 
 **Base refs:** `server/impulse.qc` · `common/impulses/all.qh` · `server/weapons/selection.qc` · `server/weapons/throwing.qc` · `server/client.qc:PlayerUseKey`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/WeaponImpulses.cs` · `Inventory.cs` · `WeaponThrowing.cs` · `WeaponOrder.cs` · `src/XonoticGodot.Server/Commands.cs:DispatchImpulse` · `game/net/ServerNet.cs:ProvideInput`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/WeaponImpulses.cs` · `Inventory.cs` · `WeaponThrowing.cs` · `WeaponOrder.cs` · `src/VortexArena.Server/Commands.cs:DispatchImpulse` · `game/net/ServerNet.cs:ProvideInput`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -163,7 +163,7 @@ This unit covers the impulse routing + the weapon-selection/throwing algorithms 
 ## Verification
 - Live wiring: code-read `ServerNet.cs:1228-1235` / `:1312-1317` → `Commands.Execute("impulse N")` →
   `DispatchImpulse:1326` → `WeaponImpulses.Handle`. PASS.
-- By-id order: `tests/XonoticGodot.Tests/WeaponByIdTests.cs` pins the QC unique-impulse order. PASS.
+- By-id order: `tests/VortexArena.Tests/WeaponByIdTests.cs` pins the QC unique-impulse order. PASS.
 - Selection algorithm: code-read `Inventory.GetCycleWeapon` vs `selection.qc:W_GetCycleWeapon` — faithful for
   imp=-1 (the cycle/best path). The impulse-group `have_other`/custom-group-bitmask complain branch is
   simplified (documented in-code). Verified by read, not behaviorally.

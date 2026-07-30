@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Formats;
-using XonoticGodot.Formats.Sidecars;
-using XonoticGodot.Formats.Vfs;
+using VortexArena.Common.Gameplay;
+using VortexArena.Formats;
+using VortexArena.Formats.Sidecars;
+using VortexArena.Formats.Vfs;
 
-namespace XonoticGodot.Game.Loaders;
+namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// Host-side implementation of QuakeC's <c>LoadPlayerSounds</c> / <c>UpdatePlayerSounds</c>

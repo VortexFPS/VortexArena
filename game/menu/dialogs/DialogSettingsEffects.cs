@@ -1,6 +1,6 @@
 using Godot;
 
-namespace XonoticGodot.Game.Menu;
+namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// Effects settings tab — a faithful C# port of <c>XonoticEffectsSettingsTab_fill</c>
@@ -15,7 +15,7 @@ namespace XonoticGodot.Game.Menu;
 ///   * QC <c>makeXonoticSliderCheckBox</c> (Motion blur) becomes a checkbox on <c>r_motionblur</c>
 ///     (on=0.4 default / off=0) plus the live slider; both write the same cvar.
 ///   * QC <c>makeMulti(e, "other")</c> checkboxes also poke a second cvar — we bind the primary cvar only.
-///   * QC dependencies guarded by <c>cvar_type("vid_gl20") &amp; CVAR_TYPEFLAG_ENGINE</c> are skipped: XonoticGodot
+///   * QC dependencies guarded by <c>cvar_type("vid_gl20") &amp; CVAR_TYPEFLAG_ENGINE</c> are skipped: VortexArena
 ///     has no such engine cvar, so applying them would permanently grey the widgets. Gameplay-cvar
 ///     dependencies and the compound <c>setDependentAND/OR/Weird</c> primary conditions are reproduced.
 /// </summary>

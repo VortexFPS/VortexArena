@@ -11,29 +11,51 @@
 // reuses the existing Entity.SpawnShieldExpire (QC's .spawnshieldtime, shared across entity types) rather
 // than redeclaring it.
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
         // --- world-item identity (server/items/spawning.qh + StartItem) ---
         /// <summary>
-        /// QC <c>.itemdef</c> — the <see cref="XonoticGodot.Common.Gameplay.Pickup"/> singleton this world item
+        /// QC <c>.itemdef</c> — the <see cref="VortexArena.Common.Gameplay.Pickup"/> singleton this world item
         /// carries; <c>Item_Touch</c> dispatches its give through this (QC ITEM_HANDLE(Pickup, this.itemdef, …)).
         /// Null on a non-item entity. Typed as object to keep this Framework partial free of a Gameplay using.
         /// </summary>
         public object? ItemDefRef;
 
         /// <summary>
-        /// QC <c>.itemdef</c> typed as the carried <see cref="XonoticGodot.Common.Gameplay.Pickup"/>. Strongly-typed
+        /// QC <c>Inventory.inv_items[]</c> (common/items/inventory.qh:8) — how many of each item this player has
+        /// picked up, keyed by the item def's HUD icon name (QC <c>m_icon</c>, e.g. "health_mega",
+        /// "ammo_rockets"). Maintained by <c>ItemPickupRules.InventoryPickupItem</c>, networked to the owning
+        /// client, and drawn by the scoreboard's Item stats grid (QC Scoreboard_ItemStats_Draw). Null until the
+        /// player picks something up; QC <c>Inventory_clear</c> is a map/round reset, NOT a respawn (the tally is
+        /// per-match).
+        /// </summary>
+        public System.Collections.Generic.Dictionary<string, int>? ItemPickupCounts;
+
+        /// <summary>QC <c>STAT(LAST_PICKUP)</c> — sim time of this player's most recent item pickup.</summary>
+        public float LastPickupTime;
+
+        /// <summary>
+        /// QC <c>.itemdef</c> typed as the carried <see cref="VortexArena.Common.Gameplay.Pickup"/>. Strongly-typed
         /// accessor over <see cref="ItemDefRef"/> (kept <c>object?</c> on this Framework partial to avoid a
-        /// Gameplay using). Set by <see cref="XonoticGodot.Common.Gameplay.StartItem.Spawn"/>; read by
+        /// Gameplay using). Set by <see cref="VortexArena.Common.Gameplay.StartItem.Spawn"/>; read by
         /// <c>Item_Touch</c> to dispatch the give (QC ITEM_HANDLE(Pickup, this.itemdef, …)).
         /// </summary>
-        public XonoticGodot.Common.Gameplay.Pickup? Pickup
+        public VortexArena.Common.Gameplay.Pickup? Pickup
         {
-            get => ItemDefRef as XonoticGodot.Common.Gameplay.Pickup;
+            get => ItemDefRef as VortexArena.Common.Gameplay.Pickup;
             set => ItemDefRef = value;
         }
+
+        /// <summary>
+        /// CLIENT-side proxy field: the weapon registry id a weapon-pickup item carries, decoded from the
+        /// snapshot's <c>Weapon</c> field (non-player entities network <c>RegistryId + 1</c>, 0 = not a weapon
+        /// pickup — see ServerNet). −1 = none/unknown. The render layer prefers this explicit identity over
+        /// matching the item model filename (a mapper can override a pickup's model; a filename guess then
+        /// paints the wrong weapon's colors or none at all).
+        /// </summary>
+        public int ItemWeaponId = -1;
 
         /// <summary>
         /// QC <c>.m_isloot</c> (server/items/spawning.qh ITEM_IS_LOOT): true for a dropped/tossed loot item
@@ -65,7 +87,7 @@ namespace XonoticGodot.Common.Framework
         /// runs the despawn animation (alpha fade + the accelerating <c>EFFECT_ITEM_DESPAWN</c> puffs,
         /// client/items/items.qc:191-210). DISTINCT from <see cref="ItemIsExpiring"/> (<c>.m_isexpiring</c>, the
         /// powerup-timer-on-the-ground flag): this one is a pure render/network status. Networked to the client via
-        /// <c>NetEntityFlags.ItemExpiring</c> (the item snapshot); the client drives <see cref="XonoticGodot.Common.Gameplay.ItemDespawnFx"/>.
+        /// <c>NetEntityFlags.ItemExpiring</c> (the item snapshot); the client drives <see cref="VortexArena.Common.Gameplay.ItemDespawnFx"/>.
         /// </summary>
         public bool ItemExpiringFx;
 
@@ -155,7 +177,7 @@ namespace XonoticGodot.Common.Framework
         /// <summary>
         /// QC <c>.mdl</c> — the item's stored world-model name, so <c>Item_Show</c> can restore
         /// <see cref="Model"/> when re-showing a hidden/respawned item (Show clears Model to "" when hiding).
-        /// Set by <see cref="XonoticGodot.Common.Gameplay.StartItem.Spawn"/> from the def's model.
+        /// Set by <see cref="VortexArena.Common.Gameplay.StartItem.Spawn"/> from the def's model.
         /// </summary>
         public string? ItemWorldModel;
 

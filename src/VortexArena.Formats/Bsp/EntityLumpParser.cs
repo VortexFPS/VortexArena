@@ -1,4 +1,4 @@
-namespace XonoticGodot.Formats.Bsp;
+namespace VortexArena.Formats.Bsp;
 
 /// <summary>
 /// Parses the BSP entity lump (lump 0) text into a list of key/value dictionaries.

@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>Result of a world sweep for client-side projectile collision: did the segment hit world geometry,
 /// and if so where + the surface normal. The Godot renderer fills this from <c>Api.Trace</c> (world-only,

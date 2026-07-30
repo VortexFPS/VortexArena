@@ -17,9 +17,9 @@ features:
     base_refs:
       - "common/mutators/mutator/dodging/sv_dodging.qc:67 REGISTER_MUTATOR(dodging, cvar(g_dodging))"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:89 IsEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
-      - "src/XonoticGodot.Server/GameWorld.cs:631 (MutatorActivation.Apply on the live game-setup path)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:89 IsEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorActivation.cs:Apply"
+      - "src/VortexArena.Server/GameWorld.cs:631 (MutatorActivation.Apply on the live game-setup path)"
     constants:
       - { name: "g_dodging", base: "0", port: "0", match: true }
     status:
@@ -44,9 +44,9 @@ features:
       - "common/mutators/mutator/dodging/sv_dodging.qc:151 PM_dodging_checkpressedkeys"
       - "common/mutators/mutator/dodging/sv_dodging.qc:278 PM_dodging_GetPressedKeys"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:161 CheckPressedKeys"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:271-275 (INPUT BRIDGE — writes MovementForward/Right/ButtonCrouch/ButtonChat/ViewAngles, RAW)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:283 (MutatorHooks.PlayerPhysics.Call — live; Move called from GameWorld.cs:2403/2414)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:161 CheckPressedKeys"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:271-275 (INPUT BRIDGE — writes MovementForward/Right/ButtonCrouch/ButtonChat/ViewAngles, RAW)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:283 (MutatorHooks.PlayerPhysics.Call — live; Move called from GameWorld.cs:2403/2414)"
     constants:
       - { name: "cl_dodging_timeout", base: "0.2", port: "0.2 (now per-client replicated via TimeoutProvider, Commands.cs:577-578; server-side Hook() value is the fallback)", match: true }
     status:
@@ -71,10 +71,10 @@ features:
     base_refs:
       - "common/mutators/mutator/dodging/sv_dodging.qc:186 (delay gate) + :192 (state gates)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:200 (delay) :204-206 (gates)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:264 IsCloseToGround"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:271 IsCloseToWall"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:278 TraceHitsNear"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:200 (delay) :204-206 (gates)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:264 IsCloseToGround"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:271 IsCloseToWall"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:278 TraceHitsNear"
     constants:
       - { name: "sv_dodging_delay", base: "0.6", port: "0.6 (cvar; hardcoded fallback 0.6)", match: true }
       - { name: "sv_dodging_height_threshold", base: "10", port: "10", match: true }
@@ -106,8 +106,8 @@ features:
       - "common/mutators/mutator/dodging/sv_dodging.qc:142 determine_force"
       - "lib/math.qh:map_bound_ranges"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:241 DetermineForce"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:251 MapBoundRanges"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:241 DetermineForce"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:251 MapBoundRanges"
     constants:
       - { name: "sv_dodging_horiz_speed_min", base: "200", port: "200", match: true }
       - { name: "sv_dodging_horiz_speed_max", base: "1000", port: "1000", match: true }
@@ -135,9 +135,9 @@ features:
     base_refs:
       - "common/mutators/mutator/dodging/sv_dodging.qc:217 PM_dodging"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:334 PMDodging"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:318 BeginDodge"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:283 (PlayerPhysics hook Call)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:334 PMDodging"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:318 BeginDodge"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:283 (PlayerPhysics hook Call)"
     constants:
       - { name: "sv_dodging_ramp_time", base: "0.1", port: "0.1", match: true }
       - { name: "sv_dodging_up_speed", base: "200", port: "200", match: true }
@@ -162,7 +162,7 @@ features:
     base_refs:
       - "common/mutators/mutator/dodging/sv_dodging.qc:259 (PlayerSound playersound_jump)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:368-369 (Api.Sound.Play player/jump.wav gated by sv_dodging_sound)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:368-369 (Api.Sound.Play player/jump.wav gated by sv_dodging_sound)"
     constants:
       - { name: "sv_dodging_sound", base: "1", port: "1 (cvar)", match: true }
     status:
@@ -186,8 +186,8 @@ features:
     base_refs:
       - "common/mutators/mutator/dodging/sv_dodging.qc:262 (animdecide_setaction ANIMACTION_JUMP)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:363-381 (UNSET_ONGROUND + up-impulse; animdecide comment citing animdecide.qc:283)"
-      - "src/XonoticGodot.Engine/Simulation/LocomotionBlend.cs:81 (SelectLegs returns Locomotion.Jump when !onGround)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:363-381 (UNSET_ONGROUND + up-impulse; animdecide comment citing animdecide.qc:283)"
+      - "src/VortexArena.Engine/Simulation/LocomotionBlend.cs:81 (SelectLegs returns Locomotion.Jump when !onGround)"
     constants: []
     status:
       logic: missing
@@ -213,11 +213,11 @@ features:
       - "common/mutators/mutator/dodging/sv_dodging.qc:322 PlayerSpawn"
       - "common/mutators/mutator/dodging/sv_dodging.qc:328 MakePlayerObserver"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:412 ResetPlayer"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:311 OnPlayerSpawn"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:319 OnMakePlayerObserver"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/MutatorHooks.cs:47 (MakePlayerObserver HookChain)"
-      - "src/XonoticGodot.Server/ClientManager.cs:564 (MutatorHooks.MakePlayerObserver.Call — live dispatch from PutObserverInServer)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:412 ResetPlayer"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:311 OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:319 OnMakePlayerObserver"
+      - "src/VortexArena.Common/Gameplay/Mutators/MutatorHooks.cs:47 (MakePlayerObserver HookChain)"
+      - "src/VortexArena.Server/ClientManager.cs:564 (MutatorHooks.MakePlayerObserver.Call — live dispatch from PutObserverInServer)"
     constants: []
     status:
       logic: faithful
@@ -242,14 +242,14 @@ features:
       - "common/mutators/mutator/dodging/sv_dodging.qc:57-58 REPLICATE(cvar_cl_dodging / cvar_cl_dodging_timeout)"
       - "common/mutators/mutator/dodging/cl_dodging.qc:3-4 REPLICATE"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:76 ClientSelect"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:84 ClientDodgingProvider"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:237 ClientDodgingEnabled"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:341-342 (PMDodging abort branch)"
-      - "src/XonoticGodot.Server/Commands.cs:233 (cl_dodging/cl_dodging_timeout registered replicate cvars)"
-      - "src/XonoticGodot.Server/Commands.cs:568-569 (ClientDodgingProvider -> per-client store)"
-      - "src/XonoticGodot.Server/Commands.cs:577-578 (TimeoutProvider -> per-client store)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:93 (TimeoutProvider field) + :258 TimeoutFor"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:76 ClientSelect"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:84 ClientDodgingProvider"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:237 ClientDodgingEnabled"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:341-342 (PMDodging abort branch)"
+      - "src/VortexArena.Server/Commands.cs:233 (cl_dodging/cl_dodging_timeout registered replicate cvars)"
+      - "src/VortexArena.Server/Commands.cs:568-569 (ClientDodgingProvider -> per-client store)"
+      - "src/VortexArena.Server/Commands.cs:577-578 (TimeoutProvider -> per-client store)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:93 (TimeoutProvider field) + :258 TimeoutFor"
     constants:
       - { name: "sv_dodging_clientselect", base: "0", port: "0 (cvar read)", match: true }
       - { name: "cl_dodging", base: "0", port: "0 (now per-client replicated via ClientDodgingProvider)", match: true }
@@ -277,10 +277,10 @@ features:
       - "common/mutators/mutator/dodging/sv_dodging.qc:223-224 (PM_dodging frozen_dodging carve-out)"
       - "common/physics/player.qc:649 (PM_check_frozen bound(-2,2) dodging sub-case)"
     port_refs:
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:155-156 (frozenDodging / frozenNoDoubletap)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:243 (DetermineForce PhysFrozen branch)"
-      - "src/XonoticGodot.Common/Gameplay/Mutators/DodgingMutator.cs:340-347 (PMDodging frozen carve-out)"
-      - "src/XonoticGodot.Common/Physics/PlayerPhysics.cs:219-223 (frozen wishmove bound(-2,2) sub-case)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:155-156 (frozenDodging / frozenNoDoubletap)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:243 (DetermineForce PhysFrozen branch)"
+      - "src/VortexArena.Common/Gameplay/Mutators/DodgingMutator.cs:340-347 (PMDodging frozen carve-out)"
+      - "src/VortexArena.Common/Physics/PlayerPhysics.cs:219-223 (frozen wishmove bound(-2,2) sub-case)"
     constants:
       - { name: "sv_dodging_frozen", base: "0", port: "0 (cvar read)", match: true }
       - { name: "sv_dodging_frozen_doubletap", base: "0", port: "0 (cvar read)", match: true }

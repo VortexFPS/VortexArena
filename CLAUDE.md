@@ -1,15 +1,15 @@
 # Vortex Arena — agent notes
 
 **Vortex Arena** is a fork of Xonotic, ported from QuakeC/DarkPlaces to Godot 4 (.NET). (The solution,
-`.csproj`, and C# namespaces still carry the original `XonoticGodot` codename — kept stable for now.)
+`.csproj`, and C# namespaces still carry the original `VortexArena` codename — kept stable for now.)
 Game host under `game/`, engine/gameplay libraries under `src/`, tests under `tests/`, design docs +
 postmortems + trackers under `planning/`.
 
 ## Build & test
 
 ```bash
-dotnet build XonoticGodot.csproj -c Debug                         # the Godot host
-dotnet test tests/XonoticGodot.Tests/XonoticGodot.Tests.csproj    # full suite (real-data tests self-skip without assets/)
+dotnet build VortexArena.csproj -c Debug                         # the Godot host
+dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj    # full suite (real-data tests self-skip without assets/)
 ci/ci.sh                                                          # the authoritative local gate
 ```
 

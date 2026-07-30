@@ -1,7 +1,7 @@
 # @!#%'n Tuba — parity spec
 
 **Base refs:** `common/weapons/weapon/tuba.qc` · `common/weapons/weapon/tuba.qh` · `bal-wep-xonotic.cfg` (`g_balance_tuba_*`) · `common/weapons/calculations.qc` / `projectiles.qh` (shared math) · `server/damage.qc:RadiusDamage`
-**Port refs:** `src/XonoticGodot.Common/Gameplay/Weapons/Tuba.cs` · `WeaponFireDriver.cs` · `WeaponFireGate.cs` · `WeaponSplash.cs` · `Notifications/DeathMessages.cs` · `Notifications/NotificationsList.cs` · `Effects/EffectsList.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Weapons/Tuba.cs` · `WeaponFireDriver.cs` · `WeaponFireGate.cs` · `WeaponSplash.cs` · `Notifications/DeathMessages.cs` · `Notifications/NotificationsList.cs` · `Effects/EffectsList.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

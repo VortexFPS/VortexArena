@@ -23,10 +23,10 @@
 //    too — they are mirrored as comments here, not behavior, to match Base exactly.
 
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
@@ -46,9 +46,9 @@ namespace XonoticGodot.Common.Framework
     }
 }
 
-namespace XonoticGodot.Common.Gameplay
+namespace VortexArena.Common.Gameplay
 {
-    using XonoticGodot.Common.Framework;
+    using VortexArena.Common.Framework;
 
     /// <summary><c>dynlight</c> — a real-time dynamic light (static / path / follow / tag-attach). Registered by <see cref="MapObjectsRegistry"/>.</summary>
     public static class DynamicLight

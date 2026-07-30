@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Physics;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Net;
-using XonoticGodot.Tests.Camera;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Physics;
+using VortexArena.Common.Services;
+using VortexArena.Net;
+using VortexArena.Tests.Camera;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// CAMERA-DRIFT / DEPARTURE apparatus (the render+prediction layer the golden-trace physics tests never cover).
@@ -94,7 +94,7 @@ public class CameraDriftTests
     [Fact]
     public void Faithful_RuntimeSmoother_MatchesQcReference_OnStairAndCrouchSequence()
     {
-        // The runtime FaithfulViewSmoothing (src/XonoticGodot.Net) must reproduce the independent QC reference
+        // The runtime FaithfulViewSmoothing (src/VortexArena.Net) must reproduce the independent QC reference
         // (CameraReferenceQc) eye Z bit-for-bit on a representative sequence — step up, plateau, step up, descend,
         // with a crouch view-height change — so "faithful mode" provably renders the stock Xonotic eye.
         var rt = new FaithfulViewSmoothing();
@@ -330,9 +330,9 @@ public class CameraDriftTests
 
     private static void ClearMutators()
     {
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
-        XonoticGodot.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+        VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
     }
 
     private List<CameraPipelineSim.Sample> RunStationary(Vector3 injected, float errorComp, out Reconciler rec)

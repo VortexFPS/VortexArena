@@ -1,4 +1,4 @@
-namespace XonoticGodot.Engine.Particles;
+namespace VortexArena.Engine.Particles;
 
 // =====================================================================================================
 //  Cvar name constants + stock defaults for the dual particle system. Centralized so every module

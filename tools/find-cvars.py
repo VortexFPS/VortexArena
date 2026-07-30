@@ -193,7 +193,39 @@ def scope_for(relpath: str) -> str:
     for prefix, scope in SCOPE_BY_DIR:
         if rp.startswith(prefix):
             return scope
+        # The src/ project directories carry the old codename and the Tier-1 rename relocates them
+        # (src/XonoticGodot.* -> src/VortexArena.*). Match either, because the alternative is the
+        # fallthrough below quietly reclassifying every server/shared/net cvar as "host" - and since
+        # docs/reference/CVARS.md treats the prefix as AUTHORITY, that is a wrong document rather than a
+        # missing one. validate_scope_dirs() below turns the same drift into a loud failure.
+        if prefix.startswith("src/XonoticGodot.") and rp.startswith(
+            prefix.replace("src/XonoticGodot.", "src/VortexArena.", 1)
+        ):
+            return scope
     return "host"
+
+
+def validate_scope_dirs(root) -> None:
+    """Fail if a configured scope prefix matches no directory on disk.
+
+    Without this, renaming a project silently degrades every cvar in it to the "host" scope instead of
+    breaking - the classic fail-open. Accepts either codename, so it stays quiet across the rename and
+    speaks up if a prefix becomes wrong for any other reason.
+    """
+    import pathlib
+
+    root = pathlib.Path(root)
+    missing = []
+    for prefix, _ in SCOPE_BY_DIR:
+        alt = prefix.replace("src/XonoticGodot.", "src/VortexArena.", 1)
+        if not (root / prefix).is_dir() and not (root / alt).is_dir():
+            missing.append(prefix)
+    if missing:
+        raise SystemExit(
+            "error: these scope prefixes match no directory, so their cvars would silently be "
+            "classified as 'host':\n  " + "\n  ".join(missing) +
+            "\n  Update SCOPE_BY_DIR - a renamed project must not degrade the scope column."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -425,6 +457,7 @@ def main(argv=None):
     if args.include_tests:
         scan_dirs.append("tests")
 
+    validate_scope_dirs(root)
     cvars, rejects = scan(root, scan_dirs)
     cvars = expand_dynamic(cvars)
 

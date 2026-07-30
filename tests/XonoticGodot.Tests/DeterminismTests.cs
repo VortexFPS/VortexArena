@@ -261,19 +261,36 @@ public class DeterminismTests
             RepoPath("src", "XonoticGodot.Common", "Math"),
             RepoPath("src", "XonoticGodot.Engine", "Simulation"),
         };
+        // A scanner that finds nothing must FAIL, not pass. These directory names carry the project's old
+        // codename, and the Tier-1 rename relocates all three (src/XonoticGodot.* -> src/VortexArena.*).
+        // With the old `if (!Directory.Exists(dir)) continue;` the loop would then skip every directory,
+        // `offenders` would be empty, and this test would report green while scanning zero files - the same
+        // failure mode that hid a broken TestPaths.HasMaps probe. Assert the directories resolve.
+        var missing = dirs.Where(d => !System.IO.Directory.Exists(d)).ToList();
+        Assert.True(
+            missing.Count == 0,
+            "the simulation source directories this guard scans do not exist, so it would pass without "
+                + "checking anything. They were probably renamed - update the list.\n  missing: "
+                + string.Join("\n           ", missing));
+
         var offenders = new List<string>();
+        int scanned = 0;
         foreach (string dir in dirs)
         {
-            if (!System.IO.Directory.Exists(dir)) continue;
             foreach (string file in System.IO.Directory.EnumerateFiles(dir, "*.cs", System.IO.SearchOption.AllDirectories))
             {
                 if (file.Contains(System.IO.Path.DirectorySeparatorChar + "obj" + System.IO.Path.DirectorySeparatorChar)) continue;
+                scanned++;
                 string text = System.IO.File.ReadAllText(file);
                 foreach (string bad in forbidden)
                     if (text.Contains(bad))
                         offenders.Add($"{System.IO.Path.GetFileName(file)}: {bad}");
             }
         }
+
+        // Belt and braces: the directories could exist and be empty, which is the same vacuous pass.
+        Assert.True(scanned > 20, $"only {scanned} simulation source files scanned - too few to be a real "
+                                  + "check; the scan roots are probably wrong");
         Assert.True(offenders.Count == 0, "non-deterministic API in the simulation source: " + string.Join(", ", offenders));
     }
 

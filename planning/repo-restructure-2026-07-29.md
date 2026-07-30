@@ -1116,11 +1116,29 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
      tool — 60 links repointed, 0 stale. `.github/workflows/pages.yml` needed nothing: it uses
      `steps.deployment.outputs.page_url`. Deliberately left: the old name in `docs/BRANCH-MIGRATION.md`
      and here (both *describe* the rename) and `planning/wave-a3/briefs/T33.json` (frozen).
-   - **`git remote set-url origin git@github.com:VortexFPS/VortexArena.git`** — still to do; the local
-     remote is stale and working only through GitHub's redirect.
+   - ~~**`git remote set-url origin`**~~ — **done 2026-07-29.** Verified: `git fetch` no longer prints
+     the "This repository moved" notice.
    - **Create `VortexFPS/VortexMaps` and `VortexFPS/VortexLauncher`** — still to do. **Stage 1 is
      blocked on `VortexMaps`.**
-   - **Check the org's default Actions permissions** — still to do, before relying on `release.yml`.
+   - **Check the org's default Actions permissions** — **measured 2026-07-29, and §5.0's warning was
+     right to flag it.** All three repos have `default_workflow_permissions = read`:
+
+     ```
+     VortexArena     default=read     VortexMaps  default=read     VortexLauncher  default=read
+     allowed_actions=all              allowed_actions=all
+     ```
+
+     `allowed_actions=all` is fine — `actions/checkout`, `actions/cache` and the rest are permitted.
+     The read-only token default is the live issue: **both `release.yml` and VortexMaps'
+     `build-maps.yml` need `contents: write`** to create a release and upload assets. Both declare it
+     at workflow level, which normally raises it from a read-only default — but if the **org** policy
+     is set to read-only, a repo cannot exceed it and the job-level grant is silently capped. That is
+     precisely §5.0's failure mode: a 403 at the upload step with nothing earlier complaining.
+
+     The org-level endpoints need `admin:org`, which this token does not have, so the org setting could
+     not be read from here. **Verify empirically instead:** every Actions job log has a
+     `GITHUB_TOKEN Permissions` block near the top listing exactly what was granted. If it shows
+     `Contents: read` on a job whose workflow asked for write, the org policy is the cap.
 1. ~~**Land `feature/map-editor`**~~ — **G8. Done 2026-07-29** (46 commits, merged; the vmap code and
    the `989cd59` single-text-file `.vmap` format are on `main`). The seven surviving branches migrate
    afterwards via `docs/BRANCH-MIGRATION.md`.

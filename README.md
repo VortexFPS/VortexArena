@@ -99,6 +99,18 @@ The set is pinned by [`data/maps.lock.json`](data/maps.lock.json) and published 
 `Shell.DataPath` and the `--data` flag, default `res://data`. Without the map fetch the game runs but has
 no maps to load; everything else works.
 
+Map *sources* are a submodule, deliberately **not** cloned by default (`update = none`) — VortexMaps is
+~1.3 GB and the game never reads it. Map authors opt in:
+
+```bash
+git submodule update --init maps-src
+```
+
+With that in place `python tools/data/fetch-maps.py --rebuild` recompiles the set from source rather
+than downloading it — the backstop for the release ever going away. It needs a Linux q3map2
+toolchain and tells you how to use CI if you have not got one. It regenerates a *working* map set,
+not a byte-identical one; `--dry-run` shows what it would compile without needing the toolchain.
+
 A blobless clone keeps the initial download small:
 
 ```bash

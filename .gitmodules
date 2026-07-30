@@ -1,0 +1,12 @@
+[submodule "maps-src"]
+	path = maps-src
+	url = https://github.com/VortexFPS/VortexMaps.git
+	# NOT cloned by default, and that is deliberate: VortexMaps is ~1.3 GB of history over ~1.6 GB of
+	# map sources, and nothing in the game build reads it — the game consumes compiled .pk3 packs that
+	# tools/data/fetch-maps.py downloads from a release. `update = none` is honoured by BOTH
+	# `git submodule update` AND `git clone --recurse-submodules` (verified: the latter prints
+	# "Skipping submodule 'maps-src'"), so a normal clone pays nothing for this entry.
+	#
+	# Map authors opt in explicitly:
+	#     git submodule update --init maps-src
+	update = none

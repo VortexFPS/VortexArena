@@ -2,8 +2,16 @@
   "schema": 1,
   "source": "VortexFPS/VortexMaps",
   "release": "maps-2026.07",
-  "backend": "q3map2",
-  "note": "Compiled maps are build output and are not committed (restructure D7). Run tools/data/fetch-maps.py to install them into data/maps/. Packs are .pk3 and are installed as-is, not extracted: MountGameDir mounts a .pk3 natively, so the packed shipping form stays packed (section 9.3). 'shared' carries the art no single map owns; the rest are one per map. truthHash is reserved for the .vmap era, where a bake is content-addressed by the hash of the map's truth sections rather than by a release tag (section 9.4).",
+  "backend": "split-pack",
+  "provenance": {
+    "source_commit": "3a362282e906b723f5cb4e8c264b19a4eb6eefc9",
+    "sources_tree": "6930c37dc0c39246b72e5b0a1e8c6c1fd057f6ca",
+    "release_tag": "maps-2026.07",
+    "release_tag_commit": "d016e0bb96a2e6dcb5eaa74df8b49a4ec33666c6",
+    "note": "source_commit is the maps-src submodule pin: VortexMaps at the commit whose build pipeline is known-good (workflow run 30511841165 succeeded end to end). The maps-2026.07 TAG sits at an earlier commit whose runs all failed, so it is recorded for reference but is not what you want to build from. sources_tree is identical at both commits, so the map SOURCES are unambiguous either way -- only the build tooling moved.",
+    "evidence": "The packs pinned here were NOT produced by q3map2. Three independent checks: (1) all 32 assets were uploaded to the release in a 5-second window (00:23:45-00:23:50Z), which is a local batch upload, not a 31-job matrix finishing one at a time; (2) every workflow run before that timestamp failed, and the first success came 3 hours later at 03:22Z; (3) the external lightmap pages inside the packs are .jpg, which is the form upstream Xonotic ships -- our q3map2 path emits .tga and converts it to .png (VortexMaps build/lightmaps-to-png.py). So these are upstream's prebuilt compiled maps re-split by build/split-pack.py. The q3map2 pipeline works -- run 30511841165 compiled stormkeep -- but it has never produced the shipped set."
+  },
+  "note": "Compiled maps are build output and are not committed (restructure D7). Run tools/data/fetch-maps.py to install them into data/maps/. Packs are .pk3 and are installed as-is, not extracted: MountGameDir mounts a .pk3 natively, so the packed shipping form stays packed (section 9.3). 'shared' carries the art no single map owns; the rest are one per map. truthHash is reserved for the .vmap era, where a bake is content-addressed by the hash of the map's truth sections rather than by a release tag (section 9.4). Rebuilding from source is `python tools/data/fetch-maps.py --rebuild`, which needs the maps-src submodule (`git submodule update --init maps-src`). A rebuild does NOT reproduce the sha256s below and is not meant to: see provenance.evidence -- these packs came from a different producer, and q3map2 output is not byte-reproducible across toolchain versions anyway. --rebuild exists so the map set can be regenerated from sources we control if the release ever goes away, which is the durability guarantee; byte-identity is not part of it.",
   "packs": {
     "_hudsetup": {
       "size": 782973,

@@ -920,11 +920,37 @@ else already does).
     one commit set later than where it was cut, which is untidy rather than harmful.
   - **Lesson worth keeping:** a protection rule that has not been tested against the specific action you
     fear is a guess. This one read as complete and had a hole in exactly the direction that matters.
-- **Do (2):** `fetch-maps.py --rebuild`, which compiles from the pinned `maps-src` submodule when a
-  fetch fails. This makes the **git sources the real backup** — distributed, and every clone is a
-  copy — rather than depending on one host staying up. §8.3 already requires pinning the q3map2
-  version and flags, so reproducibility is a stated requirement and this is mostly wiring. It is the
-  same escape hatch as `--rebuild-bake` for the vmap era (§9.4).
+- **Do (2): built 2026-07-30.** `fetch-maps.py --rebuild` compiles from the pinned `maps-src`
+  submodule. This makes the **git sources the real backup** — distributed, and every clone is a
+  copy — rather than depending on one host staying up. It is the same escape hatch as
+  `--rebuild-bake` for the vmap era (§9.4).
+
+  **Two claims in this paragraph were wrong, both found while building it:**
+
+  1. *"reproducibility is a stated requirement and this is mostly wiring."* It was not wiring, and
+     reproducibility is not achieved. `--rebuild` cannot reproduce the pinned sha256s and does not
+     try. q3map2 output is not byte-stable across compiler builds, and its lighting phase is threaded
+     — pinning the version and flags (§8.3) narrows that variance, it does not eliminate it. The
+     durability guarantee is **"a working map set can be regenerated from sources we control"**, which
+     is what G12 actually needs. Byte-identity is a stronger property that nothing here delivers.
+     Writing the weaker guarantee down matters, because a durability story that quietly assumes the
+     stronger one is false in exactly the emergency it exists for.
+  2. *The pinned packs are q3map2 output.* They are not. `data/maps.lock.json` said
+     `"backend": "q3map2"`; it now says `"split-pack"`, with the evidence recorded under
+     `provenance.evidence`. Three independent checks agree: all 32 release assets were uploaded in a
+     **5-second window** (00:23:45—00:23:50Z), which is a local batch upload rather than a 31-job
+     matrix finishing one at a time; every workflow run before that timestamp **failed**, the first
+     success landing three hours later at 03:22Z; and the external lightmap pages inside the packs are
+     **`.jpg`**, the form upstream Xonotic ships, where our q3map2 path emits `.tga` and converts it to
+     `.png`. So the shipped set is upstream's prebuilt compiled maps re-split by `split-pack.py`. The
+     q3map2 pipeline works — run `30511841165` compiled stormkeep end to end — but **it has never
+     produced the shipped set**, and a `--rebuild` written assuming it had would have "failed"
+     reproducibility for a reason that was never about q3map2.
+
+  The lockfile now pins `provenance.source_commit` (VortexMaps `3a36228`, whose pipeline is known-good)
+  and `provenance.sources_tree` (`6930c37`). The `maps-2026.07` tag is recorded too, but is *not* the
+  build pin: every CI run at or below it failed. The sources tree is identical at both, so the map
+  geometry is unambiguous either way — only the build tooling moved.
 - **Not doing:** a mirror URL on a second host. The `urls` array in the lockfile stays an array so
   one can be added without a schema change, but nothing is set up today. Revisit if we ever self-host
   a CDN.
@@ -1350,9 +1376,15 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
     - **`tools/data/fetch-maps.py` works end to end** against the real release: 32 packs downloaded,
       hash-verified, extracted atomically into the gitignored `data/maps/`. Tested `--verify-only`, a
       no-op re-run, and a poisoned lockfile hash (hard failure, existing pack untouched).
-    - **`maps-src` submodule: not added.** It buys map authors a `git submodule update` instead of a
-      clone, and nothing in the game build needs it — `sources/` is never read at runtime. Deferred
-      rather than skipped.
+    - **`maps-src` submodule: added 2026-07-30** (was deferred here, and this line said so). It is
+      pinned at VortexMaps `3a36228` and carries `update = none`, which is what makes it free:
+      that setting is honoured by **both** `git submodule update` and `git clone
+      --recurse-submodules` — verified, the latter prints `Skipping submodule 'maps-src'`. So a
+      normal clone pays nothing for ~1.3 GB of history it does not want, and map authors opt in
+      with `git submodule update --init maps-src`. The reasoning for deferring still held
+      (`sources/` is never read at runtime); what changed is that `--rebuild` needs a pinned
+      source tree to be meaningful, so the submodule stopped being a convenience and became the
+      thing G12's durability claim rests on.
     - **The CI compile workflow is parked**, see the note under stage 1 item 6 and
       `VortexMaps/build/README.md`. `split-pack.py` covers the frozen set; rebuilding from sources needs
       a decision about upstream's Perl wrapper first.
@@ -1712,7 +1744,10 @@ The pin must not rot.
 - Map release tags are immutable, enforced by a GitHub tag-protection ruleset on `VortexMaps`; never
   force-push a map tag, never delete a release that any `VortexArena` commit pins. (G12, accepted.)
 - `fetch-maps.py --rebuild` compiles from the pinned `maps-src` submodule when a fetch fails, making
-  the distributed git sources the durable backup rather than any single host. (G12, accepted.)
+  the distributed git sources the durable backup rather than any single host. (G12, **built
+  2026-07-30**.) It regenerates a **working** map set; it does not reproduce the pinned sha256s,
+  and the packs pinned today did not come from q3map2 at all — see the correction under G12 and
+  `provenance.evidence` in `data/maps.lock.json`.
 - The lockfile holds a `urls` array rather than a single `url`, so a mirror can be added later
   without a schema change. Nothing is mirrored today; that was considered and deferred.
 

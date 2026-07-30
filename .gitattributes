@@ -20,3 +20,14 @@
 # eol=lf rather than -text: these ARE text (diffable, mergeable), they just must not be converted.
 *.patch text eol=lf
 *.diff  text eol=lf
+
+# The lockfiles themselves, for the same "hash is load-bearing" reason plus a second one.
+# release.yml keys the ~750 MB map cache on `hashFiles('data/maps.lock.json')`, so the file's BYTES
+# decide whether three CI jobs hit or miss that cache.
+#
+# The failure this prevents is not hypothetical: writing this file from Python on Windows without
+# newline="\n" silently converted 233 LF to CRLF, which turned a 12-line metadata edit into a
+# 474-line whole-file diff and would have changed the cache key while changing no actual content.
+# A reviewer sees "241 insertions, 233 deletions" on a lockfile and cannot tell that from a real
+# re-pin of every pack.
+*.lock.json text eol=lf

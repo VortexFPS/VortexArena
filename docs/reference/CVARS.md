@@ -19,8 +19,8 @@
 As of the last run: **2826 distinct cvars**. The count is high because the weapon /
 monster / turret / vehicle **balance** corpus (`g_balance_*`, `g_monsters_*`, …) is
 read by the gameplay code as string literals (e.g.
-[`Vortex.cs`](../../src/XonoticGodot.Common/Gameplay/Weapons/Vortex.cs),
-[`Arc.cs`](../../src/XonoticGodot.Common/Gameplay/Weapons/Arc.cs)) — those reads are
+[`Vortex.cs`](../../src/VortexArena.Common/Gameplay/Weapons/Vortex.cs),
+[`Arc.cs`](../../src/VortexArena.Common/Gameplay/Weapons/Arc.cs)) — those reads are
 counted even though most of those cvars are never `Register()`-ed in C# (their
 values come from the shipped `.cfg` tree).
 
@@ -28,18 +28,18 @@ values come from the shipped `.cfg` tree).
 
 There is **no single registry**. Defaults are stamped from several places, and most
 cvars are merely *read* through one facade (`Api.Cvars` / the `Cvars.*` helpers →
-`ICvarService`, [Services.cs](../../src/XonoticGodot.Common/Services/Services.cs)):
+`ICvarService`, [Services.cs](../../src/VortexArena.Common/Services/Services.cs)):
 
 | Site | What it registers |
 |---|---|
-| [`Cvars.Defaults`](../../src/XonoticGodot.Server/Cvars.cs) (`new("name", …)` table) | core server / match / bot / item defaults |
-| [`ParticleCvars`](../../src/XonoticGodot.Engine/Particles/ParticleCvars.cs) + [`ClientSettings`](../../game/menu/framework/ClientSettings.cs) | particle, video, audio, and stock engine-client cvars |
+| [`Cvars.Defaults`](../../src/VortexArena.Server/Cvars.cs) (`new("name", …)` table) | core server / match / bot / item defaults |
+| [`ParticleCvars`](../../src/VortexArena.Engine/Particles/ParticleCvars.cs) + [`ClientSettings`](../../game/menu/framework/ClientSettings.cs) | particle, video, audio, and stock engine-client cvars |
 | ~30 per-subsystem `RegisterDefaults` | every HUD panel, `crosshair_*`, vignette, reticle, chat, frame-profiler, … |
 | read-only (no registration) | the balance corpus + many `sv_*` movement tunables — values come from `.cfg` or `MovementParameters` fallbacks |
 
 **1498 of the 2208 are read but never registered in C#.** Most are intentional (the
 balance corpus and the per-tick `sv_*` movement tunables, whose single source of
-truth is [`MovementParameters.FromCvars`](../../src/XonoticGodot.Common/Physics/MovementParameters.cs)
+truth is [`MovementParameters.FromCvars`](../../src/VortexArena.Common/Physics/MovementParameters.cs)
 fallbacks + the shipped cfgs). `--show-rejects` and the "read but never registered"
 list in the text report are the audit tools for finding genuinely *invisible* ones.
 
@@ -102,19 +102,19 @@ are both normal; see [Cross-boundary cvars](#cross-boundary-cvars).
 
 Cvars cross the client/server line through two deliberate mechanisms:
 
-- **`sv_*` physics flows DOWN.** [`MovementParameters.FromCvars`](../../src/XonoticGodot.Common/Physics/MovementParameters.cs)
+- **`sv_*` physics flows DOWN.** [`MovementParameters.FromCvars`](../../src/VortexArena.Common/Physics/MovementParameters.cs)
   reads ~45 `sv_*` movement cvars and runs on **both** the authoritative server tick
   *and* the client's prediction replay. The server's live values are replicated to
   the client each snapshot via
-  [`MoveVarsBlock`](../../src/XonoticGodot.Net/MoveVarsBlock.cs) (`MovementCvars` is the
+  [`MoveVarsBlock`](../../src/VortexArena.Net/MoveVarsBlock.cs) (`MovementCvars` is the
   wire list), so the client predicts with identical inputs. The StrafeHUD
   ([`StrafeHudPanel.cs`](../../game/hud/StrafeHudPanel.cs)) reads the same set to draw its
   guide. Server-authoritative; client mirrors a replicated copy.
 - **`cl_*` preferences flow UP.** The `sentcvar` system
-  ([`Commands.cs`](../../src/XonoticGodot.Server/Commands.cs)) lets a client push an
+  ([`Commands.cs`](../../src/VortexArena.Server/Commands.cs)) lets a client push an
   **allowlisted** `cl_*` cvar to the server, stored **per-client** (never the world
   store — privilege separation, see
-  [`CvarReplicationTests`](../../tests/XonoticGodot.Tests/CvarReplicationTests.cs)). The
+  [`CvarReplicationTests`](../../tests/VortexArena.Tests/CvarReplicationTests.cs)). The
   allowlist is `cl_weaponpriority`(`0`–`9`), `cl_autoswitch`(`_cts`), `cl_noantilag`,
   `cl_physics`, `cl_movement_track_canjump`, `cl_jetpack_jump`, plus the
   `notification_<CHOICE>` set. Client-authoritative; server reads a replicated copy.
@@ -123,7 +123,7 @@ Cvars cross the client/server line through two deliberate mechanisms:
 
 The scanner flags **71** cvars read in *both* a client-only dir
 (`game/client|hud|menu|console`) and a server/shared dir
-(`src/XonoticGodot.Server|Common|Engine`). They decompose into by-design patterns,
+(`src/VortexArena.Server|Common|Engine`). They decompose into by-design patterns,
 not violations:
 
 1. **`sv_*` movement → client** (StrafeHUD + prediction): `sv_maxspeed`,
@@ -140,7 +140,7 @@ not violations:
    `g_campaign(_skill)`, `sv_gravity` (mutator dialog). ✔ same pattern as (3).
 5. **Tooling caveat (not real cross-boundary)**: `cl_particles*`, `cl_decals`,
    `r_drawparticles_drawdistance` flag because the particle sim lives in
-   `XonoticGodot.Engine` (bucketed "shared"), but that code is **client-side
+   `VortexArena.Engine` (bucketed "shared"), but that code is **client-side
    rendering** — these are client-authoritative. The scanner's dir→scope mapping
    can't tell client-rendering-in-Engine from server-sim-in-Engine.
 
@@ -148,7 +148,7 @@ not violations:
 
 **Genuine fix candidate**
 - **`cl_announcer_maptime`** is read from the server's **global** store
-  ([`GameWorld.cs`](../../src/XonoticGodot.Server/GameWorld.cs)) via `Cvars.FloatOr`, unlike
+  ([`GameWorld.cs`](../../src/VortexArena.Server/GameWorld.cs)) via `Cvars.FloatOr`, unlike
   every other `cl_*` the server consumes (which go per-client through `sentcvar`).
   Either route it per-client, or — if the server truly owns the announcement cadence
   — it shouldn't wear a `cl_` prefix.
@@ -188,7 +188,7 @@ not violations:
   individually listed below (the scanner expands `snd_channel{N}volume` → `0..9` as a
   convenience):
   - `g_physics_<set>_<var>` — physics-preset overrides (e.g. `g_physics_cpma_maxspeed`),
-    built in [`PhysicsPreset`](../../src/XonoticGodot.Common/Physics/PhysicsPreset.cs).
+    built in [`PhysicsPreset`](../../src/VortexArena.Common/Physics/PhysicsPreset.cs).
   - `notification_<CHOICE>` — one per kill-message choice.
 - **Scope buckets** used for the cross-boundary signal: `client` =
   `game/client|hud|menu|console`; `server` = `src/.Server`; `shared` =

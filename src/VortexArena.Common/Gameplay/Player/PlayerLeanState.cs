@@ -1,12 +1,12 @@
 using System.Numerics;
 
-namespace XonoticGodot.Common.Framework;
+namespace VortexArena.Common.Framework;
 
 /// <summary>
 /// Per-player state for the playermodel lean effect — the port of the never-merged Base branch
 /// <c>mirceakitsune/lean_players</c> (2011, recovered from the branch tip <c>c3fe0de24</c>): the player
 /// model tips against its acceleration and away from incoming damage. See
-/// <see cref="XonoticGodot.Common.Gameplay.PlayerLean"/> for the math and the divergences from the
+/// <see cref="VortexArena.Common.Gameplay.PlayerLean"/> for the math and the divergences from the
 /// original (the original wrote the lean INTO <c>self.angles</c>; the port keeps it in a separate render-only
 /// offset because <c>Player.Angles</c> drives the weapon fire direction here).
 /// </summary>

@@ -1,11 +1,11 @@
 using System.Numerics;
-using XonoticGodot.Common.Diagnostics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Common.Gameplay.Damage
+namespace VortexArena.Common.Gameplay.Damage
 {
 
 /// <summary>
@@ -1110,13 +1110,13 @@ public sealed class DamageSystem : IDamageSystem
 // Lead wires this in GameInit:
 // Combat.System = new DamageSystem();
 
-} // namespace XonoticGodot.Common.Gameplay.Damage
+} // namespace VortexArena.Common.Gameplay.Damage
 
-namespace XonoticGodot.Common.Framework
+namespace VortexArena.Common.Framework
 {
     /// <summary>
     /// [T41] The hit-confirmation accumulator (QC <c>STAT(HITSOUND_DAMAGE_DEALT_TOTAL)</c>). Lives on the
-    /// attacker entity; the damage pipeline (<see cref="XonoticGodot.Common.Gameplay.Damage.DamageSystem.Apply"/>)
+    /// attacker entity; the damage pipeline (<see cref="VortexArena.Common.Gameplay.Damage.DamageSystem.Apply"/>)
     /// adds the (health + armor) actually removed from a *different* player to it on every hit. The owner
     /// snapshot networks it (<c>NetEntityState.HitDamageDealtTotal</c>) and the client diffs it across updates to
     /// fire the pitch-shifted hit sound (view.qc <c>UpdateDamage</c>/<c>HitSound</c>). Added on this partial in an

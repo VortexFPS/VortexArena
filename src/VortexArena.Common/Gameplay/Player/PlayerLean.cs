@@ -1,9 +1,9 @@
 using System;
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Math;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Math;
 
-namespace XonoticGodot.Common.Gameplay;
+namespace VortexArena.Common.Gameplay;
 
 /// <summary>
 /// Playermodel lean — the port of the never-merged Base branch <c>mirceakitsune/lean_players</c>

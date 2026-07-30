@@ -1,9 +1,9 @@
 using Godot;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Services;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 
-namespace XonoticGodot.Game;
+namespace VortexArena.Game;
 
 /// <summary>
 /// The presentation-side binding between a simulation <see cref="Entity"/> (Quake coords, Godot-free)
@@ -150,8 +150,8 @@ public partial class EntityNode : Node3D, IEntityPresence
         {
             var angles = new System.Numerics.Vector3(Entity.Angles.X, yawDeg, Entity.Angles.Z);
             if (hasLean)
-                angles = XonoticGodot.Common.Math.QMath.AnglesTransformMultiply(angles, Entity.LeanAngles);
-            XonoticGodot.Common.Math.QMath.AngleVectors(angles,
+                angles = VortexArena.Common.Math.QMath.AnglesTransformMultiply(angles, Entity.LeanAngles);
+            VortexArena.Common.Math.QMath.AngleVectors(angles,
                 out System.Numerics.Vector3 fwd, out System.Numerics.Vector3 right, out System.Numerics.Vector3 up);
             Basis = new Basis(Coords.ToGodot(fwd), Coords.ToGodot(up), Coords.ToGodot(right));
         }

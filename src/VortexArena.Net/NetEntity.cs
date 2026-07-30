@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace XonoticGodot.Net;
+namespace VortexArena.Net;
 
 /// <summary>
 /// What kind of networked entity a <see cref="NetEntityState"/> describes — the successor to the QC

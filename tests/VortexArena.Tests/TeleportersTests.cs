@@ -1,16 +1,16 @@
 using System.Linq;
 using System.Numerics;
-using XonoticGodot.Common;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
-using XonoticGodot.Common.Math;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
-using XonoticGodot.Engine.Simulation;
-using XonoticGodot.Server;
+using VortexArena.Common;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Math;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Simulation;
+using VortexArena.Server;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Teleporter OUT-DIRECTION + velocity fidelity (qcsrc/common/mapobjects/teleporters.qc Simple_TeleportPlayer /
@@ -207,7 +207,7 @@ public sealed class TeleportersTests
         float padLTimeBefore = tele.PushLTime;
 
         Entity carrier = Carrier();
-        XonoticGodot.Engine.Simulation.TriggerTouch.PredictTeleportsAmbient(carrier);
+        VortexArena.Engine.Simulation.TriggerTouch.PredictTeleportsAmbient(carrier);
 
         // Relocated to the destination (with the QC floor-clear nudge 1 - mins.z - 24 = 1).
         Vector3 expectedOrigin = dest.Origin + new Vector3(0, 0, 1f - carrier.Mins.Z - 24f);
@@ -245,7 +245,7 @@ public sealed class TeleportersTests
         tele.Enemy = null; // multi-destination: random exit, not predictable (CSQC skips it)
 
         Entity carrier = Carrier();
-        XonoticGodot.Engine.Simulation.TriggerTouch.PredictTeleportsAmbient(carrier);
+        VortexArena.Engine.Simulation.TriggerTouch.PredictTeleportsAmbient(carrier);
 
         // Untouched: still at the origin, no view-snap stamped.
         Assert.Equal(Vector3.Zero, carrier.Origin);

@@ -127,7 +127,7 @@ public sealed class EffectInfoOverlay
         }
 
         // 2) direct disk read from the resolved content directory — same convention as EffectInfo so the
-        //    in-tree assets/data tree is found (res:// rooted at the project dir).
+        //    in-tree data/ tree is found (res:// rooted at the project dir).
         foreach (string abs in CandidateDiskPaths(vpath))
         {
             try

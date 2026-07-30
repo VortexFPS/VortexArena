@@ -14,7 +14,7 @@ namespace XonoticGodot.Game.Client;
 /// (multiple same-named blocks layer into one effect, exactly like DP). Lookups are case-insensitive,
 /// since the libs reference effects by either the EFFECT_* spelling or the lower-case effectinfo name.
 ///
-/// The text is sourced lazily from the mounted content VFS (the configured <c>res://assets/data</c>
+/// The text is sourced lazily from the mounted content VFS (the configured <c>res://data</c>
 /// tree); a host that already has a VFS can inject one via <see cref="TextLoader"/>, otherwise we
 /// read the file directly off disk. A miss leaves the catalog empty and callers fall back to the heuristic
 /// classifier — so the game still runs with no content mounted.

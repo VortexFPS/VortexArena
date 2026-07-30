@@ -32,7 +32,7 @@ namespace XonoticGodot.Game;
 public partial class Shell : Node
 {
     /// <summary>The game data dir to mount (forwarded to <see cref="MenuState.Boot"/> + each match).</summary>
-    [Export] public string DataPath { get; set; } = "res://assets/data";
+    [Export] public string DataPath { get; set; } = "res://data";
 
     /// <summary>If set at boot, skip the menu and start straight into this map (CI/dev; the smoke test uses it).</summary>
     public string? BootMap { get; set; }

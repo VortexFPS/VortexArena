@@ -499,10 +499,31 @@ D7 exists for.
 
 So split by **role**, matching the source-tree decision:
 
-- **`shared-<version>.zip`** — 405 MB, one entry in the lockfile. Changes only when the shared art set
+- **`shared-<version>.pk3`** — 530.7 MB, one entry in the lockfile. Changes only when the shared art set
   changes, which for a frozen 0.8.6 content set is close to never.
-- **`<map>-q3map2.zip`** ×31 — 190.8 MB total. **Median 4.1 MB, mean 5.3 MB**, largest `erbium` at
-  20.5 MB (then `xoylent` 20.3, `catharsis` 18.8).
+- **`<map>.pk3`** ×31 — 186.5 MB total. **Median 4.8 MB**, largest `erbium` at 20.5 MB (then `xoylent`
+  20.3, `catharsis` 18.8).
+
+> **`.pk3`, not `.zip`, and installed rather than extracted — changed 2026-07-29.** A `.pk3` *is* a zip
+> with a different extension, and `MountGameDir` mounts one natively (it accepts `pk3`/`pak`/`dpk`/`obb`
+> directly inside the directory it is handed). §9.3 already said `.pk3dir` is the loose *editing* form and
+> `.pk3` the packed *shipping* form, so extracting the shipping form on arrival was backwards.
+>
+> Leaving them packed removes real machinery: no staging-then-rename window, no zip-member traversal
+> validation (nothing is unpacked), no `.stamp` sidecar (the artifact is its own stamp — hashing it
+> answers "is this the pinned one" directly, where a stamp only records what was once true), and
+> **718 MB on disk instead of 1.3 GB**. The published assets were renamed in place via the releases API,
+> so no re-upload was needed.
+>
+> **It also removed 31 duplicate tests, which is how the change got validated.** The suite went 3,949 →
+> 3,918, and chasing that gap found the cause: with an extracted `.pk3dir`, `Find("maps/", "bsp")`
+> returned each BSP **twice** — once as `maps/stormkeep.bsp` via the pk3dir's own mount, and again as
+> `maps/stormkeep.pk3dir/maps/stormkeep.bsp`, because the `data/` root `DirectoryMount` indexes
+> recursively and that key also starts with `maps/`. So `VisualQaTests` had been loading all 31 stock
+> maps twice under two paths. Verified by diffing `--list-tests` output between the two layouts.
+>
+> Re-verified end to end on `.pk3`: the headless host smoke boots stormkeep with **zero errors**,
+> 2,439 shaders from 185 scripts, and the same material breakdown (`normalMapped=23 glow=3`).
 
 A map revision therefore costs a **~4 MB** fetch, not 19 and not 596. Shared art downloads once. The
 lockfile grows by one entry, and a community map either brings its own art or declares a dependency on

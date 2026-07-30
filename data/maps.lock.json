@@ -3,230 +3,230 @@
   "source": "VortexFPS/VortexMaps",
   "release": "maps-2026.07",
   "backend": "q3map2",
-  "note": "Compiled maps are build output and are not committed (restructure D7). Run tools/data/fetch-maps.py to install them into data/maps/. 'shared' carries the art no single map owns; the rest are one per map. truthHash is reserved for the .vmap era, where a bake is content-addressed by the hash of the map's truth sections rather than by a release tag (section 9.4).",
+  "note": "Compiled maps are build output and are not committed (restructure D7). Run tools/data/fetch-maps.py to install them into data/maps/. Packs are .pk3 and are installed as-is, not extracted: MountGameDir mounts a .pk3 natively, so the packed shipping form stays packed (section 9.3). 'shared' carries the art no single map owns; the rest are one per map. truthHash is reserved for the .vmap era, where a bake is content-addressed by the hash of the map's truth sections rather than by a release tag (section 9.4).",
   "packs": {
     "_hudsetup": {
       "size": 782973,
       "sha256": "2ea8f7bbdb426ce60944594be799f1c480d7fa97805c8cb67cc57d389943a8e8",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/_hudsetup-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/_hudsetup.pk3"
       ]
     },
     "_init": {
       "size": 839,
       "sha256": "15328b4c2d324abdc979f8685f3dcc3f157dcfb82194b4ad5ea462484b59a4c3",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/_init-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/_init.pk3"
       ]
     },
     "afterslime": {
       "size": 7078530,
       "sha256": "4ae89895712d82dac28ba8e33bcd18577a148cd52023a28ac9b654f8c0a28f58",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/afterslime-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/afterslime.pk3"
       ]
     },
     "atelier": {
       "size": 4049603,
       "sha256": "1dd6b61ecd526c9e743a356fe0bbe5d2b707cdd2611379f85c2417bf39aa85e4",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/atelier-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/atelier.pk3"
       ]
     },
     "boil": {
       "size": 3075978,
       "sha256": "3c17fbc46f5f178b0915208558b0450f67ca030e8d1d052e3e779902851491ad",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/boil-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/boil.pk3"
       ]
     },
     "bromine": {
       "size": 5303028,
       "sha256": "e3c3def15c1507b5edc4cd9618103abb2f58955a7d8d4c72bad8838d9f46743c",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/bromine-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/bromine.pk3"
       ]
     },
     "catharsis": {
       "size": 19773750,
       "sha256": "2e046a2925f010f3909825c2acd415d345609214cc4d9c370b66e935a971139c",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/catharsis-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/catharsis.pk3"
       ]
     },
     "courtfun": {
       "size": 6491727,
       "sha256": "8e5cf911626adbdd8c3bda5408f288bf7d33558df831ba1c266bb214e10b3307",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/courtfun-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/courtfun.pk3"
       ]
     },
     "dance": {
       "size": 7776114,
       "sha256": "c4a9263b4d59aff2f5bea46fe9d90e330ab157f0aa95ebf1f4b2c6074757b525",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/dance-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/dance.pk3"
       ]
     },
     "darkzone": {
       "size": 3376757,
       "sha256": "00db02a5610418dfb986e00b9016d8b81c9d6ae2e8e28ed20cf5d92f5834cb4b",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/darkzone-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/darkzone.pk3"
       ]
     },
     "erbium": {
       "size": 20809246,
       "sha256": "e9013bd057e9d57d87ef6ab57c47277ba65dc4ae1755e33d85400ac0871fa4ab",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/erbium-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/erbium.pk3"
       ]
     },
     "finalrage": {
       "size": 3744430,
       "sha256": "5540020403701168fd9bc22aa6275774019ea773c724f7bbd3f3b3c1d27d279f",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/finalrage-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/finalrage.pk3"
       ]
     },
     "fuse": {
       "size": 3390265,
       "sha256": "772df0eef173ab758e7c25769338b4d9916299012aab7c31ed75e572015f9e55",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/fuse-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/fuse.pk3"
       ]
     },
     "geoplanetary": {
       "size": 7002842,
       "sha256": "fc2afd13c4bcb4d89b085f12ebb4a242b9092e60dbcad42bae47b9b65706dabe",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/geoplanetary-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/geoplanetary.pk3"
       ]
     },
     "glowplant": {
       "size": 5059398,
       "sha256": "c6a54e99e4783a2150c281c5ebc12fb3f2f4aa8a35d7a17a3fd6559b9d39c83b",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/glowplant-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/glowplant.pk3"
       ]
     },
     "go": {
       "size": 5493961,
       "sha256": "710ec8afbf4a4826e6ac7fccae19623f4b720a2013714ce00812c6d88081ca0a",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/go-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/go.pk3"
       ]
     },
     "implosion": {
       "size": 10999210,
       "sha256": "6b3a01d021ac7042db1251320657604ad09a86f4bb4c3e71a448d10b845531c7",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/implosion-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/implosion.pk3"
       ]
     },
     "leave_em_behind": {
       "size": 1747476,
       "sha256": "67f221b66900a1ee742f96571a6ae97edf1a458354947c41cc8b2fa9ff7578f9",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/leave_em_behind-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/leave_em_behind.pk3"
       ]
     },
     "nexballarena": {
       "size": 971875,
       "sha256": "be36cf0180115bc5147bbe299ba9f182169756a417e41d1daae5f5bae7ce6453",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/nexballarena-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/nexballarena.pk3"
       ]
     },
     "opium": {
       "size": 2213380,
       "sha256": "d7675aa105d805ca311eafecc731afdac938302ad22965db57e21f3bbc77608b",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/opium-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/opium.pk3"
       ]
     },
     "runningman": {
       "size": 2974370,
       "sha256": "3d0da814bf1c6bc0e1c02f89c59f32ae4cb2c1397c0b555f4c3c4c0d18db1c18",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/runningman-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/runningman.pk3"
       ]
     },
     "runningmanctf": {
       "size": 6130992,
       "sha256": "995b7527f858b49e58cb0cd409c933cf8b1376ba635a11efb759f362c6be78fb",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/runningmanctf-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/runningmanctf.pk3"
       ]
     },
     "shared": {
       "size": 556490517,
       "sha256": "96e63dd9299aaae050082b39dcd6cf2ba42a8db4470ef97de829a25537a6f594",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/shared-2026.07.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/shared-2026.07.pk3"
       ]
     },
     "silentsiege": {
       "size": 4110537,
       "sha256": "3385329e9fd9d5b166776d73c445b3cc8d14530d450847945f251205ea4f3bfd",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/silentsiege-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/silentsiege.pk3"
       ]
     },
     "solarium": {
       "size": 6513587,
       "sha256": "ad6ec69b24b58b881ffdbc46fe1fbac1ff44b6bdcbda5b4b501f95f823b3268d",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/solarium-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/solarium.pk3"
       ]
     },
     "space-elevator": {
       "size": 5375409,
       "sha256": "97b35c060ee0665934acc3bd0b575fafb00a55ad34960c6899f3fb5032132f89",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/space-elevator-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/space-elevator.pk3"
       ]
     },
     "stormkeep": {
       "size": 10903206,
       "sha256": "41bffcf03211a475127ce4d5191d6852ea5d1826d1ba3fab0975e5d112c758f4",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/stormkeep-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/stormkeep.pk3"
       ]
     },
     "techassault": {
       "size": 4794394,
       "sha256": "f956fd8741383a2d3fbf60fa64eecd008f6f435e0a0a6cce7d39ab598a97a226",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/techassault-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/techassault.pk3"
       ]
     },
     "trident": {
       "size": 2739806,
       "sha256": "51b148897655e0e9dfb49b2b27a1ef8440846f03e60d8a3067538585c6812f8c",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/trident-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/trident.pk3"
       ]
     },
     "vorix": {
       "size": 7704979,
       "sha256": "b4ee199976f6a9a15eb54e124b00f045e7a333c0d461c513dc38e47a2dcdd11b",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/vorix-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/vorix.pk3"
       ]
     },
     "warfare": {
       "size": 3967554,
       "sha256": "2e54240bab02738dd1a2f3c69c123896f71ae1de5da9036bbc8bef19dbff3af8",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/warfare-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/warfare.pk3"
       ]
     },
     "xoylent": {
       "size": 21232963,
       "sha256": "bb3bce9f4d92ae454d5cdde883c652dc7b922a1c92a8c03bcfdac221adca0348",
       "urls": [
-        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/xoylent-q3map2.zip"
+        "https://github.com/VortexFPS/VortexMaps/releases/download/maps-2026.07/xoylent.pk3"
       ]
     }
   }

@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
-"""Fetch the compiled map archives pinned by data/maps.lock.json.
+"""Fetch the compiled map packs pinned by data/maps.lock.json.
 
-Compiled maps are build output, so they are not committed (restructure D7): VortexMaps CI publishes
-them as GitHub Release assets and this fetches what the lockfile pins. Release-asset bandwidth is
-unmetered, so this costs nothing no matter how many people clone.
+Compiled maps are build output, so they are not committed (restructure D7): VortexMaps CI publishes them
+as GitHub Release assets and this fetches what the lockfile pins. Release-asset bandwidth is unmetered,
+so this costs nothing no matter how many people clone.
 
     python tools/data/fetch-maps.py                # fetch what is missing or hash-mismatched
     python tools/data/fetch-maps.py --verify-only  # report drift, change nothing
     python tools/data/fetch-maps.py --force        # re-download everything
 
-Reliability rules, from the plan's section 8.1 - the failure modes here are worse than a slow
-download, so each is closed deliberately:
+The packs are `.pk3` and are installed AS-IS, not extracted. A .pk3 is a zip with a different
+extension, and VirtualFileSystem.MountGameDir mounts one natively (it accepts pk3/pak/dpk/obb directly
+inside the directory it is handed). Section 9.3 puts it plainly: `.pk3dir` is the loose editing form and
+`.pk3` is the packed shipping form -- so shipping the packed form and leaving it packed is the shape the
+engine already expects, and the one community maps have always used.
 
-  * Every archive is sha256-verified BEFORE extraction. A mismatch is a hard failure; there is no
-    "download anyway" path, because a substituted artifact that loads is worse than one that errors.
-  * Extraction goes to data/maps/.staging/<name>/ and is renamed into place. Never extract over a live
-    directory: an interrupted in-place extract leaves a half-map that loads and renders wrong.
-  * A .stamp beside each extracted pack records the hash it came from, so a re-run costs a stat rather
-    than a re-download.
-  * Retries use exponential backoff and resume with an HTTP Range header, the behaviour ported from
-    download-assets.sh, which was proven against real flaky transfers.
+Installing rather than extracting removes a surprising amount of machinery and risk:
+
+  * No staging-then-rename dance. There is no window in which a half-written map exists, because the
+    file is verified before it is moved into place under its final name.
+  * No zip-member path validation. Nothing is unpacked, so a malformed or hostile archive has no
+    filesystem to escape into.
+  * No .stamp sidecar. The artifact IS its own stamp: hashing the installed .pk3 answers "is this the
+    pinned one" directly, where a stamp only records what was once true.
+  * Roughly a quarter of the disk. stormkeep is 4.8 MB packed against ~19 MB extracted.
+
+Retries use exponential backoff and resume with an HTTP Range header, the behaviour ported from
+download-assets.sh, which was proven against real flaky transfers.
 """
 from __future__ import annotations
 
@@ -32,16 +39,14 @@ import sys
 import time
 import urllib.error
 import urllib.request
-import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LOCKFILE = ROOT / "data" / "maps.lock.json"
 DEST = ROOT / "data" / "maps"
-STAGING = DEST / ".staging"
 
 RETRIES = 4
 CHUNK = 1 << 20
-USER_AGENT = "VortexArena-fetch-maps/1"
+USER_AGENT = "VortexArena-fetch-maps/2"
 
 
 def die(msg: str) -> None:
@@ -54,6 +59,16 @@ def sha256_file(path: pathlib.Path) -> str:
         for chunk in iter(lambda: fh.read(CHUNK), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def installed_digest(path: pathlib.Path, expect_size: int) -> str | None:
+    """Hash the installed pack, skipping the read when the size already rules it out."""
+    try:
+        if path.stat().st_size != expect_size:
+            return None
+    except OSError:
+        return None
+    return sha256_file(path)
 
 
 def download(urls: list[str], dest: pathlib.Path, expect_size: int | None) -> None:
@@ -89,40 +104,30 @@ def download(urls: list[str], dest: pathlib.Path, expect_size: int | None) -> No
     die(f"could not download {dest.name} after {RETRIES} attempts: {last_error}")
 
 
-def extract_atomic(archive: pathlib.Path, name: str, digest: str) -> None:
-    """Extract to a staging dir, then swap it into place. Never write over a live pack."""
-    staged = STAGING / name
-    if staged.exists():
-        shutil.rmtree(staged)
-    staged.mkdir(parents=True)
-    with zipfile.ZipFile(archive) as z:
-        for member in z.namelist():
-            # Refuse absolute paths and traversal; a malicious or malformed archive must not escape.
-            target = (staged / member).resolve()
-            if not str(target).startswith(str(staged.resolve())):
-                die(f"{archive.name} contains an unsafe path: {member}")
-        z.extractall(staged)
-    (staged / ".stamp").write_text(digest, encoding="utf-8")
+def clean_legacy_layout() -> int:
+    """Remove <map>.pk3dir directories left by the earlier extract-on-fetch scheme.
 
-    final = DEST / f"{name}.pk3dir"
-    if final.exists():
-        shutil.rmtree(final)
-    staged.rename(final)
-
-
-def stamp_of(name: str) -> str | None:
-    stamp = DEST / f"{name}.pk3dir" / ".stamp"
-    try:
-        return stamp.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
+    They must go rather than linger: MountGameDir mounts BOTH .pk3 and .pk3dir from the same directory,
+    so an old extracted copy beside a new pack would mount the same map twice, and the .pk3dir would
+    win on name order - meaning a stale map could quietly shadow the pinned one.
+    """
+    if not DEST.is_dir():
+        return 0
+    removed = 0
+    for stale in sorted(DEST.glob("*.pk3dir")):
+        if stale.is_dir():
+            shutil.rmtree(stale)
+            removed += 1
+    staging = DEST / ".staging"
+    if staging.is_dir():
+        shutil.rmtree(staging)
+    return removed
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--verify-only", action="store_true", help="report drift, change nothing")
-    ap.add_argument("--force", action="store_true", help="re-download and re-extract everything")
-    ap.add_argument("--keep-archives", action="store_true", help="do not delete the downloaded zips")
+    ap.add_argument("--force", action="store_true", help="re-download and reinstall everything")
     args = ap.parse_args()
 
     if not LOCKFILE.exists():
@@ -135,10 +140,16 @@ def main() -> int:
     print(f"{len(packs)} packs pinned by {LOCKFILE.name} "
           f"(release {lock['release']} of {lock['source']})")
 
+    if not args.verify_only:
+        stale_dirs = clean_legacy_layout()
+        if stale_dirs:
+            print(f"removed {stale_dirs} extracted .pk3dir left by the previous fetch scheme")
+
     stale = []
     for name, entry in sorted(packs.items()):
-        current = stamp_of(name)
-        if args.force or current != entry["sha256"]:
+        target = DEST / f"{name}.pk3"
+        current = None if args.force else installed_digest(target, entry["size"])
+        if current != entry["sha256"]:
             stale.append((name, entry, current))
 
     if not stale:
@@ -154,29 +165,26 @@ def main() -> int:
         return 1
 
     DEST.mkdir(parents=True, exist_ok=True)
-    STAGING.mkdir(parents=True, exist_ok=True)
     total = sum(e["size"] for _, e, _ in stale)
     print(f"fetching {len(stale)} pack(s), {total / 2**20:.1f} MB\n")
 
     for i, (name, entry, _) in enumerate(stale, 1):
-        archive = STAGING / f"{name}.zip"
+        target = DEST / f"{name}.pk3"
+        partial = DEST / f"{name}.pk3.part"
         print(f"  [{i}/{len(stale)}] {name} ({entry['size'] / 2**20:.1f} MB)")
-        download(entry["urls"], archive, entry["size"])
+        download(entry["urls"], partial, entry["size"])
 
-        digest = sha256_file(archive)
+        digest = sha256_file(partial)
         if digest != entry["sha256"]:
-            archive.unlink(missing_ok=True)
+            partial.unlink(missing_ok=True)
             die(f"{name}: sha256 mismatch\n"
                 f"       expected {entry['sha256']}\n"
                 f"       got      {digest}\n"
-                "       refusing to extract - the lockfile and the asset disagree")
+                "       refusing to install - the lockfile and the asset disagree")
 
-        extract_atomic(archive, name, digest)
-        if not args.keep_archives:
-            archive.unlink(missing_ok=True)
+        # Verified, so the rename is the whole install. No window where a bad pack is mounted.
+        partial.replace(target)
 
-    if STAGING.exists() and not any(STAGING.iterdir()):
-        STAGING.rmdir()
     print(f"\ndone - {len(stale)} pack(s) installed under {DEST.relative_to(ROOT)}")
     return 0
 

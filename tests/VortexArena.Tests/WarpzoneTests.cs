@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Gameplay;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
 using Xunit;
 
-namespace XonoticGodot.Tests;
+namespace VortexArena.Tests;
 
 /// <summary>
 /// Tests for §4.13: the seamless warpzone transform (lib/warpzone WarpZone_SetUp / TransformOrigin / Velocity)

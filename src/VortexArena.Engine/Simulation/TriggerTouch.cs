@@ -1,9 +1,9 @@
 using System.Numerics;
-using XonoticGodot.Common.Framework;
-using XonoticGodot.Common.Services;
-using XonoticGodot.Engine.Collision;
+using VortexArena.Common.Framework;
+using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
 
-namespace XonoticGodot.Engine.Simulation;
+namespace VortexArena.Engine.Simulation;
 
 /// <summary>
 /// SV_LinkEdict_TouchAreaGrid (Base/darkplaces/sv_phys.c:727) — the "touch every overlapping trigger" pass.
@@ -105,7 +105,7 @@ public static class TriggerTouch
         {
             if (ReferenceEquals(t, mover) || t.IsFreed || t.Solid != Solid.Trigger)
                 continue;
-            if (t.Active == XonoticGodot.Common.Gameplay.MapMover.ActiveNot)
+            if (t.Active == VortexArena.Common.Gameplay.MapMover.ActiveNot)
                 continue;
             // Mirror the server touch's gating EXACTLY or team pads desync (server launches, client doesn't):
             // a velocity pad is team-gated by a simple DIFF_TEAM (PushVelocityTouch); ballistic trigger_push is
@@ -115,7 +115,7 @@ public static class TriggerTouch
             if (!CollisionWorld.BoxesOverlap(areaMin, areaMax, t.AbsMin, t.AbsMax))
                 continue;
 
-            XonoticGodot.Common.Gameplay.Jumppads.JumppadPush(t, mover, isVelocityPad, predicted: true);
+            VortexArena.Common.Gameplay.Jumppads.JumppadPush(t, mover, isVelocityPad, predicted: true);
         }
     }
 
@@ -148,10 +148,10 @@ public static class TriggerTouch
         {
             if (ReferenceEquals(t, mover) || t.IsFreed || t.Solid != Solid.Trigger)
                 continue;
-            if (t.Active != XonoticGodot.Common.Gameplay.MapMover.ActiveActive)
+            if (t.Active != VortexArena.Common.Gameplay.MapMover.ActiveActive)
                 continue;
             // OBSERVERS_ONLY teleporters never relocate a live player (Teleport_Active).
-            if ((t.SpawnFlags & XonoticGodot.Common.Gameplay.Teleporters.ObserversOnly) != 0)
+            if ((t.SpawnFlags & VortexArena.Common.Gameplay.Teleporters.ObserversOnly) != 0)
                 continue;
             // Only a single cached destination is deterministic enough to predict (see SimpleTeleportPlayer).
             if (t.Enemy is null)
@@ -163,14 +163,14 @@ public static class TriggerTouch
             if (!CollisionWorld.BoxesOverlap(areaMin, areaMax, t.AbsMin, t.AbsMax))
                 continue;
 
-            if (XonoticGodot.Common.Gameplay.Teleporters.SimpleTeleportPlayer(t, mover, predicted: true) is not null)
+            if (VortexArena.Common.Gameplay.Teleporters.SimpleTeleportPlayer(t, mover, predicted: true) is not null)
             {
                 // The TELEPORT PULSE for the view smoothing (same bookkeeping the warpzone predictor stamps):
                 // the stair/eye-height glide must SNAP across the exit, never smooth a height difference into a
                 // dip. TeleportPlayer stamps .lastteleporttime only on the authoritative (!predicted) path, and
                 // the .fixangle it stamps is consumed+cleared by the host's view-snap BEFORE the camera runs —
                 // so the carrier needs its own stamp here for the camera's one-shot smoothing consume.
-                mover.LastTeleportTime = XonoticGodot.Common.Gameplay.MapMover.Now();
+                mover.LastTeleportTime = VortexArena.Common.Gameplay.MapMover.Now();
             }
             return; // one teleport per tick — the mover has moved off this (fixed) overlap box
         }
@@ -190,11 +190,11 @@ public static class TriggerTouch
     /// trigger_teleport.
     ///
     /// Mirrors the other predictors: resolves zones through the published ambient
-    /// <see cref="XonoticGodot.Common.Gameplay.WarpzoneTrace.AmbientManager"/> (the QC global g_warpzones,
+    /// <see cref="VortexArena.Common.Gameplay.WarpzoneTrace.AmbientManager"/> (the QC global g_warpzones,
     /// wired per-match by TraceService.SetWarpzoneManager) so it works on the demo facade AND the listen-server
     /// wrapper; does NOT early-out on a SOLID_NOT mover (the prediction carrier is deliberately non-solid); fires
     /// at most one warp per call (the warp moves the mover off the fixed overlap box). The crossing gate matches
-    /// the authoritative <see cref="XonoticGodot.Common.Gameplay.WarpzoneManager.Teleport"/> EXACTLY (only warp
+    /// the authoritative <see cref="VortexArena.Common.Gameplay.WarpzoneManager.Teleport"/> EXACTLY (only warp
     /// when moving INTO the IN plane) so the predicted warp fires on the same tick the server's touch does.
     /// </summary>
     /// <summary>
@@ -228,7 +228,7 @@ public static class TriggerTouch
     /// and to rotate the pending input ring (DP <c>CL_RotateMoves</c>), which keeps post-warp replays
     /// consistent and kills the spurious partner re-crossings at the root.</summary>
     public static uint LastPredictedWarpSeq;
-    public static XonoticGodot.Common.Gameplay.WarpzoneTransform LastPredictedWarpTransform;
+    public static VortexArena.Common.Gameplay.WarpzoneTransform LastPredictedWarpTransform;
 
     public static void PredictWarpzonesAmbient(Entity mover)
     {
@@ -237,7 +237,7 @@ public static class TriggerTouch
         if (PredictedWarpBudget <= 0)
             return; // this frame's predicted crossing already happened — see PredictedWarpBudget
 
-        var manager = XonoticGodot.Common.Gameplay.WarpzoneTrace.AmbientManager;
+        var manager = VortexArena.Common.Gameplay.WarpzoneTrace.AmbientManager;
         if (manager is null)
             return;
 
@@ -246,7 +246,7 @@ public static class TriggerTouch
         Vector3 areaMin = (mover.Origin + mover.Mins) - Vector3.One;
         Vector3 areaMax = (mover.Origin + mover.Maxs) + Vector3.One;
 
-        foreach (XonoticGodot.Common.Gameplay.Warpzone wz in manager.Zones)
+        foreach (VortexArena.Common.Gameplay.Warpzone wz in manager.Zones)
         {
             if (!wz.Linked || wz.Trigger is not { } trig)
                 continue;
@@ -290,7 +290,7 @@ public static class TriggerTouch
             // seam, not smooth it — the paired windows sit at different heights, and gliding the Z difference
             // reads as a "dip/step" at every crossing. LastTeleportTime is the same bookkeeping the authoritative
             // teleport stamps (QC .lastteleporttime); the host's smoothing consumes it one-shot.
-            mover.LastTeleportTime = XonoticGodot.Common.Gameplay.MapMover.Now();
+            mover.LastTeleportTime = VortexArena.Common.Gameplay.MapMover.Now();
             // The seq-keyed WARP PULSE (see the field docs): the host applies the view rotation + rotates the
             // pending input ring exactly once per real crossing (replays re-record the same seq — no re-fire).
             if (PredictionSeq > LastPredictedWarpSeq)

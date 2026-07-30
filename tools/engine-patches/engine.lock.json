@@ -2,9 +2,9 @@
   "$comment": [
     "Pins the engine template the Windows release export must be built from (restructure item 29, G10).",
     "Two independent jobs, because the failure they guard has two ends:",
-    "  'patches' pins the SOURCE — the patch files on disk, by sha256, so a silent edit to a patch is",
+    "  'patches' pins the SOURCE \u2014 the patch files on disk, by sha256, so a silent edit to a patch is",
     "    caught before anyone rebuilds a template from it.",
-    "  'binary_markers' pins the RESULT — byte sequences that must (or must not) appear in the exported",
+    "  'binary_markers' pins the RESULT \u2014 byte sequences that must (or must not) appear in the exported",
     "    game binary, which is the only check that speaks to what actually shipped.",
     "Verify with tools/verify-engine-template.py; see tools/engine-patches/README.md for the rebuild recipe."
   ],
@@ -24,7 +24,7 @@
       "drop_at_engine": "4.8",
       "$comment": [
         "Hash is over the LF form. .gitattributes pins *.patch to eol=lf precisely so this value is",
-        "the same on Windows and on the Linux runner — without that rule the file checks out CRLF",
+        "the same on Windows and on the Linux runner \u2014 without that rule the file checks out CRLF",
         "under core.autocrlf and this hash fails on whichever platform did not write it."
       ]
     }
@@ -45,8 +45,22 @@
       "Both wrong choices are silent in the direction that matters, which is why this list is short."
     ],
     "windows-client": {
-      "required": ["GetRawInputBuffer"],
-      "forbidden": []
+      "required": [
+        "GetRawInputBuffer"
+      ],
+      "forbidden": [
+        "engine.lock.json"
+      ],
+      "$comment": [
+        "forbidden is a CONTAMINATION CANARY, and it exists because the required-marker check defeated itself.",
+        "Godot's export was baking tools/ into the game pck, and this very lockfile contains the literal string",
+        "'GetRawInputBuffer' several times over. So an exported binary contained the marker whether or not the",
+        "PATCHED TEMPLATE was used - the count went 1x -> 3x purely from shipped text - and a stock-template",
+        "export would have passed the check.",
+        "Fixed primarily by excluding dev material (tools/, planning/, tests/, docs/, ci/, .github/) from the",
+        "export, which a shipped game pck has no business carrying anyway. This canary is the belt: if anything",
+        "ever re-includes this file in a build, the check fails LOUDLY instead of silently becoming a tautology."
+      ]
     }
   },
   "template": {

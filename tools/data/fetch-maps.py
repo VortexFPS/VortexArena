@@ -128,6 +128,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--verify-only", action="store_true", help="report drift, change nothing")
     ap.add_argument("--force", action="store_true", help="re-download and reinstall everything")
+    ap.add_argument("--only", metavar="MAP", action="append", default=None,
+                    help="fetch just these maps (repeatable). For a smoke test that needs one map, "
+                         "rather than the whole ~700 MB set. An unknown name is an error, not a no-op.")
     args = ap.parse_args()
 
     if not LOCKFILE.exists():
@@ -140,7 +143,19 @@ def main() -> int:
     print(f"{len(packs)} packs pinned by {LOCKFILE.name} "
           f"(release {lock['release']} of {lock['source']})")
 
-    if not args.verify_only:
+    if args.only:
+        # A typo must not read as success. Silently fetching nothing would leave the caller (ci.sh's
+        # host smoke) believing it had the map, and it would then fail with something far less obvious.
+        unknown = [m for m in args.only if m not in packs]
+        if unknown:
+            die(f"unknown map(s): {', '.join(sorted(unknown))}\n"
+                f"       pinned: {', '.join(sorted(packs))}")
+        packs = {k: v for k, v in packs.items() if k in args.only}
+        print(f"--only: restricted to {', '.join(sorted(packs))}")
+
+    # Skipped under --only: clean_legacy_layout() sweeps the whole maps dir, and a targeted fetch has no
+    # business removing artefacts belonging to maps it was not asked about.
+    if not args.verify_only and not args.only:
         stale_dirs = clean_legacy_layout()
         if stale_dirs:
             print(f"removed {stale_dirs} extracted .pk3dir left by the previous fetch scheme")

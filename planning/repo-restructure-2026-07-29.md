@@ -1235,10 +1235,27 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
     GitHub's 100 MB limit, and nothing even trips the 50 MB warning. Worth keeping as a scripted gate
     rather than a one-off: the two map packs are the only things in the whole tree that violate it, and
     they are the two things §5.3 already routes elsewhere.
-14. Add `.github/workflows/build-maps.yml` to `VortexMaps`: on tag, package each
-    `builds/<backend>/<map>.pk3dir/` as one archive, publish the set as release assets, and emit the
-    manifest that becomes `data/maps.lock.json`. Tag `maps-2026.07` as the first pinned set. In
-    `VortexArena`: add `maps-src` as a submodule pinned to `v0` and commit `data/maps.lock.json`.
+14. **Publish the first pinned map set** — **done 2026-07-29, except the CI compile step.**
+    - **`maps-2026.07` is published** at `VortexFPS/VortexMaps`: **32 assets, 717.2 MB** — one shared
+      archive at 530.7 MB plus 31 per-map archives totalling 186.5 MB, median 4.8 MB. Produced by
+      `build/split-pack.py` from the shipped pk3s (the frozen 0.8.6 set needs no recompile).
+    - **`data/maps.lock.json` is committed**, generated from the manifest and cross-checked against
+      every uploaded asset's size so a truncated upload cannot enter the lockfile. `urls` is an array
+      per §8.2 so a mirror needs no schema change.
+    - **`tools/data/fetch-maps.py` works end to end** against the real release: 32 packs downloaded,
+      hash-verified, extracted atomically into the gitignored `data/maps/`. Tested `--verify-only`, a
+      no-op re-run, and a poisoned lockfile hash (hard failure, existing pack untouched).
+    - **`maps-src` submodule: not added.** It buys map authors a `git submodule update` instead of a
+      clone, and nothing in the game build needs it — `sources/` is never read at runtime. Deferred
+      rather than skipped.
+    - **The CI compile workflow is parked**, see the note under stage 1 item 6 and
+      `VortexMaps/build/README.md`. `split-pack.py` covers the frozen set; rebuilding from sources needs
+      a decision about upstream's Perl wrapper first.
+14b. **G11's mount fix landed as `VirtualFileSystem.MountContentRoot`**, not as a call-site edit. It
+    mounts `<data>/maps` then `<data>`, and putting the order in one place was not tidiness: the game
+    and the tests had **already drifted apart on it**. With maps fetched, the tests mounted only the
+    root, saw 50 of the 185 shader scripts, and four material-count assertions failed while the content
+    was entirely present. `MenuState` and all 28 test files now share the one definition.
 15. ~~Fix the one hard-coded path that bypasses the VFS~~ — **done, and this item was wrong.**
     `DialogWinner.cs` listed three `res://` candidates and **none of them ever resolved**: the content
     root holds `.pk3dir` packages, never a loose `gfx/`, so `res://assets/data/gfx/winner.*` pointed at
@@ -1254,10 +1271,23 @@ this plan, and each one shrinks the migration's surface or makes its proof gate 
     `.shader` lines and 46 `.qc` lines that name `.tga` explicitly resolve to the PNG unchanged.
     Same for `LaserRenderer.cs:145`. The `.tga` literals in `Q3ShaderParserDirectiveTests` and
     `AutospriteBoltTests` are synthetic parser input and touch no real file.
-17. **Gate (G7): NOT YET RUN — and it cannot run until maps exist.** `tools/perf-smoke.ps1` measures
-    map-load time, and the committed `data/` has no maps: they are fetched per D7 and `VortexMaps` has
-    published nothing. So the gate is blocked behind stage 1b, not skipped. Two consequences to hold on
-    to until it runs:
+17. **Gate (G7): run 2026-07-29 — correctness proven, decode cost still unmeasured.**
+    - **`tools/perf-smoke.ps1` passes.** `ServerTickPerfBench` against the fetched `atelier`:
+      boot 174 ms (453 map entities), 4 players at **0.4423 ms/tick — 3.2% of the 72 Hz budget**,
+      per-player marginal cost 0.1022 ms.
+    - **The stronger result is the headless host smoke**, which is the game rather than a test. Booted
+      `--host stormkeep --bots 2` against the new tree with **zero hard errors and zero warnings**, and
+      all three `ci/ci.sh` assertions passed. The telling lines: `loaded 2439 shaders from 185 scripts`
+      (both mount levels), `6425 cvars from 25 cfg files, 0 missing` (the config tree resolves out of
+      `data/core.pk3dir/`), and `'stormkeep' materials: lightmapped=34 vertexLit=3 plain=8 glow=3
+      normalMapped=23` — the `_norm` and `_glow` maps were TGA and are now PNG, so that line is the
+      conversion working. Windowed captures confirm it visually.
+    - **What is still NOT measured, and it is the thing G7 actually worried about:** PNG decode CPU at
+      map load on the client. `TgaDecoder` and Godot's PNG path are both Godot-dependent, so **no
+      headless bench touches image decode** — the server-tick bench never decodes a texture. Measuring
+      it needs `perf-smoke.ps1 -Live` (a 30 s windowed release-export capture diffed against
+      `tools/perf-baselines/catharsis-release.json`), which wants a release export and a GUI session.
+    - Two consequences still standing:
     - **Do not discard the pre-conversion source.** `Projects/Vortex/Base/data/` is a pristine upstream
       clone (verified: `git status --porcelain` empty, no local edits) and is the rollback source. It
       also serves as the G7 archive, which is cheaper than the separate frozen copy stage 0 item 5

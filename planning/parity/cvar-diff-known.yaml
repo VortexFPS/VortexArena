@@ -4,19 +4,53 @@
 #
 # Discipline: add an entry ONLY after confirming the divergence on the live path and deciding it
 # is deliberate. A suppressed genuine bug is invisible — prefer fixing over suppressing.
+#
+# ── Rewritten 2026-07-30 for the Vortex config layer (restructure D8/§11) ────────────────────────
+# The old version encoded the divergence as a HAND-EDIT of the upstream chain: "Shipped as
+# physicsBryan.cfg; xonotic-server.cfg execs it instead of physicsX.cfg", with an expected chain
+# divergence of physicsX.cfg Base-only / physicsBryan.cfg port-only. All of that is now false, and
+# most of it was already false before this rewrite: physicsBryan.cfg did not exist, and
+# xonotic-server.cfg:675 execs unmodified physicsX.cfg. The divergence had evaporated when the content
+# tree was re-pointed at a clean upstream checkout, and this file went on asserting it regardless.
+#
+# Under D8 the upstream chain does not diverge at all. Every port-side cvar difference is attributable
+# to a vortex-*.cfg file, which is both a cheaper check and a stronger one: it turns "which of these
+# differences did we mean?" into "the diff IS the layer, and the layer is six readable files".
+#
+# One entry was DELETED rather than reworded — `g_mod_physics`. It reads `Xonotic` in both trees now
+# (the layer does not touch it), so the suppression was hiding a name that no longer diverges, which is
+# exactly the invisible-suppression risk the discipline note above warns about.
+#
+# Fixed alongside: the differ's PORT_DATA defaulted into the `assets/data` junction, which points at
+# `Base/data`. Both roots resolved to the same directory, so the tool was diffing Base against itself
+# and could not report any divergence at all — see assert_distinct_roots(). Treat every "0 value diffs"
+# result predating 2026-07-30 as meaningless rather than reassuring.
 
 known:
-  # The port's default physics preset: stock Xonotic values + sv_step_upspeed_max 1 (the step-up
-  # launch cap). Shipped as physicsBryan.cfg; xonotic-server.cfg execs it instead of physicsX.cfg.
-  # See the chain-divergence section (expected: physicsX.cfg Base-only, physicsBryan.cfg port-only,
-  # xonotic-server.cfg + physics.cfg text differ).
-  - name: "g_mod_physics"
-    note: "port default physics preset is 'Bryan' (stock + sv_step_upspeed_max 1)"
+  # ── Physics divergence, now carried by data/core.pk3dir/vortex-physics.cfg ─────────────────────
+  # Three lines total. physicsX.cfg (stock, `g_mod_physics Xonotic`) is exec'd by the upstream chain
+  # exactly as shipped; the layer adds one port knob on top of it.
   - name: "g_physics_clientselect_options"
-    note: "port adds 'warsow bryan' to the selectable preset list"
+    note: "layer appends 'warsow bryan' to the selectable preset list (vortex-physics.cfg). A cvar
+      cannot append, so the string is restated in full — VortexConfigLayerTests asserts ours stays a
+      superset of upstream's, or a preset upstream adds later would silently vanish from the menu."
   - name: "g_physics_bryan_*"
-    note: "the port-added physicsBryan preset cvar family"
+    note: "port-added preset cvar family for the client-selectable 'bryan' set. PhysicsPreset.Resolve
+      reads g_physics_<set>_* with a fallback to the global cvar."
   - name: "sv_step_upspeed_max"
-    note: "port-added step-up launch cap knob (the one deliberate physics change)"
+    note: "port-added step-up launch cap — the one deliberate physics change. Absent from Base
+      entirely; its default of -1 (disabled) makes the code path a strict no-op at stock values."
   - name: "sv_step_upspeed_scale"
-    note: "port-added step-up launch scale knob (companion to sv_step_upspeed_max)"
+    note: "port-added step-up launch scale, companion to sv_step_upspeed_max. NOT set by the layer —
+      it stays at its default of 1, which is vanilla behaviour. A port-only name, not a value change."
+
+  # ── Port video defaults, now carried by data/core.pk3dir/vortex-client.cfg ─────────────────────
+  # These moved out of MenuState's inline _cvars.Set as part of D8, so the differ can now see them
+  # where before it could not (a C# assignment is not in the cfg chain at all). That is a gain in
+  # signal, and it is why they need entries now and did not before.
+  - name: "vid_fullscreen"
+    note: "port default 2 (EXCLUSIVE fullscreen) over Xonotic's shipped 1. Desktop-fullscreen still
+      composites on Windows — the missed-vblank double-frames in the hitch logs (perf §12.7)."
+  - name: "vid_vsync"
+    note: "port default 0 (off). Measured -0.5 ms/frame and better lows than the previous mailbox
+      default — perf-campaign Phase 1c. Assigned nowhere in Base's chain."

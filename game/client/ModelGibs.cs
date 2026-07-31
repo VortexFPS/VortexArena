@@ -42,6 +42,26 @@ public sealed partial class ModelGibs : Node3D
     };
 
     /// <summary>
+    /// Every distinct gib model the client can ever spawn — the limb set plus the three
+    /// <see cref="Splash"/> always tosses. Map-independent and fixed, so it is also the work-list the
+    /// MENU-time asset warm uses (<c>MenuAssetWarmer</c>) and the source
+    /// <see cref="BuildWarmupInstances"/> iterates, which is what keeps the warmed set and the spawnable
+    /// set from drifting apart. Deduplicated (arm.md3 appears twice in <see cref="LimbModels"/>, once per arm).
+    /// </summary>
+    public static IReadOnlyList<string> AllModelPaths { get; } = BuildAllModelPaths();
+
+    private static string[] BuildAllModelPaths()
+    {
+        var all = new List<string>(LimbModels.Length + 3);
+        void Add(string p) { if (!all.Contains(p, StringComparer.OrdinalIgnoreCase)) all.Add(p); }
+        foreach (string m in LimbModels) Add(m);
+        Add("models/gibs/eye.md3");
+        Add("models/gibs/bloodyskull.md3");
+        Add("models/gibs/chunk.mdl");
+        return all.ToArray();
+    }
+
+    /// <summary>
     /// Spawn a full gib splash at <paramref name="origin"/> (Quake space) with base <paramref name="velocity"/>,
     /// scaled by <paramref name="amount"/> (the QC gibbage multiplier, ~1..15). Bounces off the ground plane at
     /// <paramref name="floorZ"/>. This is the type 0x01 ("full") splash; lesser types fall out as a few chunks.
@@ -159,10 +179,9 @@ public sealed partial class ModelGibs : Node3D
             list.Add(BuildMesh(path));
             list.Add(GpuWarmPass.AlphaWarm(BuildMesh(path)));
         }
-        foreach (string mdl in LimbModels) Warm(mdl);   // arm (listed twice → deduped), chest, smallchest, leg1, leg2
-        Warm("models/gibs/eye.md3");                    // the eye + bloody skull Splash() always tosses
-        Warm("models/gibs/bloodyskull.md3");
-        Warm("models/gibs/chunk.mdl");                  // fast chunks (real Quake1 MDL)
+        // AllModelPaths is the single list (limbs + eye + bloodyskull + the Quake1 chunk.mdl), shared with the
+        // menu-time warm so the set warmed at the menu and the set warmed here can never diverge.
+        foreach (string mdl in AllModelPaths) Warm(mdl);
         return list;
     }
 

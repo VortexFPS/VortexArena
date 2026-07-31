@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Godot;
 using VortexArena.Common.Diagnostics;
 using VortexArena.Game.Loaders;
@@ -45,8 +44,11 @@ namespace VortexArena.Game.Client;
 /// from. They were also the entire residual cost — a single big player-model diffuse uploads in 25–45 ms and a
 /// single generated-shader material compiles in ~20 ms even on release, neither of which any per-frame budget
 /// can subdivide. Moving them is what took the menu from "a few paced hitches" to a flat
-/// <b>p50 6.9 / p95 6.9 ms with zero asset-build hitches</b>. What is left on the main thread is the small
-/// sound-decode queue below (budgeted) and nothing else.</para>
+/// <b>p50 6.9 / p95 6.9 ms with zero asset-build hitches</b>. Sounds, loose HUD/particle textures and the
+/// world-model set take the same lane, so this node owns NO main-thread work at all — it has no
+/// <c>_Process</c>. Its only main-thread cost is the streamer's own drain, already scoped as
+/// <c>stream.build</c>; if main-thread work is ever added back here it needs its own <c>Prof.Sample</c> and a
+/// <c>FrameProfiler.TopLevelNodeScopes</c> entry (house rule).</para>
 ///
 /// <para><b>What is left is contention, not work.</b> With the main thread idle, the warm's remaining cost
 /// reaches it indirectly — a burst of concurrent decodes and GPU uploads makes the frame block in present. In
@@ -66,12 +68,6 @@ namespace VortexArena.Game.Client;
 /// </summary>
 public partial class MenuAssetWarmer : Node
 {
-    /// <summary>Per-frame budget (ms) for the main-thread work this node owns directly — the sound decodes.
-    /// Model work runs on the <see cref="BackgroundAssetStreamer"/> and is paced by ITS budget. Overshoot is
-    /// carried as debt (see <see cref="_debtMs"/>) so an item bigger than the budget is paid back by skipping
-    /// frames rather than silently ignored.</summary>
-    [Export] public double BudgetMs { get; set; } = 1.5;
-
     /// <summary>The stock player models to warm — the roster a bot or a joining human picks from (the local
     /// player's own <c>_cl_playermodel</c> is added on top when set). Mirrors NetGame's eager roster + idle-warm
     /// list so the menu warm covers the same set the per-map precache would.</summary>
@@ -82,25 +78,36 @@ public partial class MenuAssetWarmer : Node
     };
 
     /// <summary>
-    /// How many models may be warming at once. The warm has no deadline — the player is sitting in a menu —
-    /// so it is fed through a window rather than fanned out all at once. Releasing all ~54 models together put
-    /// every worker on a texture decode simultaneously and allocated over 100 MB inside the first second, which
-    /// showed up on the MAIN thread as GC pauses and 30–80 ms frames even though none of that work was main-
-    /// thread work. A small window keeps the decode rate (and so the allocation rate) flat.
+    /// How many warm units — one model, one loose texture, or one sound — may be in flight at once. The warm
+    /// has no deadline (the player is sitting in a menu), so it is fed through a window rather than fanned out.
+    ///
+    /// <para>ONE, with <see cref="Chain"/> serialising the jobs inside a unit as well — so the whole warm is a
+    /// single asset at a time. That is not caution for its own sake; it is what four release captures of the
+    /// same asset set measured (window 1 chained / 1 fanned-out / 2 / 3):</para>
+    /// <list type="bullet">
+    ///   <item>window 2, fanned out — 1 ASSET-BUILD + 3 GC-PAUSE, p95 8.6 ms, 63 MB/s allocated</item>
+    ///   <item>window 1, fanned out — 1 GC-PAUSE + 2 VSYNC, p95 9.1 ms, 38 MB/s</item>
+    ///   <item>window 3, chained — 2 ASSET-BUILD + 2 VSYNC + 1 MIXED, p95 10.6 ms, 41 MB/s</item>
+    ///   <item><b>window 1, chained — NO hitches, p95 6.9 ms, 26 MB/s</b></item>
+    /// </list>
+    /// <para>None of that work is on the main thread; it reaches the frame through the allocator and the
+    /// driver. A GC has to suspend every thread that is allocating, so N parallel decoders make an N-scaled
+    /// pause (17.4 ms for a gen0+gen1 with four workers busy), and N parallel uploads saturate the driver's
+    /// ingest so the frame blocks in present. Serial costs wall-clock only: the warm drains in ~21 s instead of
+    /// ~6 s, and nothing waits on it — a match started mid-warm just loads the remainder itself, exactly as it
+    /// did before any warm existed.</para>
     /// </summary>
-    private const int MaxModelsInFlight = 2;
+    private const int MaxUnitsInFlight = 1;
 
     private readonly AssetLoader _assets;
     private readonly string _localModel;
-    private readonly Queue<Action> _foreground = new();     // sound decodes — main-thread, budgeted
-    private readonly Queue<(string Model, bool Skeletal)> _pendingModels = new();
+    /// <summary>Every queued warm unit, as "start me and call this when I'm done". A unit is one model (which
+    /// itself expands into many streamer jobs), one loose texture, or one sound.</summary>
+    private readonly Queue<Action<Action>> _pending = new();
     private BackgroundAssetStreamer _streamer = null!;       // model parse + texture decode OFF the main thread
-    private int _modelsQueued, _modelsWarmed, _modelsInFlight;
-    private bool _foregroundDoneLogged, _modelsDoneLogged;
-
-    /// <summary>Unpaid main-thread overshoot, in ms — see <see cref="BackgroundAssetStreamer"/>'s <c>_debtMs</c>
-    /// for the rationale. A sound decode that costs 6 ms against a 1.5 ms budget buys the next ~3 frames off.</summary>
-    private double _debtMs;
+    private int _unitsQueued, _unitsWarmed, _unitsInFlight;
+    private bool _warmDoneLogged;
+    private ulong _startedMsec;   // for the completion log — how long the warm actually took to drain
 
     public MenuAssetWarmer(AssetLoader assets, string localModel = "")
     {
@@ -143,30 +150,106 @@ public partial class MenuAssetWarmer : Node
         if (!string.IsNullOrEmpty(_localModel) && !playerModels.Contains(_localModel))
             playerModels.Add(_localModel);
 
-        foreach (string m in weaponModels)
-            _pendingModels.Enqueue((m, false));
-        foreach (string m in playerModels)
-            _pendingModels.Enqueue((m, true));
-        _modelsQueued = _pendingModels.Count;
-        int weapons = weaponModels.Count, players = playerModels.Count;
-        StartPendingModels();
+        // --- world models the client can spawn on ANY map: the gib set and every registered pickup. Both were
+        //     previously warmed at map load (ModelGibs/BuildItemWarmupInstances feeding the GPU warm pass) even
+        //     though neither depends on the map. ModelGibs.AllModelPaths is the same list the load-time pass
+        //     iterates; the item paths are built with StartItem.ResolveModelPath exactly as a live spawn does,
+        //     so the warm fills the cache entry the real load will ask for. ---
+        var worldModels = new List<string>();
+        foreach (string g in VortexArena.Game.Client.ModelGibs.AllModelPaths)
+            if (!worldModels.Contains(g))
+                worldModels.Add(g);
+        foreach (VortexArena.Common.Gameplay.Pickup def in
+                 VortexArena.Common.Framework.Registry<VortexArena.Common.Gameplay.Pickup>.All)
+        {
+            string? path = VortexArena.Common.Gameplay.StartItem.ResolveModelPath(def);
+            if (!string.IsNullOrEmpty(path) && !worldModels.Contains(path!))
+                worldModels.Add(path!);
+        }
 
-        // --- combat sounds (sound/weapons/*): decode into the shared sound cache so the first fire/impact
-        //     doesn't stall decoding its OGG. AudioStream creation is a Godot resource build, so this stays on
-        //     the main thread — but each one is small, and the budget below is now enforced. ---
+        foreach (string m in weaponModels)
+            { string v = m; _pending.Enqueue(done => WarmModel(assets, v, skeletal: false, done)); }
+        foreach (string m in worldModels)
+            { string v = m; _pending.Enqueue(done => WarmModel(assets, v, skeletal: false, done)); }
+        foreach (string m in playerModels)
+            { string v = m; _pending.Enqueue(done => WarmModel(assets, v, skeletal: true, done)); }
+        int weapons = weaponModels.Count, players = playerModels.Count, world = worldModels.Count;
+
+        // --- loose textures with no model to hang off: the particle atlas and the HUD art. Both are
+        //     map-independent and were paid at map load / first draw. They need no parse, so each is a single
+        //     texture job (worker: read + decode + upload). ---
+        int textures = 0;
+        foreach (string t in MapIndependentTextures())
+        {
+            string name = t;
+            _pending.Enqueue(done => _streamer.Request(
+                () => { assets.Assets.WarmTextureOffThread(name); return name; },
+                _ => done(),
+                BackgroundAssetStreamer.Priority.Low, $"menu-warm tex {name}"));
+            textures++;
+        }
+
+        // --- sounds: the WHOLE registered set (announcer, pickup, voices, combat), not just sound/weapons/*.
+        //     All of it is map-independent, and it used to be left to the IN-MATCH idle warmer. Decoded on the
+        //     worker lane (see AssetLoader.WarmSoundOffThread — container parse only, no renderer), so 200-odd
+        //     samples cost the menu nothing. ---
         int sounds = 0;
         foreach (VortexArena.Common.Gameplay.GameSound s in VortexArena.Common.Gameplay.Sounds.All)
         {
             string sample = s.Sample;
-            if (string.IsNullOrEmpty(sample)
-                || !sample.StartsWith("weapons/", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(sample))
                 continue;
-            _foreground.Enqueue(() => assets.LoadSound(sample));
+            _pending.Enqueue(done => _streamer.Request(
+                () => { assets.WarmSoundOffThread(sample); return sample; },
+                _ => done(),
+                BackgroundAssetStreamer.Priority.Low, $"menu-warm snd {sample}"));
             sounds++;
         }
 
-        Log.Info($"[MenuWarmer] warming {weapons} weapon models + {players} player models + " +
-                 $"{sounds} combat sounds into the shared cache (background, menu-time).");
+        _unitsQueued = _pending.Count;
+        _startedMsec = Time.GetTicksMsec();
+        StartPendingUnits();
+
+        Log.Info($"[MenuWarmer] warming {weapons} weapon models + {players} player models + {world} world " +
+                 $"models + {textures} textures + {sounds} sounds into the shared cache (background, menu-time).");
+    }
+
+    /// <summary>
+    /// The map-independent loose textures worth holding before the first match: the DP particle atlas (every
+    /// explosion/impact/decal samples it) and the HUD art the in-match overlay draws on its first frame —
+    /// per-weapon icons, the configured crosshair plus its ring, the ammo icon, the nametag bar and the
+    /// progress bar. All are extension-agnostic base names resolved through the same
+    /// <see cref="AssetSystem.LoadTexture"/> path the HUD's <see cref="Hud.TextureCache"/> uses, so warming
+    /// them here makes that first draw a cache hit. A name that does not resolve is a cheap no-op.
+    /// </summary>
+    private IEnumerable<string> MapIndependentTextures()
+    {
+        var names = new List<string> { ParticleFont.AtlasVPath };
+
+        foreach (VortexArena.Common.Gameplay.Weapon w in VortexArena.Common.Gameplay.Weapons.All)
+            foreach (string p in Hud.WeaponHud.IconPaths(w.NetName))
+                if (!p.StartsWith("res://", StringComparison.Ordinal))   // project overrides aren't VFS art
+                    names.Add(p);
+
+        string skin = Hud.HudSkin.SkinName;
+        names.Add($"gfx/hud/{skin}/weapon_ammo");
+        names.Add("gfx/hud/default/weapon_ammo");
+        names.Add($"gfx/hud/{skin}/nametag_statusbar");
+        names.Add("gfx/hud/default/nametag_statusbar");
+        names.Add($"gfx/hud/{skin}/progressbar");
+        names.Add("gfx/hud/default/progressbar");
+        names.Add("gfx/crosshair_ring");
+
+        // The crosshair the player actually has selected (crosshairs.cfg default is 16). Only that one — the
+        // full gfx/crosshair1..N set is dozens of textures the player will never draw.
+        string cross = VortexArena.Game.Menu.MenuState.Cvars.GetString("crosshair");
+        if (!string.IsNullOrWhiteSpace(cross) && cross != "0")
+            names.Add($"gfx/crosshair{cross}");
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string n in names)
+            if (!string.IsNullOrWhiteSpace(n) && seen.Add(n))
+                yield return n;
     }
 
     /// <summary>
@@ -174,28 +257,27 @@ public partial class MenuAssetWarmer : Node
     /// parse cache <see cref="AssetLoader.PrepareModel"/> fills — off-thread — while handing back the material
     /// names the eventual build will resolve.
     /// </summary>
-    private void WarmWeaponModel(AssetLoader assets, string model)
-        => _streamer.Request(
-            // Worker: read + parse + sidecars. Boxed because the streamer drops a null result silently, and an
-            // empty list (a miss, or a main-thread-only MDL) must still reach the main phase to be counted.
+    private void WarmModel(AssetLoader assets, string model, bool skeletal, Action done)
+    {
+        if (skeletal)
+        {
+            // Players render through ParseSkeletalModel — a DIFFERENT cache from the weapon/world path (it holds
+            // the parsed IQM plus the pre-built AnimationLibrary, the 100-360 ms burst behind the bot-spawn hitch
+            // storm), so that is the one warmed for them.
+            _streamer.Request(
+                () => new SkeletalParseBox(assets.ParseSkeletalModel(model, 0)),  // worker: IQM + sidecars + anims
+                box => WarmMaterials(assets, model,
+                    box.Parse is null ? Array.Empty<string>() : AssetLoader.EffectiveMaterials(box.Parse), done),
+                BackgroundAssetStreamer.Priority.Low, $"menu-warm {model}");
+            return;
+        }
+        // Worker: read + parse + sidecars. Boxed because the streamer drops a null result silently, and an
+        // empty list (a miss, or a main-thread-only MDL) must still reach the main phase to be counted.
+        _streamer.Request(
             () => new MaterialList(assets.PrepareModel(model, 0)),
-            box => WarmMaterials(assets, model, box.Materials),
+            box => WarmMaterials(assets, model, box.Materials, done),
             BackgroundAssetStreamer.Priority.Low, $"menu-warm {model}");
-
-    /// <summary>
-    /// Warm one PLAYER model. Players render through <see cref="AssetLoader.ParseSkeletalModel"/> — a DIFFERENT
-    /// cache from the weapon path (it holds the parsed IQM plus the pre-built <c>AnimationLibrary</c>, the
-    /// 100–360 ms burst behind the bot-spawn hitch storm), so that is the one warmed here. What is deliberately
-    /// NOT done any more is <c>BuildSkeletalModel</c>: its <c>Skeleton3D</c> + skinned <c>ArrayMesh</c> are
-    /// per-instance and cached nowhere, so building one only to free it was the largest single cost in this
-    /// node and bought nothing. Its materials/textures — the part that DID persist — are warmed below instead.
-    /// </summary>
-    private void WarmPlayerModel(AssetLoader assets, string model)
-        => _streamer.Request(
-            () => new SkeletalParseBox(assets.ParseSkeletalModel(model, 0)),   // worker: IQM + sidecars + anims
-            box => WarmMaterials(assets, model,
-                box.Parse is null ? Array.Empty<string>() : AssetLoader.EffectiveMaterials(box.Parse)),
-            BackgroundAssetStreamer.Priority.Low, $"menu-warm {model}");
+    }
 
     /// <summary>
     /// The shared tail of both warms, in two waves. First one streamer job PER TEXTURE, entirely off the main
@@ -208,7 +290,7 @@ public partial class MenuAssetWarmer : Node
     /// in a single callback cost up to 20 ms in one frame; one per job puts each under the streamer's budget,
     /// where the debt pacing can spread them.</para>
     /// </summary>
-    private void WarmMaterials(AssetLoader assets, string model, IReadOnlyList<string> materials)
+    private void WarmMaterials(AssetLoader assets, string model, IReadOnlyList<string> materials, Action done)
     {
         var textures = new List<string>();
         foreach (string m in materials)
@@ -218,26 +300,16 @@ public partial class MenuAssetWarmer : Node
 
         if (textures.Count == 0)
         {
-            WarmMaterialsWave(assets, model, materials);
+            WarmMaterialsWave(assets, model, materials, done);
             return;
         }
 
-        int remaining = textures.Count;   // only ever touched from the main thread (streamer main phases)
-        foreach (string tex in textures)
-        {
-            string t = tex;
-            _streamer.Request(
-                // Worker: VFS read + decode + GPU upload. The upload is the step Godot would normally reserve
-                // for the main thread, and it was the dominant residual cost — a single big player-model
-                // diffuse costs 25-45 ms even on release, which no per-frame budget can subdivide.
-                () => { assets.Assets.WarmTextureOffThread(t); return t; },
-                _ =>
-                {
-                    if (--remaining == 0)
-                        WarmMaterialsWave(assets, model, materials);
-                },
-                BackgroundAssetStreamer.Priority.Low, $"menu-warm {model} tex {t}");
-        }
+        // ONE AT A TIME, chained: each job's main phase starts the next. Issuing a model's whole texture set at
+        // once put all four workers on a decode simultaneously, and a GC has to suspend every one of them — a
+        // gen0+gen1 collection measured 17.4 ms that way, which is a dropped frame even though the main thread
+        // did nothing. Serialising costs the warm wall-clock time it does not need, and nothing waits on it.
+        Chain(textures, t => () => assets.Assets.WarmTextureOffThread(t),
+              $"menu-warm {model} tex", () => WarmMaterialsWave(assets, model, materials, done));
     }
 
     /// <summary>
@@ -245,33 +317,55 @@ public partial class MenuAssetWarmer : Node
     /// textures it samples are already uploaded by now, so the work is material/shader construction only). The
     /// last one to land counts the model warmed.
     /// </summary>
-    private void WarmMaterialsWave(AssetLoader assets, string model, IReadOnlyList<string> materials)
+    private void WarmMaterialsWave(AssetLoader assets, string model, IReadOnlyList<string> materials, Action done)
     {
         if (materials.Count == 0)
         {
-            NoteModelWarmed();
+            done();
             return;
         }
 
-        int remaining = materials.Count;
-        foreach (string mat in materials)
+        // Worker: build the material. This is Godot resource construction — a ShaderMaterial plus, for a Q3
+        // shader stage, a generated Shader whose code Godot compiles — and it was the LAST thing the warm still
+        // did on the main thread, at up to 22 ms for a single material. Its textures are already uploaded by the
+        // wave above, so this is pure material/shader work. Safe for the same reason the texture upload is (see
+        // AssetSystem.WarmTextureOffThread); the shared lazy singletons it can reach are primed on the main
+        // thread before any of this starts. Chained one at a time for the same reason the texture wave is.
+        Chain(materials, m => () => assets.Assets.ResolveMaterial(m), $"menu-warm {model} mat", done);
+    }
+
+    /// <summary>
+    /// Run one streamer job per item, STRICTLY ONE AT A TIME: each job's main phase issues the next, and
+    /// <paramref name="done"/> fires after the last. <paramref name="makeWork"/> returns the worker-phase body
+    /// for an item.
+    ///
+    /// <para>The point is to bound how many workers are allocating at once. The main thread never runs any of
+    /// this, but a GC must suspend every thread that is, so N parallel decoders turn into an N-scaled pause on
+    /// the frame — measured at 17.4 ms for a gen0+gen1 collection with four workers busy. A background prefetch
+    /// with no deadline has no reason to buy parallelism at that price.</para>
+    /// </summary>
+    private void Chain(IReadOnlyList<string> items, Func<string, Action> makeWork, string label, Action done)
+    {
+        if (items.Count == 0)
         {
-            string m = mat;
-            _streamer.Request(
-                // Worker: build the material. This is Godot resource construction — a ShaderMaterial plus, for
-                // a Q3 shader stage, a generated Shader whose code Godot compiles — and it was the LAST thing
-                // the warm still did on the main thread, at up to 22 ms for a single material. Its textures are
-                // already uploaded by the wave above, so this is pure material/shader work. Safe for the same
-                // reason the texture upload is (AssetSystem.WarmTextureOffThread's remarks); the shared lazy
-                // singletons it can reach are primed on the main thread before any of this starts.
-                () => { assets.Assets.ResolveMaterial(m); return m; },
-                _ =>
-                {
-                    if (--remaining == 0)
-                        NoteModelWarmed();
-                },
-                BackgroundAssetStreamer.Priority.Low, $"menu-warm {model} mat {m}");
+            done();
+            return;
         }
+        void Step(int i)
+        {
+            if (i >= items.Count)
+            {
+                done();
+                return;
+            }
+            string item = items[i];
+            Action work = makeWork(item);
+            _streamer.Request(
+                () => { work(); return item; },
+                _ => Step(i + 1),
+                BackgroundAssetStreamer.Priority.Low, $"{label} {item}");
+        }
+        Step(0);
     }
 
     /// <summary>Non-null off-thread wrapper for a model's material work-list — the streamer drops a null result
@@ -282,69 +376,30 @@ public partial class MenuAssetWarmer : Node
     /// <see cref="MaterialList"/>, and the same shape NetGame's live player-model stream uses.</summary>
     private sealed record SkeletalParseBox(AssetLoader.SkeletalModelParse? Parse);
 
-    /// <summary>Open the warm window up to <see cref="MaxModelsInFlight"/>. Main-thread only (called from
-    /// <c>_Ready</c> and from a streamer main phase), so the counters need no locking.</summary>
-    private void StartPendingModels()
+    /// <summary>Open the warm window up to <see cref="MaxUnitsInFlight"/>. Main-thread only (called from
+    /// <c>_Ready</c> and from a streamer main phase), so the counters need no locking. Each unit calls back
+    /// exactly once when it finishes, which both frees its slot and pulls the next one in.</summary>
+    private void StartPendingUnits()
     {
-        while (_modelsInFlight < MaxModelsInFlight && _pendingModels.Count > 0)
+        while (_unitsInFlight < MaxUnitsInFlight && _pending.Count > 0)
         {
-            (string model, bool skeletal) = _pendingModels.Dequeue();
-            _modelsInFlight++;
-            if (skeletal)
-                WarmPlayerModel(_assets, model);
-            else
-                WarmWeaponModel(_assets, model);
+            Action<Action> start = _pending.Dequeue();
+            _unitsInFlight++;
+            bool counted = false;
+            start(() => { if (!counted) { counted = true; NoteUnitWarmed(); } });
         }
     }
 
-    private void NoteModelWarmed()
+    private void NoteUnitWarmed()
     {
-        _modelsInFlight--;
-        _modelsWarmed++;
-        StartPendingModels();
-        if (_modelsWarmed < _modelsQueued || _modelsDoneLogged)
+        _unitsInFlight--;
+        _unitsWarmed++;
+        StartPendingUnits();
+        if (_unitsWarmed < _unitsQueued || _warmDoneLogged)
             return;
-        _modelsDoneLogged = true;
-        Log.Info($"[MenuWarmer] model warm done ({_modelsWarmed}).");
+        _warmDoneLogged = true;
+        Log.Info($"[MenuWarmer] warm done ({_unitsWarmed} units in " +
+                 $"{(Time.GetTicksMsec() - _startedMsec) / 1000.0:0.0}s).");
     }
 
-    public override void _Process(double delta)
-    {
-        if (_foreground.Count == 0)
-        {
-            if (!_foregroundDoneLogged)
-            {
-                _foregroundDoneLogged = true;
-                Log.Info("[MenuWarmer] combat-sound warm done.");
-            }
-            SetProcess(false);   // foreground queue drained — go quiet (all items were enqueued up front in _Ready)
-            return;
-        }
-
-        // Pay off any overshoot from earlier frames first, so an item that costs more than one budget is
-        // amortised across frames instead of running one-per-frame regardless of cost.
-        if (_debtMs > 0.0)
-        {
-            _debtMs -= BudgetMs;
-            return;
-        }
-
-        using var _scope = Prof.Sample("menu.warm");
-        var sw = Stopwatch.StartNew();
-        // Always run at least one item so a tiny budget still drains; stop once the budget is spent, and bank
-        // the overshoot as debt so the budget bounds the AVERAGE per-frame cost.
-        do
-        {
-            Action work = _foreground.Dequeue();
-            try { work(); }
-            catch (Exception ex) { GD.PrintErr($"[MenuWarmer] warm item failed: {ex.Message}"); }
-        }
-        while (_foreground.Count > 0 && sw.Elapsed.TotalMilliseconds < BudgetMs);
-
-        if (sw.Elapsed.TotalMilliseconds > BudgetMs)
-            _debtMs = Math.Min(sw.Elapsed.TotalMilliseconds - BudgetMs, MaxDebtFrames * BudgetMs);
-    }
-
-    /// <summary>Ceiling on accumulated debt in whole skipped frames — see BackgroundAssetStreamer.MaxDebtFrames.</summary>
-    private const int MaxDebtFrames = 60;
 }

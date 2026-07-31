@@ -95,11 +95,13 @@ public partial class FrameProfiler : CanvasLayer
           // (E3/E5) the map editor's per-frame work: crosshair picking + drag tracking, and the line-overlay
           // rebuild. Both are inert outside an editor session but scoped so an editing session's cost is
           // attributed rather than inflating proc:other.
-          "editor.ctrl", "editor.gizmos", "editor.world",
-          // The menu-time asset warm's MAIN-THREAD half (texture uploads + sound decodes; the parse/decode runs
-          // on the streamer lane and lands in stream.build). It shipped unscoped, so the seconds it spent
-          // freezing the main menu were invisible in proc:other — the reason the regression went unnoticed.
-          "menu.warm" };
+          "editor.ctrl", "editor.gizmos", "editor.world" };
+          // NOTE (2026-07-31): there is deliberately no "menu.warm" entry. MenuAssetWarmer briefly had one while
+          // it still drained work on the main thread; it now owns none (everything runs on the streamer lane, so
+          // its whole main-thread cost is the drain already counted as stream.build) and has no _Process at all.
+          // A nested scope here would double-count against stream.build. If main-thread work is ever added back
+          // to that node, it needs its own scope AND an entry above — the lack of one is exactly why the menu
+          // freeze hid in proc:other for three weeks.
 
     /// <summary>
     /// Open a named timing scope: <c>using (FrameProfiler.Scope("name")) { ... }</c> (or as a one-statement

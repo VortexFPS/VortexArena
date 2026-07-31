@@ -8,6 +8,41 @@ and a ranked/phased plan. Timings below are from a single **Debug (jit-opt)** ca
 
 ## Implementation log
 
+- **2026-07-31 — more map-independent work moved off map load, and the warm went strictly serial.** Added to
+  the menu warm: the WHOLE registered sound set (223, not just the 36 `sound/weapons/*` — the rest used to be
+  left to the IN-MATCH `StartIdleWarmup`), the gib models (`ModelGibs.AllModelPaths`, now the single list both
+  the warm and the load-time GPU pass iterate), every registered pickup model (`Registry<Pickup>` +
+  `StartItem.ResolveModelPath`, the same vpath a live spawn builds), the particlefont atlas, and the HUD art
+  drawn on the first in-match frame (per-weapon icons, the selected crosshair + ring, ammo icon, nametag bar,
+  progress bar). Sounds decode on the worker lane via a new `AssetLoader.WarmSoundOffThread` behind a gated
+  `_soundCache` — safer off-thread than the texture path, since `AudioStreamOggVorbis.LoadFromBuffer` builds a
+  plain Resource and touches no renderer. Total: **80 models + 63 textures + 223 sounds**.
+
+  **The expansion initially made the menu WORSE — 1 hitch → 4 — and the fix was to stop being parallel.** Four
+  release captures of the same asset set, varying only the in-flight window and whether a unit's jobs fan out
+  or chain:
+
+  | config | window-1 hitches | p95 | alloc |
+  |---|---|---|---|
+  | window 2, fanned out | 1 ASSET-BUILD + 3 GC-PAUSE | 8.6 ms | 63 MB/s |
+  | window 1, fanned out | 1 GC-PAUSE + 2 VSYNC | 9.1 ms | 38 MB/s |
+  | window 3, chained | 2 ASSET-BUILD + 2 VSYNC + 1 MIXED | 10.6 ms | 41 MB/s |
+  | **window 1, chained** | **none** | **6.9 ms** | **26 MB/s** |
+
+  None of that work runs on the main thread. It reaches the frame through the *allocator* and the *driver*: a
+  GC must suspend every thread that is allocating, so N parallel decoders make an N-scaled pause (a gen0+gen1
+  measured **17.4 ms** with four workers busy), and N parallel uploads saturate the driver's ingest so the
+  frame blocks in present. Gating only the models while 63 textures and 223 sounds fanned out ungated was the
+  regression; the window now covers every unit type and `Chain` serialises the jobs *within* a unit too.
+  The cost is wall-clock only — the warm drains in **~21 s instead of ~6 s**, and nothing waits on it.
+
+  **Verified:** menu window 1 = 644 frames, p50 6.9 / p95 6.9, **no hitches**; the erebus turntable built from
+  the warm's off-thread assets is still byte-identical (md5 `080245315ffc…`) to the main-thread build; in-match
+  A/B neutral (p50 4.1 vs 4.2 ms, ASSET-BUILD 4 vs 4, gen2 8 vs 8, alloc −5 MB); suite 3973/3973.
+  `MenuAssetWarmer` now owns NO main-thread work and has no `_Process`, so the `menu.warm` profiler scope was
+  removed from `TopLevelNodeScopes` rather than left as a permanently-zero entry (a nested scope there would
+  double-count against `stream.build`, which is what actually covers the drain now).
+
 - **2026-07-31 — Phase 2 follow-up: the menu warm WAS hitching; reworked.** The Phase 2 entry below claims
   "so the menu never hitches". That was wrong, and shipped: on a **release export** the main menu ran at
   **7 frames over the first 8.8 s (p50 829.8 ms)**, recovering to normal around t≈13 s — the "menu is very slow

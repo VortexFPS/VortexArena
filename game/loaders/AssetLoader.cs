@@ -75,6 +75,10 @@ public sealed class AssetLoader
     // Resolved sample -> decoded AudioStream (or null when the sample resolves to nothing). The stream is
     // immutable and safe to share across many AudioStreamPlayer3D, so unlike models we cache the built resource.
     private readonly Dictionary<string, AudioStream?> _soundCache = new(StringComparer.Ordinal);
+    // Written from the streamer's worker lane too (WarmSoundOffThread — the menu warm decodes the whole
+    // registered sound set), so every read/write takes this gate. A double-build race is harmless: the streams
+    // are immutable and last writer wins.
+    private readonly object _soundCacheGate = new();
 
     // (perf 2026-07-03) Grow-only per-thread FILE buffer for model reads — the same pooling AssetSystem's
     // texture path uses (LoadImageFromVpath). Every LoadModel/ParseSkeletalModel/LoadMd3 used to allocate a
@@ -722,8 +726,9 @@ public sealed class AssetLoader
         string cacheKey = AssetPaths.Normalize(sample);
         if (cacheKey.Length == 0)
             return null;
-        if (_soundCache.TryGetValue(cacheKey, out AudioStream? cached))
-            return cached;
+        lock (_soundCacheGate)
+            if (_soundCache.TryGetValue(cacheKey, out AudioStream? cached))
+                return cached;
 
         AudioStream? stream = null;
         string? vpath = ResolveSoundVpath(cacheKey);
@@ -731,6 +736,7 @@ public sealed class AssetLoader
         {
             try
             {
+                // Built outside the lock so a slow read never blocks another sample's lookup.
                 stream = BuildAudioStream(_vfs.ReadBytes(vpath), vpath);
             }
             catch (Exception ex)
@@ -739,8 +745,32 @@ public sealed class AssetLoader
             }
         }
 
-        _soundCache[cacheKey] = stream; // cache misses too, to avoid re-probing a known-absent sample
+        lock (_soundCacheGate)
+            _soundCache[cacheKey] = stream; // cache misses too, to avoid re-probing a known-absent sample
         return stream;
+    }
+
+    /// <summary>
+    /// OFF-THREAD-SAFE: resolve, read and build one sample into the shared sound cache from a
+    /// <c>BackgroundAssetStreamer</c> worker, so the menu warm can hold the whole registered sound set without
+    /// costing a menu frame.
+    ///
+    /// <para>Safer off-thread than the texture/material warm it sits beside: <see cref="BuildAudioStream"/> is
+    /// <c>AudioStreamOggVorbis.LoadFromBuffer</c> (or a pure-C# WAV decode), which parses the container into a
+    /// plain Resource and touches neither the RenderingServer nor the scene tree. PCM decoding happens later,
+    /// on playback, inside the audio server.</para>
+    ///
+    /// <para>Best-effort like the rest of the warm — an exception is swallowed with a note and the sample is
+    /// simply loaded normally when something first plays it.</para>
+    /// </summary>
+    public void WarmSoundOffThread(string sample)
+    {
+        try { LoadSound(sample); }
+        catch (Exception ex)
+        {
+            GD.Print($"[AssetLoader] off-thread warm of sound '{sample}' failed ({ex.Message}); " +
+                     "it will load normally on first play.");
+        }
     }
 
     /// <summary>The ordered VFS vpaths a sample is probed at: under <c>sound/</c> (DP convention) and verbatim,

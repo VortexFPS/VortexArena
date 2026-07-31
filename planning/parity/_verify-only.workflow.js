@@ -4,7 +4,7 @@ export const meta = {
   phases: [{ title: 'Verify', detail: 'opus per-unit parity re-audit; update registry yaml' }],
 }
 
-const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Xonotic/VortexArena'
+const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Vortex/VortexArena'
 const UNITS = (args && args.units) || []
 
 const VERIFY_SCHEMA = {

@@ -12,7 +12,7 @@ export const meta = {
 
 // ---------- args ----------
 // args: { repo, waveName, tracks: [{ id, title, goal, units:[...] }] }
-const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Xonotic/VortexArena'
+const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Vortex/VortexArena'
 const WAVE = (args && args.waveName) || 'framework build'
 const TRACKS = (args && args.tracks) || []
 

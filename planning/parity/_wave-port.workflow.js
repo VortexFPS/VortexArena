@@ -10,7 +10,7 @@ export const meta = {
 }
 
 // ---------- args ----------
-const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Xonotic/VortexArena'
+const REPO = (args && args.repo) || 'C:/Users/Bryan/Projects/Vortex/VortexArena'
 const WAVE = (args && args.waveName) || 'parity wave'
 const UNITS = (args && args.units) || []
 const modelFor = t => (t === 'haiku' ? 'haiku' : t === 'sonnet' ? 'sonnet' : 'opus')

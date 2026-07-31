@@ -1,11 +1,23 @@
 {
   "$comment": [
-    "Pins the engine template the Windows release export must be built from (restructure item 29, G10).",
-    "Two independent jobs, because the failure they guard has two ends:",
+    "Pins the engine template EVERY release export must be built from (restructure item 29, G10).",
+    "Widened 2026-07-31 from 'the Windows release export': all four presets in export_presets.cfg now point",
+    "at a template pinned here, so no platform can fall back to whatever stock template the exporting",
+    "machine happens to have installed. Only the Windows template differs from stock in BEHAVIOUR (the patch",
+    "set touches platform/windows/ exclusively); the others are pinned for PROVENANCE, which is a weaker but",
+    "real property - a known build from known inputs whose hash we can check - and it is what makes 'which",
+    "engine is this Linux server running' an answerable question.",
+    "Three jobs, because the failure they guard has three ends:",
     "  'patches' pins the SOURCE \u2014 the patch files on disk, by sha256, so a silent edit to a patch is",
     "    caught before anyone rebuilds a template from it.",
+    "  'template.platforms' pins the INPUT \u2014 the published template artifact by sha256 AND by FORM,",
+    "    checked when it is fetched and again before an export (--preset-config), which is what catches an",
+    "    emptied or re-pointed custom_template/release.",
     "  'binary_markers' pins the RESULT \u2014 byte sequences that must (or must not) appear in the exported",
-    "    game binary, which is the only check that speaks to what actually shipped.",
+    "    game binary, which is the only check that speaks to what actually shipped. It can only",
+    "    discriminate patched-vs-stock where a patch exists to discriminate on, i.e. Windows; see the",
+    "    binary_markers comment below, which is deliberately explicit about what the other presets do NOT",
+    "    prove.",
     "Verify with tools/verify-engine-template.py; see tools/engine-patches/README.md for the rebuild recipe."
   ],
   "engine": {
@@ -29,10 +41,46 @@
       ]
     }
   ],
+  "unpinned_presets": {
+    "$comment": [
+      "Presets that deliberately run on the STOCK export template, each with the reason it cannot be",
+      "pinned yet. This list exists so that 'unpinned' is a declared state rather than an empty field",
+      "nobody notices - verify-engine-template.py --audit-presets requires every preset in",
+      "export_presets.cfg to be either pinned in template.platforms[].presets or named here, so a preset",
+      "added later cannot end up checked by nothing at all. An entry here is reported as a KNOWN GAP,",
+      "loudly, and never counts as verified.",
+      "Emptying this object is the goal. Adding to it needs a reason that survives being read out loud."
+    ],
+    "macos-client": {
+      "reason": "The published macOS template asset is a raw Mach-O fat binary, and Godot's macOS exporter requires the macos.zip form (a zip with macos_template.app/ inside). Pointing the preset at the published asset does not fall back to stock - it aborts the export outright, which on a continue-on-error job means the macOS build vanishes from the release without failing it.",
+      "blocked_on": "Republish the macOS template in macos.zip form: take the official Godot 4.6.3 mono macos.zip and swap macos_template.app/Contents/MacOS/godot_macos_release.universal for our lipo output, then re-pin filename/sha256/template_form here and set presets to ['macos-client'].",
+      "exposure": "Provenance only. The patch set touches platform/windows/ exclusively, so the stock macOS template is exactly what a pinned one would have been in behaviour - no backport is lost. What is lost is the ability to say which template a macOS build used.",
+      "since": "2026-07-31"
+    }
+  },
   "binary_markers": {
     "$comment": [
-      "Applies to the windows-client preset only; the other presets use stock templates by design and",
-      "have custom_template/release empty legitimately.",
+      "REQUIRED markers exist for windows-client ONLY, and that is a fact about the patch set rather than",
+      "an unfinished job. The patch set touches platform/windows/ exclusively, so the Linux and macOS",
+      "templates published at this tag are built from stock sources for their platform and are",
+      "byte-equivalent in behaviour to the official ones. There is therefore NO marker that could tell a",
+      "'patched' Linux template from a stock one, because there is no difference to find. Inventing one",
+      "would repeat the RAWINPUTHEADER mistake below in its worst form: a required marker that is absent",
+      "from a perfectly good binary.",
+      "",
+      "So the non-Windows presets carry the FORBIDDEN canary and nothing else. That canary is genuinely",
+      "platform-independent - it asserts no dev material leaked into the pck - and it was previously",
+      "checked on Windows alone even though exclude_filter can regress on any preset.",
+      "",
+      "What guards the pinned non-Windows presets against G10 instead is verify-engine-template.py",
+      "--preset-config: custom_template/release is non-empty, names the file this lockfile pins, that",
+      "file's sha256 matches, and its FORM is one the platform's exporter can actually open. (macos-client",
+      "is not pinned at all yet - unpinned_presets.macos-client - so for it even that does not apply, and",
+      "the tooling says so rather than implying otherwise.) Combined with Godot's HARD ABORT on a",
+      "populated-but-missing template path, that leaves only 'Godot ignored a valid path' uncovered,",
+      "versus the empty-field case which is the one that fails silently. It is a check on the INPUT, not",
+      "on what shipped. Do not let the absence of a required marker below read as 'verified' -",
+      "verify-engine-template.py prints the gap out loud.",
       "",
       "Chosen by MEASURING all three candidates against both real templates rather than by reading the",
       "patch, because two of the three do not discriminate:",
@@ -61,6 +109,43 @@
         "export, which a shipped game pck has no business carrying anyway. This canary is the belt: if anything",
         "ever re-includes this file in a build, the check fails LOUDLY instead of silently becoming a tautology."
       ]
+    },
+    "linux-client": {
+      "required": [],
+      "forbidden": [
+        "engine.lock.json"
+      ],
+      "$comment": [
+        "No required marker, and none is possible: the patch set does not touch platform/linuxbsd/, so a",
+        "patched and a stock Linux template contain the same engine code. This entry exists so the",
+        "contamination canary runs here too, and so a reader finds a stated reason rather than a gap."
+      ]
+    },
+    "linux-dedicated": {
+      "required": [],
+      "forbidden": [
+        "engine.lock.json"
+      ],
+      "$comment": [
+        "Same as linux-client - same template file, and the mouse backport is doubly irrelevant to a",
+        "headless server. Pinned anyway so 'which engine is this server running' has an answer; see the",
+        "linux-dedicated note in export_presets.cfg for why an unpinned preset was judged the worse option."
+      ]
+    },
+    "macos-client": {
+      "required": [],
+      "forbidden": [
+        "engine.lock.json"
+      ],
+      "$comment": [
+        "No required marker, for the same reason as linux-client, and doubly so while this preset exports",
+        "from the STOCK template (unpinned_presets.macos-client). The canary is still worth running: it is",
+        "about dev material in the pck, which is a property of exclude_filter, not of the template.",
+        "Note the binary lives INSIDE the bundle at VortexArena.app/Contents/MacOS/ -",
+        "verify-engine-template.py resolves a .app path to it rather than reading the directory, because a",
+        "check pointed at a path that cannot exist would fail for the wrong reason and teach everyone to",
+        "ignore it."
+      ]
     }
   },
   "template": {
@@ -76,6 +161,13 @@
       "anything. macos is universal (arm64 + x86_64 lipo'd); a single-arch macOS template would refuse to",
       "run on half the Mac fleet, which no marker check can see.",
       "",
+      "As of 2026-07-31 the windows and linux templates are consumed by three of the four presets, so",
+      "'patched: false' means 'carries no patch', NOT 'unused'. macos is published and pinned but consumed",
+      "by nothing yet - see its own comment and unpinned_presets.macos-client. The 'presets' list is what",
+      "verify-engine-template.py reads to tell a preset it knows has no markers from a preset name someone",
+      "typo'd - the first must not fail the build, the second must not read as verified. Keep it in step",
+      "with export_presets.cfg; --audit-presets fails if they drift.",
+      "",
       "sha256 means THIS EXACT PUBLISHED ARTIFACT, which is what a fetcher needs to verify a download. It is",
       "NOT a reproducibility claim: Godot does not build reproducibly across toolchain versions, so",
       "rebuilding from these same pinned inputs yields a different hash and that must not be read as",
@@ -84,7 +176,16 @@
       "proves the RESULT carries them.",
       "",
       "Every hash below was verified by downloading the published asset and hashing it, not taken from the",
-      "API - the value that causes a hard failure should be checked against what a fetcher actually gets."
+      "API - the value that causes a hard failure should be checked against what a fetcher actually gets.",
+      "",
+      "'template_form' is what Godot's exporter for that platform will actually OPEN, and it is pinned",
+      "because a sha256 cannot see it. The Windows and Linux exporters take the template binary directly",
+      "(EditorExportPlatformPC copies it and appends the pck), so those are a raw PE and a raw ELF. The",
+      "macOS exporter does NOT: it calls unzOpen2() on custom_template/release and reads entries under",
+      "'macos_template.app/', i.e. it requires the macos.zip-shaped archive, not a Mach-O. Verified against",
+      "the 4.6.3 editor binary, which carries the strings 'macos.zip', 'macos_template.app/' and",
+      "'Could not find template app to export: \"%s\".' next to each other in export_plugin.cpp order.",
+      "This distinction is not academic - see unpinned_presets.macos-client."
     ],
     "tag": "engine-4.6.3-stable-vortex1",
     "release_url": "https://github.com/VortexFPS/VortexArena/releases/tag/engine-4.6.3-stable-vortex1",
@@ -94,7 +195,10 @@
         "url": "https://github.com/VortexFPS/VortexArena/releases/download/engine-4.6.3-stable-vortex1/godot.windows.template_release.x86_64.mono.exe",
         "sha256": "ab7535661c3e51f8bc73833afe5e77519e1279762f1c701f69522c81d7940a73",
         "bytes": 66842624,
-        "preset": "windows-client",
+        "template_form": "pe",
+        "presets": [
+          "windows-client"
+        ],
         "patched": true
       },
       "linux": {
@@ -102,7 +206,11 @@
         "url": "https://github.com/VortexFPS/VortexArena/releases/download/engine-4.6.3-stable-vortex1/godot.linuxbsd.template_release.x86_64.mono",
         "sha256": "a5efb7020881695bc467b76491d003c5bd8e1488ff8c8b9c0255d9410b2e820e",
         "bytes": 87089704,
-        "preset": "linux-client",
+        "template_form": "elf",
+        "presets": [
+          "linux-client",
+          "linux-dedicated"
+        ],
         "patched": false
       },
       "macos": {
@@ -110,8 +218,20 @@
         "url": "https://github.com/VortexFPS/VortexArena/releases/download/engine-4.6.3-stable-vortex1/godot.macos.template_release.universal.mono",
         "sha256": "b0cba97cd41ca2adf53a183b847b8f3f3aec8a52f970474f482e7bf3c2657667",
         "bytes": 149612968,
-        "preset": "macos-client",
-        "patched": false
+        "template_form": "macho_fat",
+        "presets": [],
+        "patched": false,
+        "$comment": [
+          "'presets' is EMPTY and that is the correction of 2026-07-31, not an omission. This asset is the",
+          "raw lipo output from build-engine-template.yml - measured first bytes ca fe ba be 00 00 00 02,",
+          "a Mach-O fat binary with two architectures. Godot's macOS exporter cannot consume that: it",
+          "unzOpen2()s custom_template/release and reads 'macos_template.app/' entries out of it, so",
+          "pointing macos-client here aborts the export with 'Could not find template app to export'.",
+          "The artifact is still worth pinning and publishing - it is the input a macos.zip would be built",
+          "FROM - but nothing may point a preset at it until it is republished in macos.zip form. Tracked",
+          "in unpinned_presets.macos-client, which is what keeps that from being a fact someone has to",
+          "remember."
+        ]
       }
     }
   }

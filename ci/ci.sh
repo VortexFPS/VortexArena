@@ -9,7 +9,10 @@
 # Usage:
 #   ci/ci.sh                 # build libs+tests, run the suite, build the Godot host, headless smoke
 #   ci/ci.sh --no-smoke      # skip the Godot headless boot (no Godot install needed)
-#   ci/ci.sh --export        # additionally run both export presets (needs export templates installed)
+#   ci/ci.sh --export        # additionally run the three local export presets. Fetches the pinned
+#                            # engine templates first and verifies the exported binaries after, the
+#                            # same gates release.yml runs — an export that silently ships a stock
+#                            # engine is the bug ADR-0017 exists to prevent, on CI and locally alike.
 #
 # Env:
 #   GODOT  — path to the Godot 4.6.3 mono CONSOLE executable. Defaults to the known dev-machine path.
@@ -53,11 +56,14 @@ case "$(uname -s)" in
 esac
 
 # ── 0. engine patch provenance (cheap, and fails before anything slow) ────────
-# Only the --patches half here: --binary needs an export, which this gate does not do (release.yml
-# runs that half straight after its export). This catches a patch edited or line-ending-mangled in
-# place, which would otherwise surface as a template rebuilt from something nobody reviewed.
-step "engine patch provenance (engine.lock.json)"
-python "$ROOT/tools/verify-engine-template.py" --patches
+# --patches catches a patch edited or line-ending-mangled in place, which would otherwise surface as a
+# template rebuilt from something nobody reviewed. --audit-presets catches the bookkeeping failure the
+# per-preset gates structurally cannot: they are invoked BY NAME below and in release.yml, so a preset
+# added to export_presets.cfg later would be gated by no step at all. Both read committed text only —
+# no template on disk, no download — so they run on every ci.sh, not just --export.
+# Not --binary: that needs an export, which this gate does not do (the --export path runs it below).
+step "engine patch provenance + preset accounting (engine.lock.json)"
+python "$ROOT/tools/verify-engine-template.py" --patches --audit-presets
 
 # The parity registry's port_refs are pointers the differ and the parity workflows follow. A dangling one
 # does not look broken - it looks like coverage - so it needs a gate rather than a periodic audit. The
@@ -189,14 +195,49 @@ else
 fi
 rm -f "$vqa_log"
 
-# ── 6. optional: the two export presets (untested path — see ADR-0014) ────────
+# ── 6. optional: the three local export presets (untested path — see ADR-0014) ─
 if $do_export; then
     [ -f "$GODOT" ] || fail "--export needs Godot (set GODOT=)"
+
+    # Fetch and gate the engine templates BEFORE exporting, mirroring release.yml. Without this the
+    # local path was the hole the release workflow already spent effort closing: an export here used
+    # whatever happened to be sitting in the gitignored tools/engine-templates/, or silently fell back
+    # to the STOCK template on an empty custom_template/release and produced a launchable binary with
+    # none of the backports (G10). macos is skipped — this script cannot export it, and the macOS
+    # template is a 149 MB download nobody here would use.
+    step "fetch the pinned engine templates (windows + linux)"
+    python "$ROOT/tools/data/fetch-engine-template.py" --only windows --only linux
+
+    # Cheap and BEFORE the slow part: catches an emptied or re-pointed custom_template/release in a
+    # second rather than after three full exports, and asserts each template is in a form that
+    # platform's exporter can actually open (a sha256 cannot see that). This is the only G10 gate the
+    # Linux presets have, because no binary marker can discriminate a patched Linux template from a
+    # stock one — the patch set touches platform/windows/ exclusively. macos-client is absent because
+    # it is not exported here AND is not pinned at all yet; see engine.lock.json's unpinned_presets,
+    # and note that step 0's --audit-presets is what keeps that omission from being silent.
+    step "engine template configured + hashes + form match (pre-export gate)"
+    python "$ROOT/tools/verify-engine-template.py" \
+        --preset-config windows-client --preset-config linux-client --preset-config linux-dedicated
+
     step "export windows-client + linux-client + linux-dedicated (macos-client is CI-only — needs a Mac)"
     mkdir -p "$ROOT/dist/windows-client" "$ROOT/dist/linux-client" "$ROOT/dist/linux-dedicated"
     "$GODOT" --headless --path "$ROOT" --export-release "windows-client"  "$ROOT/dist/windows-client/VortexArena.exe"
     "$GODOT" --headless --path "$ROOT" --export-release "linux-client"    "$ROOT/dist/linux-client/VortexArena.x86_64"
     "$GODOT" --headless --path "$ROOT" --export-release "linux-dedicated" "$ROOT/dist/linux-dedicated/vortexarena-dedicated.x86_64"
+
+    # Assert on the SHIPPED BYTES, which is the only thing that speaks to what a player would run.
+    # Windows is the real content check (the backport's marker is present or the build is stock). The
+    # two Linux invocations assert only the contamination canary and SAY SO — they print
+    # "NOT CONTENT-VERIFIED" and the summary line refuses to claim otherwise. Running them is still
+    # worth it: exclude_filter is per-preset and can regress on any one of them.
+    step "windows: verify the engine template that was used; linux: contamination canary only"
+    python "$ROOT/tools/verify-engine-template.py" \
+        --binary "$ROOT/dist/windows-client/VortexArena.exe" --preset windows-client
+    python "$ROOT/tools/verify-engine-template.py" \
+        --binary "$ROOT/dist/linux-client/VortexArena.x86_64" --preset linux-client
+    python "$ROOT/tools/verify-engine-template.py" \
+        --binary "$ROOT/dist/linux-dedicated/vortexarena-dedicated.x86_64" --preset linux-dedicated
+
     echo "exports in $ROOT/dist/ — run tools/package.sh to bundle assets + zip"
 fi
 

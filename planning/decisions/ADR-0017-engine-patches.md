@@ -69,6 +69,74 @@ material from the export (which also removed 3.1 MB from every release), plus a 
 the lockfile's `forbidden` list names `engine.lock.json`, so if anything re-includes it the check fails
 loudly instead of silently becoming a tautology again.
 
+## Amendment 2026-07-31: the pin covers every preset it can, not just Windows
+
+As accepted, only `windows-client` set `custom_template/release`; the other three presets were empty,
+which is the value this ADR itself identifies as the dangerous one. The reasoning at the time was that
+the Linux and macOS templates carry no patches, so pinning them bought nothing. That is true about
+*behaviour* and wrong about *provenance*: it left Linux and macOS players, and every dedicated server,
+running whatever stock template the build machine happened to have, with no record of which.
+
+The three Linux/Windows presets now point at a pinned template, and a new
+`verify-engine-template.py --preset-config PRESET` gates the field **before** the export: non-empty,
+naming the file the lockfile pins, matching its sha256, and in a form the platform's exporter can
+actually open. That check exists because the binary check this ADR argues for cannot be extended to the
+other platforms:
+
+**Content verification is Windows-only, and that is a property of the patch set rather than a gap to
+close later.** The patches touch `platform/windows/` exclusively, so a "patched" Linux template and a
+stock one contain the same engine code. No marker can discriminate them because there is nothing
+different to find, and a required marker invented for those platforms would fail a good binary: the
+`RAWINPUTHEADER` row in the table above, in its worst form. So `verify-engine-template.py` prints
+`NOT CONTENT-VERIFIED` there and qualifies its summary line rather than reporting a pass for a check
+that did not run. The non-Windows presets are covered by the pre-export gate plus Godot's hard abort on
+a populated-but-missing path, which together leave only "Godot ignored a valid path" uncovered, as
+opposed to the empty-field case, which is the one that fails silently.
+
+This also revises one line under *Alternatives considered*: a pre-export configuration check was
+rejected as **insufficient**, which it is, since it cannot see what shipped. It is not, however, worthless,
+and on the platforms where no content check is possible it is the only thing standing between an
+emptied field and a stock build. It is now run everywhere, *in addition to* the binary check on
+Windows, not instead of it.
+
+`linux-dedicated` is pinned as well, though a headless server has no mouse and would not carry the
+backport in any case. It consumes the same file `linux-client` already fetches, so the pin is free;
+and leaving exactly one preset empty would re-create this ADR's hole in the least-watched build.
+
+### Correction, same day: macOS cannot be pinned, and pinning it broke the export
+
+The first version of this amendment pinned `macos-client` too, on the same provenance argument. That was
+wrong, and wrong in a way this ADR's own reasoning should have caught. **A sha256 pins the bytes; it says
+nothing about whether Godot can open them.** Windows and Linux go through `EditorExportPlatformPC`, which
+takes the template binary and appends the pck. macOS does not: it `unzOpen2()`s `custom_template/release`
+and reads `macos_template.app/` entries out of it, so it wants the `macos.zip` form. The macOS asset we
+publish is the raw `lipo` output, a Mach-O fat binary (first bytes `ca fe ba be`).
+
+The failure mode is the interesting part, because it is *not* the one this ADR is about. It does not fall
+back to stock; it aborts the export. But the macOS release job is `continue-on-error` and its artifact
+upload is `if-no-files-found: warn`, so the effect is that the macOS build silently disappears from the
+release while the release notes go on claiming every build came from a pinned template. That is the same
+shape of failure as G10 — a green run asserting something untrue — displaced one level up, from "wrong
+engine in the artifact" to "no artifact at all".
+
+Two changes follow:
+
+- `macos-client` is **unpinned**, and the lockfile now carries an `unpinned_presets` section recording
+  which presets deliberately run on the stock template, why, and what would close each. A declared gap is
+  reported as `KNOWN GAP` on every run and never counts as verified. Emptying that section is the goal;
+  adding to it needs a reason that survives being read out loud.
+- `--preset-config` asserts the template's **form** (`template_form` in the lockfile, checked against
+  what that platform's exporter opens and against the file's own leading bytes), and a new
+  `--audit-presets` asserts every preset is either pinned or declared. The second exists because the
+  per-preset gates are invoked by name from `ci.sh` and `release.yml`: a preset added later would be
+  gated by no step at all, and nothing would go red. That is the same silence as the empty field, one
+  level further out, and it deserved the same treatment.
+
+Closing the macOS gap needs a republished template: take the official Godot 4.6.3 mono `macos.zip`,
+replace `macos_template.app/Contents/MacOS/godot_macos_release.universal` with our `lipo` output, publish
+that, then pin `filename` / `sha256` / `template_form` together and delete the `unpinned_presets` entry in
+the same change. Nothing is lost in behaviour meanwhile — the patch set is Windows-only.
+
 ## Consequences
 
 - The template is a build input with a pinned identity, so "is this build stale" is answerable.

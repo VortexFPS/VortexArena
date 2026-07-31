@@ -242,4 +242,9 @@ if $do_zip; then
 fi
 
 info "Done. Distributions in $DIST/"
-$do_zip && info "Zips: $(cd "$DIST" && ls VortexArena-"$version"-*.zip 2>/dev/null | tr '\n' ' ')"
+# An `if` rather than `$do_zip && info ...`: as the script's last command that AND-list makes the
+# whole script exit 1 under --no-zip even though packaging succeeded (set -e never fires, since the
+# test sits in a condition position), so callers reading the exit code saw a bogus failure.
+if $do_zip; then
+    info "Zips: $(cd "$DIST" && ls VortexArena-"$version"-*.zip 2>/dev/null | tr '\n' ' ')"
+fi

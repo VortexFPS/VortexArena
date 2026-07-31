@@ -30,8 +30,29 @@ public partial class BackgroundAssetStreamer : Node
     public enum Priority { High = 0, Low = 1 }
 
     /// <summary>Main-thread build budget per frame (ms). One ready job always runs even if it overshoots, so a
-    /// single heavy build can't deadlock the queue; the loop then stops until next frame.</summary>
+    /// single heavy build can't deadlock the queue; the loop then stops until next frame — and the overshoot is
+    /// then PAID BACK by sitting out the following frames (see <see cref="_debtMs"/>), so the budget bounds the
+    /// AVERAGE cost per frame even though a single job is indivisible.</summary>
     [Export] public double BudgetMs { get; set; } = 2.0;
+
+    /// <summary>
+    /// Unpaid overshoot from previous frames, in ms. "Run at least one job per frame" is what keeps an
+    /// indivisible build from deadlocking the queue, but on its own it also makes the budget a fiction: when
+    /// every ready job costs far more than <see cref="BudgetMs"/>, the drain runs one anyway, EVERY frame, and
+    /// a queue of heavy builds becomes a solid wall of long frames rather than a spread of short ones. (That is
+    /// exactly how the menu asset warm froze the main menu at ~1 fps for its first seconds: a 2 ms budget
+    /// against ~900 ms skeletal builds.) So an overshoot is now recorded here and worked off by skipping whole
+    /// frames — the queue still drains, one job at a time, at an amortised cost of <see cref="BudgetMs"/> per
+    /// frame. Capped at <see cref="MaxDebtFrames"/>×budget so one pathological job can't stall the queue for
+    /// minutes.
+    /// </summary>
+    private double _debtMs;
+
+    /// <summary>Ceiling on accumulated debt, expressed in whole skipped frames — an outlier build pays back for
+    /// at most this many frames before the drain resumes. The cap is the latency side of the trade: pacing
+    /// delays a queued asset by at most this many frames (a live High-priority player model included), which is
+    /// the price of not spiking the frames in between. Deliberately modest for that reason.</summary>
+    private const int MaxDebtFrames = 60;
 
     private readonly object _lock = new();
     private readonly List<(Priority Prio, long Seq, Action Build, string? Label)> _ready = new(); // off-thread done, awaiting main build
@@ -67,6 +88,15 @@ public partial class BackgroundAssetStreamer : Node
 
     public override void _Process(double delta)
     {
+        // Work off any overshoot from earlier frames before building anything new, so a heavy job costs one
+        // long frame and then a run of clean ones instead of a wall of long ones. Done before the ready check
+        // so idle frames repay the debt too — the overshoot is wall-clock time that has already elapsed.
+        if (_debtMs > 0.0)
+        {
+            _debtMs -= BudgetMs;
+            return;
+        }
+
         // Fast path: nothing ready and nothing in flight → idle.
         lock (_lock)
         {
@@ -107,7 +137,12 @@ public partial class BackgroundAssetStreamer : Node
             if (label is not null)
                 Prof.Event($"stream: {label} built ({sw.Elapsed.TotalMilliseconds - t0:0.0}ms)");
             if (sw.Elapsed.TotalMilliseconds >= BudgetMs)
-                break; // budget spent — finish the rest next frame
+            {
+                // Budget spent. Bank whatever we ran over by so the next frames sit it out; without this the
+                // "always run one" rule silently converts the budget into "one heavy build EVERY frame".
+                _debtMs = Math.Min(sw.Elapsed.TotalMilliseconds - BudgetMs, MaxDebtFrames * BudgetMs);
+                break; // finish the rest next frame
+            }
         }
     }
 

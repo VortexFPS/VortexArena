@@ -95,7 +95,11 @@ public partial class FrameProfiler : CanvasLayer
           // (E3/E5) the map editor's per-frame work: crosshair picking + drag tracking, and the line-overlay
           // rebuild. Both are inert outside an editor session but scoped so an editing session's cost is
           // attributed rather than inflating proc:other.
-          "editor.ctrl", "editor.gizmos", "editor.world" };
+          "editor.ctrl", "editor.gizmos", "editor.world",
+          // The menu-time asset warm's MAIN-THREAD half (texture uploads + sound decodes; the parse/decode runs
+          // on the streamer lane and lands in stream.build). It shipped unscoped, so the seconds it spent
+          // freezing the main menu were invisible in proc:other — the reason the regression went unnoticed.
+          "menu.warm" };
 
     /// <summary>
     /// Open a named timing scope: <c>using (FrameProfiler.Scope("name")) { ... }</c> (or as a one-statement

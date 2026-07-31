@@ -60,6 +60,24 @@ public static class DpmBuilder
     private static readonly Transform3D MxfInv = Mxf.AffineInverse();
 
     /// <summary>
+    /// OFF-THREAD-SAFE (pure data): the material names a build of <paramref name="dpm"/> will resolve — one
+    /// per mesh shader name, deduplicated. DPM carries no <c>.skin</c> remap, so this is simply the set the
+    /// per-mesh <c>ResolveMaterial</c> calls in <see cref="Build"/> will ask for. Lets the off-thread texture
+    /// predecode warm exactly what the main-thread build then loads (the DPM counterpart of
+    /// <see cref="Md3Builder.EffectiveMaterials"/>).
+    /// </summary>
+    public static List<string> EffectiveMaterials(DpmData dpm)
+    {
+        var mats = new List<string>(4);
+        if (dpm is null)
+            return mats;
+        foreach (DpmMesh mesh in dpm.Meshes)
+            if (!string.IsNullOrEmpty(mesh.ShaderName) && !mats.Contains(mesh.ShaderName))
+                mats.Add(mesh.ShaderName);
+        return mats;
+    }
+
+    /// <summary>
     /// Build a posed, skinned, animated DPM model.
     /// </summary>
     /// <param name="dpm">Parsed DPM data (bind pose = frame 0).</param>

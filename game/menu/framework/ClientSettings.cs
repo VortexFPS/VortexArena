@@ -262,9 +262,12 @@ public static class ClientSettings
         // Warm the map-independent eager asset set (weapons, stock player models, combat sounds) into the shared
         // cache at GAME LOAD — in the background while the player sits at the menu — instead of at the first map
         // load (default ON). With cl_persist_asset_cache, this makes the first match's precache a cache hit so the
-        // map loads fast; the warm is fully budgeted (heavy IQM parse off-thread, small builds on a per-frame main
-        // budget) so the menu never hitches (Shell.StartMenuAssetWarm → MenuAssetWarmer). No effect when
-        // persistence is off (a per-match loader wouldn't see the warmed cache). `set cl_warm_at_boot 0` disables.
+        // map loads fast. The warm runs off the main thread wherever Godot allows it — model parse and texture
+        // decode go to the streamer's worker lane, and only the GPU upload lands on the main thread, one texture
+        // at a time under an enforced per-frame budget (Shell.StartMenuAssetWarm → MenuAssetWarmer). It is
+        // best-effort: whatever is still cold when a match starts is simply picked up by that match's own
+        // precache. No effect when persistence is off (a per-match loader wouldn't see the warmed cache).
+        // `set cl_warm_at_boot 0` disables it entirely.
         c.Register("cl_warm_at_boot", "1");
         // Show the development-release disclaimer over the main menu on a plain launch (default ON). PORT-ONLY:
         // Base ships releases and has no such notice. CvarFlags.Save because it's a genuine user preference —

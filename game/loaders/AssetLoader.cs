@@ -56,7 +56,12 @@ public sealed class AssetLoader
     // Node.Duplicate() would not deep-copy correctly, and Godot resources/nodes can't be shared across two
     // tree positions anyway. So each LoadModel/LoadSprite call rebuilds a fresh node from the cached parse —
     // cheap relative to re-reading and re-decoding the file. Null caches a known parse failure.
-    private readonly Dictionary<string, Func<Node3D?>?> _modelCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ModelParse> _modelCache = new(StringComparer.Ordinal);
+    // The model parse cache is written from the streamer's worker lane too (PrepareModel — the menu warm's
+    // off-thread half), so every read/write goes through this gate. Uncontended in the common case; a
+    // double-parse race is harmless (last writer wins, both entries are equivalent), exactly like
+    // _skeletalParseCache below.
+    private readonly object _modelCacheGate = new();
     private readonly Dictionary<string, Func<Node3D?>?> _spriteCache = new(StringComparer.Ordinal);
     // Parsed MD3 data cache for the client's per-entity ModelResolver (world items/gibs/monsters render via the
     // MD3 morph/snapshot path). Keyed by normalized vpath; null caches a miss / non-MD3 model.
@@ -161,12 +166,64 @@ public sealed class AssetLoader
 
         // Cache key includes the skin variant (different skins build different nodes).
         string cacheKey = skinIndex == 0 ? key : $"{key}#skin{skinIndex}";
-        if (!_modelCache.TryGetValue(cacheKey, out Func<Node3D?>? factory))
+        ModelParse? entry;
+        lock (_modelCacheGate)
+            _modelCache.TryGetValue(cacheKey, out entry);
+        if (entry is null)
         {
-            factory = BuildModelFactory(key, skinIndex);
-            _modelCache[cacheKey] = factory;
+            // Parse outside the lock so a slow read never blocks another model's lookup (the
+            // _skeletalParseCache rule). A race just re-parses; both entries are equivalent.
+            entry = BuildModelFactory(key, skinIndex) ?? ModelParse.Failed;
+            lock (_modelCacheGate)
+                _modelCache[cacheKey] = entry;
         }
-        return factory?.Invoke();
+        return entry.Factory?.Invoke();
+    }
+
+    /// <summary>A model's cached parse: the node factory (<c>null</c> when the file is missing or unparsable —
+    /// a cached negative) plus the material names its build will resolve. The material list is the work-list
+    /// the OFF-THREAD texture predecode needs (<see cref="PrepareModel"/>), which is why it is captured here
+    /// at parse time rather than recomputed later.</summary>
+    private sealed record ModelParse(Func<Node3D?>? Factory, IReadOnlyList<string> Materials)
+    {
+        /// <summary>The cached negative: a model that could not be read or parsed.</summary>
+        public static readonly ModelParse Failed = new(null, Array.Empty<string>());
+    }
+
+    /// <summary>
+    /// OFF-THREAD-SAFE: read + parse <paramref name="vpath"/> and publish the result into the shared model
+    /// cache WITHOUT building any Godot node, returning the material names the eventual build will resolve.
+    /// This is the worker half of a cold model load — the read, the format parse and the sidecar parse are
+    /// pure C# over the thread-safe VFS (the same chain <see cref="ParseSkeletalModel"/> already runs on the
+    /// streamer lane). A later main-thread <see cref="LoadModel"/> then finds the parse cached and only pays
+    /// the Godot build.
+    ///
+    /// <para>Pair it with <see cref="AssetSystem.PredecodeMaterialTextures"/> over the returned names to move
+    /// the texture read+decode off the main thread as well, leaving only the GPU upload — the split the menu
+    /// warm and the live player-model stream both rely on.</para>
+    ///
+    /// <para>Returns an EMPTY list for a miss, an unparsable file, or a Quake1 <c>MDL</c>: <c>MdlBuilder.Prepare</c>
+    /// creates an <see cref="ArrayMesh"/> at parse time, which is main-thread-only, so an MDL is deliberately
+    /// left for <see cref="LoadModel"/> to handle synchronously (nothing is cached, so it simply loads cold).</para>
+    /// </summary>
+    public IReadOnlyList<string> PrepareModel(string vpath, int skinIndex = 0)
+    {
+        string key = AssetPaths.Normalize(vpath);
+        // Sprites build through LoadSprite (SpriteBuilder is Godot-backed) — not preparable off-thread.
+        if (key.Length == 0 || key.EndsWith(".spr", StringComparison.OrdinalIgnoreCase))
+            return Array.Empty<string>();
+
+        string cacheKey = skinIndex == 0 ? key : $"{key}#skin{skinIndex}";
+        lock (_modelCacheGate)
+            if (_modelCache.TryGetValue(cacheKey, out ModelParse? hit))
+                return hit.Materials;
+
+        ModelParse? entry = BuildModelFactory(key, skinIndex, offThread: true);
+        if (entry is null)
+            return Array.Empty<string>();   // MDL — main-thread only; leave the cache empty so LoadModel parses it
+        lock (_modelCacheGate)
+            _modelCache[cacheKey] = entry;
+        return entry.Materials;
     }
 
     /// <summary>
@@ -298,9 +355,15 @@ public sealed class AssetLoader
 
     /// <summary>
     /// Read+parse the model and its sidecars once and return a factory that builds a fresh Godot node from
-    /// the cached parse on each call. Returns null (cached) if the file is missing or not a known model.
+    /// the cached parse on each call, together with the material names that build will resolve. Returns
+    /// <see cref="ModelParse.Failed"/> (a cached negative) if the file is missing or not a known model.
+    ///
+    /// <para>The read + format parse + sidecar parse are pure C# and thread-safe, so this whole method runs on
+    /// the streamer's worker lane via <see cref="PrepareModel"/> — with ONE exception: the Quake1 MDL branch
+    /// builds its <see cref="ArrayMesh"/> eagerly, which is main-thread-only. <paramref name="offThread"/>
+    /// makes that branch return <c>null</c> ("not preparable from here") instead of touching Godot.</para>
     /// </summary>
-    private Func<Node3D?>? BuildModelFactory(string key, int skinIndex)
+    private ModelParse? BuildModelFactory(string key, int skinIndex, bool offThread = false)
     {
         ReadOnlySpan<byte> bytes;
         try
@@ -310,7 +373,7 @@ public sealed class AssetLoader
         catch (Exception ex)
         {
             GD.PrintErr($"[AssetLoader] model '{key}' read failed: {ex.Message}");
-            return null;
+            return ModelParse.Failed;
         }
 
         string magic = ReadMagic(bytes);
@@ -321,23 +384,28 @@ public sealed class AssetLoader
                 IqmData iqm = IqmReader.Read(bytes);
                 IReadOnlyList<FrameGroup>? groups = LoadFrameGroups(key);
                 SkinFile? skin = LoadSkin(key, skinIndex);
-                return () => IqmBuilder.Build(iqm, _assets, groups, skin);
+                return new ModelParse(() => IqmBuilder.Build(iqm, _assets, groups, skin),
+                                      IqmEffectiveMaterials(iqm, skin));
             }
             if (magic.StartsWith(MagicDpm, StringComparison.Ordinal))
             {
                 DpmData dpm = DpmReader.Read(bytes);
                 IReadOnlyList<FrameGroup>? groups = LoadFrameGroups(key);
-                return () => DpmBuilder.Build(dpm, _assets, groups);
+                return new ModelParse(() => DpmBuilder.Build(dpm, _assets, groups),
+                                      DpmBuilder.EffectiveMaterials(dpm));
             }
             if (magic.StartsWith(MagicMd3, StringComparison.Ordinal))
             {
                 Md3Data md3 = Md3Reader.Read(bytes);
                 SkinFile? skin = LoadSkin(key, skinIndex);
                 IReadOnlyList<FrameGroup>? groups = LoadFrameGroups(key);
-                return () => Md3Builder.Build(md3, _assets, skin, groups);
+                return new ModelParse(() => Md3Builder.Build(md3, _assets, skin, groups),
+                                      Md3Builder.EffectiveMaterials(md3, skin));
             }
             if (magic.StartsWith(MagicMdl, StringComparison.Ordinal))
             {
+                if (offThread)
+                    return null;   // MdlBuilder.Prepare creates an ArrayMesh — main thread only (see remarks)
                 // Quake1 MDL ("IDPO"). The files that actually reach here are static single-frame props
                 // (models/casing_shell.mdl + casing_steel.mdl for the shotgun casing, models/gibs/chunk.mdl for
                 // the fast gib chunk). Build the shared geometry + palette-decoded skin material ONCE, then hand
@@ -345,13 +413,14 @@ public sealed class AssetLoader
                 // IQM/DPM/MD3 factories use, so a per-casing/per-gib spawn is a node alloc, not a re-decode.
                 MdlData mdl = MdlReader.Read(bytes);
                 MdlBuilder.Prepared prep = MdlBuilder.Prepare(mdl, 0);
-                return () => MdlBuilder.Instantiate(prep);
+                // MDL carries its palette-decoded skin material inside Prepared — no named materials to warm.
+                return new ModelParse(() => MdlBuilder.Instantiate(prep), Array.Empty<string>());
             }
         }
         catch (Exception ex)
         {
             GD.PrintErr($"[AssetLoader] model '{key}' parse failed: {ex.Message}");
-            return null;
+            return ModelParse.Failed;
         }
 
         // ── Not-yet-implemented importers: MD2 / ZYM / PSK  (TODO T72 — NOT a deliberate cut) ──────────
@@ -367,7 +436,23 @@ public sealed class AssetLoader
         //     mod / custom-map compat only.
         // Implement any of them by mirroring the MDL importer (src/VortexArena.Formats/Mdl + models/MdlBuilder).
         GD.PrintErr($"[AssetLoader] '{key}' is not a known model (magic \"{Printable(magic)}\").");
-        return null;
+        return ModelParse.Failed;
+    }
+
+    /// <summary>The material names an IQM build will resolve, post skin-remap and with <c>nodraw</c> meshes
+    /// dropped — <see cref="IqmBuilder.EffectiveMaterialName"/> over every mesh. Mirrors
+    /// <see cref="EffectiveMaterials(SkeletalModelParse)"/>, which does the same for an already-parsed
+    /// skeletal bundle.</summary>
+    private static List<string> IqmEffectiveMaterials(IqmData iqm, SkinFile? skin)
+    {
+        var mats = new List<string>(4);
+        foreach (VortexArena.Formats.Iqm.IqmMesh sub in iqm.Meshes)
+        {
+            string? name = IqmBuilder.EffectiveMaterialName(sub, skin, out _);
+            if (name is not null && !mats.Contains(name))
+                mats.Add(name);
+        }
+        return mats;
     }
 
     /// <summary>

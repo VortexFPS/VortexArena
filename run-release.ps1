@@ -32,8 +32,26 @@ if (-not (Test-Path $Out)) {
 }
 if ($LASTEXITCODE -ne 0) { Write-Host "[run-release] note: godot exited $LASTEXITCODE but produced the binary (benign export warnings) -- continuing." -ForegroundColor Yellow }
 
-# Launch from the project root so the exported build's CWD-relative asset fallback finds the in-tree
-# data/ (a packaged zip instead carries data/ beside the binary). Else: empty world.
+# Reproduce the PACKAGED layout: data/ beside the binary (tools/package.sh does the same with a real copy).
+# The export deliberately excludes data/* from the pck, so an exported build resolves it through
+# DataPaths.ResolveExported, which probes exe-relative FIRST and only then the CWD. Relying on the CWD probe
+# -- which is what this script used to do -- means the build only finds content when launched from the repo
+# root, and silently loads NOTHING otherwise: no menu asset warm, no models, an empty world, and a run whose
+# perf numbers look great because the game never loaded anything. A junction costs nothing, needs no copy,
+# and stays live as the content tree changes.
+$DataLink = Join-Path (Split-Path $Out) "data"
+$DataSrc  = Join-Path $Proj "data"
+if (-not (Test-Path $DataSrc)) {
+    Write-Host "[run-release] ERROR: no content tree at $DataSrc (fetch maps: python tools/data/fetch-maps.py)" -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path $DataLink)) {
+    New-Item -ItemType Junction -Path $DataLink -Target $DataSrc | Out-Null
+    Write-Host "[run-release] linked data/ beside the binary -> $DataSrc"
+}
+
+# Launch from the install dir, exactly as a player would -- the exe-relative probe above is what finds data/,
+# so this no longer depends on the caller's working directory.
 Write-Host "[run-release] launching $Out $args"
-Set-Location $Proj
+Set-Location (Split-Path $Out)
 & $Out @args

@@ -56,6 +56,7 @@ $logDir = Join-Path $baseDir "logs"
 if ($DebugBuild) {
     $exe = "C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64_console.exe"
     $exeArgs = @("--path", $root)
+    $workDir = $root          # --path already roots res://, so content resolution is CWD-independent here
     if (-not (Test-Path $exe)) { throw "Godot console binary not found at $exe (see docs/RUNNING.md)" }
 } else {
     $exe = Join-Path $root "dist\windows-client\VortexArena.exe"
@@ -63,6 +64,17 @@ if ($DebugBuild) {
     if (-not (Test-Path $exe)) {
         throw "release export missing at $exe - export the windows-client preset first (or use -DebugBuild for a non-representative debug run)"
     }
+    # The export excludes data/* from the pck, so the exported build finds content via
+    # DataPaths.ResolveExported: exe-relative first, CWD only as a last resort. Start-Process below does NOT
+    # inherit PowerShell's $PWD (it uses the .NET current directory), so the CWD probe is not something a
+    # capture should depend on - a run that silently mounts NO content still boots, still self-quits, and
+    # still writes a session log full of flattering numbers for a game that loaded nothing. Link data/ beside
+    # the binary (the packaged layout) so the exe-relative probe always wins.
+    $dataLink = Join-Path (Split-Path $exe) "data"
+    if (-not (Test-Path $dataLink)) {
+        New-Item -ItemType Junction -Path $dataLink -Target (Join-Path $root "data") | Out-Null
+    }
+    $workDir = Split-Path $exe   # launch from the install dir, exactly as a player would
 }
 
 # --- clean strays (an orphaned host keeps UDP 26000 bound) -----------------------------------
@@ -106,7 +118,8 @@ foreach ($c in $Cvar) {
     if ($parts.Count -eq 2) { $exeArgs += @("--cvar", $parts[0], $parts[1]) }
 }
 Write-Host ">>> [$Label] $exe $($exeArgs -join ' ')"
-$proc = Start-Process -FilePath $exe -ArgumentList $exeArgs -RedirectStandardOutput $stdout -PassThru
+$proc = Start-Process -FilePath $exe -ArgumentList $exeArgs -WorkingDirectory $workDir `
+    -RedirectStandardOutput $stdout -PassThru
 $null = $proc | Wait-Process -Timeout ($Secs + 90) -ErrorAction SilentlyContinue
 if (-not $proc.HasExited) {
     Write-Warning "self-quit did not fire - killing the process"

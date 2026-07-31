@@ -8,6 +8,59 @@ and a ranked/phased plan. Timings below are from a single **Debug (jit-opt)** ca
 
 ## Implementation log
 
+- **2026-07-31 — Phase 2 follow-up: the menu warm WAS hitching; reworked.** The Phase 2 entry below claims
+  "so the menu never hitches". That was wrong, and shipped: on a **release export** the main menu ran at
+  **7 frames over the first 8.8 s (p50 829.8 ms)**, recovering to normal around t≈13 s — the "menu is very slow
+  for a few seconds after launch" report. Three compounding causes, all fixed:
+  1. **The per-frame budgets could not bind.** Both `MenuAssetWarmer` and `BackgroundAssetStreamer` drain
+     "at least one item per frame, then check the budget". That rule is what stops an indivisible build from
+     deadlocking the queue, but when every item costs 300–900 ms against a 1.5–2 ms budget it silently becomes
+     "one heavy build EVERY frame" — a wall of long frames. Both now bank the overshoot as **debt** and work it
+     off by skipping frames, so the budget bounds the AVERAGE per-frame cost (measured after: `menu.warm` and
+     `stream.build` each average 0.9–1.0 ms/frame against a 1.0 ms budget).
+  2. **Most of the work was pure waste.** The warm called `LoadModel` / `BuildSkeletalModel` and immediately
+     `QueueFree`d the result. The `Skeleton3D` + skinned `ArrayMesh` those build are per-instance and cached
+     NOWHERE, so `iqm.mesh` — the single largest cost, 654 ms/frame on the release capture — bought nothing.
+     Only the materials/textures resolved along the way persisted. The warm now fills the caches the first
+     match actually reads (`_skeletalParseCache` for players, `_modelCache` for weapons, plus materials +
+     GPU textures) and never builds a node.
+  3. **The parse ran on the main thread for weapons.** Player models already parsed off-thread; weapons did
+     read + parse + texture-decode + upload inline. New `AssetLoader.PrepareModel` (off-thread-safe: publishes
+     the parse under a lock and returns the material work-list, with the Godot-touching MDL branch excluded)
+     plus `Md3Builder.EffectiveMaterials` / `DpmBuilder.EffectiveMaterials` let every model take the same
+     staged path the live player-model stream uses — worker parses + predecodes, main thread does ONE texture
+     upload per job. Models are also fed through a 2-at-a-time window; releasing all 54 at once put every
+     worker on a decode simultaneously and allocated >100 MB in the first second, which reached the main
+     thread as GC pauses.
+
+  4. **The last main-thread work moved off it too, and that closes backlog §13.3 #4.** Pacing got the menu to
+     p95 14.1 ms with ~20 isolated 25–45 ms frames, but those are indivisible: one
+     `ImageTexture.CreateFromImage` for a big player-model diffuse is 25–45 ms on release, and one generated-
+     shader `ResolveMaterial` is ~20 ms. A budget controls how OFTEN one lands, never how big it is. So both
+     moved to the worker lane (`AssetSystem.WarmTextureOffThread`, plus `ResolveMaterial` fanned out one job
+     per material) behind gated `_textureCache`/`_materialCache` and main-thread-primed shared singletons.
+     **Verified, not assumed:** Godot 4.6.3 Forward+/Vulkan raised no engine error, and a turntable render of
+     erebus whose textures + materials were built entirely off-thread is **byte-identical** (md5) to the same
+     render built on the main thread. Used ONLY by this warm, where a failure degrades to "the match loads it
+     normally"; the live in-match paths still upload on the main thread.
+
+  **Result (release export, menu boot):** first window **7 frames → 641 frames**, p50 **829.8 ms → 6.9 ms**,
+  p95 **9.1 ms**, and **zero asset-build hitches** — later windows report "no hitches" outright. The warm also
+  finishes much sooner (~22 s → ~6 s) now that nothing paces it against a main-thread budget. The one residual
+  main-thread cost the warm can still cause is a GC pause from worker allocation, which is what the 2-model
+  in-flight window bounds. Same-day A/B on the in-match capture (`tools/perf-run.ps1`, catharsis+6 bots) shows
+  the shared-streamer + cache-locking changes are neutral there: avg 145.3 vs 141.5 fps, p99 14.3 vs 15.7 ms,
+  ASSET-BUILD hitches 4 vs 4.
+
+  **Why it went unnoticed for three weeks:** `MenuAssetWarmer._Process` shipped with **no `Prof.Sample` scope**
+  (the house rule exists for exactly this), so its cost landed in `proc:other`; and the hitch detector needs a
+  rolling median to spike above — when EVERY frame is equally slow, it reports "no hitches". A `menu.warm`
+  scope is now registered in `FrameProfiler.TopLevelNodeScopes`. **Also fixed en route:** `run-release.ps1` /
+  `run-release.sh` / `tools/perf-run.ps1` never placed `data/` beside the exported binary and relied on the
+  CWD probe in `DataPaths.ResolveExported`. A release build launched from anywhere else mounts NO content and
+  still boots, self-quits, and writes a session log full of flattering numbers — which is exactly how the
+  first capture attempt for this investigation came back clean.
+
 - **2026-07-06 — Phase 2 (warm the eager set at game load) landed.** A plain menu boot now warms the
   MAP-INDEPENDENT eager set — every weapon v_/h_ model, the stock player-model roster (erebus + the 5 idle-warm
   models + the local pick), and the 36 combat sounds — into `MenuState.SharedAssets` in the background, via a new
@@ -15,7 +68,7 @@ and a ranked/phased plan. Timings below are from a single **Debug (jit-opt)** ca
   ([Shell.cs](game/Shell.cs) `StartMenuAssetWarm`, the `else` branch skipped by `--map`/`--host`/`--connect` so a
   scripted match isn't double-warmed). The heavy skeletal IQM parse runs OFF the main thread on the shared
   `BackgroundAssetStreamer` lane; weapon builds + sound decodes drain on a 1.5 ms/frame main budget — so the menu
-  never hitches. Gated by `cl_warm_at_boot` (default 1) AND `cl_persist_asset_cache` (a warm is wasted if the match
+  never hitches. **[SUPERSEDED 2026-07-31 — the "never hitches" claim was false; see the entry above.]** Gated by `cl_warm_at_boot` (default 1) AND `cl_persist_asset_cache` (a warm is wasted if the match
   builds its own loader). Combined with Phase 1, the first match's precache then finds these already parsed +
   GPU-uploaded → cache hits → fast map load. `WeaponVModelPath` was made `internal` so the warmer hits the same
   cache key. **Latent bug found + fixed en route:** `Sounds.All` was empty at the menu (the sound catalog was

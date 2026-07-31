@@ -82,10 +82,26 @@ if [ ! -e "$OUT" ]; then
 fi
 echo "[run-release][debug] export OK — binary present: $OUT ($(wc -c <"$OUT" 2>/dev/null | tr -d ' ') bytes)"
 
-# Launch from the project root so the exported build's content resolver finds the in-tree data/
-# (DataPaths.Resolve probes <exe-dir>/data then a CWD-relative 'data' in an exported build; a packaged
-# zip instead carries data/ beside the binary). Without this a release run boots into an empty world.
-cd "$PROJ"
+# Reproduce the PACKAGED layout: data/ beside the binary (tools/package.sh does the same with a real copy).
+# The export deliberately excludes data/* from the pck, so an exported build resolves it through
+# DataPaths.ResolveExported, which probes exe-relative FIRST and only then the CWD. Relying on the CWD probe
+# — which is what this script used to do — means the build only finds content when launched from the repo
+# root, and silently loads NOTHING otherwise: no menu asset warm, no models, an empty world, and a run whose
+# perf numbers look great because the game never loaded anything. A symlink costs nothing, needs no copy,
+# and stays live as the content tree changes.
+if [ ! -d "$PROJ/data" ]; then
+    echo "[run-release] ERROR: no content tree at $PROJ/data (fetch maps: python tools/data/fetch-maps.py)" >&2
+    exit 1
+fi
+if [ ! -e "$(dirname "$OUT")/data" ]; then
+    ln -s "$PROJ/data" "$(dirname "$OUT")/data" 2>/dev/null \
+        || cp -r "$PROJ/data" "$(dirname "$OUT")/data"      # Windows without symlink rights: fall back to a copy
+    echo "[run-release] placed data/ beside the binary"
+fi
+
+# Launch from the install dir, exactly as a player would — the exe-relative probe above is what finds data/,
+# so this no longer depends on the caller's working directory.
+cd "$(dirname "$OUT")"
 echo "[run-release] launching: $OUT $*"
 [ -x "$OUT" ] || echo "[run-release][debug] WARNING: '$OUT' is not marked executable — trying anyway" >&2
 # Run as a CHILD (not exec) so we can report the exit code. A release build that vanishes instantly is

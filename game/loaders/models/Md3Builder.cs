@@ -51,6 +51,35 @@ public static class Md3Builder
         morph.Initialize(md3, assets, skin, framegroups);
         return morph;
     }
+
+    /// <summary>
+    /// OFF-THREAD-SAFE (pure data): the material names a build of <paramref name="md3"/> will resolve, after
+    /// the <c>.skin</c> remap and with <c>nodraw</c> surfaces dropped. Deliberately mirrors
+    /// <c>Md3Morph.ResolveSurfaces</c>'s selection so the off-thread texture predecode warms exactly
+    /// what the main-thread build then loads — the MD3 counterpart of
+    /// <see cref="IqmBuilder.EffectiveMaterialName"/>. (The autosprite variant resolves from the SAME shader
+    /// name, so one entry covers both paths.)
+    /// </summary>
+    public static List<string> EffectiveMaterials(Md3Data md3, SkinFile? skin = null)
+    {
+        var mats = new List<string>(4);
+        if (md3 is null)
+            return mats;
+        foreach (Md3Surface surface in md3.Surfaces)
+        {
+            string shader = surface.Shaders.Length > 0 ? surface.Shaders[0] : surface.Name;
+            if (skin is not null && skin.MeshToTexture.TryGetValue(surface.Name, out string? remap))
+            {
+                if (SkinFile.IsNoDraw(remap))
+                    continue;                                  // skin hides this surface
+                if (!string.IsNullOrEmpty(remap))
+                    shader = remap;                            // empty remap means "leave default"
+            }
+            if (!string.IsNullOrEmpty(shader) && !mats.Contains(shader))
+                mats.Add(shader);
+        }
+        return mats;
+    }
 }
 
 /// <summary>

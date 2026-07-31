@@ -38,6 +38,15 @@ public sealed class AssetSystem
     // resolved vpath so two names that resolve to the same file share one GPU texture.
     private readonly Dictionary<string, Material> _materialCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Texture2D?> _textureCache = new(StringComparer.Ordinal);
+    // The texture cache is also written from the streamer's worker lane (WarmTextureOffThread — the menu
+    // warm's upload half), so every read/write goes through this gate. Uncontended in the common case; a
+    // double-upload race is harmless (last writer wins, the loser is collected), the same reasoning the
+    // model/skeletal parse caches already document.
+    private readonly object _textureCacheGate = new();
+    // Same story for the material cache: the menu warm resolves materials on the streamer's worker lane so the
+    // generated-shader compile never lands on a menu frame. `_shaders` itself is immutable after construction,
+    // so reading a ShaderDef from a worker needs no gate — only this cache does.
+    private readonly object _materialCacheGate = new();
 
     private Texture2D? _fallbackTexture;       // magenta/black checkerboard
     private Material? _fallbackMaterial;        // unlit material wrapping the checkerboard
@@ -153,12 +162,14 @@ public sealed class AssetSystem
             return FallbackMaterial();
 
         string key = StripShaderExtension(nameOrTexture);
-        if (_materialCache.TryGetValue(key, out Material? cached))
-            return cached;
+        lock (_materialCacheGate)
+            if (_materialCache.TryGetValue(key, out Material? cached))
+                return cached;
 
         Material result;
         try
         {
+            // Compile OUTSIDE the lock so a slow shader build never blocks another material's lookup.
             if (_shaders.TryGetValue(key, out ShaderDef? def))
             {
                 result = ShaderCompiler.Compile(def, this) ?? BuildPlainMaterial(key);
@@ -174,8 +185,27 @@ public sealed class AssetSystem
             result = FallbackMaterial();
         }
 
-        _materialCache[key] = result;
+        lock (_materialCacheGate)
+            _materialCache[key] = result;
         return result;
+    }
+
+    /// <summary>
+    /// MAIN-THREAD, call once before any worker touches <see cref="ResolveMaterial"/> or
+    /// <see cref="WarmTextureOffThread"/>: force the lazily-built shared singletons (white/black/checkerboard
+    /// textures and the fallback material) into existence.
+    ///
+    /// <para>Those four are plain <c>??=</c> lazy fields, so two workers hitting a missing texture at the same
+    /// moment would each build one and the loser would leak a GPU resource. Rather than lock every accessor on
+    /// a path that is otherwise single-threaded, the menu warm simply constructs them up front — after which
+    /// the accessors only ever READ an already-set field, which is safe from any thread.</para>
+    /// </summary>
+    public void PrimeSharedSingletons()
+    {
+        WhiteTexture();
+        BlackTexture();
+        FallbackTexture();
+        FallbackMaterial();
     }
 
     /// <summary>
@@ -561,12 +591,55 @@ public sealed class AssetSystem
         if (vpath == null)
             return null;
 
-        if (_textureCache.TryGetValue(vpath, out Texture2D? cached))
-            return cached;
+        lock (_textureCacheGate)
+            if (_textureCache.TryGetValue(vpath, out Texture2D? cached))
+                return cached;
 
+        // Decode+upload OUTSIDE the lock so a slow texture never blocks another lookup (the parse-cache rule).
         Texture2D? tex = LoadTextureFromVpath(vpath);
-        _textureCache[vpath] = tex; // cache even null to avoid re-probing a known-bad image
+        lock (_textureCacheGate)
+            _textureCache[vpath] = tex; // cache even null to avoid re-probing a known-bad image
         return tex;
+    }
+
+    /// <summary>
+    /// The menu warm's upload half, called from a <c>BackgroundAssetStreamer</c> WORKER — resolve, decode and
+    /// GPU-upload one texture into the shared cache entirely off the main thread, so a warm costs the menu
+    /// frame nothing at all.
+    ///
+    /// <para><b>Why this is a separate entry point rather than "LoadTexture is now thread-safe".</b> Godot 4's
+    /// <see cref="RenderingServer"/> is command-buffered and tolerates resource creation from a thread, but
+    /// that is a property of the ENGINE BUILD, not a contract this codebase should assume everywhere: the
+    /// live in-match paths keep uploading on the main thread, where the behaviour is unquestioned. This one
+    /// caller is safe to experiment through because a failure here is harmless by construction — the menu warm
+    /// is best-effort prefetch, so a texture that fails to warm is simply loaded normally by the match that
+    /// needs it. Any exception is swallowed with a one-line note rather than propagated.</para>
+    ///
+    /// <para>Skips <c>$</c>-prefixed engine images (<c>$whiteimage</c> and friends) — those lazily construct
+    /// shared singletons and must stay on the main thread.</para>
+    /// </summary>
+    public void WarmTextureOffThread(string baseNameNoExt)
+    {
+        if (string.IsNullOrEmpty(baseNameNoExt) || baseNameNoExt[0] == '$')
+            return;
+        using var _ = VortexArena.Common.Diagnostics.Prof.Sample("stream.upload");
+        try
+        {
+            string? vpath = _vfs.ResolveImage(baseNameNoExt);   // ConcurrentDictionary-cached (thread-safe)
+            if (vpath is null)
+                return;
+            lock (_textureCacheGate)
+                if (_textureCache.ContainsKey(vpath))
+                    return;
+            Texture2D? tex = LoadTextureFromVpath(vpath);
+            lock (_textureCacheGate)
+                _textureCache[vpath] = tex;
+        }
+        catch (Exception ex)
+        {
+            GD.Print($"[AssetSystem] off-thread warm of '{baseNameNoExt}' failed ({ex.Message}); " +
+                     "the match will load it normally.");
+        }
     }
 
     /// <summary>

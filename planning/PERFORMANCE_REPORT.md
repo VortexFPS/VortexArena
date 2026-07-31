@@ -886,8 +886,15 @@ not — orders of magnitude below the texture fetches in the same shader. Per-se
    allocation bursts → reused buffers (the remaining 30-70 ms GC-pause class).
 3. **Client-side PVS culling for ENTITIES** — players/items behind walls still pose+draw; reuse BspPvs per
    entity (DP-faithful, conservative). Pairs with cl_pose_cull.
-4. **Off-thread texture UPLOAD spike** — the remaining 5-10 ms/job main-thread cost; Godot's threaded loader
-   pattern, needs its own verification pass.
+4. ~~**Off-thread texture UPLOAD spike**~~ — **VERIFIED + DONE for the menu warm (2026-07-31).** Godot 4.6.3
+   (Forward+/Vulkan) accepts `ImageTexture.CreateFromImage` AND material/generated-shader construction from a
+   `BackgroundAssetStreamer` worker: no engine errors, and a turntable render of a model whose textures and
+   materials were built off-thread is **byte-identical** to the same render built on the main thread. Wired
+   through `AssetSystem.WarmTextureOffThread` + a gated `_textureCache`/`_materialCache`, and used ONLY by
+   `MenuAssetWarmer` (best-effort prefetch, so a failure degrades to "the match loads it normally"). Took the
+   menu boot from 20 asset-build hitches to **0**. The live in-match paths deliberately still upload on the
+   main thread — extending this to them is a separate call with a real blast radius (a bad material renders
+   wrong rather than crashing), and would want the same visual A/B.
 5. **Cluster-aligned (or smaller) world cells** — sharpens PVS culling; benefit indoor-map dependent.
 6. **Godot occlusion culling (OccluderInstance3D)** — would also cull models/particles; pop-in risk if
    occluders are over-aggressive; ranked behind #3.

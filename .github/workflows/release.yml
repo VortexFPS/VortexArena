@@ -98,11 +98,17 @@ jobs:
         shell: bash
 
       # Pre-export gate: assert custom_template/release is populated, names the file the lockfile pins,
-      # and that file's sha256 matches. Cheap, and it fails in seconds rather than after a full export.
-      # It is not a substitute for the content check below (it cannot see what Godot actually did), but
-      # it catches G10's actual cause - the field being blanked - before any time is spent.
+      # that file's sha256 matches, and it is in a form the Windows exporter can open. Cheap, and it
+      # fails in seconds rather than after a full export. It is not a substitute for the content check
+      # below (it cannot see what Godot actually did), but it catches G10's actual cause - the field
+      # being blanked - before any time is spent.
+      #
+      # --audit-presets rides along because it is the only check that sees a preset NOBODY listed: every
+      # --preset-config below is invoked by name, so a preset added to export_presets.cfg later would be
+      # gated by no step in any job and every one of them would stay green. It reads committed text
+      # only, so this Windows job is as good a place for it as any and it needs no template on disk.
       - name: Verify the engine template is configured and pinned
-        run: python tools/verify-engine-template.py --preset-config windows-client
+        run: python tools/verify-engine-template.py --audit-presets --preset-config windows-client
         shell: bash
 
       - name: Export windows-client
@@ -174,6 +180,8 @@ jobs:
       # This is the ONLY G10 gate the Linux presets can have, and it runs before the export rather than
       # after: no binary marker can tell a patched Linux template from a stock one, because there is no
       # difference to find. So an emptied custom_template/release must be caught here, on the INPUT.
+      # It also asserts the template is a real ELF and not, say, an archive - the mistake that made
+      # macos-client unpinnable, which a sha256 passes straight over.
       - name: Verify the engine templates are configured and pinned
         run: |
           python tools/verify-engine-template.py \
@@ -240,13 +248,18 @@ jobs:
       - name: Import resources
         run: godot --headless --path . --import || true
 
-      # Same provenance pin as Linux: the macOS template carries none of tools/engine-patches/ either.
-      # It IS a universal (arm64 + x86_64) build, which the stock template is too, but pinning means the
-      # arch of what shipped is a recorded fact rather than a property of the runner's install.
-      - name: Fetch the pinned engine template
-        run: python tools/data/fetch-engine-template.py --only macos
-
-      - name: Verify the engine template is configured and pinned
+      # NO template fetch here, deliberately. macos-client exports from the STOCK template that
+      # setup-godot installs, because the macOS template we publish cannot be used as a custom template:
+      # Godot's macOS exporter unzips custom_template/release and reads macos_template.app/ out of it,
+      # while our published asset is the raw lipo output, a Mach-O fat binary. Pointing the preset at it
+      # does not fall back to stock - it aborts the export, and on this continue-on-error job that would
+      # drop the macOS build from the release without turning anything red.
+      #
+      # This step therefore REPORTS the gap rather than closing it: engine.lock.json declares
+      # macos-client under unpinned_presets with the reason and what unblocks it, and the script prints
+      # that as KNOWN GAP. Downloading the 149 MB template here would cost four minutes to verify a file
+      # nothing consumes.
+      - name: Report the macOS engine-template gap
         run: python tools/verify-engine-template.py --preset-config macos-client
 
       - name: Export macos-client
@@ -345,16 +358,20 @@ jobs:
             Fat archives: binary + Godot runtime + all game content. Unzip and run, and keep the files
             together — the game loads `data/` from beside the binary.
 
-            Every build here is exported from a Godot template pinned by
-            `tools/engine-patches/engine.lock.json`, so the engine each platform ships is a recorded
-            fact rather than whatever the build machine had installed
+            The Windows and Linux builds are exported from a Godot template pinned by
+            `tools/engine-patches/engine.lock.json`, so the engine they ship is a recorded fact rather
+            than whatever the build machine had installed
             (`planning/decisions/ADR-0017-engine-patches.md`).
 
             The **Windows** template additionally carries the high-polling-rate mouse-input backport,
             and the release job asserts the shipped Windows binary actually contains it rather than
-            trusting the export to have used it. The Linux and macOS templates carry no patches: the
-            patch set touches Windows code only, so they are equivalent in behaviour to the official
-            builds and are pinned for provenance.
+            trusting the export to have used it. The Linux template carries no patches: the patch set
+            touches Windows code only, so it is equivalent in behaviour to the official build and is
+            pinned for provenance.
+
+            The **macOS** build uses the stock Godot 4.6.3 template. It is equivalent in behaviour for
+            the same reason, but which template it used is not recorded; see `unpinned_presets` in the
+            lockfile for why and what would close it.
 
             ---
           fail_on_unmatched_files: true

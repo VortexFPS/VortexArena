@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -112,26 +113,63 @@ public class GodotProjectSettingsTests
     }
 
     /// <summary>
-    /// EVERY preset's <c>custom_template/release</c> points at a template pinned in
-    /// <c>tools/engine-patches/engine.lock.json</c>. Emptied, the export silently falls back to the stock
-    /// template and ships a build missing engine-level fixes that no other test covers, because they live
-    /// below the C# boundary entirely (G10 / ADR-0017).
+    /// EVERY preset is accounted for in <c>tools/engine-patches/engine.lock.json</c>: either it pins a
+    /// template (and <c>custom_template/release</c> names exactly that file), or the lockfile declares it
+    /// under <c>unpinned_presets</c> with a reason and the field is empty. Silently emptied, the export
+    /// falls back to the stock template and ships a build missing engine-level fixes that no other test
+    /// covers, because they live below the C# boundary entirely (G10 / ADR-0017).
     ///
     /// Widened 2026-07-31. This used to require only that ONE preset was populated, which was correct
-    /// when windows-client was the only pinned preset but is now a hole: it would pass unchanged with the
-    /// Linux and macOS fields blanked back to stock, which is exactly the regression worth catching.
+    /// when windows-client was the only pinned preset but became a hole once the others were pinned: it
+    /// would pass unchanged with those fields blanked back to stock.
     ///
-    /// Scope split, deliberately. This test is a pure text check on two committed files, so it runs on any
-    /// checkout without a 300 MB template download. It asserts the fields are populated and agree with the
-    /// lockfile. Whether the pinned file is actually PRESENT and hashes correctly is
+    /// The declared-gap half is not a loophole, it is what keeps the check honest about macos-client,
+    /// whose field is empty ON PURPOSE — Godot's macOS exporter unzips its custom template, and the
+    /// published macOS artifact is a raw Mach-O, so pinning it aborts the export instead of using it.
+    /// The point is that "unpinned" has to be written down in the lockfile with a reason before this test
+    /// will accept it; a field blanked without that entry still fails.
+    ///
+    /// Scope split, deliberately. This test is a pure read of two committed files, so it runs on any
+    /// checkout without a 300 MB template download. Whether the pinned file is actually PRESENT, hashes
+    /// correctly, and is in a form Godot's exporter can open is
     /// <c>tools/verify-engine-template.py --preset-config</c>, at export time, where the file exists.
     /// </summary>
     [Fact]
     public void Every_Release_Export_Points_At_A_Pinned_Engine_Template()
     {
         var settings = ParseGodotIni(ExportPresets);
-        string lockfile = File.ReadAllText(
-            Path.Combine(TestPaths.RepoRoot, "tools", "engine-patches", "engine.lock.json"));
+        using var lockfile = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(TestPaths.RepoRoot, "tools", "engine-patches", "engine.lock.json")));
+
+        // preset name -> the filename the lockfile pins for it. Read from template.platforms[].presets
+        // rather than by grepping the file for the filename: every published artifact appears in the
+        // lockfile whether or not a preset consumes it, so a text search would happily accept a preset
+        // pointed at a template that is pinned for a DIFFERENT platform, or at one deliberately consumed
+        // by nothing (macos today).
+        var pinned = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (JsonProperty platform in lockfile.RootElement
+                     .GetProperty("template").GetProperty("platforms").EnumerateObject())
+        {
+            string filename = platform.Value.GetProperty("filename").GetString()!;
+            foreach (JsonElement preset in platform.Value.GetProperty("presets").EnumerateArray())
+                pinned[preset.GetString()!] = filename;
+        }
+
+        var gaps = new HashSet<string>(StringComparer.Ordinal);
+        if (lockfile.RootElement.TryGetProperty("unpinned_presets", out JsonElement declared))
+            foreach (JsonProperty gap in declared.EnumerateObject().Where(p => !p.Name.StartsWith('$')))
+            {
+                Assert.True(gap.Value.TryGetProperty("reason", out JsonElement reason)
+                            && !string.IsNullOrWhiteSpace(reason.GetString()),
+                    $"engine.lock.json declares '{gap.Name}' under unpinned_presets with no 'reason'. An "
+                    + "undocumented exemption is indistinguishable from the accident it exempts — either "
+                    + "write down why the preset cannot be pinned, or pin it.");
+                gaps.Add(gap.Name);
+            }
+
+        Assert.True(pinned.Count > 0,
+            "engine.lock.json pins a template for no preset at all. Every release export would fall back "
+            + "to the stock engine — the exact G10 failure this file exists to catch.");
 
         // Join `[preset.N] name=` to `[preset.N.options] custom_template/release=` on the index N. Godot
         // splits a preset across those two sections, so scanning for the bare key finds four values with
@@ -145,10 +183,13 @@ public class GodotProjectSettingsTests
         Assert.True(presets.Count > 0,
             "export_presets.cfg has no [preset.N] sections at all — the file was regenerated or truncated.");
 
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
         foreach (string section in presets)
         {
             string name = settings[$"{section}/name"].Trim('"');
             string key = $"{section}.options/custom_template/release";
+            seen.Add(name);
 
             Assert.True(settings.ContainsKey(key),
                 $"preset '{name}' has no custom_template/release key — the editor rewrote "
@@ -156,12 +197,31 @@ public class GodotProjectSettingsTests
 
             string template = settings[key].Trim('"');
 
+            // A preset in neither list is the one nobody would notice: verify-engine-template.py is
+            // invoked per preset BY NAME from ci.sh and release.yml, so an unlisted preset is gated by no
+            // step at all and every job stays green.
+            Assert.True(pinned.ContainsKey(name) || gaps.Contains(name),
+                $"preset '{name}' is accounted for nowhere in engine.lock.json — neither pinned under "
+                + "template.platforms[…].presets nor declared under unpinned_presets. Pin it, or declare "
+                + "it a gap with a reason. Do not leave it out of both: nothing else checks it.");
+
+            if (gaps.Contains(name))
+            {
+                Assert.True(template.Length == 0,
+                    $"preset '{name}' sets custom_template/release to '{template}' while engine.lock.json "
+                    + "still lists it under unpinned_presets. Those contradict each other, so the field is "
+                    + "live and gated by nothing. If the blocker is cleared, pin the preset and delete the "
+                    + "unpinned_presets entry in the same change.");
+                _out.WriteLine($"{name} -> (declared gap: exports from the stock template)");
+                continue;
+            }
+
             Assert.False(template.Length == 0,
-                $"preset '{name}' has an EMPTY custom_template/release. This is the one genuinely "
-                + "dangerous value: Godot does not fail on it, it falls back to the STOCK export template "
-                + "and produces a complete, launchable binary carrying none of tools/engine-patches/. "
-                + "Every preset is pinned deliberately — the non-Windows ones for provenance, so that "
-                + "'which engine does this build run' has an answer. Re-point it per docs/RELEASING.md.");
+                $"preset '{name}' has an EMPTY custom_template/release and is NOT declared as a gap. This "
+                + "is the genuinely dangerous value: Godot does not fail on it, it falls back to the STOCK "
+                + "export template and produces a complete, launchable binary carrying none of "
+                + "tools/engine-patches/. Re-point it per docs/RELEASING.md, or — if it truly cannot be "
+                + "pinned — add it to unpinned_presets with the reason.");
 
             Assert.StartsWith("tools/engine-templates/", template, StringComparison.Ordinal);
 
@@ -169,14 +229,17 @@ public class GodotProjectSettingsTests
             // means a fetch followed by an export would NOT line up and the export would abort - with a
             // message about an architecture mismatch rather than a missing file, which is why this is
             // worth catching in a test rather than at the point of confusion.
-            string filename = template[(template.LastIndexOf('/') + 1)..];
-            Assert.True(lockfile.Contains($"\"{filename}\"", StringComparison.Ordinal),
-                $"preset '{name}' points at '{filename}', which engine.lock.json does not pin. "
-                + "export_presets.cfg and the lockfile have drifted — one of them describes a build that "
-                + "does not exist. Fix whichever is wrong rather than loosening this check.");
+            Assert.Equal($"tools/engine-templates/{pinned[name]}", template);
 
             _out.WriteLine($"{name} -> {template}");
         }
+
+        // The other direction: the lockfile must not describe a preset that no longer exists. A stale
+        // entry is what makes the check above pass for a build nobody produces any more.
+        foreach (string described in pinned.Keys.Concat(gaps).Distinct())
+            Assert.True(seen.Contains(described),
+                $"engine.lock.json describes preset '{described}' but export_presets.cfg has no preset by "
+                + "that name. The two have drifted — one is describing a build that does not exist.");
     }
 
     /// <summary>

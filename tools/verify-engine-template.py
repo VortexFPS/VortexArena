@@ -11,16 +11,31 @@ stock-template export produces a file, so `test -f` passes and the job goes gree
 a warning is irrelevant — nothing reads it. The only assertion that speaks to what shipped is one about
 the shipped binary's content.
 
-Three modes, matching the three ends of the failure:
+Four modes, matching the ends of the failure:
 
   --patches            the SOURCE is intact: every patch file matches its sha256 in engine.lock.json.
                        Cheap; run it in CI and before rebuilding a template.
+  --audit-presets      the BOOKKEEPING is intact: every preset in export_presets.cfg is either pinned in
+                       engine.lock.json or declared in its `unpinned_presets`. Pure text, no downloads.
+                       This is the only check that sees a preset nobody thought about: the per-preset
+                       modes below are invoked by name, so a fifth preset added later would be gated by
+                       nothing and no step would go red.
   --preset-config P    the INPUT is right: preset P's `custom_template/release` is non-empty, names the
-                       file engine.lock.json pins for that platform, and that file's sha256 matches.
-                       Run it BEFORE an export — it catches the emptied field, which is G10's actual
-                       cause, without waiting for a 20-minute build to finish.
+                       file engine.lock.json pins for that platform, that file's sha256 matches, and its
+                       FORM is one that platform's exporter can actually open. Run it BEFORE an export —
+                       it catches the emptied field, which is G10's actual cause, without waiting for a
+                       20-minute build to finish.
   --binary <exe>       the RESULT is right: the exported binary carries the markers a patched build must
                        have. Run it after every export, before packaging.
+
+WHY --preset-config CHECKS THE FILE'S FORM AND NOT JUST ITS HASH:
+
+A sha256 says the bytes are the ones we published. It does not say Godot can use them. The macOS
+exporter takes a ZIP (`macos.zip`: a zip with `macos_template.app/` inside) while Windows and Linux take
+the template binary directly, and our published macOS asset is the raw lipo output — a Mach-O fat
+binary. Pinned as-is it hashes correctly, exists, and then aborts the export at "Creating app bundle".
+That is worse than an empty field on a `continue-on-error` job: the build disappears from the release
+without turning anything red. So the form is pinned in the lockfile and asserted here.
 
 WHAT --binary CAN AND CANNOT PROVE, because getting this wrong is worse than not checking:
 
@@ -35,7 +50,11 @@ So on Linux and macOS this mode asserts only the contamination canary (no dev ma
 which is real but says NOTHING about which engine went in. It prints that gap out loud and the final
 line reports content verification as PARTIAL rather than "passed". A verification that reports success
 without testing anything is worse than none, because it retires the suspicion. What actually guards
-those platforms is --preset-config plus Godot's hard abort on a populated-but-missing template path.
+Linux is --preset-config plus Godot's hard abort on a populated-but-missing template path.
+
+macOS currently has neither: it exports from the STOCK template because the published macOS artifact is
+not in a form the exporter can open (engine.lock.json → unpinned_presets.macos-client). That is a
+declared gap rather than an accident, and --preset-config macos-client prints it as KNOWN GAP.
 
 Exit 0 on pass, 1 on any failure, 2 on a usage or lockfile problem. Never exits 0 having checked nothing:
 an empty patch list or an unknown preset is an error, not a pass.
@@ -85,18 +104,74 @@ def sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
-def pinned_presets(lock: dict) -> dict[str, dict]:
-    """Map every preset name the lockfile pins a template for to that template's platform entry.
+# What each platform's exporter will actually OPEN, which a sha256 cannot tell you. Windows and Linux go
+# through EditorExportPlatformPC, which copies the template binary and appends the pck, so a raw PE and a
+# raw ELF are correct. macOS does not: export_plugin.cpp calls unzOpen2() on custom_template/release and
+# reads `macos_template.app/` entries out of it. Verified against the 4.6.3 editor binary, which carries
+# "macos.zip", "macos_template.app/" and 'Could not find template app to export: "%s".' in that order.
+REQUIRED_FORM_BY_PLATFORM = {"windows": "pe", "linux": "elf", "macos": "macos_app_zip"}
+
+FORM_DESCRIPTION = {
+    "pe": "a Windows PE executable",
+    "elf": "a Linux ELF executable",
+    "macho_fat": "a Mach-O universal (fat) binary",
+    "macos_app_zip": "a macos.zip-form archive (a zip containing macos_template.app/)",
+}
+
+
+def sniff_form(path: Path) -> str | None:
+    """Identify a template file's form from its leading bytes. Returns None if nothing matches.
+
+    Deliberately reads only a header rather than parsing: the question is "which of the shapes Godot
+    accepts is this", not "is this a well-formed binary". A zip is opened far enough to confirm the
+    macos_template.app/ prefix, because a zip of the wrong thing would pass a magic-number check and
+    then fail inside Godot, which is the failure this whole function exists to move earlier.
+    """
+    with path.open("rb") as f:
+        head = f.read(8)
+
+    if head[:2] == b"MZ":
+        return "pe"
+    if head[:4] == b"\x7fELF":
+        return "elf"
+    if head[:4] in (b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf"):
+        return "macho_fat"
+    if head[:4] in (b"PK\x03\x04", b"PK\x05\x06"):
+        import zipfile
+        try:
+            with zipfile.ZipFile(path) as zf:
+                names = zf.namelist()
+        except zipfile.BadZipFile:
+            return None
+        return "macos_app_zip" if any(n.startswith("macos_template.app/") for n in names) else "zip"
+    return None
+
+
+def pinned_presets(lock: dict) -> dict[str, tuple[str, dict]]:
+    """Map every preset name the lockfile pins a template for to (platform key, platform entry).
 
     This is what lets --binary tell "a preset I know has no markers" from "a preset name someone
     typo'd". The first must not fail the build; the second must not read as verified. Without the
     distinction one of those two has to be wrong.
+
+    The platform key comes back too because the form a template must take is a property of the
+    PLATFORM's exporter, not of the artifact — see REQUIRED_FORM_BY_PLATFORM.
     """
-    out: dict[str, dict] = {}
-    for entry in (lock.get("template") or {}).get("platforms", {}).values():
+    out: dict[str, tuple[str, dict]] = {}
+    for platform, entry in (lock.get("template") or {}).get("platforms", {}).items():
         for name in entry.get("presets", []):
-            out[name] = entry
+            out[name] = (platform, entry)
     return out
+
+
+def declared_gaps(lock: dict) -> dict[str, dict]:
+    """Presets the lockfile declares as deliberately running on the stock template, name -> details.
+
+    A declared gap is reported loudly and never counts as verified. What it buys over an undeclared
+    empty field is that the reason is written down at the point the check runs, and that --audit-presets
+    can insist every preset is one or the other.
+    """
+    return {k: v for k, v in (lock.get("unpinned_presets") or {}).items() if not k.startswith("$")}
 
 
 def check_patches(lock: dict, patch_dir: Path) -> list[str]:
@@ -180,33 +255,43 @@ def parse_export_presets(path: Path) -> dict[str, str]:
     return {name: templates.get(idx, "") for idx, name in names.items()}
 
 
-def check_preset_config(lock: dict, preset: str, presets_path: Path) -> list[str]:
+def check_preset_config(lock: dict, preset: str, presets_path: Path) -> tuple[list[str], bool]:
     """Verify preset's custom_template/release points at the template engine.lock.json pins.
+
+    Returns (failures, pinned). `pinned` is False for a preset the lockfile declares as a known gap —
+    the check ran and reached a verdict, but that verdict is "this one exports from stock", which the
+    caller must not summarise as verified.
 
     This is a check on the build INPUT, not on what shipped, and the difference is the whole reason
     --binary also exists. What it does close is G10's actual mechanism: the field being EMPTY. Godot
     treats an empty field as "use stock" and exports successfully; it treats a populated-but-missing
-    path as a hard abort. So "non-empty and hashes to the pin" plus Godot's own abort covers every
-    failure except "Godot ignored a valid path", which is the one nobody has ever observed and the one
-    a content marker would be needed to see.
+    path as a hard abort. So "non-empty, hashes to the pin, in a form the exporter can open" plus
+    Godot's own abort covers every failure except "Godot ignored a valid path", which is the one nobody
+    has ever observed and the one a content marker would be needed to see.
     """
     failures: list[str] = []
     known = pinned_presets(lock)
+    gaps = declared_gaps(lock)
+    configured = parse_export_presets(presets_path)
+
+    if preset in gaps:
+        return check_declared_gap(preset, gaps[preset], configured, presets_path), False
 
     if preset not in known:
         # A typo must not read as "verified". Same reasoning as the --binary path below.
         die_usage(f"engine.lock.json pins no template for preset '{preset}'. "
                   f"Pinned presets: {', '.join(sorted(known)) or '(none)'}. "
+                  f"Declared gaps: {', '.join(sorted(gaps)) or '(none)'}. "
                   f"Add it to template.platforms[…].presets, or fix the spelling.")
 
-    configured = parse_export_presets(presets_path)
     if preset not in configured:
         return [f"engine.lock.json pins a template for preset '{preset}' but {presets_path.name} has no "
                 f"preset by that name. The lockfile and the export config have drifted — one of them is "
-                f"describing a build that does not exist."]
+                f"describing a build that does not exist."], True
 
+    platform, entry = known[preset]
     value = configured[preset]
-    want_name = known[preset]["filename"]
+    want_name = entry["filename"]
 
     if not value:
         return [f"{preset}: custom_template/release is EMPTY.\n"
@@ -214,7 +299,7 @@ def check_preset_config(lock: dict, preset: str, presets_path: Path) -> list[str
                 f"to the STOCK export template and produces a complete, launchable binary carrying none of "
                 f"tools/engine-patches/ (measured, G10). Nothing downstream would notice.\n"
                 f"    Set it to tools/engine-templates/{want_name} and run:\n"
-                f"        python tools/data/fetch-engine-template.py"]
+                f"        python tools/data/fetch-engine-template.py"], True
 
     # `res://` and a bare repo-relative path both work in Godot and both appear in the history; accept
     # either rather than making the check fussier than the thing it checks.
@@ -228,15 +313,15 @@ def check_preset_config(lock: dict, preset: str, presets_path: Path) -> list[str
             f"    A hand-pointed path is how a machine-local or stale template gets into a release. If the "
             f"pin is what changed, update engine.lock.json; if the path is, re-point it at "
             f"tools/engine-templates/{want_name}.")
-        return failures
+        return failures, True
 
     if not path.is_file():
         return [f"{preset}: custom_template/release points at {rel}, which does not exist.\n"
                 f"    Godot would abort this export (loudly, but its message reads as an architecture "
                 f"mismatch rather than a missing file — see tools/engine-patches/README.md).\n"
-                f"    Fetch it:  python tools/data/fetch-engine-template.py"]
+                f"    Fetch it:  python tools/data/fetch-engine-template.py"], True
 
-    actual, expected = sha256_of(path), known[preset]["sha256"]
+    actual, expected = sha256_of(path), entry["sha256"]
     if actual != expected:
         return [f"{preset}: {path.name} does not match the sha256 pinned in engine.lock.json.\n"
                 f"    expected {expected}\n"
@@ -244,11 +329,141 @@ def check_preset_config(lock: dict, preset: str, presets_path: Path) -> list[str
                 f"    This template is not the published artifact, so nothing about the resulting build's "
                 f"engine is known. Re-fetch (`python tools/data/fetch-engine-template.py --force`), or if "
                 f"the template was legitimately rebuilt, update the lockfile deliberately — rebuilds are "
-                f"NOT reproducible, so a changed hash is expected there and must be recorded, not ignored."]
+                f"NOT reproducible, so a changed hash is expected there and must be recorded, not ignored."], True
 
-    patched = " (patched)" if known[preset].get("patched") else " (stock-equivalent: patches are windows-only)"
+    form_failures = check_template_form(preset, platform, entry, path)
+    if form_failures:
+        return form_failures, True
+
+    patched = " (patched)" if entry.get("patched") else " (stock-equivalent: patches are windows-only)"
     print(f"  ok: {preset} -> {rel}{patched}")
     print(f"      sha256 {actual[:16]}… matches engine.lock.json")
+    print(f"      form {entry['template_form']} — {FORM_DESCRIPTION[entry['template_form']]}")
+    return failures, True
+
+
+def check_template_form(preset: str, platform: str, entry: dict, path: Path) -> list[str]:
+    """Assert the template is in a shape this platform's exporter can open, not merely the right bytes.
+
+    Two assertions, because there are two ways to get this wrong and only one of them is visible on
+    disk: the lockfile can PIN a form the exporter cannot use (which is how macos-client came to point
+    at a Mach-O), and the file on disk can differ from the form the lockfile claims.
+    """
+    want = REQUIRED_FORM_BY_PLATFORM.get(platform)
+    if want is None:
+        return [f"{preset}: no required template form is recorded for platform '{platform}'. "
+                f"REQUIRED_FORM_BY_PLATFORM in this script describes what each Godot exporter opens; a "
+                f"platform missing from it has not been checked against the engine, so this verified "
+                f"nothing about the form."]
+
+    declared = entry.get("template_form")
+    if declared != want:
+        return [f"{preset}: engine.lock.json pins a '{declared}' template for {platform}, but Godot's "
+                f"{platform} exporter opens {FORM_DESCRIPTION.get(want, want)}.\n"
+                f"    A sha256 cannot see this: the file is exactly the artifact we published, and the "
+                f"export still aborts. On a continue-on-error job that removes the build from the release "
+                f"without turning anything red, which is why it is asserted here rather than left to the "
+                f"export to discover.\n"
+                f"    Republish the template in the form the exporter wants, then re-pin filename, sha256 "
+                f"and template_form together."]
+
+    actual = sniff_form(path)
+    if actual != want:
+        return [f"{preset}: {path.name} is {FORM_DESCRIPTION.get(actual, actual or 'an unrecognised form')}, "
+                f"but engine.lock.json pins it as '{declared}' and Godot's {platform} exporter needs "
+                f"{FORM_DESCRIPTION.get(want, want)}.\n"
+                f"    The hash matched, so this is the published artifact — the lockfile's description of "
+                f"it is what is wrong. Fix template_form, or publish the right artifact."]
+
+    return []
+
+
+def check_declared_gap(preset: str, gap: dict, configured: dict[str, str], presets_path: Path) -> list[str]:
+    """Report a preset engine.lock.json declares as deliberately unpinned, and hold it to that.
+
+    Reported LOUDLY and never as a pass — a declared gap is still a gap, and the reason it is written
+    down is so nobody has to rediscover it. The one thing this does fail on is a non-empty field: if the
+    preset is being pinned again, it must leave unpinned_presets in the same change, otherwise the field
+    is live and unchecked, which is the state with no owner at all.
+    """
+    if preset not in configured:
+        return [f"engine.lock.json declares '{preset}' as a known gap but {presets_path.name} has no "
+                f"preset by that name. Remove the stale unpinned_presets entry, or fix the spelling — a "
+                f"gap recorded for a build that does not exist is noise that hides the real ones."]
+
+    value = configured[preset]
+    if value:
+        return [f"{preset}: custom_template/release is '{value}', but engine.lock.json still lists this "
+                f"preset under unpinned_presets.\n"
+                f"    Reason recorded there: {gap.get('reason', '(none given)')}\n"
+                f"    If the blocker is cleared, pin it properly — add the preset to "
+                f"template.platforms[…].presets and delete the unpinned_presets entry in the same change. "
+                f"Leaving both makes the field live and gated by nothing."]
+
+    print(f"  KNOWN GAP: {preset} exports from the STOCK template — deliberately, and not verified.")
+    print(f"      why:         {gap.get('reason', '(none given)')}")
+    print(f"      blocked on:  {gap.get('blocked_on', '(not recorded)')}")
+    print(f"      exposure:    {gap.get('exposure', '(not recorded)')}")
+    return []
+
+
+def audit_presets(lock: dict, presets_path: Path) -> list[str]:
+    """Every preset in export_presets.cfg is either pinned in the lockfile or a declared gap.
+
+    The mode that catches a preset nobody thought about. --preset-config is invoked by NAME from ci.sh
+    and release.yml, so a fifth preset added to export_presets.cfg would be gated by no step at all and
+    every job would still be green — the same shape of silence as the empty field, one level up. This
+    reads the two files against each other and needs no template on disk, so it can run everywhere.
+    """
+    failures: list[str] = []
+    configured = parse_export_presets(presets_path)
+    known = pinned_presets(lock)
+    gaps = declared_gaps(lock)
+
+    if not configured:
+        return [f"{presets_path.name} declares no presets at all — it was regenerated or truncated."]
+
+    for preset in sorted(configured):
+        value = configured[preset]
+        in_known, in_gap = preset in known, preset in gaps
+
+        if in_known and in_gap:
+            failures.append(
+                f"{preset}: engine.lock.json both pins a template for this preset and lists it under "
+                f"unpinned_presets. Those say opposite things, so neither can be trusted — delete "
+                f"whichever is stale.")
+        elif in_known:
+            want = f"tools/engine-templates/{known[preset][1]['filename']}"
+            if not value:
+                failures.append(
+                    f"{preset}: engine.lock.json pins a template for it but custom_template/release is "
+                    f"EMPTY, so the export silently falls back to the STOCK template (G10). Set it to "
+                    f"{want}.")
+            elif value.removeprefix("res://") != want:
+                failures.append(
+                    f"{preset}: custom_template/release is '{value}', not the pinned '{want}'.")
+        elif in_gap:
+            pass  # check_declared_gap owns the per-preset verdict; the audit only asks that it be declared.
+        else:
+            failures.append(
+                f"{preset}: accounted for nowhere in engine.lock.json — neither pinned under "
+                f"template.platforms[…].presets nor declared under unpinned_presets.\n"
+                f"    A preset in neither list is gated by nothing: --preset-config is invoked by name "
+                f"from ci.sh and release.yml, so no step would go red for it. Pin it, or declare it a gap "
+                f"with a reason.")
+
+    for preset in sorted(set(known) | set(gaps)):
+        if preset not in configured:
+            failures.append(
+                f"{preset}: engine.lock.json describes this preset but {presets_path.name} has no preset "
+                f"by that name. The two have drifted — one is describing a build that does not exist.")
+
+    if not failures:
+        pinned = sorted(p for p in configured if p in known)
+        gapped = sorted(p for p in configured if p in gaps)
+        print(f"  ok: {len(configured)} preset(s), all accounted for")
+        print(f"      pinned:  {', '.join(pinned) or '(none)'}")
+        print(f"      gaps:    {', '.join(gapped) or '(none)'}")
     return failures
 
 
@@ -285,7 +500,7 @@ def check_binary(lock: dict, binary: Path, preset: str) -> tuple[list[str], bool
     known = pinned_presets(lock)
 
     if preset not in markers:
-        if preset not in known:
+        if preset not in known and preset not in declared_gaps(lock):
             # Not a pass: a typo'd preset name must not read as "verified".
             listed = ", ".join(k for k in markers if not k.startswith("$")) or "(none)"
             die_usage(f"no binary_markers entry for preset '{preset}' in engine.lock.json. "
@@ -344,6 +559,8 @@ def check_binary(lock: dict, binary: Path, preset: str) -> tuple[list[str], bool
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--patches", action="store_true", help="verify the patch files match their pinned sha256")
+    ap.add_argument("--audit-presets", action="store_true",
+                    help="verify every preset in export_presets.cfg is pinned or a declared gap")
     ap.add_argument("--preset-config", action="append", metavar="PRESET", default=None,
                     help="verify a preset's custom_template/release points at the pinned template (repeatable)")
     ap.add_argument("--binary", type=Path, metavar="EXE", help="verify an exported binary carries the patch markers")
@@ -352,8 +569,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--export-presets", type=Path, default=EXPORT_PRESETS)
     args = ap.parse_args(argv)
 
-    if not args.patches and not args.preset_config and args.binary is None:
-        ap.error("nothing to do: pass --patches, --preset-config PRESET and/or --binary EXE")
+    if not args.patches and not args.audit_presets and not args.preset_config and args.binary is None:
+        ap.error("nothing to do: pass --patches, --audit-presets, --preset-config PRESET and/or --binary EXE")
 
     lock = load_lock(args.lockfile)
     failures: list[str] = []
@@ -366,10 +583,16 @@ def main(argv: list[str] | None = None) -> int:
         failures += check_patches(lock, args.lockfile.parent)
         ran.append("patch hashes")
 
+    if args.audit_presets:
+        print(f"auditing every {args.export_presets.name} preset against engine.lock.json")
+        failures += audit_presets(lock, args.export_presets)
+        ran.append("preset audit")
+
     for preset in args.preset_config or []:
         print(f"checking {args.export_presets.name} preset '{preset}' against engine.lock.json")
-        failures += check_preset_config(lock, preset, args.export_presets)
-        ran.append(f"config[{preset}]")
+        preset_failures, pinned = check_preset_config(lock, preset, args.export_presets)
+        failures += preset_failures
+        ran.append(f"config[{preset}]" if pinned else f"gap[{preset}]")
 
     if args.binary is not None:
         print(f"checking {args.binary} against binary_markers['{args.preset}']")

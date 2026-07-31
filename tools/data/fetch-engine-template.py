@@ -128,6 +128,11 @@ def main() -> int:
         if dest.is_file() and not args.force:
             if sha256_of(dest) == want:
                 marker = "" if entry.get("patched") else "  (stock-equivalent: patches are windows-only)"
+                if not entry.get("presets"):
+                    # Published and pinned, but no preset consumes it — see unpinned_presets in the
+                    # lockfile. Worth saying out loud: otherwise the only signal is a large download that
+                    # changes nothing about any build.
+                    marker = "  (consumed by NO preset — see engine.lock.json unpinned_presets)"
                 print(f"  {name}: present and matches{marker}")
                 ok += 1
                 continue
@@ -140,8 +145,12 @@ def main() -> int:
 
     if args.verify_only:
         print(f"\n{len(stale)} template(s) missing or mismatched:")
-        for name, _, dest, *_ in stale:
-            print(f"  {name:8s} {'missing' if not dest.is_file() else 'hash mismatch'}")
+        for name, entry, dest, *_ in stale:
+            state = "missing" if not dest.is_file() else "hash mismatch"
+            # An unconsumed template being absent is not a problem to go fix — saying so here stops
+            # someone spending a 149 MB download on a file no export reads.
+            note = "" if entry.get("presets") else "  (no preset consumes this — nothing to fix)"
+            print(f"  {name:8s} {state}{note}")
         print("\nrun tools/data/fetch-engine-template.py to fix")
         return 1
 

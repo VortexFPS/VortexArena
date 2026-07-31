@@ -886,6 +886,10 @@ public sealed class AssetSystem
         Image.CompressMode target = mode >= 2 ? Image.CompressMode.Bptc : Image.CompressMode.S3Tc;
         try
         {
+            // Scoped so the cost of this setting is attributable rather than folded into whatever frame the
+            // texture happened to load on — the whole question of "is CPU compression too slow" is answerable
+            // from a capture only if it has its own line.
+            using var _ = VortexArena.Common.Diagnostics.Prof.Sample("tex.compress");
             if (image.Compress(target, src) != Error.Ok)
                 GD.Print($"[AssetSystem] texture compression skipped for '{vpath}' (unsupported source format).");
         }

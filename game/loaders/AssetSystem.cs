@@ -850,9 +850,127 @@ public sealed class AssetSystem
         names.Add(baseName + "_pants");
     }
 
+    /// <summary>
+    /// Compress an about-to-be-uploaded image to a block format when <see cref="TextureCompression"/> asks for
+    /// it, cutting its VRAM ~4× (RGBA8 → DXT5/BC7) or ~8× (opaque → DXT1). No-op when the setting is off, when
+    /// the image already arrived compressed (the DDS pass-through path — recompressing would be lossy for
+    /// nothing), or when it has no mip chain: Godot compresses the whole chain at once, and an unmipped
+    /// compressed texture would alias badly on a minified world surface.
+    ///
+    /// <para>Lightmap pages are excluded for the same reason <see cref="EnsureMipmaps"/> excludes them — DP
+    /// samples them unmipped and byte-exact, and block artefacts in a lightmap show up as visible blotching
+    /// across large flat surfaces.</para>
+    ///
+    /// <para>Cost: this is real CPU per texture (BPTC especially — it is the "Good" setting because it is the
+    /// slow one). On the menu warm that lands on a worker and is free; on a cold in-match load it is on
+    /// whichever thread asked. Failures are non-fatal — the uncompressed image simply uploads as before.</para>
+    /// </summary>
+    private static void MaybeCompress(string vpath, Image image)
+    {
+        int mode = TextureCompression;
+        if (mode <= 0 || image.IsCompressed() || image.IsEmpty() || !image.HasMipmaps())
+            return;
+        int slash = vpath.LastIndexOf('/');
+        string file = slash >= 0 ? vpath[(slash + 1)..] : vpath;
+        if (file.StartsWith("lm_", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        // CompressSource.Normal tells the compressor this is a tangent-space normal map, so it weights the
+        // channels for that instead of for perceptual colour — the difference between usable and blotchy
+        // lighting on a BC-compressed _norm. Everything else is Generic (Godot picks DXT1 for an opaque source
+        // and DXT5 when alpha is used, so an opaque texture gets the full 8×).
+        Image.CompressSource src = file.EndsWith("_norm", StringComparison.OrdinalIgnoreCase)
+            || file.Contains("_norm.", StringComparison.OrdinalIgnoreCase)
+            ? Image.CompressSource.Normal
+            : Image.CompressSource.Generic;
+        Image.CompressMode target = mode >= 2 ? Image.CompressMode.Bptc : Image.CompressMode.S3Tc;
+        try
+        {
+            if (image.Compress(target, src) != Error.Ok)
+                GD.Print($"[AssetSystem] texture compression skipped for '{vpath}' (unsupported source format).");
+        }
+        catch (Exception ex)
+        {
+            GD.Print($"[AssetSystem] texture compression failed for '{vpath}': {ex.Message}; uploading uncompressed.");
+        }
+    }
+
+    /// <summary>Alias hops allowed before we assume the pack is malformed (see <see cref="ResolveImageAlias"/>).</summary>
+    private const int MaxImageAliasHops = 4;
+
+    /// <summary>
+    /// Detect an "alias stub": a pk3 entry that is not image data at all but a few ASCII bytes naming a SIBLING
+    /// image, and return the resolved vpath (else null).
+    ///
+    /// <para><b>Why these exist.</b> Upstream builds these packs on a filesystem where the duplicate textures are
+    /// SYMLINKS — <c>dds/…/base_pipe1a_norm.dds → base_pipe1b_norm.dds</c>. Zipping without preserving the
+    /// symlink bit turns each one into a tiny regular file whose CONTENT is the link target, and that is what
+    /// ships: <c>shared.pk3</c> alone carries <b>974</b> of them, <b>903</b> pointing at a real DDS. (Verified by
+    /// reading the zip: the entries' external attributes are plain <c>0o600</c>, so nothing downstream can tell
+    /// they were links except by looking at the bytes.)</para>
+    ///
+    /// <para>Until this existed every one of them failed to decode and silently fell back to the uncompressed
+    /// TGA beside it — a wasted read, ~4-8× the VRAM for that texture, and a <c>failed to decode DDS</c> error
+    /// per file per map load. Following the alias gets the GPU-compressed texture the content author actually
+    /// intended.</para>
+    ///
+    /// <para>Deliberately strict, because "tiny file" alone is not proof of intent: the payload must be short
+    /// enough that no real image header fits, printable ASCII on ONE line, carry an image extension, and stay
+    /// inside the pack (no absolute paths, no drive letters, no <c>..</c> escape). Anything else is left to the
+    /// normal decoders, which will report it as the malformed image it is.</para>
+    /// </summary>
+    private string? ResolveImageAlias(string vpath)
+    {
+        // A DDS header alone is 128 bytes and TGA's is 18; nothing legitimate is this small.
+        const int MaxStubBytes = 120;
+        byte[] bytes;
+        try
+        {
+            if (!_vfs.Exists(vpath))
+                return null;
+            bytes = _vfs.ReadBytes(vpath);
+        }
+        catch { return null; }
+        if (bytes.Length == 0 || bytes.Length > MaxStubBytes)
+            return null;
+
+        foreach (byte b in bytes)
+            if (b < 0x20 || b > 0x7E)          // one line of printable ASCII — no newlines, no binary
+                return null;
+
+        string target = System.Text.Encoding.ASCII.GetString(bytes).Trim();
+        if (target.Length == 0 || target.Length > MaxStubBytes
+            || target.StartsWith('/') || target.Contains(':') || target.Contains('\\')
+            || target.Contains(".."))
+            return null;
+
+        string ext = AssetPaths.GetExtension(target);
+        if (ext is not ("dds" or "tga" or "png" or "jpg" or "jpeg"))
+            return null;
+
+        int slash = vpath.LastIndexOf('/');
+        string resolved = slash >= 0 ? string.Concat(vpath.AsSpan(0, slash + 1), target) : target;
+        if (string.Equals(resolved, vpath, StringComparison.OrdinalIgnoreCase))
+            return null;                        // self-reference
+        return _vfs.Exists(resolved) ? resolved : null;
+    }
+
     /// <summary>Drop any unconsumed predecoded images (map change — don't hold decoded pixels for a world
     /// that's gone).</summary>
     public void ClearPredecodedImages() => _predecodedImages.Clear();
+
+    /// <summary>
+    /// <c>gl_texturecompression</c>, mirrored here as a plain field so the texture path never does a cvar
+    /// lookup (it runs on worker threads, where the cvar store is not safe to read concurrently with a console
+    /// write). 0 = off, 1 = "Fast" (S3TC — DXT1/DXT5), 2 = "Good" (BPTC — BC7, same size, better quality but a
+    /// much slower compress). Pushed by <c>ClientSettings</c> at boot and on change.
+    ///
+    /// <para>Defaults to 0. Compression is a QUALITY TRADE (it is lossy, on top of whatever the source already
+    /// lost) and it costs real CPU per texture, so it stays opt-in rather than becoming a silent default —
+    /// exactly what the menu's existing "Texture compression: None / Fast / Good" slider is for. That slider
+    /// has been in the UI all along bound to this cvar name, but nothing read it until now.</para>
+    /// </summary>
+    public static int TextureCompression { get; set; }
 
     private Texture2D? LoadTextureFromVpath(string vpath)
     {
@@ -862,6 +980,7 @@ public sealed class AssetSystem
         if (image == null)
             return null;
         EnsureMipmaps(vpath, image);   // no-op when the worker predecode already generated them
+        MaybeCompress(vpath, image);   // gl_texturecompression: shrink RGBA8 to BC before it reaches VRAM
 
         try
         {
@@ -882,8 +1001,24 @@ public sealed class AssetSystem
     // WHOLE array, and those files are small/rare in Xonotic data).
     [ThreadStatic] private static byte[]? _fileScratch;
 
-    private Image? LoadImageFromVpath(string vpath)
+    private Image? LoadImageFromVpath(string vpath) => LoadImageFromVpath(vpath, 0);
+
+    /// <summary>
+    /// <paramref name="aliasDepth"/> guards the pk3 alias-stub hop described in
+    /// <see cref="ResolveImageAlias"/> — a malformed pack could otherwise point two stubs at each other.
+    /// </summary>
+    private Image? LoadImageFromVpath(string vpath, int aliasDepth)
     {
+        if (ResolveImageAlias(vpath) is { } aliasTarget)
+        {
+            if (aliasDepth >= MaxImageAliasHops)
+            {
+                GD.PrintErr($"[AssetSystem] image alias chain too deep at '{vpath}' — giving up.");
+                return null;
+            }
+            return LoadImageFromVpath(aliasTarget, aliasDepth + 1);
+        }
+
         string ext = AssetPaths.GetExtension(vpath);
         if (ext is "tga" or "dds")
         {

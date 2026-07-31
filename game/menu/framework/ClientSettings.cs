@@ -40,6 +40,28 @@ public static class ClientSettings
         RegisterStairSmoothDefaults(MenuState.Cvars);
         RegisterEngineClientDefaults(MenuState.Cvars);
         RegisterParticleDefaults(MenuState.Cvars);
+        ApplyTextureCompression();
+    }
+
+    /// <summary>
+    /// Mirror <c>gl_texturecompression</c> into <see cref="Loaders.AssetSystem.TextureCompression"/> and keep it
+    /// in step. The texture path reads that plain field rather than the cvar store because it runs on the
+    /// asset-streamer's worker threads, where a concurrent console write to the store would be a data race.
+    ///
+    /// <para>Changing it mid-session only affects textures loaded AFTER the change — everything already
+    /// uploaded stays as it was, since the caches never re-upload. That is the same "applies on next load"
+    /// behaviour DP's <c>gl_texturecompression</c> has, and why the Effects dialog groups it with the other
+    /// restart-ish video settings.</para>
+    /// </summary>
+    private static void ApplyTextureCompression()
+    {
+        CvarService c = MenuState.Cvars;
+        Loaders.AssetSystem.TextureCompression = (int)c.GetFloat("gl_texturecompression");
+        c.Changed += name =>
+        {
+            if (string.Equals(name, "gl_texturecompression", StringComparison.OrdinalIgnoreCase))
+                Loaders.AssetSystem.TextureCompression = (int)c.GetFloat("gl_texturecompression");
+        };
     }
 
     /// <summary>
@@ -269,6 +291,17 @@ public static class ClientSettings
         // precache. No effect when persistence is off (a per-match loader wouldn't see the warmed cache).
         // `set cl_warm_at_boot 0` disables it entirely.
         c.Register("cl_warm_at_boot", "1");
+        // GPU texture compression for images this port decodes itself (TGA/PNG/JPG, and any DDS we had to
+        // block-decode). 0 = None (default, current behaviour), 1 = "Fast" (S3TC: DXT1 for opaque, DXT5 with
+        // alpha — ~8×/~4× less VRAM), 2 = "Good" (BPTC/BC7 — same size as DXT5, better quality, much slower to
+        // compress). The Effects settings dialog has had this exact slider bound to this cvar name since it was
+        // ported, but NOTHING READ IT — the menu moved a value that reached no code. It is read by
+        // AssetSystem.MaybeCompress, mirrored into AssetSystem.TextureCompression by ApplyTextureCompression
+        // below (the texture path runs on worker threads, where reading the cvar store concurrently with a
+        // console write is not safe). Default stays 0: compression is lossy on top of already-lossy source art
+        // and costs real CPU per texture, so it is a trade the player opts into rather than a silent default.
+        // DDS files that ship already-compressed are passed through untouched either way.
+        c.Register("gl_texturecompression", "0", save);
         // Show the development-release disclaimer over the main menu on a plain launch (default ON). PORT-ONLY:
         // Base ships releases and has no such notice. CvarFlags.Save because it's a genuine user preference —
         // the dialog's "Don't show this again" checkbox writes 0 and OK persists it — not a debug knob. Read

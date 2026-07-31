@@ -12,16 +12,33 @@ namespace VortexArena.Game.Loaders;
 /// scripting API has no DDS-from-buffer loader, so — exactly as the asset pipeline already does for TGA — we
 /// decode it ourselves.
 ///
-/// Covered (the formats Xonotic actually ships):
+/// Covered:
 /// <list type="bullet">
 ///   <item>DXT1 / BC1 — RGB with optional 1-bit alpha (FourCC <c>"DXT1"</c>)</item>
 ///   <item>DXT3 / BC2 — explicit 4-bit alpha (FourCC <c>"DXT3"</c>)</item>
 ///   <item>DXT5 / BC3 — interpolated alpha (FourCC <c>"DXT5"</c>)</item>
+///   <item>BC4 — single channel (FourCC <c>"ATI1"</c>/<c>"BC4U"</c>, or DX10)</item>
+///   <item>BC5 — two channel (FourCC <c>"ATI2"</c>/<c>"BC5U"</c>, or DX10)</item>
+///   <item>BC6H / BC7 via the DX10 extended header — passed through compressed</item>
 ///   <item>uncompressed RGB/RGBA, 24/32-bit, via the pixel-format channel masks</item>
 /// </list>
+///
+/// <para><b>Why BC4/BC5 are CPU-decoded rather than passed through (2026-07-31).</b> Xonotic's <c>_norm</c>
+/// and <c>_gloss</c> companions ship as BC5 and BC4 — 18 per map on stormkeep — and until now every one was
+/// REJECTED here, silently falling back to the uncompressed TGA: a wasted read, 4-8× the VRAM, and the
+/// <c>failed to decode DDS</c> log spam. Godot has matching GPU formats (<c>RgtcR</c>/<c>RgtcRg</c>) so they
+/// could be handed over compressed — but the CHANNEL SEMANTICS would not survive it. BC5 stores only X and Y
+/// (Z is meant to be reconstructed), and every shader that samples a normal map here does
+/// <c>texture(normal_tex, uv).rgb * 2.0 - 1.0</c> and uses <c>.z</c> directly
+/// (<see cref="LightmapShader"/>, <see cref="PlayerSkinShader"/> ×2) — a passed-through BC5 would give them
+/// <c>z = -1</c> and invert the lighting. BC4 has the same problem in reverse: the skin shader reads gloss from
+/// <c>.g</c>, which <c>RgtcR</c> leaves at 0. So we decode both to RGBA8 and materialise the channels the
+/// shaders already expect: BC5 reconstructs Z, BC4 replicates its single channel to RGB. That fixes
+/// correctness and drops the redundant TGA fallback; the VRAM win for these specific files needs the shaders
+/// taught to reconstruct Z, which is a separate change with a real visual-regression surface.</para>
+///
 /// DDS rows are stored top-down (row 0 = top), matching Godot, so unlike TGA no vertical flip is needed.
-/// Returns null on a malformed/unsupported header (including the DX10 extended header and BC4/BC5, which
-/// Xonotic's world textures don't use) rather than throwing, so a bad asset is skipped, not fatal.
+/// Returns null on a malformed/unsupported header rather than throwing, so a bad asset is skipped, not fatal.
 /// </summary>
 internal static class DdsDecoder
 {
@@ -30,7 +47,7 @@ internal static class DdsDecoder
     private const uint DDPF_FOURCC      = 0x4;
     private const uint DDPF_RGB         = 0x40;
 
-    private enum BcKind { Dxt1, Dxt3, Dxt5 }
+    private enum BcKind { Dxt1, Dxt3, Dxt5, Bc4, Bc5, PassThroughOnly }
 
     /// <summary>
     /// Decode <paramref name="data"/> (a full .dds file) into a Godot <see cref="Image"/>, or null if the
@@ -74,37 +91,75 @@ internal static class DdsDecoder
         uint bMask       = U32(data, 100);
         uint aMask       = U32(data, 104);
 
-        const int dataOffset = 128; // no DX10 extended header (rejected below)
+        int dataOffset = 128; // + 20 more when a DX10 extended header follows
 
         if ((pfFlags & DDPF_FOURCC) != 0)
         {
-            // FourCC "DX10" carries a 20-byte extended header we don't parse (Xonotic ships classic S3TC).
             BcKind kind;
             int blockBytes;
             Image.Format gpuFormat;
+
             if (fourCc == FourCc('D', 'X', 'T', '1')) { kind = BcKind.Dxt1; blockBytes = 8;  gpuFormat = Image.Format.Dxt1; }
             else if (fourCc == FourCc('D', 'X', 'T', '3')) { kind = BcKind.Dxt3; blockBytes = 16; gpuFormat = Image.Format.Dxt3; }
             else if (fourCc == FourCc('D', 'X', 'T', '5')) { kind = BcKind.Dxt5; blockBytes = 16; gpuFormat = Image.Format.Dxt5; }
-            else return null; // DX10 / BC4 / BC5 / etc. — not used by Xonotic world textures
+            // The pre-DX10 spellings of BC4/BC5 (ATI's originals + the "U"nsigned aliases some tools write).
+            else if (fourCc == FourCc('A', 'T', 'I', '1') || fourCc == FourCc('B', 'C', '4', 'U'))
+            { kind = BcKind.Bc4; blockBytes = 8;  gpuFormat = Image.Format.RgtcR; }
+            else if (fourCc == FourCc('A', 'T', 'I', '2') || fourCc == FourCc('B', 'C', '5', 'U'))
+            { kind = BcKind.Bc5; blockBytes = 16; gpuFormat = Image.Format.RgtcRg; }
+            else if (fourCc == FourCc('D', 'X', '1', '0'))
+            {
+                // DDS_HEADER_DXT10: dxgiFormat, resourceDimension, miscFlag, arraySize, miscFlags2 (20 bytes).
+                if (length < 148)
+                    return null;
+                uint dxgi = U32(data, 128);
+                dataOffset = 148;
+                if (!MapDxgi(dxgi, out kind, out blockBytes, out gpuFormat))
+                    return null;
+            }
+            else return null;
 
             // ---- pass-through: full mip chain present → give Godot the compressed payload verbatim ----------
-            (int chainLevels, long chainBytes) = FullChainSize(width, height, blockBytes);
-            if (mipCount >= chainLevels && dataOffset + chainBytes <= length && chainBytes <= int.MaxValue)
+            // Only for formats whose channel layout the sampling side already expects. BC4/BC5 are deliberately
+            // excluded (see the class remarks): they would arrive with the wrong channels for our shaders.
+            bool passThrough = kind is BcKind.Dxt1 or BcKind.Dxt3 or BcKind.Dxt5 or BcKind.PassThroughOnly;
+            if (passThrough)
             {
-                // CreateFromData copies synchronously, so the exact-size pooled slice returns to the pool here.
-                byte[] slice = RgbaDecodeBuffer.Rent((int)chainBytes, clear: false);
-                try
+                (int chainLevels, long chainBytes) = FullChainSize(width, height, blockBytes);
+                if (mipCount >= chainLevels && dataOffset + chainBytes <= length && chainBytes <= int.MaxValue)
                 {
-                    System.Array.Copy(data, dataOffset, slice, 0, (int)chainBytes);
-                    return Image.CreateFromData(width, height, true, gpuFormat, slice);
+                    // CreateFromData copies synchronously, so the exact-size pooled slice returns to the pool here.
+                    byte[] slice = RgbaDecodeBuffer.Rent((int)chainBytes, clear: false);
+                    try
+                    {
+                        System.Array.Copy(data, dataOffset, slice, 0, (int)chainBytes);
+                        return Image.CreateFromData(width, height, true, gpuFormat, slice);
+                    }
+                    catch (System.Exception)
+                    {
+                        // Unexpected layout (Godot's expected chain size disagreed) — fall through below.
+                    }
+                    finally
+                    {
+                        RgbaDecodeBuffer.Return(slice);
+                    }
                 }
-                catch (System.Exception)
+
+                // BC6H/BC7 have no CPU decoder here, so a file without a full chain is passed through at level 0
+                // (unmipped) rather than dropped — still better than falling back to an uncompressed variant.
+                if (kind == BcKind.PassThroughOnly)
                 {
-                    // Unexpected layout (Godot's expected chain size disagreed) — fall through to the CPU decode.
-                }
-                finally
-                {
-                    RgbaDecodeBuffer.Return(slice);
+                    long lvl0 = (long)((width + 3) / 4) * ((height + 3) / 4) * blockBytes;
+                    if (dataOffset + lvl0 > length || lvl0 > int.MaxValue)
+                        return null;
+                    byte[] one = RgbaDecodeBuffer.Rent((int)lvl0, clear: false);
+                    try
+                    {
+                        System.Array.Copy(data, dataOffset, one, 0, (int)lvl0);
+                        return Image.CreateFromData(width, height, false, gpuFormat, one);
+                    }
+                    catch (System.Exception) { return null; }
+                    finally { RgbaDecodeBuffer.Return(one); }
                 }
             }
 
@@ -114,7 +169,13 @@ internal static class DdsDecoder
             byte[] outRgba = RgbaDecodeBuffer.Rent(width * height * 4);
             try
             {
-                if (!DecodeBc(data, length, dataOffset, width, height, blockBytes, kind, outRgba))
+                bool ok = kind switch
+                {
+                    BcKind.Bc4 => DecodeBc4(data, length, dataOffset, width, height, outRgba),
+                    BcKind.Bc5 => DecodeBc5(data, length, dataOffset, width, height, outRgba),
+                    _          => DecodeBc(data, length, dataOffset, width, height, blockBytes, kind, outRgba),
+                };
+                if (!ok)
                     return null;
                 return Image.CreateFromData(width, height, false, Image.Format.Rgba8, outRgba);
             }
@@ -141,6 +202,157 @@ internal static class DdsDecoder
         }
 
         return null; // luminance / YUV / other — not shipped for world textures
+    }
+
+    /// <summary>
+    /// Map a <c>DXGI_FORMAT</c> from a DX10 extended header onto our decode kind + Godot GPU format. Only the
+    /// block-compressed families are accepted; a DX10 file carrying plain uncompressed pixels is rejected (the
+    /// classic pixel-format masks path handles those, and no shipped content needs it). TYPELESS/UNORM/SRGB
+    /// variants of the same family decode identically here — sRGB-ness is a sampler decision, not a layout one.
+    /// SNORM BC4/BC5 are accepted too: we CPU-decode both, so the signed interpretation only shifts the ramp,
+    /// and no shipped Xonotic content uses the signed form.
+    /// </summary>
+    private static bool MapDxgi(uint dxgi, out BcKind kind, out int blockBytes, out Image.Format gpuFormat)
+    {
+        switch (dxgi)
+        {
+            case 70: case 71: case 72:                       // BC1_TYPELESS / UNORM / UNORM_SRGB
+                kind = BcKind.Dxt1; blockBytes = 8;  gpuFormat = Image.Format.Dxt1;   return true;
+            case 73: case 74: case 75:                       // BC2
+                kind = BcKind.Dxt3; blockBytes = 16; gpuFormat = Image.Format.Dxt3;   return true;
+            case 76: case 77: case 78:                       // BC3
+                kind = BcKind.Dxt5; blockBytes = 16; gpuFormat = Image.Format.Dxt5;   return true;
+            case 79: case 80: case 81:                       // BC4_TYPELESS / UNORM / SNORM
+                kind = BcKind.Bc4;  blockBytes = 8;  gpuFormat = Image.Format.RgtcR;  return true;
+            case 82: case 83: case 84:                       // BC5_TYPELESS / UNORM / SNORM
+                kind = BcKind.Bc5;  blockBytes = 16; gpuFormat = Image.Format.RgtcRg; return true;
+            case 94:                                         // BC6H_TYPELESS  (treat as unsigned)
+            case 95:                                         // BC6H_UF16
+                kind = BcKind.PassThroughOnly; blockBytes = 16; gpuFormat = Image.Format.BptcRgbfu; return true;
+            case 96:                                         // BC6H_SF16
+                kind = BcKind.PassThroughOnly; blockBytes = 16; gpuFormat = Image.Format.BptcRgbf;  return true;
+            case 97: case 98: case 99:                       // BC7_TYPELESS / UNORM / UNORM_SRGB
+                kind = BcKind.PassThroughOnly; blockBytes = 16; gpuFormat = Image.Format.BptcRgba;  return true;
+            default:
+                kind = BcKind.Dxt1; blockBytes = 0; gpuFormat = Image.Format.Rgba8; return false;
+        }
+    }
+
+    /// <summary>
+    /// BC4: one 8-byte block per 4×4 texels holding a single interpolated channel — the same layout as a BC3
+    /// alpha block. Written out as GREYSCALE RGBA8 (channel replicated to R, G and B, alpha opaque) because
+    /// that is what a <c>_gloss</c> companion looks like when it ships as a plain TGA, and the shaders that
+    /// sample it read <c>.g</c> (skin) or <c>.r</c> (world) interchangeably. See the class remarks.
+    /// </summary>
+    private static bool DecodeBc4(byte[] data, int dataLength, int offset, int width, int height, byte[] outRgba)
+    {
+        int blocksX = (width + 3) / 4, blocksY = (height + 3) / 4;
+        if (offset + (long)blocksX * blocksY * 8 > dataLength)
+            return false;
+
+        var ramp = new byte[8];
+        int p = offset;
+        for (int by = 0; by < blocksY; by++)
+        for (int bx = 0; bx < blocksX; bx++, p += 8)
+        {
+            BuildChannelRamp(data[p], data[p + 1], ramp);
+            ulong bits = ChannelBits(data, p);
+            for (int ty = 0; ty < 4; ty++)
+            {
+                int py = by * 4 + ty;
+                if (py >= height) break;
+                for (int tx = 0; tx < 4; tx++)
+                {
+                    int px = bx * 4 + tx;
+                    if (px >= width) continue;
+                    byte v = ramp[(int)((bits >> (3 * (ty * 4 + tx))) & 0x7)];
+                    int dst = (py * width + px) * 4;
+                    outRgba[dst] = v; outRgba[dst + 1] = v; outRgba[dst + 2] = v; outRgba[dst + 3] = 255;
+                }
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// BC5: two BC4 blocks per 4×4 texels (X then Y of a tangent-space normal). Z is NOT stored — it is
+    /// reconstructed here as <c>sqrt(1 - x² - y²)</c> and written into B, so the result is the ordinary RGB
+    /// normal map every shader in this codebase already expects (<c>rgb * 2 - 1</c>). See the class remarks for
+    /// why this is decoded rather than passed through as <c>RgtcRg</c>.
+    /// </summary>
+    private static bool DecodeBc5(byte[] data, int dataLength, int offset, int width, int height, byte[] outRgba)
+    {
+        int blocksX = (width + 3) / 4, blocksY = (height + 3) / 4;
+        if (offset + (long)blocksX * blocksY * 16 > dataLength)
+            return false;
+
+        var rampR = new byte[8];
+        var rampG = new byte[8];
+        int p = offset;
+        for (int by = 0; by < blocksY; by++)
+        for (int bx = 0; bx < blocksX; bx++, p += 16)
+        {
+            BuildChannelRamp(data[p], data[p + 1], rampR);
+            BuildChannelRamp(data[p + 8], data[p + 9], rampG);
+            ulong bitsR = ChannelBits(data, p);
+            ulong bitsG = ChannelBits(data, p + 8);
+            for (int ty = 0; ty < 4; ty++)
+            {
+                int py = by * 4 + ty;
+                if (py >= height) break;
+                for (int tx = 0; tx < 4; tx++)
+                {
+                    int px = bx * 4 + tx;
+                    if (px >= width) continue;
+                    int texel = ty * 4 + tx;
+                    byte r = rampR[(int)((bitsR >> (3 * texel)) & 0x7)];
+                    byte g = rampG[(int)((bitsG >> (3 * texel)) & 0x7)];
+
+                    // Unpack to [-1,1], rebuild Z, repack. Clamped so a slightly over-unit XY (quantisation)
+                    // yields a flat Z rather than a NaN.
+                    float nx = r / 127.5f - 1f;
+                    float ny = g / 127.5f - 1f;
+                    float nz = (float)System.Math.Sqrt(System.Math.Max(0f, 1f - nx * nx - ny * ny));
+
+                    int dst = (py * width + px) * 4;
+                    outRgba[dst] = r;
+                    outRgba[dst + 1] = g;
+                    outRgba[dst + 2] = (byte)System.Math.Clamp((int)((nz + 1f) * 127.5f + 0.5f), 0, 255);
+                    outRgba[dst + 3] = 255;
+                }
+            }
+        }
+        return true;
+    }
+
+    /// <summary>The 8-entry interpolation ramp a BC3-alpha / BC4 / BC5 channel block encodes from its two
+    /// endpoints. <c>e0 &gt; e1</c> selects the 8-value ramp; otherwise 6 interpolated values plus explicit
+    /// 0 and 255.</summary>
+    private static void BuildChannelRamp(byte e0, byte e1, byte[] ramp)
+    {
+        ramp[0] = e0;
+        ramp[1] = e1;
+        if (e0 > e1)
+        {
+            for (int i = 1; i <= 6; i++)
+                ramp[1 + i] = (byte)(((7 - i) * e0 + i * e1) / 7);
+        }
+        else
+        {
+            for (int i = 1; i <= 4; i++)
+                ramp[1 + i] = (byte)(((5 - i) * e0 + i * e1) / 5);
+            ramp[6] = 0;
+            ramp[7] = 255;
+        }
+    }
+
+    /// <summary>The 48 bits of 3-bit per-texel indices following a channel block's two endpoint bytes.</summary>
+    private static ulong ChannelBits(byte[] data, int blockStart)
+    {
+        ulong bits = 0;
+        for (int i = 0; i < 6; i++)
+            bits |= (ulong)data[blockStart + 2 + i] << (8 * i);
+        return bits;
     }
 
     /// <summary>The level count + total byte size of a FULL block-compressed mip chain (down to 1×1) — the

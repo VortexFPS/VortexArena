@@ -7,5 +7,28 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\VortexArena.Common\VortexArena.Common.csproj" />
+    <!-- Map catalog (map-catalog-v1 §10): MapCatalogScan reads the server's .pk3 files through the same
+         VirtualFileSystem the game mounts them with, and parses the mapinfo inside with the same
+         Vmap.MapInfo reader the editor and the map vote use. A second pk3 reader or a second mapinfo
+         parser is how the catalog would end up describing maps the server does not actually serve.
+         Acyclic (Formats depends only on Common) and free: the only two consumers of this project, the
+         Godot host and the test suite, already reference Formats. -->
+    <ProjectReference Include="..\VortexArena.Formats\VortexArena.Formats.csproj" />
   </ItemGroup>
+
+  <!-- DS-7: MasterAnnounce compiles against Conductor.Protocol, which is NOT referenced here. The
+       protocol types are vendored under Vendor/Conductor.Protocol/ instead (globbed by the SDK, so
+       there is nothing to declare).
+
+       Conductor solves the mirror-image problem for Launcher.Protocol with a conditional
+       ProjectReference to a sibling checkout plus a PackageReference fallback. That is right for
+       Conductor and wrong here. Conductor.Protocol is packable but unpublished, so the fallback leg
+       has nothing to resolve against — and unlike Conductor, whose contributors have the whole system
+       checked out, almost everyone who clones this repo has neither a sibling Conductor tree nor
+       access to a feed. The conditional form would silently work on two machines and fail restore on
+       every other one, including a fresh CI runner. `git clone && dotnet build` has to work alone.
+
+       The tradeoff vendoring buys with drift is paid back by keeping the copies byte-identical to
+       upstream, so the check is a directory diff rather than a merge. See the README in that folder
+       for the command and for what to do when the package is published. -->
 </Project>

@@ -87,6 +87,16 @@ public sealed partial class NetGame : Node3D
     // no thread, no lock — so the default path is byte-for-byte unchanged.
     private ServerThread? _serverThread;        // listen server only, sv_threaded 1 only
     private object? _simGate;                    // the shared lock; non-null iff _serverThread is non-null
+    private ServerConsole? _serverConsole;      // DS-2: stdin command reader (headless/dedicated host only)
+    // DS-3: cached "is this the dummy (headless/dedicated) display server" — read every frame by the frame
+    // governor and once at host start by the loop-cap. DisplayServer is a live singleton at construction time.
+    private readonly bool _isHeadless = DisplayServer.GetName() == "headless";
+    // DS-4: a live listen server registers a notice-broadcast here so Main's SIGTERM/SIGINT handler can tell
+    // connected clients the link is going away just before the process quits. Null when no server is hosting.
+    public static Action? GracefulShutdownHook;
+    // DS-4: process exit codes a supervisor (the host agent) keys its restart policy on. 0 = clean.
+    public const int ExitPortBindFailed = 2;   // the game UDP port was already in use
+    public const int ExitMapNotFound = 3;       // --host <map> named a map the VFS doesn't contain
     private ClientNet? _client;
     private ClientWorld _render = null!;
     private DevHarness? _devHarness;            // dev capture (--fx-demo), inert unless a dev flag was passed
@@ -172,6 +182,37 @@ public sealed partial class NetGame : Node3D
     private string _equippedVmOverride = "";       // per-weapon wr_viewmodel override (Tuba note model); rebuild on change
     private bool _viewmodelReloading;              // last-frame reload state (clip_load==-1) — play the reload anim on the rising edge
     private bool _weaponsPrecached;             // PrecacheWeaponModels ran once (warm the per-weapon asset caches)
+    // DEDICATED-SLIM: a headless listen server IS the v1 dedicated server (RUNNING.md "Dedicated server"), and it
+    // used to pay the FULL client asset pipeline for a renderer that draws nothing — the textured worldmodel
+    // (MapLoader.BuildMap), all 24 weapon v_ models + hand rigs, every combat-sound OGG decode, the player-model
+    // roster, the idle warm of the ENTIRE sound set, and the map music (measured ~4.9 GB peak working set on
+    // stormkeep+2 bots). DP's dedicated server loads NONE of that: sounds/models are precached as NAMES for the
+    // network tables; only BSP collision + entity data live in RAM. When this flag is on, the client-side asset
+    // loads are skipped (server-relevant pieces — muzzle-offset header parses, .sounds manifests, waypoints,
+    // collision — still run). True on a headless/exported-dedicated listen server; a camera-trace capture run
+    // keeps the full pipeline (its determinism baseline predates the slim path); sv_dedicated_slim 0 opts out.
+    private bool _dedicatedSlim;
+
+    /// <summary>
+    /// DS-1: a CLIENT-LESS dedicated host. <see cref="_dedicatedSlim"/> already removes the client's asset,
+    /// render, effect and audio work, but the loopback <see cref="ClientNet"/> itself still connected — so the
+    /// server burned one of its own player slots on a phantom observer, reported that slot in the server
+    /// browser's player count (<c>BuildServerInfo["clients"]</c>), and paid a prediction/carrier tick every
+    /// frame for a view nobody looks at. DP's <c>-dedicated</c> has no local client at all.
+    ///
+    /// <para>When set: no carrier, no <c>ClientNet</c>, no camera/HUD/viewmodel, no prediction — every
+    /// <c>_client</c> path in this file is already null-guarded (verified: 263 references, zero bare derefs),
+    /// so the client simply never exists. Set by <c>--dedicated</c>, and by default on the
+    /// <c>dedicated_server</c> export template. <c>--headless --host</c> deliberately keeps the v1 observer
+    /// behavior: CameraTrace, the perf harness and the two-instance join test all depend on it.</para>
+    /// </summary>
+    private bool _dedicatedNoClient;
+
+    /// <summary>DS-1: true when this process was launched as a real dedicated server (<c>--dedicated</c> or the
+    /// dedicated-server export). Read by <see cref="Shell"/> for the boot path.</summary>
+    public static bool DedicatedRequested =>
+        Array.IndexOf(OS.GetCmdlineArgs(), "--dedicated") >= 0 || OS.HasFeature("dedicated_server");
+
     private bool _readyComplete;                // _Ready finished — _Process can run its full body (before this, fields are half-built)
     private bool _captureMarked;                // one-shot guard: CaptureGate.MarkReady() fired at first spawn (--screenshot)
     private HandshakeStage _handshakeStage;     // last sub-stage announced to the LoadingScreen (so we only BeginStage on a transition)
@@ -535,6 +576,28 @@ public sealed partial class NetGame : Node3D
             PlayerSoundResolver.Install(_vfs);
         }
 
+        // Resolve the dedicated-slim decision ONCE, before any load stage (see the field doc). sv_dedicated_slim
+        // follows the sv_threaded read pattern: unset → ON (only an explicit 0 keeps the old full-client load).
+        // OS.HasFeature("dedicated_server") covers the linux-dedicated export preset (ADR-0014), which can run
+        // with its own DisplayServer name; --headless covers the v1 dev/CI dedicated path. CameraTrace captures
+        // run headless too but dump the RENDERED camera — they keep the full pipeline they were baselined on.
+        _dedicatedSlim = _isListenServer
+            && (DisplayServer.GetName() == "headless" || OS.HasFeature("dedicated_server"))
+            && !CameraTrace.Active
+            && (_sharedCvars is null || !_sharedCvars.Has("sv_dedicated_slim")
+                || _sharedCvars.GetFloat("sv_dedicated_slim") != 0f);
+        if (_dedicatedSlim)
+            GD.Print("[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped " +
+                "(server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.");
+
+        // DS-1: client-less. Only on a listen server that was actually launched as a dedicated process — never
+        // inferred from --headless alone, because the v1 headless host (CameraTrace, perf captures, the
+        // two-instance join test) needs its observer self-client.
+        _dedicatedNoClient = _isListenServer && DedicatedRequested && !CameraTrace.Active;
+        if (_dedicatedNoClient)
+            GD.Print("[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or "
+                     + "prediction. All player slots are available to real clients.");
+
         // The load sequence runs as a coroutine: each BeginStage sets the bar's target and per-stage expected
         // time (the LoadingScreen animates asymptotically from where it is now toward that target), then we
         // yield one frame so the bar can repaint with the new status text BEFORE the synchronous work begins.
@@ -569,7 +632,9 @@ public sealed partial class NetGame : Node3D
         }
 
         // The client connects to the chosen endpoint (a listen server is on 127.0.0.1; a pure client on _host).
-        StartClient();
+        // DS-1: a dedicated host has NO local client at all — this is the seam that frees the burned slot.
+        if (!_dedicatedNoClient)
+            StartClient();
 
         LoadingScreen?.BeginStage("Setting up renderer…", 0.55f, 1.0f);
         await YieldForLoadingFrame();
@@ -577,8 +642,13 @@ public sealed partial class NetGame : Node3D
 
         // Render layer + the net→render bridge + a basic HUD/camera. Built regardless of mode so a connect that
         // hasn't completed yet still has somewhere to draw once snapshots flow.
-        SetupRender();
-        SetupCameraAndHud();
+        // DS-1: except on a dedicated host, which has no client to draw for — the whole ClientWorld/camera/HUD
+        // tree (and its per-frame drive) never gets built.
+        if (!_dedicatedNoClient)
+        {
+            SetupRender();
+            SetupCameraAndHud();
+        }
 
         // Dev capture: `--fx-demo [effect]` rides on the live ClientWorld to burst a named effect in front of the
         // player each frame for an effect-parity --screenshot (the survivor of GameDemo's inline dev flags; see
@@ -600,7 +670,10 @@ public sealed partial class NetGame : Node3D
         if (!IsInsideTree()) return;
 
         // Map music: read the cdtrack from the mapinfo file (VFS) and wire a MusicPlayer into the render tree.
-        SetupMusic();
+        // Dedicated-slim: skipped — music playback is pure client presentation (a decoded music track alone is
+        // tens of MB), and connecting clients resolve the cdtrack from their OWN mapinfo parse.
+        if (!_dedicatedSlim)
+            SetupMusic();
 
         LoadingScreen?.BeginStage("Precaching weapon models…", 0.82f, 3.0f);
         await YieldForLoadingFrame();
@@ -615,11 +688,15 @@ public sealed partial class NetGame : Node3D
 
         // Warm the combat-sound decode cache + common player models (A3) so the first shot/explosion and the
         // first player render don't stall on an OGG decode / skeletal-model texture build mid-combat.
-        LoadingScreen?.BeginStage("Precaching sounds…", 0.87f, 1.5f);
-        await YieldForLoadingFrame();
-        if (!IsInsideTree()) return;
-        await PrecacheCombatSoundsAndModelsAsync();
-        if (!IsInsideTree()) return;
+        // Dedicated-slim: pure client warm — the server plays no audio and renders no players; skip it all.
+        if (!_dedicatedSlim)
+        {
+            LoadingScreen?.BeginStage("Precaching sounds…", 0.87f, 1.5f);
+            await YieldForLoadingFrame();
+            if (!IsInsideTree()) return;
+            await PrecacheCombatSoundsAndModelsAsync();
+            if (!IsInsideTree()) return;
+        }
 
         // S3: a low-priority idle warmer mops up the long tail (announcer/pickup voices, the OTHER stock player
         // models) so the whole asset set goes hot within the first minute. (Fix C) DEFER its start past the critical
@@ -628,7 +705,10 @@ public sealed partial class NetGame : Node3D
         // contributor to the spawn-rubberband: Fix A/B stop it TELEPORTing, this keeps it SMOOTH). By go-live the
         // local model + map are already hot and the player is moving; any model that appears sooner still resolves
         // on-demand at High priority. cl_idle_warmup 0 still disables it entirely (checked in StartIdleWarmup).
-        GetTree().CreateTimer(IdleWarmupDelaySeconds).Timeout += () => { if (IsInsideTree()) StartIdleWarmup(); };
+        // Dedicated-slim: never — the idle warmer would decode the ENTIRE registered sound set + 5 player models
+        // into a server that plays/renders none of it.
+        if (!_dedicatedSlim)
+            GetTree().CreateTimer(IdleWarmupDelaySeconds).Timeout += () => { if (IsInsideTree()) StartIdleWarmup(); };
 
         LoadingScreen?.BeginStage("Connecting…", 0.90f, 0.5f);
 
@@ -725,6 +805,18 @@ public sealed partial class NetGame : Node3D
         }
         else
         {
+            // DS-4: on a headless/dedicated host, a NAMED map that doesn't resolve is a boot failure, not a
+            // silent flat-floor fallback — an operator who typed `--host nonsuch` wants to know, and a supervisor
+            // needs a non-zero exit to alert/stop rather than run a useless empty server. A bare `--host` (no map)
+            // still gets the test floor (that's the intentional dev/bring-up path), and a windowed listen server
+            // keeps the soft fallback (the player can pick another map from the menu).
+            if (_isHeadless && !string.IsNullOrWhiteSpace(_map))
+            {
+                GD.PrintErr($"[NetGame] FATAL: map '{_map}' not found in the VFS — a dedicated host cannot start. " +
+                    "Check the map name and that its pk3 is mounted (docs/RUNNING.md).");
+                Callable.From(() => GetTree()?.Quit(ExitMapNotFound)).CallDeferred();
+                return;
+            }
             collision = BuildTestFloor();
             if (!string.IsNullOrWhiteSpace(_map))
                 GD.PrintErr($"[NetGame] map '{_map}' not found in the VFS — listen server runs on a flat floor.");
@@ -792,6 +884,20 @@ public sealed partial class NetGame : Node3D
         // entities (spawn points + jump-pads/items/doors), registers brush models + surfaces + PVS.
         _serverWorld.Boot(_gametype);
 
+        // DS-8: on a dedicated/headless host, back the ban list with a file so bans survive a restart (g_banned_list
+        // has no Save flag and a dedicated host doesn't reliably write config.cfg). Seeds the cvar from the file
+        // BEFORE any client connects (so the first ban check sees persisted bans), then mirrors every change back.
+        if (_isHeadless)
+            WireBanPersistence();
+
+        // DS-8: resolve the event log's counter-named file into the user data dir (XonData/logs/), which is what
+        // server.cfg.example documents and where every other writable file lives (bans.cfg, config.cfg). Left
+        // unresolved it was a bare relative name against the process CWD — unwritable for a service/container
+        // install — and any failure was swallowed, so the operator got neither a log nor a diagnostic.
+        _serverWorld.GameLog.PathResolver = static bare =>
+            VortexArena.Game.UserPaths.Resolve(System.IO.Path.Combine("logs", bare));
+        _serverWorld.GameLog.WriteErrorSink = static msg => GD.PrintErr(msg);
+
         // Expose the map name as a cvar so the server-browser infostring (ServerNet.BuildServerInfo) and the
         // pure-client map-name handshake (follow-up) have the real value; GameWorld.MapName is set, but the cvar
         // is independent (DP keeps mapname as an engine cvar available to serverinfo).
@@ -811,6 +917,23 @@ public sealed partial class NetGame : Node3D
         _serverWorld.Services.Cvars.Register("sv_threaded", "1");
         // wantThreaded + unifyStore were resolved above (before the world was built) since they pick the
         // cvar-store model; the worker/gate setup below reuses that one decision so the two never disagree.
+        // Dedicated-slim opt-out knob (read in _Ready from the SHARED store, same pattern as sv_threaded —
+        // unset → ON). Registered here for cvarlist/status visibility; no Save flag (port A/B knob).
+        _serverWorld.Services.Cvars.Register("sv_dedicated_slim", "1");
+        // DS-3: headless loop-cap knob. 0 (default) = clamp the engine frame loop to the sim tickrate (an idle
+        // dedicated box otherwise spins the loop at the cl_maxfps-derived rate, ~2× the 72 Hz sim, for nothing);
+        // >0 = an explicit cap (e.g. a busy box that wants the loop to drain net/console faster than the tick).
+        // No Save flag (port operator knob). Applied just below for a headless host.
+        _serverWorld.Services.Cvars.Register("sv_dedicated_fps", "0");
+        ApplyDedicatedLoopCap();
+
+        // DS-6: rcon (DP srcon). rcon_password EMPTY (default) = rcon OFF — an operator opts in via server.cfg.
+        // rcon_secure 1 = time+HMAC-MD4 (remote-safe default; 0 = plaintext localhost-only, 2 = challenge+HMAC).
+        // These are operator secrets/policy, authored in server.cfg — no Save flag (never persisted to config.cfg).
+        _serverWorld.Services.Cvars.Register("rcon_password", "");
+        _serverWorld.Services.Cvars.Register("rcon_secure", "1");
+        _serverWorld.Services.Cvars.Register("rcon_secure_maxdiff", "5");
+        _serverWorld.Services.Cvars.Register("rcon_secure_challengetimeout", "5");
 
         // [#44] sv_spectate stays at Base's shipped `1` (spectating allowed). The old port set it to 0 here to
         // make the host auto-spawn — which as a side effect made spectating impossible for EVERYONE (and armed
@@ -918,12 +1041,25 @@ public sealed partial class NetGame : Node3D
         if (server is null)
         {
             GD.PrintErr($"[NetGame] could not start the listen server on UDP {_port} (port in use?).");
+            // DS-4: a dedicated/headless host that can't bind its port is DEAD — there is no operator to notice
+            // the error and no client to fall back to. Exit with a distinct code so a supervisor restarts/alerts
+            // instead of leaving a zombie. A windowed listen server keeps the old soft return (the menu is still up).
+            if (_isHeadless)
+                Callable.From(() => GetTree()?.Quit(ExitPortBindFailed)).CallDeferred();
             return;
         }
         _server = server;
+        // DS-4: register the client shutdown-notice broadcast for Main's signal handler (cleared in Shutdown).
+        GracefulShutdownHook = () => _server?.BroadcastPrint("^1Server is shutting down.^7\n");
         // Answer server-browser getinfo probes so this host shows up in the LAN list (no master heartbeat —
         // the port's transport is ENet, so registering with the public DP masters would only mislead DP clients).
         server.EnableLanDiscovery(_port);
+
+        // DS-7: the modern announce lane, alongside the classic one above. Where the DP masters are the wrong
+        // audience for an ENet server, Conductor is the right one — and it verifies us with a UDP getinfo
+        // challenge to the responder EnableLanDiscovery just bound, so this adds no listener and no open port.
+        // Gated at announce time on sv_public, which is unset (0) unless an operator asked to be listed.
+        server.EnableMasterAnnounce(_port);
 
         // --- wire the server-command host sinks (QC the say bus / bprint + bot_cmd add/remove). Without these,
         //     console/clc_stringcmd `say`/`bot_add`/`setbots` no-op; with them, chat reaches every client's console
@@ -1099,6 +1235,176 @@ public sealed partial class NetGame : Node3D
                 static () => VortexArena.Engine.Simulation.SimulationLoop.TicRate);
             _serverThread.Start();
             GD.Print("[NetGame] sv_threaded 1 — server simulation running on a dedicated worker thread (XG-ServerSim).");
+        }
+
+        // DS-2: the operator console. A headless/dedicated host has a real terminal (or a piped stdin for
+        // scripted control) but no in-game console, so without this an operator can't run a single runtime
+        // command. Gated to headless (a windowed listen server uses the in-game console) and off with
+        // `--no-console`. Created LAST so the command sinks above are already wired before a line can arrive.
+        bool wantConsole = DisplayServer.GetName() == "headless"
+            && Array.IndexOf(OS.GetCmdlineArgs(), "--no-console") < 0;
+        if (wantConsole)
+        {
+            _serverConsole = new ServerConsole { Name = "ServerConsole", CommandSink = RunServerConsoleLine };
+            AddChild(_serverConsole);
+        }
+    }
+
+    /// <summary>
+    /// DS-8: file-back the server ban list so bans persist across a dedicated-server restart. The ban store
+    /// serializes to the <c>g_banned_list</c> cvar (QC-faithful, seconds-remaining) but that cvar has no Save flag
+    /// and a dedicated host doesn't write <c>config.cfg</c> — so without this a restart forgets every ban. Reads
+    /// <c>~/XonData/bans.cfg</c> and seeds the cvar BEFORE the first ban check, then wires <see cref="Bans.PersistSink"/>
+    /// to rewrite the file on every ban/unban. Uses <see cref="Bans.Load"/> after seeding so the in-memory store
+    /// reflects the persisted set immediately.
+    /// </summary>
+    private void WireBanPersistence()
+    {
+        if (_serverWorld is null)
+            return;
+        string path = UserPaths.Resolve("bans.cfg");
+
+        // Seed g_banned_list from the file (if any) before the store loads.
+        try
+        {
+            using Godot.FileAccess? f = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (f is not null)
+            {
+                string saved = f.GetAsText().Trim();
+                if (!string.IsNullOrEmpty(saved))
+                {
+                    _serverWorld.Services.Cvars.Set("g_banned_list", saved);
+                    _serverWorld.Bans.Load(); // rebuild the in-memory slots from the seeded cvar now
+                    if (_serverWorld.Bans.LastLoadWasMalformed)
+                    {
+                        // Do NOT let the session overwrite a file we could not parse — the next Save() (or the
+                        // unconditional one at Shutdown) would replace the operator's bans with an empty list.
+                        GD.PrintErr($"[NetGame] {path} is malformed (bad version token); bans NOT loaded and "
+                                    + "persistence is DISABLED this session so the file is not overwritten. "
+                                    + "Fix or delete the file to re-enable.");
+                        return;
+                    }
+                    GD.Print($"[NetGame] loaded persisted bans from {path}.");
+                }
+            }
+            else if (Godot.FileAccess.GetOpenError() is var err and not Godot.Error.FileNotFound
+                     and not Godot.Error.Ok)
+            {
+                // Present but unreadable is NOT the same as absent: refuse to persist rather than clobber it.
+                GD.PrintErr($"[NetGame] could not read {path} ({err}); ban persistence DISABLED this session.");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[NetGame] could not read {path}: {ex.Message}; ban persistence DISABLED this session.");
+            return;
+        }
+
+        // Mirror every future change back to the file (fires from Bans.Save on ban/unban/prolong).
+        _serverWorld.Bans.PersistSink = serialized =>
+        {
+            try
+            {
+                // Godot.FileAccess.Open returns NULL on failure — it does not throw — so the old `w?.StoreString`
+                // silently no-oped and the catch below was dead code. A read-only XonData or a locked bans.cfg
+                // left bans in memory only: the operator saw a successful kickban, no error, and the ban was
+                // gone after restart. Check the null and report the engine's own error code.
+                using Godot.FileAccess? w = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write);
+                if (w is null)
+                {
+                    GD.PrintErr($"[NetGame] could not write {path} ({Godot.FileAccess.GetOpenError()}); "
+                                + "bans are in memory only and will NOT survive a restart.");
+                    return;
+                }
+                w.StoreString(serialized);
+            }
+            catch (Exception ex) { GD.PrintErr($"[NetGame] could not write {path}: {ex.Message}"); }
+        };
+    }
+
+    /// <summary>
+    /// DS-3: clamp the engine's frame loop to the sim tickrate on a headless/dedicated host. Godot's main loop
+    /// runs at <see cref="Godot.Engine.MaxFps"/> (the client sets that from cl_maxfps → ~144); a server sim ticks
+    /// at 72 Hz, so an idle dedicated box was spinning the loop ~2× the sim for no benefit (pure wasted CPU,
+    /// since there is no display to present). Set the cap to <c>sv_dedicated_fps</c> when the operator pinned one,
+    /// else the tickrate. Skipped when <c>--fixed-fps</c> is present (a deterministic capture owns the pacing).
+    /// No-op off a headless host. Called at host start (post cvar-register) so server.cfg's value is live, and
+    /// re-applied per frame on the headless host — see <see cref="ReassertDedicatedLoopCap"/>.
+    /// </summary>
+    private void ApplyDedicatedLoopCap()
+    {
+        if (!_isHeadless)
+            return;
+        if (Array.IndexOf(OS.GetCmdlineArgs(), "--fixed-fps") >= 0)
+            return; // deterministic capture: Godot's fixed frame delta owns the loop rate
+
+        int target = DedicatedLoopTarget();
+        Godot.Engine.MaxFps = target;
+        _dedicatedCapApplied = target;
+        int tickHz = (int)MathF.Round(1f / VortexArena.Engine.Simulation.SimulationLoop.TicRate); // 72
+        int pinned = (int)(_serverWorld?.Services.Cvars.GetFloat("sv_dedicated_fps") ?? 0f);
+        GD.Print($"[NetGame] dedicated loop cap: Engine.MaxFps {target} " +
+            $"({(pinned > 0 ? "sv_dedicated_fps" : $"sim tickrate {tickHz} Hz")}).");
+    }
+
+    private int DedicatedLoopTarget()
+    {
+        int tickHz = (int)MathF.Round(1f / VortexArena.Engine.Simulation.SimulationLoop.TicRate); // 72
+        int pinned = (int)(_serverWorld?.Services.Cvars.GetFloat("sv_dedicated_fps") ?? 0f);
+        return pinned > 0 ? pinned : tickHz;
+    }
+
+    private int _dedicatedCapApplied = -1;
+
+    /// <summary>
+    /// Keep the DS-3 cap authoritative on a headless host. Two ways it was being lost: a runtime
+    /// <c>set sv_dedicated_fps N</c> (console or rcon) did nothing because the cap was only applied once at
+    /// boot — despite server.cfg.example and docs/RUNNING.md presenting it as an operator knob — and
+    /// <c>cl_maxfps</c> IS live-hooked on the shared store, which on a headless host is the SAME store, so a
+    /// single `set cl_maxfps 250` permanently overwrote Engine.MaxFps and the cap never came back. Cheap: two
+    /// int compares per frame, and it only writes when something actually diverged.
+    /// </summary>
+    private void ReassertDedicatedLoopCap()
+    {
+        if (!_isHeadless || _dedicatedCapApplied < 0)
+            return;
+        int want = DedicatedLoopTarget();
+        if (want != _dedicatedCapApplied)
+        {
+            _dedicatedCapApplied = want;
+            Godot.Engine.MaxFps = want;
+            GD.Print($"[NetGame] dedicated loop cap updated: Engine.MaxFps {want}.");
+            return;
+        }
+        if (Godot.Engine.MaxFps != want)
+            Godot.Engine.MaxFps = want; // something else (cl_maxfps hook) clobbered it — take it back
+    }
+
+    /// <summary>
+    /// DS-2: execute one operator-console line against the server, exactly as if it were typed at DP's dedicated
+    /// terminal (full server-console privilege — kick/ban/map/set/exec all reachable). Runs on the MAIN thread
+    /// (the <see cref="ServerConsole"/> drain); the sim-thread gate discipline mirrors the changelevel/bot sinks:
+    /// threaded → hop to the worker (and print the reply from there, since the result isn't ready synchronously),
+    /// unthreaded (the headless default) → execute inline and print the collected output now.
+    /// </summary>
+    private void RunServerConsoleLine(string line)
+    {
+        if (_serverWorld is null || string.IsNullOrWhiteSpace(line))
+            return;
+        VortexArena.Server.Commands cmds = _serverWorld.Commands;
+        if (_server is { SimGate: not null } threaded)
+        {
+            threaded.RunOnSimThread(() =>
+            {
+                string outp = cmds.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
+                if (!string.IsNullOrEmpty(outp)) GD.Print(outp.TrimEnd('\n'));
+            });
+        }
+        else
+        {
+            string outp = cmds.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
+            if (!string.IsNullOrEmpty(outp)) GD.Print(outp.TrimEnd('\n'));
         }
     }
 
@@ -1473,7 +1779,10 @@ public sealed partial class NetGame : Node3D
         _render = new ClientWorld { Name = "Render" };
         // Resolve models/sounds straight from the mounted content VFS so remote players render as real skeletal
         // IQM models + positional sounds resolve (else the placeholder box + the res:// fallback).
-        if (_assets is not null)
+        // Dedicated-slim: leave ALL of it unwired — with no resolvers the render layer would only ever build
+        // placeholder boxes, and even those are skipped (no ClientEntityView below). The node itself stays (the
+        // rest of NetGame assumes a live _render), but it never touches the asset pipeline.
+        if (_assets is not null && !_dedicatedSlim)
         {
             _render.AudioLoader = _assets.LoadSound;
             _render.Assets = _assets.Assets;   // material facade → textured world/vehicle models (ModelResolver path)
@@ -1502,7 +1811,7 @@ public sealed partial class NetGame : Node3D
         // Networked projectiles draw their REAL model (rocket.md3 with its additive RocketThrust flame cone,
         // grenademodel.md3) through the same VFS loader the world/weapon models use. Set after AddChild since
         // ClientWorld._Ready (which built _render.Projectiles) ran synchronously on it.
-        if (_assets is not null)
+        if (_assets is not null && !_dedicatedSlim)
         {
             _render.Projectiles.ModelFactory = m => _assets.LoadModel(m);
             // (engine-perf 2026-06-16) Wire the SAME loader into the gib + casing systems so they render their
@@ -1522,16 +1831,21 @@ public sealed partial class NetGame : Node3D
         // parsing effectinfo.txt + decoding the atlas on its render frame (DP precaches these at client init,
         // cl_particles.c). The Assets setter above already wired the texture/text loaders via WireEffectAssets,
         // and _render.Effects is live (ClientWorld._Ready ran synchronously on AddChild). Idempotent + invisible.
-        _render.Effects.Warmup();
-        // Likewise pre-build the shared per-type projectile-trail Resources so the first rocket/plasma/grenade
-        // doesn't construct its trail material on its render frame (see ProjectileRenderer.WarmupTrails).
-        _render.Projectiles.WarmupTrails();
-        // A2: render one hidden instance of every effect/projectile material family in a tiny offscreen viewport
-        // so the GPU compiles their shader pipelines NOW (during load) — the first real explosion/rocket/gib in
-        // play then hits a warm pipeline instead of stalling the frame. Self-frees after a few frames.
-        // The map-item / pickup MD3 models render through the entity feed (PVS-culled until first-seen), so warm
-        // them here too — built from the item registry + the same AssetLoader the live entity build uses.
-        VortexArena.Game.Client.GpuWarmPass.Run(_render, _render.Effects, _render.Projectiles, BuildItemWarmupInstances());
+            // Dedicated-slim: no effects will ever spawn (OnEffectReceived is not subscribed),
+            // so skip the warm-up entirely.
+            if (!_dedicatedSlim)
+            {
+            _render.Effects.Warmup();
+            // Likewise pre-build the shared per-type projectile-trail Resources so the first rocket/plasma/grenade
+            // doesn't construct its trail material on its render frame (see ProjectileRenderer.WarmupTrails).
+            _render.Projectiles.WarmupTrails();
+            // A2: render one hidden instance of every effect/projectile material family in a tiny offscreen viewport
+            // so the GPU compiles their shader pipelines NOW (during load) — the first real explosion/rocket/gib in
+            // play then hits a warm pipeline instead of stalling the frame. Self-frees after a few frames.
+            // The map-item / pickup MD3 models render through the entity feed (PVS-culled until first-seen), so warm
+            // them here too — built from the item registry + the same AssetLoader the live entity build uses.
+            VortexArena.Game.Client.GpuWarmPass.Run(_render, _render.Effects, _render.Projectiles, BuildItemWarmupInstances());
+            }
 
         // CSQC appearance context (FORCEMODEL/FORCECOLORS need the local player + gametype): read live each frame.
         _render.AppearanceProvider = BuildAppearanceContext;
@@ -1545,7 +1859,10 @@ public sealed partial class NetGame : Node3D
         // attaches this later — once the server's map name arrives — via LoadClientMapFromServer. No-op until then.
         AttachWorldRender();
 
-        if (_client is not null)
+        // Dedicated-slim: no entity render nodes (ClientEntityView would rebuild a placeholder per networked
+        // entity every snapshot) and no effect/sound playback — the handlers stay unsubscribed, so every
+        // broadcast effect/sound costs the dedicated host nothing beyond the packet decode.
+        if (_client is not null && !_dedicatedSlim)
         {
             _entityView = new ClientEntityView(_client, _render);
             // Third-person carried weapons: build each remote player's held weapon from the asset pipeline
@@ -1601,6 +1918,18 @@ public sealed partial class NetGame : Node3D
     {
         if (_bsp is null || _render is null || _assets?.Assets is null)
             return;
+
+        // Dedicated-slim: the server ships no geometry and draws none either. Skip the textured worldmodel build
+        // (MapLoader.BuildMap decodes every map texture + lightmap page into RAM), the render-side PVS, the
+        // DUPLICATE effects/decal collision world, and the SDF bake — the authoritative collision GameWorld traces
+        // was already built in StartListenServer. The one MapLoader-shaped line below keeps the ci.sh host smoke's
+        // "map actually loaded" signal alive (it greps for MapLoader).
+        if (_dedicatedSlim)
+        {
+            GD.Print($"[MapLoader] '{_map}' dedicated slim: render geometry skipped " +
+                $"(collision brushes + entities only; {_bsp.Models.Length} bsp models).");
+            return;
+        }
 
         // The client draws the worldmodel it loaded locally (DP VF_DRAWWORLD=1 + renderscene(); the server ships
         // no geometry). Reuses the SAME BSP + gametype submodel filter the collision was built from — render and
@@ -1790,7 +2119,8 @@ public sealed partial class NetGame : Node3D
 
         // Bridge the HUD's texture cache to the mounted game data so weapon icons / crosshairs / kill-notify
         // icons draw the REAL Xonotic art instead of colored-box fallbacks (mirrors GameDemo.SetupHud).
-        if (_assets is not null)
+        // Dedicated-slim: skipped — the font loads are eager, and headless HUD panels never draw anyway.
+        if (_assets is not null && !_dedicatedSlim)
         {
             VortexArena.Game.Hud.TextureCache.VfsResolver = _assets.LoadTexture;
             // Xolonium HUD font (the menu skin font), so HUD text matches Xonotic instead of Godot's fallback.
@@ -1862,7 +2192,7 @@ public sealed partial class NetGame : Node3D
 
         // In-vehicle low-health/shield alarm (QC vehicle_alarm, cl_vehicles.qc): feed the VehicleHud the VFS sound
         // loader so it can play SND_VEH_ALARM / SND_VEH_ALARM_SHIELD (gated by cl_vehicles_alarm, default 0).
-        if (_assets is not null)
+        if (_assets is not null && !_dedicatedSlim)
             _fullHud.Vehicle.AudioLoader = _assets.LoadSound;
 
         // The lightweight crosshair + health/armor readout + radar + networked scoreboard, on a layer ABOVE the
@@ -1898,7 +2228,7 @@ public sealed partial class NetGame : Node3D
             if (_sharedCvars.Has("cl_announcer_antispam"))
                 _notifications.AntiSpamInterval = _sharedCvars.GetFloat("cl_announcer_antispam");
         }
-        if (_assets is not null)
+        if (_assets is not null && !_dedicatedSlim) // slim: announcer voices would lazily decode per frag event
         {
             _notifications.AudioLoader = _assets.LoadSound; // sound/announcer/<voice>/<snd>.ogg from the mounted VFS
             string fallbackVoice = _notifications.AnnouncerVoice;
@@ -2668,7 +2998,9 @@ public sealed partial class NetGame : Node3D
             // The heavy bit: full mesh + material/texture build of the v_ model, plus the hand rig. Warmed for
             // every weapon by default (warmAll); the smart path restricts it to this match's expected loadout.
             // An unanticipated pickup under the smart path just lazy-loads (one-frame hitch, then cached).
-            if (warmAll || expected.Contains(w.NetName))
+            // Dedicated-slim: the server only needs the muzzle offsets registered above (projectile spawn
+            // origins) — the mesh/texture build is client-only, so every weapon stays "skipped (lazy)".
+            if (!_dedicatedSlim && (warmAll || expected.Contains(w.NetName)))
             {
                 // Build once to fill the parse + material/texture caches; keep the node to render it for pipeline
                 // warm below (instead of freeing it unrendered). A miss just caches the failure.
@@ -2807,7 +3139,7 @@ public sealed partial class NetGame : Node3D
     /// minute of play. The loaders cache, so anything the eager precache already warmed is a cheap no-op here.</summary>
     private void StartIdleWarmup()
     {
-        if (_assets is null)
+        if (_assets is null || _dedicatedSlim)
             return;
         // `set cl_idle_warmup 0` disables the background warm (A/B switch — the concurrent player-model parse was
         // implicated in an early gen2 GC stall). Unset/unregistered → on (only an explicit "0" disables).
@@ -3117,6 +3449,10 @@ public sealed partial class NetGame : Node3D
         if (_shutDown)
             return;
         _shutDown = true;
+
+        // DS-4: this server is going away — drop the signal-handler's client-notice hook so it can't fire against
+        // a torn-down transport (and a rehost re-registers a fresh one for the new _server).
+        GracefulShutdownHook = null;
 
         // Motion-trace close: the toggle-off path in MotionTrace never runs on a quit/map-change, and the
         // writer buffers 128 lines — without this a short capture (or any session tail) is silently lost.
@@ -3431,6 +3767,9 @@ public sealed partial class NetGame : Node3D
             using (VortexArena.Game.Client.FrameProfiler.Scope("server.tick"))
                 _server?.PumpTransportThreaded(rawDt); // RAW wall time (see the server Tick note above)
 
+        // DS-3: keep the dedicated loop cap authoritative (live sv_dedicated_fps + take it back from cl_maxfps).
+        ReassertDedicatedLoopCap();
+
         // Demo/benchmark camera: keep the host observing a living bot (no-op unless cl_bench_spectate is set;
         // throttled to 2 Hz). WS1 stage 3: it MUTATES server-side spectator state — run it on the sim thread
         // when threaded (RunOnSimThread is inline when not). Its 2 Hz throttle field is then written only by
@@ -3444,6 +3783,13 @@ public sealed partial class NetGame : Node3D
             else
                 _server?.RunOnSimThread(BenchSpectateThink);
         }
+
+        // DS-1: everything from here down is the LOCAL CLIENT half of the frame — music, announcer, HUD feeds,
+        // input sampling, prediction, camera, view effects. A dedicated host has no client, no ClientWorld and
+        // no HUD, so it stops here. This is also where the per-frame CPU saving lands: the server half above
+        // (transport pump + sim tick + snapshot encode) is all a dedicated process needs to do.
+        if (_dedicatedNoClient)
+            return;
 
         // (perf 2.0) ng.feeds: the music/announcer/host-mutator HUD-feed run — sub-scoped so the ng.process
         // residual shrinks to genuinely-unattributed work (frame-budget decomposition, perf-campaign doc).
@@ -3695,12 +4041,15 @@ public sealed partial class NetGame : Node3D
             // world) — skip the host auto-join entirely while it is armed.
             // cl_bench_spectate: same story — stand down so BenchSpectateThink can glue it to a bot
             // (without the gate the join would land once, then bench pulls it back: a one-spawn flicker on capture).
+                // Dedicated-slim also never auto-joins: the headless host's self-client has no human
+                // behind it, and auto-joining spawned an idle phantom player that bots duly hunted.
             // The editor gametype is excluded for the same reason as the observer camera: EDIT *is* the
             // observer state, so auto-joining the host would drop the mapper into a body at a spawn point a
             // second after the map loads. This command path bypasses the gametype join gate (it calls
             // ClientManager.Join directly), so the gate alone does not stop it — it has to be refused here.
             if (_isListenServer && !_hostJoinDone && !ObserverCamera.Active && !BenchSpectateActive
                 && !IsEditorGametype
+                    && !_dedicatedSlim
                 && _serverWorld is { } joinWorld)
             {
                 if (LocalServerPlayer is not { IsObserver: true })
@@ -4278,6 +4627,10 @@ public sealed partial class NetGame : Node3D
 
     private void FrameGovernor(float rawDt)
     {
+        // DS-3: a headless/dedicated host has no display to pace — frame-delivery smoothing is meaningless, and
+        // fighting the tickrate loop-cap (ApplyDedicatedLoopCap) would just re-raise Engine.MaxFps. Skip entirely.
+        if (_isHeadless)
+            return;
         if (!_frameGovernorCv)
         {
             if (_govSaved >= 0)

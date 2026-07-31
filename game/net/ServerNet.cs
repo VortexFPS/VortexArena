@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Reflection;
 using Godot;
 using VortexArena.Common.Diagnostics;
 using VortexArena.Common.Framework;
@@ -177,6 +178,16 @@ public sealed class ServerNet : IDisposable
 
     // --- master-server registration (server browser): periodic heartbeat + answer getinfo probes ---
     private MasterServerLink? _master;
+    // DS-7: the modern announce lane (HTTPS to Conductor), running alongside the dpmaster heartbeat above.
+    // Null until EnableMasterAnnounce. Its Tick only compares a clock and hands a value snapshot to a worker,
+    // so it is safe on the pump thread; nothing here ever waits on the network.
+    private MasterAnnounce? _announce;
+    // The sv_master_catalog_refresh hook we installed on the world's command table, kept so teardown can
+    // remove OURS and only ours (map catalog §10).
+    private System.Func<string>? _catalogRefreshHook;
+    // DS-6: the rcon/srcon authenticator, wired to the same OOB socket that answers getinfo. Null until the
+    // master link exists (WireRcon). Reads rcon_* cvars live, executes authenticated commands on the server.
+    private RconServer? _rcon;
     private readonly List<IPEndPoint> _masters = new();
     private float _heartbeatAccum;
     private const float HeartbeatInterval = 180f; // DP re-registers every ~3 minutes
@@ -481,10 +492,10 @@ public sealed class ServerNet : IDisposable
         _masterPollAccum += realDelta;
         if (advanced || _masterPollAccum >= 0.25f)
         {
-            // Gate ONLY when a master link exists (probe answers read world info via BuildServerInfo). An
-            // unregistered LAN listen server (_master null — the common case) must never block the render
-            // thread behind a worker tick for what would be a no-op pump.
-            if (_master is not null)
+            // Gate ONLY when a master lane exists (probe answers read world info via BuildServerInfo, and the
+            // DS-7 announce snapshot reads it too). An unregistered LAN listen server (both null — the common
+            // case) must never block the render thread behind a worker tick for what would be a no-op pump.
+            if (_master is not null || _announce is not null)
                 lock (_simGate)
                     PumpMasterServer(_masterPollAccum);
             _masterPollAccum = 0f;
@@ -853,6 +864,7 @@ public sealed class ServerNet : IDisposable
             {
                 _master = new MasterServerLink(candidate);
                 _master.GetInfoRequested += (from, _) => _master!.SendInfoResponse(from, BuildServerInfo(gamePort));
+                WireRcon(candidate); // DS-6: rcon rides the same OOB socket
                 GD.Print($"[ServerNet] LAN discovery: answering getinfo on UDP {candidate} (game port {gamePort}).");
                 return;
             }
@@ -866,8 +878,10 @@ public sealed class ServerNet : IDisposable
 
     public void EnableMasterServer(IEnumerable<string> masters, int port)
     {
+        bool freshLink = _master is null;
         _master ??= new MasterServerLink();
         _master.GetInfoRequested += (from, _) => _master!.SendInfoResponse(from, BuildServerInfo(port));
+        if (freshLink) WireRcon(_master.LocalEndPoint.Port); // DS-6: only wire once per link (EnableLanDiscovery may have already)
         foreach (string addr in masters)
         {
             if (TryResolve(addr, out IPEndPoint? ep))
@@ -877,8 +891,209 @@ public sealed class ServerNet : IDisposable
         GD.Print($"[ServerNet] master-server registration enabled for {_masters.Count} master(s).");
     }
 
+    /// <summary>
+    /// DS-7: start the modern announce lane — periodic <c>POST {sv_master_url}/api/v1/announce</c> so this
+    /// server appears in the Conductor directory. Purely additive to <see cref="EnableMasterServer"/>: the
+    /// classic dpmaster heartbeat, <c>MasterServerProtocol</c> and the <c>getinfo</c> responder are untouched.
+    ///
+    /// That responder is the reason this needs no new listener and no new open port. The master verifies a
+    /// claimed endpoint by sending it a classic UDP <c>getinfo</c> challenge and waiting for the matching
+    /// <c>infoResponse</c> — the same answerer <see cref="EnableLanDiscovery"/> already bound. Announcing an
+    /// endpoint you do not own therefore gets you nothing: the challenge goes to the real host, not to you.
+    ///
+    /// Costs nothing when <c>sv_public</c> is 0. The announce is itself the disclosure, so a private server
+    /// does not send one, and <see cref="MasterAnnounce.Tick"/> bails before it touches the network.
+    /// </summary>
+    public void EnableMasterAnnounce(int gamePort)
+    {
+        if (_announce is not null)
+            return;
+
+        _announce = new MasterAnnounce(() => BuildAnnounceSnapshot(gamePort), msg => GD.Print($"[announce] {msg}"));
+
+        // Map catalog §10: `sv_master_catalog_refresh` after the operator dropped a .pk3 into the data dir.
+        // Runs on this thread (console / rcon dispatch) and returns immediately — the rescan it starts is on
+        // the announce lane's own worker, because hashing a few hundred packages here would stall the world
+        // for as long as it takes to read them.
+        _world.Commands.MasterCatalogRefreshHandler = _catalogRefreshHook = () => _announce!.RefreshCatalog() switch
+        {
+            CatalogRefresh.Started => "rebuilding the map catalog in the background",
+            CatalogRefresh.AlreadyRunning => "map catalog rebuild already in progress",
+            _ => "this server does not report a map catalog (sv_master_catalog 0, or no content mounted)",
+        };
+
+        // A map change reboots the listen server onto the new map (NetGame.StartListenServer via
+        // Shell's MapChangeRequested handler), so a fresh ServerNet coming up on a map IS the map-change
+        // path — the same reason EnableMasterServer arms an immediate dpmaster heartbeat right above.
+        OnMapChanged();
+    }
+
+    /// <summary>DS-7: re-announce at the next pump instead of waiting out the 180 s cadence, per the protocol's
+    /// freshness contract (a listing showing the previous map is worse than a listing a few seconds late).
+    /// Called when this server comes up on a map; harmless when the modern lane is off.</summary>
+    public void OnMapChanged() => _announce?.OnMapChanged();
+
+    /// <summary>
+    /// Sample everything the announce needs, on the thread that owns the world. Called from
+    /// <see cref="MasterAnnounce.Tick"/>, which runs inside <see cref="PumpMasterServer"/> — the same place
+    /// and the same threading assumption as <see cref="BuildServerInfo"/>. The worker that does the HTTP never
+    /// reaches back into live server state; it only gets this value.
+    /// </summary>
+    private MasterAnnounce.AnnounceSnapshot BuildAnnounceSnapshot(int port)
+    {
+        VortexArena.Common.Services.ICvarService cv = _world.Services.Cvars;
+
+        // The offer rides along only when a runner told us its key. conductor_control 1 on a box with no
+        // runner beside it omits BOTH fields rather than sending a claim nothing can prove — and sending
+        // available_for_control with no fingerprint would fail validation and cost us the whole listing,
+        // turning a harmless misconfiguration into a delisting.
+        string fingerprint = cv.GetString("conductor_control_key") ?? "";
+        bool offerControl = cv.GetFloat("conductor_control") == 1f
+                            && Conductor.Protocol.AnnounceValidation.IsHexSha256(fingerprint);
+
+        // Self-hosters point sv_master_url at their own deployment; unset falls back to the one address the
+        // protocol itself names, so an operator never has to know it to be listed.
+        string masterUrl = cv.GetString("sv_master_url");
+        if (string.IsNullOrWhiteSpace(masterUrl))
+            masterUrl = Conductor.Protocol.AnnounceProtocol.DefaultMasterUrl;
+
+        // Map catalog §10. The package list is sampled HERE, on the world's thread, for the same reason
+        // everything else in this snapshot is: the scan worker must never reach into live state. It is a few
+        // dozen strings, and the expensive part — reading and hashing what they point at — is what the worker
+        // then does with them.
+        // Null when there is no mounted content at all, and that is NOT the same as an empty pool: §3 says
+        // absence means "does not report a catalog", and reporting zero packages because we could not look
+        // is precisely the claim it tells the master not to render.
+        IReadOnlyList<string>? packages =
+            cv.GetFloat("sv_master_catalog") == 1f ? MountedPackagePaths() : null;
+        bool reportCatalog = packages is not null;
+
+        return new MasterAnnounce.AnnounceSnapshot(
+            MasterUrl: masterUrl,
+            Port: port,
+            Hostname: _serverName,
+            Map: cv.GetString("mapname"),
+            Gametype: _world.GameType?.RegistryName ?? "dm",
+            // Humans and bots counted apart, so a bot-filled server does not read as a populated one in the
+            // browser's notempty filter. _byPlayer holds the peer-backed players, i.e. the humans.
+            Players: _byPlayer.Count,
+            Bots: _world.Clients.BotCount,
+            MaxPlayers: cv.GetFloat("g_maxplayers") > 0 ? (int)cv.GetFloat("g_maxplayers") : _maxClients,
+            GameVersion: GameVersion,
+            // The same build-parity hash the handshake rejects a mismatched client on, and the same value the
+            // classic infostring carries as "protocol". Reinterpreted, not converted: both ends only ever
+            // compare it for equality, so the sign bit is meaningless and wrapping is the correct cast.
+            NetProtocol: unchecked((int)NetProtocol.BuildParity()),
+            Mutators: ActiveMutatorNames(),
+            SvPublic: (int)cv.GetFloat("sv_public"),
+            // No join-password cvar exists in this port yet; the identity handshake (SessionAuth) is the
+            // access story. Reported honestly as false rather than guessed from an unrelated cvar.
+            PasswordProtected: false,
+            AvailableForControl: offerControl,
+            ControlKeyFingerprint: offerControl ? fingerprint : null,
+            ReportCatalog: reportCatalog,
+            PackagePaths: packages ?? System.Array.Empty<string>(),
+            CatalogDownloadUrl: cv.GetString("sv_master_catalog_url"));
+    }
+
+    /// <summary>
+    /// The <c>.pk3</c> files this server actually has loaded, for the map catalog (map-catalog-v1 §10).
+    ///
+    /// Taken from the VFS's own mount list rather than by re-globbing the data directory, so the catalog
+    /// describes what the server is serving instead of a second opinion about where content lives. A pack
+    /// that failed to mount (corrupt, locked) is not in this list and is not reported, which is the right
+    /// answer: a player who downloaded it could not join with it either.
+    ///
+    /// <c>.pk3dir</c> mounts and the gamedir itself are excluded because §10 is about files that can be
+    /// hashed and fetched by hash, and a directory is neither.
+    ///
+    /// <para>Null when nothing is mounted at all — a bare test host, or a data dir that failed to mount.
+    /// The caller turns that into "no catalog reported" rather than into an empty pool.</para>
+    /// </summary>
+    private static IReadOnlyList<string>? MountedPackagePaths()
+    {
+        if (Menu.MenuState.Vfs is not { } vfs)
+            return null;
+
+        var paths = new List<string>();
+        foreach (string mount in vfs.MountedPaths)
+        {
+            if (mount.EndsWith(".pk3", System.StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(mount))
+                paths.Add(mount);
+        }
+        return paths;
+    }
+
+    /// <summary>The active mutators as wire tokens (QC <c>BuildMutatorsString</c> — the machine-readable list,
+    /// not the ", Blood loss" pretty labels the infostring's "modifications" key carries).</summary>
+    private static List<string> ActiveMutatorNames()
+    {
+        var names = new List<string>();
+        foreach (string token in MutatorActivation.BuildMutatorsString("").Split(':',
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            names.Add(token);
+        return names;
+    }
+
+    /// <summary>What this build calls itself to the master. Stamped from the assembly's informational version,
+    /// which CI can set (<c>-p:InformationalVersion=…</c>) without any new plumbing here; a local build reports
+    /// the SDK default rather than pretending to be a release.</summary>
+    private static readonly string GameVersion =
+        typeof(ServerNet).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0-dev";
+
+    /// <summary>
+    /// DS-6: stand up the rcon authenticator on the OOB socket bound at <paramref name="oobPort"/>. Reads the
+    /// <c>rcon_*</c> cvars live (a console/server.cfg change applies to the next packet); an empty
+    /// <c>rcon_password</c> keeps rcon OFF. Authenticated commands run on the server-console path
+    /// (<c>isServerConsole:true</c> — full admin privilege) and the console output is sent back as the DP rcon
+    /// print reply. Runs on the master-pump thread; on the headless dedicated host that is the (single) main
+    /// thread, so executing against the world is safe — the same assumption the rest of the unthreaded pump makes.
+    /// </summary>
+    private void WireRcon(int oobPort)
+    {
+        if (_master is null || _rcon is not null)
+            return;
+
+        var cvars = _world.Services.Cvars;
+        _rcon = new RconServer(() => new RconConfig
+        {
+            Password = cvars.GetString("rcon_password") ?? "",
+            SecureLevel = (int)cvars.GetFloat("rcon_secure"),
+            MaxTimeDiffSeconds = cvars.GetFloat("rcon_secure_maxdiff") is float md and > 0f ? (int)md : 5,
+            ChallengeTimeoutSeconds = cvars.GetFloat("rcon_secure_challengetimeout") is float ct and > 0f ? ct : 5.0,
+        });
+
+        _master.RconReceived += (from, body) =>
+        {
+            bool isLocal = IPAddress.IsLoopback(from.Address);
+            RconServer.Result result = _rcon!.Handle(from, body, isLocal,
+                execute: cmd =>
+                {
+                    // Audit EVERY authenticated rcon command with its source (DP logs the same). Runs before the
+                    // command so a command that quits/rehosts is still attributed.
+                    GD.Print($"[rcon] {from.Address}: {cmd}");
+                    return _world.Commands.Execute(cmd, isServerConsole: true, caller: null).Output;
+                },
+                send: pkt => _master!.SendRaw(from, pkt));
+
+            if (result is RconServer.Result.Denied or RconServer.Result.RateLimited)
+                GD.Print($"[rcon] {result} from {from.Address}");
+        };
+
+        // Only announce rcon when it's actually enabled (a password is set) — else it's silently off.
+        if (!string.IsNullOrEmpty(cvars.GetString("rcon_password")))
+            GD.Print($"[ServerNet] rcon enabled on UDP {oobPort} (rcon_secure {(int)cvars.GetFloat("rcon_secure")}).");
+    }
+
     private void PumpMasterServer(float realDelta)
     {
+        // DS-7: the modern lane is driven from the same place as the classic heartbeat, and BEFORE the
+        // _master guard — LAN discovery can fail to bind (all eight candidate ports taken) and leave _master
+        // null on a server that still has every reason to announce over HTTPS.
+        _announce?.Tick();
+
         if (_master is null)
             return;
         _master.Poll(); // answer any getinfo probes (the event handler replies)
@@ -3854,6 +4069,14 @@ public sealed class ServerNet : IDisposable
         // drop the per-player physics resolver only if it is still OURS (a re-host may have installed a new one).
         if (ReferenceEquals(MovementParameters.PresetProvider, _presetProvider))
             MovementParameters.PresetProvider = null;
+        // Unhook before disposing, and only if it is still OURS (same rule as the preset provider above): the
+        // world can outlive this ServerNet, and a sv_master_catalog_refresh landing afterwards would report a
+        // rebuild that a disposed lane cancels on the spot.
+        if (ReferenceEquals(_world.Commands.MasterCatalogRefreshHandler, _catalogRefreshHook))
+            _world.Commands.MasterCatalogRefreshHandler = null;
+        // DS-7 first: it joins its in-flight announce (bounded wait) while the transport is still alive, so a
+        // map change that tears this down mid-announce does not race the socket out from under the worker.
+        _announce?.Dispose();
         _master?.Dispose();
         _transport.Dispose();
     }

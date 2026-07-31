@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Godot;
 using VortexArena.Common.Diagnostics;
 using VortexArena.Common.Gameplay;
@@ -155,6 +156,18 @@ public partial class Main : Node
                 if (h + 1 < args.Length && !args[h + 1].StartsWith("--") && string.IsNullOrEmpty(shell.BootMap))
                     shell.BootMap = args[h + 1];
             }
+            // DS-1 `--dedicated [map]` (DP `-dedicated`): boot a CLIENT-LESS server — same host path as --host,
+            // but NetGame builds no local client (see NetGame._dedicatedNoClient), so no player slot is burned
+            // and the browser's player count is real. The dedicated-server export template implies it via
+            // OS.HasFeature("dedicated_server"). `--headless --host` intentionally keeps the v1 observer host.
+            if (VortexArena.Game.Net.NetGame.DedicatedRequested)
+            {
+                shell.BootHost = true;
+                int ded = Array.IndexOf(args, "--dedicated");
+                if (ded >= 0 && ded + 1 < args.Length && !args[ded + 1].StartsWith("--")
+                    && string.IsNullOrEmpty(shell.BootMap))
+                    shell.BootMap = args[ded + 1];
+            }
             int b = Array.IndexOf(args, "--bots");
             if (b >= 0 && b + 1 < args.Length && int.TryParse(args[b + 1], out int bots))
                 shell.BootBots = bots;
@@ -197,6 +210,55 @@ public partial class Main : Node
         {
             GetTree().CreateTimer(quitSecs).Timeout += () => GetTree().Quit();
         }
+
+        // DS-4: graceful shutdown on SIGTERM/SIGINT (systemd `stop`, Ctrl+C, a supervisor stop). Without this a
+        // signal HARD-kills the process mid-frame — the ENet host never closes (peers hang until they time out)
+        // and the UDP port isn't released (the next host then fails to bind, the RUNNING.md orphaned-port trap).
+        // We cancel the default terminate and instead post a clean quit to the MAIN thread (the handler runs on a
+        // threadpool thread, so every Godot touch must be deferred): notify connected clients, then Quit(0) —
+        // which runs the normal teardown (NetGame._ExitTree → Shutdown → transport Close, releasing the port, and
+        // the config-save guard). On Windows SIGINT is Ctrl+C; SIGTERM is best-effort (the CLR catches what the OS
+        // delivers). Registrations are stored so the GC can't collect them (that would silently drop the handler).
+        RegisterShutdownSignals();
+    }
+
+    // Kept alive for the process lifetime — a collected PosixSignalRegistration removes its handler.
+    private PosixSignalRegistration? _sigTerm, _sigInt;
+    private int _shuttingDown; // 0/1 latch so a repeated signal (impatient Ctrl+C) doesn't re-enter the quit
+
+    private void RegisterShutdownSignals()
+    {
+        void Handle(PosixSignalContext ctx)
+        {
+            // ESCALATION PATH: only the FIRST signal is cancelled+handled gracefully. A second one is left
+            // uncancelled so the runtime terminates the process itself. Cancelling unconditionally meant that
+            // once the latch was set — including when the graceful quit could not run, e.g. the main loop
+            // blocked in a synchronous BSP/collision build, or GracefulQuit threw because the node had left
+            // the tree — every later SIGTERM/SIGINT was swallowed. The server then ignored `systemctl stop`
+            // until TimeoutStopSec expired, and Ctrl+C forever, leaving only kill -9.
+            if (System.Threading.Interlocked.Exchange(ref _shuttingDown, 1) != 0)
+            {
+                GD.Print($"[Main] received {ctx.Signal} again; letting the runtime terminate.");
+                return; // ctx.Cancel stays false → the OS default action runs
+            }
+            ctx.Cancel = true; // first signal: quit gracefully below
+            GD.Print($"[Main] received {ctx.Signal}; shutting down gracefully (signal again to force).");
+            Callable.From(GracefulQuit).CallDeferred();
+        }
+
+        try { _sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, Handle); } catch { /* unsupported on this OS */ }
+        try { _sigInt = PosixSignalRegistration.Create(PosixSignal.SIGINT, Handle); } catch { /* unsupported on this OS */ }
+    }
+
+    /// <summary>Runs on the MAIN thread (posted via CallDeferred): tell any live server its clients are about to
+    /// lose the link, then quit cleanly with success. The normal tree teardown does the ENet close + port release.</summary>
+    private void GracefulQuit()
+    {
+        try { NetGame.GracefulShutdownHook?.Invoke(); } catch { /* best-effort client notice */ }
+        // Null-guarded like the sibling DS-4 quit sites: this runs deferred, so the node may have left the
+        // tree in between. Throwing here would leave the shutdown latch set with the process still alive and
+        // (before the escalation path above) deaf to every further signal.
+        GetTree()?.Quit(0);
     }
 
     /// <summary>

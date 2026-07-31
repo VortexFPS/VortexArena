@@ -1,0 +1,80 @@
+// ==========================================================================
+//  Vortex Arena — example dedicated server config  (DS-5)
+// ==========================================================================
+// Copy this file to your user data dir as "server.cfg" to have the dedicated
+// server exec it at boot:
+//
+//     ~/XonData/server.cfg              (Linux/macOS)
+//     %APPDATA%\..\XonData\server.cfg   (Windows — see docs/RUNNING.md)
+//
+// It is exec'd AFTER the shipped config tree + your config.cfg, and BEFORE any
+// --cvar pins on the command line (so a CLI --cvar is always the final word).
+// Pick a different filename with  --serverconfig <name>.
+//
+// Every line here is a normal console command — set / seta / alias / exec all
+// work, exactly as if typed at the server console.
+// --------------------------------------------------------------------------
+
+// --- identity -------------------------------------------------------------
+set hostname "Vortex Arena Server"        // shown in the server browser
+set sv_motd "Welcome!  Have fun."          // message of the day
+
+// --- networking -----------------------------------------------------------
+set port 26000                             // game port (also --port <n> on the CLI)
+set sv_public 1                            // 1 = announce to the master (server browser); 0 = private/LAN
+// set sv_master_url ""                    // (DS-7) our master; empty = built-in default
+// sv_public 0 does not announce AT ALL, on either lane. The announce is itself the disclosure: it tells
+// the master this server exists, at an address, running a named map. Point sv_master_url at your own
+// deployment to run a private directory.
+
+// --- orchestration (DS-7, optional) ---------------------------------------
+// Only for a server supervised by a Vortex runner. conductor_control 1 puts an OFFER in Conductor's
+// adoption queue; it grants nothing by itself. Control begins only when the runner dials out and proves
+// it holds the private key behind the fingerprint below, so both have to be true on the same box. Without
+// a valid fingerprint the offer is simply omitted and the server still lists normally.
+// The runner writes both of these into the instance's server.cfg; set them by hand only when you are
+// deliberately reproducing that setup.
+// set conductor_control 0
+// set conductor_control_key ""            // sha256 of the runner's public key (lowercase hex)
+
+// --- map catalog (optional) -----------------------------------------------
+// Report which .pk3 packages this server carries, so players can see and download your map pool from the
+// server browser. ON by default and nearly free: the announce carries only a 64-byte hash of the pool, and
+// the pool itself is uploaded only when the master has never seen it, from you or from anyone else.
+// set sv_master_catalog 1
+// Where players can fetch YOUR packages; the file name is appended. Must be https and must not point at a
+// private address. Leave it empty if you have nowhere to publish — the master may mirror packages itself,
+// and the client verifies each package's hash after downloading in either case.
+// set sv_master_catalog_url "https://maps.example.org/vortex"
+// `sv_master_catalog_refresh` on the console or over rcon rescans after you add or remove a .pk3. The scan
+// runs in the background; it never stalls the match.
+
+// --- slots / gameplay -----------------------------------------------------
+set g_maxplayers 16                        // 0 = engine max
+set minplayers 2                           // bots fill up to this many active players
+set bot_number 4                           // bots to add when hosting
+set bot_join_empty 1                       // REQUIRED for bots on an EMPTY dedicated server (see below)
+set skill 5                                // bot skill (0..10)
+// bot_join_empty: bot fill is gated on `realPlayers > 0 || bot_join_empty` (QC bot.qc:644-660), so with the
+// default 0 a dedicated server sits empty with ZERO bots until the first human connects — bot_number and
+// minplayers alone will not fill it. (The old --host headless server appeared to fill an empty map only
+// because its loopback self-client counted as a real player; a true --dedicated host has no such client.)
+set timelimit_override 20                  // per-map time limit (minutes); -1 = map default
+set fraglimit_override 30                  // -1 = map default
+
+// --- map rotation ---------------------------------------------------------
+set g_maplist "stormkeep courtfun trident leave_em_behind"
+set g_maplist_shuffle 1                     // shuffle the rotation order
+
+// --- admin ----------------------------------------------------------------
+// rcon (DS-6): remote console. Leave the password EMPTY to keep rcon OFF.
+// set rcon_password "change-me"           // required for any remote rcon
+// set rcon_secure 1                        // 0 = plaintext (localhost only), 1 = time+HMAC, 2 = challenge+HMAC
+
+// --- logging (DS-8) -------------------------------------------------------
+// set sv_eventlog 1                        // write join/part/kill/end events to XonData/logs/
+// set sv_eventlog_console 0                // also echo eventlog lines to the console
+
+// --- performance ----------------------------------------------------------
+// set sv_dedicated_slim 1                  // headless host skips the client asset pipeline (default on)
+// set sv_dedicated_fps 0                   // 0 = clamp the engine loop to the sim tickrate (72 Hz)

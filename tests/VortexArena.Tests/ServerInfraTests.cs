@@ -269,6 +269,26 @@ public class ServerInfraTests
     }
 
     [Fact]
+    public void Bans_PersistSink_Fires_And_RoundTripsAcrossAFreshStore()
+    {
+        // DS-8: file-backed ban persistence. PersistSink gets the serialized list on every change; feeding that
+        // exact string into g_banned_list on a FRESH Bans (a "restart") must restore the ban — the mechanism the
+        // dedicated host uses so bans survive a restart independent of config.cfg.
+        Cvars.Set("g_banned_list", "");
+        string? persisted = null;
+        var bans = new Bans { PersistSink = s => persisted = s };
+        bans.Insert("77.88.99.100", 3600f, "persist");
+        Assert.False(string.IsNullOrEmpty(persisted));       // sink fired with a non-empty serialization
+        Assert.StartsWith("1 77.88.99.100", persisted);       // version-1 token string
+
+        // Simulate a restart: seed the cvar from the persisted string, load a brand-new store, ban still applies.
+        Cvars.Set("g_banned_list", persisted!);
+        var afterRestart = new Bans();
+        afterRestart.Load();
+        Assert.True(afterRestart.IsClientBanned(NewPlayer(ip: "77.88.99.100:5000")));
+    }
+
+    [Fact]
     public void Bans_Delete_RemovesBan()
     {
         var bans = new Bans();

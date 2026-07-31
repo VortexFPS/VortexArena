@@ -74,9 +74,9 @@ ci\ci.ps1             # PowerShell wrapper around the same script
 
 ---
 
-## Dedicated server (v1 = headless listen server)
+## Dedicated server (v1 = headless listen server, dedicated-slim asset load)
 
-There is no separate server binary yet — `--headless --host <map>` runs the full host with a dummy
+There is no separate server binary yet — `--headless --host <map>` runs the host with a dummy
 renderer (the same `NetGame` listen server `--host` uses; a true client-less host like DP's
 `ca_dedicated` is a deferred Shell/NetGame seam — ADR-0014). From the repo:
 
@@ -86,13 +86,46 @@ renderer (the same `NetGame` listen server `--host` uses; a true client-less hos
 "$GODOT" --path . --connect 127.0.0.1
 ```
 
-A healthy boot prints `[MapLoader] '<map>' surfaces: …`, `[bots] waypoints for '<map>': nodes=N` (once the
+**Dedicated-slim (default on a headless/exported-dedicated host):** DP's dedicated server keeps
+sounds/models as precache *names* and only map/model collision data in RAM — the port now matches that.
+A headless host skips the whole client asset pipeline (textured worldmodel build, weapon/player-model
+precache, every sound decode, map music, the idle asset warmer, entity render nodes) and keeps only the
+server-relevant loads: BSP collision + entities, waypoints, per-weapon muzzle-tag offsets, `.sounds`
+manifests. Measured on stormkeep + 2 bots (Debug): peak working set **4.9 GB → 0.58 GB**. The host's
+self-client also stays an **observer** (no phantom idle player auto-joining the match). Set
+`sv_dedicated_slim 0` (e.g. `--cvar sv_dedicated_slim 0`) to restore the old full-client load;
+`--camera-trace` captures keep the full pipeline automatically.
+
+A healthy boot prints `[MapLoader] '<map>' dedicated slim: render geometry skipped …` (or
+`[MapLoader] '<map>' surfaces: …` with slim off), `[bots] waypoints for '<map>': nodes=N` (once the
 bot fill kicks in at sim time 2.5 s), and `handshake accepted`. For scripted/CI runs add
 `--quit-after-seconds <s>` so the host exits on its own — Windows `timeout` does NOT kill the Godot child,
 and an orphaned host keeps UDP 26000 bound (the next run then fails with "Couldn't create an ENet host";
 clean up strays with `powershell "Get-Process Godot* | Stop-Process -Force"`). A `--quit-after-seconds`
 (or explicit `--no-save-config`) run also **never writes `~/XonData/config.cfg`** — DP's `-benchmark`
 rule — so scripted runs and their `--cvar`/`--bots` pins can't pollute the player's saved settings.
+
+### Operating a dedicated host (v2)
+
+- **Console (DS-2):** the host reads commands from **stdin** — type `status`, `kick <n>`, `say …`,
+  `set g_… …`, `map <name>`, `quit`, etc., exactly as at DP's dedicated terminal. Pipe a control script in
+  (`printf 'status\nquit\n' | "$GODOT" --headless --host stormkeep`) or drive it from a supervisor. `--no-console`
+  disables the reader (e.g. a service with no stdin).
+- **server.cfg (DS-5):** on any host boot the server execs `~/XonData/server.cfg` (after the shipped config
+  tree + `config.cfg`, before `--cvar` pins). Copy `server.cfg.example` (repo root) to start. `--serverconfig
+  <name>` picks a different file. Absent by default, so nothing runs unless you opt in.
+- **rcon (DS-6):** DarkPlaces-compatible remote console on the discovery UDP port (`gamePort+1..+8`, logged as
+  `rcon enabled on UDP <n>`). Set `rcon_password` (empty = OFF) in server.cfg. `rcon_secure 1` = time+HMAC-MD4
+  (default, remote-safe), `2` = challenge+HMAC-MD4, `0` = plaintext (localhost only). Every authenticated
+  command is logged `[rcon] <addr>: <cmd>`; repeated failures per address are rate-limited.
+- **Bans persist (DS-8):** `ban`/`kickban` survive a restart — the list is mirrored to `~/XonData/bans.cfg`
+  and reloaded at boot (`[NetGame] loaded persisted bans …`), independent of `config.cfg`.
+- **Loop cap (DS-3):** a headless host clamps the engine loop to the sim tickrate (`Engine.MaxFps 72`) instead
+  of the cl_maxfps-derived ~144 — an idle box no longer spins the loop for a display that isn't there.
+  `sv_dedicated_fps <n>` pins an explicit cap.
+- **Signals + exit codes (DS-4):** `SIGTERM`/`SIGINT` (systemd `stop`, Ctrl+C) shut down cleanly — the ENet
+  host closes and the UDP port releases (no orphaned-port trap), and connected clients get a shutdown notice.
+  Boot-failure exit codes for a supervisor: **2** = UDP port in use, **3** = `--host <map>` not found.
 
 **Port collisions (agents, take note):** `--port <n>` (DP `-port`) binds the hosted listen server off the
 stock 26000. When 26000 is already held by ANOTHER live instance, the new host's `CreateServer` fails but
@@ -220,7 +253,7 @@ pixel check can run in CI.
 
 | Half | What it checks | How | Where |
 |---|---|---|---|
-| **Headless (automated)** | every stock map *loads* + has renderable/collidable geometry; every model *loads* + has a valid bone parent-chain (IQM additionally: non-singular bind pose; DPM/MD3 skip the determinant/unit-scale check per shipped DP model baselines); every `.shader` *compiles* (parses, no hard failure) | `VisualQaTests.cs` (pure xUnit over the parsed asset structures — no GPU, self-skips without `assets/data`) | `ci/ci.sh` step 5; `dotnet test … --filter VisualQa` |
+| **Headless (automated)** | every stock map *loads* + has renderable/collidable geometry; every model *loads* + has a valid bone parent-chain (IQM additionally: non-singular bind pose; DPM/MD3 skip the determinant/unit-scale check per shipped DP model baselines); every `.shader` *compiles* (parses, no hard failure) | `VisualQaTests.cs` (pure xUnit over the parsed asset structures — no GPU, self-skips without `data`) | `ci/ci.sh` step 5; `dotnet test … --filter VisualQa` |
 | **Windowed (manual eye-check)** | actual on-screen *correctness*: lightmap/deluxemap direction, patch smoothness, flare quads, material color, bone pose | `tools/visual-qa.sh` captures a real frame per map + per model into `screenshots/`; then a human (or an agent via the Read tool) eyeballs each PNG against the checklist below | `tools/visual-qa.sh` + the checklist below |
 
 **The headless half is NOT a substitute for the eye-check.** A map can load with all counts in range and still

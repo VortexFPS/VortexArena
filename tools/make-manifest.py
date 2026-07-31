@@ -132,10 +132,20 @@ def main():
 
     platforms = {}
     for suffix, (key, root) in SUFFIX_TO_PLATFORM.items():
-        fat = entry(f"VortexArena-{version}-{suffix}.zip", root)
+        complete = entry(f"VortexArena-{version}-{suffix}.zip", root)
         core = entry(f"VortexArena-{version}-{suffix}-core.zip", root)
-        if fat or core:
-            platforms[key] = {"fat": fat, "core": core}
+        if complete or core:
+            # "complete" is what this everything-in-one-zip package is called now. "fat" was the
+            # original name and is emitted alongside it, pointing at the same object, deliberately.
+            #
+            # latest.json is a contract with VortexLauncher and the two repos release on their own
+            # schedules. A launcher built before the rename reads only "fat"; one built after reads
+            # either and prefers "complete". Emitting both means neither side has to ship first and
+            # no player ends up on a launcher that cannot see a package in the release at all.
+            #
+            # Drop "fat" once no supported launcher still needs it — the same kind of cutover as
+            # the XonoticGodot artifact-prefix list on the launcher side.
+            platforms[key] = {"complete": complete, "core": core, "fat": complete}
 
     if not platforms:
         print(f"ERROR: no release zips found in {args.dir} — refusing to emit an empty manifest",

@@ -1,7 +1,10 @@
 ﻿name: Release
 
-# Build the full release matrix and publish downloadable "fat" zips (binary + Godot runtime + all Xonotic
-# data) to GitHub Releases. See planning/decisions/ADR-0014-ci-packaging-distribution.md and docs/RELEASING.md.
+# Build the full release matrix and publish downloadable "complete" zips (binary + Godot runtime + all
+# Xonotic data) to GitHub Releases. Called "fat" zips until the word reached players through the
+# launcher's INSTALLED box; latest.json still emits a "fat" key beside "complete" so launchers built
+# before the rename keep working (see tools/make-manifest.py).
+# See planning/decisions/ADR-0014-ci-packaging-distribution.md and docs/RELEASING.md.
 #
 # Trigger:
 #   - push a tag `vX.Y.Z`  â†’ builds all targets and PUBLISHES a GitHub Release with the zips attached.
@@ -12,9 +15,9 @@
 # ADR-0014 flags as the flakiest path). Core content is committed and arrives with checkout; only compiled
 # maps are fetched, per data/maps.lock.json, cached on the lockfile hash.
 #
-#   windows â†’ export windows-client                     â†’ fat zip
-#   linux   â†’ export linux-client + linux-dedicated     â†’ 2 fat zips
-#   macos   â†’ export macos-client (continue-on-error)   â†’ fat zip   [BEST-EFFORT: see ADR-0014 Â§macOS]
+#   windows â†’ export windows-client                     â†’ complete zip
+#   linux   â†’ export linux-client + linux-dedicated     â†’ 2 complete zips
+#   macos   â†’ export macos-client (continue-on-error)   â†’ complete zip   [BEST-EFFORT: see ADR-0014 Â§macOS]
 #   release â†’ collect all zips, checksum, publish to GitHub Releases (tag pushes only)
 
 on:
@@ -355,7 +358,7 @@ jobs:
             > pinned to an older release will not follow the rename. A deliberate one-way cutover, not a
             > routine update — see `docs/RELEASING.md`.
 
-            Fat archives: binary + Godot runtime + all game content. Unzip and run, and keep the files
+            Complete archives: binary + Godot runtime + all game content. Unzip and run, keep the files
             together — the game loads `data/` from beside the binary.
 
             The Windows and Linux builds are exported from a Godot template pinned by

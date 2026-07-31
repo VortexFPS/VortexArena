@@ -61,7 +61,7 @@ The SourceGen analyzer: `dotnet build src/VortexArena.SourceGen/VortexArena.Sour
   Windows-only local source in `nuget.config` would hard-fail on a Linux runner).
 
 Packaged **releases** live in a separate workflow, `.github/workflows/release.yml` (push a `v*` tag →
-fat per-platform zips published to GitHub Releases). See **[RELEASING.md](RELEASING.md)**.
+complete per-platform zips published to GitHub Releases). See **[RELEASING.md](RELEASING.md)**.
 
 **The authoritative pre-push gate is the local mirror** (assets present → real-data tests + the
 headless boot smoke actually run):

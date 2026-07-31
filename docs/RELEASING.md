@@ -20,8 +20,14 @@ creates no Release.
 
 ## What ships
 
-Each target is a **"fat" zip** — game binary + the Godot runtime + **all** Xonotic data in one download.
-Unzip and play; nothing else to fetch.
+Each target is a **"complete" zip** — game binary + the Godot runtime + **all** Xonotic data in one
+download. Unzip and play; nothing else to fetch.
+
+This was called a **"fat" zip** until the word reached players: VortexLauncher renders the layout
+name straight into its INSTALLED box, and `0.2.0 (fat)` is jargon at best. `latest.json` still
+carries a `fat` key beside the new `complete` one, pointing at the same object, so launchers built
+before the rename keep working — see the comment in `tools/make-manifest.py` for when that can be
+dropped.
 
 | Zip | Contents | Run |
 |---|---|---|

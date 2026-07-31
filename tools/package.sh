@@ -2,8 +2,9 @@
 # Package VortexArena distributions (T33 — ADR-0014; extended 2026-06 for the full release matrix).
 # Takes the export-preset outputs under dist/<target>/ (produced by `ci/ci.sh --export`, run-release.*,
 # or the release workflow), lays the game assets beside each binary, adds the launcher + licenses + a
-# README, and zips each into a versioned "fat" archive (binary + Godot runtime + all Xonotic data — one
-# download, unzip and play). Mirrors the upstream layout: one install dir = binary + data + launch script.
+# README, and zips each into a versioned "complete" archive (binary + Godot runtime + all Xonotic data
+# — one download, unzip and play). Mirrors the upstream layout: one install dir = binary + data +
+# launch script.
 #
 # Targets (each = one export preset → one zip):
 #   windows-client    dist/windows-client/VortexArena.exe            → VortexArena-<ver>-windows-x86_64.zip
@@ -128,7 +129,7 @@ write_readme() {  # write_readme <dir> <target>
 Vortex Arena — $t ($version)
 A fork of Xonotic, reborn on Godot + C#.  https://github.com/VortexFPS/VortexArena
 
-This is a "fat" build: the game binary, the Godot runtime, and all Xonotic game data are
+This is a "complete" build: the game binary, the Godot runtime, and all Xonotic game data are
 bundled together. Keep the files together — the game loads data/ from beside the binary.
 
 Source code and licensing

@@ -27,6 +27,11 @@ import sys
 
 # Which lockfile `binary_markers` entry covers which matrix leg. A leg absent from here has nothing to
 # assert; add it the moment a patch starts touching that platform.
+#
+# Deliberately NOT extended when linux-client/macos-client gained binary_markers entries on 2026-07-31.
+# Those entries carry only the FORBIDDEN contamination canary, which is about dev material leaking into
+# an exported game's pck. This script checks a freshly built TEMPLATE, which has no pck at all, so the
+# canary could never fire here and wiring it in would add a check that passes by construction.
 LEG_TO_MARKER_KEY = {"windows": "windows-client"}
 
 LOCKFILE = pathlib.Path(__file__).resolve().parent / "engine-patches" / "engine.lock.json"

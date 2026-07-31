@@ -1,8 +1,30 @@
 # Engine patches (custom Godot export template)
 
-The Windows release export uses a **custom-built Godot 4.6.3 export template** carrying backports
-the stock 4.6.3 binaries lack. The editor and C# tooling stay stock — only the template binary the
-export embeds differs. `export_presets.cfg` → `custom_template/release` points at the built binary.
+**Every** release export is built from a Godot 4.6.3 export template pinned in `engine.lock.json`, so
+the engine each platform ships is a recorded fact rather than whatever the build machine happened to
+have installed. The editor and C# tooling stay stock; only the template binary the export embeds is
+ours. All four presets in `export_presets.cfg` set `custom_template/release`.
+
+Only the **Windows** template differs from stock in behaviour: the patch set touches
+`platform/windows/` exclusively, so the Linux and macOS templates carry none of it and are equivalent
+to the official builds. They are pinned for **provenance**, which is weaker than the Windows guarantee
+but not nothing: a build from known inputs whose hash we can check.
+
+That asymmetry decides what can be verified where, and the difference is real rather than an
+unfinished job:
+
+| | Windows | Linux, macOS |
+| --- | --- | --- |
+| template fetched + sha256 checked | yes | yes |
+| `custom_template/release` gated before export | yes | yes |
+| **shipped binary's content proves which engine** | **yes** | **no, and cannot** |
+
+There is no marker that could tell our Linux template from a stock one, because there is nothing
+different to find; requiring one would fail a perfectly good binary. So `verify-engine-template.py`
+prints `NOT CONTENT-VERIFIED` on those platforms and qualifies its summary line rather than implying a
+check it did not run. What covers them instead is the pre-export gate plus Godot's hard abort on a
+populated-but-missing template path, leaving only "Godot ignored a valid path" uncovered, versus the
+empty-field case, which is the one that fails silently.
 
 ## Current patches
 
@@ -18,6 +40,10 @@ export embeds differs. `export_presets.cfg` → `custom_template/release` points
 
 ## Rebuilding the template
 
+The Windows recipe, which is the only one where the patch changes anything. The Linux and macOS
+templates are built from the same tag with no patch applied, on their own runners, by
+`.github/workflows/build-engine-template.yml`; see that file for the per-leg scons invocations.
+
 ```bash
 git clone --depth 1 --branch 4.6.3-stable https://github.com/godotengine/godot.git godot-4.6.3-inputfix
 cd godot-4.6.3-inputfix
@@ -31,8 +57,11 @@ scons platform=windows target=template_release arch=x86_64 module_mono_enabled=y
 `C:\Users\Bryan\Projects\Vortex\godot-4.6.3-inputfix` on the dev box.
 
 **Drop the patch when upgrading to Godot ≥4.8** — it ships upstream from there. Re-check
-`custom_template/release` on any engine upgrade: a stale custom template from an older engine
-version will crash the export at runtime.
+`custom_template/release` in **all four presets** on any engine upgrade: a stale custom template from
+an older engine version will crash the export at runtime. Note that dropping the *patch* is not the
+same as dropping the *pin*: once 4.8 ships the backport there is nothing left to patch, and
+`tools/engine-patches/` should go, but that is a decision to make deliberately rather than by leaving
+fields empty.
 
 ### Upstream status (checked 2026-07-30, against released source rather than dates)
 
@@ -71,21 +100,29 @@ Two things that follow, and one trap:
 
 ## Exporting on another machine
 
-**No longer true as of 2026-07-30.** `custom_template/release` is now the repo-relative
-`tools/engine-templates/godot.windows.template_release.x86_64.mono.exe`, fetched by
-`python tools/data/fetch-engine-template.py` and verified against the sha256 in `engine.lock.json`.
-Any machine — including CI — can produce a correct Windows build:
+**No longer true as of 2026-07-30.** `custom_template/release` is now a repo-relative path into
+`tools/engine-templates/`, fetched by `python tools/data/fetch-engine-template.py` and verified against
+the sha256 in `engine.lock.json`. Any machine, including CI, can produce a correct build:
 
 ```bash
-python tools/data/fetch-engine-template.py --only windows
+python tools/data/fetch-engine-template.py          # all three; --only windows for just one
 ```
+
+The filenames the fetcher writes are exactly the ones the presets name, so a fetch followed by an export
+needs no manual step. `ci/ci.sh --export` does the fetch itself.
 
 Templates for all three platforms are published at
 [`engine-4.6.3-stable-vortex1`](https://github.com/VortexFPS/VortexArena/releases/tag/engine-4.6.3-stable-vortex1),
 deliberately as a **prerelease** — GitHub resolves `releases/latest` to the newest non-prerelease, and the
-launcher's update feed reads `/releases/latest/download/latest.json`. Only the Windows template differs
-from stock; the patch set touches `platform/windows/` exclusively, so the Linux and macOS templates are
-stock-equivalent and exist for provenance.
+launcher's update feed reads `/releases/latest/download/latest.json`.
+
+**Widened 2026-07-31.** Until then only `windows-client` set the field and the other three presets were
+empty, which meant Linux and macOS players ran whatever stock template the build machine had. The Linux
+and macOS templates carry no patches either way, so this bought provenance rather than a behaviour
+change, but it also closed the case where a future cross-platform patch would have missed those
+presets silently. `linux-dedicated` is pinned too, deliberately: it consumes the same file
+`linux-client` already fetches, so it costs nothing, and leaving one preset unpinned re-creates the hole
+in the place hardest to notice.
 
 The paragraph below describes the OLD arrangement and is kept because its failure analysis still applies
 to anyone who points the field somewhere by hand:

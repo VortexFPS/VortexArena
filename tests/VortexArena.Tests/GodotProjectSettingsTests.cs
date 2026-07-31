@@ -112,36 +112,71 @@ public class GodotProjectSettingsTests
     }
 
     /// <summary>
-    /// <c>custom_template/release</c> points the Windows release export at the PATCHED engine template
-    /// (§7.2 — the borderless-refresh-rate and input fixes). Emptied, the export silently falls back to
-    /// the stock template and ships a build missing engine-level fixes that no test covers, because they
-    /// live below the C# boundary entirely.
+    /// EVERY preset's <c>custom_template/release</c> points at a template pinned in
+    /// <c>tools/engine-patches/engine.lock.json</c>. Emptied, the export silently falls back to the stock
+    /// template and ships a build missing engine-level fixes that no other test covers, because they live
+    /// below the C# boundary entirely (G10 / ADR-0017).
     ///
-    /// The value is a machine-local absolute path, so this asserts the key is still POPULATED rather
-    /// than matching a literal; the path itself is checked at export time (docs/RELEASING.md).
+    /// Widened 2026-07-31. This used to require only that ONE preset was populated, which was correct
+    /// when windows-client was the only pinned preset but is now a hole: it would pass unchanged with the
+    /// Linux and macOS fields blanked back to stock, which is exactly the regression worth catching.
+    ///
+    /// Scope split, deliberately. This test is a pure text check on two committed files, so it runs on any
+    /// checkout without a 300 MB template download. It asserts the fields are populated and agree with the
+    /// lockfile. Whether the pinned file is actually PRESENT and hashes correctly is
+    /// <c>tools/verify-engine-template.py --preset-config</c>, at export time, where the file exists.
     /// </summary>
     [Fact]
-    public void Windows_Release_Export_Still_Points_At_A_Custom_Template()
+    public void Every_Release_Export_Points_At_A_Pinned_Engine_Template()
     {
-        string[] lines = File.ReadAllLines(ExportPresets);
-        var templates = lines
-            .Select(l => l.Trim())
-            .Where(l => l.StartsWith("custom_template/release=", StringComparison.Ordinal))
-            .Select(l => l["custom_template/release=".Length..].Trim().Trim('"'))
+        var settings = ParseGodotIni(ExportPresets);
+        string lockfile = File.ReadAllText(
+            Path.Combine(TestPaths.RepoRoot, "tools", "engine-patches", "engine.lock.json"));
+
+        // Join `[preset.N] name=` to `[preset.N.options] custom_template/release=` on the index N. Godot
+        // splits a preset across those two sections, so scanning for the bare key finds four values with
+        // no way to say which preset owns each - and per-preset is the whole point here.
+        var presets = settings.Keys
+            .Where(k => k.EndsWith("/name", StringComparison.Ordinal) && k.StartsWith("preset.", StringComparison.Ordinal))
+            .Select(k => k[..^"/name".Length])
+            .Where(section => !section.EndsWith(".options", StringComparison.Ordinal))
             .ToList();
 
-        Assert.True(templates.Count > 0,
-            "export_presets.cfg has no custom_template/release key at all — the file was regenerated.");
+        Assert.True(presets.Count > 0,
+            "export_presets.cfg has no [preset.N] sections at all — the file was regenerated or truncated.");
 
-        // Only the Windows client preset uses a patched template; the other three presets legitimately
-        // leave it empty, so require at least one populated rather than all of them.
-        Assert.True(templates.Any(t => t.Length > 0),
-            $"every custom_template/release in export_presets.cfg is empty ({templates.Count} presets). "
-            + "The Windows release export would fall back to the STOCK engine template, dropping the "
-            + "patches in tools/engine-patches/ — including the borderless refresh-rate under-report "
-            + "that caused the r16 rubberband. Re-point it per docs/RELEASING.md.");
+        foreach (string section in presets)
+        {
+            string name = settings[$"{section}/name"].Trim('"');
+            string key = $"{section}.options/custom_template/release";
 
-        _out.WriteLine($"{templates.Count(t => t.Length > 0)}/{templates.Count} presets carry a custom template");
+            Assert.True(settings.ContainsKey(key),
+                $"preset '{name}' has no custom_template/release key — the editor rewrote "
+                + "export_presets.cfg and dropped it. Restore it per tools/engine-patches/README.md.");
+
+            string template = settings[key].Trim('"');
+
+            Assert.False(template.Length == 0,
+                $"preset '{name}' has an EMPTY custom_template/release. This is the one genuinely "
+                + "dangerous value: Godot does not fail on it, it falls back to the STOCK export template "
+                + "and produces a complete, launchable binary carrying none of tools/engine-patches/. "
+                + "Every preset is pinned deliberately — the non-Windows ones for provenance, so that "
+                + "'which engine does this build run' has an answer. Re-point it per docs/RELEASING.md.");
+
+            Assert.StartsWith("tools/engine-templates/", template, StringComparison.Ordinal);
+
+            // The filename is what tools/data/fetch-engine-template.py writes to disk, so a mismatch here
+            // means a fetch followed by an export would NOT line up and the export would abort - with a
+            // message about an architecture mismatch rather than a missing file, which is why this is
+            // worth catching in a test rather than at the point of confusion.
+            string filename = template[(template.LastIndexOf('/') + 1)..];
+            Assert.True(lockfile.Contains($"\"{filename}\"", StringComparison.Ordinal),
+                $"preset '{name}' points at '{filename}', which engine.lock.json does not pin. "
+                + "export_presets.cfg and the lockfile have drifted — one of them describes a build that "
+                + "does not exist. Fix whichever is wrong rather than loosening this check.");
+
+            _out.WriteLine($"{name} -> {template}");
+        }
     }
 
     /// <summary>

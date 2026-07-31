@@ -69,6 +69,39 @@ material from the export (which also removed 3.1 MB from every release), plus a 
 the lockfile's `forbidden` list names `engine.lock.json`, so if anything re-includes it the check fails
 loudly instead of silently becoming a tautology again.
 
+## Amendment 2026-07-31: the pin covers every preset, not just Windows
+
+As accepted, only `windows-client` set `custom_template/release`; the other three presets were empty,
+which is the value this ADR itself identifies as the dangerous one. The reasoning at the time was that
+the Linux and macOS templates carry no patches, so pinning them bought nothing. That is true about
+*behaviour* and wrong about *provenance*: it left Linux and macOS players, and every dedicated server,
+running whatever stock template the build machine happened to have, with no record of which.
+
+All four presets now point at a pinned template, and a new
+`verify-engine-template.py --preset-config PRESET` gates the field **before** the export: non-empty,
+naming the file the lockfile pins, and matching its sha256. That check exists because the binary check
+this ADR argues for cannot be extended to the other platforms:
+
+**Content verification is Windows-only, and that is a property of the patch set rather than a gap to
+close later.** The patches touch `platform/windows/` exclusively, so a "patched" Linux template and a
+stock one contain the same engine code. No marker can discriminate them because there is nothing
+different to find, and a required marker invented for those platforms would fail a good binary: the
+`RAWINPUTHEADER` row in the table above, in its worst form. So `verify-engine-template.py` prints
+`NOT CONTENT-VERIFIED` there and qualifies its summary line rather than reporting a pass for a check
+that did not run. The non-Windows presets are covered by the pre-export gate plus Godot's hard abort on
+a populated-but-missing path, which together leave only "Godot ignored a valid path" uncovered, as
+opposed to the empty-field case, which is the one that fails silently.
+
+This also revises one line under *Alternatives considered*: a pre-export configuration check was
+rejected as **insufficient**, which it is, since it cannot see what shipped. It is not, however, worthless,
+and on the platforms where no content check is possible it is the only thing standing between an
+emptied field and a stock build. It is now run everywhere, *in addition to* the binary check on
+Windows, not instead of it.
+
+`linux-dedicated` is pinned as well, though a headless server has no mouse and would not carry the
+backport in any case. It consumes the same file `linux-client` already fetches, so the pin is free;
+and leaving exactly one preset empty would re-create this ADR's hole in the least-watched build.
+
 ## Consequences
 
 - The template is a build input with a pinned identity, so "is this build stale" is answerable.

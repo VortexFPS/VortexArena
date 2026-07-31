@@ -97,6 +97,14 @@ jobs:
         run: python tools/data/fetch-engine-template.py --only windows
         shell: bash
 
+      # Pre-export gate: assert custom_template/release is populated, names the file the lockfile pins,
+      # and that file's sha256 matches. Cheap, and it fails in seconds rather than after a full export.
+      # It is not a substitute for the content check below (it cannot see what Godot actually did), but
+      # it catches G10's actual cause - the field being blanked - before any time is spent.
+      - name: Verify the engine template is configured and pinned
+        run: python tools/verify-engine-template.py --preset-config windows-client
+        shell: bash
+
       - name: Export windows-client
         # Godot's headless export often exits non-zero on benign warnings â€” `|| true`, then assert the
         # binary actually appeared so a REAL export failure (no output) still fails the job.
@@ -155,6 +163,22 @@ jobs:
       - name: Import resources
         run: godot --headless --path . --import || true
 
+      # Both Linux presets consume the SAME pinned template (one file, two presets). It carries none of
+      # tools/engine-patches/ - the patch set touches platform/windows/ exclusively - so this is a
+      # PROVENANCE pin, not a functional one: it makes "which engine is this server running" answerable
+      # instead of "whatever stock template the runner had installed". Verified against the sha256 in
+      # engine.lock.json; a mismatch deletes the download rather than leaving a half-verified binary.
+      - name: Fetch the pinned engine template
+        run: python tools/data/fetch-engine-template.py --only linux
+
+      # This is the ONLY G10 gate the Linux presets can have, and it runs before the export rather than
+      # after: no binary marker can tell a patched Linux template from a stock one, because there is no
+      # difference to find. So an emptied custom_template/release must be caught here, on the INPUT.
+      - name: Verify the engine templates are configured and pinned
+        run: |
+          python tools/verify-engine-template.py \
+            --preset-config linux-client --preset-config linux-dedicated
+
       - name: Export linux-client + linux-dedicated
         # Godot's headless export often exits non-zero on benign warnings â€” `|| true`, then assert outputs.
         run: |
@@ -163,6 +187,19 @@ jobs:
           godot --headless --path . --export-release "linux-dedicated" dist/linux-dedicated/vortexarena-dedicated.x86_64 || true
           test -f dist/linux-client/VortexArena.x86_64
           test -f dist/linux-dedicated/vortexarena-dedicated.x86_64
+
+      # Deliberately NOT called "verify the engine template that was used" like the Windows step: on
+      # Linux this asserts only the contamination canary (no dev material in the pck), and the script
+      # prints NOT CONTENT-VERIFIED plus a qualified summary rather than a clean bill. Naming it after a
+      # check that cannot run here is how a green tick starts meaning less than a reader assumes.
+      # The canary itself is real and platform-independent, and it was previously checked on Windows
+      # alone even though exclude_filter is per-preset and can regress on any of them.
+      - name: Check the exported binaries for dev-material contamination
+        run: |
+          python tools/verify-engine-template.py \
+            --binary dist/linux-client/VortexArena.x86_64 --preset linux-client
+          python tools/verify-engine-template.py \
+            --binary dist/linux-dedicated/vortexarena-dedicated.x86_64 --preset linux-dedicated
 
 
       # Maps are build output, fetched per data/maps.lock.json. Cached on the LOCKFILE hash so the cache
@@ -203,12 +240,29 @@ jobs:
       - name: Import resources
         run: godot --headless --path . --import || true
 
+      # Same provenance pin as Linux: the macOS template carries none of tools/engine-patches/ either.
+      # It IS a universal (arm64 + x86_64) build, which the stock template is too, but pinning means the
+      # arch of what shipped is a recorded fact rather than a property of the runner's install.
+      - name: Fetch the pinned engine template
+        run: python tools/data/fetch-engine-template.py --only macos
+
+      - name: Verify the engine template is configured and pinned
+        run: python tools/verify-engine-template.py --preset-config macos-client
+
       - name: Export macos-client
         # Godot's headless export often exits non-zero on benign warnings â€” `|| true`, then assert the .app.
         run: |
           mkdir -p dist/macos-client
           godot --headless --path . --export-release "macos-client" dist/macos-client/VortexArena.app || true
           test -d dist/macos-client/VortexArena.app
+
+      # Canary only, like Linux, and named accordingly - see the Linux job for why this is not called a
+      # template verification. The script resolves the .app bundle to Contents/MacOS/<exe> itself, so the
+      # export path can be passed verbatim instead of hard-coding a bundle layout in two places.
+      - name: Check the exported binary for dev-material contamination
+        run: |
+          python tools/verify-engine-template.py \
+            --binary dist/macos-client/VortexArena.app --preset macos-client
 
 
       # Maps are build output, fetched per data/maps.lock.json. Cached on the LOCKFILE hash so the cache
@@ -291,9 +345,16 @@ jobs:
             Fat archives: binary + Godot runtime + all game content. Unzip and run, and keep the files
             together — the game loads `data/` from beside the binary.
 
-            The Windows build uses a patched Godot export template (the high-polling-rate mouse-input
-            backport — `planning/decisions/ADR-0017-engine-patches.md`). The release job asserts the
-            shipped binary actually contains it rather than trusting the export to have used it.
+            Every build here is exported from a Godot template pinned by
+            `tools/engine-patches/engine.lock.json`, so the engine each platform ships is a recorded
+            fact rather than whatever the build machine had installed
+            (`planning/decisions/ADR-0017-engine-patches.md`).
+
+            The **Windows** template additionally carries the high-polling-rate mouse-input backport,
+            and the release job asserts the shipped Windows binary actually contains it rather than
+            trusting the export to have used it. The Linux and macOS templates carry no patches: the
+            patch set touches Windows code only, so they are equivalent in behaviour to the official
+            builds and are pinned for provenance.
 
             ---
           fail_on_unmatched_files: true

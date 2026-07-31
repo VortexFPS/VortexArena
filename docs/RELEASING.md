@@ -57,11 +57,32 @@ You need the Godot **4.6.3 mono** editor and its **export templates** installed
 
 ```bash
 python tools/data/fetch-maps.py                         # one-time: fetch maps into data/maps/
-ci/ci.sh --export                                       # export windows-client + linux-dedicated (your OS only)
-# …or run a single preset:
-#   "$GODOT" --headless --path . --export-release "linux-client" dist/linux-client/VortexArena.x86_64
+ci/ci.sh --export                                       # export windows-client + linux-client + linux-dedicated
 tools/package.sh --version 0.1.0 linux-client           # lay out assets + zip → dist/VortexArena-0.1.0-linux-x86_64.zip
 ```
+
+`ci/ci.sh --export` fetches the pinned engine templates, gates every preset's
+`custom_template/release` against `tools/engine-patches/engine.lock.json` *before* exporting, and
+checks the exported binaries afterwards, the same gates `release.yml` runs. That matters because an
+empty `custom_template/release` makes Godot fall back to the **stock** template and produce a complete,
+launchable binary carrying none of the engine patches, without failing
+([ADR-0017](../planning/decisions/ADR-0017-engine-patches.md)). A local export that skipped these gates
+would be the same hole the release workflow already spent effort closing.
+
+To run a single preset by hand, do the fetch and the gate yourself first, otherwise you are back to
+trusting whatever happens to be in the gitignored `tools/engine-templates/`:
+
+```bash
+python tools/data/fetch-engine-template.py --only linux
+python tools/verify-engine-template.py --preset-config linux-client
+"$GODOT" --headless --path . --export-release "linux-client" dist/linux-client/VortexArena.x86_64
+python tools/verify-engine-template.py --binary dist/linux-client/VortexArena.x86_64 --preset linux-client
+```
+
+Only the **Windows** binary can be content-verified. The patch set touches `platform/windows/` only, so
+nothing inside a Linux or macOS binary distinguishes our template from a stock one. The script says so
+out loud (`NOT CONTENT-VERIFIED`) rather than printing a pass for a check that did not run; on those
+platforms the pre-export gate is the real guarantee.
 
 `tools/package.sh` with no target args packages every target whose export output exists under `dist/`.
 On Windows, `run-release.ps1` exports + launches the windows-client preset directly.

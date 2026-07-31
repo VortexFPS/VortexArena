@@ -48,9 +48,16 @@ namespace VortexArena.Game.Client;
 /// <b>p50 6.9 / p95 6.9 ms with zero asset-build hitches</b>. What is left on the main thread is the small
 /// sound-decode queue below (budgeted) and nothing else.</para>
 ///
-/// <para><b>The one cost that did NOT move</b> is managed allocation: the worker decodes allocate, and a GC
-/// they trigger still pauses the main thread. That is why models are fed through a small in-flight window
-/// (<see cref="MaxModelsInFlight"/>) rather than fanned out at once.</para>
+/// <para><b>What is left is contention, not work.</b> With the main thread idle, the warm's remaining cost
+/// reaches it indirectly — a burst of concurrent decodes and GPU uploads makes the frame block in present. In
+/// the capture that showed as frames of 13–25 ms whose time was almost entirely <c>rest</c>, with
+/// <c>proc</c>/<c>rcpu</c>/<c>gpu</c> all near zero. (One of them was even classified GC-PAUSE because a gen2
+/// collection happened to land in it; the GC pause itself was 0.2 ms of the 24.9.) Two things keep that in
+/// check: uploads are serialized behind <see cref="AssetSystem"/>'s upload gate so the driver gets a trickle
+/// rather than four concurrent streams, and models are fed through a small in-flight window
+/// (<see cref="MaxModelsInFlight"/>) rather than fanned out at once. The streamer's worker threads also run at
+/// <c>BelowNormal</c> priority, so the OS preempts prefetch rather than the render loop. What survives all of
+/// that is a single ~13 ms frame — one dropped frame at 144 fps — while two workers decode concurrently.</para>
 ///
 /// <para>Pipeline (PSO) compilation is deliberately NOT done here: it is viewport/World3D-variant specific
 /// (see the godot-pipeline-compile-internals notes / <see cref="GpuWarmPass"/>), so the menu's world would compile

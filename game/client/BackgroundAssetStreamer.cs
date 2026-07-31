@@ -177,7 +177,17 @@ public partial class BackgroundAssetStreamer : Node
                 _workers = new Thread[WorkerCount];
                 for (int i = 0; i < _workers.Length; i++)
                 {
-                    _workers[i] = new Thread(WorkerLoop) { IsBackground = true, Name = $"AssetStreamer-{i}" };
+                    _workers[i] = new Thread(WorkerLoop)
+                    {
+                        IsBackground = true,
+                        Name = $"AssetStreamer-{i}",
+                        // BelowNormal: this lane is PREFETCH. Nothing on it is worth a frame — a late asset
+                        // shows a placeholder a moment longer, a late frame is a visible stutter. The client
+                        // process runs AboveNormal (sys_priority_boost), so leaving the workers at Normal put
+                        // them two bands under the game only by luck of the process boost; saying it explicitly
+                        // means the OS preempts THEM rather than the render loop whenever cores are contended.
+                        Priority = ThreadPriority.BelowNormal,
+                    };
                     _workers[i].Start();
                 }
             }

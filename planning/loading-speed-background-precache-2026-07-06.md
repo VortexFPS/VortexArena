@@ -44,13 +44,24 @@ and a ranked/phased plan. Timings below are from a single **Debug (jit-opt)** ca
      render built on the main thread. Used ONLY by this warm, where a failure degrades to "the match loads it
      normally"; the live in-match paths still upload on the main thread.
 
-  **Result (release export, menu boot):** first window **7 frames → 641 frames**, p50 **829.8 ms → 6.9 ms**,
-  p95 **9.1 ms**, and **zero asset-build hitches** — later windows report "no hitches" outright. The warm also
-  finishes much sooner (~22 s → ~6 s) now that nothing paces it against a main-thread budget. The one residual
-  main-thread cost the warm can still cause is a GC pause from worker allocation, which is what the 2-model
-  in-flight window bounds. Same-day A/B on the in-match capture (`tools/perf-run.ps1`, catharsis+6 bots) shows
-  the shared-streamer + cache-locking changes are neutral there: avg 145.3 vs 141.5 fps, p99 14.3 vs 15.7 ms,
-  ASSET-BUILD hitches 4 vs 4.
+  5. **The last few hitches were contention, not work — and the "GC-PAUSE" label was a red herring.** With the
+     main thread idle, three frames of 13–25 ms remained in the first ~5 s. Read properly: `proc 0.3 rcpu 0.4
+     gpu 0.3 rest 24.2` — the time was *present*, not any scope, with the watchdog parked in `(post-process)`.
+     The worst was classified `GC-PAUSE` only because a gen2 collection happened to land in the same frame; the
+     GC pause itself was **0.2 ms of the 24.9**. The real cause was the upload burst — four workers each
+     pushing a 25–45 ms texture create saturated the driver's ingest path (VRAM climbs to ~2.7 GB in ~6 s).
+     Fixed by splitting `WarmTextureOffThread` into a PARALLEL decode and a SERIALIZED upload (one
+     `_uploadGate`), and by dropping the streamer's worker threads to `ThreadPriority.BelowNormal` — prefetch
+     should be what the OS preempts, never the render loop.
+
+  **Result (release export, menu boot):** first window **7 frames → 645 frames**, p50 **829.8 ms → 6.9 ms**,
+  p95 **6.9 ms**, and **one** hitch in the whole session: a 13.0 ms frame (one dropped frame at the 144 fps cap)
+  while two workers decode concurrently. Every window after the first reports **"no hitches"** with p50/p95/p99
+  all 6.9 ms; reproduced across two consecutive runs. The warm also finishes much sooner (~22 s → ~6 s) now that
+  nothing paces it against a main-thread budget. Same-day A/B on the in-match capture (`tools/perf-run.ps1`,
+  catharsis+6 bots) shows the shared-streamer, cache-locking and thread-priority changes are neutral there:
+  p50 3.8 vs 4.2 ms, post-load avg 190.2 vs 173.4 fps, ASSET-BUILD hitches 4 vs 4 (p99 moved +1.0 ms, inside the
+  ±1.4 ms spread of three repeat runs).
 
   **Why it went unnoticed for three weeks:** `MenuAssetWarmer._Process` shipped with **no `Prof.Sample` scope**
   (the house rule exists for exactly this), so its cost landed in `proc:other`; and the hitch detector needs a

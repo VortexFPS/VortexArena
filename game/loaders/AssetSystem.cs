@@ -622,7 +622,6 @@ public sealed class AssetSystem
     {
         if (string.IsNullOrEmpty(baseNameNoExt) || baseNameNoExt[0] == '$')
             return;
-        using var _ = VortexArena.Common.Diagnostics.Prof.Sample("stream.upload");
         try
         {
             string? vpath = _vfs.ResolveImage(baseNameNoExt);   // ConcurrentDictionary-cached (thread-safe)
@@ -631,9 +630,27 @@ public sealed class AssetSystem
             lock (_textureCacheGate)
                 if (_textureCache.ContainsKey(vpath))
                     return;
-            Texture2D? tex = LoadTextureFromVpath(vpath);
-            lock (_textureCacheGate)
-                _textureCache[vpath] = tex;
+
+            // Decode in PARALLEL (this is CPU work and the lane has several workers)...
+            using (VortexArena.Common.Diagnostics.Prof.Sample("stream.predecode"))
+                PredecodeTexture(baseNameNoExt);
+
+            // ...but upload SERIALLY. There is one GPU, and letting every worker push a 25-45 ms texture
+            // create at it concurrently saturated the driver's ingest path: the main thread then blocked in
+            // present (frames of 13-25 ms whose cost was ~all `rest`, with proc/rcpu/gpu all near zero) even
+            // though it was doing no work of its own. One upload in flight turns that burst into a trickle.
+            // The decode above is already done by the time we take the gate, so waiting here is cheap.
+            lock (_uploadGate)
+            {
+                lock (_textureCacheGate)
+                    if (_textureCache.ContainsKey(vpath))
+                        return;                     // another worker uploaded it while we decoded
+                Texture2D? tex;
+                using (VortexArena.Common.Diagnostics.Prof.Sample("stream.upload"))
+                    tex = LoadTextureFromVpath(vpath);   // consumes the predecode parked above
+                lock (_textureCacheGate)
+                    _textureCache[vpath] = tex;
+            }
         }
         catch (Exception ex)
         {
@@ -641,6 +658,10 @@ public sealed class AssetSystem
                      "the match will load it normally.");
         }
     }
+
+    /// <summary>Serializes off-thread GPU uploads — see <see cref="WarmTextureOffThread"/>. Held only around
+    /// the upload itself, never around the decode.</summary>
+    private readonly object _uploadGate = new();
 
     /// <summary>
     /// Resolve and decode a texture by extension-agnostic base name to a raw <see cref="Image"/> (no GPU

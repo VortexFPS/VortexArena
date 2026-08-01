@@ -95,6 +95,55 @@ internal static class Env
     }
 
     /// <summary>
+    /// Run a command with the caller's stdio attached (no capture) and return its exit code. This is what
+    /// the delegating commands use: the wrapped script's own output IS the output, so vx never reformats or
+    /// swallows it.
+    /// </summary>
+    internal static int Exec(string exe, IEnumerable<string> args, string? workingDir = null)
+    {
+        var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = workingDir ?? RepoRoot };
+        foreach (string a in args) psi.ArgumentList.Add(a);
+        using Process? p = Process.Start(psi);
+        if (p is null) { Console.Error.WriteLine($"vx: could not start {exe}"); return 127; }
+        p.WaitForExit();
+        return p.ExitCode;
+    }
+
+    /// <summary>
+    /// Run one of the repo's shell scripts. On Windows that needs a bash — Git Bash, which this tree
+    /// already requires (run-release.sh uses <c>/c/...</c> mount paths, and ci/ci.sh is bash-only). Finding
+    /// it explicitly rather than assuming <c>bash</c> is on PATH keeps the failure legible: "install Git for
+    /// Windows" is actionable where "the system cannot find the file specified" is not.
+    /// </summary>
+    internal static int Bash(string scriptRelPath, IEnumerable<string> args)
+    {
+        string script = Path.Combine(RepoRoot, scriptRelPath);
+        if (!File.Exists(script))
+        {
+            Console.Error.WriteLine($"vx: missing {scriptRelPath}");
+            return 1;
+        }
+
+        string? bash = Which("bash");
+        if (bash is null && IsWindows)
+            foreach (string c in new[] { @"C:\Program Files\Git\bin\bash.exe", @"C:\Program Files\Git\usr\bin\bash.exe" })
+                if (File.Exists(c)) { bash = c; break; }
+
+        if (bash is null)
+        {
+            Console.Error.WriteLine($"vx: {scriptRelPath} needs bash.");
+            Console.Error.WriteLine(IsWindows
+                ? "    Install Git for Windows (it provides Git Bash): https://git-scm.com/download/win"
+                : "    No bash on PATH — install it via your package manager.");
+            return 1;
+        }
+
+        var argv = new List<string> { script };
+        argv.AddRange(args);
+        return Exec(bash, argv);
+    }
+
+    /// <summary>
     /// Godot, resolved in the SAME order as <c>tools/lib/find-godot.sh</c>: <c>$GODOT</c> (verbatim, and a
     /// set-but-missing value deliberately does NOT fall through), then <c>.godot-bin/</c>, then PATH, then
     /// the platform's usual install location. Windows prefers the console build, whose stdout is capturable.

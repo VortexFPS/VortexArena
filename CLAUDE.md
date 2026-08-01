@@ -7,11 +7,28 @@ postmortems + trackers under `planning/`.
 
 ## Build & test
 
+`./vx` is the front door (`vx.cmd` on Windows). It is a thin dispatcher over the scripts below, which all
+stay independently runnable — **put real logic in the script, never in `vx`**.
+
 ```bash
-dotnet build VortexArena.csproj -c Debug                         # the Godot host
-dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj    # full suite (real-data tests self-skip without assets/)
+./vx doctor                  # what is installed, what is missing, what to do about it (changes nothing)
+./vx setup                   # bring a fresh clone to runnable: engine, maps, export templates
+./vx build                   # the Godot host
+./vx test                    # the suite
+./vx ci                      # the authoritative local gate
+```
+
+The underlying commands still work and are still the reference:
+
+```bash
+dotnet build VortexArena.csproj -c Debug
+dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj    # full suite (map-dependent cases lower their thresholds without maps)
 ci/ci.sh                                                          # the authoritative local gate
 ```
+
+Godot and Python are resolved, never hardcoded — `tools/lib/find-godot.sh` / `find-python.sh` (and their C#
+twins in `tools/vx/Env.cs`, which must stay in step). `$GODOT` / `$PYTHON` override. A repo-local engine in
+`.godot-bin/` is probed before PATH.
 
 Toolchain paths, launch flags (`--host <map> --bots N`, `--cvar`, `--quit-after-seconds`), headless
 smoke: **docs/RUNNING.md**.

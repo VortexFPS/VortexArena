@@ -158,6 +158,15 @@ internal static class Doctor
                 "none — map-dependent tests self-skip and the host smoke cannot run",
                 Fix: "$PYTHON tools/data/fetch-maps.py     (or --rebuild to compile from source)");
 
+        // Godot's OWN export templates, needed by any preset with an empty custom_template/release
+        // (today: macos-client, a declared exception in engine.lock.json). Separate from the pinned
+        // custom templates below, and nothing in vx installs them - it is a ~1.2 GB editor download.
+        yield return Wrappers.EditorTemplatesPresent()
+            ? new Check("Godot editor templates", Status.Ok, "installed")
+            : new Check("Godot editor templates", Status.Warn,
+                "not installed - presets without a pinned custom template cannot export (macos-client)",
+                Fix: "Godot editor -> Editor -> Manage Export Templates -> Download and Install");
+
         // The repo-local engine install find-godot.sh probes before PATH.
         string bin = Path.Combine(root, ".godot-bin");
         yield return new Check(".godot-bin/", Directory.Exists(bin) ? Status.Ok : Status.Warn,

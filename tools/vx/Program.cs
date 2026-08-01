@@ -35,6 +35,14 @@ internal static class Program
                 "maps" => Maps.Run(commandArgs, json),
                 "setup" => Setup.Run(commandArgs, json),
                 "engine" => Engine.Run(commandArgs, json),
+                "build" => Wrappers.Build(commandArgs),
+                "test" => Wrappers.Test(commandArgs),
+                "run" => Wrappers.RunClient(commandArgs),
+                "server" => Wrappers.Server(commandArgs),
+                "export" => Wrappers.Export(commandArgs),
+                "package" => Wrappers.Package(commandArgs),
+                "ci" => Wrappers.Ci(commandArgs),
+                "perf" => Wrappers.Perf(commandArgs),
                 _ => UnknownCommand(command),
             };
         }
@@ -85,13 +93,19 @@ internal static class Program
                             --force         re-download everything
                             --only <plat>   just these (repeatable)
 
+              build       Build the Godot host.        --config Debug|Release
+              test        Run the suite.               --filter <expr>
+              run         Launch the client.           extra args go to the game
+              server      Headless dedicated server.   [map] [args...]
+              export      Export a release preset.     --preset <p> | --all
+              package     Zip the exports.             (tools/package.sh)
+              ci          The full local gate.         (ci/ci.sh)
+              perf        Capture a perf session.      (tools/perf-run.sh)
+
             Global options:
               --json      Machine-readable output. The schema is versioned and is a
                           contract with VortexLauncher — see the plan before changing it.
               --help      This message.
-
-            Not yet implemented (planning/bootstrap-and-task-runner-2026-08-01.md):
-              build, test, run, server, export, package, ci, perf
 
             Environment overrides, honoured by doctor and by the shell scripts alike:
               GODOT       path to the Godot 4.6.3 mono executable

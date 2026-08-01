@@ -355,6 +355,6 @@ public class VisualQaTests
         int floor = TestPaths.HasMaps ? 500 : 200;
         Assert.True(shaders.Count >= floor,
             $"expected {floor}+ compiled materials from the stock shader scripts, got {shaders.Count} "
-            + $"(maps present: {TestPaths.HasMaps})");
+            + $"(map content: {TestPaths.Maps})");
     }
 }

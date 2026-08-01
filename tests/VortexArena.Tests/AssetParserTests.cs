@@ -57,7 +57,7 @@ public class AssetParserTests
         int floor = TestPaths.HasMaps ? 500 : 200;
         Assert.True(shaders.Count >= floor,
             $"expected {floor}+ materials from the real shader scripts, got {shaders.Count} "
-            + $"(maps present: {TestPaths.HasMaps})");
+            + $"(map content: {TestPaths.Maps})");
     }
 
     [Fact]

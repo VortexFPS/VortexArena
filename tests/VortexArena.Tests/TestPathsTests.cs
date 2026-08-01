@@ -85,10 +85,16 @@ public class TestPathsTests
     /// <c>ResolveHasMaps</c> was looking for a loose <c>.bsp</c> or a root-level <c>.pk3</c>, so
     /// <c>HasMaps</c> went false with all 32 packs installed and nothing went red.
     ///
-    /// So: if map content is discoverable by ANY layout, HasMaps must say so.
+    /// So: if map content is discoverable by ANY layout, <see cref="TestPaths.Maps"/> must not say None.
+    ///
+    /// <para>Asserts on the TRI-STATE, not on <c>HasMaps</c>, since 2026-08-01: <c>HasMaps</c> now means
+    /// specifically "the complete pinned set", so one installed pack correctly makes it false while the
+    /// content is still very much discoverable. The property this guard exists to protect is unchanged —
+    /// discoverable content must never read as None — and it is now expressible without conflating
+    /// "some maps" with "all maps".</para>
     /// </summary>
     [Fact]
-    public void HasMaps_Is_True_When_Map_Content_Is_Present()
+    public void MapContent_Is_Not_None_When_Map_Content_Is_Present()
     {
         if (!TestPaths.HasData)
             return;
@@ -107,11 +113,11 @@ public class TestPathsTests
             return; // genuinely no maps installed — the map-dependent tests are right to skip
 
         Assert.True(
-            TestPaths.HasMaps,
+            TestPaths.Maps != TestPaths.MapContent.None,
             $"map content IS present under {TestPaths.Data} (per-map .pk3={packedPerMap}, "
                 + $"extracted={extracted}, bundled .pk3={bundled}, loose .bsp={looseBsp}) but "
-                + "TestPaths.HasMaps is false — every map-dependent assertion is silently skipped or "
-                + "running against a lowered threshold. Fix ResolveHasMaps.");
+                + "TestPaths.Maps is None — every map-dependent assertion is silently skipped or "
+                + "running against a lowered threshold. Fix ResolveMaps.");
     }
 
     [Fact]

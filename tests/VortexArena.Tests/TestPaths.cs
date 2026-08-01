@@ -65,52 +65,114 @@ internal static class TestPaths
     /// <summary>True when a real content tree resolved, for tests that want an explicit guard.</summary>
     public static bool HasData => Directory.Exists(Data);
 
-    /// <summary>
-    /// True when compiled map content (BSPs and their art) is present.
-    ///
-    /// Separate from <see cref="HasData"/> because the two now arrive by different routes: the core
-    /// content is committed and comes with the clone, while compiled maps are build output fetched per
-    /// <c>data/maps.lock.json</c> from a VortexMaps release (restructure D7, section 5.3.1). So a
-    /// perfectly good checkout legitimately has core content and no maps, and the map-dependent tests
-    /// have to distinguish "not fetched" from "broken".
-    ///
-    /// Probes both layouts: per-map <c>.pk3dir</c> packages under <c>data/maps/</c> after the
-    /// restructure, and the bundled <c>*-maps.pk3</c> / <c>*-nexcompat.pk3</c> archives before it.
-    /// </summary>
-    public static bool HasMaps { get; } = ResolveHasMaps();
+    /// <summary>How much compiled map content is installed. See <see cref="Maps"/>.</summary>
+    public enum MapContent
+    {
+        /// <summary>No map content by any layout. Map-dependent assertions skip; that is correct.</summary>
+        None,
+        /// <summary>Some maps, but not every pack <c>data/maps.lock.json</c> pins.</summary>
+        Partial,
+        /// <summary>Every pinned pack, or a legacy all-in-one bundle. Safe to assert at full strength.</summary>
+        Full,
+    }
 
-    private static bool ResolveHasMaps()
+    /// <summary>
+    /// How much compiled map content (BSPs and their art) is present.
+    ///
+    /// Separate from <see cref="HasData"/> because the two arrive by different routes: core content is
+    /// committed and comes with the clone, while compiled maps are build output fetched per
+    /// <c>data/maps.lock.json</c> from a VortexMaps release (restructure D7, section 5.3.1). So a
+    /// perfectly good checkout legitimately has core content and no maps.
+    ///
+    /// <para><b>Why three states and not two (2026-08-01).</b> This was a bool, and a bool cannot express
+    /// the state <c>ci/ci.sh</c> creates for itself. The gate runs the suite, and LATER fetches
+    /// <c>--only stormkeep</c> for its host smoke — so a fresh clone went green on the first run (no maps
+    /// → assertions skipped) and RED on the second (one map → the flag flipped true → the full-set
+    /// thresholds asserted → three failures), with nothing changed but the gate's own side effect. One
+    /// installed pack is not the 32-pack set those thresholds describe. It was invisible on a dev box
+    /// where the full set is always present, which is the same blind spot that hid four portability bugs
+    /// in this tree until the same day.</para>
+    ///
+    /// <para>Probes every layout: per-map <c>.pk3</c> under <c>data/maps/</c> (current), extracted
+    /// <c>.pk3dir</c>, the pre-restructure bundled <c>*-maps.pk3</c> archives, and loose BSPs.</para>
+    /// </summary>
+    public static MapContent Maps { get; } = ResolveMaps();
+
+    /// <summary>
+    /// True only for a COMPLETE map set, i.e. safe to assert full-set thresholds against.
+    ///
+    /// <para>Deliberately <c>Full</c> rather than <c>!= None</c>, so the many call sites that read
+    /// <c>HasMaps ? highFloor : lowFloor</c> keep meaning what they were written to mean. A partial set
+    /// takes the lowered threshold, which is the safe direction: it under-asserts on an incomplete
+    /// checkout rather than failing on one.</para>
+    /// </summary>
+    public static bool HasMaps => Maps == MapContent.Full;
+
+    private static MapContent ResolveMaps()
     {
         if (!Directory.Exists(Data))
-            return false;
+            return MapContent.None;
 
-        // Current layout: fetch-maps.py installs one .pk3 per map into data/maps/, unextracted, because
+        string maps = Path.Combine(Data, "maps");
+
+        // Current layout: the fetcher installs one .pk3 per map into data/maps/, unextracted, because
         // MountGameDir mounts a .pk3 natively. Presence of a pack is enough - opening it to confirm
         // would cost a zip scan on every probe.
         //
         // This case was MISSING for a while and the omission is instructive: every earlier probe looked
         // for a loose .bsp or for a .pk3 at the data ROOT, so when the fetch switched from extracting to
-        // installing, HasMaps silently went false with all 32 packs present. Nothing went red, because a
-        // false HasMaps only LOWERS thresholds and SKIPS assertions - so the suite stayed green while the
-        // map-dependent half of it stopped asserting. TestPathsTests now guards this directly.
-        string maps = Path.Combine(Data, "maps");
-        if (Directory.Exists(maps)
-            && Directory.EnumerateFiles(maps, "*.pk3", SearchOption.TopDirectoryOnly).Any())
-            return true;
+        // installing, HasMaps went false with all 32 packs present. Nothing went red, because a false
+        // HasMaps only LOWERS thresholds and SKIPS assertions - so the suite stayed green while the
+        // map-dependent half of it stopped asserting. TestPathsTests guards this directly.
+        if (Directory.Exists(maps))
+        {
+            int installed = Directory.EnumerateFiles(maps, "*.pk3", SearchOption.TopDirectoryOnly).Count();
+            if (installed > 0)
+                return installed >= PinnedPackCount() ? MapContent.Full : MapContent.Partial;
 
-        // Extracted per-map packages, which fetch-maps.py no longer produces but a developer may still
-        // have unpacked by hand for editing (a .pk3dir IS the loose form - see section 9.3).
-        if (Directory.Exists(maps)
-            && Directory.EnumerateFiles(maps, "*.bsp", SearchOption.AllDirectories).Any())
-            return true;
+            // Extracted per-map packages, which the fetcher no longer produces but a developer may still
+            // have unpacked by hand for editing (a .pk3dir IS the loose form - see section 9.3).
+            if (Directory.EnumerateFiles(maps, "*.bsp", SearchOption.AllDirectories).Any())
+                return MapContent.Full;
+        }
 
-        // Pre-restructure: the BSPs live inside the bundled .pk3 archives at the data root.
+        // Pre-restructure: the BSPs live inside the bundled .pk3 archives at the data root. These are
+        // all-in-one, so there is no partial state to express - either the bundle is there or it is not.
         if (Directory.EnumerateFiles(Data, "*.pk3", SearchOption.TopDirectoryOnly)
             .Any(p => Path.GetFileName(p).Contains("maps", StringComparison.OrdinalIgnoreCase)))
-            return true;
+            return MapContent.Full;
 
         // Any layout can also carry loose BSPs (a locally built or authored map).
-        return Directory.EnumerateFiles(Data, "*.bsp", SearchOption.AllDirectories).Any();
+        return Directory.EnumerateFiles(Data, "*.bsp", SearchOption.AllDirectories).Any()
+            ? MapContent.Full
+            : MapContent.None;
+    }
+
+    /// <summary>
+    /// How many packs <c>data/maps.lock.json</c> pins, which is what "complete" means.
+    ///
+    /// <para>Returns 1 when the lockfile cannot be read, which makes any single installed pack count as
+    /// Full. That is the deliberate direction: an unreadable lockfile means we cannot evaluate
+    /// completeness, and the failure mode this whole property exists to prevent is the QUIET one — a
+    /// lowered threshold that stops asserting without saying so. Better to over-assert and fail loudly on
+    /// a broken checkout than to silently drop coverage on one.</para>
+    /// </summary>
+    private static int PinnedPackCount()
+    {
+        try
+        {
+            string lockPath = Path.Combine(Data, "maps.lock.json");
+            if (!File.Exists(lockPath))
+                return 1;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockPath));
+            return doc.RootElement.TryGetProperty("packs", out var packs)
+                ? Math.Max(1, packs.EnumerateObject().Count())
+                : 1;
+        }
+        catch
+        {
+            return 1;
+        }
     }
 
     /// <summary>

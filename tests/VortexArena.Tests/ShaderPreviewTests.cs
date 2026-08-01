@@ -190,7 +190,7 @@ public class ShaderPreviewTests
         // Most texture shaders live in the map packs, which are fetched rather than committed (D7).
         int minConsidered = TestPaths.HasMaps ? 200 : 0;
         Assert.True(considered > minConsidered,
-            $"only {considered} texture shaders parsed (maps present: {TestPaths.HasMaps}) "
+            $"only {considered} texture shaders parsed (map content: {TestPaths.Maps}) "
             + "— is the data dir right?");
         if (considered == 0) return;
         double rate = resolved * 100.0 / considered;
@@ -204,7 +204,7 @@ public class ShaderPreviewTests
         if (!TestPaths.HasMaps || considered < 50)
         {
             _out.WriteLine($"resolution-rate assertion skipped: {considered} texture shaders, "
-                           + $"maps present: {TestPaths.HasMaps}. {TestPaths.NoMapsReason}");
+                           + $"map content: {TestPaths.Maps}. {TestPaths.NoMapsReason}");
             return;
         }
 

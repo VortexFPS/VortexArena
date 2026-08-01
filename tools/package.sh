@@ -26,6 +26,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Python spelling differs by platform (`python` is gone on macOS 12.3+/most Linux; `python3` does not
+# exist under the python.org Windows install), so resolve it for the hints below rather than guessing.
+. "$ROOT/tools/lib/find-python.sh"
+VX_PY="$(find_python 2>/dev/null || echo python3)"
 DIST="$ROOT/dist"
 # The committed port content. Was $ROOT/assets/data, which on a dev box is a JUNCTION to the
 # pristine upstream reference — packaging from it shipped upstream content with no vortex-*.cfg
@@ -101,12 +105,12 @@ info "packaging: ${targets[*]}"
 if [ ! -d "$ASSETS_SRC" ] || [ -z "$(ls -A "$ASSETS_SRC" 2>/dev/null)" ]; then
     error "content tree missing or empty: $ASSETS_SRC"
     error "  core content is committed — if it is absent this checkout is broken."
-    error "  compiled maps: python tools/data/fetch-maps.py"
+    error "  compiled maps: $VX_PY tools/data/fetch-maps.py"
     exit 1
 fi
 if [ ! -d "$ASSETS_SRC/maps" ] || [ -z "$(ls -A "$ASSETS_SRC/maps" 2>/dev/null)" ]; then
     warn "no compiled maps in $ASSETS_SRC/maps — this build will ship without playable maps."
-    warn "  run: python tools/data/fetch-maps.py"
+    warn "  run: $VX_PY tools/data/fetch-maps.py"
 fi
 
 copy_assets() {  # copy_assets <dest-data-dir>

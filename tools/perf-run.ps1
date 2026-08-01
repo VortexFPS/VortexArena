@@ -139,8 +139,12 @@ if ($null -eq $new -or ($null -ne $before -and $new.FullName -eq $before.FullNam
 Write-Host ">>> [$Label] session: $($new.Name)"
 
 # --- report (+ json for later -Baseline use, + optional diff) --------------------------------
-$py = Get-Command python -ErrorAction SilentlyContinue
-if ($null -eq $py) { $py = Get-Command py -ErrorAction SilentlyContinue }
+# python3 first (macOS/Linux under pwsh have only that spelling), then python, then the Windows py launcher.
+$py = $null
+foreach ($n in @('python3', 'python', 'py')) {
+    $c = Get-Command $n -ErrorAction SilentlyContinue
+    if ($c) { $py = $c; break }
+}
 if ($null -eq $py) { Write-Warning "python not found - session files: $($new.FullName)"; exit 0 }
 
 $reportArgs = @((Join-Path $root "tools\perf-report.py"), $new.FullName,

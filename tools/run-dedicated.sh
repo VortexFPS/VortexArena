@@ -38,7 +38,7 @@ fi
 
 if [ ! -d data ]; then
     echo "run-dedicated.sh: WARNING — data/ missing beside the binary; the VFS mount will fail" >&2
-    echo "(core content is committed; for maps run: python tools/data/fetch-maps.py)" >&2
+    echo "(core content is committed; for maps run: python3 tools/data/fetch-maps.py)" >&2
 fi
 
 map="${1:-stormkeep}"

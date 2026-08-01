@@ -58,4 +58,6 @@ if [ "$NEW" = "${BEFORE:-}" ] || [ -z "$NEW" ]; then
     echo "!!! no new session log (boot failed?) — see _scratch/perf_${LABEL}.out"; tail -20 "$ROOT/_scratch/perf_${LABEL}.out"; exit 1
 fi
 echo ">>> [$LABEL] session: $(basename "$NEW")"
-python "$ROOT/tools/perf-report.py" "$NEW" --json "$ROOT/_scratch/perf_${LABEL}.json"
+. "$ROOT/tools/lib/find-python.sh"
+PYTHON="$(find_python)" || { python_not_found; exit 1; }
+"$PYTHON" "$ROOT/tools/perf-report.py" "$NEW" --json "$ROOT/_scratch/perf_${LABEL}.json"

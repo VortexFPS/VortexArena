@@ -12,6 +12,10 @@
 set -euo pipefail
 
 PROJ="$(cd "$(dirname "$0")" && pwd)"
+# Python spelling differs by platform (`python` is gone on macOS 12.3+/most Linux; `python3` does not
+# exist under the python.org Windows install), so resolve it for the hints below rather than guessing.
+. "$PROJ/tools/lib/find-python.sh"
+VX_PY="$(find_python 2>/dev/null || echo python3)"
 
 # Pick the desktop-client export preset + output binary for THIS OS (export_presets.cfg). The engine itself
 # is resolved by tools/lib/find-godot.sh ($GODOT → .godot-bin/ → PATH → platform install location).
@@ -31,13 +35,9 @@ case "$(uname -s)" in
     *)  echo "[run-release] unsupported OS '$(uname -s)'" >&2; exit 1 ;;
 esac
 
-# On non-Windows the export's C# publish reads nuget.config; drop the Windows-only 'godot-editor' local
-# source (a C:\ path absent here) or NuGet/SDK resolution hard-fails. Backed up + restored on exit.
-if ! $is_windows && grep -q godot-editor "$PROJ/nuget.config" 2>/dev/null; then
-    _nuget_bak="$(mktemp)"; cp "$PROJ/nuget.config" "$_nuget_bak"
-    trap 'cp -f "$_nuget_bak" "$PROJ/nuget.config"; rm -f "$_nuget_bak"' EXIT
-    dotnet nuget remove source godot-editor --configfile "$PROJ/nuget.config" >/dev/null
-fi
+# (Removed 2026-08-01, bootstrap Phase 0.) A block here stripped the Windows-only 'godot-editor' package
+# source from nuget.config before the export's C# publish read it, backing the file up and restoring it on
+# exit. nuget.config is now nuget.org-only, so there is nothing to strip.
 
 mkdir -p "$(dirname "$OUT")"
 echo "[run-release] exporting '$PRESET' (release, optimized C#) → $OUT"
@@ -91,7 +91,7 @@ echo "[run-release][debug] export OK — binary present: $OUT ($(wc -c <"$OUT" 2
 # perf numbers look great because the game never loaded anything. A symlink costs nothing, needs no copy,
 # and stays live as the content tree changes.
 if [ ! -d "$PROJ/data" ]; then
-    echo "[run-release] ERROR: no content tree at $PROJ/data (fetch maps: python tools/data/fetch-maps.py)" >&2
+    echo "[run-release] ERROR: no content tree at $PROJ/data (fetch maps: $VX_PY tools/data/fetch-maps.py)" >&2
     exit 1
 fi
 if [ ! -e "$(dirname "$OUT")/data" ]; then

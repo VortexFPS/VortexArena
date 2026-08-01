@@ -29,6 +29,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Python spelling differs by platform (`python` is gone on macOS 12.3+/most Linux; `python3` does not
+# exist under the python.org Windows install), so resolve it for the hints below rather than guessing.
+. "$ROOT/tools/lib/find-python.sh"
+VX_PY="$(find_python 2>/dev/null || echo python3)"
 . "$ROOT/tools/lib/find-godot.sh"
 GODOT="$(find_godot "$ROOT")" || GODOT=""   # the explicit check below reports it
 OUT="$ROOT/screenshots"
@@ -78,7 +82,7 @@ if [ -z "$GODOT" ] || { [ ! -x "$GODOT" ] && [ ! -f "$GODOT" ]; }; then
     exit 1
 fi
 if [ ! -d "$ROOT/data" ]; then
-    echo "visual-qa.sh: WARNING — $ROOT/data missing; captures will be empty. Core content is committed, so this checkout is broken; for maps run: python tools/data/fetch-maps.py" >&2
+    echo "visual-qa.sh: WARNING — $ROOT/data missing; captures will be empty. Core content is committed, so this checkout is broken; for maps run: $VX_PY tools/data/fetch-maps.py" >&2
 fi
 
 mkdir -p "$OUT"

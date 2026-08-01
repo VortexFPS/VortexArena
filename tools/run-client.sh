@@ -31,7 +31,7 @@ fi
 
 if [ ! -d data ]; then
     echo "run-client.sh: WARNING — data/ missing beside the binary; the world will be empty" >&2
-    echo "(core content is committed; for maps run: python tools/data/fetch-maps.py)" >&2
+    echo "(core content is committed; for maps run: python3 tools/data/fetch-maps.py)" >&2
 fi
 
 exec "$xonotic" "$@"

@@ -25,6 +25,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # nothing is found, which the --no-smoke path below treats as "skip", exactly as before.
 . "$ROOT/tools/lib/find-godot.sh"
 GODOT="$(find_godot "$ROOT")" || GODOT=""
+# Python is NOT optional here — the provenance checks below run before anything else and are the point of
+# the gate. Resolved rather than hardcoded to either spelling: `python` does not exist on macOS 12.3+ or
+# most current Linux, and `python3` does not exist under the python.org Windows install.
+. "$ROOT/tools/lib/find-python.sh"
+PYTHON="$(find_python)" || { python_not_found; exit 1; }
 
 do_smoke=true
 do_export=false
@@ -53,13 +58,13 @@ fail()  { printf '\033[1;31mFAIL:\033[0m %s\n' "$*" >&2; exit 1; }
 # no template on disk, no download — so they run on every ci.sh, not just --export.
 # Not --binary: that needs an export, which this gate does not do (the --export path runs it below).
 step "engine patch provenance + preset accounting (engine.lock.json)"
-python "$ROOT/tools/verify-engine-template.py" --patches --audit-presets
+"$PYTHON" "$ROOT/tools/verify-engine-template.py" --patches --audit-presets
 
 # The parity registry's port_refs are pointers the differ and the parity workflows follow. A dangling one
 # does not look broken - it looks like coverage - so it needs a gate rather than a periodic audit. The
 # Tier-1 rename broke all 360 in a single commit and nothing noticed until someone went looking.
 step "parity registry pointers resolve"
-python "$ROOT/tools/check-parity-refs.py"
+"$PYTHON" "$ROOT/tools/check-parity-refs.py"
 
 # ── 1. libraries + tests build (plain .NET SDK, no Godot) ─────────────────────
 step "build libraries + tests"
@@ -76,7 +81,7 @@ if [ ! -d "$ROOT/data" ]; then
 fi
 if [ ! -d "$ROOT/data/maps" ] || [ -z "$(ls -A "$ROOT/data/maps" 2>/dev/null)" ]; then
     echo "NOTE: no compiled maps — the map-dependent cases self-skipped. For full coverage:"
-    echo "      python tools/data/fetch-maps.py"
+    echo "      $PYTHON tools/data/fetch-maps.py"
 fi
 
 # ── 3. the Godot host project (restores Godot.NET.Sdk via nuget.config) ───────
@@ -105,7 +110,7 @@ if $do_smoke; then
             step "fetching stormkeep for the host smoke"
             # Non-fatal here: the presence check below decides, so an offline run gets one clear
             # message from there rather than two from different layers.
-            python "$ROOT/tools/data/fetch-maps.py" --only stormkeep || true
+            "$PYTHON" "$ROOT/tools/data/fetch-maps.py" --only stormkeep || true
         fi
         if [ -f "$ROOT/data/maps/stormkeep.pk3" ] || [ -d "$ROOT/data/maps/stormkeep.pk3dir" ]; then
             step "headless host smoke (--host stormkeep --bots 2, 20s)"
@@ -155,7 +160,7 @@ if $do_smoke; then
             fail "stormkeep is not present and could not be fetched — the headless host smoke cannot run.
       This smoke covers the listen-server path that regressed silently once (a FramePostDraw await
       that never fires headless), so skipping it is not an acceptable outcome. Fetch manually:
-        python tools/data/fetch-maps.py --only stormkeep"
+        $PYTHON tools/data/fetch-maps.py --only stormkeep"
         fi
     else
         echo "NOTE: Godot not found — skipping the headless smoke (pass --no-smoke to silence)."
@@ -182,7 +187,7 @@ if [ -d "$ROOT/data/maps" ] && [ -n "$(ls -A "$ROOT/data/maps" 2>/dev/null)" ]; 
     echo "Visual QA (headless): asserted load + structure for every stock map/model/shader; pixel correctness is the WINDOWED tools/visual-qa.sh checklist (docs/RUNNING.md)."
 else
     echo "NOTE: no compiled maps — the MAP theories self-skipped (models/shaders from core content still ran)."
-    echo "      python tools/data/fetch-maps.py"
+    echo "      $PYTHON tools/data/fetch-maps.py"
 fi
 rm -f "$vqa_log"
 
@@ -200,7 +205,7 @@ if $do_export; then
     # none of the backports (G10). macos is skipped — this script cannot export it, and the macOS
     # template is a 149 MB download nobody here would use.
     step "fetch the pinned engine templates (windows + linux)"
-    python "$ROOT/tools/data/fetch-engine-template.py" --only windows --only linux
+    "$PYTHON" "$ROOT/tools/data/fetch-engine-template.py" --only windows --only linux
 
     # Cheap and BEFORE the slow part: catches an emptied or re-pointed custom_template/release in a
     # second rather than after three full exports, and asserts each template is in a form that
@@ -210,7 +215,7 @@ if $do_export; then
     # it is not exported here AND is not pinned at all yet; see engine.lock.json's unpinned_presets,
     # and note that step 0's --audit-presets is what keeps that omission from being silent.
     step "engine template configured + hashes + form match (pre-export gate)"
-    python "$ROOT/tools/verify-engine-template.py" \
+    "$PYTHON" "$ROOT/tools/verify-engine-template.py" \
         --preset-config windows-client --preset-config linux-client --preset-config linux-dedicated
 
     step "export windows-client + linux-client + linux-dedicated (macos-client is CI-only — needs a Mac)"
@@ -225,11 +230,11 @@ if $do_export; then
     # "NOT CONTENT-VERIFIED" and the summary line refuses to claim otherwise. Running them is still
     # worth it: exclude_filter is per-preset and can regress on any one of them.
     step "windows: verify the engine template that was used; linux: contamination canary only"
-    python "$ROOT/tools/verify-engine-template.py" \
+    "$PYTHON" "$ROOT/tools/verify-engine-template.py" \
         --binary "$ROOT/dist/windows-client/VortexArena.exe" --preset windows-client
-    python "$ROOT/tools/verify-engine-template.py" \
+    "$PYTHON" "$ROOT/tools/verify-engine-template.py" \
         --binary "$ROOT/dist/linux-client/VortexArena.x86_64" --preset linux-client
-    python "$ROOT/tools/verify-engine-template.py" \
+    "$PYTHON" "$ROOT/tools/verify-engine-template.py" \
         --binary "$ROOT/dist/linux-dedicated/vortexarena-dedicated.x86_64" --preset linux-dedicated
 
     echo "exports in $ROOT/dist/ — run tools/package.sh to bundle assets + zip"

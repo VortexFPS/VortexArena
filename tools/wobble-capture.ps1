@@ -83,4 +83,12 @@ Write-Host "Trace: $($trace.FullName)"
 $reportArgs = @((Join-Path $PSScriptRoot "wobble-report.py"), $trace.FullName,
                 "--json", (Join-Path $outDirFull "wobble_$stamp.json"))
 if ($pmCsv) { $reportArgs += @("--presentmon", $pmCsv) }
-python @reportArgs
+# Resolve the interpreter rather than assuming `python`: that spelling does not exist on macOS 12.3+ or most
+# current Linux, and `python3` does not exist under the python.org Windows install.
+$pyCmd = $null
+foreach ($n in @('python3', 'python', 'py')) {
+    $c = Get-Command $n -ErrorAction SilentlyContinue
+    if ($c) { $pyCmd = $c.Source; break }
+}
+if (-not $pyCmd) { Write-Error "Python not found (tried python3, python, py) - trace kept at $($trace.FullName)"; exit 1 }
+& $pyCmd @reportArgs

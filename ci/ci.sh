@@ -15,12 +15,16 @@
 #                            # engine is the bug ADR-0017 exists to prevent, on CI and locally alike.
 #
 # Env:
-#   GODOT  — path to the Godot 4.6.3 mono CONSOLE executable. Defaults to the known dev-machine path.
+#   GODOT  — path to the Godot 4.6.3 mono CONSOLE executable. Optional: when unset, tools/lib/find-godot.sh
+#            probes .godot-bin/, PATH and the platform's install location. Set it to override.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GODOT="${GODOT:-/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe}"
+# Resolved, not hardcoded: $GODOT → .godot-bin/ → PATH → the platform's install location. Empty when
+# nothing is found, which the --no-smoke path below treats as "skip", exactly as before.
+. "$ROOT/tools/lib/find-godot.sh"
+GODOT="$(find_godot "$ROOT")" || GODOT=""
 
 do_smoke=true
 do_export=false
@@ -36,24 +40,10 @@ done
 step()  { printf '\n\033[1;34m== %s ==\033[0m\n' "$*"; }
 fail()  { printf '\033[1;31mFAIL:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# ── 0. on non-Windows, drop the Windows-only 'godot-editor' NuGet source ──────
-# nuget.config adds the dev machine's local Godot editor nupkgs folder as a package source (key
-# "godot-editor", a C:\ path). That path exists only on the Windows dev box; on Linux/macOS NuGet AND
-# the Godot.NET.Sdk MSBuild SDK resolver hard-fail on the missing local source — so the host build below
-# can't even resolve its SDK. Mirror what .github/workflows/ci.yml does: remove the source first. We back
-# nuget.config up (to $TMPDIR) and restore it on exit, so the working tree is left byte-identical.
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*|Windows_NT) ;;   # real Windows dev box: the local source exists — keep it
-    *)
-        if grep -q godot-editor "$ROOT/nuget.config" 2>/dev/null; then
-            step "drop the Windows-only 'godot-editor' NuGet source (non-Windows host)"
-            _nuget_bak="$(mktemp)"
-            cp "$ROOT/nuget.config" "$_nuget_bak"
-            trap 'cp -f "$_nuget_bak" "$ROOT/nuget.config"; rm -f "$_nuget_bak"' EXIT
-            dotnet nuget remove source godot-editor --configfile "$ROOT/nuget.config" >/dev/null
-        fi
-        ;;
-esac
+# (Removed 2026-08-01, bootstrap Phase 0.) A block here used to back up nuget.config, strip the
+# Windows-only 'godot-editor' package source on non-Windows hosts, and restore the file on exit — because
+# NuGet and the Godot.NET.Sdk MSBuild resolver both hard-fail on a missing local source. nuget.config is
+# now nuget.org-only, so there is nothing to strip and no need to mutate a tracked file mid-run.
 
 # ── 0. engine patch provenance (cheap, and fails before anything slow) ────────
 # --patches catches a patch edited or line-ending-mangled in place, which would otherwise surface as a
@@ -168,7 +158,8 @@ if $do_smoke; then
         python tools/data/fetch-maps.py --only stormkeep"
         fi
     else
-        echo "NOTE: Godot not found at '$GODOT' — skipping the headless smoke (set GODOT= or pass --no-smoke to silence)."
+        echo "NOTE: Godot not found — skipping the headless smoke (pass --no-smoke to silence)."
+        godot_not_found "$ROOT"
     fi
 fi
 
@@ -197,7 +188,10 @@ rm -f "$vqa_log"
 
 # ── 6. optional: the three local export presets (untested path — see ADR-0014) ─
 if $do_export; then
-    [ -f "$GODOT" ] || fail "--export needs Godot (set GODOT=)"
+    if [ -z "$GODOT" ] || { [ ! -f "$GODOT" ] && [ ! -x "$GODOT" ]; }; then
+        godot_not_found "$ROOT"
+        fail "--export needs Godot"
+    fi
 
     # Fetch and gate the engine templates BEFORE exporting, mirroring release.yml. Without this the
     # local path was the hole the release workflow already spent effort closing: an export here used

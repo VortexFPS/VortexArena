@@ -54,10 +54,11 @@ $logDir = Join-Path $baseDir "logs"
 
 # --- pick the binary -------------------------------------------------------------------------
 if ($DebugBuild) {
-    $exe = "C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64_console.exe"
+    . (Join-Path $root "tools\lib\Find-Godot.ps1")
+    $exe = Find-Godot -Root $root
+    if (-not $exe) { Write-GodotNotFound -Root $root; throw "Godot not found (debug capture needs the editor binary)" }
     $exeArgs = @("--path", $root)
     $workDir = $root          # --path already roots res://, so content resolution is CWD-independent here
-    if (-not (Test-Path $exe)) { throw "Godot console binary not found at $exe (see docs/RUNNING.md)" }
 } else {
     $exe = Join-Path $root "dist\windows-client\VortexArena.exe"
     $exeArgs = @()

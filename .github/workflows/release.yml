@@ -78,12 +78,6 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: "9.0.x" }       # global.json: 8.0.0 + rollForward latestMajor
 
-      # The nuget.config "godot-editor" source is a dev-machine-local Windows path that doesn't exist on a
-      # clean runner; NuGet (and the Godot.NET.Sdk MSBuild resolver) hard-fail on a missing local source.
-      - name: Drop the dev-machine Godot editor NuGet source
-        run: dotnet nuget remove source godot-editor --configfile nuget.config
-        shell: bash
-
       - uses: chickensoft-games/setup-godot@v2
         with: { version: "${{ env.GODOT_VERSION }}", use-dotnet: true, include-templates: true }
 
@@ -163,9 +157,6 @@ jobs:
           submodules: false   # the map SOURCE tree (1.5 GB) is irrelevant to building a client
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: "9.0.x" }
-      - name: Drop the dev-machine Godot editor NuGet source
-        run: dotnet nuget remove source godot-editor --configfile nuget.config
-
       - uses: chickensoft-games/setup-godot@v2
         with: { version: "${{ env.GODOT_VERSION }}", use-dotnet: true, include-templates: true }
 
@@ -242,9 +233,6 @@ jobs:
           submodules: false   # the map SOURCE tree (1.5 GB) is irrelevant to building a client
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: "9.0.x" }
-      - name: Drop the dev-machine Godot editor NuGet source
-        run: dotnet nuget remove source godot-editor --configfile nuget.config
-
       - uses: chickensoft-games/setup-godot@v2
         with: { version: "${{ env.GODOT_VERSION }}", use-dotnet: true, include-templates: true }
 

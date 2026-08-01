@@ -7,8 +7,11 @@
 #   with game args:                                          .\run-release.ps1 --host atelier --gametype dm
 $ErrorActionPreference = "Stop"
 
-$Godot  = "C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64_console.exe"
 $Proj   = $PSScriptRoot
+# Resolved, not hardcoded: $env:GODOT -> .godot-bin\ -> PATH -> the usual install location.
+. (Join-Path $Proj "tools\lib\Find-Godot.ps1")
+$Godot  = Find-Godot -Root $Proj
+if (-not $Godot) { Write-GodotNotFound -Root $Proj; exit 1 }
 $Preset = "windows-client"                              # preset.0 in export_presets.cfg
 $Out    = Join-Path $Proj "dist\windows-client\VortexArena.exe"
 

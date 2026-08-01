@@ -11,11 +11,14 @@
 # triggered on `v*` tags (and workflow_dispatch). Keeping the heavy Godot export off this per-push gate is
 # deliberate (ADR-0014): the mono export templates are ~1 GB and the data is ~1.5 GB.
 #
-# The one repo-specific gotcha: nuget.config adds the Windows dev machine's Godot editor nupkgs folder
-# as a package source ("godot-editor"). On a Linux runner that path doesn't exist and NuGet hard-fails
-# on a missing local source â€” and the MSBuild SDK resolver for `Sdk="Godot.NET.Sdk/4.6.3"` reads the
-# same config. Every job therefore removes that source FIRST. Godot.NET.Sdk 4.6.3 / GodotSharp 4.6.3
-# are published on nuget.org (verified 2026-06), so everything restores from there.
+# nuget.config is nuget.org-only, so every job restores directly with no preparation. Godot.NET.Sdk 4.6.3 /
+# GodotSharp 4.6.3 are published there (verified 2026-06) and the MSBuild SDK resolver for
+# `Sdk="Godot.NET.Sdk/4.6.3"` reads the same config.
+#
+# Until 2026-08-01 that file also carried a "godot-editor" source pointing at the Windows dev machine's
+# editor nupkgs folder, and because NuGet hard-fails on a MISSING LOCAL SOURCE, every job here had to run
+# `dotnet nuget remove source godot-editor` before restoring. Those steps are gone with the source itself
+# (bootstrap Phase 0) — the same missing-path failure broke every fresh clone, not just CI runners.
 
 name: Tests
 
@@ -44,9 +47,6 @@ jobs:
         with:
           dotnet-version: "9.0.x" # global.json: 8.0.0 + rollForward latestMajor (matches the dev machine)
 
-      - name: Drop the Windows-only Godot editor NuGet source
-        run: dotnet nuget remove source godot-editor --configfile nuget.config
-
       - name: Restore
         run: dotnet restore tests/VortexArena.Tests/VortexArena.Tests.csproj
 
@@ -73,9 +73,6 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "9.0.x"
-
-      - name: Drop the Windows-only Godot editor NuGet source
-        run: dotnet nuget remove source godot-editor --configfile nuget.config
 
       - name: Build the Godot host project
         run: dotnet build VortexArena.csproj -c Debug

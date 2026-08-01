@@ -29,7 +29,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GODOT="${GODOT:-/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe}"
+. "$ROOT/tools/lib/find-godot.sh"
+GODOT="$(find_godot "$ROOT")" || GODOT=""   # the explicit check below reports it
 OUT="$ROOT/screenshots"
 
 # The official maps shipped in xonotic-20230620-maps.pk3 (docs/RUNNING.md "Gotchas → Maps"), verified against the
@@ -72,8 +73,8 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-if [ ! -x "$GODOT" ] && [ ! -f "$GODOT" ]; then
-    echo "visual-qa.sh: Godot not found at '$GODOT' — set GODOT= to the mono console exe (see docs/RUNNING.md)." >&2
+if [ -z "$GODOT" ] || { [ ! -x "$GODOT" ] && [ ! -f "$GODOT" ]; }; then
+    godot_not_found "$ROOT"
     exit 1
 fi
 if [ ! -d "$ROOT/data" ]; then

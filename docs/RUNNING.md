@@ -13,20 +13,31 @@ Performance capture + hitch diagnosis has its own playbook: **[PERF-DEBUGGING.md
 |---|---|---|
 | **Godot 4.6.3 (GUI/editor)** | `C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64.exe` | The **mono/.NET** build — required (the plain build can't run C#). |
 | **Godot 4.6.3 (console)** | `C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64_console.exe` | Same engine, but **writes to stdout** — use this for headless/CLI runs so you capture `GD.Print` + errors. |
-| Godot bundled C# packages | `C:\Program Files\Godot\GodotSharp\Tools\nupkgs` | Holds `Godot.NET.Sdk 4.6.3` etc. `VortexArena/nuget.config` adds this folder as a package source (exact editor parity + offline builds). The 4.6.3 packages **are** also on public NuGet (verified 2026-06) — CI removes this source and restores from nuget.org (see `.github/workflows/ci.yml`). |
+| Godot bundled C# packages | `C:\Program Files\Godot\GodotSharp\Tools\nupkgs` | Holds `Godot.NET.Sdk 4.6.3` etc. **No longer a package source** — `nuget.config` is nuget.org-only as of 2026-08-01, because a committed local Windows path made `dotnet restore` hard-fail on every machine without that exact install. Add it per-machine if you want offline/editor-exact builds; see the comment in `nuget.config`. |
 | .NET SDK | `dotnet --version` → 9.0.308 (builds the `net8.0` targets) | net8.0 ref pack auto-restores. |
 | Project root | `C:\Users\Bryan\Projects\Xonotic\VortexArena` | `project.godot` + `VortexArena.csproj` (the Godot host) live here. |
 | Game content | `data/` (committed) | Core content ships with the clone. Compiled maps are fetched into `data/maps/` by `python tools/data/fetch-maps.py`, pinned by `data/maps.lock.json`. The VFS mounts this at runtime (see `Shell.DataPath` / the `--data` flag, default `res://data`). **`Base/` is only the upstream reference used by the parity tooling — the game never reads it.** |
 
-**Tip — set an env var once per shell** so commands/tests are short:
+**`$GODOT` is optional.** Every script that needs the engine resolves it through
+`tools/lib/find-godot.sh` (and `tools/lib/Find-Godot.ps1` for the PowerShell tools), which probes in order:
+
+1. `$GODOT` — set it to override everything else; it is used verbatim and nothing else is tried.
+2. `.godot-bin/` inside the clone — where `./vx setup` will install it.
+3. `PATH` — `godot4`, `godot`, `Godot`, `godot-mono`.
+4. The platform's usual install location (`C:\Program Files\Godot\`, `/Applications/Godot*.app`,
+   `/usr/local/bin`, flatpak).
+
+On Windows the **console** build is preferred automatically, because the plain `.exe` detaches from the
+terminal and its `GD.Print`/error output never reaches a captured stdout.
+
+Set it explicitly only to pin a specific build:
 ```bash
-# bash (git-bash / WSL-style)
-export GODOT="/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe"
+export GODOT="/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe"   # bash / git-bash
 ```
-```cmd
-:: cmd / PowerShell
-set GODOT="C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64_console.exe"
+```powershell
+$env:GODOT = "C:\Program Files\Godot\Godot_v4.6.3-stable_mono_win64_console.exe"   # PowerShell
 ```
+When nothing is found, the scripts print every location they tried rather than failing obscurely.
 
 ---
 

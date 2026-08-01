@@ -13,16 +13,17 @@ set -euo pipefail
 
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 
-# Pick the desktop-client export preset + output binary for THIS OS (export_presets.cfg). GODOT may be
-# overridden via the environment so non-Windows devs point at their own Godot 4.6.3 mono console build.
+# Pick the desktop-client export preset + output binary for THIS OS (export_presets.cfg). The engine itself
+# is resolved by tools/lib/find-godot.sh ($GODOT → .godot-bin/ → PATH → platform install location).
+. "$PROJ/tools/lib/find-godot.sh"
+GODOT="$(find_godot "$PROJ")" || { godot_not_found "$PROJ"; exit 1; }
+
 is_windows=false
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*|Windows_NT)
         is_windows=true
-        GODOT="${GODOT:-/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe}"
         PRESET="windows-client"; OUT="$PROJ/dist/windows-client/VortexArena.exe" ;;   # preset.0
     Linux)
-        GODOT="${GODOT:-godot}"
         PRESET="linux-client";   OUT="$PROJ/dist/linux-client/VortexArena.x86_64" ;;  # preset.2
     Darwin)
         echo "[run-release] macOS export is CI-only / best-effort (ADR-0014) — use the release workflow." >&2

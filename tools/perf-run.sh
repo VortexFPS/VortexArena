@@ -24,7 +24,9 @@ else
 fi
 
 if [ "${PERF_DEBUG:-0}" = "1" ]; then
-    EXE="/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe"
+    # Debug capture runs the project through the editor binary rather than an export.
+    . "$ROOT/tools/lib/find-godot.sh"
+    EXE="$(find_godot "$ROOT")" || { godot_not_found "$ROOT"; exit 1; }
     EXTRA_ARGS=(--path "$ROOT")
 else
     EXE="$ROOT/dist/windows-client/VortexArena.exe"

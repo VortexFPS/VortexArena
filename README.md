@@ -141,8 +141,10 @@ asset-dependent tests self-skip there, so `ci/ci.sh` with assets downloaded is t
 **Headless smoke test** (no window — useful for CI or quick verification):
 
 ```bash
-# Set GODOT to the console variant of the engine
-export GODOT="/path/to/Godot_v4.6.3-stable_mono_win64_console.exe"
+# The engine is discovered automatically (PATH, the platform's install location, or .godot-bin/).
+# Set GODOT only to pin a specific build — see docs/RUNNING.md.
+. tools/lib/find-godot.sh
+GODOT="$(find_godot "$PWD")" || { godot_not_found "$PWD"; exit 1; }
 
 "$GODOT" --headless --path . --quit-after 200
 ```

@@ -32,6 +32,7 @@ internal static class Program
             return command switch
             {
                 "doctor" => Doctor.Run(commandArgs, json),
+                "maps" => Maps.Run(commandArgs, json),
                 _ => UnknownCommand(command),
             };
         }
@@ -67,6 +68,12 @@ internal static class Program
 
             Commands:
               doctor      Diagnose the toolchain and content. Changes nothing.
+              maps        Install the map packs pinned by data/maps.lock.json.
+                            --verify-only   report drift, change nothing
+                            --force         re-download everything
+                            --only <map>    just these (repeatable)
+                            --rebuild       compile from the maps-src submodule
+                                            instead (delegates to Python)
 
             Global options:
               --json      Machine-readable output. The schema is versioned and is a

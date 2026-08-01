@@ -401,16 +401,26 @@ or `package.sh`. They work, they are well-reasoned, and their comments carry his
 "bugs", and makes the list below part of the work rather than a footnote. Each was verified by scanning the
 tree, not inferred:
 
-| # | gap | evidence | severity |
+| # | gap | evidence | status |
 |---|---|---|---|
-| 1 | **`timeout` does not exist on macOS.** BSD userland has no `timeout`; it is `gtimeout` from `brew install coreutils`. | `ci/ci.sh:101,123,148` and `tools/perf-run.sh:48`. Hit live today: `/bin/bash: timeout: command not found` | **High** — every headless smoke and the whole local perf path fail on macOS |
-| 2 | **A documented house rule is impossible to follow on macOS.** `CLAUDE.md` says "Perf-relevant changes: run `tools/perf-smoke.ps1` before merging", and that script is PowerShell-only with no `.sh` twin. | `tools/perf-smoke.ps1`, `tools/wobble-capture.ps1` are the only two `.ps1` with no shell counterpart | **High** — the rule cannot be complied with |
-| 3 | **A fresh clone fails a test on Apple silicon.** `QuakeMathReferences` holds exactly two pins — x64/Windows CRT and x64/Linux glibc — and the test passes only on "any known platform". | `DeterminismTests.cs:156-160`; arm64/macOS measures `0xC1C9EEE2DA9D3297` (this box, 2026-08-01) | **High** — new macOS devs meet a red suite on day one |
-| 4 | `nuget.config`'s `godot-editor` source aborts `dotnet restore` outright | Phase 0, item 1 | **High** |
-| 5 | ~11 hardcoded Windows Godot paths | Phase 0, item 2 | **High** |
-| 6 | `readlink -f` is BSD-incompatible on older macOS; both uses are `2>/dev/null`-guarded, so **verify the fallback actually fires** rather than assuming | `tools/run-client.sh:15`, `tools/run-dedicated.sh:19` | Low — guarded, but unverified |
-| 7 | `macos-client` exports from the **stock** template — a declared, tracked gap, not an oversight | `engine.lock.json` → `unpinned_presets.macos-client` | Medium — provenance only; blocked on republishing the template in `macos.zip` form |
-| 8 | **`ci/ci.sh` invokes bare `python`, which does not exist on macOS.** Apple removed `/usr/bin/python` in macOS 12.3; there is only `python3`. Many Linux distros are the same. | ~10 call sites: `ci/ci.sh:66,72,118,209,219,234,236,…`. Verified: `which python` → not found on this box | **High** — every verify/fetch step in the local gate fails on macOS |
+| 4 | `nuget.config`'s `godot-editor` source aborts `dotnet restore` outright | Phase 0, item 1 | ✅ **FIXED** `24af7459` |
+| 5 | ~11 hardcoded Windows Godot paths | Phase 0, item 2 | ✅ **FIXED** `24af7459` — `tools/lib/find-godot.sh` + `.ps1` twin |
+| 8 | **Bare `python`**, which macOS 12.3+ and most current Linux do not provide. A blind swap to `python3` would have broken Windows instead: the python.org installer creates `python.exe` and `py`, not `python3.exe`. | 8 call sites in `ci/ci.sh` alone | ✅ **FIXED** `e91c1ea1` — `tools/lib/find-python.sh` |
+| 1 | **`timeout` does not exist on macOS.** BSD userland has no `timeout`; it is `gtimeout` from `brew install coreutils`. | `ci/ci.sh:96,118,143` and `tools/perf-run.sh:48` | ❌ **OPEN** — not yet reached on this box only because Godot is absent, so the smoke block is skipped. Installing Godot on a Mac exposes it immediately. |
+| 3 | **A fresh clone fails a test on Apple silicon.** `QuakeMathReferences` holds exactly two pins — x64/Windows CRT and x64/Linux glibc — and the test passes only on "any known platform". | `DeterminismTests.cs:156-160`; arm64/macOS measures `0xC1C9EEE2DA9D3297` (this box, 2026-08-01) | ❌ **OPEN** — now the *only* thing between macOS and a green `ci/ci.sh --no-smoke`. Deliberately not fixed here: see the note below. |
+| 2 | **A documented house rule is impossible to follow on macOS.** `CLAUDE.md` says "Perf-relevant changes: run `tools/perf-smoke.ps1` before merging", and that script is PowerShell-only with no `.sh` twin. | `tools/perf-smoke.ps1`, `tools/wobble-capture.ps1` are the only two `.ps1` with no shell counterpart | ❌ **OPEN** — Phase 2 |
+| 6 | `readlink -f` is BSD-incompatible on older macOS; both uses are `2>/dev/null`-guarded, so **verify the fallback actually fires** rather than assuming | `tools/run-client.sh:15`, `tools/run-dedicated.sh:19` | ❌ **OPEN** — low; guarded but unverified |
+| 7 | `macos-client` exports from the **stock** template — a declared, tracked gap, not an oversight | `engine.lock.json` → `unpinned_presets.macos-client` | ❌ **OPEN** — provenance only; blocked on republishing the template in `macos.zip` form |
+
+**State after Phase 0 + the `python` fix:** `ci/ci.sh --no-smoke` runs every step on macOS. Engine patch
+provenance and the parity-pointer check — both pure Python — execute there for the first time. The gate stops
+only at gap 3.
+
+**Why gap 3 was not fixed in passing.** Adding `0xC1C9EEE2DA9D3297` to `QuakeMathReferences` is one line, but
+it would pin *whatever this particular machine computes*. The two existing entries are each identified by
+platform and toolchain (`x64 / Windows CRT`, `x64 / Linux glibc`) and came from those platforms' own runs. The
+arm64 value should come from a clean `macos-latest` CI run and land with the same provenance, which also
+proves the value is a property of arm64/Apple libm rather than of this laptop.
 
 On (3): the fix is one line, but it is a **judgement call, not a mechanical edit** — adding the arm64 value
 pins whatever this machine computes, so it should be taken from a clean CI run on `macos-latest` and landed

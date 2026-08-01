@@ -41,6 +41,11 @@ _scratch/*
 # (TestResults/) are already covered by the [Tt]est[Rr]esults/ rule above.
 /dist/
 
+# Repo-local Godot install. tools/lib/find-godot.sh probes this BEFORE PATH, so a clone can pin its own
+# engine without touching the machine and two clones can disagree about the version; `./vx setup` will
+# install here. Never committed — it is a ~100 MB binary, and which one you want is a per-machine choice.
+/.godot-bin/
+
 # Compiled golden-trace generator (the .c source + the generated golden/*.json fixtures ARE tracked)
 /tools/movement-ref/movement_ref
 /tools/movement-ref/movement_ref.exe

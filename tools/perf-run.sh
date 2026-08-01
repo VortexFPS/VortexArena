@@ -8,6 +8,7 @@
 # PERF_USERDIR (capture profile dir; default _scratch/perf-userdir, "real" = the daily ~/XonData).
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+. "$ROOT/tools/lib/run-timeout.sh"   # portable `timeout` (absent on macOS)
 LABEL="${1:-run}"; SECS="${2:-35}"; shift 2 || true
 MAP="${PERF_MAP:-catharsis}"; BOTS="${PERF_BOTS:-6}"
 
@@ -47,7 +48,7 @@ if [ "${PERF_SCENARIO:-demo}" = "demo" ]; then
                    --cvar g_forced_respawn 1
                    --cvar bot_ai_weapon_rotate 8)
 fi
-timeout $((SECS+60)) "$EXE" "${EXTRA_ARGS[@]}" --host "$MAP" --gametype dm --bots "$BOTS" \
+run_with_timeout $((SECS+60)) "$EXE" "${EXTRA_ARGS[@]}" --host "$MAP" --gametype dm --bots "$BOTS" \
     --cvar cl_frameprofiler 2 --cvar cl_frameprofiler_hitchms 8 \
     --cvar cl_autopause 0 --cvar cl_portal_render 0 --cvar vid_vsync 0 --cvar cl_maxfps 0 \
     "${SCENARIO_ARGS[@]}" \

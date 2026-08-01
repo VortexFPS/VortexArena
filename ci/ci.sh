@@ -30,6 +30,9 @@ GODOT="$(find_godot "$ROOT")" || GODOT=""
 # most current Linux, and `python3` does not exist under the python.org Windows install.
 . "$ROOT/tools/lib/find-python.sh"
 PYTHON="$(find_python)" || { python_not_found; exit 1; }
+# GNU `timeout` is not in BSD userland, so it does not exist on macOS. run_with_timeout uses the real
+# tool wherever there is one and supervises the child itself otherwise.
+. "$ROOT/tools/lib/run-timeout.sh"
 
 do_smoke=true
 do_export=false
@@ -93,7 +96,7 @@ if $do_smoke; then
     if [ -x "$GODOT" ] || [ -f "$GODOT" ]; then
         step "headless smoke (--quit-after 200)"
         log="$(mktemp)"
-        timeout 180 "$GODOT" --headless --path "$ROOT" --quit-after 200 > "$log" 2>&1 || true
+        run_with_timeout 180 "$GODOT" --headless --path "$ROOT" --quit-after 200 > "$log" 2>&1 || true
         hard_errors=$(grep -cE '^ERROR:|SCRIPT ERROR|Unhandled exception' "$log" || true)
         echo "hard errors: $hard_errors | warnings: $(grep -c 'WARNING:' "$log" || true)"
         grep -iE "VortexArena boot|MenuState\]|NetGame\]|loaded .* shaders|collision brushes|spawned" "$log" || true
@@ -115,7 +118,7 @@ if $do_smoke; then
         if [ -f "$ROOT/data/maps/stormkeep.pk3" ] || [ -d "$ROOT/data/maps/stormkeep.pk3dir" ]; then
             step "headless host smoke (--host stormkeep --bots 2, 20s)"
             log="$(mktemp)"
-            timeout 240 "$GODOT" --headless --path "$ROOT" --host stormkeep --gametype dm --bots 2 \
+            run_with_timeout 240 "$GODOT" --headless --path "$ROOT" --host stormkeep --gametype dm --bots 2 \
                 --quit-after-seconds 20 > "$log" 2>&1 || true
             # Belt-and-braces: Windows `timeout` can't kill the Godot child; a hung host would hold UDP 26000.
             command -v powershell >/dev/null 2>&1 && \
@@ -140,7 +143,7 @@ if $do_smoke; then
             # (QC bot.qc:644-660) — the v1 host only filled an empty map via its phantom self-client.
             step "dedicated smoke (--dedicated stormkeep, stdin console, 20s)"
             dlog="$(mktemp)"
-            { sleep 12; echo status; echo quit; } | timeout 240 "$GODOT" --headless --path "$ROOT" \
+            { sleep 12; echo status; echo quit; } | run_with_timeout 240 "$GODOT" --headless --path "$ROOT" \
                 --dedicated stormkeep --gametype dm --bots 2 --port 26099 \
                 --cvar bot_join_empty 1 --quit-after-seconds 30 > "$dlog" 2>&1 || true
             command -v powershell >/dev/null 2>&1 && \

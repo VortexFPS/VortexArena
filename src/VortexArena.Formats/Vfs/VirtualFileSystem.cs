@@ -372,7 +372,17 @@ public sealed class VirtualFileSystem : IDisposable
         {
             foreach (IMount m in _mounts)
             {
-                if (m.Contains(candidate)) { resolved = candidate; break; }
+                if (m.Contains(candidate))
+                {
+                    // Return where the BYTES are, not the name that was asked for. Xonotic's build-time
+                    // dedup turns duplicate textures into links, and shared.pk3 carries ~900 of them whose
+                    // symlink bit was lost when the pack was zipped — so without this a link and its target
+                    // are two distinct strings for one file, and every cache keyed on the result (notably
+                    // AssetSystem's texture cache, which exists precisely so "two names that resolve to the
+                    // same file share one GPU texture") decodes and uploads it twice.
+                    resolved = m.ResolveLink(candidate);
+                    break;
+                }
             }
             if (resolved != null)
                 break;
@@ -506,6 +516,14 @@ public sealed class VirtualFileSystem : IDisposable
 
         /// <summary>Reads the entry; <paramref name="key"/> must already be normalized and present.</summary>
         byte[] ReadBytes(string key);
+
+        /// <summary>
+        /// Follow any link this mount records for <paramref name="key"/> to the entry that actually holds
+        /// the bytes, or return it unchanged. Exposed so <see cref="VirtualFileSystem.ResolveImage"/> can
+        /// hand callers the FINAL vpath: a link and its target must resolve to the same string, or every
+        /// cache keyed on the result stores the same file twice under two names.
+        /// </summary>
+        string ResolveLink(string key) => key;
     }
 
     /// <summary>A loose directory mount (<c>.pk3dir</c> or a plain gamedir). Files read straight off disk.</summary>
@@ -599,7 +617,10 @@ public sealed class VirtualFileSystem : IDisposable
                 throw;
             }
 
-            List<(string key, ZipArchiveEntry entry)>? symlinkEntries = null;
+            // (key, entry, declared) — `declared` distinguishes an entry that still carries its S_IFLNK bit
+            // from one merely SHAPED like a stripped link. The second pass trusts the former and demands
+            // more of the latter.
+            List<(string key, ZipArchiveEntry entry, bool declared)>? symlinkEntries = null;
             foreach (ZipArchiveEntry entry in _archive.Entries)
             {
                 // A directory entry has an empty Name (full name ends in '/'); skip those.
@@ -611,8 +632,9 @@ public sealed class VirtualFileSystem : IDisposable
                 // If the same path appears twice in one zip, the LAST entry wins — that's what unzip
                 // tools and Darkplaces' rebuilt sorted table effectively do for a later duplicate.
                 _index[key] = entry.FullName;
-                if (IsSymlink(entry))
-                    (symlinkEntries ??= new List<(string, ZipArchiveEntry)>()).Add((key, entry));
+                bool declared = IsSymlink(entry);
+                if (declared || LooksLikeStrippedSymlink(entry))
+                    (symlinkEntries ??= new List<(string, ZipArchiveEntry, bool)>()).Add((key, entry, declared));
             }
 
             // Second pass: resolve symlink entries against the now-complete index. A link's body is its
@@ -622,7 +644,7 @@ public sealed class VirtualFileSystem : IDisposable
             // follows the chain.
             if (symlinkEntries != null)
             {
-                foreach ((string key, ZipArchiveEntry entry) in symlinkEntries)
+                foreach ((string key, ZipArchiveEntry entry, bool declared) in symlinkEntries)
                 {
                     if (entry.Length is <= 0 or > 4096) // a path target is tiny; never a real file's size
                         continue;
@@ -630,9 +652,24 @@ public sealed class VirtualFileSystem : IDisposable
                     try { target = ReadEntryText(entry).Trim(); }
                     catch { continue; }
                     string? targetKey = ResolveSymlinkTarget(key, target);
-                    if (targetKey != null && _index.ContainsKey(targetKey))
-                        _symlinks[key] = targetKey;
+                    if (targetKey is null || !_index.TryGetValue(targetKey, out string? targetEntryName))
+                        continue;
+
+                    // An UNDECLARED candidate must point at something that could actually BE the image it
+                    // claims to be. Content alone cannot separate "a stripped symlink" from "a small file
+                    // that happens to contain a path" — they are byte-identical — so the discriminator is
+                    // the target: a real link points at a real image, and a DDS header alone is 128 bytes
+                    // (TGA's is 18). Without this, a regular file whose body reads as a sibling name gets
+                    // followed, which VfsSymlinkTests guards against deliberately. A DECLARED symlink skips
+                    // the check: the archive says it is a link, and that is not ours to second-guess.
+                    if (!declared && (archiveEntryLength(targetEntryName) < 18))
+                        continue;
+
+                    _symlinks[key] = targetKey;
                 }
+
+                long archiveEntryLength(string entryName)
+                    => _archive.GetEntry(entryName)?.Length ?? 0;
             }
         }
 
@@ -642,13 +679,7 @@ public sealed class VirtualFileSystem : IDisposable
 
         public byte[] ReadBytes(string key)
         {
-            // Follow symlink redirects (Xonotic dedup) to the real entry, guarding against cycles.
-            for (int hops = 0; _symlinks.TryGetValue(key, out string? target); hops++)
-            {
-                if (hops >= 8)
-                    throw new AssetParseException($"symlink chain too deep starting at \"{key}\" in \"{_path}\".");
-                key = target;
-            }
+            key = FollowLinks(key);   // Xonotic dedup links, and ones whose S_IFLNK bit was stripped
 
             if (!_index.TryGetValue(key, out string? entryName))
                 throw new AssetParseException($"\"{key}\" not present in pk3 \"{_path}\".");
@@ -686,13 +717,7 @@ public sealed class VirtualFileSystem : IDisposable
 
         public int ReadBytesInto(string key, ref byte[]? buffer)
         {
-            // Follow symlink redirects (Xonotic dedup) to the real entry, guarding against cycles.
-            for (int hops = 0; _symlinks.TryGetValue(key, out string? target); hops++)
-            {
-                if (hops >= 8)
-                    throw new AssetParseException($"symlink chain too deep starting at \"{key}\" in \"{_path}\".");
-                key = target;
-            }
+            key = FollowLinks(key);   // Xonotic dedup links, and ones whose S_IFLNK bit was stripped
 
             if (!_index.TryGetValue(key, out string? entryName))
                 throw new AssetParseException($"\"{key}\" not present in pk3 \"{_path}\".");
@@ -724,6 +749,53 @@ public sealed class VirtualFileSystem : IDisposable
         /// <summary>True if a zip entry carries the Unix S_IFLNK mode in its external attributes (a symlink).</summary>
         private static bool IsSymlink(ZipArchiveEntry entry)
             => ((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000; // S_IFMT mask, S_IFLNK value
+
+        /// <summary>
+        /// A symlink whose S_IFLNK bit did not survive being zipped: a tiny regular entry whose CONTENT is
+        /// a sibling filename. <c>shared.pk3</c> alone carries <b>974</b> of them, 903 pointing at a real
+        /// DDS — verified by reading the zip, whose external attributes are a plain <c>0o600</c>, so
+        /// nothing downstream can tell except by looking at the bytes.
+        ///
+        /// <para>This is only a CANDIDATE filter; the second pass is what decides. That pass reads the
+        /// body, resolves it relative to the link's directory, rejects anything escaping the archive root,
+        /// and registers the link ONLY when the target is a real entry in THIS pk3. So a false positive
+        /// needs a genuine image file under 120 bytes whose entire content is a valid relative path to
+        /// another entry in the same archive — and even then the bytes it resolves to are a real image.</para>
+        ///
+        /// <para>Deciding this once at mount, from the central directory, is why the per-load alias probe
+        /// that used to live in <c>AssetSystem</c> could be deleted: that one read every image in full
+        /// before decoding it, just to discover it was not a stub.</para>
+        /// </summary>
+        private static bool LooksLikeStrippedSymlink(ZipArchiveEntry entry)
+        {
+            // A DDS header alone is 128 bytes and TGA's is 18; nothing legitimate is this small. Bounded to
+            // image entries so the extra body reads at mount time stay proportional to the problem.
+            if (entry.Length is <= 0 or > 120)
+                return false;
+            string name = entry.Name;
+            int dot = name.LastIndexOf('.');
+            if (dot < 0) return false;
+            string ext = name[(dot + 1)..].ToLowerInvariant();
+            return ext is "dds" or "tga" or "png" or "jpg" or "jpeg";
+        }
+
+        /// <summary>
+        /// Follow the link chain for <paramref name="key"/>, guarding against a malformed pack pointing two
+        /// entries at each other. Shared by <see cref="ReadBytes"/>, <see cref="ReadBytesInto"/> and
+        /// <see cref="ResolveLink"/> so the three cannot disagree about where a name ends up.
+        /// </summary>
+        private string FollowLinks(string key)
+        {
+            for (int hops = 0; _symlinks.TryGetValue(key, out string? target); hops++)
+            {
+                if (hops >= 8)
+                    throw new AssetParseException($"symlink chain too deep starting at \"{key}\" in \"{_path}\".");
+                key = target;
+            }
+            return key;
+        }
+
+        public string ResolveLink(string key) => _symlinks.Count == 0 ? key : FollowLinks(key);
 
         /// <summary>Read a small entry (a symlink's target path) as UTF-8 text.</summary>
         private static string ReadEntryText(ZipArchiveEntry entry)

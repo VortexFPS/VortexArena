@@ -57,6 +57,7 @@ public sealed class AssetSystem
     // to a ShaderMaterial with baked CUSTOM0/1 semantics on the model path but keeps the plain
     // billboard fallback on the ordinary (BSP) path. A null entry caches "not an autosprite shader".
     private readonly Dictionary<string, ShaderMaterial?> _autospriteCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _autospriteCacheGate = new();
 
     /// <summary>
     /// Build the facade over <paramref name="vfs"/>: load and parse every <c>scripts/*.shader</c> into
@@ -186,7 +187,18 @@ public sealed class AssetSystem
         }
 
         lock (_materialCacheGate)
+        {
+            // Re-check before publishing, the way WarmTextureOffThread does under the upload gate. Without
+            // it, two threads resolving one key both compile and both publish, and the loser's Material has
+            // already been RETURNED to a caller — so the cache and a live mesh hold different ShaderMaterial
+            // instances for one name, which is a duplicate pipeline compile on first draw and a break of the
+            // documented "materials and textures are cached and shared" contract. Reachable since the menu
+            // warm began resolving materials on a worker while a match resolves the same names on the main
+            // thread, over the same AssetSystem.
+            if (_materialCache.TryGetValue(key, out Material? raced))
+                return raced;
             _materialCache[key] = result;
+        }
         return result;
     }
 
@@ -206,6 +218,16 @@ public sealed class AssetSystem
         BlackTexture();
         FallbackTexture();
         FallbackMaterial();
+        // The generated shaders reachable from ResolveMaterial on a worker (TryBuildSkinMaterial finds the
+        // _shirt/_pants masks on any stock player model). Their accessors are individually locked now, which
+        // is what actually makes them safe; priming here is belt-and-braces so the FIRST construction — the
+        // expensive one, and the one that compiles GLSL — still lands on the main thread where the renderer
+        // is unquestioned. Priming ALONE was not enough and is the reason this list was wrong before: it
+        // covered the four singletons AssetSystem owns and silently missed the three it merely reaches.
+        _ = PlayerSkinShader.Shader;
+        _ = LightmapShader.Shader;
+        _ = LightmapShader.TranslucentShader;
+        _ = Md3MorphShader.Shader;
     }
 
     /// <summary>
@@ -222,12 +244,19 @@ public sealed class AssetSystem
             return null;
 
         string key = StripShaderExtension(nameOrTexture);
-        if (_autospriteCache.TryGetValue(key, out ShaderMaterial? cached))
-            return cached;
+        // Gated like its two siblings. This one had NO lock at all while _materialCache and _textureCache
+        // gained theirs, which was survivable only for as long as nothing off-thread reached it — and the
+        // menu warm now resolves materials on a worker. A plain Dictionary read concurrent with a resize is
+        // undefined, so the failure would be a corrupted lookup rather than a clean race.
+        lock (_autospriteCacheGate)
+            if (_autospriteCache.TryGetValue(key, out ShaderMaterial? cached))
+                return cached;
 
         ShaderMaterial? result = null;
         try
         {
+            // Compiled OUTSIDE the lock, matching ResolveMaterial: a slow shader build must not block
+            // another name's lookup.
             if (_shaders.TryGetValue(key, out ShaderDef? def))
                 result = ShaderCompiler.CompileAutosprite(def, this);
         }
@@ -236,7 +265,12 @@ public sealed class AssetSystem
             GD.PrintErr($"[AssetSystem] autosprite material '{key}' failed to compile: {ex.Message}");
         }
 
-        _autospriteCache[key] = result;
+        lock (_autospriteCacheGate)
+        {
+            if (_autospriteCache.TryGetValue(key, out ShaderMaterial? raced))
+                return raced;
+            _autospriteCache[key] = result;
+        }
         return result;
     }
 
@@ -595,11 +629,28 @@ public sealed class AssetSystem
             if (_textureCache.TryGetValue(vpath, out Texture2D? cached))
                 return cached;
 
-        // Decode+upload OUTSIDE the lock so a slow texture never blocks another lookup (the parse-cache rule).
-        Texture2D? tex = LoadTextureFromVpath(vpath);
-        lock (_textureCacheGate)
-            _textureCache[vpath] = tex; // cache even null to avoid re-probing a known-bad image
-        return tex;
+        // The upload gate is taken HERE too, not only by the off-thread warm. It used to be the warm's
+        // alone, which made "one upload in flight" true worker-vs-worker and false against the main thread —
+        // and the warm deliberately keeps running into a match (Shell sets ProcessMode.Always) over the same
+        // shared AssetSystem, warming exactly the set the match precaches. Both sides would miss the cache,
+        // both would upload, and both would publish: one 25-45 ms upload wasted, one Texture2D orphaned
+        // while a already-built Material still referenced it, and the driver-ingest burst the gate exists to
+        // prevent happening anyway. The decode is still outside the gate, so a slow decode blocks nobody.
+        // Decode, mip and compress OUTSIDE the gate — a slow texture must never block another uploader.
+        Image? image = PrepareImage(vpath);
+
+        lock (_uploadGate)
+        {
+            // Re-check under the gate: whoever held it may have been uploading this very vpath.
+            lock (_textureCacheGate)
+                if (_textureCache.TryGetValue(vpath, out Texture2D? raced))
+                    return raced;
+
+            Texture2D? tex = image is null ? null : UploadImage(vpath, image);
+            lock (_textureCacheGate)
+                _textureCache[vpath] = tex; // cache even null to avoid re-probing a known-bad image
+            return tex;
+        }
     }
 
     /// <summary>
@@ -631,23 +682,35 @@ public sealed class AssetSystem
                 if (_textureCache.ContainsKey(vpath))
                     return;
 
-            // Decode in PARALLEL (this is CPU work and the lane has several workers)...
-            using (VortexArena.Common.Diagnostics.Prof.Sample("stream.predecode"))
-                PredecodeTexture(baseNameNoExt);
+            // Decode in PARALLEL (this is CPU work and the lane has several workers). PredecodeTexture opens
+            // its own `stream.predecode` scope, so wrapping the call in a second one of the same name
+            // double-counted the warm's dominant worker cost — Prof accumulates by NAME, so every capture
+            // read ~2x here and the scope became its own parent in the hitch tree.
+            PredecodeTexture(baseNameNoExt);
+
+            // Consume the predecode and finish the CPU work — mips and, when enabled, the block compress —
+            // still OUTSIDE the gate. Taking the image out of _predecodedImages here also means a lost race
+            // below simply drops a local: the parked image can no longer be stranded, which it was when the
+            // early-out returned while it was still in the dictionary (nothing drains it after the vpath is
+            // cached, so it survived to the next map change — ~21 MB for a 2048² chain, per lost race).
+            Image? image = PrepareImage(vpath);
+            if (image is null)
+                return;
 
             // ...but upload SERIALLY. There is one GPU, and letting every worker push a 25-45 ms texture
             // create at it concurrently saturated the driver's ingest path: the main thread then blocked in
             // present (frames of 13-25 ms whose cost was ~all `rest`, with proc/rcpu/gpu all near zero) even
             // though it was doing no work of its own. One upload in flight turns that burst into a trickle.
-            // The decode above is already done by the time we take the gate, so waiting here is cheap.
+            // Everything above is done by the time we take the gate, so waiting here is cheap — and now the
+            // gate really does hold nothing but the upload, which is what its comment always claimed.
             lock (_uploadGate)
             {
                 lock (_textureCacheGate)
                     if (_textureCache.ContainsKey(vpath))
-                        return;                     // another worker uploaded it while we decoded
+                        return;                     // another uploader won; `image` is a local and is collected
                 Texture2D? tex;
                 using (VortexArena.Common.Diagnostics.Prof.Sample("stream.upload"))
-                    tex = LoadTextureFromVpath(vpath);   // consumes the predecode parked above
+                    tex = UploadImage(vpath, image);
                 lock (_textureCacheGate)
                     _textureCache[vpath] = tex;
             }
@@ -662,6 +725,24 @@ public sealed class AssetSystem
     /// <summary>Serializes off-thread GPU uploads — see <see cref="WarmTextureOffThread"/>. Held only around
     /// the upload itself, never around the decode.</summary>
     private readonly object _uploadGate = new();
+
+    /// <summary>
+    /// Run <paramref name="build"/> holding the upload gate. For callers that construct Godot GPU resources
+    /// OUTSIDE <see cref="LoadTexture"/> — notably the menu warm's material wave, where
+    /// <c>ShaderCompiler.Compile</c> builds a <c>Shader</c>/<c>ShaderMaterial</c> and any texture its stage
+    /// list did not pre-warm falls through to a fresh upload. Those went through no gate at all, so the
+    /// serialisation the warm's texture half is careful about did not cover its material half, and the
+    /// driver-ingest saturation the gate exists to prevent could still happen on gameplay frames (the warm
+    /// keeps running into a match by design).
+    ///
+    /// <para>Kept as an explicit method rather than exposing the lock object, so the gate cannot be taken
+    /// somewhere that then does slow CPU work under it — the mistake this file has already made once.</para>
+    /// </summary>
+    public T WithUploadGate<T>(Func<T> build)
+    {
+        lock (_uploadGate)
+            return build();
+    }
 
     /// <summary>
     /// Resolve and decode a texture by extension-agnostic base name to a raw <see cref="Image"/> (no GPU
@@ -918,66 +999,6 @@ public sealed class AssetSystem
     /// </summary>
     public static int TextureCompressionCategories { get; set; } = TextureCategories.DefaultMask;
 
-    /// <summary>Alias hops allowed before we assume the pack is malformed (see <see cref="ResolveImageAlias"/>).</summary>
-    private const int MaxImageAliasHops = 4;
-
-    /// <summary>
-    /// Detect an "alias stub": a pk3 entry that is not image data at all but a few ASCII bytes naming a SIBLING
-    /// image, and return the resolved vpath (else null).
-    ///
-    /// <para><b>Why these exist.</b> Upstream builds these packs on a filesystem where the duplicate textures are
-    /// SYMLINKS — <c>dds/…/base_pipe1a_norm.dds → base_pipe1b_norm.dds</c>. Zipping without preserving the
-    /// symlink bit turns each one into a tiny regular file whose CONTENT is the link target, and that is what
-    /// ships: <c>shared.pk3</c> alone carries <b>974</b> of them, <b>903</b> pointing at a real DDS. (Verified by
-    /// reading the zip: the entries' external attributes are plain <c>0o600</c>, so nothing downstream can tell
-    /// they were links except by looking at the bytes.)</para>
-    ///
-    /// <para>Until this existed every one of them failed to decode and silently fell back to the uncompressed
-    /// TGA beside it — a wasted read, ~4-8× the VRAM for that texture, and a <c>failed to decode DDS</c> error
-    /// per file per map load. Following the alias gets the GPU-compressed texture the content author actually
-    /// intended.</para>
-    ///
-    /// <para>Deliberately strict, because "tiny file" alone is not proof of intent: the payload must be short
-    /// enough that no real image header fits, printable ASCII on ONE line, carry an image extension, and stay
-    /// inside the pack (no absolute paths, no drive letters, no <c>..</c> escape). Anything else is left to the
-    /// normal decoders, which will report it as the malformed image it is.</para>
-    /// </summary>
-    private string? ResolveImageAlias(string vpath)
-    {
-        // A DDS header alone is 128 bytes and TGA's is 18; nothing legitimate is this small.
-        const int MaxStubBytes = 120;
-        byte[] bytes;
-        try
-        {
-            if (!_vfs.Exists(vpath))
-                return null;
-            bytes = _vfs.ReadBytes(vpath);
-        }
-        catch { return null; }
-        if (bytes.Length == 0 || bytes.Length > MaxStubBytes)
-            return null;
-
-        foreach (byte b in bytes)
-            if (b < 0x20 || b > 0x7E)          // one line of printable ASCII — no newlines, no binary
-                return null;
-
-        string target = System.Text.Encoding.ASCII.GetString(bytes).Trim();
-        if (target.Length == 0 || target.Length > MaxStubBytes
-            || target.StartsWith('/') || target.Contains(':') || target.Contains('\\')
-            || target.Contains(".."))
-            return null;
-
-        string ext = AssetPaths.GetExtension(target);
-        if (ext is not ("dds" or "tga" or "png" or "jpg" or "jpeg"))
-            return null;
-
-        int slash = vpath.LastIndexOf('/');
-        string resolved = slash >= 0 ? string.Concat(vpath.AsSpan(0, slash + 1), target) : target;
-        if (string.Equals(resolved, vpath, StringComparison.OrdinalIgnoreCase))
-            return null;                        // self-reference
-        return _vfs.Exists(resolved) ? resolved : null;
-    }
-
     /// <summary>Drop any unconsumed predecoded images (map change — don't hold decoded pixels for a world
     /// that's gone).</summary>
     public void ClearPredecodedImages() => _predecodedImages.Clear();
@@ -995,7 +1016,15 @@ public sealed class AssetSystem
     /// </summary>
     public static int TextureCompression { get; set; }
 
-    private Texture2D? LoadTextureFromVpath(string vpath)
+    /// <summary>
+    /// Decode and PREPARE the pixels for <paramref name="vpath"/> — everything that is pure CPU work.
+    /// Deliberately separate from <see cref="UploadImage"/> so callers can do this OUTSIDE the upload gate:
+    /// mipmap generation and especially <see cref="MaybeCompress"/> (BPTC is the "Good" setting because it
+    /// is the slow one) used to run inside it, so one worker's compress blocked every other worker's upload
+    /// and the gate stopped being what its own comment claims — "held around the upload itself, never around
+    /// the decode".
+    /// </summary>
+    private Image? PrepareImage(string vpath)
     {
         // Consume the off-thread predecode when one is parked for this vpath (removed so memory is freed).
         if (!_predecodedImages.TryRemove(vpath, out Image? image))
@@ -1004,7 +1033,12 @@ public sealed class AssetSystem
             return null;
         EnsureMipmaps(vpath, image);   // no-op when the worker predecode already generated them
         MaybeCompress(vpath, image);   // gl_texturecompression: shrink RGBA8 to BC before it reaches VRAM
+        return image;
+    }
 
+    /// <summary>The GPU half, and the only part that belongs inside the upload gate.</summary>
+    private static Texture2D? UploadImage(string vpath, Image image)
+    {
         try
         {
             return ImageTexture.CreateFromImage(image);
@@ -1016,6 +1050,12 @@ public sealed class AssetSystem
         }
     }
 
+    private Texture2D? LoadTextureFromVpath(string vpath)
+    {
+        Image? image = PrepareImage(vpath);
+        return image is null ? null : UploadImage(vpath, image);
+    }
+
     // (perf 2026-07-03) Grow-only per-thread FILE buffer for the tga/dds read path: `_vfs.ReadBytes`'s fresh
     // `new byte[]` per texture (4-16 MB for an uncompressed TGA / mip-chained DDS, ~11 textures per player
     // model) was the dominant LOH churn behind the 130-430 MB single-frame allocation storms → gen2
@@ -1024,24 +1064,19 @@ public sealed class AssetSystem
     // WHOLE array, and those files are small/rare in Xonotic data).
     [ThreadStatic] private static byte[]? _fileScratch;
 
-    private Image? LoadImageFromVpath(string vpath) => LoadImageFromVpath(vpath, 0);
-
     /// <summary>
-    /// <paramref name="aliasDepth"/> guards the pk3 alias-stub hop described in
-    /// <see cref="ResolveImageAlias"/> — a malformed pack could otherwise point two stubs at each other.
+    /// Decode one resolved vpath. Link following is NOT done here: <see cref="VirtualFileSystem"/> resolves
+    /// a link to its target at mount time and <c>ResolveImage</c> hands back the final vpath, so by the time
+    /// a name reaches this method it already names the entry that holds the bytes.
+    ///
+    /// <para>It used to be done here, by reading every image in full before decoding it just to discover it
+    /// was not a 20-byte stub — a second read and a full-size unpooled allocation per texture, in front of
+    /// the pooled path built to avoid exactly that. Doing it once from the zip's central directory is both
+    /// cheaper and, because the mount validates the target against its OWN index, incapable of the
+    /// cross-pack redirect the per-load version allowed.</para>
     /// </summary>
-    private Image? LoadImageFromVpath(string vpath, int aliasDepth)
+    private Image? LoadImageFromVpath(string vpath)
     {
-        if (ResolveImageAlias(vpath) is { } aliasTarget)
-        {
-            if (aliasDepth >= MaxImageAliasHops)
-            {
-                GD.PrintErr($"[AssetSystem] image alias chain too deep at '{vpath}' — giving up.");
-                return null;
-            }
-            return LoadImageFromVpath(aliasTarget, aliasDepth + 1);
-        }
-
         string ext = AssetPaths.GetExtension(vpath);
         if (ext is "tga" or "dds")
         {

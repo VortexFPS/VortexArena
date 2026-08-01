@@ -264,7 +264,17 @@ void light() {
     private static Shader? _sharedTranslucent;
 
     /// <summary>The shared opaque <see cref="Shader"/> instance compiled from <see cref="Code"/>.</summary>
-    public static Shader Shader => _shared ??= new Shader { Code = Code };
+    private static readonly object _sharedGate = new();
+
+    /// <summary>Shared instance; locked for the reason spelled out in <c>PlayerSkinShader.Shader</c>.</summary>
+    public static Shader Shader
+    {
+        get
+        {
+            lock (_sharedGate)
+                return _shared ??= new Shader { Code = Code };
+        }
+    }
 
     /// <summary>
     /// The translucent variant, for alpha-blended world surfaces (Q3 <c>blendFunc blend</c> over a lightmap —
@@ -273,7 +283,14 @@ void light() {
     /// alpha channel drives the see-through. Built once by injecting the alpha write into <see cref="Code"/> so
     /// the colour-space / deluxe / glow math can never drift between the two variants.
     /// </summary>
-    public static Shader TranslucentShader => _sharedTranslucent ??= new Shader { Code = TranslucentCode };
+    public static Shader TranslucentShader
+    {
+        get
+        {
+            lock (_sharedGate)
+                return _sharedTranslucent ??= new Shader { Code = TranslucentCode };
+        }
+    }
 
     /// <summary>The translucent source: the opaque <see cref="Code"/> with a single <c>ALPHA = base.a</c> write
     /// added (the opaque variant deliberately leaves ALPHA unwritten to stay in the opaque pass).</summary>

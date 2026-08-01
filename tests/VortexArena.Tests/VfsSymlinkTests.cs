@@ -109,6 +109,61 @@ public class VfsSymlinkTests
         finally { File.Delete(pk3); }
     }
 
+    /// <summary>
+    /// The bug this whole path exists for: <c>shared.pk3</c> carries ~974 entries that WERE symlinks until the
+    /// pack was zipped without preserving the S_IFLNK bit, 903 of them pointing at a real DDS. Every one used
+    /// to read back as its 20-byte path string, fail to decode, and fall back to the uncompressed TGA beside
+    /// it — or to nothing at all where no TGA existed.
+    /// </summary>
+    [Fact]
+    public void StrippedSymlink_Bit_Still_Follows_When_The_Target_Is_A_Real_Image()
+    {
+        byte[] real = new byte[256];                       // plausibly an image: bigger than any header
+        for (int i = 0; i < real.Length; i++) real[i] = (byte)i;
+        byte[] stub = Encoding.ASCII.GetBytes("base_b_norm.dds");
+
+        // NOTE the `false`: neither entry carries the symlink bit, which is exactly the shipped situation.
+        string pk3 = WriteZip(
+            ("dds/textures/x/base_b_norm.dds", real, false),
+            ("dds/textures/x/base_a_norm.dds", stub, false));
+        try
+        {
+            using var vfs = new VirtualFileSystem();
+            vfs.Mount(pk3);
+            Assert.Equal(real, vfs.ReadBytes("dds/textures/x/base_a_norm.dds"));
+
+            // And both names must resolve to ONE vpath, or the texture cache keys them separately and
+            // decodes + uploads the same pixels twice — which is what made this worth fixing in the VFS
+            // rather than in the image loader.
+            Assert.Equal(vfs.ResolveImage("textures/x/base_b_norm"),
+                         vfs.ResolveImage("textures/x/base_a_norm"));
+        }
+        finally { File.Delete(pk3); }
+    }
+
+    /// <summary>
+    /// The discriminator that keeps the above from swallowing ordinary files. A stripped link and a small
+    /// regular file whose body happens to be a path are byte-identical, so the only thing separating them is
+    /// what they point AT: a real link points at a real image. A DECLARED symlink is trusted regardless —
+    /// the archive said it is a link.
+    /// </summary>
+    [Fact]
+    public void StrippedSymlink_Is_Not_Followed_When_The_Target_Is_Too_Small_To_Be_An_Image()
+    {
+        byte[] tiny = Encoding.ASCII.GetBytes("X");        // 1 byte: cannot be any image
+        byte[] body = Encoding.ASCII.GetBytes("real.dds");
+        string pk3 = WriteZip(
+            ("textures/base/real.dds", tiny, false),
+            ("textures/base/plain.dds", body, false));
+        try
+        {
+            using var vfs = new VirtualFileSystem();
+            vfs.Mount(pk3);
+            Assert.Equal(body, vfs.ReadBytes("textures/base/plain.dds"));
+        }
+        finally { File.Delete(pk3); }
+    }
+
     [Fact]
     public void RealData_DedupSymlink_NowReadsAsRealDds()
     {

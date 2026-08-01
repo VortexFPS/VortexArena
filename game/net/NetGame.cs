@@ -3174,14 +3174,22 @@ public sealed partial class NetGame : Node3D
                 // its own budgeted job. (§12.6) The built model then RENDERS offscreen for a few frames before
                 // it's freed: a built-but-never-drawn model never compiled its material variants' pipelines,
                 // so the first player wearing it on screen paid the compile (`pipe +N` mid-fight).
-                parse => EnqueueStagedSkeletalBuild(loader, parse,
-                    VortexArena.Game.Client.BackgroundAssetStreamer.Priority.Low, $"idle-warm {m}",
-                    () =>
-                    {
-                        if (loader.BuildSkeletalModel(parse)?.Root is { } warmRoot)
-                            VortexArena.Game.Client.GpuWarmPass.WarmNodes(this,
-                                new List<Node3D> { warmRoot }, () => warmRoot.QueueFree());
-                    }),
+                parse =>
+                {
+                    // The streamer now always calls back, including when the parse failed, so a miss is
+                    // handled here rather than by never being told. An idle warm is best-effort: the match
+                    // that needs the model loads it normally.
+                    if (parse is null)
+                        return;
+                    EnqueueStagedSkeletalBuild(loader, parse,
+                        VortexArena.Game.Client.BackgroundAssetStreamer.Priority.Low, $"idle-warm {m}",
+                        () =>
+                        {
+                            if (loader.BuildSkeletalModel(parse)?.Root is { } warmRoot)
+                                VortexArena.Game.Client.GpuWarmPass.WarmNodes(this,
+                                    new List<Node3D> { warmRoot }, () => warmRoot.QueueFree());
+                        });
+                },
                 VortexArena.Game.Client.BackgroundAssetStreamer.Priority.Low,
                 label: $"idle-warm {m} (parse)");
         }

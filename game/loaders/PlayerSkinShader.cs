@@ -297,5 +297,25 @@ void fragment() {
     private static Shader? _shared;
 
     /// <summary>The shared <see cref="Shader"/> instance compiled from <see cref="Code"/>.</summary>
-    public static Shader Shader => _shared ??= new Shader { Code = Code };
+    private static readonly object _sharedGate = new();
+
+    /// <summary>
+    /// The shared <see cref="Shader"/> instance compiled from <see cref="Code"/>.
+    ///
+    /// <para>Locked, not <c>??=</c>. The menu warm resolves materials on a streamer worker, and a stock
+    /// player model reaches TryBuildSkinMaterial there — so this can be FIRST TOUCHED off the main thread
+    /// while a match touches it on the main thread over the same AssetSystem. Unguarded, two Shader objects
+    /// get compiled, half the skin materials bind each, Godot compiles a duplicate pipeline set that
+    /// GpuWarmPass's pre-warm misses, and one Shader leaks. The non-volatile field could also publish the
+    /// reference before the Code setter's effects were visible, yielding a material bound to an empty
+    /// shader and then cached permanently.</para>
+    /// </summary>
+    public static Shader Shader
+    {
+        get
+        {
+            lock (_sharedGate)
+                return _shared ??= new Shader { Code = Code };
+        }
+    }
 }

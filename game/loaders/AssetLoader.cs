@@ -746,7 +746,16 @@ public sealed class AssetLoader
         }
 
         lock (_soundCacheGate)
+        {
+            // Re-check before publishing. Two threads can be inside BuildAudioStream for one sample at once —
+            // the menu warm holds the whole registry on a worker while the menu itself plays UI samples on the
+            // main thread — and without this the loser's AudioStream is returned to its caller while a
+            // different instance sits in the cache, which is the same split-identity bug the material cache
+            // had. Publishing the first winner keeps one instance per sample.
+            if (_soundCache.TryGetValue(cacheKey, out AudioStream? raced))
+                return raced;
             _soundCache[cacheKey] = stream; // cache misses too, to avoid re-probing a known-absent sample
+        }
         return stream;
     }
 

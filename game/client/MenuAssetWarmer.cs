@@ -264,18 +264,20 @@ public partial class MenuAssetWarmer : Node
             // Players render through ParseSkeletalModel — a DIFFERENT cache from the weapon/world path (it holds
             // the parsed IQM plus the pre-built AnimationLibrary, the 100-360 ms burst behind the bot-spawn hitch
             // storm), so that is the one warmed for them.
+            // No box: the streamer calls back exactly once now, null included, so a failed parse advances
+            // the chain instead of stranding every unit behind it.
             _streamer.Request(
-                () => new SkeletalParseBox(assets.ParseSkeletalModel(model, 0)),  // worker: IQM + sidecars + anims
-                box => WarmMaterials(assets, model,
-                    box.Parse is null ? Array.Empty<string>() : AssetLoader.EffectiveMaterials(box.Parse), done),
+                () => assets.ParseSkeletalModel(model, 0),                        // worker: IQM + sidecars + anims
+                parse => WarmMaterials(assets, model,
+                    parse is null ? Array.Empty<string>() : AssetLoader.EffectiveMaterials(parse), done),
                 BackgroundAssetStreamer.Priority.Low, $"menu-warm {model}");
             return;
         }
-        // Worker: read + parse + sidecars. Boxed because the streamer drops a null result silently, and an
-        // empty list (a miss, or a main-thread-only MDL) must still reach the main phase to be counted.
+        // Worker: read + parse + sidecars. An empty list (a miss, or a main-thread-only MDL) still reaches
+        // the main phase and is still counted.
         _streamer.Request(
-            () => new MaterialList(assets.PrepareModel(model, 0)),
-            box => WarmMaterials(assets, model, box.Materials, done),
+            () => assets.PrepareModel(model, 0),
+            mats => WarmMaterials(assets, model, mats ?? Array.Empty<string>(), done),
             BackgroundAssetStreamer.Priority.Low, $"menu-warm {model}");
     }
 
@@ -331,7 +333,11 @@ public partial class MenuAssetWarmer : Node
         // wave above, so this is pure material/shader work. Safe for the same reason the texture upload is (see
         // AssetSystem.WarmTextureOffThread); the shared lazy singletons it can reach are primed on the main
         // thread before any of this starts. Chained one at a time for the same reason the texture wave is.
-        Chain(materials, m => () => assets.Assets.ResolveMaterial(m), $"menu-warm {model} mat", done);
+        // Under the upload gate: ResolveMaterial builds a Shader/ShaderMaterial, and any texture the wave
+        // above did not cover falls through to a real GPU upload here — so this wave has exactly the same
+        // driver-ingest concern the texture wave does, and previously took no gate at all.
+        Chain(materials, m => () => assets.Assets.WithUploadGate(() => assets.Assets.ResolveMaterial(m)),
+            $"menu-warm {model} mat", done);
     }
 
     /// <summary>
@@ -368,13 +374,11 @@ public partial class MenuAssetWarmer : Node
         Step(0);
     }
 
-    /// <summary>Non-null off-thread wrapper for a model's material work-list — the streamer drops a null result
-    /// silently, so a model with no materials would never reach its main phase or be counted as warmed.</summary>
-    private sealed record MaterialList(IReadOnlyList<string> Materials);
-
-    /// <summary>Non-null wrapper for a (possibly failed) skeletal parse — same reason as
-    /// <see cref="MaterialList"/>, and the same shape NetGame's live player-model stream uses.</summary>
-    private sealed record SkeletalParseBox(AssetLoader.SkeletalModelParse? Parse);
+    // (2026-08-01) MaterialList and SkeletalParseBox lived here only to smuggle a null past the streamer,
+    // which used to drop a null off-thread result without calling back. That contract is fixed — Request now
+    // invokes onMain exactly once, null included — so the wrappers are gone and the callbacks take the value
+    // directly. NetGame's ThumbBox and SkeletalParseBox remain for now; they can go the same way whenever
+    // that path is next touched.
 
     /// <summary>Open the warm window up to <see cref="MaxUnitsInFlight"/>. Main-thread only (called from
     /// <c>_Ready</c> and from a streamer main phase), so the counters need no locking. Each unit calls back

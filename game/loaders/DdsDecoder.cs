@@ -222,10 +222,24 @@ internal static class DdsDecoder
                 kind = BcKind.Dxt3; blockBytes = 16; gpuFormat = Image.Format.Dxt3;   return true;
             case 76: case 77: case 78:                       // BC3
                 kind = BcKind.Dxt5; blockBytes = 16; gpuFormat = Image.Format.Dxt5;   return true;
-            case 79: case 80: case 81:                       // BC4_TYPELESS / UNORM / SNORM
+            case 79: case 80:                                // BC4_TYPELESS / UNORM
                 kind = BcKind.Bc4;  blockBytes = 8;  gpuFormat = Image.Format.RgtcR;  return true;
-            case 82: case 83: case 84:                       // BC5_TYPELESS / UNORM / SNORM
+            case 82: case 83:                                // BC5_TYPELESS / UNORM
                 kind = BcKind.Bc5;  blockBytes = 16; gpuFormat = Image.Format.RgtcRg; return true;
+
+            // BC4_SNORM (81) and BC5_SNORM (84) are REJECTED, not routed to the unsigned decoders.
+            //
+            // The endpoints are signed bytes, and reading them as UNORM does not "shift the ramp" — it WRAPS
+            // around the midpoint. 0xFF is SNORM -1 (a component of about -1) but UNORM 255 (about +1), and
+            // 0x80 is SNORM -128 but UNORM 128, so every X/Y comes out mirrored; nz = sqrt(1 - nx² - ny²)
+            // then clamps to 0 across most of the texture and the surface lights flat or black. Because a
+            // decode "succeeds", the caller never falls back to the sibling TGA, so the corruption is silent
+            // — strictly worse than the pre-2026-07-31 behaviour, which rejected all of BC4/BC5 and degraded
+            // gracefully. Returning false restores that until there is a decoder that reads them as signed.
+            case 81:
+            case 84:
+                kind = default; blockBytes = 0; gpuFormat = default;
+                return false;
             case 94:                                         // BC6H_TYPELESS  (treat as unsigned)
             case 95:                                         // BC6H_UF16
                 kind = BcKind.PassThroughOnly; blockBytes = 16; gpuFormat = Image.Format.BptcRgbfu; return true;

@@ -130,5 +130,15 @@ void fragment() {
     private static Shader? _shared;
 
     /// <summary>The shared <see cref="Shader"/> instance compiled from <see cref="Code"/>.</summary>
-    public static Shader Shader => _shared ??= new Shader { Code = Code };
+    private static readonly object _sharedGate = new();
+
+    /// <summary>Shared instance; locked for the reason spelled out in <c>PlayerSkinShader.Shader</c>.</summary>
+    public static Shader Shader
+    {
+        get
+        {
+            lock (_sharedGate)
+                return _shared ??= new Shader { Code = Code };
+        }
+    }
 }

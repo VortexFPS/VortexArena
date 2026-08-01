@@ -33,6 +33,8 @@ internal static class Program
             {
                 "doctor" => Doctor.Run(commandArgs, json),
                 "maps" => Maps.Run(commandArgs, json),
+                "setup" => Setup.Run(commandArgs, json),
+                "engine" => Engine.Run(commandArgs, json),
                 _ => UnknownCommand(command),
             };
         }
@@ -68,12 +70,20 @@ internal static class Program
 
             Commands:
               doctor      Diagnose the toolchain and content. Changes nothing.
+              setup       Bring this clone to a runnable state.
+                            --profile <p>   play | dev | server | ci | launcher
+                            --yes           proceed without confirming
+                            --dry-run       print the plan, change nothing
               maps        Install the map packs pinned by data/maps.lock.json.
                             --verify-only   report drift, change nothing
                             --force         re-download everything
                             --only <map>    just these (repeatable)
                             --rebuild       compile from the maps-src submodule
                                             instead (delegates to Python)
+              engine      Fetch the export templates pinned by engine.lock.json.
+                            --verify-only   report drift, change nothing
+                            --force         re-download everything
+                            --only <plat>   just these (repeatable)
 
             Global options:
               --json      Machine-readable output. The schema is versioned and is a
@@ -81,7 +91,7 @@ internal static class Program
               --help      This message.
 
             Not yet implemented (planning/bootstrap-and-task-runner-2026-08-01.md):
-              setup, build, test, run, server, export, package, maps, engine, ci, perf
+              build, test, run, server, export, package, ci, perf
 
             Environment overrides, honoured by doctor and by the shell scripts alike:
               GODOT       path to the Godot 4.6.3 mono executable

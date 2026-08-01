@@ -78,17 +78,20 @@ internal static class Doctor
             string ver = Env.Run(py, "-c", "import sys;print('.'.join(map(str,sys.version_info[:3])))").Out;
             yield return new Check("Python 3", Status.Ok, $"{ver}  ({py})", Required: true);
 
-            // The fetchers use urllib, and python.org's macOS installer ships its own OpenSSL that ignores
-            // the system keychain — so HTTPS fails until Install Certificates.command has been run once.
-            // Checked explicitly because the symptom (CERTIFICATE_VERIFY_FAILED, four retries deep inside
-            // fetch-maps.py) points nowhere near the cause. Apple's /usr/bin/python3 is unaffected.
+            // python.org's macOS installer ships its own OpenSSL that ignores the system keychain, so
+            // urllib's HTTPS fails until Install Certificates.command has been run once.
+            //
+            // Downgraded to a WARNING once `vx maps` and `vx engine` were ported to HttpClient (2026-08-01):
+            // the bootstrap no longer depends on it. It still matters for `vx maps --rebuild`, which drives
+            // the maps-src pipeline, and for anyone running the tools/*.py scripts directly — and the
+            // symptom (CERTIFICATE_VERIFY_FAILED, four retries deep inside a fetcher) points nowhere near
+            // the cause, which is why it is worth naming at all. Apple's /usr/bin/python3 is unaffected.
             var ssl = Env.Run(py, TimeSpan.FromSeconds(20),
                 "-c", "import urllib.request as u; u.urlopen('https://api.github.com', timeout=10); print('ok')");
             if (ssl.Code != 0 && ssl.Err.Contains("CERTIFICATE_VERIFY_FAILED"))
-                // Missing, but NOT Required: this blocks FETCHING content, not building or testing, and
-                // conflating the two would make the summary line say something untrue.
-                yield return new Check("Python TLS trust", Status.Missing,
-                    "urllib cannot verify HTTPS — fetch-maps.py and fetch-engine-template.py will both fail",
+                yield return new Check("Python TLS trust", Status.Warn,
+                    "urllib cannot verify HTTPS — affects 'vx maps --rebuild' and the tools/*.py scripts run "
+                    + "directly (vx maps / vx engine no longer use them)",
                     Fix: Env.IsMacOS
                         ? "run '/Applications/Python 3.x/Install Certificates.command', or: export PYTHON=/usr/bin/python3"
                         : "this interpreter has no usable CA bundle; try a distro python3");

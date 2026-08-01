@@ -1,0 +1,66 @@
+{
+  "$comment": [
+    "Pins the Godot EDITOR that ./vx setup installs into .godot-bin/. Distinct from",
+    "tools/engine-patches/engine.lock.json, which pins the export TEMPLATE a release is built from -- that",
+    "one is about what SHIPS, this one is about what a developer runs. Both must name the same engine",
+    "version; engine.lock.json's engine.version is the authority and this follows it.",
+    "",
+    "WHY PIN THE EDITOR AT ALL. Every script resolves Godot through tools/lib/find-godot.sh, which probes",
+    ".godot-bin/ BEFORE PATH precisely so a clone can pin its own engine without touching the machine, and",
+    "so two clones can disagree about the version. That property is worth nothing if the thing installed",
+    "there is 'whatever was current the day someone ran setup'.",
+    "",
+    "PROVENANCE OF THESE HASHES. Taken from the GitHub release API's asset digests, then CONFIRMED by",
+    "download for the platform setup was first run on -- see 'verified' per platform below. This mirrors",
+    "the standard engine.lock.json sets for itself: 'the value that causes a hard failure should be checked",
+    "against what a fetcher actually gets', not trusted from an API response. A platform marked",
+    "verified:false is pinned but not yet confirmed by download; the first setup run on that platform",
+    "confirms it, and a mismatch there is a real finding rather than a nuisance.",
+    "",
+    "The MONO builds are required. The plain build cannot run C# at all, and its failure mode is a wall of",
+    "script errors that never names the cause."
+  ],
+  "schema": 1,
+  "engine": {
+    "version": "4.6.3",
+    "channel": "stable",
+    "upstream_tag": "4.6.3-stable"
+  },
+  "platforms": {
+    "macos": {
+      "filename": "Godot_v4.6.3-stable_mono_macos.universal.zip",
+      "url": "https://github.com/godotengine/godot/releases/download/4.6.3-stable/Godot_v4.6.3-stable_mono_macos.universal.zip",
+      "sha256": "380bf3cd0c9a8a9a7c7fd907a70c0372857445f04fee3509dbfa79846c314573",
+      "bytes": 190574861,
+      "verified": true,
+      "$comment": [
+        "Universal (arm64 + x86_64). The archive contains Godot_mono_macos.universal.app/; setup renames it",
+        "to Godot.app so find-godot.sh's probe path is stable across engine versions.",
+        "Note macOS quarantines downloaded bundles: the first launch may need Gatekeeper approval. setup",
+        "says so rather than stripping the attribute silently, which is a security decision that belongs to",
+        "the person running it."
+      ]
+    },
+    "linux": {
+      "filename": "Godot_v4.6.3-stable_mono_linux_x86_64.zip",
+      "url": "https://github.com/godotengine/godot/releases/download/4.6.3-stable/Godot_v4.6.3-stable_mono_linux_x86_64.zip",
+      "sha256": "702a8a6785060203fd46373adf864586ecf0c377ac685d7107dde66b1eba0a9e",
+      "bytes": 100887313,
+      "verified": false,
+      "$comment": "Archive contains a same-named directory; setup normalises the binary to .godot-bin/godot."
+    },
+    "windows": {
+      "filename": "Godot_v4.6.3-stable_mono_win64.zip",
+      "url": "https://github.com/godotengine/godot/releases/download/4.6.3-stable/Godot_v4.6.3-stable_mono_win64.zip",
+      "sha256": "0015a6f2fab16e255919380864e8b5320017b1258c01121d5521b133dbe705f6",
+      "bytes": 109661890,
+      "verified": false,
+      "$comment": [
+        "Carries BOTH Godot_v4.6.3-stable_mono_win64.exe and its _console.exe sibling. setup normalises them",
+        "to godot.exe and godot_console.exe, and find-godot.sh prefers the console one: the plain .exe",
+        "detaches from the terminal, so GD.Print and errors never reach a captured stdout, which every",
+        "headless and CI use in this tree depends on."
+      ]
+    }
+  }
+}

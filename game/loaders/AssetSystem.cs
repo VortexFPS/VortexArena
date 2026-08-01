@@ -870,19 +870,25 @@ public sealed class AssetSystem
         int mode = TextureCompression;
         if (mode <= 0 || image.IsCompressed() || image.IsEmpty() || !image.HasMipmaps())
             return;
-        int slash = vpath.LastIndexOf('/');
-        string file = slash >= 0 ? vpath[(slash + 1)..] : vpath;
-        if (file.StartsWith("lm_", StringComparison.OrdinalIgnoreCase))
+        // Which gl_texturecompression_* gate this texture answers to. Note the lightmap exclusion that used to
+        // be hardcoded here is now the Q3BspLightmaps bucket, which DP and Xonotic both default to 0 — so the
+        // behaviour is unchanged, but it is a setting rather than a rule. It stays safe even if a player turns
+        // it on: EnsureMipmaps skips lm_ pages, and the !HasMipmaps() guard above already refuses those.
+        if (!TextureCategories.Enabled(TextureCompressionCategories, TextureCategories.Classify(vpath)))
             return;
 
-        // CompressSource.Normal tells the compressor this is a tangent-space normal map, so it weights the
-        // channels for that instead of for perceptual colour — the difference between usable and blotchy
-        // lighting on a BC-compressed _norm. Everything else is Generic (Godot picks DXT1 for an opaque source
-        // and DXT5 when alpha is used, so an opaque texture gets the full 8×).
-        Image.CompressSource src = file.EndsWith("_norm", StringComparison.OrdinalIgnoreCase)
-            || file.Contains("_norm.", StringComparison.OrdinalIgnoreCase)
-            ? Image.CompressSource.Normal
-            : Image.CompressSource.Generic;
+        // ALWAYS Generic, including for _norm — see TexCategory.Normal. CompressSource.Normal would be the
+        // quality-correct hint (it weights the channels for a tangent-space normal instead of for perceptual
+        // colour), but Godot implements it by declaring the image RG-only: image.cpp's
+        // detect_used_channels(COMPRESS_SOURCE_NORMAL) returns USED_CHANNELS_RG unconditionally, which routes
+        // to a two-channel BC5/RGTC_RG texture whose BLUE SAMPLES AS 0. Every shader here unpacks a normal as
+        // `texture(normal_tex, uv).rgb * 2.0 - 1.0` and uses `.z` (LightmapShader, PlayerSkinShader ×2), so
+        // that gives z = -1 and inverts the lighting — the exact failure DdsDecoder's remarks cite as the
+        // reason BC5 is CPU-decoded to RGBA8 with Z reconstructed rather than passed through. Generic keeps a
+        // real blue channel (DXT1 opaque / DXT5 with alpha / BC7), so a compressed _norm stays correct, just
+        // lower quality than BC5 would be. Switching to CompressSource.Normal requires teaching those three
+        // shaders to reconstruct Z first (the notes' option E).
+        Image.CompressSource src = Image.CompressSource.Generic;
         Image.CompressMode target = mode >= 2 ? Image.CompressMode.Bptc : Image.CompressMode.S3Tc;
         try
         {
@@ -898,6 +904,19 @@ public sealed class AssetSystem
             GD.Print($"[AssetSystem] texture compression failed for '{vpath}': {ex.Message}; uploading uncompressed.");
         }
     }
+
+    /// <summary>
+    /// Bitmask of the enabled <see cref="TexCategory"/> buckets, mirrored out of the cvar store by
+    /// <c>ClientSettings.ApplyTextureCompression</c> for the same reason <see cref="TextureCompression"/> is:
+    /// the texture path runs on the streamer's worker threads, where reading the cvar store concurrently with
+    /// a console write is not safe. One <c>int</c> rather than eleven <c>bool</c>s so a worker reads the whole
+    /// set in one atomic load and can never observe a half-applied change.
+    ///
+    /// <para>Initialised to DP's defaults so the field is correct even before <c>ClientSettings</c> pushes it
+    /// (a test or tool that builds an <see cref="AssetSystem"/> without the menu stack gets stock behaviour,
+    /// not "everything off").</para>
+    /// </summary>
+    public static int TextureCompressionCategories { get; set; } = TextureCategories.DefaultMask;
 
     /// <summary>Alias hops allowed before we assume the pack is malformed (see <see cref="ResolveImageAlias"/>).</summary>
     private const int MaxImageAliasHops = 4;

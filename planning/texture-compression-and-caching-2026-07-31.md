@@ -108,8 +108,36 @@ Consequences of DP's design worth noting, because they are all things we are not
 | BC4 / BC5 / DX10 header / BC6H / BC7 | ✅ added 2026-07-31 |
 | pk3 alias stubs followed | ✅ added 2026-07-31 — **the actual bug** |
 | `gl_texturecompression` (master, 0/1/2) | ✅ added 2026-07-31, default 0 |
-| `gl_texturecompression_*` per-category | ❌ not implemented (12 cvars, see `parity/CVAR-DIFF.md`) |
+| `gl_texturecompression_*` per-category | ✅ added 2026-08-01 — **eleven**, not twelve (see below) |
 | `r_texture_dds_load` / `_save` | ❌ not implemented (load is unconditional; no bake) |
+
+### Correction: it is eleven cvars, not twelve
+
+`gl_textures.c:37-48` is twelve lines because **line 37 is the master itself**. The table in §1 lists eleven
+categories plus the master; "twelve `gl_texturecompression_*` cvars" above was counting the master twice.
+Verified against upstream source, not the table.
+
+### ⚠ `CompressSource.Normal` inverts normal-map lighting — found 2026-08-01
+
+`MaybeCompress` passed `Image.CompressSource.Normal` for `_norm` textures on the theory that it weights the
+channels for normals. It does — by **declaring the image RG-only**. Godot's
+`detect_used_channels(COMPRESS_SOURCE_NORMAL)` returns `USED_CHANNELS_RG` unconditionally (`image.cpp:3401`,
+comment: *"Normal maps only use RG channels"*), which routes to `BETSY_FORMAT_BC5_UNSIGNED`
+(`image_compress_betsy.cpp:761`) — a two-channel texture whose **blue samples as 0**.
+
+That is precisely the failure [the DdsDecoder remarks](../game/loaders/DdsDecoder.cs) cite as the reason BC5 is
+CPU-decoded to RGBA8 with Z reconstructed instead of passed through: `LightmapShader` and `PlayerSkinShader`
+(×2) unpack `texture(normal_tex, uv).rgb * 2.0 - 1.0` and use `.z`, so B=0 gives `z = -1` and the shaded normal
+points into the surface. **`bec0d4e9` therefore undid its own fix**: the decoder expanded BC5 to recover Z, and
+`MaybeCompress` re-compressed it straight back to BC5.
+
+So **the 3139 → 956 MB VRAM figure in §4 was measured with inverted normals on screen.** It was a VRAM/perf
+capture; the turntable byte-compare was run for the off-thread work, not for compression. The VRAM number is
+still real, but it is not the cost of a correct render.
+
+Fixed by always passing `CompressSource.Generic`, which keeps a real blue channel (DXT1 opaque / DXT5 alpha /
+BC7). A compressed `_norm` is now correct but lower quality than BC5 would be; getting BC5's quality still
+needs the three shaders taught to reconstruct Z — option (E), unchanged.
 
 ### The alias-stub bug (the one that mattered)
 
@@ -222,11 +250,43 @@ trade too.
    now render. Verify a handful of maps look right (or better), not different-in-a-bad-way.
 4. **(B) Then consider flipping the default on** — but only after (A), so normals are excluded, and only with a
    visual comparison. 3.3× VRAM is a big enough prize to be worth the QA.
+   **Update 2026-08-01: recommend NOT flipping it yet.** (A) has landed and the normal-map inversion is fixed,
+   but the evidence base for (B) has not improved — it has got worse. The one measurement we have was taken
+   through the inverted-normal path, so the "what does compression look like" question is entirely unanswered,
+   not partially answered. Flipping the default is a lossy change applied to every player, justified by a
+   capture that did not render correctly. It needs a fresh VRAM number and a real visual pass first. See
+   §"On flipping the master default" below.
 5. **Leave (D) and (F).** (D) is solved by the shipped `dds/` tree plus a 70 ms compression cost; (F) is
    faithfulness with no user-visible benefit.
 6. **(E) only if VRAM is still a problem after the above**, with a proper visual A/B.
 
 ---
+
+## On flipping the master default (2026-08-01)
+
+**No — keep `gl_texturecompression 0`.** Four reasons, in order of weight:
+
+1. **The measurement that motivates it is invalid.** 3139 → 956 MB was captured with `CompressSource.Normal`
+   live, i.e. with every `_norm` inverted. We do not currently know what compression costs *visually*, and the
+   VRAM figure will move now that `_norm` compresses via `Generic` (BC7/DXT5 keeps three channels, so it saves
+   less than the two-channel BC5 did) and defaults off entirely.
+2. **Upstream declines it.** Xonotic ships the master at 0 (`xonotic-client.cfg:788`), so 0 IS the parity
+   answer. Turning it on is a deliberate divergence, which needs its own justification rather than inheriting
+   the parity argument.
+3. **The cache makes it a one-way door in practice.** Nothing keys the texture cache on compression mode and
+   nothing evicts, so with `cl_persist_asset_cache 1` the menu warm has already loaded most of the stock set
+   before the player can reach the Effects slider — a player who turns it *off* after boot keeps the compressed
+   textures for the process lifetime, and vice versa. Shipping it on means shipping the lossy version as the
+   one most players can never fully back out of within a session.
+4. **The compression still runs on the main thread.** `MaybeCompress` sits in `LoadTextureFromVpath`, which is
+   the synchronous `LoadTexture` path, so a default-on setting puts CPU block-compression on the frame thread
+   for every cold in-match load. §4's 70 ms figure is a whole *map load* under a loading screen; the
+   mid-match lazy-load case is still unmeasured.
+
+**What would change the answer:** re-run the §4 capture on the fixed path, byte-compare a turntable with
+compression on vs off, and move `MaybeCompress` to the worker (`PredecodeTexture`) so the setting cannot hitch
+the frame thread. If VRAM still falls substantially and the turntable diff is visually acceptable, flipping to
+`1` becomes a reasonable proposal — with `_normal` still off, as upstream has it.
 
 ## Open questions
 

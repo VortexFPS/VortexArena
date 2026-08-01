@@ -76,10 +76,22 @@ In-match A/B stayed neutral across every change (`ASSET-BUILD` hitches 4 vs 4, p
 
 ## Next steps, ranked
 
-### 1. Per-category `gl_texturecompression_*` cvars — **do first**
-Twelve cvars, DP defaults (`texture-compression-and-caching-2026-07-31.md` §1 has the table). Routes `_norm` to
-the `_normal` category, which upstream defaults **off** — removing the riskiest part of enabling compression.
-Small, contained, closes 12 cvars of parity debt. Then consider flipping our master default off 0.
+### 1. Per-category `gl_texturecompression_*` cvars — ✅ **DONE 2026-08-01**
+**Eleven** cvars, not twelve — `gl_textures.c:37-48` is twelve lines because line 37 is the master, which
+already shipped in `bec0d4e9`. Registered with DP's defaults; Xonotic's overrides arrive the normal way, from
+`xonotic-client.cfg:789-794` executing over them. `_norm` routes to `_normal`, which defaults **off**.
+
+Classification lives in `src/VortexArena.Formats/Vfs/TextureCategories.cs` (pure string logic, unit-tested —
+40 cases) rather than in `AssetSystem`, because the failure mode is silent: a mis-bucketed texture does not
+error, it just obeys the wrong cvar.
+
+**This turned up a live bug it also fixes.** `CompressSource.Normal` makes Godot emit a two-channel BC5 whose
+blue reads 0, and every normal-sampling shader here uses `.z` — so `gl_texturecompression 1` was inverting
+lighting on every `_norm`, undoing the Z reconstruction `bec0d4e9` added three files away. Details and the
+consequences for the §4 measurement are in
+[texture-compression-and-caching-2026-07-31.md](texture-compression-and-caching-2026-07-31.md).
+
+**Recommendation on the master default: keep it at 0** — see that doc's "On flipping the master default".
 
 ### 2. Fix VortexMaps packaging so alias stubs stop shipping
 `shared.pk3` carries **974** symlink stubs (903 pointing at a real DDS) because the symlink bit was lost when

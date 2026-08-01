@@ -2,6 +2,7 @@ using Godot;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Particles;
 using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Vfs;
 
 namespace VortexArena.Game.Menu;
 
@@ -44,24 +45,80 @@ public static class ClientSettings
     }
 
     /// <summary>
-    /// Mirror <c>gl_texturecompression</c> into <see cref="Loaders.AssetSystem.TextureCompression"/> and keep it
-    /// in step. The texture path reads that plain field rather than the cvar store because it runs on the
-    /// asset-streamer's worker threads, where a concurrent console write to the store would be a data race.
+    /// Mirror <c>gl_texturecompression</c> and its eleven per-category gates into
+    /// <see cref="Loaders.AssetSystem"/> and keep them in step. The texture path reads those plain fields
+    /// rather than the cvar store because it runs on the asset-streamer's worker threads, where a concurrent
+    /// console write to the store would be a data race.
     ///
-    /// <para>Changing it mid-session only affects textures loaded AFTER the change — everything already
-    /// uploaded stays as it was, since the caches never re-upload. That is the same "applies on next load"
-    /// behaviour DP's <c>gl_texturecompression</c> has, and why the Effects dialog groups it with the other
-    /// restart-ish video settings.</para>
+    /// <para>The <c>Changed</c> hook matches on the <c>gl_texturecompression</c> PREFIX, so the master and all
+    /// eleven categories are covered by one subscription and a category added to
+    /// <see cref="TextureCompressionCategories"/> is wired up automatically.</para>
+    ///
+    /// <para>Changing any of them mid-session only affects textures loaded AFTER the change — everything
+    /// already uploaded stays as it was, since the caches never re-upload. That is the same "applies on next
+    /// load" behaviour DP has, and why the Effects dialog groups it with the other restart-ish video settings.
+    /// Worth knowing that this bites harder here than in DP: with <c>cl_persist_asset_cache 1</c> the menu warm
+    /// has already loaded most of the stock asset set by the time a player reaches the Effects dialog, so
+    /// flipping the slider leaves that set at its original compression for the whole process lifetime.</para>
     /// </summary>
     private static void ApplyTextureCompression()
     {
         CvarService c = MenuState.Cvars;
-        Loaders.AssetSystem.TextureCompression = (int)c.GetFloat("gl_texturecompression");
+        PushTextureCompression(c);
         c.Changed += name =>
         {
-            if (string.Equals(name, "gl_texturecompression", StringComparison.OrdinalIgnoreCase))
-                Loaders.AssetSystem.TextureCompression = (int)c.GetFloat("gl_texturecompression");
+            if (name.StartsWith("gl_texturecompression", StringComparison.OrdinalIgnoreCase))
+                PushTextureCompression(c);
         };
+    }
+
+    /// <summary>
+    /// DarkPlaces' per-category compression gates (<c>gl_textures.c:38-48</c>): cvar name, the bucket it
+    /// drives, and DP's REGISTERED default. Xonotic's own overrides are not duplicated here — they arrive the
+    /// normal way, from <c>xonotic-client.cfg:789-794</c> executing over these defaults, exactly as upstream
+    /// does it (that cfg turns <c>_sky</c> on and <c>_lightcubemaps</c> off, among others).
+    ///
+    /// <para>This table is the single place a category is declared: adding one means one row here plus one
+    /// <see cref="TexCategory"/> member, and registration, the mirror and the change hook
+    /// all follow. The previous shape — a hand-written static field plus its own <c>Changed</c> arm per
+    /// setting — is what let the Effects dialog's compression slider sit bound to a cvar that nothing read.</para>
+    /// </summary>
+    private static readonly (string Cvar, TexCategory Category, string DpDefault)[]
+        TextureCompressionCategories =
+    [
+        ("gl_texturecompression_color",           TexCategory.Color,           "1"),
+        ("gl_texturecompression_normal",          TexCategory.Normal,          "0"),
+        ("gl_texturecompression_gloss",           TexCategory.Gloss,           "1"),
+        ("gl_texturecompression_glow",            TexCategory.Glow,            "1"),
+        ("gl_texturecompression_2d",              TexCategory.TwoD,            "0"),
+        ("gl_texturecompression_q3bsplightmaps",  TexCategory.Q3BspLightmaps,  "0"),
+        ("gl_texturecompression_q3bspdeluxemaps", TexCategory.Q3BspDeluxemaps, "0"),
+        ("gl_texturecompression_sky",             TexCategory.Sky,             "0"),
+        ("gl_texturecompression_lightcubemaps",   TexCategory.LightCubemaps,   "1"),
+        ("gl_texturecompression_reflectmask",     TexCategory.ReflectMask,     "1"),
+        ("gl_texturecompression_sprites",         TexCategory.Sprites,         "1"),
+    ];
+
+    /// <summary>Register the eleven per-category gates with DP's defaults (idempotent, keeps any cfg value).</summary>
+    private static void RegisterTextureCompressionCategories(CvarService c)
+    {
+        foreach ((string cvar, _, string def) in TextureCompressionCategories)
+            c.Register(cvar, def, CvarFlags.Save);   // DP registers all twelve CF_ARCHIVE
+    }
+
+    /// <summary>
+    /// Mirror the master plus the eleven category gates into <see cref="Loaders.AssetSystem"/>'s plain static
+    /// fields. Recomputes the whole mask on any change rather than patching one bit, so the field a worker
+    /// reads is always a complete, self-consistent set.
+    /// </summary>
+    private static void PushTextureCompression(CvarService c)
+    {
+        Loaders.AssetSystem.TextureCompression = (int)c.GetFloat("gl_texturecompression");
+        int mask = 0;
+        foreach ((string cvar, TexCategory category, _) in TextureCompressionCategories)
+            if (c.GetFloat(cvar) != 0f)
+                mask |= 1 << (int)category;
+        Loaders.AssetSystem.TextureCompressionCategories = mask;
     }
 
     /// <summary>
@@ -302,6 +359,12 @@ public static class ClientSettings
         // and costs real CPU per texture, so it is a trade the player opts into rather than a silent default.
         // DDS files that ship already-compressed are passed through untouched either way.
         c.Register("gl_texturecompression", "0", save);
+        // The eleven per-category gates DP registers alongside the master (gl_textures.c:38-48). The master
+        // still wins outright — its own description says "a value of 0 disables compression (even if the
+        // individual cvars are 1)" — so with the master at its default 0 these change nothing today; they
+        // decide WHICH textures participate once it is turned on. Notably gl_texturecompression_normal
+        // defaults 0, upstream's own judgement that block-compressing normal maps is not worth it.
+        RegisterTextureCompressionCategories(c);
         // Show the development-release disclaimer over the main menu on a plain launch (default ON). PORT-ONLY:
         // Base ships releases and has no such notice. CvarFlags.Save because it's a genuine user preference —
         // the dialog's "Don't show this again" checkbox writes 0 and OK persists it — not a debug knob. Read

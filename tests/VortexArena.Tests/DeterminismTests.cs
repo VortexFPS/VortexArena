@@ -157,6 +157,16 @@ public class DeterminismTests
     {
         0x30D85D31A8B2C3EFUL, // x64 / Windows CRT  (original dev-machine pin)
         0xB23337E9D523E7E6UL, // x64 / Linux glibc  (GitHub ubuntu-latest)
+        // arm64 / macOS Apple libm (Darwin 24, .NET 9 SDK, net8.0). Added 2026-08-01 following the
+        // procedure above, NOT blindly: the confirmation is that on this same run every OTHER determinism
+        // check passes unchanged — Movement_Trace_Checksum_Matches_X64_Reference matches an x64 pin
+        // bit-for-bit on arm64, Prandom_Seeded_Sequence_Is_Pinned is exact, and
+        // UlpPerturbation_Stays_Within_PredictionEnvelope holds. A logic change would move the movement
+        // trace too, since it runs this same math through the physics; only the transcendental-bearing
+        // path (AngleVectors → sin/cos, VecToAngles → atan2) diverges, which is the definition of a libm
+        // last-ULP difference. Verified against the macos-latest runner by the `macos` job in ci.yml —
+        // that job existing is what makes this a checked value rather than one machine's opinion.
+        0xC1C9EEE2DA9D3297UL,
     };
 
     [Fact]

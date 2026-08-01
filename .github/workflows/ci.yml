@@ -64,6 +64,39 @@ jobs:
           name: test-results
           path: TestResults
 
+  # WHY THIS JOB EXISTS. Four separate bugs were fixed on 2026-08-01 — hardcoded Windows Godot paths, a
+  # committed local NuGet source, bare `python`, and `timeout` — and every one of them survived for the same
+  # reason: the dev box is Windows, CI was Linux, and nothing ever ran on a Mac. They were not four
+  # oversights, they were one blind spot with four symptoms. This job is the fix for the blind spot.
+  #
+  # It runs ci/ci.sh rather than dotnet directly, deliberately: the SHELL SCRIPTS are what rotted, so the
+  # thing worth exercising is tools/lib/find-godot.sh, find-python.sh and run-timeout.sh under a real BSD
+  # userland with bash 3.2 — not just whether the C# compiles. --no-smoke because there is no Godot here;
+  # every other step runs.
+  macos:
+    name: macOS (arm64) — local gate scripts + suite
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "9.0.x"
+
+      # Record what this runner actually is. Cheap, and it is the evidence for the portability claims the
+      # scripts make — e.g. that `timeout` is genuinely absent here rather than assumed to be.
+      - name: Toolchain facts
+        run: |
+          uname -sm
+          sw_vers || true
+          /bin/bash --version | head -1
+          for t in python3 python timeout gtimeout perl curl; do
+            printf '%-10s %s\n' "$t" "$(command -v $t || echo '(absent)')"
+          done
+
+      - name: Local gate (ci/ci.sh --no-smoke)
+        run: bash ci/ci.sh --no-smoke
+
   build-host:
     name: Build Godot host (nuget.org SDK restore)
     runs-on: ubuntu-latest

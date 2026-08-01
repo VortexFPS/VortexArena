@@ -93,6 +93,41 @@ consequences for the §4 measurement are in
 
 **Recommendation on the master default: keep it at 0** — see that doc's "On flipping the master default".
 
+### 1b. Code-review fixes across the asset path — ✅ **DONE 2026-08-01**
+
+The fourteen findings from the review of this thread's own commits. The largest was structural: pk3 link
+following moved OUT of `AssetSystem` (which read every image in full, unpooled, before decoding it just to
+discover it was not a 20-byte stub) and INTO `Pk3Mount`, which already indexed symlinks at mount time and
+validated targets against its own archive. That one move fixed three findings — the double read, the
+duplicate cache key/upload for a link and its target, and a cross-pack redirect the runtime probe allowed.
+The rest: `LoadTexture` now takes the upload gate (it never did, so "one upload in flight" was false against
+the main thread); compression moved out of the gate; `Request` always calls back so one throwing worker can
+no longer strand the entire menu warm; the debt pacer stopped blocking High-priority work; three static
+shader lazies got locked; BC4/BC5 SNORM is rejected rather than silently decoded as UNORM.
+
+**In-match A/B, stormkeep + 2 bots, macOS release export, n=2 per arm:**
+
+| metric | before | after | verdict |
+|---|---|---|---|
+| **alloc total** | **1371.5 MB** | **975.2 MB** | **−28.9%, real** (spread <0.3% within each arm) |
+| p50 / p95 frame | 8.8 / 12.3 ms | 8.9 / 12.4 ms | neutral |
+| p99, 1% low, slow frames | — | — | **noise** — swung ±44% and FLIPPED direction between pairs |
+
+The allocation drop is the double-read and un-pooled LOH allocation going away, which is what the fix
+predicts. The tail metrics are the lesson: on the first pair they looked like a 28% regression in 1%-low, and
+a second pair reversed them. **One pair is not an A/B at this map/duration** — the tail needs more samples
+than the mean does.
+
+Two caveats worth carrying: this is an M-series Mac, so the numbers are NOT comparable to the RTX 3080
+baselines in `tools/perf-baselines` (an A/B is relative and still valid); and both arms must run with a WARM
+shader cache — the first capture after an export pays sync pipeline compiles that shift the whole session and
+made the very first comparison useless.
+
+Rendering verified unchanged by byte-comparing a turntable: `980252d4c4f1187bad0c30e5f2e7a18b` on both sides.
+Note the capture resolution must be checked before trusting that hash — a first-run capture landed at
+1280×720 before the compositor resized the window to 1650×1050, which read as a rendering difference and was
+not one.
+
 ### 2. Fix VortexMaps packaging so alias stubs stop shipping
 `shared.pk3` carries **974** symlink stubs (903 pointing at a real DDS) because the symlink bit was lost when
 the pack was zipped. It is our build output (`data/maps.lock.json` → `VortexFPS/VortexMaps`), not upstream's.

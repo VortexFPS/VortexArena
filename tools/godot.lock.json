@@ -26,6 +26,26 @@
     "channel": "stable",
     "upstream_tag": "4.6.3-stable"
   },
+  "editor_templates": {
+    "$comment": [
+      "Godot's OWN export templates -- the set the EDITOR installs via Manage Export Templates, distinct from",
+      "the pinned custom templates in tools/engine-patches/engine.lock.json. Three of the four presets embed",
+      "a custom template and never touch these; macos-client has no custom_template/release (a declared",
+      "exception in engine.lock.json unpinned_presets) and so falls back to this set, which is why an export",
+      "on a fresh machine failed with 'No export template found' until `./vx engine --editor` existed.",
+      "",
+      "Installed to the editor's per-user directory, NOT into the clone: Godot resolves them from a fixed",
+      "path it owns, so there is no repo-local option the way there is for the editor binary itself. That is",
+      "the one place vx writes outside the clone, and setup says so before doing it.",
+      "MONO build, matching the editor -- the plain templates cannot run C#."
+    ],
+    "filename": "Godot_v4.6.3-stable_mono_export_templates.tpz",
+    "url": "https://github.com/godotengine/godot/releases/download/4.6.3-stable/Godot_v4.6.3-stable_mono_export_templates.tpz",
+    "sha256": "6436f474ee085fb0a94d3d296b9821736bdd663b6e91b2228fdf77066f1d1400",
+    "bytes": 1175747935,
+    "install_dir": "4.6.3.stable.mono",
+    "verified": true
+  },
   "platforms": {
     "macos": {
       "filename": "Godot_v4.6.3-stable_mono_macos.universal.zip",

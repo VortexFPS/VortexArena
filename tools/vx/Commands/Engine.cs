@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -26,6 +27,9 @@ internal static class Engine
 
     internal static int Run(string[] args, bool json)
     {
+        if (args.Contains("--editor"))
+            return InstallEditorTemplates(args.Contains("--force"));
+
         bool verifyOnly = args.Contains("--verify-only");
         bool force = args.Contains("--force");
         var only = args.Where((a, i) => i > 0 && args[i - 1] == "--only").ToList();
@@ -122,6 +126,81 @@ internal static class Engine
 
         Console.WriteLine($"\ndone — {stale.Count} template(s) under tools/engine-templates/");
         return 0;
+    }
+
+    /// <summary>
+    /// Install Godot's OWN export templates (the Manage-Export-Templates set) for the pinned engine.
+    ///
+    /// <para>THE ONE PLACE vx WRITES OUTSIDE THE CLONE, because Godot resolves these from a fixed per-user
+    /// directory it owns — unlike the editor binary, which .godot-bin/ can hold. Says where it is writing
+    /// before it does. A .tpz is a zip whose members sit under <c>templates/</c>; they are flattened into
+    /// the version directory, which is the layout the editor expects.</para>
+    ///
+    /// <para>Only presets with an empty <c>custom_template/release</c> need this — today just macos-client,
+    /// a declared exception in engine.lock.json. The other three embed the pinned custom templates and are
+    /// unaffected.</para>
+    /// </summary>
+    private static int InstallEditorTemplates(bool force)
+    {
+        string lockPath = Path.Combine(Env.RepoRoot, "tools", "godot.lock.json");
+        JsonNode? e = JsonNode.Parse(File.ReadAllText(lockPath))!["editor_templates"];
+        if (e is null) { Console.Error.WriteLine("vx engine --editor: godot.lock.json pins no editor_templates"); return 1; }
+
+        string want = e["sha256"]!.GetValue<string>();
+        long size = e["bytes"]!.GetValue<long>();
+        string dirName = e["install_dir"]!.GetValue<string>();
+
+        string root = Env.IsWindows
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Godot", "export_templates")
+            : Env.IsMacOS
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Library", "Application Support", "Godot", "export_templates")
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".local", "share", "godot", "export_templates");
+        string dest = Path.Combine(root, dirName);
+
+        if (!force && Directory.Exists(dest) && Directory.GetFiles(dest).Length > 0)
+        {
+            Console.WriteLine($"editor templates already installed: {dest}");
+            return 0;
+        }
+
+        Console.WriteLine($"vx engine --editor: installing Godot's export templates");
+        Console.WriteLine($"   {size / (double)(1 << 20):F0} MB  ->  {dest}");
+        Console.WriteLine("   (outside the clone: Godot resolves these from a fixed per-user directory)");
+
+        Directory.CreateDirectory(root);
+        string tpz = Path.Combine(root, e["filename"]!.GetValue<string>());
+        if (!(File.Exists(tpz) && new FileInfo(tpz).Length == size))
+        {
+            try { Download(e["url"]!.GetValue<string>(), tpz, size); }
+            catch (Exception ex) { Console.Error.WriteLine($"vx engine --editor: download failed: {ex.Message}"); return 1; }
+        }
+
+        string got = Sha256File(tpz);
+        if (!got.Equals(want, StringComparison.OrdinalIgnoreCase))
+        {
+            File.Delete(tpz);
+            Console.Error.WriteLine($"vx engine --editor: sha256 mismatch\n   expected {want}\n   got      {got}");
+            return 1;
+        }
+        Console.WriteLine("   sha256 verified");
+
+        if (Directory.Exists(dest)) Directory.Delete(dest, true);
+        Directory.CreateDirectory(dest);
+        using (ZipArchive zip = ZipFile.OpenRead(tpz))
+            foreach (ZipArchiveEntry entry in zip.Entries)
+            {
+                if (entry.Length == 0 || entry.FullName.EndsWith('/')) continue;
+                // Flatten: the archive nests everything under templates/, the editor wants them directly
+                // in <version>/ and matches by file NAME.
+                entry.ExtractToFile(Path.Combine(dest, Path.GetFileName(entry.FullName)), overwrite: true);
+            }
+        File.Delete(tpz);
+
+        int n = Directory.GetFiles(dest).Length;
+        Console.WriteLine($"   installed {n} template file(s)");
+        return n > 0 ? 0 : 1;
     }
 
     private static string Sha256File(string path)

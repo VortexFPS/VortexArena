@@ -30,9 +30,31 @@ if [ "${PERF_DEBUG:-0}" = "1" ]; then
     EXE="$(find_godot "$ROOT")" || { godot_not_found "$ROOT"; exit 1; }
     EXTRA_ARGS=(--path "$ROOT")
 else
-    EXE="$ROOT/dist/windows-client/VortexArena.exe"
+    # The export for THIS platform. Hardcoding the Windows path made every non-Windows capture impossible;
+    # the presets and their output names are export_presets.cfg's, mirrored in tools/package.sh.
+    case "$(uname -s)" in
+        Darwin) PRESET="macos-client"; EXE="$ROOT/dist/macos-client/VortexArena.app/Contents/MacOS/VortexArena" ;;
+        Linux)  PRESET="linux-client"; EXE="$ROOT/dist/linux-client/VortexArena.x86_64" ;;
+        *)      PRESET="windows-client"; EXE="$ROOT/dist/windows-client/VortexArena.exe" ;;
+    esac
     EXTRA_ARGS=()
-    [ -x "$EXE" ] || { echo "!!! release export missing at $EXE — export windows-client first (or PERF_DEBUG=1)"; exit 1; }
+    [ -x "$EXE" ] || { echo "!!! release export missing at $EXE — run: ./vx export --preset $PRESET   (or PERF_DEBUG=1)"; exit 1; }
+
+    # Reproduce the PACKAGED content layout, exactly as run-release.sh does and for the same reason: the
+    # export excludes data/* from the pck, so an exported build resolves it through DataPaths.ResolveExported,
+    # which probes exe-relative FIRST and only then the CWD. Without this the binary launches, mounts NOTHING,
+    # self-quits and writes a session log full of flattering numbers — which is precisely how the first
+    # capture of the menu-warm investigation came back clean. macOS keeps it inside the bundle at
+    # Contents/Resources/data (tools/package.sh); the other platforms put it beside the binary.
+    case "$(uname -s)" in
+        Darwin) DATA_DEST="$ROOT/dist/macos-client/VortexArena.app/Contents/Resources/data" ;;
+        *)      DATA_DEST="$(dirname "$EXE")/data" ;;
+    esac
+    if [ ! -e "$DATA_DEST" ]; then
+        mkdir -p "$(dirname "$DATA_DEST")"
+        ln -s "$ROOT/data" "$DATA_DEST" 2>/dev/null || cp -R "$ROOT/data" "$DATA_DEST"
+        echo ">>> placed data/ for the exported build at $DATA_DEST"
+    fi
 fi
 
 powershell -NoProfile -Command "Get-Process Godot*,VortexArena* -ErrorAction SilentlyContinue | Stop-Process -Force" 2>/dev/null
@@ -48,10 +70,13 @@ if [ "${PERF_SCENARIO:-demo}" = "demo" ]; then
                    --cvar g_forced_respawn 1
                    --cvar bot_ai_weapon_rotate 8)
 fi
-run_with_timeout $((SECS+60)) "$EXE" "${EXTRA_ARGS[@]}" --host "$MAP" --gametype dm --bots "$BOTS" \
+# ${arr[@]+"${arr[@]}"} rather than "${arr[@]}": under `set -u`, macOS's bash 3.2 treats expanding an EMPTY
+# array as an unbound variable and aborts. bash 4.4+ does not, which is why this only ever failed off the dev
+# box. EXTRA_ARGS is empty on every non-PERF_DEBUG run, i.e. every release capture.
+run_with_timeout $((SECS+60)) "$EXE" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} --host "$MAP" --gametype dm --bots "$BOTS" \
     --cvar cl_frameprofiler 2 --cvar cl_frameprofiler_hitchms 8 \
     --cvar cl_autopause 0 --cvar cl_portal_render 0 --cvar vid_vsync 0 --cvar cl_maxfps 0 \
-    "${SCENARIO_ARGS[@]}" \
+    ${SCENARIO_ARGS[@]+"${SCENARIO_ARGS[@]}"} \
     "$@" --quit-after-seconds "$SECS" > "$ROOT/_scratch/perf_${LABEL}.out" 2>&1
 sleep 2   # session-log writer flush
 NEW=$(ls -t "$LOGDIR"/*.log 2>/dev/null | head -1)

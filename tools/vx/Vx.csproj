@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ./vx — the task runner. Deliberately standalone:
+
+      * NOT in VortexArena.sln and NOT referencing any VortexArena project. It must build and run when the
+        rest of the tree does not, because diagnosing that state is `vx doctor`'s job.
+      * NO PackageReference. Every dependency it takes is one a fresh clone must already have, and the whole
+        point of choosing C# was that .NET is the only unavoidable one. Adding a NuGet package here also
+        means a restore must succeed before the tool that diagnoses restore failures can run.
+      * net8.0 to match global.json (8.0.0, rollForward latestMajor), so it builds on the same SDK the rest
+        of the tree pins rather than needing its own.
+
+    See planning/bootstrap-and-task-runner-2026-08-01.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>vx</AssemblyName>
+    <RootNamespace>Vx</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The shim rebuilds this whenever a source file is newer than the dll, so a stale-looking build is
+         never the user's problem to notice. Quiet output keeps `vx doctor` readable when it does rebuild. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

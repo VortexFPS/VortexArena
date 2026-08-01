@@ -1,0 +1,84 @@
+using Vx.Commands;
+
+namespace Vx;
+
+/// <summary>
+/// Entry point and command dispatcher for <c>./vx</c>.
+///
+/// <para>DELIBERATELY THIN. Real logic belongs in the command it delegates to, or in the script that command
+/// wraps — the failure mode this design is guarding against is <c>vx</c> quietly becoming a second place
+/// where build logic lives, in parallel with <c>ci/ci.sh</c>, <c>tools/package.sh</c> and the fetchers. Those
+/// scripts are well reasoned and stay authoritative; <c>vx</c> is the door in.</para>
+/// </summary>
+internal static class Program
+{
+    internal static int Main(string[] args)
+    {
+        // Global flags are recognised before the command so `vx --help` and `vx doctor --json` both work.
+        bool json = args.Contains("--json");
+        var rest = args.Where(a => a != "--json").ToArray();
+
+        if (rest.Length == 0 || rest[0] is "--help" or "-h" or "help")
+        {
+            PrintUsage();
+            return 0;
+        }
+
+        string command = rest[0];
+        string[] commandArgs = rest.Skip(1).ToArray();
+
+        try
+        {
+            return command switch
+            {
+                "doctor" => Doctor.Run(commandArgs, json),
+                _ => UnknownCommand(command),
+            };
+        }
+        catch (Exception ex)
+        {
+            // A stack trace is the right thing for a tool its own developers maintain, but it is noise for
+            // someone who just wants to build the game — so it is behind a flag rather than the default.
+            Console.Error.WriteLine($"vx: {command}: {ex.Message}");
+            if (Environment.GetEnvironmentVariable("VX_DEBUG") == "1")
+                Console.Error.WriteLine(ex);
+            else
+                Console.Error.WriteLine("(set VX_DEBUG=1 for the stack trace)");
+            return 1;
+        }
+    }
+
+    private static int UnknownCommand(string command)
+    {
+        Console.Error.WriteLine($"vx: unknown command '{command}'");
+        Console.Error.WriteLine();
+        PrintUsage(Console.Error);
+        return 2;
+    }
+
+    private static void PrintUsage(TextWriter? w = null)
+    {
+        w ??= Console.Out;
+        w.WriteLine("""
+            vx — the Vortex Arena task runner
+
+            Usage:
+              ./vx <command> [options]
+
+            Commands:
+              doctor      Diagnose the toolchain and content. Changes nothing.
+
+            Global options:
+              --json      Machine-readable output. The schema is versioned and is a
+                          contract with VortexLauncher — see the plan before changing it.
+              --help      This message.
+
+            Not yet implemented (planning/bootstrap-and-task-runner-2026-08-01.md):
+              setup, build, test, run, server, export, package, maps, engine, ci, perf
+
+            Environment overrides, honoured by doctor and by the shell scripts alike:
+              GODOT       path to the Godot 4.6.3 mono executable
+              PYTHON      path to a Python 3 interpreter
+            """);
+    }
+}

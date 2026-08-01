@@ -76,3 +76,7 @@ data/maps/
 # Fetched engine export templates (tools/data/fetch-engine-template.py, pinned by
 # tools/engine-patches/engine.lock.json). Build inputs, not source — ~300 MB across three platforms.
 tools/engine-templates/
+
+# ./vx task runner build output (tools/vx/). The shim rebuilds it on demand; never committed.
+/tools/vx/bin/
+/tools/vx/obj/

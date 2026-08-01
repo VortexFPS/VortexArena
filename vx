@@ -1,0 +1,59 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------------------------------
+# ./vx — the Vortex Arena task runner.
+#
+# THIS FILE IS A SHIM, NOT THE TOOL. Its only job is to get to the real thing: find dotnet, build
+# tools/vx if it is missing or stale, then hand over every argument. Everything a person would call
+# "setup" — checking dependencies, installing Godot, fetching maps — lives in the C# tool, where there is
+# real JSON, real hashing and real error handling.
+#
+# It is deliberately boring. The one dependency it handles is the RUNTIME, because that is the only one it
+# cannot delegate: the OS cannot run C# until dotnet exists. Everything else belongs on the other side of
+# the handover. Keeping this file boring is what stops it becoming a second build system in a language
+# nobody wants to maintain.
+#
+# POSIX sh only — macOS ships bash 3.2 and this also runs under Git Bash. See
+# planning/bootstrap-and-task-runner-2026-08-01.md for why the tool is C# and the shim is not.
+# ---------------------------------------------------------------------------------------------------
+set -eu
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+PROJ="$ROOT/tools/vx/Vx.csproj"
+DLL="$ROOT/tools/vx/bin/Release/net8.0/vx.dll"
+
+if ! command -v dotnet >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+
+vx: the .NET SDK is not installed (or not on PATH).
+
+It is the one dependency vx cannot install for you, because it is what vx runs on.
+Everything else — Godot, the maps, the engine templates — vx handles once it can start.
+
+  Install 8.0 or newer:  https://dotnet.microsoft.com/download
+  (global.json pins 8.0.0 with rollForward latestMajor)
+
+EOF
+    exit 1
+fi
+
+# Rebuild when any source is newer than the dll, so nobody has to remember to. `find -newer` is POSIX and
+# needs no timestamp arithmetic; the -print -quit pair stops at the first hit instead of walking the tree.
+needs_build=0
+if [ ! -f "$DLL" ]; then
+    needs_build=1
+elif [ -n "$(find "$ROOT/tools/vx" -name '*.cs' -newer "$DLL" -print -quit 2>/dev/null)" ] \
+  || [ "$PROJ" -nt "$DLL" ]; then
+    needs_build=1
+fi
+
+if [ "$needs_build" -eq 1 ]; then
+    echo "vx: building the task runner (first run or sources changed)…" >&2
+    if ! dotnet build "$PROJ" -c Release --nologo -v quiet -o "$ROOT/tools/vx/bin/Release/net8.0" >&2; then
+        echo "" >&2
+        echo "vx: could not build the task runner." >&2
+        echo "    If this is a restore failure, check nuget.config is reachable — it is nuget.org-only." >&2
+        exit 1
+    fi
+fi
+
+exec dotnet "$DLL" "$@"

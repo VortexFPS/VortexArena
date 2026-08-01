@@ -35,6 +35,10 @@
     <Compile Remove="src/**/*.cs" />
     <Compile Remove="tests/**/*.cs" />
     <Compile Remove="planning/**/*.cs" />
+    <!-- The ./vx task runner (tools/vx/) is a standalone console app with its own csproj. Godot.NET.Sdk
+         globs **/*.cs from the project directory, so without this its Program.cs would be compiled INTO the
+         game host — a second Main, and tooling code shipped in the game assembly. -->
+    <Compile Remove="tools/**/*.cs" />
     <Compile Remove=".godot/**/*.cs" />
     <Compile Remove="obj/**/*.cs" />
     <Compile Remove="bin/**/*.cs" />

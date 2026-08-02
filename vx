@@ -38,17 +38,29 @@ fi
 
 # Rebuild when any source is newer than the dll, so nobody has to remember to. `find -newer` is POSIX and
 # needs no timestamp arithmetic; the -print -quit pair stops at the first hit instead of walking the tree.
+#
+# obj/ and bin/ are PRUNED, and that is not tidiness. The build writes its own C# into
+# obj/<cfg>/<tfm>/ — Vx.AssemblyInfo.cs, Vx.GlobalUsings.g.cs — so a scan that includes them is comparing
+# the build's output against the build's other output. Here they land a second or two BEFORE the dll so
+# the comparison happened to come out right; the .cmd twin uses xcopy, whose timestamp comparison is too
+# coarse to see a two-second gap, so over there it rebuilt on EVERY invocation. Same latent bug, and it
+# only bit on one side.
 needs_build=0
 if [ ! -f "$DLL" ]; then
     needs_build=1
-elif [ -n "$(find "$ROOT/tools/vx" -name '*.cs' -newer "$DLL" -print -quit 2>/dev/null)" ] \
+elif [ -n "$(find "$ROOT/tools/vx" \( -name obj -o -name bin \) -prune -o \
+             -name '*.cs' -newer "$DLL" -print -quit 2>/dev/null)" ] \
   || [ "$PROJ" -nt "$DLL" ]; then
     needs_build=1
 fi
 
 if [ "$needs_build" -eq 1 ]; then
     echo "vx: building the task runner (first run or sources changed)…" >&2
-    if ! dotnet build "$PROJ" -c Release --nologo -v quiet -o "$ROOT/tools/vx/bin/Release/net8.0" >&2; then
+    # -nodeReuse:false because vx is a short build run by other tools. MSBuild otherwise leaves worker
+    # nodes alive for ~15 minutes holding obj/.../vx.dll, and the next rebuild fails CS2012 "being used
+    # by another process" — which is what a caller sees as vx randomly refusing to start.
+    if ! dotnet build "$PROJ" -c Release --nologo -v quiet -nodeReuse:false \
+         -o "$ROOT/tools/vx/bin/Release/net8.0" >&2; then
         echo "" >&2
         echo "vx: could not build the task runner." >&2
         echo "    If this is a restore failure, check nuget.config is reachable — it is nuget.org-only." >&2

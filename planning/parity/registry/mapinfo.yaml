@@ -470,10 +470,12 @@ features:
       - "common/mapinfo.qc:MapInfo_ListAllowedMaps"
       - "common/mapinfo.qc:MapInfo_ListAllAllowedMaps"
     port_refs:
-      - "src/VortexArena.Server/MapRotation.cs:AllowedMaps + Init (empty g_maplist = every map supporting the gametype)"
+      - "src/VortexArena.Server/MapListStore.cs (cvar -> maplist.txt -> every installed map; tier 3 never written)"
+      - "src/VortexArena.Server/MapRotation.cs:AllowedMaps + Init (resolves through MapListStore)"
       - "src/VortexArena.Server/CommandReplies.cs:GetMaplist / GetLsmaps"
       - "src/VortexArena.Server/GameWorld.cs:4453 (gametype-switch maplist reset clears g_maplist)"
-      - "game/net/NetGame.cs:1169-1178 (host wiring: MapExists / MapSupportsGametype / AllowedMaps → MapList)"
+      - "game/net/NetGame.cs (host wiring: MapExists / MapSupportsGametype / AllowedMaps → MapList; MapListStore.FilePath → UserPaths.GameDir)"
+      - "game/menu/CreateGameScreen.cs:MaplistSet/SaveMaplist (menu reads and writes the same store)"
     constants:
       - { name: "MAPLIST_MAX/LSMAPS_MAX", base: "250", port: "250", match: true }
     status:
@@ -484,7 +486,7 @@ features:
       audio: na
       liveness: live
     intended_divergence: true
-    divergence_rationale: "Neither side serialises the full catalog into g_maplist any more. Base's MapInfo_ListAllowedMaps built one space-separated string, which QC caps at 16383 bytes — a big server got the list back truncated mid-name (xonotic-data#3002). The Base patch and the port both treat an empty g_maplist as 'every map that supports the current gametype' and keep the list in a buffer/List<string>; the string form survives only for the menu's map picker, where it is cut between names."
+    divergence_rationale: "Neither side serialises the full catalog into g_maplist any more. Base's MapInfo_ListAllowedMaps built one space-separated string, which QC caps at 16383 bytes — a big server got the list back truncated mid-name (xonotic-data#3002). The Base patch and the port both treat an empty g_maplist as 'every map that supports the current gametype' and keep the list in a buffer/List<string>; a list too long for the cvar spills to maplist.txt instead. An unconfigured list is resolved live from the catalog and deliberately never written back, so a map installed later appears without anyone having to clear a stale file."
     gaps: []
     verification:
       - { kind: code, ref: "MapRotation.Init reads AllowedMaps() when g_maplist yields nothing usable and clears the cvar; NetGame.cs:1169-1178 wires the VFS/.mapinfo catalog; GameWorld.cs:4453 resets by clearing.", result: pass }

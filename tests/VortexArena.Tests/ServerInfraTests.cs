@@ -766,6 +766,113 @@ public class ServerInfraTests
         Assert.Equal("boil dance", Cvars.String("g_maplist"));
     }
 
+    // ================================================================================ map list store
+
+    private static string NewMaplistFile()
+    {
+        string p = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "vxmaplist-" + System.Guid.NewGuid().ToString("N") + ".txt");
+        MapListStore.FilePath = p;
+        return p;
+    }
+
+    [Fact]
+    public void MapListStore_UnsetList_ResolvesLiveAndIsNeverWritten()
+    {
+        // The regression this guards: writing tier 3 out would freeze the list, and a map installed
+        // afterwards would never enter the rotation until someone deleted the file (xonotic-data#3002).
+        string file = NewMaplistFile();
+        try
+        {
+            Cvars.Set("g_maplist", "");
+            var installed = new List<string> { "boil", "dance" };
+
+            Assert.Equal(new[] { "boil", "dance" }, MapListStore.Resolve(() => installed));
+            Assert.Equal(MapListStore.Source.All, MapListStore.LastSource);
+            Assert.False(System.IO.File.Exists(file), "resolving an unset list must not write the file");
+
+            // a new map turns up on disk: it must appear with no config change and no file to clear
+            installed.Add("stormkeep");
+            Assert.Equal(new[] { "boil", "dance", "stormkeep" }, MapListStore.Resolve(() => installed));
+            Assert.False(System.IO.File.Exists(file));
+        }
+        finally { MapListStore.FilePath = null; Cvars.Set("g_maplist", ""); }
+    }
+
+    [Fact]
+    public void MapListStore_Precedence_CvarThenFileThenInstalled()
+    {
+        string file = NewMaplistFile();
+        try
+        {
+            System.IO.File.WriteAllText(file, "// mine\nboil\nstormkeep # keep this one\n");
+            var installed = new List<string> { "boil", "dance", "stormkeep", "solarium" };
+
+            Cvars.Set("g_maplist", "");
+            Assert.Equal(new[] { "boil", "stormkeep" }, MapListStore.Resolve(() => installed));
+            Assert.Equal(MapListStore.Source.File, MapListStore.LastSource);
+
+            Cvars.Set("g_maplist", "dance solarium"); // the cvar still wins over the file
+            Assert.Equal(new[] { "dance", "solarium" }, MapListStore.Resolve(() => installed));
+            Assert.Equal(MapListStore.Source.Cvar, MapListStore.LastSource);
+
+            Cvars.Set("g_maplist", "");
+            MapListStore.Forget();
+            Assert.Equal(installed, MapListStore.Resolve(() => installed));
+            Assert.Equal(MapListStore.Source.All, MapListStore.LastSource);
+        }
+        finally { MapListStore.FilePath = null; Cvars.Set("g_maplist", ""); }
+    }
+
+    [Fact]
+    public void MapListStore_Save_UsesCvarUntilItDoesNotFit()
+    {
+        string file = NewMaplistFile();
+        try
+        {
+            Cvars.Set("g_maplist", "");
+            Assert.Equal(MapListStore.Source.Cvar, MapListStore.Save(new[] { "boil", "dance" }));
+            Assert.Equal("boil dance", Cvars.String("g_maplist"));
+            Assert.False(System.IO.File.Exists(file));
+
+            var huge = new List<string>();
+            for (int i = 0, len = 0; len < MapListStore.CvarMaxLen + 500; i++)
+            {
+                string name = $"map{i:D6}";
+                huge.Add(name);
+                len += name.Length + 1; // the same measure Save uses
+            }
+            Assert.Equal(MapListStore.Source.File, MapListStore.Save(huge));
+            Assert.Equal("", Cvars.String("g_maplist")); // cvar steps out of the way
+            Assert.True(System.IO.File.Exists(file));
+            Assert.Equal(huge, MapListStore.Resolve(() => new List<string>()));
+        }
+        finally { MapListStore.FilePath = null; Cvars.Set("g_maplist", ""); }
+    }
+
+    [Fact]
+    public void MapRotation_UnusableStoredList_DropsItAndTakesTheCatalog()
+    {
+        string file = NewMaplistFile();
+        try
+        {
+            System.IO.File.WriteAllText(file, "ghost_a\nghost_b\n");
+            Cvars.Set("g_maplist", "");
+            Cvars.Set("g_maplist_shuffle", "0");
+            Cvars.Set("g_maplist_mostrecent", "");
+            var r = new MapRotation
+            {
+                MapExists = m => m == "boil" || m == "dance",
+                AllowedMaps = () => new[] { "boil", "dance" },
+            };
+
+            Assert.Equal(2, r.Init("boil"));
+            Assert.Equal(new[] { "boil", "dance" }, r.Buffer);
+            Assert.False(System.IO.File.Exists(file), "the unusable list is dropped, not rewritten");
+        }
+        finally { MapListStore.FilePath = null; Cvars.Set("g_maplist", ""); }
+    }
+
     // ========================================================================================== timeout
 
     [Fact]

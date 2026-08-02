@@ -65,21 +65,21 @@ public sealed class MapRotation
     public int Init(string currentMap)
     {
         _buffer.Clear();
-        string list = Cvars.String("g_maplist");
         var maps = new List<string>();
-        foreach (string m in list.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        foreach (string m in MapListStore.Resolve(AllowedMaps))
             if (MapExists(m) && MapSupportsGametype(m) && !maps.Contains(m))
                 maps.Add(m);
 
-        if (maps.Count == 0)
+        if (maps.Count == 0 && MapListStore.LastSource != MapListStore.Source.All)
         {
-            // QC Maplist_Init's "Maplist contains no usable maps!" fallback: drop a list that turned out to
-            // hold nothing playable (so it can't keep costing a scan every intermission) and rotate through
-            // the whole catalog instead. Already filtered by gametype, which is what MapCheck(_, 2) tests.
-            if (!string.IsNullOrEmpty(list))
-                Cvars.Set("g_maplist", "");
-            foreach (string m in AllowedMaps())
-                if (!maps.Contains(m))
+            // QC Maplist_Init's "Maplist contains no usable maps!" fallback: a configured list with nothing
+            // playable in it gets dropped, and the rotation takes every installed map instead — which is
+            // what an unset list means. Only a STORED list is dropped; tier 3 comes from the live catalog,
+            // so there is nothing to drop and nothing to freeze.
+            Cvars.Set("g_maplist", "");
+            MapListStore.Forget();
+            foreach (string m in MapListStore.Resolve(AllowedMaps))
+                if (MapExists(m) && MapSupportsGametype(m) && !maps.Contains(m))
                     maps.Add(m);
         }
 

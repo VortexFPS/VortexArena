@@ -102,9 +102,9 @@ public sealed class CommandReplies
     /// </summary>
     private string GetMaplist()
     {
-        IReadOnlyList<string> words = SplitWords(Cvars.String("g_maplist"));
-        if (words.Count == 0)
-            words = _world.Rotation.AllowedMaps();
+        // The same resolved list the rotation uses (cvar, else the list file, else every installed
+        // map), so this reply can't disagree with what the server will actually play.
+        IReadOnlyList<string> words = MapListStore.Resolve(_world.Rotation.AllowedMaps);
         if (words.Count == 0)
             return "^7Map list is empty";
 

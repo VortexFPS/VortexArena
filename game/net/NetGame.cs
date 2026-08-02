@@ -1177,6 +1177,13 @@ public sealed partial class NetGame : Node3D
         };
         _serverWorld.Rotation.AllowedMaps = () => Menu.MapList.ForGametype(_serverWorld?.GameType?.NetName ?? "");
 
+        // The map list file tier (QC common/maplist.qc MAPLIST_FILE): a selection too long for the cvar
+        // lives here instead. In the user gamedir, beside the configs, so an admin can edit it by hand.
+        // NOTE: only ever written by a deliberate edit -- an unset list resolves live from the catalog, so
+        // a map added later shows up without anyone having to clear a stale file (xonotic-data#3002).
+        VortexArena.Server.MapListStore.FilePath =
+            System.IO.Path.Combine(UserPaths.GameDir, VortexArena.Server.MapListStore.FileName);
+
         // QC localcmd("\nsv_vote_gametype_hook_all\n") + localcmd("\nsv_vote_gametype_hook_", name, "\n") from
         // GameTypeVote_SetGametype: fires on the sim thread (ApplyGametypeSwitch → DriveEndOfMatchMapFlow), so the
         // handler runs synchronously on that thread — no RunOnSimThread wrapper needed on either path.

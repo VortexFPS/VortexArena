@@ -420,15 +420,18 @@ public partial class CreateGameScreen : MenuScreen
         return col;
     }
 
-    /// <summary>The current g_maplist selection as a set of map names (space-separated cvar tokens).</summary>
+    /// <summary>The current selection, read through the store: it may live in a file rather than the
+    /// cvar (a selection too long for one), and an unset list means every installed map.</summary>
     private static HashSet<string> MaplistSet()
-        => new(MenuState.Cvars.GetString("g_maplist")
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
+        => new(VortexArena.Server.MapListStore.Resolve(MapList.Available), StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Saves the selection, to the cvar when it fits and to the list file when it does not.
+    /// Always a deliberate edit &#8212; "add all" pins the current set on purpose.</summary>
     private static void SaveMaplist(IEnumerable<string> maps)
     {
-        MenuState.Cvars.Set("g_maplist", string.Join(' ', maps));
-        MenuState.Cvars.MarkArchived("g_maplist");
+        var list = new List<string>(maps);
+        if (VortexArena.Server.MapListStore.Save(list) == VortexArena.Server.MapListStore.Source.Cvar)
+            MenuState.Cvars.MarkArchived("g_maplist");
     }
 
     /// <summary>Maps whose .mapinfo declares support for <paramref name="gametype"/> (no mapinfo = shown).</summary>

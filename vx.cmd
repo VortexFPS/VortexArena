@@ -8,11 +8,16 @@ REM planning\bootstrap-and-task-runner-2026-08-01.md.
 REM ---------------------------------------------------------------------------------------------------
 setlocal EnableDelayedExpansion
 
-set "ROOT=%~dp0"
-if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
-set "PROJ=%ROOT%\tools\vx\Vx.csproj"
-set "OUTDIR=%ROOT%\tools\vx\bin\Release\net8.0"
-set "DLL=%OUTDIR%\vx.dll"
+REM Every name here is VX_-prefixed on purpose. `set` in cmd creates an ENVIRONMENT variable, which every
+REM child inherits, and MSBuild reads the environment as properties (case-insensitively) — so a bare OUTDIR
+REM silently becomes $(OutDir) and redirects the output of `vx build`, `vx test` and `vx export` into the
+REM task runner's own bin\. Do not drop the prefix. The ./vx twin is a shell script whose variables are not
+REM exported, so it never had this hazard.
+set "VX_ROOT=%~dp0"
+if "%VX_ROOT:~-1%"=="\" set "VX_ROOT=%VX_ROOT:~0,-1%"
+set "VX_PROJ=%VX_ROOT%\tools\vx\Vx.csproj"
+set "VX_OUTDIR=%VX_ROOT%\tools\vx\bin\Release\net8.0"
+set "VX_DLL=%VX_OUTDIR%\vx.dll"
 
 where dotnet >nul 2>&1
 if errorlevel 1 (
@@ -30,27 +35,25 @@ if errorlevel 1 (
 
 REM Rebuild when any source is newer than the dll. cmd has no `find -newer`, so this compares the newest
 REM source timestamp against the dll's via a sorted directory listing - same intent as the sh side.
-set "NEEDS_BUILD=0"
-if not exist "%DLL%" (
-    set "NEEDS_BUILD=1"
+set "VX_NEEDS_BUILD=0"
+if not exist "%VX_DLL%" (
+    set "VX_NEEDS_BUILD=1"
 ) else (
-    for /f "delims=" %%F in ('dir /b /s /o-d "%ROOT%\tools\vx\*.cs" "%PROJ%" 2^>nul') do (
-        set "NEWEST=%%F"
+    for /f "delims=" %%F in ('dir /b /s /o-d "%VX_ROOT%\tools\vx\*.cs" "%VX_PROJ%" 2^>nul') do (
+        set "VX_NEWEST=%%F"
         goto :checked
     )
     :checked
-    if defined NEWEST (
-        for %%A in ("!NEWEST!") do set "SRC_TIME=%%~tA"
-        for %%B in ("%DLL%") do set "DLL_TIME=%%~tB"
-        REM String compare is unreliable across locales, so fall back to xcopy's /L /D test: it lists the
-        REM file only when the source is NEWER than the destination.
-        xcopy /L /D /Y "!NEWEST!" "%DLL%" 2>nul | findstr /i /c:".cs" >nul && set "NEEDS_BUILD=1"
+    if defined VX_NEWEST (
+        REM String compare is unreliable across locales, so use xcopy's /L /D test: it lists the file only
+        REM when the source is NEWER than the destination.
+        xcopy /L /D /Y "!VX_NEWEST!" "%VX_DLL%" 2>nul | findstr /i /c:".cs" >nul && set "VX_NEEDS_BUILD=1"
     )
 )
 
-if "%NEEDS_BUILD%"=="1" (
+if "%VX_NEEDS_BUILD%"=="1" (
     echo vx: building the task runner ^(first run or sources changed^)... 1>&2
-    dotnet build "%PROJ%" -c Release --nologo -v quiet -o "%OUTDIR%" 1>&2
+    dotnet build "%VX_PROJ%" -c Release --nologo -v quiet -o "%VX_OUTDIR%" 1>&2
     if errorlevel 1 (
         echo. 1>&2
         echo vx: could not build the task runner. 1>&2
@@ -59,5 +62,5 @@ if "%NEEDS_BUILD%"=="1" (
     )
 )
 
-dotnet "%DLL%" %*
+dotnet "%VX_DLL%" %*
 exit /b %ERRORLEVEL%

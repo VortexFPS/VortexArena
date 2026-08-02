@@ -79,6 +79,12 @@ public partial class MenuRoot : Control
         FitToViewport();
         GetViewport().SizeChanged += FitToViewport;
 
+        // Give every scrollable in the front-end the Xonotic scroll feel. Hooked once, here, rather than at each
+        // of the ~30 construction sites: a QC listbox eases toward its scroll target instead of snapping (see
+        // SmoothScroll), and that is a property of the menu as a whole rather than of individual dialogs — a
+        // list added to a screen later should get it without anyone having to remember to ask.
+        GetTree().NodeAdded += OnNodeAdded;
+
         BuildBackground();
 
         // A dedicated host node keeps the screen subtrees separate from the background panel,
@@ -97,8 +103,32 @@ public partial class MenuRoot : Control
         ShowScreen(new MainMenu());
     }
 
+    /// <summary>
+    /// Attach <see cref="SmoothScroll"/> to any scrollable Godot control that lands under this menu. The type
+    /// test comes first so the signal — which fires for every node the game ever adds, including a map's tens
+    /// of thousands — costs one type check for everything that isn't a list.
+    /// </summary>
+    private void OnNodeAdded(Node node)
+    {
+        if (node is not (ItemList or Tree or ScrollContainer))
+            return;
+        for (Node? p = node.GetParent(); p is not null; p = p.GetParent())
+        {
+            if (!ReferenceEquals(p, this))
+                continue;
+            // Deferred: we are inside the tree's own node-added dispatch, and the control is still setting its
+            // own children up.
+            var control = (Control)node;
+            Callable.From(() => { if (IsInstanceValid(control)) SmoothScroll.Attach(control); }).CallDeferred();
+            return;
+        }
+    }
+
     public override void _ExitTree()
     {
+        if (GetTree() is { } tree)
+            tree.NodeAdded -= OnNodeAdded;
+
         // Release the skinned custom mouse cursor installed in _Ready/Restart BEFORE the RenderingServer is
         // torn down. The DisplayServer holds the cursor image's texture independently of the scene tree, so it
         // outlives every node we free; left set, its texture RID is released only after RenderingServer::finish(),

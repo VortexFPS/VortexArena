@@ -30,6 +30,19 @@ public sealed class MasterServerLink : IDisposable
 
     // ---- events (raised from Poll) ----
 
+    /// <summary>
+    /// How many datagrams one <see cref="Poll"/> will drain. BUDGETED: an unauthenticated UDP flood (rcon
+    /// getchallenge spam, master noise) would otherwise pin the calling thread inside the drain and stop the
+    /// sim from ticking at all. Anything left over is read next frame — the socket buffer is the queue.
+    ///
+    /// <para>A CLIENT-side browser link raises this a long way, because there the leftovers are not a backlog
+    /// to work through later but measurement error: the browser times a server's ping from when it sent the
+    /// probe to when it reads the reply, so a reply that waits several frames for a drain slot reports the
+    /// queue depth rather than the round trip. A browser link only ever receives answers to probes it sent,
+    /// so there is no flood for the low budget to protect it from.</para>
+    /// </summary>
+    public int MaxPacketsPerPoll { get; set; } = 64;
+
     /// <summary>A master replied with a server list (client browser). The list is (ip, port) game servers.</summary>
     public event Action<IReadOnlyList<(IPAddress ip, int port)>>? ServerListReceived;
 
@@ -87,10 +100,6 @@ public sealed class MasterServerLink : IDisposable
     /// <summary>Drain pending datagrams (non-blocking) and raise the matching event for each recognised message.</summary>
     public void Poll()
     {
-        // BUDGETED: an unauthenticated UDP flood (rcon getchallenge spam, master noise) would otherwise pin the
-        // main thread inside this drain and stop the sim from ticking at all. Anything left over is read next
-        // frame — the socket buffer is the queue.
-        const int MaxPacketsPerPoll = 64;
         for (int i = 0; i < MaxPacketsPerPoll; i++)
         {
             byte[] data;

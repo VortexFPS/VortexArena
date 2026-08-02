@@ -71,6 +71,73 @@ public static class MenuSkin
     public static Color ListBackground => TableRgba("COLOR_LISTBOX_BACKGROUND", "ALPHA_LISTBOX_BACKGROUND", 0f, 0f, 0f, 0.25f);
     /// <summary>How far disabled widgets fade (ALPHA_DISABLED).</summary>
     public static float DisabledAlpha => TableNum("ALPHA_DISABLED", 0.25f);
+    /// <summary>How opaque the selected-row fill is (ALPHA_LISTBOX_SELECTED).</summary>
+    public static float SelectionAlpha => TableNum("ALPHA_LISTBOX_SELECTED", 1f);
+
+    // --- The hovered ("focused") row. ListBox_setFocusedItem snaps focusedItemAlpha to ALPHA_LISTBOX_FOCUSED
+    //     whenever the hovered row CHANGES, and drawListBoxItem then eases it toward FADEALPHA_LISTBOX_FOCUSED
+    //     (getFadedAlpha, 0.5/s) — the highlight flashes as the cursor crosses a row and settles dimmer.
+
+    /// <summary>The hovered-row fill (COLOR_LISTBOX_FOCUSED) — a deep Xonotic blue, not the selection orange.</summary>
+    public static Color ListFocused => TableRgb("COLOR_LISTBOX_FOCUSED", 0.09f, 0.42f, 0.69f);
+    /// <summary>Hovered-row alpha the moment the cursor enters it (ALPHA_LISTBOX_FOCUSED).</summary>
+    public static float ListFocusedAlpha => TableNum("ALPHA_LISTBOX_FOCUSED", 0.55f);
+    /// <summary>Hovered-row alpha it settles to (FADEALPHA_LISTBOX_FOCUSED).</summary>
+    public static float ListFocusedFadeAlpha => TableNum("FADEALPHA_LISTBOX_FOCUSED", 0.3f);
+    // --- Button art tints. Every state is '1 1 1' in luma, but a skin may recolour them, and the QC reads
+    //     the table rather than assuming white — so do the same instead of hardcoding Colors.White.
+
+    /// <summary>Normal button art tint (COLOR_BUTTON_N).</summary>
+    public static Color ButtonNormal => TableRgb("COLOR_BUTTON_N", 1f, 1f, 1f);
+    /// <summary>Clicked/forced-pressed button art tint (COLOR_BUTTON_C).</summary>
+    public static Color ButtonClicked => TableRgb("COLOR_BUTTON_C", 1f, 1f, 1f);
+    /// <summary>Focused (hovered) button art tint (COLOR_BUTTON_F).</summary>
+    public static Color ButtonFocused => TableRgb("COLOR_BUTTON_F", 1f, 1f, 1f);
+    /// <summary>Disabled button art tint (COLOR_BUTTON_D).</summary>
+    public static Color ButtonDisabledTint => TableRgb("COLOR_BUTTON_D", 1f, 1f, 1f);
+
+    // --- Scrollbar art tints (item/listbox.qc draws the bar with these through draw_VertButtonPicture).
+
+    /// <summary>Scrollbar groove tint (COLOR_SCROLLBAR_S).</summary>
+    public static Color ScrollbarTrack => TableRgb("COLOR_SCROLLBAR_S", 1f, 1f, 1f);
+    /// <summary>Scrollbar grabber tint (COLOR_SCROLLBAR_N).</summary>
+    public static Color ScrollbarNormal => TableRgb("COLOR_SCROLLBAR_N", 1f, 1f, 1f);
+    /// <summary>Scrollbar grabber tint while hovered (COLOR_SCROLLBAR_F).</summary>
+    public static Color ScrollbarFocused => TableRgb("COLOR_SCROLLBAR_F", 1f, 1f, 1f);
+    /// <summary>Scrollbar grabber tint while dragged (COLOR_SCROLLBAR_C).</summary>
+    public static Color ScrollbarClicked => TableRgb("COLOR_SCROLLBAR_C", 1f, 1f, 1f);
+
+    // --- The server browser's own palette (serverlist.qc drawListBoxItem).
+
+    /// <summary>Category heading colour/alpha (COLOR_/ALPHA_SERVERLIST_CATEGORY).</summary>
+    public static Color ServerListCategory => TableRgba("COLOR_SERVERLIST_CATEGORY", "ALPHA_SERVERLIST_CATEGORY", 0.03f, 0.25f, 0.49f, 1f);
+    /// <summary>Row tint at ping &lt; hud_panel_scoreboard_ping_low (COLOR_SERVERLIST_LOWPING).</summary>
+    public static Color ServerListLowPing => TableRgb("COLOR_SERVERLIST_LOWPING", 0.08f, 0.98f, 0.08f);
+    /// <summary>Row tint at hud_panel_scoreboard_ping_medium (COLOR_SERVERLIST_MEDPING).</summary>
+    public static Color ServerListMedPing => TableRgb("COLOR_SERVERLIST_MEDPING", 0.98f, 0.76f, 0.08f);
+    /// <summary>Row tint at hud_panel_scoreboard_ping_high (COLOR_SERVERLIST_HIGHPING).</summary>
+    public static Color ServerListHighPing => TableRgb("COLOR_SERVERLIST_HIGHPING", 0.98f, 0.08f, 0.08f);
+    /// <summary>How far a row past the high-ping threshold fades (ALPHA_SERVERLIST_HIGHPING).</summary>
+    public static float ServerListHighPingAlpha => TableNum("ALPHA_SERVERLIST_HIGHPING", 0.4f);
+    /// <summary>A server with no humans on it (ALPHA_SERVERLIST_EMPTY).</summary>
+    public static float ServerListEmptyAlpha => TableNum("ALPHA_SERVERLIST_EMPTY", 0.65f);
+    /// <summary>A server you cannot connect to (ALPHA_SERVERLIST_FULL).</summary>
+    public static float ServerListFullAlpha => TableNum("ALPHA_SERVERLIST_FULL", 0.4f);
+    /// <summary>Colour a bookmarked row is blended toward (COLOR_SERVERLIST_FAVORITE).</summary>
+    public static Color ServerListFavorite => TableRgb("COLOR_SERVERLIST_FAVORITE", 1f, 1f, 1f);
+    /// <summary>How far toward <see cref="ServerListFavorite"/> a bookmark blends (ALPHA_SERVERLIST_FAVORITE).</summary>
+    public static float ServerListFavoriteAlpha => TableNum("ALPHA_SERVERLIST_FAVORITE", 0.8f);
+    /// <summary>A server this client's crypto settings can't reach (COLOR_/ALPHA_SERVERLIST_IMPOSSIBLE).</summary>
+    public static Color ServerListImpossible => TableRgb("COLOR_SERVERLIST_IMPOSSIBLE", 0.3f, 0.3f, 0.3f);
+    public static float ServerListImpossibleAlpha => TableNum("ALPHA_SERVERLIST_IMPOSSIBLE", 0.7f);
+    /// <summary>How far the mod icon fades for a server running modified settings (ALPHA_SERVERLIST_ICON_NONPURE).</summary>
+    public static float ServerListIconNonPureAlpha => TableNum("ALPHA_SERVERLIST_ICON_NONPURE", 0.5f);
+
+    /// <summary>The listbox scrollbar width in menu px (WIDTH_SCROLLBAR).</summary>
+    public static float ScrollbarWidth => TableNum("WIDTH_SCROLLBAR", 16f);
+
+    /// <summary>Scale <paramref name="c"/>'s alpha by <paramref name="alpha"/> (the QC <c>draw_alpha *=</c> idiom).</summary>
+    public static Color Fade(Color c, float alpha) => new(c.R, c.G, c.B, c.A * alpha);
 
     // ---------------------------------------------------------------------------------------------------------
     //  Backgrounds + the per-instance radio icons (CheckBox can't carry two icon sets in one theme).
@@ -169,20 +236,20 @@ public static class MenuSkin
         // A Xonotic button is drawn by draw_ButtonPicture: height-square end caps + a stretched middle, so the
         // rounded ends stay undistorted at any button size (see ButtonPictureStyleBox). A fixed-margin 9-slice
         // would squash the caps vertically on non-64px buttons — the artefact this replaces.
-        StyleBox Btn(string state, Color modulate)
-            => PicStyle("button_" + state, modulate, contentH: 18, contentV: 7);
+        t.SetStylebox("normal", "Button", ButtonPicture("n"));
+        t.SetStylebox("hover", "Button", ButtonPicture("f"));
+        t.SetStylebox("pressed", "Button", ButtonPicture("c"));
+        t.SetStylebox("disabled", "Button", ButtonPicture("d"));
+        t.SetStylebox("focus", "Button", ButtonPicture("f"));
 
-        t.SetStylebox("normal", "Button", Btn("n", Colors.White));
-        t.SetStylebox("hover", "Button", Btn("f", Colors.White));
-        t.SetStylebox("pressed", "Button", Btn("c", Colors.White));
-        t.SetStylebox("disabled", "Button", Btn("d", new Color(1, 1, 1, 0.5f)));
-        t.SetStylebox("focus", "Button", Btn("f", Colors.White));
-
-        t.SetColor("font_color", "Button", Text);
-        t.SetColor("font_hover_color", "Button", Bright);
-        t.SetColor("font_pressed_color", "Button", Accent);
-        t.SetColor("font_focus_color", "Button", Bright);
-        t.SetColor("font_disabled_color", "Button", new Color(Text.R, Text.G, Text.B, 0.4f));
+        // The LABEL colour does not change with the button's state in Xonotic: Button_draw only swaps the
+        // background PICTURE, and the text underneath it is a plain Label drawn at colorL = SKINCOLOR_TEXT,
+        // alpha = SKINALPHA_TEXT (xonotic/button.qh). Brightening on hover and going orange on press — the
+        // old behaviour here — read as a different, more "web-like" widget than Base's. Only `disabled` is
+        // special, and only because Button_draw scales draw_alpha by SKINALPHA_DISABLED for the whole widget.
+        foreach (string s in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color" })
+            t.SetColor(s, "Button", Text);
+        t.SetColor("font_disabled_color", "Button", Fade(Text, DisabledAlpha));
         t.SetFontSize("font_size", "Button", BodySize);
     }
 
@@ -205,10 +272,11 @@ public static class MenuSkin
         SetIcon(t, "CheckBox", "unchecked_disabled", "checkbox_d0");
         t.SetConstant("icon_max_width", "CheckBox", 24);
         t.SetConstant("h_separation", "CheckBox", 8);
-        t.SetColor("font_color", "CheckBox", Text);
-        t.SetColor("font_hover_color", "CheckBox", Bright);
-        t.SetColor("font_pressed_color", "CheckBox", Bright);
-        t.SetColor("font_disabled_color", "CheckBox", new Color(Text.R, Text.G, Text.B, 0.4f));
+        // Same rule as Button: the label is a Label at SKINCOLOR_TEXT, unaffected by hover/press. What changes
+        // on a QC checkbox is the BOX graphic (checkbox_n0/n1 → _f on focus, _c while held).
+        foreach (string s in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color" })
+            t.SetColor(s, "CheckBox", Text);
+        t.SetColor("font_disabled_color", "CheckBox", Fade(Text, DisabledAlpha));
         t.SetFontSize("font_size", "CheckBox", BodySize);
     }
 
@@ -258,17 +326,14 @@ public static class MenuSkin
     {
         // The cvar TextSlider is a Godot OptionButton (a dropdown stand-in for the QC </> text slider): give it
         // the button skin so it reads as part of the set, and theme its popup so the open list matches too.
-        StyleBox Btn(string state, Color mod) => PicStyle("button_" + state, mod, contentH: 14, contentV: 7);
-
-        t.SetStylebox("normal", "OptionButton", Btn("n", Colors.White));
-        t.SetStylebox("hover", "OptionButton", Btn("f", Colors.White));
-        t.SetStylebox("pressed", "OptionButton", Btn("c", Colors.White));
-        t.SetStylebox("disabled", "OptionButton", Btn("d", new Color(1, 1, 1, 0.5f)));
-        t.SetStylebox("focus", "OptionButton", Btn("f", Colors.White));
-        t.SetColor("font_color", "OptionButton", Text);
-        t.SetColor("font_hover_color", "OptionButton", Bright);
-        t.SetColor("font_pressed_color", "OptionButton", Bright);
-        t.SetColor("font_focus_color", "OptionButton", Bright);
+        t.SetStylebox("normal", "OptionButton", ButtonPicture("n", contentH: 14));
+        t.SetStylebox("hover", "OptionButton", ButtonPicture("f", contentH: 14));
+        t.SetStylebox("pressed", "OptionButton", ButtonPicture("c", contentH: 14));
+        t.SetStylebox("disabled", "OptionButton", ButtonPicture("d", contentH: 14));
+        t.SetStylebox("focus", "OptionButton", ButtonPicture("f", contentH: 14));
+        foreach (string s in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color" })
+            t.SetColor(s, "OptionButton", Text);
+        t.SetColor("font_disabled_color", "OptionButton", Fade(Text, DisabledAlpha));
         t.SetFontSize("font_size", "OptionButton", BodySize);
 
         // The dropdown list (PopupMenu): a clean flat dark floating panel (NOT the chunky border.tga dialog frame,
@@ -290,17 +355,18 @@ public static class MenuSkin
 
     private static void StyleTabs(Theme t)
     {
-        // The settings/media tab strip: active tab in the accent orange, the rest dimmed; the body sits in a
-        // bordered panel. Both TabContainer and the bare TabBar are themed (different screens use each). Tabs use
-        // the same button-picture rendering (height-square caps) so short labels make compact pills.
+        // The settings/media tab strip. A QC tab button is an ordinary XonoticButton that the ModalController
+        // holds in `forcePressed` while its page is showing (item/modalcontroller.qc:188) — so the ACTIVE tab
+        // is the CLICKED button art (button_c) at COLOR_BUTTON_C, and every other tab is a plain normal button.
+        // Both TabContainer and the bare TabBar are themed (different screens use each).
         foreach (string type in new[] { "TabContainer", "TabBar" })
         {
-            t.SetStylebox("tab_selected", type, PicStyle("button_n", Accent, 12, 9));
-            t.SetStylebox("tab_hovered", type, PicStyle("button_f", Colors.White, 12, 9));
-            t.SetStylebox("tab_unselected", type, PicStyle("button_n", new Color(1, 1, 1, 0.55f), 12, 9));
-            t.SetColor("font_selected_color", type, Bright);
-            t.SetColor("font_unselected_color", type, Header);
-            t.SetColor("font_hovered_color", type, Bright);
+            t.SetStylebox("tab_selected", type, ButtonPicture("c", contentH: 12, contentV: 9));
+            t.SetStylebox("tab_hovered", type, ButtonPicture("f", contentH: 12, contentV: 9));
+            t.SetStylebox("tab_unselected", type, ButtonPicture("n", contentH: 12, contentV: 9));
+            t.SetColor("font_selected_color", type, Text);
+            t.SetColor("font_unselected_color", type, Text);
+            t.SetColor("font_hovered_color", type, Text);
             t.SetFontSize("font_size", type, BodySize);
         }
         // The tab BODY has no frame in Xonotic: QC tab content draws straight onto the dialog backing
@@ -314,16 +380,49 @@ public static class MenuSkin
     }
 
     /// <summary>
-    /// A tab pill stylebox for <see cref="XonoticTabs"/> (the QC tab-row buttons): <c>"active"</c> = the
-    /// accent-orange button art (SKINCOLOR_TAB_ACTIVE), <c>"hover"</c> = the focused button art,
-    /// anything else = the dimmed normal art.
+    /// One state of the standard Xonotic button picture (item/button.qc <c>Button_draw</c>'s four branches),
+    /// tinted from the skin table: <c>"n"</c>ormal, <c>"f"</c>ocused (Godot's hover), <c>"c"</c>licked — which
+    /// is also what a <em>forcePressed</em> button draws, i.e. the active tab and the active sort column — and
+    /// <c>"d"</c>isabled, which additionally carries the SKINALPHA_DISABLED fade Button_draw applies globally.
+    /// </summary>
+    public static StyleBox ButtonPicture(string state, float contentH = 18f, float contentV = 7f) => state switch
+    {
+        "c" => PicStyle("button_c", ButtonClicked, contentH, contentV),
+        "f" => PicStyle("button_f", ButtonFocused, contentH, contentV),
+        "d" => PicStyle("button_d", Fade(ButtonDisabledTint, DisabledAlpha), contentH, contentV),
+        _ => PicStyle("button_n", ButtonNormal, contentH, contentV),
+    };
+
+    /// <summary>
+    /// A tab pill stylebox for <see cref="XonoticTabs"/> (the QC tab-row buttons). <c>"active"</c> is the
+    /// forcePressed look the ModalController gives the showing tab — the CLICKED button art, not a recolour.
     /// </summary>
     public static StyleBox TabPill(string state) => state switch
     {
-        "active" => PicStyle("button_n", Accent, 12, 7),
-        "hover" => PicStyle("button_f", Colors.White, 12, 7),
-        _ => PicStyle("button_n", new Color(1, 1, 1, 0.55f), 12, 7),
+        "active" => ButtonPicture("c", 12f, 7f),
+        "hover" => ButtonPicture("f", 12f, 7f),
+        _ => ButtonPicture("n", 12f, 7f),
     };
+
+    /// <summary>
+    /// One state of the listbox scrollbar art, drawn the way <c>draw_VertButtonPicture</c> does (width-square
+    /// end caps, only the middle stretched): <c>"s"</c> = the groove, <c>"n"</c>/<c>"f"</c>/<c>"c"</c> = the
+    /// grabber idle / hovered / dragged. Used by <see cref="MenuListBox"/>, which paints its own bar.
+    /// </summary>
+    public static StyleBox ScrollbarStyle(string state)
+    {
+        Texture2D? tex = LoadSkinTexture("scrollbar_" + state);
+        Color tint = state switch
+        {
+            "s" => ScrollbarTrack,
+            "f" => ScrollbarFocused,
+            "c" => ScrollbarClicked,
+            _ => ScrollbarNormal,
+        };
+        if (tex == null)
+            return Flat(state == "s" ? ListBackground : new Color(0.45f, 0.62f, 0.82f, 0.7f), Colors.White);
+        return new VertButtonPictureStyleBox { Texture = tex, Tint = tint };
+    }
 
     private static void StyleScrollbars(Theme t)
     {
@@ -331,20 +430,20 @@ public static class MenuSkin
         // grabber is scrollbar_n/_f/_c, both drawn with draw_VertButtonPicture (width-square caps, vertical
         // stretch) — reproduced by VertButtonPictureStyleBox so the scrollbar uses the real skin art at any
         // height. The ~16px bar width comes from each stylebox's left/right content margin.
-        const float halfW = 8f; // → ~16px scrollbar (SKINWIDTH_SCROLLBAR)
-        StyleBox VScroll(string state)
+        float halfW = ScrollbarWidth * 0.5f; // → the SKINWIDTH_SCROLLBAR (16px) bar
+        StyleBox VScroll(string state, Color tint)
         {
             Texture2D? tex = LoadSkinTexture("scrollbar_" + state);
             if (tex == null)
                 return Flat(state == "s" ? ListBackground : new Color(0.45f, 0.62f, 0.82f, 0.7f), Colors.White);
-            var sb = new VertButtonPictureStyleBox { Texture = tex };
+            var sb = new VertButtonPictureStyleBox { Texture = tex, Tint = tint };
             sb.ContentMarginLeft = sb.ContentMarginRight = halfW;
             return sb;
         }
-        t.SetStylebox("scroll", "VScrollBar", VScroll("s"));
-        t.SetStylebox("grabber", "VScrollBar", VScroll("n"));
-        t.SetStylebox("grabber_highlight", "VScrollBar", VScroll("f"));
-        t.SetStylebox("grabber_pressed", "VScrollBar", VScroll("c"));
+        t.SetStylebox("scroll", "VScrollBar", VScroll("s", ScrollbarTrack));
+        t.SetStylebox("grabber", "VScrollBar", VScroll("n", ScrollbarNormal));
+        t.SetStylebox("grabber_highlight", "VScrollBar", VScroll("f", ScrollbarFocused));
+        t.SetStylebox("grabber_pressed", "VScrollBar", VScroll("c", ScrollbarClicked));
 
         // Horizontal scrollbars are rare in the menu; a flat translucent grabber is fine for them.
         StyleBox HFlat(Color c)
@@ -366,7 +465,16 @@ public static class MenuSkin
         // text — without this every list (campaign, server browser, media) falls back to Godot's grey default.
         StyleBox Selected()
         {
-            var s = new StyleBoxFlat { BgColor = new Color(Selection.R, Selection.G, Selection.B, 0.9f) };
+            var s = new StyleBoxFlat { BgColor = new Color(Selection.R, Selection.G, Selection.B, SelectionAlpha) };
+            s.SetCornerRadiusAll(2);
+            return s;
+        }
+        // The hovered row. ListBox_drawListBoxItem fills it with COLOR_LISTBOX_FOCUSED, easing the alpha from
+        // ALPHA_LISTBOX_FOCUSED down to FADEALPHA_LISTBOX_FOCUSED as the cursor rests on it. A Godot stylebox
+        // can't animate, so the Godot-widget lists get the settled value; MenuListBox does the real fade.
+        StyleBox Hovered()
+        {
+            var s = new StyleBoxFlat { BgColor = Fade(ListFocused, ListFocusedFadeAlpha) };
             s.SetCornerRadiusAll(2);
             return s;
         }
@@ -381,6 +489,10 @@ public static class MenuSkin
             t.SetStylebox("panel", type, listPanel);
             t.SetStylebox("selected", type, Selected());
             t.SetStylebox("selected_focus", type, Selected());
+            t.SetStylebox("hovered", type, Hovered());
+            // Selection wins over hover, exactly as the QC does (isSelected is checked first).
+            t.SetStylebox("hovered_selected", type, Selected());
+            t.SetStylebox("hovered_selected_focus", type, Selected());
             t.SetStylebox("cursor", type, new StyleBoxEmpty());
             t.SetStylebox("cursor_unfocused", type, new StyleBoxEmpty());
             t.SetColor("font_color", type, Text);

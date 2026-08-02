@@ -357,8 +357,8 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   `tools/visual-qa.sh --models` drives the full per-model sweep. (Headless renders blank — run windowed.)
 - `--menu-screen <id>` → open one dialog for a screenshot. ids: `settings` (or `settings:Audio` to pick a tab),
   `media` (or `media:Demos`), `multiplayer`, `singleplayer`, `create`, `credits`, `pause`, `profile`,
-  `mutators`, `serverinfo`, `teamselect`, `firstrun`, `tos`, `welcome`, `hudpanels`, `hudweapons`, `cvarlist`,
-  `sandbox`, `disclaimer`. e.g.:
+  `mutators`, `serverinfo`, `incompatible`, `teamselect`, `firstrun`, `tos`, `welcome`, `hudpanels`,
+  `hudweapons`, `cvarlist`, `sandbox`, `disclaimer`. e.g.:
   ```bash
   "$GODOT" --path . --menu-screen "settings:Audio" --screenshot "$PWD/screenshots/audio.png"
   ```

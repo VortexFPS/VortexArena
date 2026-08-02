@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using VortexArena.Common.Gameplay;
 
 namespace VortexArena.Game.Menu;
 
@@ -23,21 +24,37 @@ public partial class MultiplayerScreen : MenuScreen
     public static readonly ServerBrowser Browser = new();
 
     private XonoticTabs _tabs = null!;
-    private Tree _serverTree = null!;
+    private ServerListBox _serverList = null!;
     private LineEdit _filterEdit = null!;
     private LineEdit _addressEdit = null!;
     private Button _favoriteButton = null!;
     private Button _leaveButton = null!;
+    private Button _joinButton = null!;
+    private Button _infoButton = null!;
+    private Control _headerBar = null!;
 
-    private bool _refreshedOnce;
     private int _renderedRevision = -1;
     private string _renderedFilterKey = "";
 
-    // Sort state (QC: default ping ascending — serverlist.qc draw: setSortOrder(SLIST_FIELD_PING, +1)).
-    private enum SortField { Ping, Name, Map, Type, Players }
+    /// <summary>
+    /// QC <c>nextRefreshTime</c>: opening the Servers tab re-queries the masters, but no more often than every
+    /// 10 seconds, so flipping between tabs doesn't hammer them (serverlist.qc <c>focusEnter</c>).
+    /// </summary>
+    private ulong _nextRefreshMsec;
+    private const ulong RefreshCooldownMsec = 10_000;
+    private bool _wasVisible;
+
+    // Sort state. The QC default is ping ascending (serverlist.qc draw: setSortOrder(SLIST_FIELD_PING, +1));
+    // each column button carries its OWN initial direction, which is why they are listed here rather than all
+    // starting ascending. "Type" is deliberately absent: its header button is not a sort at all — see
+    // OnTypeClicked.
+    private enum SortField { Ping, Name, Map, Players }
     private SortField _sortField = SortField.Ping;
     private int _sortOrder = +1;
     private readonly Button[] _sortButtons = new Button[5];
+
+    /// <summary>The direction a column starts in when you first click it (QC ServerList_*Sort_Click).</summary>
+    private static int InitialSortOrder(SortField field) => field == SortField.Ping ? +1 : -1;
 
     /// <summary>Select a tab by title ("Servers"/"Create"/"Profile"); no-op if not found. Dev/CI capture.</summary>
     public void SelectTab(string title) => _tabs.SelectByTitle(title);
@@ -86,8 +103,14 @@ public partial class MultiplayerScreen : MenuScreen
         filter.AddThemeConstantOverride("separation", 10);
 
         var categories = Widgets.CheckBox("menu_slist_categories", "Categories",
-            "Show servers grouped by category (not supported yet — uncategorised list)");
-        categories.Toggled += _ => InvalidateRender();
+            "Group the server list under category headings");
+        categories.Toggled += _ =>
+        {
+            // QC ServerList_Categories_Click also clears the address box, since the row you had picked is
+            // about to move.
+            _addressEdit.Text = "";
+            InvalidateRender();
+        };
         filter.AddChild(categories);
 
         var filterLabel = MakeLabel("Filter:");
@@ -115,42 +138,39 @@ public partial class MultiplayerScreen : MenuScreen
         col.AddChild(filter);
 
         // --- the five sort-header buttons over the columned list (QC sortButton1..5) -------------------
-        var header = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        header.AddThemeConstantOverride("separation", 4);
+        // Not an HBox: the QC positions each button to line up exactly with the column it heads
+        // (positionSortButton), including the leading gap for the icon strip, so this mirrors that — a bare
+        // Control whose children are placed from the list's own column geometry.
+        _headerBar = new Control { CustomMinimumSize = new Vector2(0, 28) };
         string[] titles = { "Ping", "Hostname", "Map", "Type", "Players" };
         for (int i = 0; i < 5; i++)
         {
             int idx = i;
+            // ClipText: a Godot Button refuses to lay out narrower than its label, and "Players" is wider than
+            // the five character cells its column gets — without this the last two headers overlap each other
+            // instead of sitting over their columns. The QC condenses the label instead (Label_recalcPos);
+            // clipping is the closest Godot equivalent and keeps the alignment, which is the point of the row.
             var b = new Button
             {
                 Text = Localization.Tr(titles[i]),
-                SizeFlagsHorizontal = SizeFlags.ExpandFill,
-                SizeFlagsStretchRatio = ColumnRatio(i),
-                CustomMinimumSize = new Vector2(0, 28),
                 FocusMode = FocusModeEnum.None,
+                ClipText = true,
             };
-            b.Pressed += () => OnSortClicked((SortField)idx);
+            b.Pressed += () => OnHeaderClicked(idx);
             _sortButtons[i] = b;
-            header.AddChild(b);
+            _headerBar.AddChild(b);
         }
-        col.AddChild(header);
+        _sortButtons[3].TooltipText = Localization.Tr("Cycle the gametype filter through the game modes");
+        _headerBar.Resized += LayoutSortButtons;
+        col.AddChild(_headerBar);
 
-        _serverTree = new Tree
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            Columns = 5,
-            HideRoot = true,
-            SelectMode = Tree.SelectModeEnum.Row,
-            FocusMode = FocusModeEnum.None,
-        };
-        for (int i = 0; i < 5; i++)
-        {
-            _serverTree.SetColumnExpand(i, true);
-            _serverTree.SetColumnExpandRatio(i, Mathf.RoundToInt(ColumnRatio(i) * 100));
-        }
-        _serverTree.ItemActivated += OnConnect;     // double-click / Enter = Join (QC doubleClick)
-        _serverTree.ItemSelected += OnRowSelected;  // echo the address into the box (QC setSelected)
-        col.AddChild(_serverTree);
+        _serverList = new ServerListBox { SizeFlagsVertical = SizeFlags.ExpandFill };
+        _serverList.ItemActivated += _ => OnConnect();        // double-click / Enter = Join (QC doubleClick)
+        _serverList.ItemSelected += _ => OnRowSelected();      // echo the address into the box (QC setSelected)
+        _serverList.InfoRequested += server => ShowInfo(server.Address);
+        _serverList.FavoriteToggleRequested += server => ToggleFavorite(server.Address);
+        _serverList.ColumnsChanged += LayoutSortButtons;
+        col.AddChild(_serverList);
 
         // --- Address: [box] [Bookmark] [Info...] (QC rows-2) --------------------------------------------
         var addr = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -168,22 +188,49 @@ public partial class MultiplayerScreen : MenuScreen
         _addressEdit.TextSubmitted += _ => OnConnect(); // QC onEnter = Connect
         addr.AddChild(_addressEdit);
 
-        _favoriteButton = MakeButton("Bookmark", OnToggleFavorite);
+        _favoriteButton = MakeButton("Favorite", OnToggleFavorite);
         _favoriteButton.SizeFlagsStretchRatio = 1.1f;
         addr.AddChild(_favoriteButton);
 
-        var info = MakeButton("Info...", OnInfo);
-        info.TooltipText = Localization.Tr("Show more information about the currently highlighted server");
-        info.SizeFlagsStretchRatio = 1.1f;
-        addr.AddChild(info);
+        _infoButton = MakeButton("Info...", OnInfo);
+        _infoButton.TooltipText = Localization.Tr("Show more information about the currently highlighted server");
+        _infoButton.SizeFlagsStretchRatio = 1.1f;
+        addr.AddChild(_infoButton);
         col.AddChild(addr);
 
         // --- bottom row: Leave current match | Join! (QC last row) --------------------------------------
         _leaveButton = MakeButton("Leave current match", () => MenuCommand.Run("disconnect"));
-        var join = MakeButton("Join!", OnConnect);
-        col.AddChild(MakeButtonBar(_leaveButton, join));
+        _joinButton = MakeButton("Join!", OnConnect);
+        col.AddChild(MakeButtonBar(_leaveButton, _joinButton));
 
+        UpdateFavoriteButton();
+        UpdateSortButtons();
         return col;
+    }
+
+    /// <summary>
+    /// Place each header button over the column it labels — the port of
+    /// <c>XonoticServerList_positionSortButton</c>, which does the same arithmetic in the dialog's coordinate
+    /// space. Re-run whenever the list recomputes its columns (i.e. on every resize).
+    /// </summary>
+    private void LayoutSortButtons()
+    {
+        if (_headerBar is null || _serverList is null)
+            return;
+        float h = _headerBar.Size.Y;
+        (float Origin, float Width)[] columns =
+        {
+            (_serverList.ColumnPingOrigin, _serverList.ColumnPingSize),
+            (_serverList.ColumnNameOrigin, _serverList.ColumnNameSize),
+            (_serverList.ColumnMapOrigin, _serverList.ColumnMapSize),
+            (_serverList.ColumnTypeOrigin, _serverList.ColumnTypeSize),
+            (_serverList.ColumnPlayersOrigin, _serverList.ColumnPlayersSize),
+        };
+        for (int i = 0; i < _sortButtons.Length; i++)
+        {
+            _sortButtons[i].Position = new Vector2(columns[i].Origin, 0f);
+            _sortButtons[i].Size = new Vector2(columns[i].Width, h);
+        }
     }
 
     private void AddFilterCheck(HBoxContainer row, string cvar, string label, string tooltip)
@@ -193,44 +240,45 @@ public partial class MultiplayerScreen : MenuScreen
         row.AddChild(cb);
     }
 
-    /// <summary>QC column proportions (serverlist.qc resizeNotify): ping 3ch, name the rest, map 10ch, type 4ch, players 5ch.</summary>
-    private static float ColumnRatio(int column) => column switch
-    {
-        0 => 0.09f,  // Ping
-        1 => 0.50f,  // Hostname
-        2 => 0.20f,  // Map
-        3 => 0.09f,  // Type
-        4 => 0.12f,  // Players
-        _ => 0.1f,
-    };
-
     // -------------------------------------------------------------------------------------------------
-    //  List rendering: filter + sort the browser rows into the Tree
+    //  List rendering: filter + sort the browser rows into the listbox
     // -------------------------------------------------------------------------------------------------
 
     private void InvalidateRender() => _renderedRevision = -1;
 
     /// <summary>
     /// Pump the browser's async master/server replies each frame and re-render when rows changed (or the
-    /// filter/sort changed). Also auto-refreshes ONCE when the tab first becomes visible — the QC list
-    /// refreshes when it first draws, so the user never stares at an empty pane.
+    /// filter/sort changed). Also re-queries the masters whenever the tab becomes visible, rate-limited to
+    /// once per <see cref="RefreshCooldownMsec"/> — the port of <c>XonoticServerList_focusEnter</c>, which is
+    /// what makes the list fill itself in without the user ever pressing Refresh.
     /// </summary>
     public override void _Process(double delta)
     {
-        if (!IsVisibleInTree())
+        // The refresh is on the visibility EDGE, not on a timer: Refresh() rebuilds the list from scratch, so
+        // re-running it while the tab is open would blank the rows (and throw away their measured pings) every
+        // few seconds. QC hangs it off focusEnter for the same reason.
+        bool visible = IsVisibleInTree();
+        bool becameVisible = visible && !_wasVisible;
+        _wasVisible = visible;
+        if (!visible)
             return;
 
-        if (!_refreshedOnce)
-        {
-            _refreshedOnce = true;
+        if (becameVisible && Time.GetTicksMsec() >= _nextRefreshMsec)
             OnRefresh();
-        }
 
         bool paused = MenuState.Cvars.GetFloat("net_slist_pause") != 0f;
         if (!paused)
             Browser.Poll();
 
         _leaveButton.Disabled = MenuCommand.InMatch is null || !MenuCommand.InMatch();
+
+        // QC XonoticServerList_draw: Join and Favorite need an address, Info needs the address to actually be
+        // the selected row's (`owned`) — you can't show details for a server nobody has queried.
+        bool hasAddress = !string.IsNullOrWhiteSpace(_addressEdit.Text);
+        _joinButton.Disabled = !hasAddress;
+        _favoriteButton.Disabled = !hasAddress;
+        _infoButton.Disabled = !hasAddress
+                               || Browser.FindByAddress(ServerBrowser.NormalizeAddress(_addressEdit.Text)) is null;
 
         string filterKey = FilterKey();
         if (Browser.Revision != _renderedRevision || filterKey != _renderedFilterKey)
@@ -239,73 +287,156 @@ public partial class MultiplayerScreen : MenuScreen
 
     private string FilterKey() =>
         $"{_filterEdit.Text}|{MenuState.Cvars.GetFloat("menu_slist_showempty")}|{MenuState.Cvars.GetFloat("menu_slist_showfull")}|" +
-        $"{MenuState.Cvars.GetFloat("menu_slist_showlaggy")}|{(int)_sortField}|{_sortOrder}";
+        $"{MenuState.Cvars.GetFloat("menu_slist_showlaggy")}|{MenuState.Cvars.GetFloat("menu_slist_categories")}|" +
+        $"{MenuState.Cvars.GetString("menu_slist_modfilter")}|{(int)_sortField}|{_sortOrder}";
 
     private void OnRefresh()
     {
+        _nextRefreshMsec = Time.GetTicksMsec() + RefreshCooldownMsec;
         GD.Print("[Menu] Refreshing server list (favorites + LAN + internet master query).");
         Browser.Refresh();
         InvalidateRender();
     }
 
-    private void OnSortClicked(SortField field)
+    /// <summary>
+    /// A column header was clicked. Four of the five set the sort order; "Type" (index 3) does not sort at all
+    /// — in the QC it is <c>ServerList_TypeSort_Click</c>, which cycles the gametype prefix of the FILTER box
+    /// through the registered game modes, and its button is the one <c>setSortOrder</c> always leaves
+    /// un-pressed (serverlist.qc:710).
+    /// </summary>
+    private void OnHeaderClicked(int index)
     {
-        // QC setSortOrder: clicking the active column flips the order, a new column starts ascending.
-        if (_sortField == field) _sortOrder = -_sortOrder;
-        else { _sortField = field; _sortOrder = +1; }
+        if (index == 3)
+        {
+            OnTypeClicked();
+            return;
+        }
+        SortField field = index switch
+        {
+            0 => SortField.Ping,
+            1 => SortField.Name,
+            2 => SortField.Map,
+            _ => SortField.Players,
+        };
+        // QC setSortOrder: clicking the active column flips it; a new column starts in its own direction.
+        _sortOrder = _sortField == field ? -_sortOrder : InitialSortOrder(field);
+        _sortField = field;
+        _serverList.SetScrollTop();
+        UpdateSortButtons();
         InvalidateRender();
     }
 
-    /// <summary>Filter + sort + pour the rows into the Tree (the QC drawListBoxItem columns).</summary>
+    /// <summary>
+    /// QC <c>ServerList_TypeSort_Click</c>: step the filter box's <c>gametype:</c> prefix to the next
+    /// registered game mode (wrapping), keeping whatever text follows the colon.
+    /// </summary>
+    private void OnTypeClicked()
+    {
+        (string current, string rest) = ServerListInfo.SplitFilter(_filterEdit.Text);
+
+        var types = new List<string>();
+        foreach (GameType gt in GameTypes.All)
+            types.Add(gt.NetName);
+        if (types.Count == 0)
+            return;
+
+        int at = types.FindIndex(t => string.Equals(t, current, StringComparison.OrdinalIgnoreCase));
+        // Not currently filtering by type (or on the last one) → start over at the first.
+        string next = at < 0 || at + 1 >= types.Count ? types[0] : types[at + 1];
+
+        _filterEdit.Text = rest.Length > 0 ? $"{next}:{rest}" : $"{next}:";
+        _filterEdit.CaretColumn = _filterEdit.Text.Length;
+        InvalidateRender();
+    }
+
+    /// <summary>
+    /// Repaint the header buttons so the active sort column reads as pressed. The QC does this with
+    /// <c>forcePressed</c>, which makes Button_draw pick the CLICKED graphic — the same look this gives it.
+    /// </summary>
+    private void UpdateSortButtons()
+    {
+        int active = _sortField switch
+        {
+            SortField.Ping => 0,
+            SortField.Name => 1,
+            SortField.Map => 2,
+            _ => 4,
+        };
+        for (int i = 0; i < _sortButtons.Length; i++)
+        {
+            // Index 3 (Type) is never marked: it is a filter cycler, not a sort.
+            if (i == active && i != 3)
+                _sortButtons[i].AddThemeStyleboxOverride("normal", MenuSkin.ButtonPicture("c"));
+            else
+                _sortButtons[i].RemoveThemeStyleboxOverride("normal");
+        }
+    }
+
+    /// <summary>
+    /// Filter + sort the browser's rows and hand them to the listbox, which inserts the category headings.
+    /// The filter set is the QC's (serverlist.qc <c>refreshServerList</c>): the three visibility checkboxes,
+    /// the <c>menu_slist_modfilter</c> cvar, a <c>gametype:</c> prefix, and free text matched against the
+    /// hostname, map, gametype OR the connected players' names.
+    /// </summary>
     private void RenderServers(string filterKey)
     {
         _renderedRevision = Browser.Revision;
         _renderedFilterKey = filterKey;
 
-        string selectedAddress = SelectedRowAddress() ?? "";
-
-        var rows = new List<ServerEntry>();
         bool showEmpty = MenuState.Cvars.GetFloat("menu_slist_showempty") != 0f;
         bool showFull = MenuState.Cvars.GetFloat("menu_slist_showfull") != 0f;
         bool showLaggy = MenuState.Cvars.GetFloat("menu_slist_showlaggy") != 0f;
         float maxPing = MenuState.Cvars.GetFloat("menu_slist_maxping");
-        if (maxPing <= 0) maxPing = 300;
-        string needle = _filterEdit.Text.Trim();
+        string modFilter = MenuState.Cvars.GetString("menu_slist_modfilter").Trim();
+        (string typeFilter, string needle) = ServerListInfo.SplitFilter(_filterEdit.Text);
 
+        var rows = new List<ServerEntry>();
         foreach (ServerEntry s in Browser.Servers)
         {
-            int humans = Math.Max(0, s.Players - s.Bots);
-            if (!showEmpty && humans == 0 && !s.Favorite && !s.IsLan) continue;
-            if (!showFull && s.MaxPlayers > 0 && s.Players >= s.MaxPlayers) continue;
-            if (!showLaggy && s.Ping > maxPing) continue;
+            // A bookmark or a server on this LAN is always listed: it is there because the player put it there
+            // or because it is one hop away, and hiding it behind the "empty servers" filter helps nobody.
+            bool alwaysShow = s.Favorite || s.IsLan;
+
+            // Drop the rows the master named but that never answered our getinfo probe. They are not servers
+            // that are merely slow: measured against the live dpmaster list, 42% of what it returns never
+            // replies at all — stale registrations, hosts behind a firewall, machines long gone — and
+            // re-probing the silent ones recovers exactly none of them. All such a row can show is its own IP
+            // address (no name, map, gametype or player count), and it cannot be joined, so it is noise that
+            // buries the real entries. Everything that DOES answer is back inside ~200 ms (p90), so this
+            // costs the list nothing but the first moment after a refresh. A bookmark is exempt: the player
+            // asked for it by name, and "your saved server is not answering" is worth showing.
+            if (!s.Queried && !s.Favorite) continue;
+
+            if (!showFull && s.FreeSlots < 1) continue;
+            if (!showEmpty && s.Humans < 1 && !alwaysShow) continue;
+            if (!showLaggy && maxPing > 0 && s.Ping > maxPing) continue;
+            if (typeFilter.Length > 0 && !string.Equals(s.Gametype, typeFilter, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (modFilter.Length > 0)
+            {
+                bool negated = modFilter.StartsWith('!');
+                string want = negated ? modFilter[1..] : modFilter;
+                bool same = string.Equals(s.ModName, want, StringComparison.OrdinalIgnoreCase);
+                if (same == negated) continue;
+            }
             if (needle.Length > 0
-                && !Contains(s.Name, needle) && !Contains(s.Map, needle) && !Contains(s.Gametype, needle))
+                && !Contains(s.Name, needle) && !Contains(s.Map, needle)
+                && !Contains(s.Gametype, needle) && !Contains(s.PlayerNames, needle))
                 continue;
             rows.Add(s);
         }
 
-        rows.Sort((a, b) => _sortOrder * Compare(a, b));
-
-        _serverTree.Clear();
-        TreeItem rootItem = _serverTree.CreateItem();
-        TreeItem? reselect = null;
-        foreach (ServerEntry s in rows)
+        // sethostcachesort(field, SLSF_CATEGORIES | …): the category is the PRIMARY key, so the headings come
+        // out contiguous whatever column the player is sorting by.
+        rows.Sort((a, b) =>
         {
-            TreeItem item = _serverTree.CreateItem(rootItem);
-            item.SetText(0, s.PingText);
-            item.SetCustomColor(0, PingColor(s.Ping));
-            item.SetText(1, (s.Favorite ? "★ " : s.IsLan ? "LAN " : "") + MenuColorCodes.Strip(s.Name));
-            item.SetText(2, s.Map);
-            item.SetText(3, s.Gametype);
-            item.SetText(4, s.PlayersText);
-            item.SetTextAlignment(0, HorizontalAlignment.Right);
-            item.SetTextAlignment(3, HorizontalAlignment.Center);
-            item.SetTextAlignment(4, HorizontalAlignment.Center);
-            item.SetMetadata(0, s.Address);
-            if (s.Address == selectedAddress)
-                reselect = item;
-        }
-        reselect?.Select(0);
+            int byCategory = ServerBrowser.CategoryOverride(a.Category)
+                .CompareTo(ServerBrowser.CategoryOverride(b.Category));
+            return byCategory != 0 ? byCategory : _sortOrder * Compare(a, b);
+        });
+
+        _serverList.SetServers(rows);
+        _serverList.RefreshSeenAddressFamilies();
     }
 
     private static bool Contains(string haystack, string needle)
@@ -313,37 +444,22 @@ public partial class MultiplayerScreen : MenuScreen
 
     private int Compare(ServerEntry a, ServerEntry b) => _sortField switch
     {
-        // Unknown pings sort to the bottom of the ascending list (QC: unqueried servers trail).
-        SortField.Ping => (a.Ping < 0 ? int.MaxValue : a.Ping).CompareTo(b.Ping < 0 ? int.MaxValue : b.Ping),
+        // An unqueried row sorts as ping 0 — so a fresh list starts with everything at the top and each row
+        // drops into place as its reply lands. That churn IS what Base does (the host cache has no
+        // "unmeasured" state), and it is why net_slist_pause exists.
+        SortField.Ping => a.PingOrZero.CompareTo(b.PingOrZero),
         SortField.Name => string.Compare(MenuColorCodes.Strip(a.Name), MenuColorCodes.Strip(b.Name), StringComparison.OrdinalIgnoreCase),
         SortField.Map => string.Compare(a.Map, b.Map, StringComparison.OrdinalIgnoreCase),
-        SortField.Type => string.Compare(a.Gametype, b.Gametype, StringComparison.OrdinalIgnoreCase),
-        SortField.Players => (a.Players - a.Bots).CompareTo(b.Players - b.Bots),
+        SortField.Players => a.Humans.CompareTo(b.Humans),
         _ => 0,
-    };
-
-    /// <summary>The QC ping tint: green when snappy, fading to red as latency climbs.</summary>
-    private static Color PingColor(int ping) => ping switch
-    {
-        < 0 => new Color(0.7f, 0.7f, 0.7f, 0.6f),
-        < 70 => new Color(0.45f, 0.95f, 0.45f),
-        < 140 => new Color(0.95f, 0.95f, 0.45f),
-        < 200 => new Color(0.95f, 0.65f, 0.30f),
-        _ => new Color(0.95f, 0.35f, 0.30f),
     };
 
     // -------------------------------------------------------------------------------------------------
     //  Row/address actions
     // -------------------------------------------------------------------------------------------------
 
-    /// <summary>The address of the selected Tree row, or null when nothing is selected.</summary>
-    private string? SelectedRowAddress()
-    {
-        TreeItem? sel = _serverTree.GetSelected();
-        if (sel is null) return null;
-        Variant meta = sel.GetMetadata(0);
-        return meta.VariantType == Variant.Type.String ? meta.AsString() : null;
-    }
+    /// <summary>The address of the selected row, or null when the list is empty.</summary>
+    private string? SelectedRowAddress() => _serverList.SelectedServer?.Address;
 
     private void OnRowSelected()
     {
@@ -361,29 +477,46 @@ public partial class MultiplayerScreen : MenuScreen
 
     private void OnConnect()
     {
-        string? target = Browser.Connect(TargetAddress());
+        string address = TargetAddress();
+
+        // Stop before the connect, not after: the browser's internet list comes from the shared Xonotic
+        // masters, so most rows are Darkplaces servers this build cannot speak to. Letting the attempt
+        // proceed would spend the connection timeout and then report a generic failure, which tells the
+        // player nothing about why. Only a row we actually queried can be judged — a typed address, or a
+        // bookmark that hasn't answered yet, still goes through.
+        if (Browser.FindByAddress(ServerBrowser.NormalizeAddress(address)) is { IsIncompatibleXonotic: true } server)
+        {
+            GD.Print($"[Menu] Join refused: {server.Address} is a Xonotic server (no VortexArena protocol tag).");
+            Menu?.Push(new DialogIncompatibleServer(server.Name, server.Address));
+            return;
+        }
+
+        string? target = Browser.Connect(address);
         if (target is null)
             GD.Print("[Menu] Join: no address entered or selected.");
         else
             GD.Print($"[Menu] Connecting to {target}.");
     }
 
-    private void OnInfo()
+    private void OnInfo() => ShowInfo(TargetAddress());
+
+    private void ShowInfo(string address)
     {
-        string address = TargetAddress();
         if (address.Length > 0)
             Menu?.Push(new DialogServerInfo(ServerBrowser.NormalizeAddress(address)));
     }
 
     /// <summary>QC ServerList_Favorite_Click + Update_favoriteButton: one button toggling bookmark state.</summary>
-    private void OnToggleFavorite()
+    private void OnToggleFavorite() => ToggleFavorite(TargetAddress());
+
+    private void ToggleFavorite(string rawAddress)
     {
-        string address = ServerBrowser.NormalizeAddress(TargetAddress());
+        string address = ServerBrowser.NormalizeAddress(rawAddress);
         if (address.Length == 0)
             return;
-        if (Browser.IsFavorite(address)) Browser.RemoveFavorite(address);
-        else Browser.AddFavorite(address);
-        Browser.Refresh();
+        // Toggling in place rather than re-querying: the star changed, not the server. (Re-querying also threw
+        // away every ping the list had collected, which is why the row order used to jump on a bookmark.)
+        Browser.ToggleFavorite(address);
         UpdateFavoriteButton();
         InvalidateRender();
     }
@@ -391,7 +524,10 @@ public partial class MultiplayerScreen : MenuScreen
     private void UpdateFavoriteButton()
     {
         string address = ServerBrowser.NormalizeAddress(TargetAddress());
-        _favoriteButton.Text = Localization.Tr(
-            address.Length > 0 && Browser.IsFavorite(address) ? "Unbookmark" : "Bookmark");
+        bool favorite = address.Length > 0 && Browser.IsFavorite(address);
+        _favoriteButton.Text = Localization.Tr(favorite ? "Remove favorite" : "Favorite");
+        _favoriteButton.TooltipText = Localization.Tr(favorite
+            ? "Remove the currently highlighted server from bookmarks"
+            : "Bookmark the currently highlighted server so that it's faster to find in the future");
     }
 }

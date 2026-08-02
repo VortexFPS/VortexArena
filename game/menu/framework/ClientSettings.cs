@@ -209,6 +209,15 @@ public static class ClientSettings
         c.Register("in_pitch_max", "90");
         // Server-browser auto-refresh pause toggle (DP default 0).
         c.Register("net_slist_pause", "0");
+        // The bookmarked servers, as a space-separated list of addresses / public-key fingerprints. A cvar in
+        // Base too (commands.cfg's addfav/delfav aliases append to and remove from exactly this one), which is
+        // why the browser keeps its favourites here rather than in a file of its own. Archived, so a bookmark
+        // survives a restart the same way every other menu preference does.
+        c.Register("net_slist_favorites", "", save);
+        // Listbox scroll easing (menu/item/listbox.qc AUTOCVARs — declared in QC, not in any shipped .cfg,
+        // so they have to be registered here for the port's SmoothScroll/MenuListBox to read them).
+        c.Register("menu_scroll_averaging_time", "0.16", save);
+        c.Register("menu_scroll_averaging_time_pressed", "0.06", save);
         // Local-player movement-prediction model (read live by NetGame). DEFAULT 1 = PATH A, the Base-faithful path:
         // predict the local player ONCE per RENDER frame at the real (clamped) frame dt — Xonotic Base's
         // Movetype_Physics_NoMatchTicrate — so the predicted origin lands at the exact render time and moves smoothly

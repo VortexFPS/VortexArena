@@ -1035,13 +1035,10 @@ public sealed class ServerNet : IDisposable
         return names;
     }
 
-    /// <summary>What this build calls itself to the master. Stamped from the assembly's informational version,
-    /// which CI can set (<c>-p:InformationalVersion=…</c>) without any new plumbing here; a local build reports
-    /// the SDK default rather than pretending to be a release.</summary>
-    private static readonly string GameVersion =
-        typeof(ServerNet).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion ?? "0.0.0-dev";
+    /// <summary>What this build calls itself to the master — see <see cref="VortexArena.Common.BuildInfo"/>,
+    /// which is also what seeds the <c>g_vortexversion</c> cvar and the classic <c>qcstatus</c> version
+    /// token, so every lane reports the same string.</summary>
+    private static readonly string GameVersion = VortexArena.Common.BuildInfo.Version;
 
     /// <summary>
     /// DS-6: stand up the rcon authenticator on the OOB socket bound at <paramref name="oobPort"/>. Reads the
@@ -1108,6 +1105,13 @@ public sealed class ServerNet : IDisposable
     }
 
     /// <summary>The DP infostring a browser sees: hostname, map, gametype, player counts, protocol parity.</summary>
+    /// <summary>
+    /// The infostring key a VortexArena server tags its <c>getinfo</c> reply with; its value is
+    /// <see cref="NetProtocol.BuildParity"/>. Read by the server browser (<c>ServerEntry.IsVortexArena</c>)
+    /// to tell a joinable host from the Xonotic/Darkplaces servers the shared masters also return.
+    /// </summary>
+    public const string VortexServerKey = "vortexarena";
+
     private Dictionary<string, string> BuildServerInfo(int port)
     {
         // QC server/client.qc:1107 MUTATOR_CALLHOOK(BuildMutatorsPrettyString, ""): accumulate each active
@@ -1130,12 +1134,73 @@ public sealed class ServerNet : IDisposable
                 : _maxClients.ToString(),
             ["protocol"] = NetProtocol.BuildParity().ToString(),
             ["port"] = port.ToString(),
-            ["gamename"] = "Xonotic",
+            // dpmaster indexes servers by this, so it is what decides which list a host appears in. Vortex
+            // is its own game (see GameIdentity): a host of ours listed among Xonotic's would be an entry no
+            // Xonotic client can join. The BROWSER still asks for Xonotic servers as well — that is a
+            // separate, deliberate choice on the query side.
+            ["gamename"] = GameIdentity.Name,
+            // The one key that says "this host speaks the VortexArena wire protocol". It exists because the
+            // browser queries the stock Xonotic masters, so nearly every row in the list is a Darkplaces
+            // server this client cannot talk to at all — and there is otherwise nothing in a getinfo reply
+            // that reliably separates the two: matching on the ABSENCE of some Darkplaces key would be a
+            // guess that silently starts blocking real servers the day Darkplaces adds or drops one, and
+            // `gamename` alone cannot be trusted for it either — a Darkplaces server can report any string
+            // it likes. The value is the build-parity hash, so a client can also tell a VortexArena server
+            // of a DIFFERENT build from one it can actually join.
+            [VortexServerKey] = NetProtocol.BuildParity().ToString(),
         };
         // QC WriteString(msg_type, modifications) — only include the field when there are active mutators.
         if (prettyMutators.Length > 0)
             info["modifications"] = prettyMutators;
+
+        info["qcstatus"] = BuildQcStatus();
         return info;
+    }
+
+    /// <summary>
+    /// The <c>qcstatus</c> infostring key — the compact status line every Xonotic server publishes and the
+    /// server browser reads for everything the plain keys don't carry: which category the server sorts under,
+    /// whether it is running stock settings, how many slots the gamecode will actually let you play in, and
+    /// which feature flags it has. Format and token order are
+    /// <c>WinningConditionHelper</c>'s (qcsrc/server/scores.qc:452):
+    /// <code>gametype:version:P&lt;purechanges&gt;:S&lt;freeslots&gt;:F&lt;serverflags&gt;:M&lt;modname&gt;::&lt;score labels&gt;</code>
+    ///
+    /// <para>Without this the browser sees no mod name at all, which — per <c>CategoryForEntry</c> — means
+    /// "a server too old to report one", and every VortexArena host would be filed under Modified Servers.</para>
+    ///
+    /// <para>The score-label block after the double colon is what the scoreboard-preview part of the QC status
+    /// uses; nothing in the browser reads it, so it is left empty rather than fabricated.</para>
+    /// </summary>
+    private string BuildQcStatus()
+    {
+        VortexArena.Common.Services.ICvarService cv = _world.Services.Cvars;
+        string gametype = _world.GameType?.RegistryName ?? "dm";
+        // Token 1 is the version an operator sees in the browser's Server Info. Read through the cvar so a
+        // host can override what it publishes, but fall back to the build string rather than shipping the
+        // empty token upstream's absent g_xonoticversion used to produce. Sanitized because a ':' here would
+        // be read as the start of the next qcstatus field.
+        string version = cv.GetString("g_vortexversion");
+        version = string.IsNullOrWhiteSpace(version)
+            ? GameVersion
+            : VortexArena.Common.BuildInfo.Sanitize(version);
+
+        int maxClients = cv.GetFloat("g_maxplayers") > 0 ? (int)cv.GetFloat("g_maxplayers") : _maxClients;
+        int freeSlots = System.Math.Max(0, maxClients - _byPlayer.Count);
+
+        // "purechanges": how far the server has been moved off stock settings. The port has no cvar-change
+        // ledger of its own yet, so report the honest lower bound of 0 ("official settings") only when nothing
+        // has activated a mutator — a mutator IS a settings change, and claiming purity there would put a
+        // green "stock" tick on a server that isn't one.
+        int pureChanges = prettyMutatorsPresent() ? 1 : 0;
+
+        // The M token is the mod name. Reporting "Vortex" rather than "Xonotic" keeps it consistent with the
+        // gamename above — and the browser's category table has a matching arm for it, so a Vortex host files
+        // under Normal Servers instead of being read as somebody's modified Xonotic (see
+        // ServerListInfo.CategoryForEntry, which notes this as its one deliberate divergence from Base).
+        return $"{gametype}:{version}:P{pureChanges}:S{freeSlots}:F{(int)cv.GetFloat("serverflags")}:M{GameIdentity.Name}::";
+
+        bool prettyMutatorsPresent()
+            => MutatorActivation.BuildMutatorsPrettyString("").Length > 0;
     }
 
     private static bool TryResolve(string hostPort, out IPEndPoint? ep)

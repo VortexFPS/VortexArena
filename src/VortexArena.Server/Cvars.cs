@@ -667,6 +667,18 @@ public static class Cvars
             return;
         foreach (CvarDef d in Defaults)
             Api.Cvars.Register(d.Name, d.DefaultValue, d.Flags);
+
+        // g_vortexversion: this build's version string, the counterpart of upstream's g_xonoticversion.
+        //
+        // Registered HERE, in code, rather than in a .cfg for two reasons. It has to exist BEFORE the config
+        // chain runs so a cfg can interpolate `$g_vortexversion` — and MenuState.Boot calls this immediately
+        // before ConfigLoader.Load, which is what makes that ordering hold. And its value comes from the
+        // binary, not from a file: upstream's g_xonoticversion ships as the literal "git", a placeholder
+        // their release tooling substitutes, so it says nothing about a build made from source. (That cvar
+        // is also simply absent here — it is set only in xonotic-common.cfg, which the port's boot chain
+        // does not exec, so `$g_xonoticversion` expanded to nothing and took the default hostname's version
+        // with it.)
+        Api.Cvars.Register("g_vortexversion", VortexArena.Common.BuildInfo.Version);
     }
 
     /// <summary>Register one extra cvar default (a host/mutator adding its own autocvar at boot).</summary>

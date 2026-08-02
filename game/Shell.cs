@@ -350,6 +350,9 @@ public partial class Shell : Node
             "profile" => new DialogMultiplayerProfile(),
             "mutators" => new DialogMutators(),
             "serverinfo" => new DialogServerInfo(),
+            // Reachable only by clicking a Xonotic row in the browser, so it needs an id of its own to be
+            // inspectable in a capture at all.
+            "incompatible" => new DialogIncompatibleServer("^3Example ^7Xonotic Server", "192.0.2.10:26000"),
             "teamselect" => new DialogTeamSelect(),
             "firstrun" => new DialogFirstRun(),
             "tos" => new DialogTermsOfService(),

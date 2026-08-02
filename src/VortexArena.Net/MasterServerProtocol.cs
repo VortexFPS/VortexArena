@@ -61,7 +61,7 @@ public static class MasterServerProtocol
     /// alter the bytes. The trailing <c>\x0A</c> (LF) is part of the literal DP sends.
     /// </summary>
     /// <param name="gameName">Unused by the wire format (see remarks); present for call-site symmetry.</param>
-    public static byte[] EncodeHeartbeat(string gameName = "Xonotic")
+    public static byte[] EncodeHeartbeat(string gameName = GameIdentity.Name)
     {
         _ = gameName; // intentionally not encoded; the DP heartbeat literal is game-independent
         return BuildOob("heartbeat DarkPlaces\x0A");

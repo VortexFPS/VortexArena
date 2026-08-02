@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using Godot;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 using VortexArena.Net;
 
 namespace VortexArena.Game.Menu;
@@ -23,11 +25,90 @@ public sealed class ServerEntry
     public bool Favorite;
     public bool IsLan;
 
+    // --- Fields derived from the server's `qcstatus` infostring key (SLIST_FIELD_QCSTATUS). Xonotic servers
+    //     pack their gameplay-visible state into one colon-separated token list built by WinningConditionHelper
+    //     (qcsrc/server/scores.qc:452): "gametype:version:P<purechanges>:S<freeslots>:F<serverflags>:T<tos>:
+    //     M<modname>::<player labels>". The browser's categories, icons and row dimming all read these, which
+    //     is why they are parsed onto the row rather than left in the raw string.
+
+    /// <summary>The raw <c>qcstatus</c> value, kept so the Server Info dialog can show it verbatim.</summary>
+    public string QcStatus = "";
+    /// <summary>The server's game version (<c>g_xonoticversion</c>), token 1 of qcstatus.</summary>
+    public string Version = "";
+    /// <summary>The mod name (qcstatus <c>M</c>), lowercased. Empty = the server didn't report one.</summary>
+    public string ModName = "";
+    /// <summary>True when the server reports zero setting changes from stock (qcstatus <c>P0</c>).</summary>
+    public bool Pure;
+    /// <summary>False when the server didn't report purity at all — then <see cref="Pure"/> means nothing.</summary>
+    public bool PureAvailable;
+    /// <summary>Slots the gamecode will actually let you play in (qcstatus <c>S</c>); -1 = not reported.</summary>
+    public int QcFreeSlots = -1;
+    /// <summary>SERVERFLAG_* bits (qcstatus <c>F</c>); -1 = not reported.</summary>
+    public int ServerFlags = -1;
+    /// <summary>The server's terms-of-service URL (qcstatus <c>T</c>), if it published one.</summary>
+    public string TermsOfServiceUrl = "";
+    /// <summary>Space-separated player names, for the filter box (SLIST_FIELD_PLAYERS).</summary>
+    public string PlayerNames = "";
+
+    /// <summary>True when the server reports that it submits player statistics (SERVERFLAG_PLAYERSTATS).</summary>
+    public bool HasPlayerStats => ServerFlags >= 0 && (ServerFlags & ServerListInfo.ServerFlagPlayerStats) != 0;
+    /// <summary>... and to a non-default stats server (SERVERFLAG_PLAYERSTATS_CUSTOM).</summary>
+    public bool HasCustomStatsServer => ServerFlags >= 0 && (ServerFlags & ServerListInfo.ServerFlagPlayerStatsCustom) != 0;
+
+    /// <summary>Human players (SLIST_FIELD_NUMHUMANS): the connected count minus the bots among them.</summary>
+    public int Humans => System.Math.Max(0, Players - Bots);
+
+    /// <summary>Connectable slots (SLIST_FIELD_FREESLOTS) — what the "Full" filter and the row dimming test.</summary>
+    public int FreeSlots => MaxPlayers > 0 ? System.Math.Max(0, MaxPlayers - Players) : 1;
+
+    /// <summary>True for a bracketed IPv6 literal address (the QC <c>substring(s,0,1) == "["</c> test).</summary>
+    public bool IsIPv6 => Address.StartsWith('[');
+    /// <summary>True for a dotted IPv4 literal (QC IS_DIGIT on the first character).</summary>
+    public bool IsIPv4 => Address.Length > 0 && Address[0] >= '0' && Address[0] <= '9';
+
+    /// <summary>Which <see cref="ServerCategory"/> this row sorts under; filled by the browser on refresh.</summary>
+    public ServerCategory Category = ServerCategory.Normal;
+
+    // --- Joinability. The browser asks the STOCK Xonotic masters for its internet list, so most of what comes
+    //     back is Darkplaces servers running the original QuakeC game. VortexArena's netcode is a ground-up
+    //     reimplementation and shares no wire format with them, so those rows are listed (they are real
+    //     servers, and hiding them would just look like the browser is broken) but not connectable.
+
+    /// <summary>True once this row has been filled in from a real <c>infoResponse</c>, rather than being a
+    /// placeholder built from a bookmark or a typed address. Only a queried row can be judged.</summary>
+    public bool Queried;
+
+    /// <summary>
+    /// True when the server tagged its reply with <see cref="Net.ServerNet.VortexServerKey"/> — i.e. it
+    /// speaks this game's protocol rather than Darkplaces'.
+    /// </summary>
+    public bool IsVortexArena;
+
+    /// <summary>The build-parity hash the server reported, or 0 when it isn't a VortexArena server.</summary>
+    public uint BuildParity;
+
+    /// <summary>
+    /// A server we have queried and know to be running stock Xonotic (or any other Darkplaces game) — the
+    /// case the Join path refuses with an explanation rather than dropping the player into a connection
+    /// that cannot possibly complete. An unqueried row is NOT this: we simply don't know yet, and a typed
+    /// address deserves the benefit of the doubt.
+    /// </summary>
+    public bool IsIncompatibleXonotic => Queried && !IsVortexArena;
+
     /// <summary>Humans/slots, the QC players column (SLIST_FIELD_NUMHUMANS / maxclients).</summary>
-    public string PlayersText => MaxPlayers > 0 ? $"{System.Math.Max(0, Players - Bots)}/{MaxPlayers}"
-                                                : System.Math.Max(0, Players - Bots).ToString();
-    public string PingText => Ping >= 0 ? Ping.ToString() : "--";
+    public string PlayersText => MaxPlayers > 0 ? $"{Humans}/{MaxPlayers}" : Humans.ToString();
+
+    /// <summary>
+    /// The ping as the browser reads it. <see cref="Ping"/> is -1 while no reply has come back, but the QC
+    /// has no such state: an entry the engine has not measured reads 0 out of the host cache, and every
+    /// consumer — the column text, the row colour, the sort — treats that as a real zero. Keeping the -1
+    /// internally means "unmeasured" is still distinguishable in code; this is what the UI uses.
+    /// </summary>
+    public int PingOrZero => System.Math.Max(0, Ping);
+
+    public string PingText => PingOrZero.ToString();
 }
+
 
 /// <summary>
 /// The chosen match configuration produced by the Create-Game screen and handed to whoever starts the
@@ -90,12 +171,15 @@ public sealed class ServerBrowser : IDisposable
     private const int LanSweepRange = 9;
 
     /// <summary>
-    /// The dpmaster game filter and DP network protocol version sent in <c>getservers</c> — Xonotic's
-    /// <c>gamename</c> and DP protocol 3 (matches <see cref="MasterServerProtocol"/>'s tests and the
-    /// server-side infostring in ServerNet).
+    /// The game names asked for in <c>getservers</c>. Both, against every configured master: <c>Vortex</c>
+    /// because that is what this game's servers report (<see cref="GameIdentity.Name"/>), and <c>Xonotic</c>
+    /// because the browser deliberately keeps listing upstream's servers — they are shown, and then refused
+    /// at Join with an explanation, until backwards-compatible support exists. A master that knows nothing
+    /// about one of the two simply doesn't answer that query.
     /// </summary>
-    private const string GameName = "Xonotic";
-    private const int Protocol = 3;
+    private static readonly string[] GameNames = { GameIdentity.Name, GameIdentity.LegacyName };
+
+    private const int Protocol = GameIdentity.DpProtocol;
 
     /// <summary>The challenge token echoed in getinfo probes (matches replies to our request / ping).</summary>
     private const string InfoChallenge = "rebirth";
@@ -118,7 +202,13 @@ public sealed class ServerBrowser : IDisposable
     /// <summary>getinfo send time per "ip:port" target, for the ping column (reply time − send time).</summary>
     private readonly Dictionary<string, long> _probeSent = new();
 
-    private static long NowMs => System.Environment.TickCount64;
+    /// <summary>
+    /// The clock the ping column is measured against. A Stopwatch rather than <c>Environment.TickCount64</c>,
+    /// whose ~15.6 ms granularity on Windows is coarser than the difference between a good server and a great
+    /// one — it quantised most of the list onto the same handful of numbers.
+    /// </summary>
+    private static readonly System.Diagnostics.Stopwatch Clock = System.Diagnostics.Stopwatch.StartNew();
+    private static long NowMs => Clock.ElapsedMilliseconds;
 
     /// <summary>The shared UDP socket for master queries + per-server info probes. Lazily created on refresh.</summary>
     private MasterServerLink? _link;
@@ -153,10 +243,9 @@ public sealed class ServerBrowser : IDisposable
     /// </summary>
     public event Action<string>? ConnectRequested;
 
-    public ServerBrowser()
-    {
-        LoadFavorites();
-    }
+    // No constructor work on purpose: the bookmark list lives in a cvar now, and this type is created from a
+    // static field initialiser that can run before MenuState.Boot has applied the user's config. Every read
+    // path calls LoadFavorites() itself, so the first touch is always after the store is populated.
 
     // -------------------------------------------------------------------------------------------------
     //  Refresh — rebuild the list from favorites + a LAN discovery sweep.
@@ -172,6 +261,7 @@ public sealed class ServerBrowser : IDisposable
     public void Refresh()
     {
         _servers.Clear();
+        LoadFavorites();
 
         // 1) Favorites first — always shown so a saved server is one click away even when offline.
         foreach (string addr in _favoriteAddresses)
@@ -183,6 +273,7 @@ public sealed class ServerBrowser : IDisposable
                 Gametype = "?",
                 Map = "?",
                 Favorite = true,
+                Category = ServerCategory.Favorited,
             });
         }
         Revision++; // the Clear + favorites rebuild is itself a change the UI must pick up
@@ -216,13 +307,16 @@ public sealed class ServerBrowser : IDisposable
         {
             if (!TryResolveEndpoint(master, out IPEndPoint? ep))
                 continue;
-            try
+            foreach (string game in GameNames)
             {
-                link.RequestServers(ep!, GameName, Protocol);
-            }
-            catch (Exception e)
-            {
-                GD.Print($"[Menu] master query to {master} failed: {e.Message}");
+                try
+                {
+                    link.RequestServers(ep!, game, Protocol);
+                }
+                catch (Exception e)
+                {
+                    GD.Print($"[Menu] master query to {master} for '{game}' failed: {e.Message}");
+                }
             }
         }
     }
@@ -255,7 +349,11 @@ public sealed class ServerBrowser : IDisposable
             return _link;
         try
         {
-            var link = new MasterServerLink();
+            // The master hands back on the order of a thousand servers and we probe them all at once, so the
+            // replies arrive in a burst. Draining only the stock 64 per frame would make the ping column read
+            // "how deep in the queue this reply was" instead of "how far away this server is" — every row
+            // landing on the same handful of values. See MaxPacketsPerPoll.
+            var link = new MasterServerLink { MaxPacketsPerPoll = 4096 };
 
             // A master answered: add a placeholder row per server and probe each for its details/ping.
             link.ServerListReceived += servers =>
@@ -323,7 +421,20 @@ public sealed class ServerBrowser : IDisposable
         existing.Bots = entry.Bots;
         existing.MaxPlayers = entry.MaxPlayers;
         existing.Ping = entry.Ping;
+        existing.QcStatus = entry.QcStatus;
+        existing.Version = entry.Version;
+        existing.ModName = entry.ModName;
+        existing.Pure = entry.Pure;
+        existing.PureAvailable = entry.PureAvailable;
+        existing.QcFreeSlots = entry.QcFreeSlots;
+        existing.ServerFlags = entry.ServerFlags;
+        existing.TermsOfServiceUrl = entry.TermsOfServiceUrl;
+        existing.PlayerNames = entry.PlayerNames;
+        existing.Queried = entry.Queried;
+        existing.IsVortexArena = entry.IsVortexArena;
+        existing.BuildParity = entry.BuildParity;
         if (isLan) existing.IsLan = true;
+        existing.Category = CategoryForEntry(existing);
         Revision++;
     }
 
@@ -340,17 +451,18 @@ public sealed class ServerBrowser : IDisposable
         else if (string.IsNullOrEmpty(entry.Name))
             entry.Name = entry.Address;
 
+        // This IS a real reply, so the row can now be judged joinable or not (see IsIncompatibleXonotic).
+        entry.Queried = true;
+        entry.IsVortexArena = info.TryGetValue(Net.ServerNet.VortexServerKey, out string? parity);
+        entry.BuildParity = entry.IsVortexArena && uint.TryParse(parity, out uint reported) ? reported : 0u;
+
         if (info.TryGetValue("mapname", out string? map)) entry.Map = map;
+        if (info.TryGetValue("qcstatus", out string? qc) && qc.Length > 0)
+            ParseQcStatus(entry, qc);
+        if (info.TryGetValue("players", out string? pl))
+            entry.PlayerNames = pl;
         if (info.TryGetValue("gametype", out string? gt) && gt.Length > 0)
-        {
             entry.Gametype = gt;
-        }
-        else if (info.TryGetValue("qcstatus", out string? qc) && qc.Length > 0)
-        {
-            // Real Xonotic servers carry the gametype as the first ":"-token of qcstatus ("ctf:git:P0:S16:...").
-            int colon = qc.IndexOf(':');
-            entry.Gametype = colon > 0 ? qc[..colon] : qc;
-        }
         if (info.TryGetValue("clients", out string? c) && int.TryParse(c, out int players))
             entry.Players = players;
         if (info.TryGetValue("bots", out string? b) && int.TryParse(b, out int bots))
@@ -377,8 +489,84 @@ public sealed class ServerBrowser : IDisposable
             }
             entry.Favorite |= _favoriteAddresses.Contains(rekeyed);
         }
+        entry.Category = CategoryForEntry(entry);
         Revision++;
     }
+
+    /// <summary>
+    /// Split a server's <c>qcstatus</c> onto <paramref name="entry"/> — a direct port of the token walk
+    /// <c>CategoryForEntry</c> and <c>drawListBoxItem</c> both do (serverlist.qc:117 / :853). Token 0 is the
+    /// gametype, token 1 the version; from token 2 on, each is a one-letter key with the value after it, and an
+    /// empty token ends the header section (what follows is the score-label block). Unknown keys are skipped,
+    /// so a newer server adding one doesn't break the parse.
+    /// </summary>
+    private static void ParseQcStatus(ServerEntry entry, string qcstatus)
+    {
+        QcStatus q = ServerListInfo.ParseQcStatus(qcstatus);
+        entry.QcStatus = qcstatus;
+        if (q.Gametype.Length > 0)
+            entry.Gametype = q.Gametype;
+        entry.Version = q.Version;
+        entry.Pure = q.Pure;
+        entry.PureAvailable = q.PureAvailable;
+        entry.QcFreeSlots = q.FreeSlots;
+        entry.ServerFlags = q.ServerFlags;
+        entry.ModName = q.ModName;
+        entry.TermsOfServiceUrl = q.TermsOfServiceUrl;
+    }
+
+    // -------------------------------------------------------------------------------------------------
+    //  Categories (serverlist.qc CategoryForEntry / CategoryOverride)
+    // -------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Servers the master flagged as promoted, and servers the community list recommends. In Base these are
+    /// fetched by the external response system (<c>_Nex_ExtResponseSystem_*</c>, an HTTP list pulled at
+    /// startup); this port has no such fetch yet, so both stay empty and the <c>menu_slist_recommendations</c>
+    /// bit-1 vote is a consistent "no" — which is exactly how Base behaves before its fetch completes. Public
+    /// so a future fetcher can fill them without touching the categorisation logic.
+    /// </summary>
+    public List<string> PromotedServers { get; } = new();
+    public List<string> RecommendedServers { get; } = new();
+
+    /// <summary>
+    /// Which category a row belongs to, before any override — the port of <c>CategoryForEntry</c>
+    /// (serverlist.qc:117). Bookmarks win outright, then the recommendation vote, then the reported mod.
+    /// </summary>
+    public ServerCategory CategoryForEntry(ServerEntry e)
+    {
+        ICvarService cv = MenuState.Cvars;
+        var input = new ServerListInfo.CategoryInput(
+            IsFavorite: e.Favorite,
+            IsPromoted: PromotedServers.Contains(e.Address),
+            IsRecommended: RecommendedServers.Contains(e.Address),
+            ModName: e.ModName,
+            Pure: e.Pure,
+            PureAvailable: e.PureAvailable,
+            QcFreeSlots: e.QcFreeSlots,
+            Humans: e.Humans,
+            Ping: e.Ping);
+        var rules = new ServerListInfo.RecommendationRules(
+            Mode: (int)cv.GetFloat("menu_slist_recommendations"),
+            MaxPing: cv.GetFloat("menu_slist_recommendations_maxping"),
+            MinFreeSlots: cv.GetFloat("menu_slist_recommendations_minfreeslots"),
+            MinHumans: cv.GetFloat("menu_slist_recommendations_minhumans"),
+            PureThreshold: cv.GetFloat("menu_slist_recommendations_purethreshold"),
+            ModImpurity: cv.GetFloat("menu_slist_modimpurity"));
+        return ServerListInfo.CategoryForEntry(input, rules);
+    }
+
+    /// <summary>
+    /// Fold a raw category through the override table, reading the enabled column out of the live cvar store.
+    /// See <see cref="ServerListInfo.ApplyOverride"/> for what the two columns mean.
+    /// </summary>
+    public static ServerCategory CategoryOverride(ServerCategory cat)
+        => ServerListInfo.ApplyOverride(cat,
+            MenuState.Cvars.GetFloat("menu_slist_categories") != 0f,
+            key => MenuState.Cvars.GetString($"menu_slist_categories_{key}_override"));
+
+    /// <summary>The heading a category draws (the CTX'd SLCAT^ strings of serverlist.qh:150).</summary>
+    public static string CategoryTitle(ServerCategory cat) => Localization.Tr(ServerListInfo.CategoryTitle(cat));
 
     /// <summary>
     /// Resolve a <c>host:port</c> string to an <see cref="IPEndPoint"/> via DNS. Returns false (and logs)
@@ -524,13 +712,20 @@ public sealed class ServerBrowser : IDisposable
     //  Favorites — add/remove + persistence.
     // -------------------------------------------------------------------------------------------------
 
-    /// <summary>True when <paramref name="address"/> (normalised) is bookmarked — drives the Bookmark/Unbookmark toggle.</summary>
-    public bool IsFavorite(string address) => _favoriteAddresses.Contains(NormalizeAddress(address));
+    /// <summary>True when <paramref name="address"/> (normalised) is bookmarked — drives the Favorite toggle.</summary>
+    public bool IsFavorite(string address)
+    {
+        LoadFavorites(); // the cvar is the store, and the console/`addfav` can change it behind our back
+        return _favoriteAddresses.Contains(NormalizeAddress(address));
+    }
 
     public void AddFavorite(string address)
     {
         string norm = NormalizeAddress(address);
-        if (norm.Length == 0 || _favoriteAddresses.Contains(norm))
+        if (norm.Length == 0)
+            return;
+        LoadFavorites();
+        if (_favoriteAddresses.Contains(norm))
             return;
         _favoriteAddresses.Add(norm);
         SaveFavorites();
@@ -539,26 +734,79 @@ public sealed class ServerBrowser : IDisposable
     public void RemoveFavorite(string address)
     {
         string norm = NormalizeAddress(address);
+        LoadFavorites();
         if (_favoriteAddresses.Remove(norm))
             SaveFavorites();
     }
 
+    /// <summary>
+    /// QC <c>XonoticServerList_toggleFavorite</c>: flip a server's bookmark and re-sort, because bookmarking
+    /// moves the row into (or out of) the Favorites category.
+    /// </summary>
+    public void ToggleFavorite(string address)
+    {
+        if (IsFavorite(address)) RemoveFavorite(address);
+        else AddFavorite(address);
+
+        // Recategorise in place rather than re-querying: the star changed, not the server.
+        string norm = NormalizeAddress(address);
+        foreach (ServerEntry s in _servers)
+        {
+            if (s.Address != norm)
+                continue;
+            s.Favorite = _favoriteAddresses.Contains(norm);
+            s.Category = CategoryForEntry(s);
+        }
+        Revision++;
+    }
+
+    /// <summary>
+    /// Read the bookmark list out of the <c>net_slist_favorites</c> cvar — the same store Base uses, so the
+    /// <c>addfav</c>/<c>delfav</c> console aliases (data/core.pk3dir/commands.cfg:78) and the menu agree.
+    /// The list is space-separated, exactly as <c>tokenize_console</c> reads it there.
+    /// </summary>
     private void LoadFavorites()
     {
+        MigrateLegacyFavorites();
         _favoriteAddresses.Clear();
-        var cfg = new ConfigFile();
-        if (cfg.Load(FavoritesPath) != Error.Ok)
-            return;
-        var arr = (string[])cfg.GetValue("favorites", "addresses", Array.Empty<string>());
-        _favoriteAddresses.AddRange(arr);
+        foreach (string token in MenuState.Cvars.GetString("net_slist_favorites")
+                     .Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            _favoriteAddresses.Add(NormalizeAddress(token));
     }
 
     private void SaveFavorites()
+        => MenuState.Cvars.Set("net_slist_favorites", string.Join(' ', _favoriteAddresses));
+
+    /// <summary>
+    /// One-time fold of the port's old <c>favorites.cfg</c> into the cvar, so nobody loses the servers they had
+    /// bookmarked before the store moved. Deletes the file once its contents are in the cvar, which is what
+    /// makes this run at most once.
+    /// </summary>
+    private void MigrateLegacyFavorites()
     {
+        if (_migratedLegacy)
+            return;
+        _migratedLegacy = true;
+
         var cfg = new ConfigFile();
-        cfg.SetValue("favorites", "addresses", _favoriteAddresses.ToArray());
-        cfg.Save(FavoritesPath);
+        if (cfg.Load(FavoritesPath) != Error.Ok)
+            return;
+        var legacy = (string[])cfg.GetValue("favorites", "addresses", Array.Empty<string>());
+
+        var merged = new List<string>(MenuState.Cvars.GetString("net_slist_favorites")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        foreach (string addr in legacy)
+        {
+            string norm = NormalizeAddress(addr);
+            if (norm.Length > 0 && !merged.Contains(norm))
+                merged.Add(norm);
+        }
+        MenuState.Cvars.Set("net_slist_favorites", string.Join(' ', merged));
+        DirAccess.RemoveAbsolute(FavoritesPath);
+        GD.Print($"[Menu] migrated {legacy.Length} bookmark(s) from favorites.cfg into net_slist_favorites.");
     }
+
+    private bool _migratedLegacy;
 
     // -------------------------------------------------------------------------------------------------
     //  Teardown — release the UDP socket.

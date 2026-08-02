@@ -124,7 +124,13 @@ public partial class XonoticTabs : VBoxContainer
     /// <summary>The title of tab <paramref name="index"/>.</summary>
     public string TitleOf(int index) => _entries[index].Title;
 
-    /// <summary>Paint a tab pill: active = the accent-orange button art, inactive = the dimmed art (luma skin).</summary>
+    /// <summary>
+    /// Paint a tab pill. The showing tab is the one the QC ModalController holds in <c>forcePressed</c>
+    /// (item/modalcontroller.qc:188), which in Button_draw means the CLICKED button graphic at
+    /// COLOR_BUTTON_C — a white pressed pill, not a recolour. Its label stays SKINCOLOR_TEXT like every
+    /// other button's: a QC tab button is a plain <c>makeXonoticButton(title, '0 0 0')</c>, and nothing in
+    /// the toolkit varies a Label's colour by button state.
+    /// </summary>
     private static void Restyle(Entry e, bool active)
     {
         StyleBox normal = MenuSkin.TabPill(active ? "active" : "normal");
@@ -133,8 +139,7 @@ public partial class XonoticTabs : VBoxContainer
         e.Button.AddThemeStyleboxOverride("hover", hover);
         e.Button.AddThemeStyleboxOverride("pressed", MenuSkin.TabPill("active"));
         e.Button.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
-        e.Button.AddThemeColorOverride("font_color", active ? MenuSkin.Bright : MenuSkin.Header);
-        e.Button.AddThemeColorOverride("font_hover_color", MenuSkin.Bright);
-        e.Button.AddThemeColorOverride("font_pressed_color", MenuSkin.Bright);
+        foreach (string s in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color" })
+            e.Button.AddThemeColorOverride(s, MenuSkin.Text);
     }
 }

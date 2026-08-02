@@ -74,9 +74,82 @@ note above.)
 A core design rule: **`VortexArena.Common` has no Godot dependency.** This keeps the gameplay simulation
 headless-testable and enables a dedicated server that runs without the Godot renderer.
 
-## Getting started
+## Getting the game
+
+There are three ways in. Pick by what you want to do, not by what looks smallest — the download sizes are
+much closer together than they look, because the game's *content* dominates all three.
+
+| | For | Download | On disk |
+|---|---|---|---|
+| **[Launcher](https://github.com/VortexFPS/VortexLauncher)** *(recommended for players)* | Playing, and staying current | **~31 MB** (then it fetches the game) | ~1.8 GB |
+| **Release build** | Playing without installing anything extra | **~1.5 GB** | ~1.8 GB |
+| **`./vx`** *(recommended for developers)* | Building, modifying, contributing | **~1.7 GB** | **~5.3 GB** after a first editor run |
+
+### 1. The launcher — recommended if you just want to play
+
+[**VortexFPS/VortexLauncher**](https://github.com/VortexFPS/VortexLauncher) installs and updates the game
+for you. It keeps release builds current automatically, and it can also build from source on your machine if
+you'd rather run the tip of `main` — without you setting up a toolchain by hand.
+
+The launcher itself is a **~31 MB** download; it then pulls the same content everything else uses, landing at
+**~1.8 GB** installed.
+
+### 2. A release build — manual install
+
+Grab a `.zip` from [**Releases**](https://github.com/VortexFPS/VortexArena/releases) and unpack it. No
+toolchain, no build step; you update it by downloading the next one.
+
+**~1.5 GB** to download (macOS ~1.6 GB), **~1.8 GB** unpacked. Nearly all of that is content — the game
+binaries are only ~170 MB of it. A `linux-dedicated` zip is published too, at the same size for the same
+reason: a server needs the maps.
+
+### 3. The development environment — recommended for contributors
+
+Everything below is driven by **`./vx`** (`vx.cmd` on Windows), which is the front door for the whole
+toolchain. From a fresh clone:
+
+```bash
+git clone --filter=blob:none https://github.com/VortexFPS/VortexArena.git
+cd VortexArena
+./vx setup          # installs what's missing, asks first, and prints every command it runs
+./vx ci             # the authoritative gate: build + tests + headless boot smoke
+```
+
+`vx setup` has profiles for the different jobs — `--profile play`, `dev`, `server`, `ci` — and everything it
+installs goes into **`.godot-bin/` inside the clone**, never system-wide. Uninstalling is `rm -rf`, and two
+clones can pin two different engine versions. It never runs `sudo`; system packages are printed for you to
+run yourself.
+
+`./vx doctor` reports what's installed and what's missing without changing anything, which is the right first
+command when something won't build.
+
+#### Storage for a dev clone
+
+Budget **~5.3 GB** for a working setup. The parts:
+
+| Item | Size | Notes |
+|---|---|---|
+| Clone (history + working tree) | ~1.7 GB | ~0.7 GB of that is the download; `--filter=blob:none` trims it further |
+| Compiled maps (`data/maps/`) | ~0.7 GB | fetched, not cloned — see [Content](#content) |
+| Pinned engine + export template | ~0.3 GB | into `.godot-bin/`; the template is 64 MB (Windows) / 83 MB (Linux) / 143 MB (macOS) |
+| Godot import cache (`.godot/`) | **~2.4 GB** | generated on first editor run, not downloaded |
+| Build output (`bin/`, `obj/`) | ~0.2 GB | |
+
+That import cache is the one that surprises people: it is bigger than everything you downloaded, it appears
+the first time you open the project in the editor, and it is safe to delete (Godot rebuilds it). Headless
+runs and `./vx ci` don't need it.
+
+**Options that cost more:**
+
+- **Map sources** (`git submodule update --init maps-src`) — **+~1.3 GB**. Only map authors need this; the
+  submodule is `update = none` so a normal clone skips it entirely.
+- **Exported builds** (`./vx ci --export`, `dist/`) — **+~0.2 GB** of binaries per platform.
+- **Godot's own full export-template set**, if you install it from the editor rather than using the pinned
+  one — **+~1.9 GB**. You don't need it: `vx` installs only the single template the project is pinned to.
 
 ### Prerequisites
+
+`./vx setup` handles these, but if you'd rather install them yourself:
 
 - [.NET SDK 8.0+](https://dotnet.microsoft.com/download)
 - [Godot 4.6.3 (.NET / mono build)](https://godotengine.org/download) — the standard build won't
@@ -85,8 +158,9 @@ headless-testable and enables a dedicated server that runs without the Godot ren
 ### Content
 
 Core content — textures, models, sounds, fonts, music and the config tree — is **committed to this
-repository** under `data/` and arrives with the clone. Only compiled maps are fetched, because they are
-build output rather than source:
+repository** under `data/` and arrives with the clone (~0.9 GB of it). Only compiled maps are fetched
+(~0.7 GB), because they are build output rather than source. `./vx setup` does this for you; to drive it
+directly:
 
 ```bash
 python tools/data/fetch-maps.py                 # install the pinned map set into data/maps/
@@ -111,13 +185,17 @@ than downloading it — the backstop for the release ever going away. It needs a
 toolchain and tells you how to use CI if you have not got one. It regenerates a *working* map set,
 not a byte-identical one; `--dry-run` shows what it would compile without needing the toolchain.
 
-A blobless clone keeps the initial download small:
+### Build
 
 ```bash
-git clone --filter=blob:none https://github.com/VortexFPS/VortexArena.git
+./vx doctor         # what's installed, what's missing, what to do about it (changes nothing)
+./vx setup          # bring a fresh clone to runnable: engine, maps, export templates
+./vx build          # the Godot host
+./vx test           # the suite
+./vx ci             # the authoritative local gate
 ```
 
-### Build
+`vx` is a thin dispatcher; the underlying commands still work and are still the reference:
 
 ```bash
 # Build and test the engine/gameplay libraries (no Godot needed)
@@ -127,7 +205,7 @@ dotnet test  tests/VortexArena.Tests/VortexArena.Tests.csproj
 # Build the full Godot project
 dotnet build VortexArena.csproj
 
-# Or run the whole local CI gate (build + tests + host + headless boot smoke)
+# The whole local CI gate (build + tests + host + headless boot smoke)
 ci/ci.sh
 ```
 

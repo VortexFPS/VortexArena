@@ -174,4 +174,54 @@ From the earlier survey, still unmoved and all map-independent:
   reason the off-thread work is trustworthy; re-run it after any change to the texture/material path.
 - **Re-run the in-match A/B** for anything touching `BackgroundAssetStreamer` or `AssetSystem` — they are
   shared with live play, not just the menu.
-- Suite must stay 3973/3973.
+- **Suite must stay 4013/4013** *with the full 32-pack map set installed*. The number is content-dependent and
+  that is not a footnote: with no maps it is 3731, because ~242 map-dependent cases produce no test cases at
+  all rather than skipping visibly. `TestPaths.Maps` is tri-state for this reason — a PARTIAL set (one pack,
+  which is what `ci/ci.sh`'s own stormkeep fetch leaves behind) lowers thresholds instead of asserting
+  full-set ones. Quote the number with the content state or it means nothing.
+
+### Running all four on macOS (2026-08-01)
+
+Every rule above is now satisfiable on a Mac. It took four portability fixes to get there, and the specifics
+below are the ones that will bite again.
+
+```bash
+./vx setup --profile dev      # engine into .godot-bin/, 32 map packs, pinned export templates
+./vx engine --editor          # Godot's OWN templates (~1.1 GB) — macos-client has no custom template
+./vx export --preset macos-client
+./vx ci                       # the full gate, smokes included
+```
+
+**The release export.** `macos-client` is the one preset with no `custom_template/release` (a declared
+exception in `engine.lock.json`), so it falls back to the editor's stock template set — which nothing
+installed until `vx engine --editor` existed. Output is `dist/macos-client/VortexArena.app`, and macOS keeps
+its content *inside* the bundle at `Contents/Resources/data`. `tools/perf-run.sh` places it there itself now;
+the `data/` trap is the same trap, in a different directory.
+
+**Warm the shader cache before comparing anything.** The first capture after an export pays sync pipeline
+compiles that shift the whole session — the first attempt here produced a 58 s "after" against a 29 s
+"before" and was worthless. Run each arm twice and use the second. Both arms share
+`_scratch/perf-userdir`, so whichever runs first eats the cost.
+
+**The mean needs n=1; the tail needs more.** At stormkeep/25 s, `p99` and `1%low` swing **±44%** run to run.
+The first A/B pair here showed p99 +39% and 1%-low −28% — a convincing regression — and a second pair
+reversed both. `alloc_total_mb` by contrast reproduced to under 0.3%. Report tail numbers only with at least
+two pairs, or don't report them.
+
+**These numbers are not comparable to `tools/perf-baselines/`.** Those are the Windows/RTX 3080 dev box. An
+A/B is relative and stays valid, but never diff a macOS capture against a stored baseline.
+
+**Check the turntable's resolution before trusting its hash.** A capture landed at 1280×720 before the
+compositor resized the window to 1650×1050, and the differing md5 read as a rendering regression. It was not.
+Compare sizes first, then bytes.
+
+```bash
+"$(sh -c '. tools/lib/find-godot.sh; find_godot "$PWD"')" --path "$PWD" \
+    --resolution 1280x720 --screenshot out.png --screenshot-frames 150 --model erebus
+```
+
+**What was broken, and is not any more:** `python` (gone since macOS 12.3 — resolved via
+`tools/lib/find-python.sh`), `timeout` (not in BSD userland — `tools/lib/run-timeout.sh`), the hardcoded
+Windows Godot paths (`tools/lib/find-godot.sh`), and `nuget.config`'s committed local package source. A
+`macos-latest` job in `ci.yml` now runs `ci/ci.sh` so this cannot rot again — which is the actual fix, since
+all four survived only because nothing ever ran on a Mac.

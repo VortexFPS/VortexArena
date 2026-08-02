@@ -40,6 +40,46 @@ tracer: see **NET-DEBUGGING.md** (`net_input_trace`) and **TROUBLESHOOTING.md**.
    ```
    The diff marks the VSYNC/PRESENT class as machine-load noisy — trust the other rows first.
 
+## macOS / Linux: the same thing with `tools/perf-run.sh`
+
+`perf-run.ps1` is Windows-only. `tools/perf-run.sh` is the twin and, since 2026-08-01, picks the export for
+the platform it is running on rather than assuming `dist/windows-client/`.
+
+```bash
+./vx setup --profile dev              # engine, maps, pinned export templates
+./vx engine --editor                  # Godot's own templates (~1.1 GB) — macos-client needs them
+./vx export --preset macos-client     # or linux-client
+PERF_MAP=stormkeep PERF_BOTS=2 tools/perf-run.sh baseline 35
+```
+
+Env vars replace the PowerShell flags: `PERF_MAP`, `PERF_BOTS`, `PERF_SCENARIO=idle`, `PERF_USERDIR`,
+`PERF_DEBUG=1` (project via the editor binary instead of an export — not release-representative).
+
+**`macos-client` needs `./vx engine --editor`.** It is the one preset with no `custom_template/release`
+(a declared exception in `engine.lock.json`), so it falls back to the editor's stock template set. Without
+it the export fails with `No export template found`; `./vx doctor` reports whether they are installed.
+
+**Content lives inside the bundle on macOS** — `VortexArena.app/Contents/Resources/data`. `perf-run.sh`
+places it. This is the same trap as the Windows `data/`-beside-the-binary one: an export that resolves no
+content still boots, self-quits, and writes a session log full of flattering numbers. Sanity-check any
+capture by confirming it did real work — a plausible `draws p50`, pipeline compiles, `iqm.mesh` among the top
+scopes.
+
+### Three things that will mislead you
+
+**Warm the shader cache.** The first capture after an export pays sync pipeline compiles that shift the whole
+session; a 25 s request came back as a 58 s session against a 29 s one, and the comparison was worthless. Run
+each arm twice, use the second. Both arms share `_scratch/perf-userdir`, so whichever goes first pays.
+
+**The tail needs more samples than the mean.** At stormkeep/25 s, `p99` and `1%low` swing **±44%** run to run.
+A real A/B here showed p99 +39% and 1%-low −28% on the first pair — a convincing regression — and the second
+pair reversed both, while `alloc_total_mb` reproduced to under 0.3%. Two pairs minimum before reporting a
+tail number, or report only the mean.
+
+**Never diff a non-Windows capture against `tools/perf-baselines/`.** Those are the Windows/RTX 3080 dev box.
+A before/after A/B on one machine is relative and stays valid; a stored-baseline diff across platforms is
+meaningless.
+
 Live, in-game: the profiler overlay (top-left) pins the **last hitch** (class + reason + age) and a
 session hitch counter; **F11** expands the live scope tree; `set cl_frameprofiler_alert 1` flashes
 `HITCH <ms> <class>` on screen the moment one fires.
@@ -80,7 +120,8 @@ session hitch counter; **F11** expands the live scope tree; `set cl_frameprofile
 |---|---|
 | `tools/perf-run.ps1` / `.sh` | One-command capture: launches the **release export** (`-DebugBuild` for the project) on a map + bots with the profiler forced, self-quits, runs the report, writes `_scratch/perf_<label>.json`. |
 | `tools/perf-report.py` | Turns a session pair into percentiles/1%-lows, a primaries-vs-recovery census, hitch **clusters**, top offending scopes, alloc storms, GC/pipeline totals — plus a **post-load block** (`t ≥ 20 s`, `--postload SECS`) so steady-state smoothness is readable without load/join noise (trust the `pl` rows for smoothness A/Bs; the full-session 0.1%-low is pinned by load frames). `--diff <session|json>` compares runs; `--json` writes a baseline. Old (pre-2026-07-03) CSVs had a one-frame ms↔scopes skew — the tool detects and corrects it. |
-| `tools/perf-smoke.ps1` | Pre-merge gate: budget-asserting headless benches (`ServerTickPerfBench` fails on a >4-5× tick regression; opt out with `VA_PERF_ASSERT=0`), `-Live` adds a 30 s capture diffed vs `tools/perf-baselines/`. |
+| `tools/perf-run.sh` | The cross-platform twin of `perf-run.ps1` (see "macOS / Linux" above). Selects the export for the running platform and reproduces the packaged content layout, including macOS's in-bundle `Contents/Resources/data`. Flags are env vars: `PERF_MAP`, `PERF_BOTS`, `PERF_SCENARIO`, `PERF_USERDIR`, `PERF_DEBUG`. |
+| `tools/perf-smoke.ps1` | **Windows only — no `.sh` twin yet.** Pre-merge gate: budget-asserting headless benches (`ServerTickPerfBench` fails on a >4-5× tick regression; opt out with `VA_PERF_ASSERT=0`), `-Live` adds a 30 s capture diffed vs `tools/perf-baselines/`. |
 | `cl_frameprofiler_dump 1` | Console: dumps the last ~240 frames (forensic ring) to `frameprofile_ring.csv`. |
 | RenderDoc auto-capture | Run under RenderDoc → sync SURFACE compiles self-capture (≤6/session, after t=28 s) to `<temp>/xonotic_rdoc/`. |
 | `net_input_trace 1` | The input→server→reconcile pipeline tracer — see NET-DEBUGGING.md. |

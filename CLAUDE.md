@@ -46,4 +46,9 @@ smoke: **docs/RUNNING.md**.
 - Any new per-frame system ships with a `Prof.Sample` scope (registered in
   `FrameProfiler.TopLevelNodeScopes`) in the same change.
 - Redirected-stdout debug logs go to `_scratch/` (gitignored), not the repo root.
-- Perf-relevant changes: run `tools/perf-smoke.ps1` before merging.
+- Perf-relevant changes: run `tools/perf-smoke.ps1` before merging (Windows). **Off Windows** that script has
+  no twin yet, so the equivalent is `./vx test --filter ServerTickPerfBench` — the budget-asserting bench is
+  its headless half and is portable — plus a before/after A/B with `tools/perf-run.sh`. Do NOT diff a
+  non-Windows capture against `tools/perf-baselines/`; those are the RTX 3080 dev box. See
+  **docs/PERF-DEBUGGING.md → "macOS / Linux"**, which also covers the two things that will mislead you there
+  (warm the shader cache; the tail needs two pairs, the mean needs one).

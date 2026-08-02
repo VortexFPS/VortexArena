@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="VortexArena"
-config/description="Xonotic, reborn on Godot + C#. See planning/."
+config/description="Vortex Arena — Xonotic, reborn on Godot + C#. See planning/."
 run/main_scene="res://Main.tscn"
 ; r16 rubberband ROOT CAUSE: Godot's delta smoothing (default ON) snaps every _Process delta onto a grid
 ; derived from the DETECTED refresh rate — which this platform misreads as 60Hz on high-refresh panels

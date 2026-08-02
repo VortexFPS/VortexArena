@@ -1,0 +1,36 @@
+{
+  "format": "vortex-brand-lock/1",
+  "tool": "vxbrand 0.1.0",
+  "target": "vortex-arena",
+  "specSha256": "31d85a39c206112a4ef6e90005e3939ffc73b0b8193ac696a4b97c6823bffce4",
+  "files": {
+    "branding/vortex-arena-1024.png": "0d6fc0a41b418970528d0c583ab2fa1495eb586c3b903a622ea71e62e2a41844",
+    "branding/vortex-arena-emblem.svg": "d2e8ad6af788ca1b8c983cd202993d180de915650fe9a81f9ffa0d31532ae6f2",
+    "branding/vortex-arena.icns": "9ffd4576ce1ae856c699a7e7093b562cdc1fe6f7331b256a43730ba437f5936b",
+    "branding/vortex-arena.ico": "67460dec92cfeee88bd7e8264e579015ebe4a742bad80b08edd02c70baa3369d",
+    "data/core.pk3dir/darkplaces-icon.png": "777ef1fdb46cf5e5a04240eefa8a569a267f7ca7ca23f9da393cc89b83ab5450",
+    "data/core.pk3dir/darkplaces-icon.xpm": "211af0ddb9727d17fe3030ac44bef50ca0a3a36a0e20ff7d3e797d6b7179d495",
+    "data/core.pk3dir/darkplaces-icon2.png": "4c863d741f7536f52413d513323958cd065e115d3c1dee97779c211b70fa303b",
+    "data/core.pk3dir/darkplaces-icon3.png": "96c91e645cc8797e772aa91ccb5a21b92cec304d0dfed243d9adb57dcdc35719",
+    "data/core.pk3dir/darkplaces-icon4.png": "1e80148aa551d8f92359c8339c458edf65ed86d9850c443ee6f6d37077fde702",
+    "data/core.pk3dir/darkplaces-icon5.png": "f89730b589b62606c493829a4137ce82423fd16a5e74831881b790494764bc52",
+    "data/core.pk3dir/darkplaces-icon6.png": "f3b33b5a404cdcd0047d9fc372e6f49bf311380bfdd4160c5ec0ae7361011eef",
+    "data/core.pk3dir/darkplaces-icon7.png": "2f2f655810660139baa557484da0cb3259d1f6e690bd42d57f877aa7e392c87d",
+    "data/core.pk3dir/darkplaces-icon8.png": "2b8d64ce61b09ed8cc181988e2c07a4b4e5a6786f32d0e42db54fd7dcbda5732",
+    "data/core.pk3dir/darkplaces-icon9.png": "ee35b0382899d4693d4cd6d566c76df02ce382fe45121e07f07d60ea337f3e02"
+  },
+  "wiring": [
+    {
+      "file": "export_presets.cfg",
+      "note": "Windows export. Both fields are empty upstream; the pair is matched together so a partial edit cannot half-apply."
+    },
+    {
+      "file": "export_presets.cfg",
+      "note": "macOS export. `application/icon=\"\"` appears in both presets, so this one is anchored on the bundle identifier that follows it."
+    },
+    {
+      "file": "project.godot",
+      "note": "The only Xonotic string in project.godot that is copy rather than an identifier."
+    }
+  ]
+}

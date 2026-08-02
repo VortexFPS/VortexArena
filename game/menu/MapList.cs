@@ -109,13 +109,15 @@ public static class MapList
         int added = 0;
         foreach (string map in maps)
         {
-            if (added >= LsmapsMax)
-                break;
-            sb.Append(added % 2 != 0 ? "^2" : "^3").Append(map);
             added++;
-            if (added < maps.Count && added < LsmapsMax)
+            if (added > LsmapsMax)
+                continue; // QC counts every map, it just stops listing them past the cap
+            if (sb.Length > 0)
                 sb.Append(' ');
+            sb.Append(added % 2 == 0 ? "^2" : "^3").Append(map);
         }
+        if (added > LsmapsMax)
+            sb.Append(" ^7(").Append(added - LsmapsMax).Append(" not listed)");
         return $"^7Maps available ({added}): {sb}";
     }
 

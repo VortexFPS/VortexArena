@@ -132,11 +132,11 @@ units are symptoms of this subsystem.
 | `m_isForcedSupported` dispatch | `MapInfoBackend.ApplyForcedGametypes` + MapInfoCache inline (duel+tdm only) | live, menu-only |
 | `.arena`/`.defi` | NOT IMPLEMENTED (GameWorld.cs:573 probes existence for the separate world.qc q3compat flag) | |
 | Enumerate/Filter (menu) | `MapList.Available` + `CreateGameScreen.RefilterMaps` | live; flags/features filters absent |
-| `MapInfo_CheckMap` (server) | `MapRotation.MapExists`/`MapSupportsGametype` predicate seams | **stub — no host wires them (default true)** |
+| `MapInfo_CheckMap` (server) | `MapRotation.MapExists`/`MapSupportsGametype` predicate seams | live (NetGame wires the VFS + .mapinfo catalog) |
 | `MapInfo_LoadMapSettings` fallback | NOT IMPLEMENTED (`GameWorld.ResolveGameType` = name lookup + DM fallback) | no map-support check at boot |
 | `MapInfo_LoadMap` | ApplyMapChange/Shell reboot (sv-mapvoting/sv-campaign) | settemp-restore moot (per-world cvar store) |
 | `MapInfo_FindName`/`FixName` | NOT IMPLEMENTED (exact-match only) | |
-| `ListAllowedMaps` (lsmaps, maplist reset) | `CommandReplies.GetLsmaps` lists g_maplist words; gametype-switch keeps current list | degraded |
+| `ListAllowedMaps` (lsmaps, maplist reset) | `MapRotation.AllowedMaps` (empty `g_maplist` = every map for the gametype); `CommandReplies.GetLsmaps`/`GetMaplist` | live; never flattened into the cvar (xonotic-data#3002) |
 | title_sans_author / isRedundant | `MapInfoBackend.Finish`/`TitleSansAuthor` | " by " only; no titlestring composite |
 | cdtrack → music | `NetGame.SetupMusic`+`ParseMapinfoCdTrack` + `GameWorld.ApplyWorldspawn` music/noise → `MusicPlayer` | live, faithful (intended in-process divergence) |
 | settemp_for_type + ACL | NOT IMPLEMENTED (`SettempCvars` mechanism exists, never fed by mapinfo) | |

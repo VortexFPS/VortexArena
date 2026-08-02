@@ -93,25 +93,47 @@ public sealed class CommandReplies
     /// QC <c>getmaplist()</c>: "^7Maps in list (N): &lt;colorized words&gt;" from <c>g_maplist</c>, alternating
     /// ^2/^3 per word. (QC also filters MapInfo_CheckMap; the port colorizes every word — the rotation cvar is
     /// already a curated list, and no catalog is reachable here.)
+    ///
+    /// <para>An empty <c>g_maplist</c> is not an empty rotation: it means "every map that supports the current
+    /// gametype", so this lists what <see cref="MapRotation.Init"/> would actually cycle through rather than
+    /// reporting nothing. Long lists are split over several lines (QC <c>maplist_reply[]</c> pages) rather
+    /// than capped at an entry count, so every map is shown; only a list longer than every page combined
+    /// reports a remainder.</para>
     /// </summary>
     private string GetMaplist()
     {
-        string maplist = Cvars.String("g_maplist");
-        if (string.IsNullOrEmpty(maplist))
+        IReadOnlyList<string> words = SplitWords(Cvars.String("g_maplist"));
+        if (words.Count == 0)
+            words = _world.Rotation.AllowedMaps();
+        if (words.Count == 0)
             return "^7Map list is empty";
 
-        var words = SplitWords(maplist);
-        var sb = new StringBuilder();
-        int mapcount = 0;
+        var pages = new List<StringBuilder> { new() };
+        int mapcount = 0, listed = 0;
         foreach (string w in words)
         {
-            string col = (mapcount % 2) != 0 ? "^2" : "^3";
-            if (sb.Length > 0) sb.Append(' ');
-            sb.Append(col).Append(w);
             mapcount++;
+            StringBuilder page = pages[^1];
+            if (page.Length + w.Length + 4 > MaplistPageMaxLen)
+            {
+                if (pages.Count >= MaplistReplyPages)
+                    continue; // out of pages: keep counting so the total stays honest
+                pages.Add(page = new StringBuilder());
+            }
+            if (page.Length > 0) page.Append(' ');
+            page.Append((mapcount % 2) == 0 ? "^2" : "^3").Append(w);
+            listed++;
         }
-        return $"^7Maps in list ({mapcount}): {sb}";
+        if (mapcount > listed)
+            pages[^1].Append(" ^7(").Append(mapcount - listed).Append(" not listed)");
+        return $"^7Maps in list ({mapcount}): {string.Join('\n', pages)}";
     }
+
+    /// <summary>QC <c>MAPLIST_REPLY_MAXLEN</c>: how much of the map list one reply line carries.</summary>
+    public const int MaplistPageMaxLen = 15000;
+
+    /// <summary>QC <c>MAPLIST_REPLY_PAGES</c>: how many such lines the reply may span.</summary>
+    public const int MaplistReplyPages = 10;
 
     /// <summary>
     /// QC <c>getlsmaps()</c>: "^7Maps available (N): &lt;colorized catalog&gt;" over every installed map that

@@ -1160,6 +1160,23 @@ public sealed partial class NetGame : Node3D
         // so it is safe on whichever thread the command was dispatched on.
         cmd.Replies.MapCatalogReply = Menu.MapList.LsmapsReply;
 
+        // The rotation's own catalog seams (QC fexists / MapInfo_CheckMap / MapInfo_ListAllowedMaps). Nothing
+        // wired these before, so the server took every g_maplist word on faith and an empty g_maplist — the
+        // default — produced an EMPTY rotation instead of "cycle everything installed". Same reads as the
+        // lsmaps reply above: VFS index lookups and the parsed-.mapinfo cache, safe on either thread.
+        // AllowedMaps is what Base's Maplist_Init regenerates when the list is empty or unusable; it stays a
+        // list here and is never flattened into the cvar, which is what overflowed upstream (xonotic-data#3002).
+        _serverWorld.Rotation.MapExists = m => _vfs is null || _vfs.Exists($"maps/{m}.bsp");
+        _serverWorld.Rotation.MapSupportsGametype = m =>
+        {
+            string gt = _serverWorld?.GameType?.NetName ?? "";
+            if (string.IsNullOrEmpty(gt))
+                return true;
+            var info = Menu.MapInfoCache.Get(m);
+            return info.Gametypes.Count == 0 || info.Gametypes.Contains(gt);
+        };
+        _serverWorld.Rotation.AllowedMaps = () => Menu.MapList.ForGametype(_serverWorld?.GameType?.NetName ?? "");
+
         // QC localcmd("\nsv_vote_gametype_hook_all\n") + localcmd("\nsv_vote_gametype_hook_", name, "\n") from
         // GameTypeVote_SetGametype: fires on the sim thread (ApplyGametypeSwitch → DriveEndOfMatchMapFlow), so the
         // handler runs synchronously on that thread — no RunOnSimThread wrapper needed on either path.

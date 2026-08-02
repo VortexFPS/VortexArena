@@ -470,25 +470,27 @@ features:
       - "common/mapinfo.qc:MapInfo_ListAllowedMaps"
       - "common/mapinfo.qc:MapInfo_ListAllAllowedMaps"
     port_refs:
-      - "src/VortexArena.Server/CommandReplies.cs:GetLsmaps (106-119)"
-      - "src/VortexArena.Server/GameWorld.cs:4273 (gametype-switch maplist: keeps current list, comment documents the gap)"
-    constants: []
+      - "src/VortexArena.Server/MapRotation.cs:AllowedMaps + Init (empty g_maplist = every map supporting the gametype)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetMaplist / GetLsmaps"
+      - "src/VortexArena.Server/GameWorld.cs:4453 (gametype-switch maplist reset clears g_maplist)"
+      - "game/net/NetGame.cs:1169-1178 (host wiring: MapExists / MapSupportsGametype / AllowedMaps → MapList)"
+    constants:
+      - { name: "MAPLIST_MAX/LSMAPS_MAX", base: "250", port: "250", match: true }
     status:
-      logic: partial
+      logic: faithful
       values: na
       timing: na
       presentation: faithful
       audio: na
       liveness: live
-    intended_divergence: false
-    divergence_rationale: null
-    gaps:
-      - "There is no full-catalog enumerate on the server, so both consumers degrade: (1) the lsmaps reply lists the g_maplist rotation words instead of every allowed installed map (CommandReplies.cs:102-105 documents it; colorization + count format faithful); (2) after a gametype vote with sv_vote_gametype_maplist_reset and no per-gametype list, Base regenerates g_maplist via MapInfo_ListAllowedMaps — the port keeps the current list (GameWorld.cs:4273, cross-ref sv-mapvoting.gametype_vote which records the same residual)."
-      - "getmaplist (the g_maplist reply) skips the per-word MapInfo_CheckMap filter (CommandReplies.cs:79) — consistent with check.checkmap being a stub."
+    intended_divergence: true
+    divergence_rationale: "Neither side serialises the full catalog into g_maplist any more. Base's MapInfo_ListAllowedMaps built one space-separated string, which QC caps at 16383 bytes — a big server got the list back truncated mid-name (xonotic-data#3002). The Base patch and the port both treat an empty g_maplist as 'every map that supports the current gametype' and keep the list in a buffer/List<string>; the string form survives only for the menu's map picker, where it is cut between names."
+    gaps: []
     verification:
-      - { kind: code, ref: "CommandReplies.cs:77-119 read; GameWorld.cs:4231/4273 comments; sv-mapvoting.yaml gametype_vote row records the maplist-reset residual.", result: pass }
+      - { kind: code, ref: "MapRotation.Init reads AllowedMaps() when g_maplist yields nothing usable and clears the cvar; NetGame.cs:1169-1178 wires the VFS/.mapinfo catalog; GameWorld.cs:4453 resets by clearing.", result: pass }
+      - { kind: test, ref: "ServerInfraTests.MapRotation_EmptyMaplist_UsesEveryAllowedMap / _UnusableMaplist_FallsBackAndClearsTheCvar / _ExplicitMaplistWins_OverTheFullCatalog; ServerClientCommandsTests.PrintMapList_EmptyMaplist_ListsTheFullCatalog / _HugeCatalog_IsCappedButCountsEverything.", result: pass }
     confidence: high
-    notes: "Lights up automatically once a server-side map catalog (enumerate + CheckMap) exists."
+    notes: "getmaplist still skips the per-word MapInfo_CheckMap filter for an explicit g_maplist (consistent with check.checkmap being a stub); the empty-list path is filtered because the catalog it reads already is."
 
   - id: mapinfo.metadata.title_author
     name: "Title/author/description derivation (title_sans_author separators, isRedundant titlestring, decolorize, SVQC worldspawn message/author fallback)"

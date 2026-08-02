@@ -370,6 +370,56 @@ public class ServerClientCommandsTests
     }
 
     [Fact]
+    public void PrintMapList_EmptyMaplist_ListsTheFullCatalog()
+    {
+        // An empty g_maplist is not an empty rotation — it means "every map that supports the current
+        // gametype" — so the reply lists what the rotation would actually cycle (xonotic-data#3002).
+        var world = NewWorld();
+        Cvars.Set("g_maplist", "");
+        world.Rotation.AllowedMaps = () => new[] { "boil", "dance", "stormkeep" };
+        CommandContext ctx = world.Commands.Execute("printmaplist", isServerConsole: true);
+        Assert.Contains("Maps in list (3)", ctx.Output);
+        Assert.Contains("stormkeep", ctx.Output);
+    }
+
+    [Fact]
+    public void PrintMapList_LongCatalog_IsPagedNotTruncated()
+    {
+        // QC maplist_reply[] paging: a list too long for one reply line is split over several, so every map
+        // is still shown. A count cap would silently hide maps, which is the shape of the #3002 bug.
+        var world = NewWorld();
+        Cvars.Set("g_maplist", "");
+        string[] catalog = Enumerable.Range(0, 3000).Select(i => $"map{i}").ToArray();
+        world.Rotation.AllowedMaps = () => catalog;
+        CommandContext ctx = world.Commands.Execute("printmaplist", isServerConsole: true);
+
+        Assert.Contains($"Maps in list ({catalog.Length})", ctx.Output);
+        Assert.DoesNotContain("not listed", ctx.Output);      // 3000 maps fit inside the page budget
+        Assert.Contains("map0 ", ctx.Output);                 // first
+        Assert.Contains($"map{catalog.Length - 1}", ctx.Output); // and last — nothing was dropped
+        foreach (string line in ctx.Output.Split('\n'))
+            Assert.True(line.Length <= CommandReplies.MaplistPageMaxLen + 64,
+                $"a reply line exceeded the page budget: {line.Length}");
+    }
+
+    [Fact]
+    public void PrintMapList_BeyondEveryPage_CountsWhatItCannotShow()
+    {
+        // Only when the list outruns every page does the reply report a remainder — and the total stays honest.
+        var world = NewWorld();
+        Cvars.Set("g_maplist", "");
+        int perPage = CommandReplies.MaplistPageMaxLen / 12;                   // ~"^3mapNNNNN " per entry
+        string[] catalog = Enumerable.Range(0, perPage * (CommandReplies.MaplistReplyPages + 4))
+            .Select(i => $"map{i:D6}").ToArray();
+        world.Rotation.AllowedMaps = () => catalog;
+        CommandContext ctx = world.Commands.Execute("printmaplist", isServerConsole: true);
+
+        Assert.Contains($"Maps in list ({catalog.Length})", ctx.Output);
+        Assert.Contains("not listed", ctx.Output);
+        Assert.Equal(CommandReplies.MaplistReplyPages, ctx.Output.TrimEnd('\n').Split('\n').Length);
+    }
+
+    [Fact]
     public void Rankings_NonRaceMode_HonestEmpty()
     {
         var world = NewWorld();

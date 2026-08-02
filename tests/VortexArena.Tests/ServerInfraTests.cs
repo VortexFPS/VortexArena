@@ -715,6 +715,57 @@ public class ServerInfraTests
         Assert.Equal(ballot.Count, new HashSet<string>(ballot).Count); // distinct
     }
 
+    [Fact]
+    public void MapRotation_EmptyMaplist_UsesEveryAllowedMap()
+    {
+        // QC Maplist_Init: an empty g_maplist means "every map that supports the current gametype". Base used
+        // to write those names back into the cvar, which truncated mid-name past 16383 bytes (xonotic-data#3002);
+        // neither side serialises the list any more, so the cvar must stay empty.
+        Cvars.Set("g_maplist", "");
+        Cvars.Set("g_maplist_shuffle", "0");
+        Cvars.Set("g_maplist_selectrandom", "0");
+        Cvars.Set("g_maplist_mostrecent", "");
+        var r = new MapRotation { AllowedMaps = () => new[] { "boil", "dance", "stormkeep" } };
+
+        Assert.Equal(3, r.Init("boil"));
+        Assert.Equal(new[] { "boil", "dance", "stormkeep" }, r.Buffer);
+        Assert.Equal("dance", r.GetNextMap());
+        Assert.Equal("", Cvars.String("g_maplist"));
+    }
+
+    [Fact]
+    public void MapRotation_UnusableMaplist_FallsBackAndClearsTheCvar()
+    {
+        // QC "Maplist contains no usable maps!": drop the list that yielded nothing playable and rotate the
+        // whole catalog instead, rather than keeping a list that costs a scan every intermission.
+        Cvars.Set("g_maplist", "gone_a gone_b");
+        Cvars.Set("g_maplist_shuffle", "0");
+        Cvars.Set("g_maplist_selectrandom", "0");
+        Cvars.Set("g_maplist_mostrecent", "");
+        var r = new MapRotation
+        {
+            MapExists = m => m == "boil" || m == "dance",
+            AllowedMaps = () => new[] { "boil", "dance" },
+        };
+
+        Assert.Equal(2, r.Init("boil"));
+        Assert.Equal(new[] { "boil", "dance" }, r.Buffer);
+        Assert.Equal("", Cvars.String("g_maplist"));
+    }
+
+    [Fact]
+    public void MapRotation_ExplicitMaplistWins_OverTheFullCatalog()
+    {
+        Cvars.Set("g_maplist", "boil dance");
+        Cvars.Set("g_maplist_shuffle", "0");
+        Cvars.Set("g_maplist_mostrecent", "");
+        var r = new MapRotation { AllowedMaps = () => new[] { "boil", "dance", "stormkeep", "solarium" } };
+
+        Assert.Equal(2, r.Init("boil"));
+        Assert.Equal(new[] { "boil", "dance" }, r.Buffer);
+        Assert.Equal("boil dance", Cvars.String("g_maplist"));
+    }
+
     // ========================================================================================== timeout
 
     [Fact]

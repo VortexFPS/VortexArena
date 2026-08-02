@@ -26,6 +26,12 @@ public sealed class MapRotation
     /// <summary>Does the map support the current gametype? (QC <c>MapInfo_CheckMap</c>). Default true.</summary>
     public Func<string, bool> MapSupportsGametype { get; set; } = static _ => true;
 
+    /// <summary>
+    /// Every installed map that supports the current gametype (QC <c>MapInfo_AllowedMapsToBuffer</c>), used
+    /// when <c>g_maplist</c> is empty. Default: none — a host with the asset layer wires the real catalog.
+    /// </summary>
+    public Func<IReadOnlyList<string>> AllowedMaps { get; set; } = static () => Array.Empty<string>();
+
     public MapRotation(int seed = 0x5EED) => _rng = new Random(seed);
 
     /// <summary>Reseed the shuffle/random RNG (determinism for headless runs/tests).</summary>
@@ -49,6 +55,12 @@ public sealed class MapRotation
     /// the gametype), optionally shuffling (<c>g_maplist_shuffle</c>), and set the cursor to the current map's
     /// position (<c>g_maplist_index</c>). <paramref name="currentMap"/> is the map running now (so the cursor
     /// resumes after it). Returns the buffer size.
+    ///
+    /// <para>An empty <c>g_maplist</c> means "every map that supports the current gametype"
+    /// (<see cref="AllowedMaps"/>). Base used to write those names back into the cvar, which broke on servers
+    /// whose full list exceeded the 16383-byte QC string limit — the list came back truncated mid-name
+    /// (xonotic-data#3002) — so neither side serialises it any more: the rotation buffer holds one map per
+    /// entry and the cvar stays empty.</para>
     /// </summary>
     public int Init(string currentMap)
     {
@@ -58,6 +70,18 @@ public sealed class MapRotation
         foreach (string m in list.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             if (MapExists(m) && MapSupportsGametype(m) && !maps.Contains(m))
                 maps.Add(m);
+
+        if (maps.Count == 0)
+        {
+            // QC Maplist_Init's "Maplist contains no usable maps!" fallback: drop a list that turned out to
+            // hold nothing playable (so it can't keep costing a scan every intermission) and rotate through
+            // the whole catalog instead. Already filtered by gametype, which is what MapCheck(_, 2) tests.
+            if (!string.IsNullOrEmpty(list))
+                Cvars.Set("g_maplist", "");
+            foreach (string m in AllowedMaps())
+                if (!maps.Contains(m))
+                    maps.Add(m);
+        }
 
         if (Cvars.Bool("g_maplist_shuffle"))
         {

@@ -4408,8 +4408,8 @@ public sealed class GameWorld
     /// QC <c>GameTypeVote_SetGametype</c>: apply the gametype switch chosen by the gametype vote. Sets the
     /// <c>gametype</c> cvar so the next map boots with the voted gametype. When <c>sv_vote_gametype_maplist_reset</c>
     /// is set and a per-gametype maplist cvar (<c>sv_vote_gametype_&lt;name&gt;_maplist</c>) is configured, rewrites
-    /// <c>g_maplist</c> with that value. If the cvar is not set but reset is requested and the port knows the
-    /// gametype, the existing <c>g_maplist</c> is kept (the port has no full MapInfo_ListAllowedMaps enumerate).
+    /// <c>g_maplist</c> with that value; with no per-gametype list it clears <c>g_maplist</c>, which
+    /// <see cref="MapRotation.Init"/> reads as "every map that supports the current gametype".
     ///
     /// <para>Also fires <see cref="VortexArena.Server.Commands.GameTypeVoteHookHandler"/> for
     /// <c>sv_vote_gametype_hook_all</c> and <c>sv_vote_gametype_hook_&lt;name&gt;</c> (QC <c>localcmd</c>).</para>
@@ -4450,8 +4450,13 @@ public sealed class GameWorld
         {
             Cvars.Set("g_maplist", perGtMaplist);
         }
-        // else: sv_vote_gametype_maplist_reset is set but no per-gametype list → keep the current g_maplist
-        // (the port has no full MapInfo_ListAllowedMaps enumerate to generate a fresh list).
+        else if (Cvars.Bool("sv_vote_gametype_maplist_reset"))
+        {
+            // No per-gametype list, but a reset was asked for: clear g_maplist, which MapRotation.Init reads
+            // as "every map that supports the current gametype" — the list Base's MapInfo_ListAllowedMaps
+            // regenerated here, minus the round trip through a cvar it no longer fits in (xonotic-data#3002).
+            Cvars.Set("g_maplist", "");
+        }
     }
 
     /// <summary>

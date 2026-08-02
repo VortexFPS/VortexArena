@@ -43,6 +43,12 @@ smoke: **docs/RUNNING.md**.
 
 ## House rules
 
+- **Never** push a commit, open a merge request, or post a comment/issue on the Xonotic GitLab
+  (`gitlab.com/xonotic`, including forks of it) without showing the exact text and target first and
+  getting an explicit yes for that specific action. Building the branch, the patch file and the draft
+  MR text locally is expected; only the outbound step is gated, and approval to push is not approval
+  to open the MR. Upstream conventions live in `../Base/CONTRIBUTING.md` (branch `myname/mychange`,
+  GPLv3-or-later, Allman braces, no compiler warnings).
 - Any new per-frame system ships with a `Prof.Sample` scope (registered in
   `FrameProfiler.TopLevelNodeScopes`) in the same change.
 - Redirected-stdout debug logs go to `_scratch/` (gitignored), not the repo root.

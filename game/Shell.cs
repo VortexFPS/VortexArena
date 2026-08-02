@@ -226,6 +226,13 @@ public partial class Shell : Node
             vmaps.RegisterCommands(MenuState.Interp!);
         }
 
+        // `r_missingtextures [map] [-v]` — which of a map's textures will not render. Client-side and local like
+        // the vmap commands: it audits this install's search path, so it never routes to the server. The no-arg
+        // form needs the map the client is in, which is resolved per invocation (no match exists yet at boot).
+        if (MenuState.SharedAssets is { } sharedAssets)
+            Loaders.MissingTextures.RegisterCommand(
+                MenuState.Interp!, sharedAssets, () => _netGame?.CurrentMap ?? string.Empty);
+
         // Editor view aids: the world-space alignment grid's cvars + its `editor_grid` / `editor_grid_size`
         // commands. Client-side and bindable; the grid node itself lives in the match scene (NetGame).
         Vmap.EditorGrid.RegisterDefaults(MenuState.Cvars);

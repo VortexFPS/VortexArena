@@ -347,6 +347,11 @@ public static class MapLoader
                  $" glow={nGlow} normalMapped={nNormal} (deluxe={deluxe}, internalPages={bsp.Lightmaps.Length}" +
                  $", atlas={(atlas is not null ? $"{atlas.PageCount}p" : "none")}, cellSize={cellSize:0}, cells={cellCount}, surfaces={drawSurfaces})");
 
+        // One line when a texture the map references will not render — the port's answer to DP's per-texture
+        // `could not load texture` spam, which loses the count and says nothing about a shader whose stage
+        // image is missing. Silent on a clean map; `r_missingtextures` prints the detail.
+        MissingTextures.LogLoadSummary(bsp, assets, mapName);
+
         // Build the warpzone/portal "window" meshes (no-op when the map has none).
         BuildPortalSurfaces(root, bsp, assets, mapName, deluxe, portalFaces, decorFaces);
 
@@ -1547,7 +1552,8 @@ public static class MapLoader
             if (ws.TryGetValue("message", out string? m) && m is not null)
                 message = m;
 
-            sky = FirstNonEmpty(ws, "sky", "_skybox", "skyname", "skybox");
+            // One key list, shared with the skybox loader and the missing-texture audit (SkyboxPaths).
+            sky = SkyboxPaths.WorldspawnSky(bsp);
 
             if (ws.TryGetValue("gravity", out string? g) && g is not null)
             {
@@ -1637,16 +1643,6 @@ public static class MapLoader
                 return ent;
         }
         return bsp.Entities[0];
-    }
-
-    private static string FirstNonEmpty(IReadOnlyDictionary<string, string> dict, params string[] keys)
-    {
-        foreach (string k in keys)
-        {
-            if (dict.TryGetValue(k, out string? v) && !string.IsNullOrWhiteSpace(v))
-                return v;
-        }
-        return string.Empty;
     }
 
     // -------------------------------------------------------------------------------------------------

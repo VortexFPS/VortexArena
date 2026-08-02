@@ -333,6 +333,16 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   the `VORTEX_USERDIR` env var to an absolute path to override it (tests/CI use this to keep `~` clean).
   `MenuState.Boot` does a one-time copy of an existing `user://` `config.cfg`/`settings.cfg`/`favorites.cfg`
   into `~/XonData` on first run, so an upgrade keeps the player's saved prefs.
+- **User gamedir — where a player's own content goes.** **`~/XonData/data/`** (`UserPaths.GameDir`, created on
+  first boot together with its `maps/` subfolder) is mounted as a second content root, *after* the shipped one
+  and therefore **above** it — DP's `~/.xonotic/data`. Same layout as the shipped tree: map packs in
+  `~/XonData/data/maps/*.pk3`, anything else as a loose `.pk3`/`.pk3dir` at the top. A map dropped there shows
+  up in the create-game maplist and the host loads it, with no repo or install edit.
+  - Because the user root outranks the shipped one, a user pack **can shadow core content** — that is what
+    makes an override pack work, and it is DP's behaviour, but a pack carrying e.g. its own
+    `xonotic-client.cfg` or `textures/` will win over the shipped copy.
+  - Nothing is cached across the boundary: `MapList` enumerates `maps/*.bsp` off the search path, so shipped
+    and user maps are one list.
 - **In-game:** Escape opens the pause menu (`Shell` pauses the tree; Disconnect returns to the main menu).
 
 **Boot / capture flags** (on the windowed run):
@@ -384,7 +394,55 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - **Maps:** the **32 pinned compiled maps** install as one `.pk3` each into `data/maps/` via `tools/data/fetch-maps.py`
   (downloaded from the `xonotic-0.8.6.zip` release; `xonotic-20230620-nexcompat.pk3` adds the Nexuiz-compat set).
   `maps/_init/_init.bsp` is still present (inside the maps pk3) as the lightweight placeholder. To add more,
-  drop another `*.pk3` into `data/maps/` — `MountGameDir` picks it up automatically.
+  drop another `*.pk3` into `data/maps/` — `MountGameDir` picks it up automatically. **A player** adds maps to
+  `~/XonData/data/maps/` instead (the user gamedir, above), which needs no write access to the install.
+- **`fs_rescan`** (DP `FS_Rescan_f`) re-reads the content search path *without a restart*: drop a `.pk3` into
+  either gamedir, run `fs_rescan`, and the map is in the maplist and loadable. Registered on the shared
+  interpreter (console, a bind, `server.cfg`) **and** as a server-console/rcon command, so a dedicated operator
+  can add a pack and `gotomap` onto it live. It prints
+  `N mounts (A added, R removed, U reused), M maps, T ms`.
+  - Unchanged packs are **carried over, not re-opened** — re-reading a stock tree's packs (central directory
+    plus the symlink pass, ~974 entry reads for `shared.pk3` alone) would be seconds of disk work. What is
+    left is a re-walk of the directory mounts plus the shader re-parse: **~90 ms on the stock tree**
+    (measured 2026-08-01, 42 mounts / 32 packs reused / 10 directory mounts rebuilt). It is synchronous, and
+    on a `sv_threaded` host it runs on the sim thread — hence the timing in the output.
+  - It refreshes where files are *found*, not what is already loaded (same line DP draws): the shader table and
+    the menu's map/preview caches are rebuilt, but textures/models already decoded this session keep their
+    loaded copies until a map change or `vid_restart`.
+  - Deleting a mounted `.pk3` works on Windows too (the archives are opened `FILE_SHARE_DELETE`); the name is
+    released when the rescan disposes the mount. Overwriting one **in place** while it is mounted still is not
+    possible on Windows — delete, `fs_rescan`, then copy the replacement.
+- **Console command dispatch — the `commands.cfg` alias chain.** Nearly every player-facing verb is an alias:
+  `alias lsmaps "qc_cmd_svcmd lsmaps ${* ?}"`, where each `qc_cmd_*` is itself an alias resolving — via the
+  `if_client`/`if_dedicated` pair in `xonotic-common.cfg` — to one of **four prefix verbs**:
+
+  | alias prefix | resolves to | meaning |
+  |---|---|---|
+  | `qc_cmd_cmd`, `qc_cmd_svcmd` | `cmd <verb>` | client→server (DP `Cmd_ForwardToServer`) |
+  | `qc_cmd_sv` | `sv_cmd <verb>` | server/admin command |
+  | `qc_cmd_cl`, `qc_cmd_svcl` | `cl_cmd <verb>` | client-side command |
+  | `qc_cmd_svmenu` | `menu_cmd <verb>` | front-end command |
+
+  In QC those four are registered commands. **They did not exist in the port**, so all ~158 aliases expanded
+  correctly and then died on the last hop — reaching the router as an unknown `cmd <verb>` line and coming
+  back `Unknown command`. `ConsoleOverlay.RegisterHostCommands` now supplies that hop, which is what makes
+  `printmaplist`, `records`, `rankings`, `ladder`, `teamstatus`, `info`, `time`, `cvar_changes`, `gotomap`,
+  `shuffleteams` and the rest reachable from the client console at all. `CommandDispatchTests` asserts the
+  chain against the shipped cfgs — including a sweep proving no alias is stranded.
+  - `sv_cmd` is deliberately **not** forwarded to a remote server: the tail alone would hit that server's
+    client-privilege gate and be rejected, so a round trip would only turn an honest local message into a
+    confusing remote one.
+  - `cl_cmd` dispatches only *registered* names. Registered names outrank aliases, so re-entering the
+    interpreter for one cannot loop back through the alias that sent us there — `help` is literally
+    `"cl_cmd help; cmd help"`.
+- **`lsmaps [gametype]`** lists the installed maps (QC `CommonCommand_lsmaps`), and **answers with no server
+  running**: it is registered client-side (ahead of its alias), so at the menu it prints this install's
+  catalog off the search path instead of the "no server — start a match first" hint. With a game live the
+  server still owns the answer (forwarded as the bare verb), and a listen/dedicated host feeds its reply from
+  the *same* formatter (`MapList.LsmapsReply` → `CommandReplies.MapCatalogReply`), so the two cannot disagree.
+  - Offline the list is unfiltered — QC's gametype filter (`MapInfo_CheckMap`) is a property of a *running*
+    gametype, and there is none. Pass one to filter: `lsmaps ctf`.
+  - **`maps`** and **`listmaps`** are aliases for it (`vortex-client.cfg`), arguments included: `maps ctf`.
 - **Sounds** load from the mounted content (`sound/*.ogg|wav`) via `AssetLoader.LoadSound` (wired into
   `ClientWorld.AudioLoader`); the old `res://sound/<sample>.ogg` convention remains as a fallback. The same
   loader feeds **announcer voices** (`HudNotifications.AudioLoader` → `sound/announcer/<voice>/<snd>.ogg`).
@@ -409,6 +467,23 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   means the VFS didn't mount the data dir (check the `--data` path). The gameplay layer's ~461 live `GetFloat`
   reads (movement physics, regen, gametype limits, mutator/monster balance) depend on this — a low number = stale
   defaults. Unit-test the parser headlessly via `dotnet test` (`ConfigTests.cs`, incl. 4 real-data assertions).
+- **Missing map textures:** `r_missingtextures` in the console lists every texture the loaded map references that
+  will not render, worst first, with the face count each one wears. `r_missingtextures <map>` audits any map in the
+  search path *without loading it* (useful before shipping a pack); `-v` also lists the ones that are fine. A map
+  with anything missing announces itself at load with one `[MapLoader] '<map>': N textures missing (M faces
+  affected)` warning; at `developer 1` a clean map says so too, so "audited, all present" is distinguishable from
+  "the audit never ran". **This is strictly more than DarkPlaces reports** — DP prints `could not load texture` only
+  for a texture with *no shader at all*, and is silent when a `.shader` resolves but one of its stage images does
+  not (`R_SkinFrame_LoadExternal(…, complain: false)`), which is exactly what a pk3 shipped without its texture
+  folder looks like. The audit walks stages, so it names the missing *file* under the shader that wanted it.
+  **The skybox is checked too** — it is invisible to a surface listing (sky faces draw nothing; the box is drawn
+  around the view), so a map whose every wall resolves can still render a blank void overhead. The report names
+  the resolved skybox, the suffix convention it matched, and which of the six faces are absent. Name resolution
+  and the suffix/path tables live in `SkyboxPaths` and are shared with `SkyboxLoader`, so the audit's verdict is
+  a statement about what the loader will actually do rather than a parallel guess at it. Note the whole thing
+  only runs on the client render path — a `--headless` host skips render geometry entirely (dedicated-slim), so
+  add `--cvar sv_dedicated_slim 0` to exercise it in a headless run. Analysis + its unit tests:
+  `MapTextureAudit` / `MapTextureAuditTests` (the real-data test scans every installed map).
 - **Managed exceptions** surface as a `WARNING:`/`ERROR:` banner followed by a `at VortexArena.…` C# stack trace in
   the console-exe stdout — grep `at VortexArena\.` to find the failing method:line.
 - **Visual capture (verified 2026-06):** an agent/CI can capture a real frame and *look at it*. `Main` accepts

@@ -27,27 +27,9 @@ namespace VortexArena.Game.Loaders;
 /// </summary>
 public static class SkyboxLoader
 {
-    // DP box side order: 0=+X 1=-X 2=+Y 3=-Y 4=+Z 5=-Z (r_sky.c skyboxvertex3f). suffix[conv][side]
-    // copied verbatim from r_sky.c:27-53 (the suffix[3][6] table).
-    private static readonly string[][] Suffixes =
-    {
-        new[] { "px", "nx", "py", "ny", "pz", "nz" },
-        new[] { "posx", "negx", "posy", "negy", "posz", "negz" },
-        new[] { "rt", "lf", "bk", "ft", "up", "dn" },
-    };
-
-    // (flipX, flipY, flipDiagonal) per side, per convention — the third column of r_sky.c's suffix table.
-    // Only the rt/lf/... convention flips; px/nx and posx/negx are stored already box-aligned.
-    private static readonly (bool Fx, bool Fy, bool Diag)[][] Flips =
-    {
-        new[] { (false, false, false), (false, false, false), (false, false, false),
-                (false, false, false), (false, false, false), (false, false, false) },
-        new[] { (false, false, false), (false, false, false), (false, false, false),
-                (false, false, false), (false, false, false), (false, false, false) },
-        new[] { (false, false, true),  (true,  true,  true),  (false, true,  false),
-                (true,  false, false), (false, false, true),  (false, false, true) },
-    };
-
+    // The DP suffix/flip tables and the per-face path forms now live in VortexArena.Formats
+    // (SkyboxPaths) so this loader and MapTextureAudit's skybox check probe the same files — see that
+    // class for why they cannot be allowed to diverge.
     private static readonly string[] Uniforms = { "face_px", "face_nx", "face_py", "face_ny", "face_pz", "face_nz" };
 
     /// <summary>
@@ -69,22 +51,7 @@ public static class SkyboxLoader
     /// otherwise the first sky shader's <c>skyParms</c> far box (DP default). Empty when neither exists.
     /// </summary>
     public static string ResolveSkyName(BspData bsp, AssetSystem assets)
-    {
-        // worldspawn override (DP CL_ParseEntityLump: a "sky"/"skyname" key beats the shader default).
-        string ws = MapLoader.BuildWorldspawn(bsp).Sky;
-        if (!string.IsNullOrWhiteSpace(ws))
-            return ws.Trim();
-
-        // shader default: first surface whose shader is a sky shader carrying a skyParms far box.
-        foreach (BspTexture t in bsp.Textures)
-        {
-            ShaderDef? def = assets.GetShader(t.ShaderName);
-            string? fb = def?.SkyParms?.FarBox;
-            if (def is not null && def.IsSky && !string.IsNullOrWhiteSpace(fb))
-                return fb!.Trim();
-        }
-        return string.Empty;
-    }
+        => SkyboxPaths.ResolveName(bsp, assets.GetShader);
 
     private static Sky? Build(string name, AssetSystem assets)
     {
@@ -110,15 +77,15 @@ public static class SkyboxLoader
     // reoriented to the canonical box layout the shader samples.
     private static Image[]? LoadFaces(string name, AssetSystem assets)
     {
-        for (int conv = 0; conv < Suffixes.Length; conv++)
+        for (int conv = 0; conv < SkyboxPaths.Suffixes.Count; conv++)
         {
-            var faces = new Image[6];
+            var faces = new Image[SkyboxPaths.Sides];
             bool all = true;
-            for (int side = 0; side < 6; side++)
+            for (int side = 0; side < SkyboxPaths.Sides; side++)
             {
-                Image? img = LoadFace(name, Suffixes[conv][side], assets);
+                Image? img = LoadFace(name, SkyboxPaths.Suffixes[conv][side], assets);
                 if (img is null) { all = false; break; }
-                var (fx, fy, diag) = Flips[conv][side];
+                var (fx, fy, diag) = SkyboxPaths.Flips[conv][side];
                 faces[side] = ApplyMux(img, fx, fy, diag);
             }
             if (all)
@@ -127,14 +94,15 @@ public static class SkyboxLoader
         return null;
     }
 
-    // DP R_LoadSkyBox path forms: the "_" separator only on the first form (so "env/foo/foo" + "_" + "rt"
-    // hits env/foo/foo_rt, and a name already ending in "_" hits via the second form). Extension search is
+    // The candidate path forms are SkyboxPaths.FaceCandidates (DP R_LoadSkyBox); the extension search is
     // handled by VirtualFileSystem.ResolveImage inside LoadImage.
     private static Image? LoadFace(string name, string suffix, AssetSystem assets)
-        => assets.LoadImage(name + "_" + suffix)
-        ?? assets.LoadImage(name + suffix)
-        ?? assets.LoadImage("env/" + name + suffix)
-        ?? assets.LoadImage("gfx/env/" + name + suffix);
+    {
+        foreach (string candidate in SkyboxPaths.FaceCandidates(name, suffix))
+            if (assets.LoadImage(candidate) is { } img)
+                return img;
+        return null;
+    }
 
     /// <summary>
     /// Reorient a face exactly as DP's <c>Image_CopyMux</c> does (image.c): <paramref name="diag"/> transposes

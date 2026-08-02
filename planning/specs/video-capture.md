@@ -63,7 +63,7 @@ before the first mix). Godot's launch hooks:
   `mjpeg_quality`, `mix_rate`, `speaker_mode`, `disable_vsync`. *(Confirm exact setting keys against Godot 4.6 at
   implementation — names are stable across 4.x but verify before relying on them.)*
 - **Runtime:** `Engine.SetWriteMoviePath(path)` exists, but mid-session enabling is **not** the supported-for-audio
-  path. We use it only for the "capture live play, video-only acceptable" convenience case (§6), and relaunch for
+  path. We use it only for the "capture live play, video-only acceptable" convenience case (§3c), and relaunch for
   the canonical demo-to-video path.
 
 ---
@@ -97,7 +97,30 @@ The relaunched process:
 This mirrors DP, where enabling capture dedicates the play session to producing the file. It is the **robust** path:
 launch-time Movie Maker mode + a deterministic playhead = bit-reproducible, audio-synced output.
 
-### 3b. Convenience: capture live play (video acceptable, audio best-effort)
+### 3b. Sub-range: capture one bookmark instead of the whole demo
+
+The same relaunch, bounded to an interval. This is what "Export clip" on a demo bookmark
+([`demo-replay-and-spectator.md`](demo-replay-and-spectator.md) §17.6) runs, and the reason a 20-minute
+always-on recording is worth keeping:
+
+```
+--playdemo match.xgd --capture-video frag.mp4 --capture-bookmark 3
+--playdemo match.xgd --capture-video frag.mp4 --capture-range 412.5,427.5
+```
+
+- `--capture-range <start>,<end>` — demo seconds. The hook seeks `DemoPlayback` to `start` before the first
+  captured frame and quits the tree at `end`, so the movie finalizes there instead of at the demo's duration.
+- `--capture-bookmark <id>` — resolves the marker against the demo's marker trailer + `.xgb` sidecar and derives
+  the range as `[tick − pre, tick + post]` from `demo_bookmark_pre` / `demo_bookmark_post` (or the marker's own
+  override). Sugar over `--capture-range`, so the cvars are honored without the menu recomputing them. An
+  unknown id is an error, never a silent whole-demo capture.
+
+The initial seek happens **before** capture starts, not on a captured frame, so the transient clear and
+loop-sound reconstruction ([`demo-replay-and-spectator.md`](demo-replay-and-spectator.md) §7) settle before the
+first frame is written. Everything else (fixed FPS, audio lockstep, `--capture-view`, the transcode in §4) is
+identical to 3a.
+
+### 3c. Convenience: capture live play (video acceptable, audio best-effort)
 
 A console command / keybind toggles `Engine.SetWriteMoviePath` at runtime for capturing live gameplay without a
 relaunch. Documented caveat: runtime-enabled capture may not capture audio cleanly (the driver swap) and the fixed
@@ -159,12 +182,15 @@ window-independent resolution and is a §8 follow-up if needed.
 
 **Touched:**
 - `Main.cs` — parse `--capture-video <path>`, `--capture-fps N`, `--capture-size WxH`, `--capture-format F`,
-  `--capture-view V`; attach `VideoCaptureHook`. (Mirrors the existing `--screenshot` parsing.)
+  `--capture-view V`, `--capture-range S,E`, `--capture-bookmark ID`; attach `VideoCaptureHook`. (Mirrors the
+  existing `--screenshot` parsing.)
 - `game/menu/dialogs/DialogMediaDemo.cs` — "Record to video" → a small settings dialog (FPS/resolution/format) →
   **relaunch** the engine with the capture flags for the selected demo; show progress; on child exit, run the
-  optional transcode. (See `demo-replay-and-spectator.md` §10 for the playback side of this dialog.)
+  optional transcode. The same dialog serves a bookmark's "Export clip" with the range pre-filled. (See
+  `demo-replay-and-spectator.md` §10 for the playback side of this dialog, §17.6 for the clip side.)
 - `src/XonoticGodot.Server/DemoPlayback.cs` — expose a "playhead reached duration" signal/callback the capture hook
-  consumes to end an unattended capture. (Already needed by replay UI to show "end of demo".)
+  consumes to end an unattended capture (already needed by replay UI to show "end of demo"), plus the same
+  callback at an arbitrary end tick for §3b, and marker lookup for `--capture-bookmark`.
 - `../../docs/RUNNING.md` — document `--capture-video` next to `--screenshot` once it lands.
 
 The recording (`.xgd` demo writing) and playback live entirely in `demo-replay-and-spectator.md`; this spec owns only
@@ -179,6 +205,9 @@ Video capture is inherently I/O + GPU, so tests are thin and the proof is manual
 - **Settings parse (headless, `XonoticGodot.Tests`):** flags/cvars → `VideoCaptureSettings` (fps/size/format/ffmpeg/
   dir), incl. `0×0 → window-size` and format-needs-ffmpeg gating.
 - **ffmpeg command build:** `(settings, in.avi) → argv` for mp4 and ogv; absent-ffmpeg → "keep AVI, log note" path.
+- **Range resolution (§3b):** `--capture-range` parses to start/end ticks; `--capture-bookmark` resolves to the
+  same pair through the pre/post rule and clamps at both ends of the demo; an unknown marker id fails with a
+  named error rather than capturing the whole demo.
 - **Manual (the real proof):** `--playdemo <bot-match.xgd> --capture-video out.mp4 --capture-fps 60 --capture-size 1920x1080`
   on a recorded `--host` bot match → produces a smooth, audio-synced file; verify even frame timing by capturing on a
   deliberately throttled run (output must be identical length/cadence to an un-throttled run). Spot-check a frame via
@@ -206,6 +235,9 @@ Video capture is inherently I/O + GPU, so tests are thin and the proof is manual
   `--capture-format mp4` yields a compressed file when ffmpeg is present.
 - **Phase V2 — Menu integration.** `DialogMediaDemo` "Record to video" settings dialog (FPS/resolution/format) +
   relaunch + progress + post-transcode. *Deliverable:* export a demo to video entirely from the menu.
+- **Phase V2b — Sub-range capture.** `--capture-range` / `--capture-bookmark` + seek-before-capture + quit-at-end
+  (§3b). Pairs with the bookmark work in `demo-replay-and-spectator.md` §17. *Deliverable:* a bookmark exports as
+  a ~15-second clip instead of a 20-minute file.
 - **Phase V3 — (optional) live capture + direct-ffmpeg writer.** Runtime toggle for live play; the pipe-to-ffmpeg
   writer. *Deliverable:* short live clips without a relaunch; no intermediate AVI.
 
@@ -216,7 +248,7 @@ V0/V1 can be prototyped against the live `--host` session in the meantime.
 
 ## 10. Risks & open questions
 
-- **Audio sync under runtime-enable (6/3b)** — the mid-session driver swap is the fragile case; the relaunch path
+- **Audio sync under runtime-enable (§6/3c)** — the mid-session driver swap is the fragile case; the relaunch path
   (3a) avoids it. Keep the menu on relaunch.
 - **Window-size capture** — capturing at a resolution ≠ the display requires resizing the window (or a SubViewport).
   Fine for the first cut (set window size at launch); the SubViewport route is the polished follow-up (§8).

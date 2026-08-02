@@ -6,8 +6,9 @@ record/playback), `qcsrc/server/demo` glue, `qcsrc/client/main.qc` + `view.qc` (
 `spectatee_status`), `qcsrc/menu/xonotic/dialog_media_demo.qc`.
 
 > **Status:** ☐ not started — design approved (refined 2026-06-10: always-on auto-record by default on both client
-> and server; menu = playback + video export). Implementation phased below. **Video capture** (the fixed-FPS
-> "perfect" render-to-file) is a companion spec: [`video-capture.md`](video-capture.md).
+> and server; menu = playback + video export; extended 2026-08-01 with **bookmarks**, §10). Implementation phased
+> below. **Video capture** (the fixed-FPS "perfect" render-to-file) is a companion spec:
+> [`video-capture.md`](video-capture.md).
 
 ---
 
@@ -185,6 +186,7 @@ Frame stream  (one record per recorded tick)
 Trailer / index
   keyframe index: [tick → byte offset]   (O(log n) seek)
   loop-sound index: derived start/stop intervals per (sourceNetId, channel)  (see §7)
+  bookmarks: [id, tick, label, authorNetId, preSeconds, postSeconds]  (see §10)
 ```
 
 Notes:
@@ -279,7 +281,7 @@ enum SpectatorMode { FreeFly, Follow, Director }
   always, that player's first-person.
 
 1. **FreeFly** — the existing observer free-flight. Camera = the predicted observer eye (the viewer's own live
-   spectator body). Nothing new beyond confirming the client predicts the `MOVETYPE_FLY` observer path (see §11).
+   spectator body). Nothing new beyond confirming the client predicts the `MOVETYPE_FLY` observer path (see §15).
 2. **Follow** — pick a recorded player net id; camera tracks that entity's interpolated origin.
    - **First-person:** eye at the target's origin + eye height, oriented by the target's **view angles**.
    - **Chase (3rd-person):** reuse [`FirstPersonView`](../../game/client/FirstPersonView.cs)'s existing chase-cam.
@@ -303,7 +305,8 @@ enum SpectatorMode { FreeFly, Follow, Director }
   (−1, 0, 0.25, 0.5, 1, 2, 4), step-frame, jump-to-keyframe, and event markers on the timeline (kills/captures
   from the notification stream). Visible in replay only.
 - **Keybinds** (replay-only context): space = pause/play, ←/→ = seek ±5 s, [ / ] = speed down/up, comma/period =
-  step frame, F1/F2/F3 = camera mode, mouse-wheel or Tab = cycle follow target.
+  step frame, F1/F2/F3 = camera mode, mouse-wheel or Tab = cycle follow target, PageUp/PageDown = previous/next
+  bookmark (§10.5).
 - Dragging the bar issues a **seek**; the speed selector sets `speed`. For a **local single viewer**, these drive
   `DemoPlayback` directly. For a **shared replay** (multiple viewers, one timeline), time control is a server-side
   admin action over the existing `ClientCommand` channel (`demo_*` commands); camera mode stays per-viewer. Build
@@ -311,7 +314,125 @@ enum SpectatorMode { FreeFly, Follow, Director }
 
 ---
 
-## 10. Menu integration & launch path
+## 10. Bookmarks (mark it live, review and clip it later)
+
+A **bookmark** is one named point in time inside a demo. You take one with a keypress while the thing is
+happening; later the replay timeline shows it, seeking to it starts playback a few seconds *before* it, and
+one menu action exports that window to a video file. Without it, finding a 4-second frag inside a 20-minute
+always-on recording (§4) means scrubbing roughly 86,000 recorded ticks by hand, so the recordings pile up unwatched.
+
+No DP/QC analogue: Xonotic has `cl_autodemo` and the auto-delete/keep bits ([`DemoControl.KeepDemo`](../../src/VortexArena.Server/DemoControl.cs)),
+but no in-demo markers. This is ours, so there is no parity constraint on the format or the bind.
+
+### 10.1 Taking one during a match
+
+`demo_bookmark` is a console command, bound like any other action
+([`KeyBindings.Actions`](../../game/menu/KeyBindings.cs) Misc group, id `demo_bookmark`, label "Bookmark this
+moment"). Default bind: **F11**, the one free function key in
+[`binds-xonotic.cfg`](../../data/core.pk3dir/binds-xonotic.cfg) and next to `F12 screenshot`, which is the same
+reflex ("keep what just happened"). One press marks two files:
+
+1. **Client demo** — the client's `DemoRecorder` stamps a bookmark at the client's current server time.
+2. **Server demo** — the client sends a `demo_bookmark` request over the existing `ClientCommand` channel; the
+   server stamps a bookmark into its own recording, attributed to that client's net id.
+
+Both, because the two files answer different questions about the same 15 seconds: the client demo replays what
+that player saw, the server demo lets anyone free-cam or follow anybody else through it (§8). Marking only one
+of them means the good angle is the one you don't have.
+
+- `sv_demo_bookmark 0` makes the server ignore the request (a public server that doesn't want clients writing
+  into its recording). The client demo is unaffected, and the client is told, so the confirmation doesn't lie.
+- Presses within `demo_bookmark_min_interval` of the previous one are dropped, on both sides. A held key or a
+  mashed key produces one bookmark, not forty.
+- Observers and spectators bookmark exactly like players; nothing on the path needs a player body. Bots never do.
+- With `demo_bookmark_notify 1` the client prints a HUD line naming the mark and its match time
+  (`Bookmark 3 — 07:42`) so you know it landed without leaving the fight.
+
+### 10.2 Taking one while watching a replay
+
+Same command, different clock: in replay mode the bookmark is stamped at the **playhead**, not at wall-clock
+time, and no pre-roll compensation applies (§10.4) because you can scrub to the exact frame first. This is how a
+bookmark gets added to a demo recorded by somebody else, and how a match's worth of marks gets curated down to
+the three worth exporting.
+
+### 10.3 Where bookmarks are stored
+
+Two places, because a `.xgd` is written once at a match boundary and never rewritten (§4):
+
+| Origin | Storage |
+|---|---|
+| Taken while recording | The demo's **trailer** (§5), written at finalize next to the keyframe index. |
+| Taken, renamed, retimed, or deleted during playback | A **sidecar** `<demo>.xgb` beside the `.xgd`. |
+
+The reader merges the two at load, sidecar last. A sidecar entry with the same `id` as a trailer entry replaces
+it; a tombstone entry removes it. The `.xgd` stays byte-immutable, so an interrupted bookmark edit cannot corrupt
+a recording, and deleting the sidecar restores the as-recorded set. It also means bookmark edits don't invalidate
+the keyframe index or the `buildParity` gate.
+
+One `Bookmark` record type in `DemoFormat`, used by both:
+
+```
+id           uint     stable within the demo; sidecar edits key off it
+tick         uint     the marked tick — the moment, not the clip start
+label        string   "" → auto ("Bookmark 3"); editable in the menu
+authorNetId  int      who pressed it; -1 = added during playback
+preSeconds   float    0 → use demo_bookmark_pre at read time
+postSeconds  float    0 → use demo_bookmark_post
+```
+
+`preSeconds`/`postSeconds` are per-bookmark but normally `0`: the cvars supply the window, and a value is only
+written when that one clip is trimmed by hand (§10.5). Storing the resolved seconds instead would freeze a
+5-second post window into every mark taken before the user decided 5 seconds was too short.
+
+### 10.4 The pre/post window (a bookmark is an interval, not a point)
+
+You press the key *after* you see the frag. So every consumer treats the mark as the end of the interesting part
+rather than its middle, and expands it into `[tick − pre, tick + post]`, clamped to `[0, duration]`:
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `demo_bookmark_pre` | `10` | Seconds of demo *before* the mark that a seek or an export includes. |
+| `demo_bookmark_post` | `5` | Seconds *after* the mark. |
+| `demo_bookmark_min_interval` | `1.0` | Minimum seconds between accepted presses (debounce, enforced client- and server-side). |
+| `demo_bookmark_notify` | `1` | Confirm each accepted bookmark on the HUD/console. |
+| `sv_demo_bookmark` | `1` | Server accepts client bookmark requests into the server demo; `0` refuses. |
+
+`pre` is twice `post` because the two ends are asymmetric: the lead-up (the approach, the rocket leaving the
+tube, the flag grab) is what makes the clip readable, while the tail only needs to cover the reaction time
+between the event and the keypress plus a beat to land on. Both are plain cvars, so a player who wants 30-second
+clips sets them once and every subsequent export honors it. A per-bookmark override (§10.3) wins over both.
+
+### 10.5 Reviewing them
+
+- **Timeline.** `ReplayControlBar` (§9) draws bookmarks on the scrub bar in a style distinct from the automatic
+  event markers (kills/captures from the notification stream), label on hover, with the pre/post window drawn as
+  a bracket around each so the clip bounds are visible before you export.
+- **Seek.** Jumping to a bookmark seeks to `tick − pre`, never to `tick`; landing on the mark itself would start
+  playback after the setup, which is the whole thing the window exists to avoid.
+- **Replay keybinds** (replay context, alongside §9's): **PageUp** / **PageDown** = previous / next bookmark,
+  `demo_bookmark` = add one at the playhead.
+- **Bookmark list panel** — every mark with match time, label, and author, plus rename, delete, nudge the
+  time, override pre/post, "Play from here", and "Export clip". Every edit writes the sidecar (§10.3).
+
+### 10.6 Exporting a clip
+
+"Export clip" on a bookmark reuses the video-capture relaunch path ([`video-capture.md`](video-capture.md) §3a),
+bounded to the bookmark window ([`video-capture.md`](video-capture.md) §3b) instead of the whole demo:
+
+```
+--playdemo match.xgd --capture-video frag.mp4 --capture-bookmark 3
+--playdemo match.xgd --capture-video frag.mp4 --capture-range 412.5,427.5   # explicit, same effect
+```
+
+`--capture-bookmark <id>` resolves the id against trailer + sidecar and applies the §10.4 rule, so the cvars are
+honored without the caller doing the arithmetic. The capture hook seeks to the start tick, plays to the end tick,
+and quits the tree there (finalizing the file) rather than waiting for the demo's duration. `--capture-view`,
+fps, size and format work unchanged; a client demo's clip is that player's first-person, as always (§8). "Export
+all bookmarks" runs the same relaunch once per bookmark, sequentially, naming files from the labels.
+
+---
+
+## 11. Menu integration & launch path
 
 - **`DialogMediaDemo`** ([dialog](../../game/menu/dialogs/DialogMediaDemo.cs)) already has the Demos tab UI (filter,
   list, Refresh, Play, Timedemo, `cl_autodemo`) wired but inert. Give it the backend. Because recording is now
@@ -320,6 +441,9 @@ enum SpectatorMode { FreeFly, Follow, Director }
   - **Play** → launch a replay (`NetGame.ConfigureReplay`).
   - **Record to video** → an FPS/resolution/format dialog that exports the selected demo to a video file via
     [`video-capture.md`](video-capture.md) (the relaunch path). Replaces the inert "Timedemo" affordance.
+  - **Bookmarks** (§10): the selected demo's marks listed beside it with time and label, so a demo with
+    bookmarks can be opened straight at one; **Export clip** and **Export all bookmarks** hang off the same
+    "Record to video" settings dialog with the range pre-filled from `demo_bookmark_pre`/`_post`.
   - Keep the `cl_autodemo` checkbox as the always-on opt-out (now default-checked).
 - **`NetGame.ConfigureReplay(demoPath, vfs, …)`** — a third configuration beside `ConfigureClient` /
   `ConfigureListenServer`: boots a replay-mode `GameWorld` + `DemoPlayback` + `ServerNet` (loopback), self-connects
@@ -330,7 +454,10 @@ enum SpectatorMode { FreeFly, Follow, Director }
 
 ---
 
-## 11. File-by-file change list
+## 12. File-by-file change list
+
+> Paths written before the `XonoticGodot.*` → `VortexArena.*` project rename still say `XonoticGodot`; read
+> them as the `VortexArena` assembly of the same name (`src/VortexArena.Server/DemoControl.cs` and friends).
 
 **New:**
 - `src/XonoticGodot.Net/DemoFormat.cs` — header/frame/index records + read/write (pure, testable).
@@ -339,6 +466,9 @@ enum SpectatorMode { FreeFly, Follow, Director }
   loop-sound reconstruction.
 - `game/client/SpectatorCamera.cs` — FreeFly / Follow / Director pose generation + target cycling.
 - `game/hud/ReplayControlBar.cs` — scrub/time UI + keybind context.
+- `src/VortexArena.Net/DemoBookmarks.cs` — the `Bookmark` record, the `.xgb` sidecar reader/writer, and the
+  trailer+sidecar merge (§10.3) plus the pre/post window resolution (§10.4). Pure; no Godot, no file-format
+  coupling beyond the record type.
 
 **Touched:**
 - `game/net/ServerNet.cs` — add `DemoSink` (record hook) + `ReplaySource` (inject hook in `BuildEntitySet`);
@@ -351,12 +481,28 @@ enum SpectatorMode { FreeFly, Follow, Director }
 - `game/net/ClientNet.cs` — client-side `DemoRecorder` tap (record the decoded per-snapshot entity set) + finalize on
   disconnect/quit (the always-on `cl_autodemo` path, §4).
 - `game/menu/dialogs/DialogMediaDemo.cs` — enumerate + launch replay + "Record to video" export (see
-  [`video-capture.md`](video-capture.md)).
+  [`video-capture.md`](video-capture.md)) + the bookmark list, clip export, and batch export (§10.5, §10.6).
 - (fidelity) the player net-state path — record per-player **view angles** for faithful first-person follow.
+
+**Touched (bookmarks, §10):**
+- `src/XonoticGodot.Net/DemoFormat.cs` — bookmark block in the trailer; read/write beside the keyframe index.
+- `src/XonoticGodot.Server/DemoRecorder.cs` — buffer live bookmarks, write them at finalize.
+- `src/XonoticGodot.Server/DemoPlayback.cs` — expose the merged bookmark set; `SeekToBookmark(id)` (lands at
+  `tick − pre`); accept marks taken at the playhead.
+- `game/console/BindInput.cs` + [`game/menu/KeyBindings.cs`](../../game/menu/KeyBindings.cs) — the
+  `demo_bookmark` action, its command mapping, and its settings row.
+- [`data/core.pk3dir/binds-xonotic.cfg`](../../data/core.pk3dir/binds-xonotic.cfg) — `bind F11 demo_bookmark`
+  (a Vortex addition, no DP line to match; flag it in the fidelity notes so the audit doesn't strip it).
+- `game/net/ClientNet.cs` — send the bookmark request; stamp the local client demo.
+- `game/net/ServerNet.cs` / the `ClientCommand` handler — accept `demo_bookmark` per `sv_demo_bookmark`, debounce
+  per `demo_bookmark_min_interval`, hand it to the recorder.
+- `game/hud/ReplayControlBar.cs` — timeline markers with pre/post brackets, PageUp/PageDown, the list panel.
+- `game/VideoCaptureHook.cs` + `Main.cs` — `--capture-bookmark` / `--capture-range` (see
+  [`video-capture.md`](video-capture.md) §3b).
 
 ---
 
-## 12. Testing
+## 13. Testing
 
 - **Round-trip (headless, `XonoticGodot.Tests`):** build a synthetic entity-set sequence → `DemoRecorder` →
   `DemoFormat` read → `DemoPlayback.SampleAt` per tick reproduces the original sets byte-for-byte (incl. keyframe
@@ -366,16 +512,28 @@ enum SpectatorMode { FreeFly, Follow, Director }
 - **Loop-sound reconstruction:** after a seek to `T`, the computed active-loop set matches forward play to `T`.
 - **Time model:** pause holds entity state while sim time advances; `speed` scales playhead; negative speed
   decreases it; all clamp at `[0, duration]`.
+- **Bookmark round-trip:** marks taken during recording survive finalize and reload with id, tick, label, and
+  author intact; a `.xgb` sidecar written afterwards merges over them; a tombstone removes one; deleting the
+  sidecar restores the as-recorded set (§10.3).
+- **Window resolution:** `[tick − pre, tick + post]` from the cvars, from a per-bookmark override, and clamped
+  at both ends of the demo (a mark 2 s into a recording yields a clip starting at 0, not a negative tick).
+- **Debounce:** N presses inside `demo_bookmark_min_interval` produce one bookmark, asserted on the server path
+  (rate-limited command) and the client path (local stamp) independently.
 - **Manual / `--playdemo`:** record a `--host` bot match, replay it, exercise all three camera modes + scrub +
-  slow-mo + rewind; screenshot via the existing `--screenshot` path.
+  slow-mo + rewind; screenshot via the existing `--screenshot` path. Press F11 during the bot match, then
+  confirm the mark shows on both the server and client demo timelines and that
+  `--capture-bookmark 1` exports a clip of the expected length.
 
 ---
 
-## 13. Phasing
+## 14. Phasing
 
 - **Phase 0 — Format + recorder (client + server, always-on).** `DemoFormat` + `DemoRecorder` + `DemoControl`
   wiring + the client-side recorder tap + boundary finalize + defaults flipped on (§4) + round-trip tests. No
-  playback yet. *Deliverable:* real matches auto-write `.xgd` files on both sides; tests prove the round-trip.
+  playback yet. **Includes the capture half of bookmarks** (§10.1): the `demo_bookmark` command and bind, the
+  client-command path, the trailer block, and the pre/post cvars. Marks have to be in the format from the first
+  recorded match, or every demo made before Phase 5 has none. *Deliverable:* real matches auto-write `.xgd` files
+  on both sides; tests prove the round-trip.
 - **Phase 1 — Replay host (forward, free-fly).** `GameWorld.ReplayMode` + `DemoPlayback` + `ServerNet.ReplaySource`
   + `NetGame.ConfigureReplay` + `--playdemo`. *Deliverable:* fly around a recording at 1×.
 - **Phase 2 — Time control.** Two-clock model, pause/slow/fast/smooth-rewind/seek, keyframe seek, transient-clear +
@@ -384,13 +542,16 @@ enum SpectatorMode { FreeFly, Follow, Director }
   the three modes the user asked for.
 - **Phase 4 — Menu + polish.** `DialogMediaDemo` backend (enumerate + Play + "Record to video"), timeline event
   markers, shared-replay time-control commands (optional).
+- **Phase 5 — Bookmark review + clip export.** Timeline markers, PageUp/PageDown, the list panel with
+  rename/retime/trim, the `.xgb` sidecar, and `--capture-bookmark`. *Deliverable:* press a key mid-match, and
+  later export that moment to a video in two clicks.
 - **Video capture** (the fixed-FPS "perfect" render-to-file the user asked for) is a **parallel track** in its own
   companion spec — [`video-capture.md`](video-capture.md), Phases V0–V3 — and depends on Phase 1 (a playable replay)
   before it is meaningful.
 
 ---
 
-## 14. Risks & open questions
+## 15. Risks & open questions
 
 - **Spectator prediction.** FreeFly is responsive only if the client predicts the `MOVETYPE_FLY` observer path.
   Verify the reconciler/`EntityMovementStep` covers it; if not, fall back to server-authoritative + interpolation
@@ -399,6 +560,14 @@ enum SpectatorMode { FreeFly, Follow, Director }
 - **Demo size / long matches** — keyframe interval trades file size vs seek latency; expose `demo_keyframe_interval`.
 - **Format stability** — gated by `buildParity`; bump `formatVersion` on any layout change. Old demos that don't
   match are rejected with an honest message (no silent misrender).
+- **Bookmark clock skew.** The client stamps its own demo at its view of server time; the server stamps its demo
+  when the request arrives, one round-trip later. The two marks for the same keypress land up to a ping apart.
+  `demo_bookmark_pre` (10 s) swallows that, but if per-frame alignment ever matters, carry the client's intended
+  server time in the request and let the server use it (clamped to a sane window so a client can't mark
+  arbitrary points in the recording).
+- **Bookmark spam.** `demo_bookmark_min_interval` debounces a key held down; it does not stop a client marking
+  every second for a whole match. If that becomes a problem on public servers, cap marks per client per match
+  server-side rather than lowering the interval. `sv_demo_bookmark 0` is the blunt opt-out that already exists.
 - **Promote to an ADR?** The two load-bearing decisions — *record server-side full-state* and *replay-as-listen-server
   with direct entity injection* — are arguably ADR-worthy. Capture as an ADR if/when accepted.
 ```

@@ -1146,6 +1146,20 @@ public sealed partial class NetGame : Node3D
             cmd.LastLevelHandler = () => Callable.From(() => MenuCommand.Disconnect?.Invoke()).CallDeferred();
         }
 
+        // `fs_rescan` from the server console (DP FS_Rescan_f): re-read the content search path so a .pk3 the
+        // operator just dropped into the gamedir is usable — the pack, then `gotomap <newmap>`, with no
+        // restart. Wired outside the threaded/non-threaded split because it needs neither wrapper:
+        // MenuState.RescanContent is safe to call from the sim thread (the VFS and asset caches are
+        // internally synchronized, and it posts the main-thread-only menu caches through CallDeferred).
+        cmd.ContentRescanHandler = Menu.MenuState.RescanContent;
+
+        // `lsmaps` — the real installed-map catalog, gametype-filtered, instead of the g_maplist words this
+        // seam could reach on its own (which are empty on a default config, so a server with 32 maps answered
+        // "Maps available (0):"). Same formatter the client console uses when no server is running, so the
+        // answer does not change shape depending on who is asking. Pure read over already-built VFS indexes,
+        // so it is safe on whichever thread the command was dispatched on.
+        cmd.Replies.MapCatalogReply = Menu.MapList.LsmapsReply;
+
         // QC localcmd("\nsv_vote_gametype_hook_all\n") + localcmd("\nsv_vote_gametype_hook_", name, "\n") from
         // GameTypeVote_SetGametype: fires on the sim thread (ApplyGametypeSwitch → DriveEndOfMatchMapFlow), so the
         // handler runs synchronously on that thread — no RunOnSimThread wrapper needed on either path.

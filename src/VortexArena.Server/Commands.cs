@@ -140,6 +140,14 @@ public sealed class Commands
     public Action<string>? ChangeLevelHandler { get; set; }
 
     /// <summary>
+    /// Optional sink the host wires for <c>fs_rescan</c> (DP <c>FS_Rescan_f</c>): re-read the content search
+    /// path so a <c>.pk3</c> added to the gamedir since boot is usable without restarting the server. Returns
+    /// a one-line summary for the console. The filesystem lives in the host (this library never touches one),
+    /// so unwired it reports that and does nothing — which is the honest answer for a bare test world.
+    /// </summary>
+    public Func<string>? ContentRescanHandler { get; set; }
+
+    /// <summary>
     /// E6: the authoritative editing session, when the editor gametype has one open. Set by the host; null in
     /// every other mode, which is what makes <c>editor_op</c> inert outside an editing session.
     /// </summary>
@@ -777,6 +785,12 @@ public sealed class Commands
         Register("map", "map <name> — change to a map immediately", CmdMap);
         Register("gotomap", "gotomap <name> — queue the next map (after intermission)", CmdGotoMap);
         Register("nextmap", "nextmap [name] — get or set the next map", CmdNextMap);
+        // DP FS_Rescan_f. Belongs beside the map commands because that is the workflow it exists for: an
+        // operator drops a new map pack into the server's gamedir, rescans, then `gotomap`s onto it without
+        // taking the server down. Server-console/rcon only — it is not in the client-callable set, and a
+        // remote client asking a server to re-read its filesystem has no legitimate use.
+        Register("fs_rescan", "fs_rescan — re-read the content search path (pick up newly added .pk3 packs)",
+            CmdFsRescan);
 
         // ---- match flow (QC GameCommand allready/resetmatch/gametype/cointoss) ----
         Register("allready", "allready — end warmup and start the match now", CmdAllReady);
@@ -1327,6 +1341,21 @@ public sealed class Commands
         _world.QueuedNextMap = ctx.Arg(1);
         _world.EndMatch();
         ctx.Print($"next map: {ctx.Arg(1)}");
+        return true;
+    }
+
+    /// <summary>
+    /// <c>fs_rescan</c> (DP <c>FS_Rescan_f</c>) — hand off to the host's filesystem and print what it found.
+    /// The work is the host's: this library has no VFS, deliberately.
+    /// </summary>
+    private bool CmdFsRescan(CommandContext ctx)
+    {
+        if (ContentRescanHandler is null)
+        {
+            ctx.Print("fs_rescan: no filesystem is wired to this server.");
+            return true;
+        }
+        ctx.Print(ContentRescanHandler());
         return true;
     }
 

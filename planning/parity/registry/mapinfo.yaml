@@ -267,11 +267,11 @@ features:
       - "common/mapinfo.qc:MapInfo_BSPName_ByID"
       - "common/mapinfo.qc:MapInfo_Get_ByID"
     port_refs:
-      - "game/menu/MapList.cs:Available (35-67, maps/*.bsp VFS glob, sorted, b_* prefabs skipped)"
-      - "game/menu/CreateGameScreen.cs:RefilterMaps (442-487, gametype + substring filter)"
-      - "game/menu/MapList.cs:ByIndex (75)"
+      - "game/menu/MapList.cs:Available (maps/*.bsp VFS glob, sorted, b_* prefabs skipped)"
+      - "game/menu/CreateGameScreen.cs:RefilterMaps (gametype + substring filter)"
+      - "game/menu/MapList.cs:ByIndex"
     constants:
-      - { name: "glob", base: "search_begin(\"maps/*.bsp\")", port: "vfs.Find(\"maps/\",\"bsp\") + res://maps + ~/XonData/maps", match: true }
+      - { name: "glob", base: "search_begin(\"maps/*.bsp\")", port: "vfs.Find(\"maps/\",\"bsp\") over the full search path (shipped data root + the ~/XonData/data user gamedir)", match: true }
       - { name: "sort", base: "heapsort strcasecmp", port: "SortedSet OrdinalIgnoreCase", match: true }
     status:
       logic: partial

@@ -21,14 +21,29 @@ namespace VortexArena.Server;
 /// <para><b>Scope (deviation R8):</b> records/rankings/ladder are race/CTS/CTF-specific and read the persistent
 /// race records DB (<c>ServerProgsDB</c>). The port's race store isn't wired into this seam, so these report the
 /// honest QC empty case ("No records are available…", "No ladder on this server!") rather than fabricating —
-/// exactly what QC prints for a non-race mode / fresh server. getmaplist/getlsmaps/getmonsterlist ARE fully
-/// computed from <c>g_maplist</c> + the map catalog (when wired) + the monster registry.</para>
+/// exactly what QC prints for a non-race mode / fresh server. getmaplist/getmonsterlist are fully computed from
+/// <c>g_maplist</c> + the monster registry; getlsmaps enumerates the REAL installed catalog whenever the host
+/// wires <see cref="MapCatalogReply"/> (it does), and falls back to the rotation words when nothing does.</para>
 /// </summary>
 public sealed class CommandReplies
 {
     private readonly GameWorld _world;
 
     public CommandReplies(GameWorld world) => _world = world;
+
+    /// <summary>
+    /// Optional host seam for the real installed-map catalog, keyed by gametype: the host hands back QC's
+    /// finished <c>getlsmaps()</c> line for the maps it has mounted. Wired by the game host (which owns the
+    /// VFS); null in this library's own world, in a unit test, and on any bare server — where
+    /// <see cref="GetLsmaps"/> keeps its previous <c>g_maplist</c>-derived answer.
+    ///
+    /// <para>It exists because QC's <c>getlsmaps()</c> enumerates the MAP CATALOG (every installed map not
+    /// forbidden, filtered by <c>MapInfo_CheckMap</c>) and nothing at this seam could reach one — so the port
+    /// listed the rotation cvar instead, which on a default config is empty and made <c>lsmaps</c> answer
+    /// "Maps available (0):" on a server with 32 maps installed. This closes that gap (deviation R8) without
+    /// giving a Godot-free library a filesystem.</para>
+    /// </summary>
+    public System.Func<string, string>? MapCatalogReply { get; set; }
 
     // ---- the cached reply strings (QC the strzoned globals in getreplies.qh) -------------------------------
 
@@ -99,12 +114,21 @@ public sealed class CommandReplies
     }
 
     /// <summary>
-    /// QC <c>getlsmaps()</c>: "^7Maps available (N): &lt;colorized catalog&gt;". The port's map catalog at this
-    /// seam is the rotation list (no full MapInfo enumeration is reachable), so it lists the same words as
-    /// <see cref="GetMaplist"/> when present, else "^7Maps available (0): " (the honest empty catalog).
+    /// QC <c>getlsmaps()</c>: "^7Maps available (N): &lt;colorized catalog&gt;" over every installed map that
+    /// supports the current gametype — via <see cref="MapCatalogReply"/> when the host has wired its real
+    /// catalog. Without that seam there is no MapInfo enumeration reachable from here, so it falls back to
+    /// listing the rotation cvar (<see cref="GetMaplist"/>'s words), or "^7Maps available (0): " when that is
+    /// empty too.
     /// </summary>
     private string GetLsmaps()
     {
+        if (MapCatalogReply is { } catalog)
+        {
+            // The gametype the filter is against — QC MapInfo_CheckMap against MapInfo_CurrentGametype.
+            try { return catalog(_world.GameType?.NetName ?? ""); }
+            catch (System.Exception) { /* a broken host seam must not take the command down; fall through */ }
+        }
+
         string maplist = Cvars.String("g_maplist");
         var words = SplitWords(maplist);
         var sb = new StringBuilder();

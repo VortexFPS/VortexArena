@@ -153,7 +153,22 @@ public static class MenuState
             // MountContentRoot mounts <data>/maps (the fetched per-map packages) and then <data> itself,
             // in that order — see its remarks for why the order is load-bearing. Restructure G11, §9.3.
             if (vfs.MountContentRoot(DataPaths.Resolve(dataPath)))
+            {
+                // The player's own gamedir (~/XonData/data), mounted SECOND so its whole block outranks the
+                // shipped content — DP's FS_Init adds the basedir gamedir and then the userdir one. This is
+                // where a downloaded map .pk3 goes, and mounting it here is what puts that map in the
+                // create-game list and lets the host actually load it.
+                //
+                // Gated on the shipped root having mounted, for two reasons: without core content there is no
+                // game for a user pack to add to, and keeping _vfs conditional on the SHIPPED root preserves
+                // the boot diagnostic RUNNING.md documents (a low `config: N cvars` total means the data dir
+                // didn't mount) — a user gamedir that always exists would otherwise mask it.
+                string userGameDir = UserPaths.GameDir;
+                vfs.MountContentRoot(userGameDir);
                 _vfs = vfs;
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"[MenuState] user gamedir mounted: {userGameDir} (drop .pk3 packs in its maps/ subfolder).");
+            }
             else
                 VortexArena.Common.Diagnostics.Log.Warn($"[MenuState] data dir '{dataPath}' not found — menu runs on registered cvar defaults only.");
         }
@@ -209,6 +224,12 @@ public static class MenuState
         }
         // Even without a data dir (config skipped/failed) the console still needs a live command buffer.
         _interp ??= new ConfigInterpreter(_cvars, reader);
+
+        // `fs_rescan` (DP FS_Rescan_f). Registered HERE rather than alongside the console's host commands
+        // because this is where the VFS lives and the command needs nothing from the Godot front-end — so the
+        // one registration serves a console line, a bind, and a server.cfg alike.
+        _interp.RegisterCommand("fs_rescan",
+            _ => VortexArena.Common.Diagnostics.Log.Help(RescanContent()));
 
         // --- THE LINCHPIN: populate the canonical keybind table from binds-xonotic.cfg. ---
         // xonotic-client.cfg:603 already exec'd binds-xonotic.cfg above, but `bind` is on the interpreter's
@@ -288,6 +309,56 @@ public static class MenuState
         if (string.IsNullOrEmpty(_cvars.GetString("_menu_prvm_language")))
             _cvars.Set("_menu_prvm_language", lang);
         Localization.SetLanguage(lang, _vfs);
+    }
+
+    /// <summary>
+    /// <c>fs_rescan</c> — re-read the content search path so a <c>.pk3</c> dropped into the user gamedir (or
+    /// the shipped data dir) while the game is running becomes usable without a restart, and a pack deleted
+    /// there stops being offered. Returns the rescan's tally, or null when no content is mounted at all.
+    ///
+    /// <para>Beyond the search path itself this drops the derived caches that would otherwise keep answering
+    /// from the OLD one. All three cache MISSES as well as hits, which is what makes them wrong rather than
+    /// merely stale after a rescan: a map that was not installed a moment ago is remembered as having no
+    /// <c>.mapinfo</c> and no preview image, and its pack's <c>scripts/*.shader</c> were not in the table the
+    /// material builder reads.</para>
+    ///
+    /// <para><b>What it does not do</b>, matching DP: assets already decoded this session keep their loaded
+    /// copies. A newly shadowed texture or model that is already on screen stays as it is until the thing
+    /// holding it is rebuilt (a map change, or <c>vid_restart</c>); this refreshes where files are FOUND.</para>
+    ///
+    /// <para>Returns the one-line summary rather than printing it, because the two callers report differently:
+    /// the client console logs it, and the dedicated server's console prints it into the command's own output
+    /// (<c>Commands.ContentRescanHandler</c>). Logging here as well would double it on a headless host.</para>
+    /// </summary>
+    public static string RescanContent()
+    {
+        if (_vfs is null)
+            return "fs_rescan: no content is mounted — nothing to rescan.";
+
+        // Timed and reported, because this is synchronous and a threaded host runs it ON THE SIM THREAD — an
+        // operator who rescans a large tree mid-match deserves to see what it cost rather than wonder whether
+        // the stutter they just felt was this.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // Both of these are internally synchronized, so they are safe on whichever thread called us.
+        VirtualFileSystem.RescanResult r = _vfs.Rescan();
+        _sharedAssets?.Assets.ReloadShaders();
+
+        // The menu-side caches are plain dictionaries owned by the main thread, and this is reachable from the
+        // SERVER console — which on a threaded host dispatches commands on the sim thread. Posting the
+        // invalidation keeps that off a foreign thread. From the main thread it just means "at the next idle",
+        // which is well before any menu screen can read them again.
+        Callable.From(() =>
+        {
+            MapInfoCache.Invalidate();
+            MenuSkin.InvalidateImageCache();
+        }).CallDeferred();
+
+        // The real count off the search path, not MapList.Available() — that one substitutes a hardcoded
+        // fallback list when nothing is installed, which would make an empty install report 21 maps.
+        int maps = _vfs.Find("maps/", "bsp").Count();
+        return $"fs_rescan: {r.Mounts} mounts ({r.Added} added, {r.Removed} removed, {r.Reused} reused), "
+               + $"{maps} maps, {sw.ElapsedMilliseconds} ms.";
     }
 
     /// <summary>

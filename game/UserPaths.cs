@@ -28,7 +28,34 @@ public static class UserPaths
     /// <summary>The default subfolder name created under the OS home directory.</summary>
     public const string DefaultFolderName = "XonData";
 
+    /// <summary>The per-user content gamedir's folder name under <see cref="BaseDir"/>.</summary>
+    public const string GameDirFolderName = "data";
+
     private static string? _baseDir;
+
+    /// <summary>
+    /// The per-user CONTENT gamedir — <c>~/XonData/data</c> — and the answer to "where do I put a map I
+    /// downloaded". Anything mountable goes here: <c>maps/&lt;name&gt;.pk3</c> for map packs (mirroring the
+    /// shipped <c>data/maps/</c> layout), a loose <c>.pk3</c>/<c>.pk3dir</c> at the top for anything else.
+    ///
+    /// <para>This is the one place under <see cref="BaseDir"/> that is READ as content rather than written as
+    /// state, and it is deliberately the same shape as the shipped content root so the two layer: the client
+    /// mounts it OVER <see cref="DataPaths"/>'s tree at boot, which is Darkplaces' <c>~/.xonotic/data</c>
+    /// (<c>FS_Init</c> adds the basedir gamedir, then the userdir one, so the player's own packs win).</para>
+    ///
+    /// <para>Created — with its <c>maps/</c> subdirectory — on first access, so a player who goes looking for
+    /// it finds it already there instead of having to guess the name.</para>
+    /// </summary>
+    public static string GameDir
+    {
+        get
+        {
+            string dir = Resolve(GameDirFolderName);
+            EnsureDir(dir);
+            EnsureDir(System.IO.Path.Combine(dir, "maps"));
+            return dir;
+        }
+    }
 
     /// <summary>
     /// The absolute base directory all user data lives under — <c>~/XonData</c> by default, or the

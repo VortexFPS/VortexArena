@@ -560,6 +560,11 @@ public static class MapInfoCache
 
     private static readonly Dictionary<string, Entry> Cache = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Drop every parsed entry so the next <see cref="Get"/> re-reads from the CURRENT search path —
+    /// <c>fs_rescan</c> (<see cref="MenuState.RescanContent"/>). Needed because a miss is cached too: a map
+    /// listed before its pack was mounted is remembered as having no <c>.mapinfo</c> at all.</summary>
+    public static void Invalidate() => Cache.Clear();
+
     public static Entry Get(string map)
     {
         if (Cache.TryGetValue(map, out Entry? hit))

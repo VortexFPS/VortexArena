@@ -31,7 +31,12 @@ public sealed class AssetSystem
     private readonly VirtualFileSystem _vfs;
 
     // name (extension-stripped, lower-cased) -> parsed shader. Case-insensitive lookups.
-    private readonly IReadOnlyDictionary<string, ShaderDef> _shaders;
+    //
+    // Read lock-free from the streamer's worker lanes, which is safe because the dictionary is never MUTATED:
+    // ReloadShaders (fs_rescan) parses a whole new one and swaps the reference. `volatile` is what makes that
+    // swap publish safely — a worker mid-flight keeps reading the old snapshot, which is still a complete and
+    // internally consistent table. Same immutable-snapshot discipline VirtualFileSystem uses for its mounts.
+    private volatile IReadOnlyDictionary<string, ShaderDef> _shaders;
 
     // Caches. Materials are keyed by the *requested* name (so a shader and a bare texture of the same
     // stem share a slot, matching Q3 where the shader shadows the texture). Textures are keyed by the
@@ -80,6 +85,45 @@ public sealed class AssetSystem
     /// <c>.shader</c> files declare them, which is exactly what a face's <c>Material</c> holds.
     /// </summary>
     public IEnumerable<string> ShaderNames() => _shaders.Keys;
+
+    /// <summary>
+    /// Re-parse every <c>scripts/*.shader</c> off the CURRENT search path and swap the table in — the
+    /// <c>fs_rescan</c> half that makes a newly mounted pack's shaders take effect (most map packs ship one).
+    /// The derived caches go with it: a material or autosprite compiled from the old table has to be rebuilt,
+    /// and a texture that resolved to nothing may now resolve.
+    ///
+    /// <para>Already-built materials held by the live scene are NOT reached by this and keep rendering as they
+    /// are — clearing a cache only decides what the NEXT request builds. That is the same line
+    /// <see cref="VirtualFileSystem.Rescan"/> draws, and the reason a rescan is not a substitute for a map
+    /// reload when the goal is to restyle what is already on screen.</para>
+    /// </summary>
+    public void ReloadShaders()
+    {
+        _shaders = LoadShaders(_vfs);
+
+        lock (_materialCacheGate)
+            _materialCache.Clear();
+        lock (_autospriteCacheGate)
+            _autospriteCache.Clear();
+
+        // Textures are dropped SELECTIVELY: a null entry is a cached "this file does not exist", which a new
+        // pack may have just made false. A live entry is a GPU texture the running scene is sharing — evicting
+        // it would re-decode and re-upload the whole working set on the next frame that touches it, for no
+        // gain, since the bytes behind a texture that still resolves the same way have not changed.
+        lock (_textureCacheGate)
+        {
+            var misses = new List<string>();
+            foreach (var kv in _textureCache)
+            {
+                if (kv.Value is null)
+                    misses.Add(kv.Key);
+            }
+            foreach (string key in misses)
+                _textureCache.Remove(key);
+        }
+
+        ClearPredecodedImages();
+    }
 
     // -------------------------------------------------------------------------------------------------
     //  Shader dictionary

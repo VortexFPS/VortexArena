@@ -596,6 +596,30 @@ public static class MenuSkin
         _texCache.Clear();
     }
 
+    /// <summary>
+    /// Drop only the <see cref="Image"/> entries (arbitrary game textures by VFS name — map previews, weapon
+    /// icons, crosshairs), leaving the skin theme, fonts and skin graphics alone. For <c>fs_rescan</c>
+    /// (<see cref="MenuState.RescanContent"/>): a map listed before its pack was mounted has a cached NULL
+    /// preview, and only a re-resolve against the new search path can turn that into its levelshot.
+    ///
+    /// <para>Deliberately not <see cref="Reload"/>, which also discards the theme — that one is half of
+    /// <c>menu_restart</c> and leaves the live front-end holding a stale <see cref="Theme"/> until its caller
+    /// re-applies the rebuilt one. A content rescan has no business restyling the menu.</para>
+    /// </summary>
+    public static void InvalidateImageCache()
+    {
+        // The one cache is shared by three keyspaces; Image() is the only one prefixed, which is what makes
+        // this separable at all. Collected first — the dictionary cannot be mutated while enumerating it.
+        var imageKeys = new List<string>();
+        foreach (string k in _texCache.Keys)
+        {
+            if (k.StartsWith("img:", StringComparison.Ordinal))
+                imageKeys.Add(k);
+        }
+        foreach (string k in imageKeys)
+            _texCache.Remove(k);
+    }
+
     /// <summary>Load a skin image by base name (e.g. "button_n") from <c>gfx/menu/&lt;skin&gt;/</c>, cached.</summary>
     private static Texture2D? LoadSkinTexture(string baseName)
     {

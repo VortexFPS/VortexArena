@@ -29,6 +29,11 @@ namespace VortexArena.Formats.Vfs;
 /// so readers always see a consistent snapshot. Each mount's file index is built once at mount time
 /// and is immutable thereafter. Zip access is serialized per mount because a single
 /// <see cref="ZipArchive"/> / its underlying stream is not safe for concurrent reads.</para>
+///
+/// <para><b>Rescanning.</b> <see cref="Rescan"/> (the <c>fs_rescan</c> console command) rebuilds the whole
+/// search path so content dropped in while the game is running becomes visible. It works by REPLAYING the
+/// recorded mount calls rather than by patching the existing list, so a rescanned search path is the same
+/// path a fresh process would have built.</para>
 /// </summary>
 public sealed class VirtualFileSystem : IDisposable
 {
@@ -37,6 +42,28 @@ public sealed class VirtualFileSystem : IDisposable
     private volatile IReadOnlyList<IMount> _mounts = Array.Empty<IMount>();
     private readonly object _mountLock = new();
     private bool _disposed;
+
+    // The mount CALLS that built the current search path, in call order. Recorded so Rescan() can replay
+    // them; a replay is what makes a rescanned path identical to a freshly-booted one instead of an
+    // approximation of it. Guarded by _mountLock (written on mount, read on rescan).
+    private readonly List<(MountSource Kind, string Path)> _sources = new();
+
+    /// <summary>Which public mount entry point produced a recorded source (so <see cref="Rescan"/> replays
+    /// it through the same code path it originally took).</summary>
+    private enum MountSource
+    {
+        /// <summary><see cref="Mount(string)"/> — one archive or directory.</summary>
+        Single,
+        /// <summary><see cref="MountGameDir(string)"/> — a base dir and the packs directly inside it.</summary>
+        GameDir,
+        /// <summary><see cref="MountContentRoot(string)"/> — <c>&lt;root&gt;/maps</c> then <c>&lt;root&gt;</c>.</summary>
+        ContentRoot,
+    }
+
+    /// <summary>What one <see cref="Rescan"/> did to the search path. <see cref="Added"/> counts mounts built
+    /// fresh (new packs, plus every directory mount, which is always rebuilt), <see cref="Reused"/> the pack
+    /// mounts carried over untouched, and <see cref="Removed"/> the ones that dropped out and were disposed.</summary>
+    public readonly record struct RescanResult(int Mounts, int Added, int Removed, int Reused);
 
     // Resolved-path + negative lookup caches for the two hot extension-search paths (A4). Exists() linearly
     // probes every mount, and ResolveImage() probes up to 11 candidate vpaths × every mount per call — many
@@ -73,7 +100,11 @@ public sealed class VirtualFileSystem : IDisposable
         else
             return false;
 
-        Prepend(mount);
+        lock (_mountLock)
+        {
+            _sources.Add((MountSource.Single, path));
+            PrependLocked(new[] { mount });
+        }
         return true;
     }
 
@@ -91,6 +122,33 @@ public sealed class VirtualFileSystem : IDisposable
         ArgumentException.ThrowIfNullOrEmpty(dir);
         if (!Directory.Exists(dir))
             return false;
+
+        List<IMount> built = BuildGameDirMounts(dir, reuse: null);
+
+        // Prepend the whole batch atomically, preserving relative order (last element = top).
+        lock (_mountLock)
+        {
+            _sources.Add((MountSource.GameDir, dir));
+            PrependLocked(built);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The mounts <see cref="MountGameDir"/> produces for <paramref name="dir"/>, lowest priority first
+    /// (packs in name order, then the directory itself on top). Empty when the directory does not exist.
+    /// Shared with <see cref="Rescan"/> so a rescanned gamedir cannot order itself differently than a
+    /// freshly mounted one.
+    ///
+    /// <para><paramref name="reuse"/>, when given, maps a pack's full path to a LIVE mount for it that the
+    /// caller has already established is still valid; a hit is carried over instead of re-opened. Only pack
+    /// files are reused — a directory mount is a plain re-walk with no handles to conserve.</para>
+    /// </summary>
+    private static List<IMount> BuildGameDirMounts(string dir, IReadOnlyDictionary<string, IMount>? reuse)
+    {
+        var built = new List<IMount>();
+        if (!Directory.Exists(dir))
+            return built;
 
         // Gather the pack entries (files AND directories) that look like packs, sorted by name.
         // Darkplaces sorts the raw directory listing ascending, then adds .pak before .pk3/.pk3dir;
@@ -116,12 +174,19 @@ public sealed class VirtualFileSystem : IDisposable
 
         // Mount packs lowest-first so later-sorted packs end up higher in the search path,
         // then the plain directory on top (loose files have priority over packed files).
-        var built = new List<IMount>(entries.Count + 1);
+        built.Capacity = entries.Count + 1;
         foreach (string entry in entries)
         {
             try
             {
-                built.Add(Directory.Exists(entry) ? new DirectoryMount(entry) : new Pk3Mount(entry));
+                if (Directory.Exists(entry))
+                {
+                    built.Add(new DirectoryMount(entry));
+                    continue;
+                }
+                built.Add(reuse is not null && reuse.TryGetValue(Path.GetFullPath(entry), out IMount? live)
+                    ? live
+                    : new Pk3Mount(entry));
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
             {
@@ -130,10 +195,7 @@ public sealed class VirtualFileSystem : IDisposable
             }
         }
         built.Add(new DirectoryMount(dir));
-
-        // Prepend the whole batch atomically, preserving relative order (last element = top).
-        PrependRange(built);
-        return true;
+        return built;
     }
 
     /// <summary>
@@ -156,42 +218,173 @@ public sealed class VirtualFileSystem : IDisposable
     /// They did once: the tests mounted only the root, so they saw 50 of the 185 shader scripts and the
     /// material-count assertions failed while the content was in fact all present.
     /// </para>
+    /// <para>
+    /// <b>Several roots layer.</b> Each call prepends its whole block, so a LATER root outranks an earlier one
+    /// entirely — which is how the per-user gamedir is stacked over the shipped content (Darkplaces'
+    /// <c>FS_Init</c> adds the basedir gamedir and then the userdir one, so a player's own pack wins). The
+    /// consequence to be aware of: a pack in the later root can shadow core content from the earlier root,
+    /// including a map pack's <c>textures/</c> shadowing core's. That is what makes an override pack possible
+    /// and it is DP's behaviour, but it means a careless user pack can restyle the whole game.
+    /// </para>
     /// </remarks>
     public bool MountContentRoot(string dataRoot)
     {
         ArgumentException.ThrowIfNullOrEmpty(dataRoot);
-        MountGameDir(Path.Combine(dataRoot, "maps")); // absent on a checkout that has not fetched maps
-        return MountGameDir(dataRoot);
+
+        // Built outside the lock (a pack's central directory + symlink pass is the slow part), swapped in
+        // under it. <root>/maps is absent on a checkout that has not fetched maps, and on a user gamedir the
+        // player has not put anything in yet — BuildGameDirMounts answers with an empty batch either way.
+        List<IMount> mapsBatch = BuildGameDirMounts(Path.Combine(dataRoot, "maps"), reuse: null);
+        List<IMount> rootBatch = BuildGameDirMounts(dataRoot, reuse: null);
+        bool rootExists = Directory.Exists(dataRoot);
+
+        lock (_mountLock)
+        {
+            // Recorded even when the root does not exist yet, so a later Rescan() picks it up once the player
+            // creates it — the whole point of the command is to not need a restart.
+            _sources.Add((MountSource.ContentRoot, dataRoot));
+            PrependLocked(mapsBatch);
+            PrependLocked(rootBatch);
+        }
+        return rootExists;
     }
 
-    private void Prepend(IMount mount)
+    /// <summary>
+    /// Rebuild the entire search path from the recorded mount calls, so content added, replaced or removed on
+    /// disk since boot takes effect — the <c>fs_rescan</c> console command (DP <c>FS_Rescan_f</c>).
+    ///
+    /// <para><b>Unchanged packs are carried over, not re-opened.</b> Opening a <c>.pk3</c> reads its central
+    /// directory and runs the symlink pass over it (which reads entry bodies — <c>shared.pk3</c> alone has
+    /// ~974), and a stock tree is half a gigabyte of packs. A pack whose size and mtime still match what they
+    /// were at mount keeps its existing mount object; only new/changed ones are opened. Directory mounts are
+    /// always rebuilt — a directory index is a plain re-walk and holds no handles to conserve.</para>
+    ///
+    /// <para><b>What this does NOT do</b> — the same line DP draws: it refreshes where files are FOUND, not
+    /// what has already been loaded from them. Textures, models and sounds already decoded this session keep
+    /// their loaded copies (they are owned by caches above this class, and by the live scene). Callers that
+    /// hold VFS-derived state of their own must invalidate it themselves; the game's <c>fs_rescan</c> does that
+    /// for the shader table and the menu's map/preview caches.</para>
+    ///
+    /// <para><b>Concurrency.</b> Safe to call while reads are in flight: the new search path is swapped in
+    /// atomically, and a reader holding the old snapshot keeps using it. A mount that dropped out IS disposed
+    /// here, so a read that is mid-flight on a pack whose file was deleted or replaced fails with an
+    /// <see cref="AssetParseException"/> ("has been disposed") rather than returning wrong bytes — the
+    /// failure callers already handle by skipping the asset. Disposal takes each mount's own read gate, so it
+    /// never tears down underneath an active read.</para>
+    /// </summary>
+    public RescanResult Rescan()
     {
         lock (_mountLock)
         {
-            var next = new List<IMount>(_mounts.Count + 1) { mount };
-            next.AddRange(_mounts);
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(VirtualFileSystem));
+
+            IReadOnlyList<IMount> old = _mounts;
+
+            // Belt and braces: a mount path that forgot to record its source would otherwise have every mount
+            // silently disposed here. Nothing to replay = nothing to do.
+            if (_sources.Count == 0)
+                return new RescanResult(old.Count, 0, 0, old.Count);
+
+            // Only mounts still backed by the same bytes on disk are eligible to be carried over.
+            var reuse = new Dictionary<string, IMount>(StringComparer.Ordinal);
+            foreach (IMount m in old)
+            {
+                if (m.IsCurrent())
+                    reuse.TryAdd(m.SourcePath, m);
+            }
+
+            var next = new List<IMount>();
+            foreach ((MountSource kind, string path) in _sources)
+            {
+                switch (kind)
+                {
+                    case MountSource.Single:
+                        if (BuildSingleMount(path, reuse) is { } single)
+                            PrependInto(next, new[] { single });
+                        break;
+                    case MountSource.GameDir:
+                        PrependInto(next, BuildGameDirMounts(path, reuse));
+                        break;
+                    case MountSource.ContentRoot:
+                        PrependInto(next, BuildGameDirMounts(Path.Combine(path, "maps"), reuse));
+                        PrependInto(next, BuildGameDirMounts(path, reuse));
+                        break;
+                }
+            }
+
             _mounts = next;
-            ClearLookupCaches(); // a new mount can satisfy a previously-cached MISS — invalidate
+            ClearLookupCaches(); // the whole point: a cached MISS may now be a hit (and vice-versa)
+
+            // Dispose whatever fell out of the path. Reference identity is the right test — a carried-over
+            // mount is literally the same object — and neither mount type overrides Equals, so the default
+            // comparer IS reference equality.
+            var kept = new HashSet<IMount>(next);
+            var before = new HashSet<IMount>(old);
+            int removed = 0;
+            foreach (IMount m in old)
+            {
+                if (kept.Contains(m))
+                    continue;
+                removed++;
+                m.Dispose();
+            }
+
+            int added = 0;
+            foreach (IMount m in next)
+            {
+                if (!before.Contains(m))
+                    added++;
+            }
+            return new RescanResult(next.Count, added, removed, next.Count - added);
+        }
+    }
+
+    /// <summary>Rebuild one <see cref="MountSource.Single"/> source during a rescan. Unlike
+    /// <see cref="Mount(string)"/> this swallows a bad pack: a rescan reports on a search path, and one
+    /// archive that has gone corrupt since boot must not take the other mounts down with it.</summary>
+    private static IMount? BuildSingleMount(string path, IReadOnlyDictionary<string, IMount> reuse)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                return new DirectoryMount(path);
+            if (!File.Exists(path))
+                return null;
+            return reuse.TryGetValue(Path.GetFullPath(path), out IMount? live) ? live : new Pk3Mount(path);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 
     /// <summary>
-    /// Prepend a batch where the LAST item of <paramref name="batch"/> becomes the highest priority,
-    /// matching the order in which <see cref="MountGameDir(string)"/> appends (packs, then the dir).
+    /// Prepend a batch to the live search path, where the LAST item of <paramref name="batch"/> becomes the
+    /// highest priority — matching the order in which <see cref="BuildGameDirMounts"/> appends (packs, then
+    /// the dir). Must be called under <see cref="_mountLock"/>.
     /// </summary>
-    private void PrependRange(IReadOnlyList<IMount> batch)
+    private void PrependLocked(IReadOnlyList<IMount> batch)
     {
         if (batch.Count == 0)
             return;
-        lock (_mountLock)
-        {
-            var next = new List<IMount>(batch.Count + _mounts.Count);
-            for (int i = batch.Count - 1; i >= 0; i--) // reverse: last appended = front = top priority
-                next.Add(batch[i]);
-            next.AddRange(_mounts);
-            _mounts = next;
-            ClearLookupCaches(); // new mounts can satisfy previously-cached MISSes — invalidate
-        }
+        var next = new List<IMount>(batch.Count + _mounts.Count);
+        PrependInto(next, batch);
+        next.AddRange(_mounts);
+        _mounts = next;
+        ClearLookupCaches(); // new mounts can satisfy previously-cached MISSes — invalidate
+    }
+
+    /// <summary>The one place the "last appended = highest priority" reversal lives, so the live mount path
+    /// and <see cref="Rescan"/> cannot disagree about it.</summary>
+    private static void PrependInto(List<IMount> list, IReadOnlyList<IMount> batch)
+    {
+        if (batch.Count == 0)
+            return;
+        var head = new List<IMount>(batch.Count);
+        for (int i = batch.Count - 1; i >= 0; i--) // reverse: last appended = front = top priority
+            head.Add(batch[i]);
+        list.InsertRange(0, head);
     }
 
     /// <summary>Drop the resolved-path + negative lookup caches (A4). Called under <see cref="_mountLock"/>
@@ -510,6 +703,13 @@ public sealed class VirtualFileSystem : IDisposable
         /// <summary><paramref name="key"/> must already be normalized.</summary>
         bool Contains(string key);
 
+        /// <summary>
+        /// True when this mount still reflects what is on disk, so <see cref="VirtualFileSystem.Rescan"/> can
+        /// carry it over instead of rebuilding it. Defaults to FALSE — a mount type opts in only when it can
+        /// answer cheaply and exactly, and the safe answer is to rebuild.
+        /// </summary>
+        bool IsCurrent() => false;
+
         /// <summary>(perf 2026-07-03) Read into a caller-owned, grow-only buffer (see
         /// <see cref="VirtualFileSystem.ReadBytesInto"/>). Returns the byte count actually read.</summary>
         int ReadBytesInto(string key, ref byte[]? buffer);
@@ -598,6 +798,12 @@ public sealed class VirtualFileSystem : IDisposable
         // read would return the path-string body instead of the linked file. Built once at mount and
         // immutable thereafter (so concurrent reads are safe); empty for pk3s without symlinks.
         private readonly Dictionary<string, string> _symlinks;
+        // Size + mtime as they were when this archive was opened. Rescan compares them against the file on
+        // disk to decide whether this mount can be carried over (see IsCurrent). Cheap and exact enough: a
+        // rewritten pack changes at least one of the two, and the cost of being wrong is bounded by the fact
+        // that a pack is only ever REPLACED wholesale, never edited in place.
+        private readonly long _stampLength;
+        private readonly DateTime _stampWriteUtc;
 
         public Pk3Mount(string path)
         {
@@ -605,7 +811,17 @@ public sealed class VirtualFileSystem : IDisposable
             _index = new Dictionary<string, string>(StringComparer.Ordinal);
             _symlinks = new Dictionary<string, string>(StringComparer.Ordinal);
 
-            _stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var stamp = new FileInfo(_path);
+            _stampLength = stamp.Length;
+            _stampWriteUtc = stamp.LastWriteTimeUtc;
+
+            // FileShare.Delete matters on Windows, where a share mode without it makes an open pack
+            // UNDELETABLE: a player trying to remove a map pack while the game runs gets "in use by another
+            // process" from their file manager, and fs_rescan can never observe a removal. With it the unlink
+            // succeeds immediately (the name is released once this mount is disposed, which is what a rescan
+            // does), and reads through this handle keep working against the now-unlinked file in the meantime.
+            // POSIX already behaves this way; this makes Windows match.
+            _stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             try
             {
                 _archive = new ZipArchive(_stream, ZipArchiveMode.Read, leaveOpen: true, Encoding.UTF8);
@@ -676,6 +892,26 @@ public sealed class VirtualFileSystem : IDisposable
         public string SourcePath => _path;
         public IEnumerable<string> Keys => _index.Keys;
         public bool Contains(string key) => _index.ContainsKey(key);
+
+        /// <summary>Still the same archive we indexed? A disposed mount, a deleted file, or one whose size or
+        /// mtime moved answers false and gets rebuilt by the rescan.</summary>
+        public bool IsCurrent()
+        {
+            lock (_gate)
+            {
+                if (_archive is null)
+                    return false;
+            }
+            try
+            {
+                var now = new FileInfo(_path);
+                return now.Exists && now.Length == _stampLength && now.LastWriteTimeUtc == _stampWriteUtc;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return false; // can't tell → rebuild, which will report the real problem
+            }
+        }
 
         public byte[] ReadBytes(string key)
         {

@@ -41,6 +41,10 @@ public partial class ConsoleOverlay : CanvasLayer
     private CvarService? _cvars;
     private ConsoleCommands? _commands;
     private Func<bool>? _shouldCaptureOnClose;
+    // Kept (not just handed to ConsoleCommands) so a host command registered here can take the SAME route a
+    // gameplay command does — `lsmaps` asks the live server when there is one and answers locally when not.
+    private Func<string, string?>? _localRouter;
+    private Action<string>? _remoteSender;
 
     private readonly List<string> _history = new();
     private int _histIndex = -1;                 // -1 = editing a fresh line (not navigating history)
@@ -103,6 +107,8 @@ public partial class ConsoleOverlay : CanvasLayer
         _interp = interp;
         _cvars = cvars;
         _shouldCaptureOnClose = shouldCaptureOnClose;
+        _localRouter = localRouter;
+        _remoteSender = remoteSender;
         _commands = new ConsoleCommands(interp, cvars, Print, Clear, localRouter, remoteSender);
         RegisterHostCommands(interp);
 
@@ -152,6 +158,92 @@ public partial class ConsoleOverlay : CanvasLayer
             MenuState.Cvars.Set("scoreboard_columns", spec);
         });
 
+        // ---- the four command-PREFIX dispatchers every commands.cfg alias bottoms out in ----
+        //
+        // commands.cfg builds ~158 aliases of the form `alias lsmaps "qc_cmd_svcmd lsmaps ${* ?}"`, and the
+        // qc_cmd_* names are themselves aliases resolving to one of four verbs (`cmd`, `sv_cmd`, `cl_cmd`,
+        // `menu_cmd`) picked by the if_client/if_dedicated pair in xonotic-common.cfg. In QC each of those
+        // four is a registered engine/progs command. None of them existed here — so every one of those
+        // aliases expanded correctly and then died on the last hop, reaching the router as an unknown `cmd
+        // <verb>` line and coming back "Unknown command". These four registrations are that last hop.
+        //
+        // Verified against the real cfg tree by CommandDispatchTests, which asserts what each alias actually
+        // expands to rather than what this comment claims it does.
+
+        // DP Cmd_ForwardToServer: the client→server channel. QC's CLIENT_COMMAND set (the `cmd` prefix) plus
+        // everything aliased through qc_cmd_cmd/qc_cmd_svcmd — lsmaps, records, rankings, ladder, printmaplist,
+        // teamstatus, info, time, cvar_changes, join, ready, vote, …
+        interp.RegisterCommand("cmd", a => ForwardToGame(JoinTail(a), "cmd"));
+
+        // QC SERVER_COMMAND (the sv_cmd prefix): admin verbs — kick/ban/gotomap/endmatch/shuffleteams/…
+        // Deliberately NOT forwarded to a remote server: the tail alone would be judged by the server's
+        // client-privilege gate and rejected anyway, so a round trip would only turn an honest local message
+        // into a confusing remote one.
+        interp.RegisterCommand("sv_cmd", a =>
+        {
+            string tail = JoinTail(a);
+            if (tail.Length == 0) { Print("usage: sv_cmd <command> [args]"); return; }
+            if (_localRouter?.Invoke(tail) is not string outp)
+            {
+                Print($"sv_cmd: \"{tail}\" needs a server you are hosting (try `map <name>` first).");
+                return;
+            }
+            string trimmed = outp.TrimEnd('\n', '\r', ' ', '\t');
+            if (trimmed.Length > 0)
+                Print(trimmed);
+        });
+
+        // QC CLIENT_COMMAND run locally (the cl_cmd prefix). Dispatches only names that are REGISTERED
+        // commands: registered names outrank aliases in the interpreter, so re-entering ExecuteLine for one
+        // cannot loop back through the alias that sent us here (`help` = "cl_cmd help; cmd help" is exactly
+        // that shape). An unregistered name is reported rather than routed — a client command the port has
+        // not implemented is not the server's business.
+        interp.RegisterCommand("cl_cmd", a =>
+        {
+            string tail = JoinTail(a);
+            if (tail.Length == 0) { Print("usage: cl_cmd <command> [args]"); return; }
+            if (a.Count >= 2 && interp.CommandNames.Any(n => string.Equals(n, a[1], StringComparison.OrdinalIgnoreCase)))
+                interp.ExecuteLine(tail);
+            else
+                Print($"cl_cmd: unknown client command \"{a[1]}\".");
+        });
+
+        // QC MENU_COMMAND (the menu_cmd prefix): the front-end verbs, routed through the menu's own dispatcher.
+        interp.RegisterCommand("menu_cmd", a =>
+        {
+            string tail = JoinTail(a);
+            if (tail.Length == 0) { Print("usage: menu_cmd <command> [args]"); return; }
+            MenuCommand.Run(tail);
+        });
+
+        // `lsmaps [gametype]` — QC CommonCommand_lsmaps. Registered CLIENT-side (and therefore ahead of the
+        // `commands.cfg` alias, which registered commands outrank) because at the menu there is no server to
+        // answer and the alias's route ends in the generic "no server — start a match first" hint. A player
+        // asking what maps they have installed can be answered from the mounted search path without one.
+        //
+        // A live game still owns the answer: on a listen host that is this very catalog (NetGame feeds
+        // MapList.LsmapsReply into the server's reply seam), and on a remote server it is THEIR pool — which
+        // is the question worth asking, since `vcall gotomap` can only pick from that.
+        interp.RegisterCommand("lsmaps", a =>
+        {
+            if (_localRouter?.Invoke("lsmaps") is string local)
+            {
+                string trimmed = local.TrimEnd('\n', '\r', ' ', '\t');
+                if (trimmed.Length > 0)
+                    Print(trimmed);
+                return;
+            }
+            if (MenuCommand.InMatch?.Invoke() == true)
+            {
+                _remoteSender?.Invoke("lsmaps"); // reply arrives async via the server print channel
+                return;
+            }
+            // No server anywhere: report what THIS install has. The optional argument is the gametype filter
+            // (QC MapInfo_CheckMap); with no live gametype to inherit, the unfiltered catalog is the honest
+            // default rather than a guess at what the player will end up hosting.
+            Print(MapList.LsmapsReply(a.Count >= 2 ? a[1] : null));
+        });
+
         interp.RegisterCommand("vid_restart", _ => MenuCommand.VideoRestart?.Invoke());
         interp.RegisterCommand("snd_restart", _ => MenuCommand.AudioRestart?.Invoke());
         interp.RegisterCommand("togglemenu", a =>
@@ -159,6 +251,33 @@ public partial class ConsoleOverlay : CanvasLayer
             int mode = (a.Count >= 2 && a[1] == "0") ? 0 : -1;
             MenuCommand.ToggleMenu?.Invoke(mode);
         });
+    }
+
+    /// <summary>Everything after the verb, rejoined — the line a prefix dispatcher passes on.</summary>
+    private static string JoinTail(IReadOnlyList<string> argv)
+        => argv.Count < 2 ? string.Empty : string.Join(' ', argv.Skip(1));
+
+    /// <summary>
+    /// Send <paramref name="line"/> down the same client→server route an unrouted console line takes: the
+    /// in-process listen world first, then the connected server. <paramref name="verb"/> only names the
+    /// dispatcher in the usage message.
+    /// </summary>
+    private void ForwardToGame(string line, string verb)
+    {
+        if (line.Length == 0)
+        {
+            Print($"usage: {verb} <command> [args]");
+            return;
+        }
+        if (_localRouter?.Invoke(line) is string outp)
+        {
+            string trimmed = outp.TrimEnd('\n', '\r', ' ', '\t');
+            if (trimmed.Length > 0)
+                Print(trimmed);
+            return;
+        }
+        // No local world: the connected server, or (at the menu) the sender's own "no server" hint.
+        _remoteSender?.Invoke(line);
     }
 
     // =============================================================================================

@@ -135,6 +135,8 @@ TEMPLATE = r'''<!doctype html>
   body { margin:0; background:var(--bg); color:var(--fg);
     font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
   header { padding:20px 24px 8px; }
+  .home { display:inline-block; margin-bottom:6px; color:var(--muted); font-size:13px; text-decoration:none; }
+  .home:hover { color:var(--accent); }
   h1 { margin:0 0 2px; font-size:20px; }
   .sub { color:var(--muted); font-size:13px; }
   .toolbar { position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--line);
@@ -191,6 +193,7 @@ TEMPLATE = r'''<!doctype html>
 </head>
 <body>
 <header>
+  <a class="home" href="./">&larr; home</a>
   <h1>Upstream Watch — Ledger</h1>
   <div class="sub">Triaged original-Xonotic contributions considered for Vortex Arena.
     Source of truth: <code>LEDGER.yaml</code> · regenerate this page with <code>python tools/upstream-ledger-html.py</code>.</div>

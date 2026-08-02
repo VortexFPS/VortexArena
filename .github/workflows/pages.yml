@@ -1,7 +1,8 @@
 name: Deploy docs to Pages
 
 # Publishes the GitHub Pages site:
-#   /                -> planning/upstream-watch/LEDGER.html (regenerated from LEDGER.yaml)
+#   /                -> planning/site/index.html (landing page / directory)
+#   /ledger.html     -> planning/upstream-watch/LEDGER.html (regenerated from LEDGER.yaml)
 #   /balance.html    -> planning/reference/xonotic-balance-history.html
 #   /physics.html    -> planning/reference/xonotic-physics-history.html
 
@@ -9,6 +10,7 @@ on:
   push:
     branches: [main]
     paths:
+      - planning/site/index.html
       - planning/upstream-watch/LEDGER.yaml
       - planning/reference/xonotic-balance-history.html
       - planning/reference/xonotic-physics-history.html
@@ -41,7 +43,8 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p _site
-          cp planning/upstream-watch/LEDGER.html _site/index.html
+          cp planning/site/index.html _site/index.html
+          cp planning/upstream-watch/LEDGER.html _site/ledger.html
           cp planning/reference/xonotic-balance-history.html _site/balance.html
           cp planning/reference/xonotic-physics-history.html _site/physics.html
       - uses: actions/upload-pages-artifact@v5

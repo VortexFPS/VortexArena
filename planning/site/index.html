@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vortex Arena — Project Pages</title>
+<style>
+/*
+  Design:  Landing page / directory for the Vortex Arena GitHub Pages site.
+  Same palette/type stack as the physics + balance history docs.
+
+  ground   #07100e
+  surface  #0c1a16
+  border   #162a24
+  code     #6ec9bc
+  hot      #df7b3c
+  text1    #bdd8d1
+  text2    #4c7872
+  text3    #2d5450
+*/
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  background: #07100e;
+  color: #bdd8d1;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.72;
+}
+
+body {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 24px 120px;
+}
+
+code, .mono {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+}
+
+/* ──────────────────────── HEADER ──────────────────────── */
+
+.page-head {
+  position: relative;
+  padding: 64px 0 48px;
+  border-bottom: 1px solid #162a24;
+  margin-bottom: 56px;
+  overflow: hidden;
+}
+
+.page-head::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(#162a24 1px, transparent 1px),
+    linear-gradient(90deg, #162a24 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 40%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 40%, transparent 100%);
+  pointer-events: none;
+}
+
+.head-inner { position: relative; }
+
+.kicker {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: #df7b3c;
+  margin-bottom: 14px;
+}
+
+h1 {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #e8f4f0;
+  margin-bottom: 12px;
+}
+
+.tagline {
+  color: #4c7872;
+  font-size: 16px;
+  max-width: 620px;
+}
+
+.tagline code {
+  color: #6ec9bc;
+  font-size: .9em;
+}
+
+/* ──────────────────────── DIRECTORY ──────────────────────── */
+
+.dir-label {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: #2d5450;
+  margin-bottom: 20px;
+}
+
+.cards { display: grid; gap: 18px; }
+
+a.card {
+  display: block;
+  position: relative;
+  background: #0c1a16;
+  border: 1px solid #162a24;
+  border-radius: 10px;
+  padding: 26px 28px 24px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s ease, transform .15s ease;
+}
+
+a.card:hover, a.card:focus-visible {
+  border-color: #2d5450;
+  transform: translateY(-2px);
+}
+
+a.card:hover .card-title, a.card:focus-visible .card-title { color: #df7b3c; }
+
+.card-path {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  color: #2d5450;
+  margin-bottom: 8px;
+}
+
+.card-title {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 19px;
+  font-weight: 700;
+  color: #e8f4f0;
+  margin-bottom: 8px;
+  transition: color .15s ease;
+}
+
+.card-title .arrow { color: #df7b3c; font-weight: 400; margin-left: 6px; }
+
+.card-desc { color: #4c7872; font-size: 14.5px; max-width: 640px; }
+
+.card-desc code {
+  color: #6ec9bc;
+  font-size: .88em;
+  background: #07100e;
+  border: 1px solid #162a24;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.card-tags { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.tag {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: #6ec9bc;
+  border: 1px solid #162a24;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+/* ──────────────────────── FOOTER ──────────────────────── */
+
+footer {
+  margin-top: 64px;
+  padding-top: 28px;
+  border-top: 1px solid #162a24;
+  color: #2d5450;
+  font-size: 13px;
+}
+
+footer a { color: #4c7872; text-decoration: none; }
+footer a:hover { color: #6ec9bc; }
+</style>
+</head>
+<body>
+
+<header class="page-head">
+  <div class="head-inner">
+    <div class="kicker">VortexFPS / VortexArena</div>
+    <h1>Vortex Arena</h1>
+    <p class="tagline">An arena FPS — a fork of Xonotic ported from QuakeC/DarkPlaces to
+      Godot&nbsp;4 (.NET). These pages are the project's living reference docs, generated
+      from the repo on every push to <code>main</code>.</p>
+  </div>
+</header>
+
+<main>
+  <div class="dir-label">// pages</div>
+  <div class="cards">
+
+    <a class="card" href="ledger.html">
+      <div class="card-path">/ledger.html</div>
+      <div class="card-title">Upstream Watch — Ledger<span class="arrow">→</span></div>
+      <p class="card-desc">Every original-Xonotic contribution triaged for Vortex Arena:
+        what we port, adapt, defer, or reject, and why. Searchable and filterable by
+        decision, relevance, and kind. Regenerated from <code>LEDGER.yaml</code>.</p>
+      <div class="card-tags">
+        <span class="tag">upstream triage</span>
+        <span class="tag">port decisions</span>
+        <span class="tag">searchable</span>
+      </div>
+    </a>
+
+    <a class="card" href="balance.html">
+      <div class="card-path">/balance.html</div>
+      <div class="card-title">Weapon Balance — Change History<span class="arrow">→</span></div>
+      <p class="card-desc">Xonotic's weapon balance changelog, release by release, with
+        inline before/after diffs of the numbers that changed — damage, refire, spread,
+        ammo. The reference for where our balance values came from.</p>
+      <div class="card-tags">
+        <span class="tag">weapons</span>
+        <span class="tag">per-release diffs</span>
+      </div>
+    </a>
+
+    <a class="card" href="physics.html">
+      <div class="card-path">/physics.html</div>
+      <div class="card-title">Default Physics — Change History<span class="arrow">→</span></div>
+      <p class="card-desc">An annotated history of Xonotic's default movement physics —
+        acceleration, air control, friction, and the cvars behind them — tracing how the
+        feel evolved and which values Vortex Arena inherits.</p>
+      <div class="card-tags">
+        <span class="tag">movement</span>
+        <span class="tag">cvar history</span>
+      </div>
+    </a>
+
+  </div>
+</main>
+
+<footer>
+  Source: <a href="https://github.com/VortexFPS/VortexArena">github.com/VortexFPS/VortexArena</a>
+  · deployed by <span class="mono">pages.yml</span> on push to <span class="mono">main</span>
+</footer>
+
+</body>
+</html>

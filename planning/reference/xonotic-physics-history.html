@@ -64,6 +64,17 @@ body {
 
 .head-inner { position: relative; }
 
+.home-link {
+  display: inline-block;
+  margin-bottom: 14px;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .08em;
+  color: #4c7872;
+  text-decoration: none;
+}
+.home-link:hover { color: #6ec9bc; }
+
 .head-eyebrow {
   font-family: 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
   font-size: 0.64rem;
@@ -542,6 +553,7 @@ a:focus-visible { outline: 2px solid #df7b3c; outline-offset: 2px; }
 
 <header class="page-head">
   <div class="head-inner">
+    <a class="home-link" href="./">&larr; home</a>
     <div class="head-eyebrow">physicsX.cfg &nbsp;·&nbsp; git-verified &nbsp;·&nbsp; xonotic-data.pk3dir &nbsp;·&nbsp; 2010–2025</div>
 
     <h1 class="head-title">

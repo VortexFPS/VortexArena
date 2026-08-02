@@ -43,6 +43,8 @@ internal static class Program
                 "package" => Wrappers.Package(commandArgs),
                 "ci" => Wrappers.Ci(commandArgs),
                 "perf" => Wrappers.Perf(commandArgs),
+                "perf-smoke" => Wrappers.PerfSmoke(commandArgs),
+                "wobble" => Wrappers.Wobble(commandArgs),
                 _ => UnknownCommand(command),
             };
         }
@@ -101,6 +103,8 @@ internal static class Program
               package     Zip the exports.             (tools/package.sh)
               ci          The full local gate.         (ci/ci.sh)
               perf        Capture a perf session.      (tools/perf-run.sh)
+              perf-smoke  Pre-merge perf gate.         --live adds a capture
+              wobble      Motion/present wobble capture.
 
             Global options:
               --json      Machine-readable output. The schema is versioned and is a

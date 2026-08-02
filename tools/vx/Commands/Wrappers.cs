@@ -166,20 +166,37 @@ internal static class Wrappers
     /// the dev box actually uses. Prefer it on Windows rather than pretending the .sh is authoritative
     /// there; retiring the pair is Phase 2 of the plan, not something to paper over here.
     /// </summary>
-    internal static int Perf(string[] args)
+    /// <summary>Pre-merge perf gate. Same platform split as <see cref="Perf"/>.</summary>
+    internal static int PerfSmoke(string[] args) => PsOrSh("perf-smoke", args);
+
+    /// <summary>
+    /// Motion/present wobble capture. The .ps1 is NOT interchangeable with the .sh here: it drives
+    /// PresentMon, an ETW consumer with no macOS or Linux equivalent, so the shell twin captures the motion
+    /// trace only. Dispatching by platform is what makes that difference invisible at the call site.
+    /// </summary>
+    internal static int Wobble(string[] args) => PsOrSh("wobble-capture", args);
+
+    /// <summary>
+    /// Run tools/&lt;name&gt;.ps1 on Windows and tools/&lt;name&gt;.sh elsewhere. The .ps1/.sh pairs are a
+    /// maintenance tax the plan intends to retire, but while they exist a caller should not have to know
+    /// which one they are on — and on Windows the .ps1 is the one with the fuller implementation.
+    /// </summary>
+    private static int PsOrSh(string name, string[] args)
     {
         if (Env.IsWindows)
         {
             string? pwsh = Env.Which("pwsh") ?? Env.Which("powershell");
             if (pwsh is not null)
             {
-                var argv = new List<string> { "-File", Path.Combine(Env.RepoRoot, "tools", "perf-run.ps1") };
+                var argv = new List<string> { "-File", Path.Combine(Env.RepoRoot, "tools", name + ".ps1") };
                 argv.AddRange(args);
                 return Env.Exec(pwsh, argv);
             }
         }
-        return Env.Bash("tools/perf-run.sh", args);
+        return Env.Bash($"tools/{name}.sh", args);
     }
+
+    internal static int Perf(string[] args) => PsOrSh("perf-run", args);
 
     // ---- helpers ---------------------------------------------------------------------------------------
 

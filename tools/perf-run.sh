@@ -5,7 +5,8 @@
 #   perf-run.sh pvs_off  35 --cvar r_pvs_cull 0
 # Env: PERF_MAP (default catharsis), PERF_BOTS (default 6), PERF_DEBUG=1 (Godot console binary
 # on the project instead of the release export — NOT release-representative),
-# PERF_USERDIR (capture profile dir; default _scratch/perf-userdir, "real" = the daily ~/XonData).
+# PERF_USERDIR (capture profile dir; default _scratch/perf-userdir, "real" = the daily ~/XonData),
+# PERF_BASELINE (path to a perf_*.json to --diff against; the twin of perf-run.ps1's -Baseline).
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/tools/lib/run-timeout.sh"   # portable `timeout` (absent on macOS)
@@ -86,4 +87,14 @@ fi
 echo ">>> [$LABEL] session: $(basename "$NEW")"
 . "$ROOT/tools/lib/find-python.sh"
 PYTHON="$(find_python)" || { python_not_found; exit 1; }
-"$PYTHON" "$ROOT/tools/perf-report.py" "$NEW" --json "$ROOT/_scratch/perf_${LABEL}.json"
+# PERF_BASELINE is the .sh counterpart of perf-run.ps1's -Baseline. Its absence was drift, not design: the
+# two scripts are documented as twins, and perf-smoke's --live gate has nothing to compare against without it.
+REPORT_ARGS=("$NEW" --json "$ROOT/_scratch/perf_${LABEL}.json")
+if [ -n "${PERF_BASELINE:-}" ]; then
+    if [ -f "$PERF_BASELINE" ]; then
+        REPORT_ARGS+=(--diff "$PERF_BASELINE")
+    else
+        echo ">>> baseline '$PERF_BASELINE' not found — reporting without a diff" >&2
+    fi
+fi
+"$PYTHON" "$ROOT/tools/perf-report.py" "${REPORT_ARGS[@]}"

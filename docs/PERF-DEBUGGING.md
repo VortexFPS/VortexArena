@@ -76,6 +76,13 @@ A real A/B here showed p99 +39% and 1%-low −28% on the first pair — a convin
 pair reversed both, while `alloc_total_mb` reproduced to under 0.3%. Two pairs minimum before reporting a
 tail number, or report only the mean.
 
+**`wobble-capture` is genuinely asymmetric, and that is not a gap to close.** The `.ps1` captures the present
+queue with PresentMon, an ETW consumer; ETW is a Windows kernel facility with no macOS or Linux equivalent, so
+there is nothing to port it to. `tools/wobble-capture.sh` therefore records the MOTION half only and reports
+on the trace alone — which is a mode the `.ps1` already has when PresentMon is missing, not a new degradation.
+The motion half catches camera/interp wobble; separating "the frame was late" from "the camera moved wrong"
+stays Windows-only.
+
 **Never diff a non-Windows capture against `tools/perf-baselines/`.** Those are the Windows/RTX 3080 dev box.
 A before/after A/B on one machine is relative and stays valid; a stored-baseline diff across platforms is
 meaningless.
@@ -121,7 +128,7 @@ session hitch counter; **F11** expands the live scope tree; `set cl_frameprofile
 | `tools/perf-run.ps1` / `.sh` | One-command capture: launches the **release export** (`-DebugBuild` for the project) on a map + bots with the profiler forced, self-quits, runs the report, writes `_scratch/perf_<label>.json`. |
 | `tools/perf-report.py` | Turns a session pair into percentiles/1%-lows, a primaries-vs-recovery census, hitch **clusters**, top offending scopes, alloc storms, GC/pipeline totals — plus a **post-load block** (`t ≥ 20 s`, `--postload SECS`) so steady-state smoothness is readable without load/join noise (trust the `pl` rows for smoothness A/Bs; the full-session 0.1%-low is pinned by load frames). `--diff <session|json>` compares runs; `--json` writes a baseline. Old (pre-2026-07-03) CSVs had a one-frame ms↔scopes skew — the tool detects and corrects it. |
 | `tools/perf-run.sh` | The cross-platform twin of `perf-run.ps1` (see "macOS / Linux" above). Selects the export for the running platform and reproduces the packaged content layout, including macOS's in-bundle `Contents/Resources/data`. Flags are env vars: `PERF_MAP`, `PERF_BOTS`, `PERF_SCENARIO`, `PERF_USERDIR`, `PERF_DEBUG`. |
-| `tools/perf-smoke.ps1` | **Windows only — no `.sh` twin yet.** Pre-merge gate: budget-asserting headless benches (`ServerTickPerfBench` fails on a >4-5× tick regression; opt out with `VA_PERF_ASSERT=0`), `-Live` adds a 30 s capture diffed vs `tools/perf-baselines/`. |
+| `tools/perf-smoke.ps1` / `.sh` | Pre-merge gate (`./vx perf-smoke` picks the right one): budget-asserting headless benches (`ServerTickPerfBench` fails on a >4-5× tick regression; opt out with `VA_PERF_ASSERT=0`), `-Live`/`--live` adds a 30 s capture diffed vs `tools/perf-baselines/`. The `.sh` REFUSES that diff off Windows (the baselines are the RTX 3080 box; override with `PERF_ALLOW_CROSS_PLATFORM_BASELINE=1`). |
 | `cl_frameprofiler_dump 1` | Console: dumps the last ~240 frames (forensic ring) to `frameprofile_ring.csv`. |
 | RenderDoc auto-capture | Run under RenderDoc → sync SURFACE compiles self-capture (≤6/session, after t=28 s) to `<temp>/xonotic_rdoc/`. |
 | `net_input_trace 1` | The input→server→reconcile pipeline tracer — see NET-DEBUGGING.md. |

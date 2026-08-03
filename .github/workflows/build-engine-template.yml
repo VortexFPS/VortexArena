@@ -54,7 +54,12 @@ env:
   # Matches tools/engine-patches/README.md's rebuild recipe, so the CI artifact and the dev-box binary
   # are the same configuration rather than merely both "patched". `arch` is per-platform (macOS builds
   # two and lipos them), so it is not in here.
-  SCONS_COMMON: module_mono_enabled=yes
+  # cvtt_export_templates=yes (2026-08-02): build the BPTC/BC7 ENCODER into export templates — upstream
+  # excludes the cvtt module from template builds (modules/cvtt/config.py gates on editor_build unless this
+  # flag is set), which together with etcpak's TOOLS_ENABLED-gated encoders made gl_texturecompression a
+  # silent no-op in release. The etcpak side needs the patch in tools/engine-patches/ (applied by the patch
+  # step); this flag is upstream-supported and covers the BC7 path on its own.
+  SCONS_COMMON: module_mono_enabled=yes cvtt_export_templates=yes
 
 jobs:
   # Which matrix legs run, from the `platforms` input. Kept as a job so the choice is visible in the run
@@ -365,10 +370,12 @@ jobs:
           Per-asset sha256 is in each build job's summary; \`tools/engine-patches/engine.lock.json\` pins
           the ones the export actually verifies.
 
-          **Only the Windows template differs from stock.** The patch set touches
-          \`platform/windows/\` exclusively, so the Linux and macOS templates here are
-          stock-equivalent in behaviour — they exist for provenance (a template we built and can
-          hash-verify) rather than to fix anything. The macOS template is universal (arm64 + x86_64).
+          **Since vortex2 the patch set is no longer Windows-only.** The mouse-input backport touches
+          \`platform/windows/\` alone, but \`godot-4.6.3-etcpak-runtime-encode.patch\` un-gates the
+          cross-platform BC/ETC texture encoders and \`cvtt_export_templates=yes\` builds the BC7
+          encoder in — every platform's template carries those, so Linux/macOS builds here differ from
+          stock in texture-compression capability (and only that). The macOS template is universal
+          (arm64 + x86_64).
 
           Marked **prerelease deliberately** — see the workflow comment. A full release here hijacks
           \`releases/latest\` and drops every launcher onto the rate-limited API feed.

@@ -8,12 +8,12 @@
     "real property - a known build from known inputs whose hash we can check - and it is what makes 'which",
     "engine is this Linux server running' an answerable question.",
     "Three jobs, because the failure they guard has three ends:",
-    "  'patches' pins the SOURCE \u2014 the patch files on disk, by sha256, so a silent edit to a patch is",
+    "  'patches' pins the SOURCE — the patch files on disk, by sha256, so a silent edit to a patch is",
     "    caught before anyone rebuilds a template from it.",
-    "  'template.platforms' pins the INPUT \u2014 the published template artifact by sha256 AND by FORM,",
+    "  'template.platforms' pins the INPUT — the published template artifact by sha256 AND by FORM,",
     "    checked when it is fetched and again before an export (--preset-config), which is what catches an",
     "    emptied or re-pointed custom_template/release.",
-    "  'binary_markers' pins the RESULT \u2014 byte sequences that must (or must not) appear in the exported",
+    "  'binary_markers' pins the RESULT — byte sequences that must (or must not) appear in the exported",
     "    game binary, which is the only check that speaks to what actually shipped. It can only",
     "    discriminate patched-vs-stock where a patch exists to discriminate on, i.e. Windows; see the",
     "    binary_markers comment below, which is deliberately explicit about what the other presets do NOT",
@@ -25,7 +25,7 @@
     "channel": "stable",
     "dotnet": true,
     "upstream_tag": "4.6.3-stable",
-    "scons": "platform=windows target=template_release arch=x86_64 module_mono_enabled=yes d3d12=no"
+    "scons": "platform=windows target=template_release arch=x86_64 module_mono_enabled=yes cvtt_export_templates=yes d3d12=no"
   },
   "patches": [
     {
@@ -36,8 +36,21 @@
       "drop_at_engine": "4.8",
       "$comment": [
         "Hash is over the LF form. .gitattributes pins *.patch to eol=lf precisely so this value is",
-        "the same on Windows and on the Linux runner \u2014 without that rule the file checks out CRLF",
+        "the same on Windows and on the Linux runner — without that rule the file checks out CRLF",
         "under core.autocrlf and this hash fails on whichever platform did not write it."
+      ]
+    },
+    {
+      "file": "godot-4.6.3-etcpak-runtime-encode.patch",
+      "sha256": "dd95bc1301420b7d8d94d7249112d3fe521548fdd15de15918b3f96ff615e57f",
+      "bytes": 2169,
+      "upstream": "none - deliberate deviation: upstream considers runtime VRAM-compression encode an editor feature (etcpak register_types.cpp TOOLS_ENABLED); this game compresses at load time (gl_texturecompression)",
+      "drop_at_engine": "never (re-evaluate on engine upgrades: re-check the guard is still present upstream)",
+      "$comment": [
+        "Removes the TOOLS_ENABLED guard around the etcpak encoder registrations + declarations",
+        "(register_types.cpp, image_compress_etcpak.h/.cpp). The encode kernels (thirdparty",
+        "ProcessDxtc/ProcessRGB) were ALWAYS compiled into templates; only the entry points were",
+        "stripped. cvtt/BPTC needs no patch (registers unconditionally)."
       ]
     }
   ],
@@ -199,7 +212,17 @@
         "presets": [
           "windows-client"
         ],
-        "patched": true
+        "patched": true,
+        "$comment": [
+          "STILL vortex1 (input backport only) — a vortex2 with godot-4.6.3-etcpak-runtime-encode.patch was",
+          "built LOCALLY on 2026-08-02 and REJECTED BY MEASUREMENT: the local MSVC build ran ~25% slower",
+          "across every CPU bucket than this CI-built binary on identical code and flags (catharsis p50",
+          "4.06 -> 5.46/6.17 ms; features-off control still slow = the template, not the features; see",
+          "perf-deep-dive-2026-08-02.md 5c). The etcpak patch itself is correct and stays in patches[];",
+          "build vortex2 VIA THE CI WORKFLOW (same toolchain as this binary), verify a capture pair against",
+          "this baseline, then re-pin. Until then release builds compress via the BC7 fallback",
+          "(AssetSystem.MaybeCompress probes S3TC and routes to cvtt), which ships in all templates."
+        ]
       },
       "linux": {
         "filename": "godot.linuxbsd.template_release.x86_64.mono",

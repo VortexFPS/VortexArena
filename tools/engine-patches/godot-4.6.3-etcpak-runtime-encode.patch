@@ -1,0 +1,57 @@
+diff --git a/modules/etcpak/image_compress_etcpak.cpp b/modules/etcpak/image_compress_etcpak.cpp
+index 1d8c936..3834407 100644
+--- a/modules/etcpak/image_compress_etcpak.cpp
++++ b/modules/etcpak/image_compress_etcpak.cpp
+@@ -30,7 +30,7 @@
+ 
+ #include "image_compress_etcpak.h"
+ 
+-#ifdef TOOLS_ENABLED
++// VortexArena: TOOLS_ENABLED guard removed (see register_types.cpp).
+ 
+ #include "core/os/os.h"
+ #include "core/string/print_string.h"
+@@ -305,4 +305,4 @@ void _compress_etcpak(EtcpakType p_compress_type, Image *r_img) {
+ 
+ 	print_verbose(vformat("etcpak: Encoding took %d ms.", OS::get_singleton()->get_ticks_msec() - start_time));
+ }
+-#endif // TOOLS_ENABLED
++
+diff --git a/modules/etcpak/image_compress_etcpak.h b/modules/etcpak/image_compress_etcpak.h
+index eb57297..9af769b 100644
+--- a/modules/etcpak/image_compress_etcpak.h
++++ b/modules/etcpak/image_compress_etcpak.h
+@@ -30,7 +30,8 @@
+ 
+ #pragma once
+ 
+-#ifdef TOOLS_ENABLED
++// VortexArena: TOOLS_ENABLED guard removed — release builds compress at load time
++// (gl_texturecompression); see register_types.cpp.
+ 
+ #include "core/io/image.h"
+ 
+@@ -54,4 +55,3 @@ void _compress_bc(Image *r_img, Image::UsedChannels p_channels);
+ 
+ void _compress_etcpak(EtcpakType p_compress_type, Image *r_img);
+ 
+-#endif // TOOLS_ENABLED
+diff --git a/modules/etcpak/register_types.cpp b/modules/etcpak/register_types.cpp
+index da0c1e5..b4c724c 100644
+--- a/modules/etcpak/register_types.cpp
++++ b/modules/etcpak/register_types.cpp
+@@ -38,11 +38,12 @@ void initialize_etcpak_module(ModuleInitializationLevel p_level) {
+ 		return;
+ 	}
+ 
+-#ifdef TOOLS_ENABLED
++	// VortexArena: encoders registered unconditionally (upstream guards them TOOLS_ENABLED, leaving
++	// export templates decode-only). This game compresses textures at load time (gl_texturecompression),
++	// so release builds need the BC/ETC encode path; etcpak itself has no editor dependencies.
+ 	Image::_image_compress_etc1_func = _compress_etc1;
+ 	Image::_image_compress_etc2_func = _compress_etc2;
+ 	Image::_image_compress_bc_func = _compress_bc;
+-#endif
+ 
+ 	Image::_image_decompress_etc1 = _decompress_etc;
+ 	Image::_image_decompress_etc2 = _decompress_etc;

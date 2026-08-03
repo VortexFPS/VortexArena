@@ -58,6 +58,19 @@ no step at all, with every job still green.
 
 ## Current patches
 
+- **godot-4.6.3-etcpak-runtime-encode.patch** (2026-08-02, template `vortex2`) — removes the
+  `TOOLS_ENABLED` guard around etcpak's BC/ETC **encoder** registrations
+  (`modules/etcpak/register_types.cpp` + the matching declaration/definition guards in
+  `image_compress_etcpak.h/.cpp`). Upstream treats runtime VRAM-compression *encoding* as an
+  editor/import feature, so export templates ship decode-only — which made `gl_texturecompression`
+  a silent no-op in release builds (250 "unsupported source format" skips per session; measured
+  2026-08-02, planning/perf-deep-dive-2026-08-02.md §5c) while the editor compressed the same set
+  to a third of the VRAM. The encode kernels (thirdparty ProcessDxtc/ProcessRGB) were always
+  compiled into templates; only the entry points were stripped, so the patch adds ~0 bytes of new
+  code. cvtt (BPTC) needs no patch — it registers unconditionally, which is also the automatic
+  fallback path AssetSystem uses on an unpatched template. Not upstreamable as-is (it reverses a
+  deliberate upstream design line); re-check the guard on every engine upgrade.
+
 - **godot-4.6.3-pr109639-mouse-input-backport.patch** — backport of
   [godotengine/godot#109639](https://github.com/godotengine/godot/pull/109639) (merged upstream
   2026-07-24, milestone 4.8): batch-drain raw mouse input via `GetRawInputBuffer` + coalesce

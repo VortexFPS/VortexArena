@@ -97,10 +97,11 @@ internal static class Program
 
               build       Build the Godot host.        --config Debug|Release
               test        Run the suite.               --filter <expr>
-              run         Launch the client.           extra args go to the game
-                            --release       the exported client from dist/ (what a
-                                            player runs) instead of the project, whose
-                                            C# is Debug and OS.IsDebugBuild() is true
+              run         Launch the client — the RELEASE export from dist/ (what a
+                          player runs). Extra args go to the game.
+                            debug           the Debug project via the editor engine
+                                            instead (OS.IsDebugBuild() true, profiler +
+                                            showfps on; NOT release-representative)
                             -n, --no-build-check
                                             skip the "sources are newer than the build,
                                             rebuild?" prompt and launch immediately

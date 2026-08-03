@@ -60,13 +60,18 @@ internal static class Wrappers
     /// </summary>
     internal static int RunClient(string[] args)
     {
-        bool release = args.Contains("--release");
+        // RELEASE IS THE DEFAULT (2026-08-03, Bryan): `vx run` launches the exported client — what a player
+        // runs and what every perf number is measured against. The Debug project build is the OPT-IN
+        // (`vx run debug`), because a debug run is the non-representative one: OS.IsDebugBuild() is true,
+        // profiler + showfps default on, frame times are not comparable. `--release` is still accepted as a
+        // no-op so older muscle memory and scripts keep working.
+        bool debug = args.Contains("debug") || args.Contains("--debug");
         bool skipCheck = args.Contains("--no-build-check") || args.Contains("-n");
         string[] gameArgs = args
-            .Where(a => a is not ("--release" or "--no-build-check" or "-n"))
+            .Where(a => a is not ("debug" or "--debug" or "--release" or "--no-build-check" or "-n"))
             .ToArray();
 
-        return release ? RunRelease(gameArgs, skipCheck) : RunProject(gameArgs, skipCheck);
+        return debug ? RunProject(gameArgs, skipCheck) : RunRelease(gameArgs, skipCheck);
     }
 
     private static int RunProject(string[] gameArgs, bool skipCheck)

@@ -14,7 +14,7 @@ stay independently runnable — **put real logic in the script, never in `vx`**.
 ./vx doctor                  # what is installed, what is missing, what to do about it (changes nothing)
 ./vx setup                   # bring a fresh clone to runnable: engine, maps, export templates
 ./vx build                   # the Godot host
-./vx run                     # launch it: project+Debug C# by default, `--release` for the dist/ export
+./vx run                     # launch it: the RELEASE dist/ export by default, `debug` for the editor project
 ./vx test                    # the suite
 ./vx ci                      # the authoritative local gate
 ```

@@ -257,22 +257,23 @@ Headless doesn't render. To walk around the scene:
 ### `./vx run` — and which build you actually get
 
 ```bash
-./vx run                      # the PROJECT: editor engine + Debug C#
+./vx run                      # the RELEASE export from dist/ — what a player runs
+./vx run debug                # the PROJECT: editor engine + Debug C#
 ```
 
-This is step 4 above with the paths resolved for you. Extra args pass through to the game unchanged
-(`./vx run --host stormkeep --bots 2`). Two things to know:
+Extra args pass through to the game unchanged (`./vx run --host stormkeep --bots 2`). Two things to know:
 
-| | `./vx run` (default) | `./vx run --release` |
+| | `./vx run` (default, since 2026-08-03) | `./vx run debug` |
 |---|---|---|
-| what runs | Godot editor binary on `project.godot`, loading `.godot/mono/temp/bin/Debug/` | the export at `dist/<platform>/` — what a player runs |
-| `OS.IsDebugBuild()` | **true** | false |
-| consequences | frame profiler defaults on; `showfps`/`showposition` default on; frame times **not** release-representative | ships-as-shipped |
-| iterate by | `./vx build` (seconds) | `./vx export` (minutes) |
+| what runs | the export at `dist/<platform>/` — what a player runs | Godot editor binary on `project.godot`, loading `.godot/mono/temp/bin/Debug/` |
+| `OS.IsDebugBuild()` | false | **true** |
+| consequences | ships-as-shipped | frame profiler defaults on; `showfps`/`showposition` default on; frame times **not** release-representative |
+| iterate by | `./vx export` (minutes) | `./vx build` (seconds) |
 
-**Never measure performance on the default.** `docs/PERF-DEBUGGING.md` says capture on the release export, and
-this is why: half the diagnostics that are on by default in the left column do not exist in the right one.
-`./vx run` prints which of the two it picked before launching, so a capture can't quietly be the wrong build.
+The default flipped to release on 2026-08-03: what launches by default is now the thing every perf number is
+measured against, and the non-representative Debug project is the explicit opt-in (`debug`). `--release` is
+still accepted as a no-op for older scripts/muscle memory. `./vx run` prints which of the two it picked
+before launching, so a capture can't quietly be the wrong build.
 
 Before launching, both forms compare the newest `game/`+`src/` source against the artifact they are about to
 run and offer to rebuild if it's older (~tens of ms for ~800 files, i.e. invisible next to engine startup).

@@ -78,6 +78,19 @@ if ($DebugBuild) {
     $workDir = Split-Path $exe   # launch from the install dir, exactly as a player would
 }
 
+# --- preflight: the map must actually exist in this checkout's content -----------------------
+# data/maps is NOT tracked by git (~700MB, populated by `vx setup` / maps.lock.json), so a fresh
+# clone or a git WORKTREE starts with no maps at all. The engine does not fail on a missing map:
+# it prints "listen server runs on a flat floor" and then writes a session log full of plausible
+# numbers for a scene that is not the benchmark. That burned the 2026-08-02 interleaved A/B - the
+# A-arm worktree launched minutes after creation, before its maps were synced, and its first cell
+# silently measured a flat floor. Fail HERE, before spending capture minutes.
+$mapPk3 = Join-Path $root "data\maps\$Map.pk3"
+if (-not (Test-Path $mapPk3) -and -not (Test-Path (Join-Path $root "data\*.pk3dir\maps\$Map.bsp"))) {
+    throw ("map '$Map' not found in this checkout (no $mapPk3, no data\*.pk3dir\maps\$Map.bsp). " +
+           "A fresh clone/worktree has no map content - run ./vx setup, or sync data\maps from the main checkout.")
+}
+
 # --- clean strays (an orphaned host keeps UDP 26000 bound) -----------------------------------
 Get-Process Godot*, VortexArena* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
@@ -137,6 +150,19 @@ if ($null -eq $new -or ($null -ne $before -and $new.FullName -eq $before.FullNam
     exit 1
 }
 Write-Host ">>> [$Label] session: $($new.Name)"
+
+# --- postflight: refuse to bless a degraded run ----------------------------------------------
+# The runtime twin of the preflight above: if the engine degraded mid-boot (map/content failed to
+# mount AFTER the preflight passed - a bad junction, a corrupt pk3, a VFS regression), the game
+# says so on stdout. A capture of the wrong scene must exit non-zero and write NO json, or it
+# poisons every later -Baseline diff. (Game-side GD.Print goes to stdout, not the session log,
+# so this scans the .out capture.)
+$flatFloor = Select-String -Path $stdout -Pattern "runs on a flat floor" -SimpleMatch -Quiet
+if ($flatFloor) {
+    Write-Warning "capture INVALID: the engine could not mount the requested map - it ran on a flat floor. No json written."
+    Select-String -Path $stdout -Pattern "not found" -SimpleMatch | Select-Object -First 4 | ForEach-Object { Write-Host "    $($_.Line)" }
+    exit 1
+}
 
 # --- report (+ json for later -Baseline use, + optional diff) --------------------------------
 # python3 first (macOS/Linux under pwsh have only that spelling), then python, then the Windows py launcher.

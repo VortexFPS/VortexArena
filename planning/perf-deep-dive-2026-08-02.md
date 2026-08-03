@@ -503,6 +503,28 @@ baseline — it turns the compression default from a loud no-op into the measure
 (3) the template-codegen investigation (a ~25% swing hides real wins if either arm is thermally dirty —
 re-run the local-vs-CI comparison cold before drawing the LTO conclusion).
 
+### 5e-POSTSCRIPT (2026-08-03): the A/B orchestration itself broke — root causes + the harness that replaces it
+
+Found while investigating "the A/B run that's still running": an **orphaned watcher loop** from the 23:48
+batch had been polling every 30 s for ~11 hours. Timeline from the task files: the batch's first cell
+launched the A-arm worktree **before its maps were synced** (`data/maps` is gitignored, ~700 MB via
+`vx setup` — a fresh worktree has none), and the engine does not fail on a missing map: it printed
+`map 'catharsis' not found in the VFS — listen server runs on a flat floor` and kept benchmarking the wrong
+scene. Moments later the batch task died (the session hit its context limit right then), so the
+`AB BATCH1 DONE` marker its watcher was grep-polling for never appeared. The maps were synced at 23:50 and
+all six real cells completed 23:52–00:01 — **the §5e-RESOLVED conclusion stands on those cells** — but
+nobody killed the watcher for the dead first batch.
+
+Three defects, three fixes (landed 2026-08-03, no captures re-run):
+1. **A degraded run could pass.** `perf-run.ps1` now throws **before launch** when the map isn't in the
+   checkout's content, and exits 1 **without writing json** when the stdout capture shows the flat-floor
+   fallback. Verified against the real failing output (detects it) and a known-good capture (doesn't).
+2. **Fresh A-arms start contentless.** `tools/ab-run.ps1` (new) preflights both arms and syncs
+   `data/maps` A←B via additive robocopy before any cell.
+3. **The orchestration was orphanable.** `ab-run.ps1` is sequential and foreground — no background tasks,
+   no completion markers, no watchers; a dead run leaves nothing behind. It prints per-cell rows, per-arm
+   medians, the B−A delta, and both arms' HEADs.
+
 ## 5f. What Base/DP does that we don't (audit 2026-08-03, `../Base` + `../Base/darkplaces`)
 
 Ranked by value to a CPU-bound port. Every line has Base evidence; several invert an assumption we made.

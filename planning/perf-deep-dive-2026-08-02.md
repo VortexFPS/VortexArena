@@ -793,6 +793,52 @@ with `proc:other` ~15 ms (the watchdog says `(unscoped)` — genuinely unattribu
 small enough to hunt calmly), ~22 ms VSYNC/PRESENT singles (`rest`-dominated, game-side quiet), and the two
 pipeline-compile singles. Nothing over 28.7 ms.
 
+## 5l. The sub-40 ms campaign (2026-08-03 afternoon): three passes, two classes dead, honest residue
+
+Bryan: "I want *zero* hitches." Baseline for this stretch: stormkeep 39 post-load hitches / 644 ms total /
+worst 28.8 ms; catharsis 65 / worst 37.6 ms. Method: census every remaining hitch by (class, watchdog
+phase), attack the biggest attributable group, verify by capture, repeat.
+
+**Pass 1 — the profiler was hitching the game it profiles.** 44 of the 50 VSYNC/PRESENT + EXTERNAL hitches
+sat within 150 ms of a `[frameprofile]` snapshot block: EmitSnapshot recursed the whole scene tree
+synchronously (4+ interop calls x ~3,500 nodes) and echoed four lines through the redirected-stdout pipe.
+Census walk is now INCREMENTAL (250 visits/frame, armed after each emit, printed a window later); the
+periodic block is file-only. Verified: that class went 17 -> 0. Also: the ng.viewfx class (10-15 ms +
+~1.5 MB alloc per weapon switch) was EquipNetworkedWeapon rebuilding the first-person rig on every switch —
+now a per-weapon EQUIP CACHE seeded by the precache with the exact nodes it warm-renders
+(ViewModel.ReleaseWeaponModel hands the outgoing node back detached). Verified: 7 -> 0.
+
+**Pass 2 — decal splats: one mesh, aging in the shader.** The unscoped CPU-LOGIC hitches sat on draw-count
+spikes (draws 755 / objs 2525 vs ~310/~2000 steady). DecalSplats was node-pooled but still one
+MeshInstance3D + ShaderMaterial per splat = 256 objects/draws at cap plus a fade-uniform push per splat per
+frame. Now ONE ArrayMesh on ONE node, UVs remapped into the particle-font atlas (ParticleFont.CellUvRect),
+and fade computed in the shader from a per-vertex spawn stamp (UV2) against a single `now` uniform — mesh
+rebuilt only on add/prune. Also cn.events/cn.sounds child scopes (the ng.poll hitch class was event/sound
+bundle handlers, 10-15 ms with cn.snapshot at 0.2). Verified capture: 21 hitches / 331 ms / worst 23.2 ms,
+median 3.4 ms, avg 266 fps — the best stormkeep numbers recorded, and the steady draw floor dropped.
+
+**Pass 3 — casings: struct-array sim + two MultiMesh batches.** 100 CasingBody nodes x _PhysicsProcess ->
+one pool + one callback (scoped `casings`, reads <0.05 ms/frame), two draws, buffers sized once. End-of-life
+is a short floor-sink instead of per-instance alpha (does not compose with skin ShaderMaterials under
+MultiMesh; reads the same at casing scale). Warm pass warms MULTIMESH instances — instancing is its own
+vertex format/pipeline.
+
+**Honest verification note:** the pass-3 capture read WORSE than pass-2 (38 hitches / 633 ms / 227 fps vs
+21 / 331 / 266) with the new work itself clean (zero casings-attributed hitches; the growth was ng.input and
+GC). These single-run slaughter captures swing ~2x run-to-run (the section-5e lesson at smaller scale) — at
+this depth the per-run hitch census is inside the noise floor, and only structural evidence (callbacks
+removed, draws capped, scopes clean) plus multi-run medians should drive conclusions.
+
+**Remaining kill-list (worst first, all <=35 ms):**
+1. `ng.input` 15-24 ms spikes — the local weapon-fire path (one record showed `mp.weapon` 14.7 ms on a
+   mortar shot at t=41: likely first-fire lazy init somewhere in the weapon think). Needs child scopes.
+2. `(unscoped)` CPU-LOGIC ~15-28 ms — shrunk but present; next lever is the GIBS MultiMesh conversion
+   (same recipe as casings: 9 meshes, cap 64 — the remaining per-node burst renderer), then whatever the
+   draw census shows.
+3. GC-PAUSE up to 34 ms + steady 15 MB/s alloc — needs an allocator audit (the equip-cache already removed
+   the biggest known per-switch burst).
+4. `(post-process)` 10-16 ms — deferred-free churn candidates shrink with the gibs conversion.
+
 ## 6. Measurement discipline updates
 
 - **Post-load boundary**: use `--postload 25` until a real world-entry marker exists; better, emit a

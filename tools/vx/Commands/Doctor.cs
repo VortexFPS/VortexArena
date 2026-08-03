@@ -194,6 +194,21 @@ internal static class Doctor
                 "none — map-dependent tests self-skip and the host smoke cannot run",
                 Fix: "$PYTHON tools/data/fetch-maps.py     (or --rebuild to compile from source)");
 
+        // Packs present but no longer pinned. `vx maps` verifies the other direction — every pinned pack is
+        // installed and matches — so a pack DROPPED from the lockfile, or renamed, or left by an older fetch
+        // scheme, is invisible to every existing check while the VFS goes on mounting it.
+        //
+        // Safe to call an extra pack a finding because this directory is not a drop box: player-supplied
+        // packs belong in ~/XonData/data/maps (UserPaths), which is mounted OVER this tree rather than into
+        // it. REPORTED, NOT REMOVED — doctor changes nothing, and "delete the map file I do not recognise"
+        // is not a decision to take on someone's behalf.
+        string[] orphans = OrphanPacks(root).ToArray();
+        if (orphans.Length > 0)
+            yield return new Check("data/maps/ (unpinned)", Status.Warn,
+                $"{orphans.Length} pack(s) not in maps.lock.json: {string.Join(", ", orphans.Take(5))}"
+                + (orphans.Length > 5 ? $", +{orphans.Length - 5} more" : ""),
+                Fix: "left by an older fetcher or a dropped pin — the VFS still mounts them; delete if unwanted");
+
         // Godot's OWN export templates, needed by any preset with an empty custom_template/release
         // (today: macos-client, a declared exception in engine.lock.json). Separate from the pinned
         // custom templates below, and nothing in vx installs them - it is a ~1.2 GB editor download.
@@ -294,4 +309,30 @@ internal static class Doctor
 
     private static string Truncate(string s, int n)
         => s.Length <= n ? s : s[..n] + "…";
+
+    /// <summary>
+    /// Installed <c>data/maps/*.pk3</c> that <c>data/maps.lock.json</c> does not pin. Empty when the lockfile
+    /// is unreadable: a check that cannot read its own reference must report nothing rather than accuse every
+    /// pack of being an orphan.
+    /// </summary>
+    private static IEnumerable<string> OrphanPacks(string root)
+    {
+        string dir = Path.Combine(root, "data", "maps");
+        if (!Directory.Exists(dir)) yield break;
+
+        HashSet<string>? pinned = null;
+        try
+        {
+            string lockPath = Path.Combine(root, "data", "maps.lock.json");
+            if (File.Exists(lockPath))
+                pinned = JsonNode.Parse(File.ReadAllText(lockPath))?["packs"]?.AsObject()
+                    .Select(kv => kv.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch { /* fall through */ }
+        if (pinned is null) yield break;
+
+        foreach (string f in Directory.GetFiles(dir, "*.pk3").OrderBy(x => x, StringComparer.Ordinal))
+            if (!pinned.Contains(Path.GetFileNameWithoutExtension(f)))
+                yield return Path.GetFileName(f);
+    }
 }

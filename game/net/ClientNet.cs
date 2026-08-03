@@ -616,8 +616,16 @@ public sealed class ClientNet : IDisposable
             case NetControl.HandshakeAccept: HandleAccept(ref r); break;
             case NetControl.HandshakeReject: HandleReject(ref r); break;
             case NetControl.Snapshot: HandleSnapshot(ref r); break;
-            case NetControl.EventBundle: HandleEventBundle(ref r); break;
-            case NetControl.SoundBundle: HandleSoundBundle(ref r); break;
+            // [zero-hitch 2026-08-03] cn.events/cn.sounds: the ng.poll hitch class showed 10-15ms with
+            // cn.snapshot at 0.2ms and the rest UNATTRIBUTED inside the poll — the event/sound bundle
+            // handlers (a slaughter is a burst of effect + sound messages, each spawning into the particle
+            // sim / audio) run inside the transport dispatch. Scoped so the next capture names the half.
+            case NetControl.EventBundle:
+                using (VortexArena.Common.Diagnostics.Prof.Sample("cn.events")) HandleEventBundle(ref r);
+                break;
+            case NetControl.SoundBundle:
+                using (VortexArena.Common.Diagnostics.Prof.Sample("cn.sounds")) HandleSoundBundle(ref r);
+                break;
             case NetControl.ReliableBundle: HandleReliableBundle(ref r); break;
             case NetControl.ServerPrint: HandleServerPrint(ref r); break;
             case NetControl.MinigameState: HandleMinigameState(ref r); break;

@@ -296,12 +296,12 @@ public sealed partial class DecalSplats : Node3D
             Splat(bestPos, bestNormal, halfSize, removal, alpha, texnum);
     }
 
-    /// <summary>Remove every live splat (map change). Pooled nodes survive for the next map.</summary>
+    /// <summary>Remove every live splat (map change). The merged node survives for the next map.</summary>
     public void Clear()
     {
-        for (int i = 0; i < _liveSlots.Count; i++)
-            ReleaseSlot(_liveSlots[i]);
-        _liveSlots.Clear();
+        _splats.Clear();
+        _meshDirty = false;
+        _mergedMesh?.ClearSurfaces();
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -489,57 +489,65 @@ public sealed partial class DecalSplats : Node3D
     }
 
     // ---------------------------------------------------------------------------------------------
-    //  Mesh + material + lifecycle — pooled (PERFORMANCE_REPORT §11 R2). A splat acquires a pooled
-    //  MeshInstance3D + ArrayMesh + ShaderMaterial slot (the mesh is rebuilt in place via ClearSurfaces +
-    //  AddSurfaceFromArrays) and ONE _Process ager drives every live splat's hold/fade/release. Replaces
-    //  the per-splat ArrayMesh/ShaderMaterial/MeshInstance3D/Tween allocation + QueueFree churn that made
-    //  a rocket volley a node-churn spike (each impact splats several marks in one frame).
+    //  Mesh + lifecycle — ONE MERGED MESH (zero-hitch 2026-08-03; previously one pooled MeshInstance3D +
+    //  ShaderMaterial PER SPLAT). At the 256 cap the old shape was 256 render objects and 256 draw calls:
+    //  the release captures' remaining unscoped CPU-LOGIC hitches sat exactly on draw-count spikes
+    //  (draws 755 / objs 2525 vs ~310/~2000 steady after a slaughter), and per-object main-thread work is
+    //  unscoped native time. Now every live splat lives in ONE ArrayMesh on ONE node (one draw call), UVs
+    //  remapped into the shared particle-font ATLAS, and AGING IS SHADER-SIDE: each vertex carries its
+    //  spawn time in UV2.x (UV2.y = textured flag), the fragment computes fade from a single `now` uniform
+    //  — one SetShaderParameter per frame TOTAL, replacing up to 256/frame during fades, and zero mesh
+    //  work while marks hold or fade. The mesh is rebuilt only when a splat is ADDED (batched: N impacts
+    //  in one frame = one rebuild) or when expired splats are pruned (piggybacks on the next add, plus a
+    //  slow periodic sweep so an idle screen stops drawing fully-faded quads).
     // ---------------------------------------------------------------------------------------------
 
-    // Shader uniform names cached per the §3.4 standing rule: never pass a string literal to a
-    // StringName-typed Godot API from a per-frame path (_Process below pushes "fade" while splats decay).
-    private static readonly StringName FadeParam = "fade";
-    private static readonly StringName SplatTexParam = "splat_tex";
-    private static readonly StringName HasTexParam = "has_tex";
+    private static readonly StringName NowParam = "now";
+    private static readonly StringName HoldParam = "hold";
+    private static readonly StringName FadeDurParam = "fade_dur";
+    private static readonly StringName AtlasTexParam = "atlas_tex";
 
-    /// <summary>One pooled splat: the node plus its permanently-owned mesh/material, and the live age.</summary>
-    private sealed class Slot
+    /// <summary>One recorded splat: its emitted geometry (atlas-space UVs) + spawn stamp. Kept oldest-first;
+    /// the merged mesh is the concatenation of every live record.</summary>
+    private sealed class SplatRec
     {
-        public MeshInstance3D Node = null!;
-        public ArrayMesh Mesh = null!;
-        public ShaderMaterial Mat = null!;
-        public float Age;
+        public float Spawn;
+        public Vector3[] Verts = null!;
+        public Vector2[] Uvs = null!;    // atlas-remapped for textured splats; raw 0..1 for the radial fallback
+        public Vector2[] Uv2 = null!;    // per-vertex (spawn, has_tex) — the shader-side aging attributes
+        public Color[] Cols = null!;
     }
 
-    private readonly List<Slot> _liveSlots = new();   // append order == age order (oldest first)
-    private readonly Queue<Slot> _freeSlots = new();
+    private readonly List<SplatRec> _splats = new();   // append order == age order (oldest first)
+    private MeshInstance3D? _mergedNode;
+    private ArrayMesh? _mergedMesh;
+    private ShaderMaterial? _mergedMat;
+    private float _now;                // client splat clock (accumulated _Process delta; spawn stamps + uniform)
+    private bool _meshDirty;
+    private float _nextPruneAt;        // slow sweep so an idle screen drops fully-faded quads
+    private bool _atlasApplied;
 
-    private Slot AcquireSlot()
+    private void EnsureMergedNode()
     {
-        if (_freeSlots.TryDequeue(out Slot? pooled))
-            return pooled;
-        var mesh = new ArrayMesh();
+        if (_mergedNode is not null)
+            return;
+        _mergedMesh = new ArrayMesh();
         // Draw BEFORE the particle batches (priority 0/1): DP renders decals during the per-surface pass,
         // ahead of the sorted transparent particles — smoke and fire composite OVER the marks, never under.
-        var mat = new ShaderMaterial { Shader = _shader ??= SplatShader(), RenderPriority = -1 };
-        var node = new MeshInstance3D
+        _mergedMat = new ShaderMaterial { Shader = _shader ??= SplatShader(), RenderPriority = -1 };
+        _mergedMat.SetShaderParameter(HoldParam, DecalTime);
+        _mergedMat.SetShaderParameter(FadeDurParam, MathF.Max(FadeTime, 0.001f));
+        _mergedNode = new MeshInstance3D
         {
-            Name = "splat",
-            Mesh = mesh,
-            MaterialOverride = mat,
+            Name = "splats",
+            Mesh = _mergedMesh,
+            MaterialOverride = _mergedMat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             GIMode = GeometryInstance3D.GIModeEnum.Disabled,
-            Visible = false,
+            // Splats span the whole map inside one mesh — never let Godot cull the lot on a stale AABB.
+            ExtraCullMargin = 16384f,
         };
-        AddChild(node);
-        return new Slot { Node = node, Mesh = mesh, Mat = mat };
-    }
-
-    private void ReleaseSlot(Slot s)
-    {
-        s.Node.Visible = false;
-        s.Mesh.ClearSurfaces();   // drop the GPU vertex buffer while parked
-        _freeSlots.Enqueue(s);
+        AddChild(_mergedNode);
     }
 
     private void AddSplatMesh(List<Vector3> verts, List<Vector2> uvs, List<Color> cols, int texnum)
@@ -547,82 +555,129 @@ public sealed partial class DecalSplats : Node3D
         if (verts.Count < 3)
             return;
 
-        Slot s = AcquireSlot();
+        EnsureMergedNode();
+
+        // Textured: remap the emitted 0..1 cell-local UVs into the ATLAS rect so every splat samples the
+        // one shared atlas texture. Untextured fallback: keep raw UVs (the shader's radial branch never
+        // samples the atlas), flagged per-vertex via UV2.y.
+        Rect2 rect = default;
+        bool hasTex = Font is not null && Font.CellUvRect(texnum, out rect);
+        if (hasTex && !_atlasApplied && Font!.AtlasTexture is { } atlas)
+        {
+            _mergedMat!.SetShaderParameter(AtlasTexParam, atlas);
+            _atlasApplied = true;
+        }
+
+        var rec = new SplatRec
+        {
+            Spawn = _now,
+            Verts = verts.ToArray(),
+            Uvs = new Vector2[uvs.Count],
+            Uv2 = new Vector2[uvs.Count],
+            Cols = cols.ToArray(),
+        };
+        var uv2 = new Vector2(_now, hasTex ? 1f : 0f);
+        for (int i = 0; i < uvs.Count; i++)
+        {
+            rec.Uvs[i] = hasTex ? rect.Position + uvs[i] * rect.Size : uvs[i];
+            rec.Uv2[i] = uv2;
+        }
+        _splats.Add(rec);
+
+        // Hard cap (DP cl_decals_max): retire the oldest. RemoveAt(0) is O(n) but n <= MaxSplats and this
+        // only runs while saturated.
+        while (_splats.Count > MaxSplats)
+            _splats.RemoveAt(0);
+
+        _meshDirty = true;   // one rebuild this frame no matter how many impacts landed
+    }
+
+    // Rebuild scratch (reused; sized to the live splat set).
+    private readonly List<Vector3> _rbVerts = new();
+    private readonly List<Vector2> _rbUvs = new();
+    private readonly List<Vector2> _rbUv2 = new();
+    private readonly List<Color> _rbCols = new();
+
+    /// <summary>Concatenate every live record into the single surface. Runs ONLY on add/prune frames.</summary>
+    private void RebuildMergedMesh()
+    {
+        _meshDirty = false;
+        if (_mergedMesh is null)
+            return;
+
+        // Prune fully-faded splats while we are here (their quads multiply by 1.0 — invisible, but they
+        // still cost vertex work and fill).
+        float deadBefore = _now - (DecalTime + FadeTime);
+        for (int i = _splats.Count - 1; i >= 0; i--)
+            if (_splats[i].Spawn <= deadBefore)
+                _splats.RemoveAt(i);
+
+        _mergedMesh.ClearSurfaces();
+        if (_splats.Count == 0)
+            return;
+
+        _rbVerts.Clear(); _rbUvs.Clear(); _rbUv2.Clear(); _rbCols.Clear();
+        foreach (SplatRec r in _splats)
+        {
+            _rbVerts.AddRange(r.Verts);
+            _rbUvs.AddRange(r.Uvs);
+            _rbUv2.AddRange(r.Uv2);
+            _rbCols.AddRange(r.Cols);
+        }
 
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = verts.ToArray();
-        arrays[(int)Mesh.ArrayType.TexUV] = uvs.ToArray();
-        arrays[(int)Mesh.ArrayType.Color] = cols.ToArray();   // removal · per-vertex falloff (DP c4f)
-        s.Mesh.ClearSurfaces();
-        s.Mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-
-        // The raw particlefont cell — under (1 − tex·color) its black background removes nothing, exactly
-        // DP's "the particlefont does not need alpha on most textures". Solid fallback keeps marks alive
-        // without the atlas.
-        Texture2D? cell = Font?.Cell(texnum);
-        s.Mat.SetShaderParameter(FadeParam, 1f);
-        if (cell is not null)
-            s.Mat.SetShaderParameter(SplatTexParam, cell);
-        s.Mat.SetShaderParameter(HasTexParam, cell is not null);
-
-        s.Age = 0f;
-        s.Node.Visible = true;
-        _liveSlots.Add(s);
-
-        // Hard cap (DP cl_decals_max): retire the oldest. RemoveAt(0) is O(n) but n ≤ MaxSplats and this
-        // only runs while saturated.
-        while (_liveSlots.Count > MaxSplats)
-        {
-            ReleaseSlot(_liveSlots[0]);
-            _liveSlots.RemoveAt(0);
-        }
+        arrays[(int)Mesh.ArrayType.Vertex] = _rbVerts.ToArray();
+        arrays[(int)Mesh.ArrayType.TexUV] = _rbUvs.ToArray();
+        arrays[(int)Mesh.ArrayType.TexUV2] = _rbUv2.ToArray();
+        arrays[(int)Mesh.ArrayType.Color] = _rbCols.ToArray();   // removal * per-vertex falloff (DP c4f)
+        _mergedMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
     }
 
-    /// <summary>The one splat ager — hold for <see cref="DecalTime"/>, fade the multiplicative factor over
-    /// <see cref="FadeTime"/>, release to the pool (cl_decals_time/_fadetime). During the hold nothing is
-    /// pushed to the GPU (fade stays 1), so a screen full of fresh marks costs zero uniform traffic.</summary>
+    /// <summary>Advance the splat clock + push the ONE per-frame uniform; rebuild only when dirty. The
+    /// hold/fade lifecycle itself runs in the shader (see the section note).</summary>
     public override void _Process(double delta)
     {
-        int count = _liveSlots.Count;
-        if (count == 0)
+        _now += (float)delta;
+        if (_splats.Count == 0 && !_meshDirty)
             return;
-        using var _scope = VortexArena.Game.Client.FrameProfiler.Scope("decals.splat"); // [profiling] §18: out of proc:other
-        float dt = (float)delta;
-        for (int i = count - 1; i >= 0; i--)
+        using var _scope = VortexArena.Game.Client.FrameProfiler.Scope("decals.splat"); // [profiling] out of proc:other
+        _mergedMat?.SetShaderParameter(NowParam, _now);
+
+        if (_meshDirty)
         {
-            Slot s = _liveSlots[i];
-            s.Age += dt;
-            if (s.Age <= DecalTime)
-                continue;   // full strength — fade uniform already 1
-            float fade = FadeTime > 0f ? 1f - (s.Age - DecalTime) / FadeTime : 0f;
-            if (fade <= 0f)
-            {
-                ReleaseSlot(s);
-                _liveSlots.RemoveAt(i);
-                continue;
-            }
-            s.Mat.SetShaderParameter(FadeParam, fade);
+            RebuildMergedMesh();
+            _nextPruneAt = _now + 2f;
+        }
+        else if (_now >= _nextPruneAt)
+        {
+            // Idle sweep: drop fully-faded quads even when nothing new splats. Cheap when nothing expired.
+            _nextPruneAt = _now + 2f;
+            float deadBefore = _now - (DecalTime + FadeTime);
+            for (int i = 0; i < _splats.Count; i++)
+                if (_splats[i].Spawn <= deadBefore) { _meshDirty = true; break; }
+            if (_meshDirty)
+                RebuildMergedMesh();
         }
     }
 
-    /// <summary>A standalone one-triangle splat for the offscreen GPU warm pass (§11 R1) sharing the SAME
-    /// splat <see cref="Shader"/> the live pool uses, so the blend_mul splat pipeline compiles at map load
-    /// instead of on the first impact mark. The warm pass parents, renders, and frees it.</summary>
+    /// <summary>A standalone one-triangle splat for the offscreen GPU warm pass sharing the SAME splat
+    /// <see cref="Shader"/> the live merged mesh uses, so the blend_mul splat pipeline compiles at map
+    /// load instead of on the first impact mark. The warm pass parents, renders, and frees it.</summary>
     public MeshInstance3D BuildWarmupInstance()
     {
+        var mesh = new ArrayMesh();
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = new Vector3[] { new(0f, 0f, 0f), new(8f, 0f, 0f), new(0f, 8f, 0f) };
-        arrays[(int)Mesh.ArrayType.TexUV] = new Vector2[] { new(0f, 0f), new(1f, 0f), new(0f, 1f) };
-        arrays[(int)Mesh.ArrayType.Color] = new Color[] { new(0.5f, 0.5f, 0.5f), new(0.5f, 0.5f, 0.5f), new(0.5f, 0.5f, 0.5f) };
-        var mesh = new ArrayMesh();
+        arrays[(int)Mesh.ArrayType.Vertex] = new Vector3[] { new(0, 0, 0), new(1, 0, 0), new(0, 1, 0) };
+        arrays[(int)Mesh.ArrayType.TexUV] = new Vector2[] { new(0, 0), new(1, 0), new(0, 1) };
+        arrays[(int)Mesh.ArrayType.TexUV2] = new Vector2[] { new(0, 1), new(0, 1), new(0, 1) };
+        arrays[(int)Mesh.ArrayType.Color] = new Color[] { new(1, 1, 1), new(1, 1, 1), new(1, 1, 1) };
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         var mat = new ShaderMaterial { Shader = _shader ??= SplatShader(), RenderPriority = -1 };
-        mat.SetShaderParameter(HasTexParam, false);
         return new MeshInstance3D
         {
-            Name = "warm_splat",
+            Name = "splat_warm",
             Mesh = mesh,
             MaterialOverride = mat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
@@ -630,25 +685,30 @@ public sealed partial class DecalSplats : Node3D
         };
     }
 
-    /// <summary>DP's decal draw state (gl_rmain.c:9699-9706): GL_ZERO/ONE_MINUS_SRC_COLOR == blend_mul of
-    /// (1 − tex·color·fade), depth test on / write off, double-sided, unshaded, GL_PolygonOffset. Godot
-    /// shaders have no polygon offset, so the vertex stage writes POSITION with a small constant NDC depth
-    /// nudge toward the viewer (Godot 4 uses reversed-Z: nearer = larger depth) — the splat triangles lie
-    /// EXACTLY on the surface geometrically (no per-face displacement → no gaps at shared edges).</summary>
+    /// <summary>The merged-splat shader: DP's INVMOD blend with SHADER-SIDE aging — fade derives from the
+    /// per-vertex spawn stamp (UV2.x) against the `now` uniform, so a fading screenful of marks costs zero
+    /// CPU. UV2.y selects atlas sampling vs the radial fallback. The small +z nudge is the polygon-offset
+    /// stand-in (Godot 4 reversed-Z: nearer = larger depth); splat triangles lie exactly on the surface.</summary>
     private static Shader SplatShader() => new()
     {
         Code =
             "shader_type spatial;\n" +
             "render_mode blend_mul, unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;\n" +
-            "uniform sampler2D splat_tex : source_color, filter_linear;\n" +
-            "uniform bool has_tex = true;\n" +
-            "uniform float fade = 1.0;\n" +
+            "uniform sampler2D atlas_tex : source_color, filter_linear;\n" +
+            "uniform float now = 0.0;\n" +
+            "uniform float hold = 12.0;\n" +
+            "uniform float fade_dur = 2.0;\n" +
+            "varying vec2 v_uv2;\n" +
             "void vertex() {\n" +
+            "    v_uv2 = UV2;\n" +
             "    POSITION = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);\n" +
             "    POSITION.z += 0.0004 * POSITION.w;   // polygon-offset stand-in (reversed-Z: toward viewer)\n" +
             "}\n" +
             "void fragment() {\n" +
-            "    vec3 t = has_tex ? texture(splat_tex, UV).rgb : vec3(1.0 - smoothstep(0.3, 0.5, distance(UV, vec2(0.5))));\n" +
+            "    float age = now - v_uv2.x;\n" +
+            "    float fade = age <= hold ? 1.0 : max(0.0, 1.0 - (age - hold) / fade_dur);\n" +
+            "    vec3 t = v_uv2.y > 0.5 ? texture(atlas_tex, UV).rgb\n" +
+            "                           : vec3(1.0 - smoothstep(0.3, 0.5, distance(UV, vec2(0.5))));\n" +
             "    ALBEDO = vec3(1.0) - t * COLOR.rgb * fade;\n" +
             "    ALPHA = 1.0;\n" +
             "}\n",

@@ -170,6 +170,24 @@ public sealed class ParticleFont
     /// The sprite texture for atlas <paramref name="index"/>, cropped from the atlas and cached. Returns null
     /// when the font isn't loaded or the index has no cell (caller falls back to a solid quad/disc).
     /// </summary>
+    /// <summary>
+    /// (zero-hitch 2026-08-03) Atlas UV rect of cell <paramref name="index"/>, normalized 0..1 — for renderers
+    /// that draw MANY cells in ONE mesh sampling <see cref="AtlasTexture"/> directly (the merged decal-splat
+    /// mesh) instead of holding a cropped per-cell texture each. False when the atlas/cell is missing.
+    /// </summary>
+    public bool CellUvRect(int index, out Rect2 uvRect)
+    {
+        uvRect = default;
+        if (_atlas is null || !_cells.TryGetValue(index, out Rect2I rect) || rect.Size.X <= 0)
+            return false;
+        Vector2 atlasSize = new(_atlas.GetWidth(), _atlas.GetHeight());
+        if (atlasSize.X <= 0 || atlasSize.Y <= 0)
+            return false;
+        uvRect = new Rect2(rect.Position.X / atlasSize.X, rect.Position.Y / atlasSize.Y,
+                           rect.Size.X / atlasSize.X, rect.Size.Y / atlasSize.Y);
+        return true;
+    }
+
     public ImageTexture? Cell(int index)
     {
         if (_atlas is null || !_cells.TryGetValue(index, out Rect2I rect) || rect.Size.X <= 0)

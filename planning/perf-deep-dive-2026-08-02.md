@@ -567,6 +567,74 @@ including "audioprep"/"audiospatialize") — the same instinct as our `Prof` sco
 in fixed `dt` with an accumulator clamped by `minfps`, then components interpolate by the remainder. A
 port running everything at render rate lost that decoupling.
 
+## 5g. The separate render thread — the biggest single win, and our own docs hid it (2026-08-03)
+
+`PERFORMANCE_REPORT.md` §S7 asserted `rendering/driver/threads/thread_model` was "removed in Godot 4 …
+the key is inert … tested → reverted". **Every clause was false**, verified against the pinned 4.6.3
+source (see the corrected S7 entry for the file:line proof). At Godot's DEFAULT the entire render pass —
+cull, render-list build, sort, submission, present — runs INLINE on the main thread inside
+`Main::iteration`, immediately after `SceneTree::process`. That *is* the `rest` bucket, and it is why
+`rest` tracks draw count.
+
+| catharsis demo, release, 90 s | before | after |
+|---|---|---|
+| p50 frame | 4.21 ms | **3.72 ms** |
+| avg fps | 237 | **269** |
+| `rest` | 1.76 | **0.78** |
+| `proc` | 1.70 | 2.06 |
+
+The bucket movement confirms the mechanism rather than just the outcome: `rest` halves because draw left
+the main thread; `proc` *rises* because RenderingServer calls from main now marshal through
+`CommandQueueMT` instead of calling directly. Net **+13%**. (The draw counter reading 515 vs 253 is the
+documented racy-under-threading read, not a real doubling.)
+
+Not yet default-safe: upstream flags resize/particle crashes and `CommandQueueMT` contention against
+background resource loading (godot#112452) — which is exactly what `BackgroundAssetStreamer`/`IdleWarmer`
+do. **Gate on a soak + window-resize/alt-tab pass before shipping.** Also landed alongside:
+`depth_prepass/enable=false` (the prepass re-records the whole opaque list a second time — CPU spent to
+save overdraw we don't need at 84% GPU idle).
+
+## 5h. Per-frame callback audit — the menu was working while invisible (2026-08-03)
+
+Full inventory: **104 Godot callbacks** in `game/` (81 `_Process`, 2 `_PhysicsProcess`, 19 input-family,
+2 `_Notification`); `src/` has none. Measured dispatch cost is ~177–224 ns per callback per frame in a
+**release export** (godot#89826, #115960) and each C# node pays **two** native↔managed crossings, because
+`CSharpInstance::_call_notification` fires unconditionally even when `_Notification` isn't overridden.
+
+**Calibration first, because it inverts the usual advice:** at ~200 ns, our ~150–200 processing nodes are
+≈0.04 ms — about 2% of `proc`. The dramatic 14× figures circulating in Godot issues are 5,000–100,000-node
+scenes, and one headline report is **13.5× inflated by running in the editor** (239 ms editor vs 17.67 ms
+exported, same scene). **Consolidation only pays where instances are numerous; a singleton doing real work
+is not worth touching.**
+
+**What the audit actually found — bugs, not micro-optimizations.** The menu tree stays INSTANTIATED during
+a match (`Shell` only sets `_menu.Visible = false`) and `Shell` runs `ProcessModeEnum.Always`, so these ran
+every frame while invisible: `MainMenu._Process` executed the full `LayoutFrame()` **completely ungated**
+(~40 marshalled property writes across 6 tiles); `LeaveMatchButton` wrote a marshalled **string** property
+(`Text`) plus `Disabled` every frame for the whole match after the first Escape; `PauseMenu` did a cvar read
++ string compares on the same lifetime; `CreditsScreen` kept auto-scrolling a hidden pane. All four now gate
+on `IsVisibleInTree()`.
+
+Biggest per-instance item, also landed: **`Md3Morph`** — one node per `.md3` instance (items, world weapons,
+map props, effect models; hundreds alive), each idle one paying dispatch to reach `if (!_playing) return`.
+`_playing` now routes through `SetPlaying()`, which toggles `SetProcess`, so a statically-posed model never
+joins the process list. Plus `DamageTextLayer` got the empty early-out its siblings already had.
+
+**Queued, ranked by (live count × cheapness of body):**
+1. **`SmoothScroll` → static drive from `MenuRoot`** — ~26 live instances, each with a `_Process` AND an
+   `_Input` on the **global** stage, so every mouse-motion event costs 26 dispatches (we ship a mouse-flood
+   engine patch, so input volume is known-high). It already keeps a static `Live` list. **52 callbacks → 2.**
+2. **Casings/gibs parent-driven** — up to **164** live `_PhysicsProcess` at cap (`MaxCasings 100` +
+   `MaxGibs 64`); both parents already own the child lists. Also evaluates the slowmo scale once, not 164×.
+3. The remaining 23 HUD panels via `HudPanel.DriveFrame` (cheapest bodies first: `RadarPanel` is literally
+   `=> QueueRedraw()`).
+4. **`Shell._Process`** calls a Win32 `GetForegroundWindow` + several cvar reads **every frame**, unthrottled.
+5. `ScreenshotService._Input` runs a bind-table lookup on **every** input event — needs a type gate.
+
+**Doc correction found in passing:** `HudManager.cs:297` claims the migrated panels' "callbacks are switched
+off in `HudPanel._Ready`". There is no such `_Ready`. They work because their `_Process` overrides were
+deleted — the next migration must delete, not rely on a mechanism that doesn't exist.
+
 ## 6. Measurement discipline updates
 
 - **Post-load boundary**: use `--postload 25` until a real world-entry marker exists; better, emit a

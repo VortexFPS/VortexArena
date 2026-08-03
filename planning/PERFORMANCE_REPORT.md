@@ -331,9 +331,31 @@ areagrid differential + analyzer suites); stormkeep windowed screenshots verify 
 - **B2** `cl_movement_perframe` default-on — kept default 0: that's the parity-faithful default (stock DP = fixed
   72 Hz input); flipping changes movement *feel* and needs the windowed feel-test the report gates it on (a user
   step). Feature already cvar-exposed.
-- **S7** render `thread_model=2` — **not applicable to Godot 4.6**: the Godot-3-era `rendering/driver/threads/
-  thread_model` was removed in Godot 4, which already runs the RenderingServer on a separate thread via its
-  command queue. Setting the key is inert (ProjectSettings stores it unread); tested → reverted.
+- **S7** render `thread_model=2` — ~~"not applicable to Godot 4.6 … removed in Godot 4 … the key is inert
+  (ProjectSettings stores it unread); tested → reverted"~~ **THIS WAS WRONG IN EVERY CLAUSE, and it cost the
+  single biggest measured win of the whole campaign. Corrected 2026-08-03, verified against the PINNED
+  4.6.3 source, not documentation:**
+  - `main/main.cpp:2722` — `separate_thread_render = (int)GLOBAL_DEF("rendering/driver/threads/thread_model",
+    OS::RENDER_THREAD_SAFE) == OS::RENDER_SEPARATE_THREAD;` — the key **is** read.
+  - `core/os/os.h:93-95` — `RENDER_THREAD_UNSAFE=0, RENDER_THREAD_SAFE=1, RENDER_SEPARATE_THREAD=2`, unchanged.
+  - `rendering_server_default.cpp draw()` — `if (create_thread) command_queue.push(_draw) else _draw(...)`.
+    At the DEFAULT (Safe) the whole render pass runs **INLINE ON THE MAIN THREAD** inside `Main::iteration`.
+    Godot 4 does *not* "already run the RenderingServer on a separate thread"; that is the Separate mode.
+
+  **Measured after enabling** (release export, catharsis demo 90 s): p50 **4.21 → 3.72 ms**, i.e.
+  **237 → 269 fps**, with `rest` **1.76 → 0.78 ms** and `proc` *rising* 1.70 → 2.06 (RenderingServer calls
+  from main now marshal through `CommandQueueMT`). Landed in `project.godot` 2026-08-03; still experimental
+  upstream (resize/particle crashes, `CommandQueueMT` contention vs background loading — godot#112452), so
+  it needs a soak + resize/alt-tab pass before release.
+
+  **Two traps that made the original test read "inert", both worth remembering:**
+  1. Inside the `[rendering]` INI section the key is **section-relative** — `driver/threads/thread_model=2`.
+     Writing the full `rendering/driver/...` path there silently resolves to `rendering/rendering/...` and
+     does nothing.
+  2. The activation `WARN_PRINT` (`main.cpp:3417`) goes to **stderr**, which `perf-run.ps1` does not capture.
+     Its absence from stdout is NOT evidence the mode is off. Capture stderr to confirm.
+  Also note `main.cpp:2725` force-disables it in the editor/project-manager, so it can only be evaluated on
+  an exported build.
 
 **Deferred (conditional/high-risk per the report — gated on a manual measurement this automated pass can't run):**
 - **3.2-1** GpuParticles3D node pooling — §3.2-1 explicitly says "do A1 caching first, **measure**, pool *if node

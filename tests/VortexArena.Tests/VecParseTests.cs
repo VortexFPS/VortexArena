@@ -53,10 +53,18 @@ public class VecParseTests
     {
         // Config/CLI values are always invariant-formatted ("1.5"), regardless of the machine's locale. Pin it:
         // under a comma-decimal culture a naive float.Parse would reject "1.5" (or read it as 15).
+        //
+        // Pinning is BEST-EFFORT since 2026-08-03: Directory.Build.props sets InvariantGlobalization, so
+        // `new CultureInfo("de-DE")` now throws and the hostile condition can no longer be constructed. The
+        // assertions below still run and still matter — they are what would fail first if that property were
+        // ever removed AND VecParse regressed to a culture-sensitive Parse. Swallowing the refusal keeps this
+        // test meaningful in both worlds rather than deleting a check that earns its keep in one of them.
+        // (LocaleInvarianceTests is what asserts the property itself is on.)
         CultureInfo prev = Thread.CurrentThread.CurrentCulture;
         try
         {
-            Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE");
+            try { Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE"); }
+            catch (CultureNotFoundException) { /* invariant mode — no comma culture exists to pin */ }
             Assert.True(VecParse.TryParseFloats("1.5 -2.25 3", 3, out float[] vals));
             Assert.Equal(new[] { 1.5f, -2.25f, 3f }, vals);
         }

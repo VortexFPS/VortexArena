@@ -10,6 +10,23 @@
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- (2026-08-03) THE MACHINE'S LOCALE MUST NOT REACH THE NUMBERS.
+         A contributor on a Russian-locale box hit this as a test failure — DeferredCommands printed
+         "-> In      1,50: restart", because plain interpolation formats with CurrentCulture and ru-RU uses a
+         comma. Cosmetic there, not cosmetic in general: this is a Quake/DarkPlaces port whose cvar values
+         round-trip through config.cfg, the console and rcon, so a locale that WRITES "1,50" produces a config
+         that will not parse back, and console output that disagrees with DP. DP itself is immune — C's %f in
+         the default "C" locale is period-always.
+         Measured before choosing this over a site-by-site sweep: ~78 un-invariant float.Parse calls (against
+         88 that already pass InvariantCulture — the tree was half-fixed), ~82 interpolations with a numeric
+         format, ~31 ToString("F.."). One property fixes all of them and, unlike a sweep, cannot regress.
+         The wider blast radius was checked rather than assumed, and is empty: no `new CultureInfo` anywhere,
+         no StringComparison.CurrentCulture, and all 113 ToUpper/ToLower calls are already the Invariant
+         overloads. So this makes the runtime agree with what the code already believed.
+         Consequence to know: creating a specific culture (new CultureInfo("ru-RU")) now throws. If real UI
+         localisation ever lands it belongs in string tables, not in CultureInfo — but if that changes, this
+         is the line to revisit. LocaleInvarianceTests pins the behaviour. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <!-- (perf 2026-07-03) Debug builds run JIT-OPTIMIZED by default: the editor/dev builds are what gets

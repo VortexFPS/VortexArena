@@ -130,7 +130,8 @@ public partial class WeaponsPanel : HudPanel
     // QC weapon_pos_current: the animated top-left of the selection highlight, in panel-local px. -1 = uninit.
     private Vector2 _selPos = new(-1f, -1f);
 
-    public override void _Process(double delta) => _localClock += delta;
+    // (perf 2026-08-03, R1) Driven centrally by HudManager — no per-panel Godot _Process callback.
+    public override void DriveFrame(double delta) => _localClock += delta;
 
     private float NowTime()
     {

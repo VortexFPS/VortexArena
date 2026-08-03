@@ -88,6 +88,10 @@ public partial class ViewModel : Node3D
     /// </summary>
     [Export] public Vector3 GunOffset { get; set; } = Vector3.Zero;
 
+    // Memo for the cl_gunoffset string cvar (see RefreshCvars): raw text last parsed + its parsed value.
+    private string? _gunOffsetRaw;
+    private Vector3 _gunOffsetParsed;
+
     /// <summary>
     /// <c>cl_gunalign</c> — 1/2 = center, 3 = right (Xonotic default), 4 = left. With shoot-from-eye servers
     /// this is purely the visual gun position. We apply the same small nudge <c>shotorg_adjustfromclient</c>
@@ -1116,7 +1120,17 @@ public partial class ViewModel : Node3D
 
         // cl_gunalign: 3 = right (default), 4 = left, 1/2 = center. Rebuild the rest placement when it changes.
         int align = (int)CvarFloat(cv, "cl_gunalign", GunAlign);
-        Vector3 offset = ParseVec(cv.GetString("cl_gunoffset"), GunOffset);
+        // (perf 2026-08-03) cl_gunoffset is a STRING cvar and this ran ParseVec — a char[] + string[] + up to
+        // three substrings — every frame, for a value that changes only when the player edits it. Memo on the
+        // raw string: the compare is a reference/length check in the common case, and the split only runs on
+        // an actual edit.
+        string offsetRaw = cv.GetString("cl_gunoffset");
+        if (!string.Equals(offsetRaw, _gunOffsetRaw, StringComparison.Ordinal))
+        {
+            _gunOffsetRaw = offsetRaw;
+            _gunOffsetParsed = ParseVec(offsetRaw, GunOffset);
+        }
+        Vector3 offset = _gunOffsetParsed;
         if (align != GunAlign || offset != GunOffset)
         {
             GunAlign = align;

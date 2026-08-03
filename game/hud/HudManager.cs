@@ -291,6 +291,16 @@ public partial class Hud : CanvasLayer
             _configuringPrev = showCtx.Configuring;
         }
 
+        // (perf 2026-08-03, R1) Drive every panel's per-frame clock/state from THIS loop instead of letting
+        // each panel own a Godot `_Process` callback. ~25 HUD panels each cost a native->managed crossing per
+        // frame for what is usually `_localClock += delta`; the manager is already walking the same list, so
+        // the work is free here and the callbacks are switched off in HudPanel._Ready. Panels opt in by
+        // overriding HudPanel.DriveFrame. Runs BEFORE the visibility/redraw gating below so a panel whose
+        // animation drives its own NeedsRedraw sees this frame's clock — and, unlike the old per-node
+        // callback, it keeps ticking on the same schedule whether or not the panel ends up visible.
+        foreach (HudPanel p in _panels)
+            p.DriveFrame(delta);
+
         foreach (HudPanel p in _panels)
         {
             // Port extras own their visibility/redraw — just keep their cvar layout fresh (full-viewport).

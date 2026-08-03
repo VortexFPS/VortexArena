@@ -159,7 +159,8 @@ public partial class PowerupsPanel : HudPanel
         c.Register("hud_progressbar_alpha", "0.6", CvarFlags.Save);
     }
 
-    public override void _Process(double delta) => _localClock += delta;
+    // (perf 2026-08-03, R1) Driven centrally by HudManager — no per-panel Godot _Process callback.
+    public override void DriveFrame(double delta) => _localClock += delta;
 
     private float CurrentTime()
     {

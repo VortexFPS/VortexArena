@@ -72,7 +72,8 @@ public partial class ItemsTimePanel : HudPanel
 
     private double _localClock;
 
-    public override void _Process(double delta)
+    // (perf 2026-08-03, R1) Driven centrally by HudManager — no per-panel Godot _Process callback.
+    public override void DriveFrame(double delta)
     {
         _localClock += delta;
         QueueRedraw();

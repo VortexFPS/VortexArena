@@ -210,6 +210,9 @@ public partial class ClientWorld : Node3D
         public int NetId;          // emitter net id to follow (0 = a fixed world point, e.g. an impact/explosion)
         public float BaseVolume;   // pre-attenuation volume (QC vol); the DP falloff scales this each frame
         public float Attenuation;  // QC ATTEN_* — 0 = heard everywhere (no spatialization)
+        // (perf 2026-08-03) Last position we WROTE, so the per-frame drive can skip an unchanged
+        // GlobalPosition write and needs no GlobalPosition read for the falloff math. Null until first write.
+        public Godot.Vector3? LastPos;
     }
 
     /// <summary>
@@ -494,6 +497,15 @@ public partial class ClientWorld : Node3D
 
     public override void _ExitTree()
     {
+        // (perf 2026-08-03) Exact effectiveness of the per-entity PVS memo — see the counter note. A timing
+        // A/B cannot resolve this optimization against the benchmark's run-to-run spread; the hit rate can,
+        // and it is deterministic.
+        long pvsTotal = _pvsTestsRun + _pvsTestsSaved;
+        if (pvsTotal > 0)
+            VortexArena.Common.Diagnostics.Log.Info(
+                $"[perf] entity PVS tests: {_pvsTestsRun} run, {_pvsTestsSaved} skipped by memo "
+                + $"({100.0 * _pvsTestsSaved / pvsTotal:F1}% of {pvsTotal} avoided BSP descents)");
+
         // Detach our sink so a torn-down client doesn't keep mirroring into freed nodes.
         if (EffectEmitter.Sink is RenderSink rs)
             EffectEmitter.Sink = rs.Inner;
@@ -915,9 +927,21 @@ public partial class ClientWorld : Node3D
     /// player's 3D position relative to the listener.</summary>
     private void SetSpatialVolume(AudioStreamPlayer3D player, float baseVolume, float attenuation, Godot.Vector3 listener)
     {
-        float dist = player.GlobalPosition.DistanceTo(listener);
+        SetSpatialVolume(player, baseVolume, attenuation, listener, player.GlobalPosition);
+    }
+
+    /// <summary>As above, but with the emitter position already in hand — the per-frame drives just wrote or
+    /// read it, and <c>GlobalPosition</c> is a marshalled native read (perf 2026-08-03: ~5 interop crossings
+    /// per live sound per frame, 150-300/frame in a firefight). The dB write is change-gated at 0.25 dB, which
+    /// is well under audible: re-writing an unchanged volume is pure interop.</summary>
+    private void SetSpatialVolume(AudioStreamPlayer3D player, float baseVolume, float attenuation,
+        Godot.Vector3 listener, Godot.Vector3 emitterPos)
+    {
+        float dist = emitterPos.DistanceTo(listener);
         float gain = Mathf.Clamp(baseVolume, 0f, 1f) * DpDistanceGain(dist, attenuation);
-        player.VolumeDb = gain <= 0.0008f ? -80f : Mathf.LinearToDb(gain); // -80 dB ≈ silent
+        float db = gain <= 0.0008f ? -80f : Mathf.LinearToDb(gain); // -80 dB ≈ silent
+        if (Mathf.Abs(player.VolumeDb - db) >= 0.25f)
+            player.VolumeDb = db;
     }
 
     /// <summary>
@@ -1085,11 +1109,22 @@ public partial class ClientWorld : Node3D
                 _activeOneShots.RemoveAt(i);
                 continue;
             }
+            // Track the emitter position we know locally so the volume math needs no GlobalPosition READ, and
+            // skip the position WRITE when it hasn't moved (a fixed-point one-shot never moves at all).
+            Godot.Vector3 emitter;
             if (a.Attenuation <= 0f)
-                a.Player.GlobalPosition = listener;                  // ATTEN_NONE: stay centered
+                emitter = listener;                                  // ATTEN_NONE: stay centered
             else if (a.NetId > 0 && EntityOriginResolver?.Invoke(a.NetId) is { } pos)
-                a.Player.GlobalPosition = Coords.ToGodot(pos);       // follow the emitter; fixed point otherwise
-            SetSpatialVolume(a.Player, a.BaseVolume, a.Attenuation, listener);
+                emitter = Coords.ToGodot(pos);                       // follow the emitter
+            else
+                emitter = a.LastPos ?? a.Player.GlobalPosition;      // fixed point: read once, then reuse
+            if (a.LastPos is not { } last || last.DistanceSquaredTo(emitter) > 0.0001f)
+            {
+                a.Player.GlobalPosition = emitter;
+                a.LastPos = emitter;
+                _activeOneShots[i] = a;   // ActiveOneShot is a STRUCT — store the memo back into the list
+            }
+            SetSpatialVolume(a.Player, a.BaseVolume, a.Attenuation, listener, emitter);
         }
     }
 
@@ -1362,12 +1397,34 @@ public partial class ClientWorld : Node3D
                 _entityPvsExtraClusters.Add(pc);
         }
 
+        // (perf 2026-08-03) Viewpoint STAMP: bump only when the set of viewpoint clusters actually changes.
+        // Every entity's cached PVS verdict keys on it, so a frame that doesn't cross a cluster boundary (the
+        // overwhelming majority) does zero BSP descents for entities that also haven't moved.
+        if (viewerCluster != _pvsStampCluster || !SameExtraClusters())
+        {
+            _pvsStampCluster = viewerCluster;
+            _pvsStampExtras.Clear();
+            _pvsStampExtras.AddRange(_entityPvsExtraClusters);
+            _pvsStamp++;
+        }
+        // Re-test an entity only once it could have left the leaf its last test covered. The test box is
+        // ±margin, so drifting less than the margin keeps the SAME box overlap conservative-safe: PVS is a
+        // superset, and a box that still contains the tested point can only gain clusters, never lose the
+        // ones that made it visible. Half the margin is the safe, cheap threshold.
+        float pvsMoveTol = Mathf.Max(margin.X * 0.5f, 1f);
+
+        // ONE walk of _entityNodes now feeds BOTH per-entity passes (this one and the csqc hooks below) —
+        // the live set is collected here and reused, instead of re-enumerating the dictionary and re-running
+        // the validity checks a second time in DriveCsqcModelHooks.
+        _liveEntityScratch.Clear();
+
         foreach (var kv in _entityNodes)
         {
             EntityNode node = kv.Value;
             Entity? e = node.Entity;
             if (e is null || e.IsFreed || !GodotObject.IsInstanceValid(node))
                 continue;
+            _liveEntityScratch.Add((node, e));
             // DP-faithful PVS visibility. Local player + unvised map / camera-in-solid stay visible (wrongly
             // culling a visible enemy is far worse than under-culling one solidly behind a wall). Bounds are a
             // generous symmetric box around the networked origin; an active warpzone exit unions its extra
@@ -1376,9 +1433,18 @@ public partial class ClientWorld : Node3D
             if (pvsEnabled && !showAll && e.Index != localId)
             {
                 NVec3 o = e.Origin;
-                pvsVis = Pvs!.BoxAnyClusterVisibleFrom(viewerCluster, o - margin, o + margin);
-                for (int i = 0; i < _entityPvsExtraClusters.Count && !pvsVis; i++)
-                    pvsVis = Pvs!.BoxAnyClusterVisibleFrom(_entityPvsExtraClusters[i], o - margin, o + margin);
+                if (!node.TryGetCachedPvs(_pvsStamp, o, pvsMoveTol, out pvsVis))
+                {
+                    _pvsTestsRun++;
+                    pvsVis = Pvs!.BoxAnyClusterVisibleFrom(viewerCluster, o - margin, o + margin);
+                    for (int i = 0; i < _entityPvsExtraClusters.Count && !pvsVis; i++)
+                        pvsVis = Pvs!.BoxAnyClusterVisibleFrom(_entityPvsExtraClusters[i], o - margin, o + margin);
+                    node.CachePvs(_pvsStamp, o, pvsVis);
+                }
+                else
+                {
+                    _pvsTestsSaved++;
+                }
             }
             node.SetPvsVisible(pvsVis);
 
@@ -1392,6 +1458,29 @@ public partial class ClientWorld : Node3D
 
     // Scratch for ApplyEntityPvsCull's portal-exit cluster union (rebuilt per frame; empty when no portal renders).
     private readonly List<int> _entityPvsExtraClusters = new();
+
+    // (perf 2026-08-03) Viewpoint stamp for the per-entity PVS memo (see EntityNode.TryGetCachedPvs) and the
+    // live-entity scratch the two per-entity passes share, so _entityNodes is walked once per frame.
+    // (perf 2026-08-03) Deterministic effectiveness counters. Frame-time deltas of 0.05-0.2 ms are BELOW this
+    // benchmark's run-to-run spread (~0.5 ms p50 on identical code), so a timing A/B cannot resolve a single
+    // micro-optimization. Counting the work actually eliminated can: these are exact, reproducible, and
+    // independent of thermals. Printed once at teardown.
+    private long _pvsTestsRun, _pvsTestsSaved;
+
+    private int _pvsStamp;
+    private int _pvsStampCluster = int.MinValue;
+    private readonly List<int> _pvsStampExtras = new();
+    private readonly List<(EntityNode Node, Entity Entity)> _liveEntityScratch = new();
+
+    private bool SameExtraClusters()
+    {
+        if (_pvsStampExtras.Count != _entityPvsExtraClusters.Count)
+            return false;
+        for (int i = 0; i < _pvsStampExtras.Count; i++)
+            if (_pvsStampExtras[i] != _entityPvsExtraClusters[i])
+                return false;
+        return true;
+    }
 
     /// <summary>
     /// Port of the per-frame CSQCModel PreDraw hooks (<c>CSQCModel_Hook_PreDraw</c>, csqcmodel_hooks.qc:674) for
@@ -1422,13 +1511,11 @@ public partial class ClientWorld : Node3D
         _ghostColorThisFrame = CvarColormod("cl_ghost_items_color", new Godot.Vector3(-1f, -1f, -1f));
         _stayColorThisFrame = CvarColormod("cl_weapon_stay_color", new Godot.Vector3(2f, 0.5f, 0.5f));
 
-        foreach (var kv in _entityNodes)
+        // (perf 2026-08-03) Iterate the live set DriveEntityNodes already collected + validated this frame,
+        // not the dictionary again: same entities, same order, one walk and one round of validity checks.
+        // DriveEntityNodes always runs first (ClientWorld._Process), so the scratch is current.
+        foreach ((EntityNode node, Entity e) in _liveEntityScratch)
         {
-            EntityNode node = kv.Value;
-            Entity? e = node.Entity;
-            if (e is null || e.IsFreed || !GodotObject.IsInstanceValid(node))
-                continue;
-
             CsqcState st = CsqcStateFor(e);
 
             // (1) APPEARANCE (player models only): the FORCECOLORS reassignment + glowmod from the colormap +

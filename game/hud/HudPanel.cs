@@ -89,7 +89,12 @@ public abstract partial class HudPanel : Control
     /// <summary>The integer value of this panel's master <c>hud_panel_&lt;id&gt;</c> show cvar (0 = off). For the
     /// physics/strafehud panels this is a multi-value show-mode (see <see cref="ResolveShowMode"/>); for the rest
     /// it is a plain 0/1 toggle.</summary>
-    protected int ShowModeCvar() => Mathf.RoundToInt(GlobalF("hud_panel_" + PanelId, 0f));
+    // (perf 2026-08-03) The show-cvar NAME is constant per panel, but this concatenated a fresh string every
+    // call — and ResolveVisible calls it every frame for every CanBeOff panel (~25 panels x fps ≈ 4.5k string
+    // allocations/s at 180 fps, all immediately garbage). Built once, lazily (PanelId is set after ctor).
+    private string? _showCvarName;
+    protected int ShowModeCvar()
+        => Mathf.RoundToInt(GlobalF(_showCvarName ??= "hud_panel_" + PanelId, 0f));
 
     /// <summary>
     /// QC per-panel show gate — does <c>hud_panel_&lt;id&gt;</c> (plus any multi-value show-mode) permit this panel
@@ -154,6 +159,16 @@ public abstract partial class HudPanel : Control
     /// <summary>QC <c>panel == tab_panel</c>: this panel is the current Ctrl+Tab cycle candidate (drawn with the
     /// dim fill preview before Ctrl is released to commit the selection). Set live by <see cref="HudConfigEditor"/>.</summary>
     public bool IsTabSelected { get; set; }
+
+    /// <summary>
+    /// (perf 2026-08-03, R1) Per-frame drive, called for every registered panel from
+    /// <see cref="HudManager"/>'s own <c>_Process</c> — the central-drive pattern <c>ClientWorld</c> already
+    /// uses for entity nodes. Override this INSTEAD of <c>_Process</c>: a panel that owns a Godot process
+    /// callback costs a native→managed crossing per frame, and there are ~25 of them, almost all doing
+    /// nothing but advancing a clock. Panels that still override <c>_Process</c> keep working (the manager
+    /// does not disable their callback) — this is opt-in, one panel at a time.
+    /// </summary>
+    public virtual void DriveFrame(double delta) { }
 
     /// <summary>
     /// Whether this panel's DISPLAYED content actually changed since its last draw (3.2-3). A dynamic panel is

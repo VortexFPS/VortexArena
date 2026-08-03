@@ -409,12 +409,23 @@ public partial class PlayerModel : Node3D
     // scale: when such a bone returns to unit we set it back to one (instead of leaving the stale scale).
     private bool[]? _boneScaleNonUnit;
 
+    // (perf 2026-08-03) The bone hierarchy is immutable after Setup, but GetBoneParent was read per bone per
+    // frame — ~60 marshalled native reads per player per frame (~420/frame at 7 players) for a constant.
+    // Cached alongside the bone count on first push (and re-derived if a rebuild changes the count).
+    private int[]? _boneParents;
+
     /// <summary>Convert each CPU bone's posed model-space transform → Godot bone-local pose, parents first.</summary>
     private void PushBones()
     {
         int n = _skeleton.GetBoneCount();
         if (_boneScaleNonUnit is null || _boneScaleNonUnit.Length != n)
             _boneScaleNonUnit = new bool[n];
+        if (_boneParents is null || _boneParents.Length != n)
+        {
+            _boneParents = new int[n];
+            for (int i = 0; i < n; i++)
+                _boneParents[i] = _skeleton.GetBoneParent(i);
+        }
         Span<Transform3D> worldGodot = n <= 256 ? stackalloc Transform3D[n] : new Transform3D[n];
         for (int i = 0; i < n; i++)
         {
@@ -423,7 +434,7 @@ public partial class PlayerModel : Node3D
             Transform3D wg = IqmBuilder.ConjugateQuakeWorldToGodot(quakeWorld);
             worldGodot[i] = wg;
 
-            int parent = _skeleton.GetBoneParent(i);
+            int parent = _boneParents[i];
             Transform3D local = (parent >= 0 && parent < i) ? worldGodot[parent].AffineInverse() * wg : wg;
 
             _skeleton.SetBonePosePosition(i, local.Origin);

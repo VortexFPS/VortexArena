@@ -103,6 +103,34 @@ public partial class EntityNode : Node3D, IEntityPresence
     /// visibility regain — see <see cref="ApplyVisible"/>).</summary>
     public void ForceSync() => _syncValid = false;
 
+    // (perf 2026-08-03) PVS-test memo. BoxAnyClusterVisibleFrom is a recursive BSP descent per entity per
+    // frame — the dominant cost of the entity drive at ~165 entities. Its result is a pure function of
+    // (viewpoint cluster set, entity bounds), so it only has to be recomputed when one of those actually
+    // changes: the caller stamps the viewpoint set (bumped when the camera crosses a cluster or the active
+    // portal-exit set changes), and we re-test on our side only when the entity has moved far enough that a
+    // margin-sized box around it could span a different leaf. Items and idle players are static, so the steady
+    // state is a couple of tests a frame instead of one per entity.
+    private int _pvsStamp = int.MinValue;
+    private System.Numerics.Vector3 _pvsTestedAt;
+    private bool _pvsTestedResult;
+
+    /// <summary>True when the cached PVS verdict is still valid for this viewpoint stamp and origin.
+    /// <paramref name="moveTolerance"/> is how far the entity may drift before a re-test is required.</summary>
+    public bool TryGetCachedPvs(int stamp, in System.Numerics.Vector3 origin, float moveTolerance, out bool visible)
+    {
+        visible = _pvsTestedResult;
+        return _pvsStamp == stamp
+            && System.Numerics.Vector3.DistanceSquared(origin, _pvsTestedAt) <= moveTolerance * moveTolerance;
+    }
+
+    /// <summary>Record a fresh PVS verdict for this viewpoint stamp + origin.</summary>
+    public void CachePvs(int stamp, in System.Numerics.Vector3 origin, bool visible)
+    {
+        _pvsStamp = stamp;
+        _pvsTestedAt = origin;
+        _pvsTestedResult = visible;
+    }
+
     /// <summary>Copy the bound entity's origin and yaw onto this node's transform (Quake -> Godot).</summary>
     public void SyncFromEntity()
     {

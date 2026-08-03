@@ -93,7 +93,8 @@ public partial class HealthArmorPanel : HudPanel
         c.Register("hud_panel_healtharmor_oxygenbar_startalpha", "0.2", save);
     }
 
-    public override void _Process(double delta) => _localClock += delta;
+    // (perf 2026-08-03, R1) Driven centrally by HudManager — no per-panel Godot _Process callback.
+    public override void DriveFrame(double delta) => _localClock += delta;
 
     // Use the slaved sim clock when set (>= 0 and finite); otherwise the local wall clock. Guarding against a
     // non-finite Now matters because Time feeds Mathf.Sin in the blink/pulse effects — sin(Infinity) is NaN,

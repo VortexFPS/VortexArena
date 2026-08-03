@@ -22,7 +22,7 @@ stay independently runnable — **put real logic in the script, never in `vx`**.
 The underlying commands still work and are still the reference:
 
 ```bash
-dotnet build VortexArena.csproj -c Debug
+dotnet build VortexArena.csproj -c Release   # (`vx build`; `-c Debug` = what `vx run debug` loads)
 dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj    # full suite (map-dependent cases lower their thresholds without maps)
 ci/ci.sh                                                          # the authoritative local gate
 ```

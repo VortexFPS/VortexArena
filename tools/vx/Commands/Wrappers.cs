@@ -19,10 +19,23 @@ internal static class Wrappers
 
     internal static int Build(string[] args)
     {
-        string config = ValueOf(args, "--config") ?? "Debug";
+        // RELEASE IS THE DEFAULT (2026-08-03, Bryan) - symmetric with `vx run`: the default pipeline
+        // operates on the configuration players get. `vx build debug` (or --config Debug) builds the Debug
+        // assembly the editor project (`vx run debug`) loads. The build itself is INCREMENTAL by nature -
+        // plain `dotnet build` runs MSBuild's up-to-date checks and compiles nothing when nothing changed;
+        // `--clean` is the explicit full-rebuild escape (dotnet clean for that config, then build).
+        string config = ValueOf(args, "--config") ?? (args.Contains("debug") || args.Contains("--debug") ? "Debug" : "Release");
+        bool clean = args.Contains("--clean");
         string? dotnet = Env.Which("dotnet");
         if (dotnet is null) { NoDotnet(); return 1; }
-        return Env.Exec(dotnet, ["build", Path.Combine(Env.RepoRoot, "VortexArena.csproj"), "-c", config, "--nologo"]);
+        string proj = Path.Combine(Env.RepoRoot, "VortexArena.csproj");
+        if (clean)
+        {
+            int rc = Env.Exec(dotnet, ["clean", proj, "-c", config, "--nologo", "-v", "q"]);
+            if (rc != 0) return rc;
+        }
+        Console.WriteLine($"-> {config} C# build{(clean ? " (after clean)" : "")}");
+        return Env.Exec(dotnet, ["build", proj, "-c", config, "--nologo"]);
     }
 
     internal static int Test(string[] args)
@@ -46,13 +59,13 @@ internal static class Wrappers
     /// <para><b>Which build you get, which used to be invisible.</b> Two very different things can be meant by
     /// "run the game", and they do not behave the same:</para>
     /// <list type="bullet">
-    ///   <item><b>default</b> — the Godot editor binary on the PROJECT (<c>--path &lt;root&gt;</c>), loading the
-    ///         Debug C# assembly from <c>.godot/mono/temp/bin/Debug/</c>. <c>OS.IsDebugBuild()</c> is TRUE here,
-    ///         and that is not cosmetic: the frame profiler defaults on, <c>showfps</c>/<c>showposition</c>
-    ///         default on, and frame times are not release-representative. Fast to iterate — <c>./vx build</c>
-    ///         and relaunch.</item>
-    ///   <item><b><c>--release</c></b> — the EXPORTED client from <c>dist/</c>, i.e. what a player runs. The one
-    ///         perf work must use (docs/PERF-DEBUGGING.md: capture on the release export, not Debug).</item>
+    ///   <item><b>default</b> — the EXPORTED client from <c>dist/</c>, i.e. what a player runs and what every
+    ///         perf number is measured against (docs/PERF-DEBUGGING.md: capture on the release export).</item>
+    ///   <item><b><c>debug</c></b> — the Godot editor binary on the PROJECT (<c>--path &lt;root&gt;</c>), loading
+    ///         the Debug C# assembly from <c>.godot/mono/temp/bin/Debug/</c>. <c>OS.IsDebugBuild()</c> is TRUE
+    ///         here, and that is not cosmetic: the frame profiler defaults on, <c>showfps</c>/<c>showposition</c>
+    ///         default on, and frame times are not release-representative. Fast to iterate — <c>./vx build
+    ///         debug</c> and relaunch.</item>
     /// </list>
     ///
     /// <para>Both print which they picked before launching, because guessing wrong costs an afternoon of
@@ -80,7 +93,7 @@ internal static class Wrappers
         if (godot is null) { NoGodot(); return 1; }
 
         string dll = Path.Combine(Env.RepoRoot, ".godot", "mono", "temp", "bin", "Debug", "VortexArena.dll");
-        if (!skipCheck && !EnsureFresh(dll, "the Debug assembly", "./vx build", () => Build([])))
+        if (!skipCheck && !EnsureFresh(dll, "the Debug assembly", "./vx build debug", () => Build(["debug"])))
             return 1;
 
         Console.WriteLine("→ project, Debug C# (editor engine; OS.IsDebugBuild() is true — profiler and "
@@ -96,8 +109,8 @@ internal static class Wrappers
         string artifact = Path.Combine(Env.RepoRoot, outRel.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(artifact) && !Directory.Exists(artifact))
         {
-            Console.Error.WriteLine($"vx run --release: nothing exported at {outRel}");
-            Console.Error.WriteLine($"                  ./vx export --preset {preset}");
+            Console.Error.WriteLine($"vx run: nothing exported at {outRel}");
+            Console.Error.WriteLine($"        ./vx export --preset {preset}   (or `vx run debug` for the editor project)");
             return 1;
         }
         if (!skipCheck && !EnsureFresh(artifact, $"the {preset} export", $"./vx export --preset {preset}",

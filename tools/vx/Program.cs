@@ -95,7 +95,10 @@ internal static class Program
                             --force         re-download everything
                             --only <plat>   just these (repeatable)
 
-              build       Build the Godot host.        --config Debug|Release
+              build       Build the Godot host C# (Release by default; incremental).
+                            debug           build the Debug config (what `vx run
+                                            debug` loads); --config also accepted
+                            --clean         full rebuild (dotnet clean first)
               test        Run the suite.               --filter <expr>
               run         Launch the client — the RELEASE export from dist/ (what a
                           player runs). Extra args go to the game.

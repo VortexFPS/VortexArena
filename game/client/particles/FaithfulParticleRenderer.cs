@@ -89,16 +89,44 @@ public sealed partial class FaithfulParticleRenderer : Node3D
     // Cached depth-sort state — the comparator reads these instead of capturing a closure, so Sync
     // allocates nothing per frame. Key: squared distance of the particle's SortOrg (the EFFECT center)
     // from the view origin, farthest first; ties by pool index ascending (DP queue-insertion order).
-    private Particle[] _sortPool = Array.Empty<Particle>();
-    private NVec3 _sortVo;
-    private Comparison<int>? _depthCmp;
+    // (hitch fix 2026-08-03) Depth sort WITHOUT a comparison delegate. The old shape —
+    // List<int>.Sort(CompareDepthFarthestFirst) — recomputed BOTH particles' view distances on every one of
+    // the ~n·log n comparisons, each a random ~100-byte-stride struct access (a cache miss), through a
+    // delegate call. At a burst-filled pool that is over a million delegate comparisons and two million
+    // distance computes in one frame: measured as the residual 400-840 ms particles.cpu freezes on stormkeep
+    // AFTER the sim's trace/content budgets landed (watchdog 3656/3664 samples in particles.cpu with both
+    // budgets capped). Now each particle's distance is computed ONCE into a sortable ulong key —
+    //   [ ~bits(distSq) : 32 ][ pool index : 32 ]
+    // — and Array.Sort(keys, indices) runs the tight primitive-key introsort. distSq is non-negative, and
+    // IEEE bit patterns of non-negative floats are order-isomorphic to their values, so ~bits gives
+    // ascending = FARTHEST FIRST; the embedded pool index makes equal distances resolve in pool order
+    // (spawn/block order within a burst) exactly like the old explicit tie-break, with no stability
+    // requirement on the sort itself.
+    private ulong[] _sortKeys = Array.Empty<ulong>();
+    private int[] _sortIdx = Array.Empty<int>();
 
-    private int CompareDepthFarthestFirst(int ia, int ib)
+    /// <summary>Sort a cull stream's indices farthest-first (ties in pool order) via the key arrays.</summary>
+    private void SortDepth(List<int> indices, Particle[] pool, NVec3 viewOrigin)
     {
-        NVec3 da = _sortPool[ia].SortOrg - _sortVo, db = _sortPool[ib].SortOrg - _sortVo;
-        float fa = NVec3.Dot(da, da), fb = NVec3.Dot(db, db);
-        int c = fb.CompareTo(fa);                 // farthest first
-        return c != 0 ? c : ia.CompareTo(ib);     // tie: pool order (spawn/block order within a burst)
+        int n = indices.Count;
+        if (n <= 1) return;
+        if (_sortKeys.Length < n)
+        {
+            int cap = System.Numerics.BitOperations.RoundUpToPowerOf2((uint)n) is var c && c > 0 ? (int)c : n;
+            _sortKeys = new ulong[cap];
+            _sortIdx = new int[cap];
+        }
+        for (int k = 0; k < n; k++)
+        {
+            int i = indices[k];
+            NVec3 d = pool[i].SortOrg - viewOrigin;
+            uint bits = System.BitConverter.SingleToUInt32Bits(NVec3.Dot(d, d));
+            _sortKeys[k] = ((ulong)~bits << 32) | (uint)i;
+            _sortIdx[k] = i;
+        }
+        Array.Sort(_sortKeys, _sortIdx, 0, n);
+        for (int k = 0; k < n; k++)
+            indices[k] = _sortIdx[k];
     }
 
     public override void _Ready()
@@ -506,11 +534,8 @@ public sealed partial class FaithfulParticleRenderer : Node3D
 
         // 2) Sort both streams the way DP's transparent queue does: farthest SortOrg (the effect center)
         //    first, ties in pool order — a burst composites in its spawn/block order.
-        _sortPool = pool;
-        _sortVo = viewOrigin;
-        _depthCmp ??= CompareDepthFarthestFirst;
-        if (premul.Indices.Count > 1) premul.Indices.Sort(_depthCmp);
-        if (invmod.Indices.Count > 1) invmod.Indices.Sort(_depthCmp);
+        SortDepth(premul.Indices, pool, viewOrigin);
+        SortDepth(invmod.Indices, pool, viewOrigin);
 
         // 3) Pack + upload.
         PackAndUpload(premul, pool, sizeScale, alphaScale, fwd, time, planeStart, planeEnd, doFade, invmod: false);
@@ -538,15 +563,23 @@ public sealed partial class FaithfulParticleRenderer : Node3D
         // Now the buffer is sized once at MaxInstances and never resized; VisibleInstanceCount (set by the
         // caller) is what limits drawing, which is the cheap per-frame knob the MultiMesh contract intends.
         // Cost is memory, and it is small: MaxInstances x 20 floats x 4 B ~= 0.65 MB per batch.
-        // Overflow beyond MaxInstances is CLAMPED rather than reallocated - dropping the tail of one
+        // Overflow beyond MaxInstances is CLAMPED rather than reallocated - dropping part of one
         // extreme burst is invisible next to an 800 ms freeze, and the sim's own pool ceiling bounds n.
+        // (2026-08-03) The clamp keeps the NEAREST MaxInstances: the stream is sorted farthest-first, so
+        // taking the FIRST n kept the far particles and dropped the ones in the player's face. Packing the
+        // TAIL window keeps the near subset, still in farthest-first order within itself (correct
+        // transparent compositing).
+        int first = 0;
         if (n > MaxInstances)
+        {
+            first = n - MaxInstances;
             n = MaxInstances;
+        }
         float[] buf = b.Buffer;
 
         for (int k = 0; k < n; k++)
         {
-            ref Particle p = ref pool[b.Indices[k]];
+            ref Particle p = ref pool[b.Indices[first + k]];
             int o = k * FloatsPerInstance;
 
             int slot = _slotOf.TryGetValue(p.TexNum, out int s) ? s : 0;

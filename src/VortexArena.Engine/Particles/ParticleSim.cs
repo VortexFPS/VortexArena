@@ -80,12 +80,15 @@ public sealed class ParticleSim
     /// <summary>The sim's current clock (last value passed to <see cref="Update"/>). Spawns use it for `die`.</summary>
     public float Now => _currentTime;
 
-    // The default pool CEILING (the pool grows ×2 from initialCapacity up to this). 1<<16 = 65,536 keeps the
-    // faithful sim near DP's practical particle count: the old 1<<18 = 262,144 gave BOTH the per-frame
-    // collision-trace loop AND the full-capacity MultiMesh upload ~4× more headroom than DP ever uses, so a
-    // heavy-combat burst could balloon both into the catastrophic particles.cpu hitch. Tests pass an explicit
-    // max, so this only retunes the production backend (FaithfulParticleBackend uses the default).
-    public ParticleSim(IParticleRng rng, int initialCapacity = 8192, int maxParticles = 1 << 16)
+    // The default pool CEILING (the pool grows ×2 from initialCapacity up to this). 1<<14 = 16,384
+    // (2026-08-03, down from 1<<16): the renderer can DRAW at most 16,384 instances (two fixed 8,192
+    // MultiMesh batches), so simulating more than that is work no one can ever see — and at 65k live even
+    // the budgeted integration loop plus its ring laps stayed hitch-class (a full trace-ring lap took 128
+    // frames, stretching the resume segments into map-length sweeps). A burst past the ceiling truncates
+    // exactly like DP's full pool does (spawns drop); with the drawable cap at the same number, the
+    // truncation is invisible by construction. Tests pass an explicit max, so this only retunes the
+    // production backend (FaithfulParticleBackend uses the default).
+    public ParticleSim(IParticleRng rng, int initialCapacity = 8192, int maxParticles = 1 << 14)
     {
         Rng = rng ?? throw new ArgumentNullException(nameof(rng));
         _maxParticles = Math.Max(initialCapacity, maxParticles);
@@ -138,16 +141,86 @@ public sealed class ParticleSim
     /// </summary>
     public static float QualityScale = 1f;
 
-    /// <summary>
-    /// Max world bounce-traces per frame (see the note at the trace site). Static + mutable so it can be
-    /// tuned or disabled (int.MaxValue restores the old unbounded behaviour) without a rebuild. 512 sweeps
-    /// is well inside a frame's budget while still resolving every visible collision within a few frames at
-    /// realistic particle counts.
-    /// </summary>
+    // ── per-frame BSP-work budgets (hitch fix 2026-08-03) ────────────────────────────────────────────────
+    // The integration loop used to pay TWO unbounded per-particle world costs every frame: the bounce TRACE
+    // (a full world sweep per bouncing particle) and the CONTENT checks (PointContents for the liquid-friction
+    // branch, plus the Blood/Bubble/Rain/Snow kill-checks). Against the 65,536 pool ceiling a sustained
+    // firefight kept the frame in particles.cpu for 400-840 ms at a stretch (stormkeep, 8 bots: watchdog
+    // 3656/3664 samples there). Budgeting ONLY the traces was not enough — the content checks alone are tens
+    // of thousands of broadphase queries a frame at a full pool.
+    //
+    // Both costs now run under FAIR ROTATING RINGS over live-particle ordinals: each frame the ring covers the
+    // next `budget` live particles (wrapping on last frame's live count), so every particle is served within
+    // ceil(live/budget) frames and none is starved — the first budget cut (spend-counter, first-come) starved
+    // whichever particles sat above the budget in pool order for their whole lifetime. A particle outside the
+    // trace ring flies ballistically for a few frames (DP already resolves bounces at frame granularity, so
+    // this only stretches an existing latency); outside the content ring it reuses its cached InLiquid verdict
+    // and defers its kill-check a few frames (a blood mote inside a wall dies ~ceil(live/budget) frames late —
+    // invisible next to its alpha fade).
+    //
+    // PARITY: when live <= budget the ring covers everything and behaviour is bit-identical to DP/unbudgeted —
+    // the C-reference replays (small pools) never see a skip. int.MaxValue disables a ring outright.
+
+    /// <summary>Bounce-trace ring width (world sweeps per frame). int.MaxValue = unbounded (old behaviour).</summary>
     public static int TraceBudgetPerFrame = 512;
 
-    // Traces spent this frame, reset in Update. Sim is single-threaded (client main), so a plain field.
-    private int _tracesThisFrame;
+    /// <summary>
+    /// Max length (Quake units) of one budgeted resume sweep. An out-of-ring particle accumulates movement
+    /// between its trace turns, and with a big pool the accumulated segment can grow into a map-length BVH
+    /// sweep — 1,024 of those a frame was itself a freeze. A particle whose pending segment exceeds this
+    /// forfeits the overflow (its LastTraced jumps forward) — a fast laggard can tunnel a wall in that rare
+    /// case, which the (also budgeted) content kill-checks clean up. int.MaxValue disables the clamp.
+    /// </summary>
+    public static float TraceMaxSegment = 1024f;
+
+    /// <summary>Content-check ring width (particles content-checked per frame; a blood particle spends up to
+    /// two PointContents on its eligible frame — liquid + kill-check — so worst-case calls ≈ 2× this).
+    /// int.MaxValue = unbounded (old behaviour).</summary>
+    public static int ContentBudgetPerFrame = 2048;
+
+    // Ring state. Ordinals count ACTIVE slots in scan order this frame; the cursors advance by one ring width
+    // per frame, wrapping on last frame's active count. Sim is single-threaded (client main) — plain fields.
+    //
+    // The rings alone have a one-frame hole: the wrap modulus is LAST frame's active count, so a mega-burst
+    // that arrives in a single frame is fully eligible on its first Update (n <= budget ⇒ everyone in-ring).
+    // The SPEND CAPS below are the backstop — a hard per-frame ceiling of 2× the ring width on actual world
+    // queries. They only bind on that pathological first frame (the ring covers steady state); a particle
+    // beyond the cap simply waits for its ring turn like any out-of-ring particle.
+    private int _activeOrdinal;     // running ordinal of the active particle being processed this frame
+    private int _lastActiveCount;   // active count from the previous frame (ring wrap modulus)
+    private int _traceCursor;
+    private int _contentCursor;
+    private int _tracesSpent;       // world sweeps issued this frame (cap: 2× TraceBudgetPerFrame)
+    private int _contentsSpent;     // PointContents calls issued this frame (cap: 2× ContentBudgetPerFrame)
+
+    /// <summary>True when ordinal falls in the rotating window [cursor, cursor+budget) mod lastActive.
+    /// A pool at-or-under the budget is always fully covered (the parity case).</summary>
+    private bool InRing(int ordinal, int cursor, int budget)
+    {
+        int n = _lastActiveCount;
+        if (n <= budget) return true;
+        int rel = ordinal - cursor;
+        if (rel < 0) rel += n;
+        return (uint)rel < (uint)budget;   // ordinal can exceed n when the pool grew this frame — treat as out-of-ring until the count catches up
+    }
+
+    /// <summary>Spend one bounce-trace against the per-frame backstop cap. See the ring-state note.</summary>
+    private bool SpendTrace()
+    {
+        if (TraceBudgetPerFrame == int.MaxValue) return true;                 // budgets disabled
+        if (_tracesSpent >= TraceBudgetPerFrame * 2) return false;
+        _tracesSpent++;
+        return true;
+    }
+
+    /// <summary>Spend one PointContents against the per-frame backstop cap. See the ring-state note.</summary>
+    private bool SpendContent()
+    {
+        if (ContentBudgetPerFrame == int.MaxValue) return true;               // budgets disabled
+        if (_contentsSpent >= ContentBudgetPerFrame * 2) return false;
+        _contentsSpent++;
+        return true;
+    }
     private bool CvBool(string name) => (Cvars ?? Api.Cvars).GetFloat(name) != 0f;
 
     /// <summary>The resolved tracer: the injected client world-only tracer, or the ambient fallback (tests).</summary>
@@ -519,6 +592,8 @@ public sealed class ParticleSim
         p.Org = new Vector3(px, py, pz);
         p.Vel = new Vector3(pvx, pvy, pvz);
         p.SortOrg = p.Org;   // internal sub-spawns sort by their own org; SpawnEffect overrides to the effect center
+        p.LastTraced = p.Org; // budgeted-trace resume origin (see the trace ring): the next bounce trace sweeps
+                              // from here, so movement on out-of-ring frames is still collision-checked later
 
         p.AirFriction = pairfriction;
         p.LiquidFriction = pliquidfriction;
@@ -585,7 +660,13 @@ public sealed class ParticleSim
         // frametime = bound(0, time - updatetime, 1); updatetime = bound(time-1, updatetime+frametime, time+1).
         // (cl_particles.c:2921-2922) — _updateTime starts at 0, so the first frametime is `time` clamped to 1.
         _currentTime = time;   // publish the sim clock so spawns this frame read the same `now`
-        _tracesThisFrame = 0;  // re-arm the per-frame bounce-trace budget (see TraceBudgetPerFrame)
+        // Advance the fairness rings one window per frame (see the budget block above the ctor).
+        _activeOrdinal = 0;
+        _tracesSpent = _contentsSpent = 0;
+        _traceCursor = _lastActiveCount > TraceBudgetPerFrame
+            ? (_traceCursor + TraceBudgetPerFrame) % _lastActiveCount : 0;
+        _contentCursor = _lastActiveCount > ContentBudgetPerFrame
+            ? (_contentCursor + ContentBudgetPerFrame) % _lastActiveCount : 0;
         float frametime = time - _updateTime;
         if (frametime < 0f) frametime = 0f; else if (frametime > 1f) frametime = 1f;
         float lo = time - 1f, hi = time + 1f;
@@ -610,6 +691,10 @@ public sealed class ParticleSim
                 continue;
             }
 
+            // Ring eligibility for this particle's budgeted world queries (see the budget block up top).
+            int ordinal = _activeOrdinal++;
+            bool inContentRing = InRing(ordinal, _contentCursor, ContentBudgetPerFrame);
+
             if (update)
             {
                 if (p.DelayedSpawn > time) { live++; continue; }
@@ -622,8 +707,17 @@ public sealed class ParticleSim
                 if (p.Orientation != ParticleOrientation.Beam && frametime > 0f)
                 {
                     float f;
-                    bool inLiquid = p.LiquidFriction != 0f && collisions &&
-                                    (TraceSvc.PointContents(p.Org) & SuperContents.LiquidsMask) != 0;
+                    // Budgeted liquid check: out-of-ring frames reuse the cached verdict (a particle crosses
+                    // a liquid surface at most a few frames before the ring re-checks it).
+                    bool inLiquid;
+                    if (p.LiquidFriction != 0f && collisions)
+                    {
+                        if (inContentRing && SpendContent())
+                            p.InLiquid = (TraceSvc.PointContents(p.Org) & SuperContents.LiquidsMask) != 0;
+                        inLiquid = p.InLiquid;
+                    }
+                    else
+                        inLiquid = false;
                     if (inLiquid)
                     {
                         if (p.TypeIndex == ParticleType.Blood) p.Size += frametime * 8f;
@@ -641,27 +735,15 @@ public sealed class ParticleSim
                         }
                     }
 
-                    Vector3 oldorg = p.Org;
-                    p.Org += p.Vel * frametime;
+                    p.Org += p.Vel * frametime;   // (oldorg gone: the bounce trace resumes from p.LastTraced)
 
-                    // (hitch fix 2026-08-03) PER-FRAME TRACE BUDGET. The bounce trace below is a full world
-                    // BSP sweep, and it ran for EVERY bouncing particle EVERY frame with no bound — the pool
-                    // ceiling is 65536, so one big burst turns into tens of thousands of traces in a single
-                    // frame. Measured on stormkeep: repeated 758-880 ms mid-match freezes with the watchdog
-                    // putting ~1864/1870 samples inside particles.cpu. (The MultiMesh realloc fixed just
-                    // before this was a correlate of the same bursts, not the cause — its events are gone and
-                    // the freezes remained.)
-                    //
-                    // Budget: at most TraceBudgetPerFrame sweeps per frame, resuming next frame where this
-                    // one stopped (_traceCursor), so no particle is starved — a skipped particle simply flies
-                    // ballistically for a frame or two before its next collision check. That is a far smaller
-                    // fidelity change than it sounds: DP itself only traces at frame granularity, so a bounce
-                    // is already resolved up to a frame late, and the visible signature (a spark dying on
-                    // contact) survives because the particle still gets traced within a few frames.
-                    bool mayTrace = _tracesThisFrame < TraceBudgetPerFrame;
-                    if (p.Bounce != 0f && collisions && mayTrace && p.Vel.LengthSquared() != 0f)
+                    // Budgeted bounce trace (a full world sweep — see the budget block up top). Out-of-ring
+                    // frames fly ballistically; the ring re-traces this particle within ceil(live/budget)
+                    // frames, and DP already resolves bounces at frame granularity, so the visible signature
+                    // (a spark dying on contact) survives.
+                    if (p.Bounce != 0f && collisions && p.Vel.LengthSquared() != 0f
+                        && InRing(ordinal, _traceCursor, TraceBudgetPerFrame) && SpendTrace())
                     {
-                        _tracesThisFrame++;
                         int hitmask = SuperContents.Solid |
                             ((p.TypeIndex == ParticleType.Rain || p.TypeIndex == ParticleType.Snow) ? SuperContents.LiquidsMask : 0);
                         // DP's per-frame bounce trace (cl_particles.c:2984) is CL_TraceLine(..., MOVE_NORMAL, ...,
@@ -674,7 +756,17 @@ public sealed class ParticleSim
                         // the live SERVER world was the dominant combat-frame hitch: every bouncing spark/ember box-
                         // swept the entire live entity broadphase under the server-tick lock each frame; the static
                         // client tracer removes both the per-trace cost and the cross-thread serialisation.
-                        TraceResult tr = TraceSvc.Trace(oldorg, Vector3.Zero, Vector3.Zero, p.Org, MoveFilter.NoMonsters, null);
+                        // Sweep from the last CHECKED position, not this frame's oldorg: on out-of-ring frames
+                        // the particle moved untraced, and resuming the segment here is what makes the ring a
+                        // true resume (no tunnel-through-wall between eligible frames). In-ring every frame
+                        // (the parity case) LastTraced == oldorg and this is exactly DP's per-frame sweep.
+                        // The segment is length-clamped (TraceMaxSegment) so one sweep stays bounded work.
+                        Vector3 segFrom = p.LastTraced;
+                        Vector3 seg = p.Org - segFrom;
+                        float segLen2 = Vector3.Dot(seg, seg);
+                        if (segLen2 > TraceMaxSegment * TraceMaxSegment)
+                            segFrom = p.Org - seg * (TraceMaxSegment / MathF.Sqrt(segLen2));
+                        TraceResult tr = TraceSvc.Trace(segFrom, Vector3.Zero, Vector3.Zero, p.Org, MoveFilter.NoMonsters, null);
                         // Honor only the requested hitmask: a SOLID-only particle ignores a liquid surface.
                         bool hitWanted = (tr.DpHitContents & hitmask) != 0 || tr.StartSolid;
                         if (tr.Fraction < 1f && !hitWanted)
@@ -732,6 +824,7 @@ public sealed class ParticleSim
                                 }
                             }
                         }
+                        p.LastTraced = p.Org;   // segment checked up to here (survivor paths only — kills exited)
                     }
 
                     if (Vector3.Dot(p.Vel, p.Vel) < 0.03f)
@@ -752,20 +845,31 @@ public sealed class ParticleSim
                             break;
                         case ParticleType.Blood:
                         {
-                            int a = TraceSvc.PointContents(p.Org);
-                            if ((a & (SuperContents.Solid | SuperContents.Lava | SuperContents.NoDrop)) != 0) { Kill(ref p, i); continue; }
+                            // Budgeted (content ring): out-of-ring frames defer the kill-check a few frames —
+                            // invisible next to the alpha fade, and the same deal for the three types below.
+                            if (inContentRing && SpendContent())
+                            {
+                                int a = TraceSvc.PointContents(p.Org);
+                                if ((a & (SuperContents.Solid | SuperContents.Lava | SuperContents.NoDrop)) != 0) { Kill(ref p, i); continue; }
+                            }
                             break;
                         }
                         case ParticleType.Bubble:
                         {
-                            int a = TraceSvc.PointContents(p.Org);
-                            if ((a & (SuperContents.Water | SuperContents.Slime)) == 0) { Kill(ref p, i); continue; }
+                            if (inContentRing && SpendContent())
+                            {
+                                int a = TraceSvc.PointContents(p.Org);
+                                if ((a & (SuperContents.Water | SuperContents.Slime)) == 0) { Kill(ref p, i); continue; }
+                            }
                             break;
                         }
                         case ParticleType.Rain:
                         {
-                            int a = TraceSvc.PointContents(p.Org);
-                            if ((a & (SuperContents.Solid | SuperContents.LiquidsMask)) != 0) { Kill(ref p, i); continue; }
+                            if (inContentRing && SpendContent())
+                            {
+                                int a = TraceSvc.PointContents(p.Org);
+                                if ((a & (SuperContents.Solid | SuperContents.LiquidsMask)) != 0) { Kill(ref p, i); continue; }
+                            }
                             break;
                         }
                         case ParticleType.Snow:
@@ -777,8 +881,11 @@ public sealed class ParticleSim
                                 p.Vel.X = p.Vel.X * 0.9f + (float)ParticleRandom.Lhrandom(Rng, -32, 32);
                                 p.Vel.Y = p.Vel.X * 0.9f + (float)ParticleRandom.Lhrandom(Rng, -32, 32);
                             }
-                            int a = TraceSvc.PointContents(p.Org);
-                            if ((a & (SuperContents.Solid | SuperContents.LiquidsMask)) != 0) { Kill(ref p, i); continue; }
+                            if (inContentRing && SpendContent())
+                            {
+                                int a = TraceSvc.PointContents(p.Org);
+                                if ((a & (SuperContents.Solid | SuperContents.LiquidsMask)) != 0) { Kill(ref p, i); continue; }
+                            }
                             break;
                         }
                         default: break;
@@ -797,6 +904,7 @@ public sealed class ParticleSim
         // reduce high-water (3170-3172).
         while (_highWater > 0 && !_pool[_highWater - 1].Active) _highWater--;
         LiveCount = live;
+        _lastActiveCount = _activeOrdinal;   // ring wrap modulus for next frame (active slots scanned this frame)
     }
 
     private void Kill(ref Particle p, int i)
@@ -814,6 +922,8 @@ public sealed class ParticleSim
         _freeParticle = 0;
         LiveCount = 0;
         _updateTime = 0f;
+        _lastActiveCount = 0;   // rings fully covered again (parity state)
+        _traceCursor = _contentCursor = 0;
     }
 
     // -----------------------------------------------------------------------------------------------------

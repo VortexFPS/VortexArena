@@ -50,4 +50,11 @@ public struct Particle
     public ParticleOrientation Orientation;
     public byte TexNum;            // atlas cell index drawn for this particle
     public sbyte StainTexNum;      // < 0 => no stain
+
+    // --- budgeted-sim cache (does not affect the position/vel/alpha golden trace below the budget) ---
+    public bool InLiquid;          // last budgeted PointContents liquid verdict (ParticleSim content ring);
+                                   // reused on the frames this particle's content check is skipped
+    public Vector3 LastTraced;     // where the budgeted bounce trace last CHECKED this particle (ParticleSim
+                                   // trace ring): the next sweep resumes from here, so movement on skipped
+                                   // frames still gets collision-checked (no tunnel between eligible frames)
 }

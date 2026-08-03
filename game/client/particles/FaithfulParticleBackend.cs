@@ -367,7 +367,10 @@ public sealed partial class FaithfulParticleBackend : Node3D
         // still, so Update() is a same-time no-op: particles hang frozen; no aging, no leak (paused sim emits
         // nothing new). This keeps the wall-clock SOURCE the doc above requires — only the step is scaled.
         _clientTime += Math.Min(VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta), MaxParticleStep);
-        _sim.Update(_clientTime);
+        // Child scopes: a particles.cpu hitch names its half directly (sim integration vs renderer
+        // cull/sort/pack) instead of restarting the whole who-is-it hunt.
+        using (VortexArena.Common.Diagnostics.Prof.Sample("particles.sim"))
+            _sim.Update(_clientTime);
 
         // View origin/forward in Quake space, from the active camera (GetViewport().GetCamera3D()). The
         // renderer culls/sorts against this and converts to Godot at the boundary.
@@ -383,7 +386,8 @@ public sealed partial class FaithfulParticleBackend : Node3D
             viewForward = Coords.ToQuake(gFwd);
         }
 
-        _renderer.Sync(_sim.Pool, _sim.HighWater, viewOrigin, viewForward, _clientTime);
+        using (VortexArena.Common.Diagnostics.Prof.Sample("particles.sync"))
+            _renderer.Sync(_sim.Pool, _sim.HighWater, viewOrigin, viewForward, _clientTime);
     }
 
     private float _clientTime;   // accumulating client render clock driving the sim

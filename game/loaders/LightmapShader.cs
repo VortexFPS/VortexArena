@@ -85,6 +85,7 @@ public static class LightmapShader
 
     /// <summary>Uniform name for the flag that enables <c>_norm</c> per-pixel normal perturbation.</summary>
     public static readonly StringName UseNormalUniform = "use_normal";
+    public static readonly StringName NormRgUniform = "norm_rg";
 
     /// <summary>Uniform name for the specular (<c>_gloss</c>) companion texture.</summary>
     public static readonly StringName GlossUniform = "gloss_tex";
@@ -106,7 +107,11 @@ shader_type spatial;
 // ALBEDO carries the plain diffuse purely so the light() below has something to modulate.
 // `ambient_light_disabled` is essential: the scene's ambient/sky would otherwise be added on top of a
 // lightmap that already accounts for all of it, washing every map out.
-render_mode cull_back, depth_draw_opaque, ambient_light_disabled;
+// `shadows_disabled` (2026-08-02): the world RECEIVES no shadow map — the light() below discards
+// directional light entirely (the lightmap already owns it) and no omni here casts — so paying the
+// per-pixel PCF tap chain at 4x MSAA bought nothing. If a future feature wants the world shadowed,
+// remove this together with the r_sun_shadow default (they were retired as a pair).
+render_mode cull_back, depth_draw_opaque, ambient_light_disabled, shadows_disabled;
 
 // NOTE: albedo/lightmap are sampled RAW (no source_color) — the stock Xonotic config renders in gamma space.
 // The srgb_color path decodes them explicitly. See LightmapShader's type doc.
@@ -129,6 +134,7 @@ uniform float glow_scale = 1.0;         // DP Color_Glow (straight additive scal
 // unused — matching DP, which only normal/gloss-maps the lightdirectionmap modes.
 uniform sampler2D normal_tex : filter_linear_mipmap_anisotropic; // tangentspace _norm companion (raw; decoded *2-1).
 uniform bool use_normal = false;        // a _norm page was found for this surface.
+uniform bool norm_rg = false;           // BC5/RGTC two-channel normal: reconstruct z = sqrt(1 - x^2 - y^2).
 uniform sampler2D gloss_tex : hint_default_black;               // _gloss specular map (DP Texture_Gloss).
 uniform bool use_gloss = false;         // a _gloss page was found for this surface.
 uniform float specular_power = 32.0;    // DP r_shadow_glossexponent (× glosstex.a per-texel in the shader).
@@ -203,9 +209,14 @@ void fragment() {
         // Per-pixel surface normal from the _norm companion (tangentspace), else the flat face normal (0,0,1).
         // DP MODE_LIGHTDIRECTIONMAP_TANGENTSPACE: the directional diffuse is dot(surfacenormal, lightnormal),
         // which reduces to clamp(lightnormal.z,0,1) when there is no normalmap (sn = (0,0,1)) — the old path.
-        vec3 sn = use_normal
-            ? normalize(texture(normal_tex, UV * albedo_uv_scale).xyz * 2.0 - 1.0)
-            : vec3(0.0, 0.0, 1.0);
+        // BC5/RGTC normals carry only X/Y (industry-standard normal compression — blue samples as 0);
+        // reconstruct Z on the unit hemisphere. Full-channel textures keep the direct decode.
+        vec3 sn = vec3(0.0, 0.0, 1.0);
+        if (use_normal) {
+            vec3 nt = texture(normal_tex, UV * albedo_uv_scale).xyz * 2.0 - 1.0;
+            if (norm_rg) { nt.z = sqrt(max(0.0, 1.0 - dot(nt.xy, nt.xy))); }
+            sn = normalize(nt);
+        }
         float diffuse = clamp(dot(sn, lightnormal), 0.0, 1.0);
         // lightcolor = lightmap / max(0.25, lightnormal.z)  (angle-attenuation undo); reused by the specular.
         lm *= 1.0 / max(0.25, lightnormal.z);
@@ -261,20 +272,44 @@ void light() {
     // The shader resource is immutable text, so a single shared instance is reused across every
     // lightmap material (the per-surface textures live on the ShaderMaterial, not the Shader).
     private static Shader? _shared;
+    private static Shader? _sharedMasked;
     private static Shader? _sharedTranslucent;
 
     /// <summary>The shared opaque <see cref="Shader"/> instance compiled from <see cref="Code"/>.</summary>
     private static readonly object _sharedGate = new();
 
-    /// <summary>Shared instance; locked for the reason spelled out in <c>PlayerSkinShader.Shader</c>.</summary>
+    /// <summary>Shared OPAQUE instance — <see cref="Code"/> with the alpha-test block textually removed
+    /// (2026-08-02): a shader that *contains* `discard` is classified alpha-discard by Godot even when the
+    /// uniform keeps it dead, which forces the depth prepass to run the fragment shader for ALL world
+    /// geometry and weakens early-Z in the main pass. The overwhelming majority of world surfaces have
+    /// `alpha_cutoff == 0`, so they now compile a discard-free program; masked surfaces (grates/foliage)
+    /// keep it via <see cref="MaskedShader"/>. Locked for the reason spelled out in
+    /// <c>PlayerSkinShader.Shader</c>.</summary>
     public static Shader Shader
     {
         get
         {
             lock (_sharedGate)
-                return _shared ??= new Shader { Code = Code };
+                return _shared ??= new Shader { Code = OpaqueCode };
         }
     }
+
+    /// <summary>The masked (alpha-tested) variant — the original <see cref="Code"/>, whose discard block
+    /// keeps grates/foliage in the opaque pass. Chosen by <see cref="MakeMaterial"/> when
+    /// <c>alphaCutoff &gt; 0</c>.</summary>
+    public static Shader MaskedShader
+    {
+        get
+        {
+            lock (_sharedGate)
+                return _sharedMasked ??= new Shader { Code = Code };
+        }
+    }
+
+    /// <summary>The opaque source: <see cref="Code"/> minus the alpha-test block (see <see cref="Shader"/>).
+    /// Derived textually, like <see cref="TranslucentCode"/>, so the color math can never drift.</summary>
+    private static readonly string OpaqueCode = Code.Replace(
+        "    if (alpha_cutoff > 0.0 && base.a < alpha_cutoff) {\n        discard;\n    }\n", "");
 
     /// <summary>
     /// The translucent variant, for alpha-blended world surfaces (Q3 <c>blendFunc blend</c> over a lightmap —
@@ -304,7 +339,7 @@ void light() {
     /// regardless of transparency variant, so a translucent glass surface is not mistaken for a lightmap-bind
     /// miss (the regression signature the tally guards).</summary>
     public static bool IsLightmapShader(Shader? shader)
-        => shader != null && (shader == _shared || shader == _sharedTranslucent);
+        => shader != null && (shader == _shared || shader == _sharedMasked || shader == _sharedTranslucent);
 
     /// <summary>
     /// Build a <see cref="ShaderMaterial"/> that modulates <paramref name="albedo"/> by
@@ -329,7 +364,13 @@ void light() {
         Texture2D? glow = null, float glowScale = 1.0f, bool translucent = false,
         Texture2D? normal = null, Texture2D? gloss = null)
     {
-        var mat = new ShaderMaterial { Shader = translucent ? TranslucentShader : Shader };
+        // Three-way program pick (2026-08-02): translucent → alpha-blend variant; alpha-tested (grates,
+        // foliage) → the masked variant that carries `discard`; everything else → the discard-free opaque
+        // program, which is what lets Godot run a position-only depth prepass for the world.
+        var mat = new ShaderMaterial
+        {
+            Shader = translucent ? TranslucentShader : alphaCutoff > 0f ? MaskedShader : Shader,
+        };
         if (albedo != null)
             mat.SetShaderParameter(AlbedoUniform, albedo);
         if (lightmap != null)
@@ -352,6 +393,8 @@ void light() {
         {
             mat.SetShaderParameter(NormalUniform, normal);
             mat.SetShaderParameter(UseNormalUniform, true);
+            if (AssetSystem.IsRgTexture(normal))
+                mat.SetShaderParameter(NormRgUniform, true); // BC5 two-channel — shader reconstructs Z
         }
         if (gloss != null)
         {

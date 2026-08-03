@@ -113,6 +113,7 @@ uniform sampler2D shirt_mask : hint_default_black;
 uniform sampler2D pants_mask : hint_default_black;
 uniform sampler2D reflect_mask : hint_default_black;
 uniform sampler2D normal_tex : hint_normal;
+uniform bool norm_rg = false;  // BC5/RGTC two-channel normal: reconstruct z = sqrt(1 - x^2 - y^2).
 uniform sampler2D gloss_tex : hint_default_white;
 uniform sampler2D glow_tex : hint_default_black;
 // dpreflectcube (playtest #36): the environment cubemap the _reflect mask gates. DP ADDS mask x cubemap on
@@ -212,6 +213,7 @@ void fragment() {
         vec3 nrm = normalize(NORMAL);
         if (has_normal) {
             vec3 nm = texture(normal_tex, UV).rgb * 2.0 - 1.0;
+            if (norm_rg) { nm.z = sqrt(max(0.0, 1.0 - dot(nm.xy, nm.xy))); }
             nrm = normalize(TANGENT * nm.x + BINORMAL * nm.y + NORMAL * nm.z);
         }
         vec3 ldir = normalize((VIEW_MATRIX * vec4(grid_dir, 0.0)).xyz);
@@ -251,7 +253,13 @@ void fragment() {
         ALBEDO = tinted;
 
         if (has_normal) {
-            NORMAL_MAP = texture(normal_tex, UV).rgb;
+            vec3 nmap = texture(normal_tex, UV).rgb;
+            if (norm_rg) {
+                // Reconstruct the encoded [0,1] blue so Godot's NORMAL_MAP decode sees a full vector.
+                vec2 xy = nmap.rg * 2.0 - 1.0;
+                nmap.b = sqrt(max(0.0, 1.0 - dot(xy, xy))) * 0.5 + 0.5;
+            }
+            NORMAL_MAP = nmap;
         }
 
         // Resolve roughness/metallic locally (avoid reading write-only builtins), then assign once.

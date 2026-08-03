@@ -45,6 +45,11 @@ public partial class MapParticleEmitters : Node3D
         public GpuParticles3D Particles = null!;
         public bool ImpulseMode;     // PARTICLES_IMPULSE: one-shot burst on toggle-ON only
         public bool WasActive;
+        // (draws 2026-08-02) PVS gating state: the cluster of the emitter's position (re-derived when it
+        // moves — a train-mounted emitter changes rooms) and whether we culled it last frame.
+        public int PvsCluster = -2;                       // -2 = never derived
+        public System.Numerics.Vector3 PvsClusterAt;      // origin the cluster was derived at
+        public bool PvsCulled;
     }
 
     private readonly Dictionary<Entity, MapEmitter> _emitters = new();
@@ -64,6 +69,14 @@ public partial class MapParticleEmitters : Node3D
             _rescanIn = RescanInterval;
         }
 
+        // (draws 2026-08-02) PVS gate: an emitter in a room no current viewpoint can see runs neither its
+        // GPU process dispatch nor its draw (courtfun has 44 of these; every one used to run every frame).
+        // Same conservative contract as the world cells — the culler answers "show" whenever it can't prove
+        // otherwise. `r_pvs_cull_emitters 0` restores always-on for A/B.
+        var culler = VortexArena.Game.WorldPvsCuller.Instance;
+        bool pvsGate = culler is { CullActive: true }
+            && Api.Cvars.GetFloat("r_pvs_cull_emitters") != 0f;
+
         foreach (MapEmitter em in _emitters.Values)
         {
             Entity e = em.Entity;
@@ -74,6 +87,35 @@ public partial class MapParticleEmitters : Node3D
             // scaled deltas the CPU-side drivers use), so drive their SpeedScale from the shared factor — frozen
             // mid-air at slowmo 0, slow drift at fractional slowmo. Nothing else sets SpeedScale (default 1).
             em.Particles.SpeedScale = VortexArena.Game.Client.ClientRenderTime.Scale;
+
+            bool pvsCulled = false;
+            if (pvsGate)
+            {
+                // Re-derive the cluster only when the emitter moved (~all are static; 32qu covers mover sway).
+                if (em.PvsCluster == -2
+                    || System.Numerics.Vector3.DistanceSquared(e.Origin, em.PvsClusterAt) > 32f * 32f)
+                {
+                    em.PvsCluster = culler!.ClusterAt(e.Origin);
+                    em.PvsClusterAt = e.Origin;
+                }
+                pvsCulled = !culler!.ClusterVisibleFromView(em.PvsCluster);
+            }
+            if (pvsCulled != em.PvsCulled)
+            {
+                em.PvsCulled = pvsCulled;
+                em.Particles.Visible = !pvsCulled;
+                if (pvsCulled && em.Particles.Emitting)
+                    em.Particles.Emitting = false;   // stop the stream; the state machine below re-arms it
+                if (pvsCulled)
+                {
+                    em.WasActive = false;            // an impulse edge while hidden re-fires on unculling
+                    continue;
+                }
+            }
+            else if (pvsCulled)
+            {
+                continue;                            // stays hidden: skip the per-frame drive entirely
+            }
 
             bool active = e.Active == MapMover.ActiveActive;
             if (em.ImpulseMode)

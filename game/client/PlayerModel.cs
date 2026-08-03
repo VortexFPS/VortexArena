@@ -300,15 +300,29 @@ public partial class PlayerModel : Node3D
     {
         if (n is MeshInstance3D mi)
         {
-            if (mi.Skin is Skin skin)
+            // (2026-08-02) The skinned ArrayMesh + rest Skin are CACHE-owned and shared by every wearer of a
+            // (model, skin) — IqmBuilder.SharedSkinnedGeometry. Disposing them here would free the geometry out
+            // from under every other player still rendering it, so shared resources are excluded exactly like
+            // the surface materials, the AnimationLibrary and the placeholder always were. Anything still
+            // exclusively owned (a non-shared build) is released as before.
+            if (mi.Skin is Skin skin && !IqmBuilder.IsShared(skin))
             {
                 mi.Skin = null;
                 skin.Dispose();
             }
-            if (mi.Mesh is Mesh m && !ReferenceEquals(m, PlaceholderMesh))
+            else if (mi.Skin is not null)
+            {
+                mi.Skin = null; // drop this instance's reference; the cache keeps the resource alive
+            }
+
+            if (mi.Mesh is Mesh m && !ReferenceEquals(m, PlaceholderMesh) && !IqmBuilder.IsShared(m))
             {
                 mi.Mesh = null;
                 m.Dispose();
+            }
+            else if (mi.Mesh is not null && !ReferenceEquals(mi.Mesh, PlaceholderMesh))
+            {
+                mi.Mesh = null;
             }
         }
         foreach (Node c in n.GetChildren())

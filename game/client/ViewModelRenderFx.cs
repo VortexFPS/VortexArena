@@ -211,6 +211,8 @@ internal static class ViewModelRenderFx
         {
             mat.SetShaderParameter("normal_tex", source.NormalTexture);
             mat.SetShaderParameter("has_normal", true);
+            if (VortexArena.Game.Loaders.AssetSystem.IsRgTexture(source.NormalTexture))
+                mat.SetShaderParameter("norm_rg", true); // BC5 two-channel — shader reconstructs Z
         }
         if (source.RoughnessTexture is not null)
         {

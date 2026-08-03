@@ -460,7 +460,12 @@ public partial class ModelAnimator : Node3D
         // so a same-frame Dispose of the replaced mesh is safe.)
         Mesh? initialMesh = _mesh.Mesh;
         _mesh.Mesh = _morphMesh;
-        if (initialMesh is not null && initialMesh != _morphMesh)
+        // (2026-08-02) Never dispose a CACHE-owned mesh (IqmBuilder.SharedSkinnedGeometry) — freeing it here
+        // would pull the geometry out from under every other user. This animator only ever drives MD3 (its own
+        // per-instance build), so the guard is insurance against a future IQM/DPM caller, same rule as
+        // PlayerModel._ExitTree.
+        if (initialMesh is not null && initialMesh != _morphMesh
+            && !VortexArena.Game.Loaders.Models.IqmBuilder.IsShared(initialMesh))
             initialMesh.Dispose();
 
         // One-shot build breadcrumb: which morph path this model took and why (per-model, boot/spawn-time

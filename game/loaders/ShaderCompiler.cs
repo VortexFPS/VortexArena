@@ -32,6 +32,28 @@ namespace VortexArena.Game.Loaders;
 /// </summary>
 public static class ShaderCompiler
 {
+    // (2026-08-02) Shared Shader programs keyed by their GENERATED CODE. Two different Q3 shader names very
+    // often generate byte-identical GLSL (the texture is a uniform, so `tcMod scroll 0 1` on twenty different
+    // textures is one program) — but each name used to get its own `new Shader`, i.e. its own compiled program
+    // and its own Vulkan PSO family (part of the 84-89 sync pipeline compiles per session). One Shader per
+    // distinct code collapses the program count and helps Godot's material sort; the ShaderMaterials stay
+    // per-use (they carry the per-material textures/params). This is the same program/parameter split DP's
+    // shader system and Godot's Shader-vs-ShaderMaterial design both intend. Lock-guarded: material resolution
+    // also runs on the menu-warm/streamer worker lanes.
+    private static readonly System.Collections.Generic.Dictionary<string, Shader> _sharedShadersByCode = new();
+    private static readonly object _sharedShaderGate = new();
+
+    /// <summary>One <see cref="Shader"/> per distinct generated source — see the field note above.</summary>
+    internal static Shader SharedShader(string code)
+    {
+        lock (_sharedShaderGate)
+        {
+            if (!_sharedShadersByCode.TryGetValue(code, out Shader? s) || !GodotObject.IsInstanceValid(s))
+                _sharedShadersByCode[code] = s = new Shader { Code = code };
+            return s;
+        }
+    }
+
     /// <summary>A resource-name marker the mesh builder checks to skip a non-drawn surface.</summary>
     public const string NoDrawMarker = "__nodraw__";
 
@@ -162,7 +184,7 @@ public static class ShaderCompiler
         string code = AutospriteShaderGen.Generate(def, stage, axial.Value);
         var mat = new ShaderMaterial
         {
-            Shader = new Shader { Code = code },
+            Shader = SharedShader(code),
             ResourceName = def.Name + "/autosprite",
         };
         mat.SetShaderParameter("albedo_tex", albedo);
@@ -482,7 +504,7 @@ public static class ShaderCompiler
     private static ShaderMaterial BuildAnimatedStage(ShaderDef def, ShaderStage stage, AssetSystem ctx, bool isBasePass)
     {
         string code = GenerateStageShader(def, stage, isBasePass);
-        var shader = new Shader { Code = code };
+        Shader shader = SharedShader(code);
         var mat = new ShaderMaterial { Shader = shader, ResourceName = def.Name + "/anim" };
 
         string albedoName = StageImageName(stage);

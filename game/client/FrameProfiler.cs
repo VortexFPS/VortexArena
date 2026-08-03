@@ -874,7 +874,25 @@ public partial class FrameProfiler : CanvasLayer
                  "(run the release export via tools/perf-run.ps1 for real numbers)", toConsole: true);
         if (_sessionLog.DroppedFrames > 0)
             Emit($"  note: {_sessionLog.DroppedFrames} CSV rows dropped under disk backpressure (log lines unaffected)", toConsole: true);
+
+        // (perf 2026-08-02) One-shot VRAM census at session end: which texture categories own the resident
+        // set, so a "vram 3.4GB" monitor line in the log answers itself. Provider-injected (NetGame wires the
+        // live AssetSystem); one-shot because the census walks the cache with GetImage() CPU copies — cheap
+        // once at quit, unacceptable per-frame.
+        if (VramCensusProvider is { } census)
+        {
+            try
+            {
+                foreach (string line in census().TrimEnd().Split('\n'))
+                    Emit($"  {line}", toConsole: true);
+            }
+            catch (Exception ex) { Emit($"  vram census failed: {ex.Message}", toConsole: true); }
+        }
     }
+
+    /// <summary>Session-end VRAM census hook (see EmitSummary) — static so Shell can wire it once at boot
+    /// without caring whether the profiler node exists yet; it resolves the LIVE asset system at quit time.</summary>
+    public static Func<string>? VramCensusProvider { get; set; }
 
     public override void _ExitTree()
     {

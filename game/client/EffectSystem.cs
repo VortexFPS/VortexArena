@@ -1038,19 +1038,47 @@ public partial class EffectSystem : Node3D
         return particles;
     }
 
+    // (2026-08-02) Shared gradient-ramp textures. Every burst/trail used to build a fresh Gradient +
+    // GradientTexture1D — a GPU texture RID + its upload — PER SHOT, mid-combat, for ramps that are pure
+    // functions of a couple of color values (DP's equivalents are shared palette lookups by construction;
+    // Godot Resources are designed to be shared). The textures are never mutated after build, so one cached
+    // instance per distinct ramp serves every ParticleProcessMaterial that wants it. Effects spawn on the
+    // main thread only, so a plain Dictionary suffices. Kind: 0=class ramp, 1=initial c0→c1, 2=alpha fade.
+    private readonly record struct RampKey(byte Kind, uint A, uint B, float F0, float F1);
+    private static readonly Dictionary<RampKey, GradientTexture1D> _rampCache = new();
+
     /// <summary>Fade particles toward transparent over their life; warm classes also cool toward dark.</summary>
     private static void ApplyColorRamp(ParticleProcessMaterial mat, EffectClass kind, Color baseColor)
     {
-        var ramp = new Gradient();
         bool warm = kind is EffectClass.Explosion or EffectClass.Fire or EffectClass.MuzzleFlash;
-        ramp.SetColor(0, warm ? new Color(1f, 1f, 0.85f, 1f) : baseColor);
-        ramp.AddPoint(0.5f, baseColor);
-        // End transparent (and darker for warm classes, like smoke cooling out of a fireball).
-        Color end = warm ? new Color(0.2f, 0.18f, 0.18f, 0f) : new Color(baseColor.R, baseColor.G, baseColor.B, 0f);
-        ramp.SetColor(ramp.GetPointCount() - 1, end);
-
-        var tex = new GradientTexture1D { Gradient = ramp };
+        var key = new RampKey(0, baseColor.ToRgba32(), warm ? 1u : 0u, 0f, 0f);
+        if (!_rampCache.TryGetValue(key, out GradientTexture1D? tex) || !GodotObject.IsInstanceValid(tex))
+        {
+            var ramp = new Gradient();
+            ramp.SetColor(0, warm ? new Color(1f, 1f, 0.85f, 1f) : baseColor);
+            ramp.AddPoint(0.5f, baseColor);
+            // End transparent (and darker for warm classes, like smoke cooling out of a fireball).
+            Color end = warm ? new Color(0.2f, 0.18f, 0.18f, 0f) : new Color(baseColor.R, baseColor.G, baseColor.B, 0f);
+            ramp.SetColor(ramp.GetPointCount() - 1, end);
+            _rampCache[key] = tex = new GradientTexture1D { Gradient = ramp };
+        }
         mat.ColorRamp = tex;
+    }
+
+    /// <summary>The shared c0→c1 per-particle initial-color ramp (see <see cref="_rampCache"/>).</summary>
+    private static GradientTexture1D SharedInitialRamp(uint color0, uint color1)
+    {
+        var key = new RampKey(1, color0, color1, 0f, 0f);
+        if (!_rampCache.TryGetValue(key, out GradientTexture1D? tex) || !GodotObject.IsInstanceValid(tex))
+        {
+            Color c0 = new Color(((color0 >> 16) & 0xFF) / 255f, ((color0 >> 8) & 0xFF) / 255f, (color0 & 0xFF) / 255f);
+            Color c1 = new Color(((color1 >> 16) & 0xFF) / 255f, ((color1 >> 8) & 0xFF) / 255f, (color1 & 0xFF) / 255f);
+            var initGrad = new Gradient();
+            initGrad.SetColor(0, c0);
+            initGrad.SetColor(1, c1);
+            _rampCache[key] = tex = new GradientTexture1D { Gradient = initGrad };
+        }
+        return tex;
     }
 
     // Per-(class, sprite) cache of the heuristic draw mesh+material. The mesh+material is a pure function of
@@ -1560,14 +1588,7 @@ public partial class EffectSystem : Node3D
         // ColorInitialRamp assigns each particle a random tint sampled from the gradient at spawn time. With the
         // base Color White and the ramp white-RGB, this is the SOLE tint when it's set.
         if (perParticleColor)
-        {
-            Color c0 = new Color(((info.Color0 >> 16) & 0xFF) / 255f, ((info.Color0 >> 8) & 0xFF) / 255f, (info.Color0 & 0xFF) / 255f);
-            Color c1 = new Color(((info.Color1 >> 16) & 0xFF) / 255f, ((info.Color1 >> 8) & 0xFF) / 255f, (info.Color1 & 0xFF) / 255f);
-            var initGrad = new Gradient();
-            initGrad.SetColor(0, c0);
-            initGrad.SetColor(1, c1);
-            mat.ColorInitialRamp = new GradientTexture1D { Gradient = initGrad };
-        }
+            mat.ColorInitialRamp = SharedInitialRamp(info.Color0, info.Color1);
 
         // --- rotation (rotate base/spin) --------------------------------------------------------------
         if (info.RotateSpinMin != 0f || info.RotateSpinMax != 0f || info.RotateBaseMax != info.RotateBaseMin)
@@ -1746,14 +1767,7 @@ public partial class EffectSystem : Node3D
         mat.Color = perParticleColor ? Colors.White : baseColor;
         ApplyInfoColorRamp(mat, info);
         if (perParticleColor)
-        {
-            Color c0 = new Color(((info.Color0 >> 16) & 0xFF) / 255f, ((info.Color0 >> 8) & 0xFF) / 255f, (info.Color0 & 0xFF) / 255f);
-            Color c1 = new Color(((info.Color1 >> 16) & 0xFF) / 255f, ((info.Color1 >> 8) & 0xFF) / 255f, (info.Color1 & 0xFF) / 255f);
-            var initGrad = new Gradient();
-            initGrad.SetColor(0, c0);
-            initGrad.SetColor(1, c1);
-            mat.ColorInitialRamp = new GradientTexture1D { Gradient = initGrad };
-        }
+            mat.ColorInitialRamp = SharedInitialRamp(info.Color0, info.Color1);
 
         if (info.RotateSpinMin != 0f || info.RotateSpinMax != 0f || info.RotateBaseMax != info.RotateBaseMin)
         {
@@ -1910,12 +1924,18 @@ public partial class EffectSystem : Node3D
         // alphafade is alpha-units/sec; over `life` seconds it drops a0 by (alphafade/256)*life. Clamp to 0.
         float life = info.Lifetime();
         float a1 = Math.Clamp(a0 - (info.AlphaFade / 256f) * life, 0f, a0);
+        float aEnd = info.AlphaFade > 0f ? 0f : a1;
 
-        var ramp = new Gradient();
-        ramp.SetColor(0, new Color(1f, 1f, 1f, a0));
-        // For additive/blood, fade fully to transparent at the end so the burst dissipates cleanly.
-        ramp.SetColor(1, new Color(1f, 1f, 1f, info.AlphaFade > 0f ? 0f : a1));
-        mat.ColorRamp = new GradientTexture1D { Gradient = ramp };
+        var key = new RampKey(2, 0, 0, a0, aEnd);
+        if (!_rampCache.TryGetValue(key, out GradientTexture1D? tex) || !GodotObject.IsInstanceValid(tex))
+        {
+            var ramp = new Gradient();
+            ramp.SetColor(0, new Color(1f, 1f, 1f, a0));
+            // For additive/blood, fade fully to transparent at the end so the burst dissipates cleanly.
+            ramp.SetColor(1, new Color(1f, 1f, 1f, aEnd));
+            _rampCache[key] = tex = new GradientTexture1D { Gradient = ramp };
+        }
+        mat.ColorRamp = tex;
     }
 
     /// <summary>Composite cache key for <see cref="BuildInfoMesh"/>: everything that determines the mesh+material.</summary>

@@ -52,6 +52,9 @@ public partial class DynamicLightRenderer : Node3D
     {
         public Entity Entity = null!;
         public OmniLight3D Light = null!;
+        // (draws 2026-08-02) PVS gating state — see MapParticleEmitters' twin fields.
+        public int PvsCluster = -2;
+        public System.Numerics.Vector3 PvsClusterAt;
     }
 
     private readonly Dictionary<Entity, LightNode> _lights = new();
@@ -71,8 +74,37 @@ public partial class DynamicLightRenderer : Node3D
             _rescanIn = RescanInterval;
         }
 
+        // (draws 2026-08-02) PVS gate: an out-of-view dynlight otherwise still enters the clustered light
+        // grid (its range reaches up to MaxRange), taxing every fragment its cluster covers. Same contract as
+        // the emitters; `r_pvs_cull_dynlights 0` restores always-on. APPROXIMATION, stated honestly: the cull
+        // keys on the LIGHT's cluster being visible from a viewpoint. A light around a corner that spills
+        // through a doorway into a room you DO see can be culled a frame early/late (cluster visibility is
+        // not transitive); the exact test is a PVS-row intersection per light per frame, which costs more
+        // than these decorative lights do. Map dynlights are slow-moving ambience — the corner case reads as
+        // a doorway glow fading a step sooner, and the cvar restores exactness-by-always-on.
+        var culler = VortexArena.Game.WorldPvsCuller.Instance;
+        bool pvsGate = culler is { CullActive: true }
+            && Api.Cvars.GetFloat("r_pvs_cull_dynlights") != 0f;
+
         foreach (LightNode ln in _lights.Values)
+        {
+            if (pvsGate && !ln.Entity.IsFreed)
+            {
+                if (ln.PvsCluster == -2
+                    || System.Numerics.Vector3.DistanceSquared(ln.Entity.Origin, ln.PvsClusterAt) > 32f * 32f)
+                {
+                    ln.PvsCluster = culler!.ClusterAt(ln.Entity.Origin);
+                    ln.PvsClusterAt = ln.Entity.Origin;
+                }
+                if (!culler!.ClusterVisibleFromView(ln.PvsCluster))
+                {
+                    if (GodotObject.IsInstanceValid(ln.Light))
+                        ln.Light.Visible = false;
+                    continue;
+                }
+            }
             UpdateLight(ln);
+        }
     }
 
     // =================================================================================================

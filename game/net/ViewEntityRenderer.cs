@@ -450,12 +450,18 @@ public sealed class ViewEntityRenderer
     // per-build). Dispose those meshes on the MAIN thread before the QueueFree, instead of leaving
     // them to the .NET finalizer thread whose RenderingServer::free races the render loop (the
     // 0xC0000374 family). Materials are the shared AssetSystem cache and are never touched.
+    // (2026-08-02) ...and since the IQM builder now hands ONE cached ArrayMesh to every instance of a model
+    // (IqmBuilder.SharedSkinnedGeometry), "per-build" is no longer true for the 69 IQM weapon models: disposing
+    // one holder's mesh would kill the geometry every other holder — and the next LoadModel — is still using.
+    // Cache-owned meshes are dropped by reference here and freed with the cache, exactly as the materials
+    // always were. MD3 holders keep the per-build dispose.
     private static void DisposeOwnedMeshes(Node n)
     {
         if (n is MeshInstance3D mi && mi.Mesh is Mesh m)
         {
             mi.Mesh = null;
-            m.Dispose();
+            if (!VortexArena.Game.Loaders.Models.IqmBuilder.IsShared(m))
+                m.Dispose();
         }
         foreach (Node c in n.GetChildren())
             DisposeOwnedMeshes(c);

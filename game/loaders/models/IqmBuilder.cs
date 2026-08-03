@@ -92,6 +92,46 @@ public static class IqmBuilder
     public const string SkeletonNodeName = "Skeleton3D";
 
     /// <summary>
+    /// The render geometry every instance of one (model, skin) shares: the skinned <see cref="ArrayMesh"/> and
+    /// the rest-pose <see cref="Skin"/>. Both are pure functions of the parsed IQM + skin remap, so N wearers
+    /// of one model need ONE of each — the DarkPlaces model_t contract (Mod_ForName caches; entities reference).
+    /// <see cref="Build"/> fills an empty instance and reuses a populated one; <c>AssetLoader</c> owns the cache
+    /// and its lifetime. NOTE (2026-08-02, measured): on today's 6-bot benchmark this is perf-NEUTRAL — the load
+    /// window builds ~40-70 DISTINCT models once each, so sharing pays nothing there (see the perf-deep-dive
+    /// doc §2). It is kept for architectural correctness and the N-wearer cases the bench doesn't exercise:
+    /// forcemodels, large player counts, corpse copies, mid-match joins, and VRAM at scale.
+    ///
+    /// LIFETIME CONTRACT (see PlayerModel._ExitTree / ViewEntityRenderer.DisposeOwnedMeshes): once shared, a
+    /// mesh/skin is CACHE-owned and must NOT be disposed when any single wearer leaves the tree.
+    /// <see cref="IsShared"/> is the check the per-model teardowns use to skip exactly these resources — the
+    /// same exclusion the surface materials and the AnimationLibrary already rely on.
+    /// </summary>
+    public sealed class SharedSkinnedGeometry
+    {
+        public ArrayMesh? Mesh;
+        public Skin? Skin;
+    }
+
+    // Instance ids of every resource handed out through a SharedSkinnedGeometry. A HashSet of ids (not the
+    // objects) so this registry never itself keeps a freed resource alive, and so the check is O(1) on the
+    // teardown path. Written on the main thread during a build, read on the main thread during teardown.
+    private static readonly HashSet<ulong> _sharedResourceIds = new();
+
+    /// <summary>Register a resource as cache-owned + shared across model instances (see
+    /// <see cref="SharedSkinnedGeometry"/>).</summary>
+    public static void MarkShared(Resource? r)
+    {
+        if (r is not null)
+            _sharedResourceIds.Add(r.GetInstanceId());
+    }
+
+    /// <summary>True when this resource is shared across instances, so a single instance's teardown must not
+    /// dispose it. Cheap enough for the per-mesh teardown walk. Safe on an already-disposed wrapper (answers
+    /// false) — teardown paths run during shutdown and must never throw.</summary>
+    public static bool IsShared(Resource? r)
+        => r is not null && GodotObject.IsInstanceValid(r) && _sharedResourceIds.Contains(r.GetInstanceId());
+
+    /// <summary>
     /// Build a posed, skinned, animated model from <paramref name="iqm"/>. Returns a root <see cref="Node3D"/>
     /// whose children are the <see cref="Skeleton3D"/> (carrying the <see cref="MeshInstance3D"/>) and an
     /// <see cref="AnimationPlayer"/>. Materials come from <c>assets.ResolveMaterial(mesh.Material)</c>; if
@@ -101,7 +141,8 @@ public static class IqmBuilder
     /// work) — when supplied it is attached verbatim and the inline build is skipped.
     /// </summary>
     public static Node3D Build(IqmData iqm, AssetSystem assets, IReadOnlyList<FrameGroup>? framegroups = null,
-        SkinFile? skin = null, AnimationLibrary? prebuiltAnims = null, string? prebuiltDefaultClip = null)
+        SkinFile? skin = null, AnimationLibrary? prebuiltAnims = null, string? prebuiltDefaultClip = null,
+        SharedSkinnedGeometry? shared = null)
     {
         ArgumentNullException.ThrowIfNull(iqm);
 
@@ -116,15 +157,42 @@ public static class IqmBuilder
         }
 
         // ---- 2. Skinned mesh -------------------------------------------------------------------------
+        // Geometry is a pure function of (IqmData, SkinFile): `shared` lets the caller cache one ArrayMesh +
+        // Skin per (model, skin) and hand it to every instance (the DP model_t contract). Per-player appearance
+        // never touches these — colormod/glowmod/shirt/pants ride SetInstanceShaderParameter and alpha rides
+        // GeometryInstance3D.Transparency, both per-INSTANCE. A cached entry whose resource was disposed anyway
+        // (an unguarded teardown path) degrades to a rebuild, never a dead handle: the failure mode of a stale
+        // cache must be a slow frame, not an ObjectDisposedException mid-_Process.
         var meshInstance = new MeshInstance3D { Name = "Mesh" };
-        using (Prof.Sample("iqm.mesh"))
-            meshInstance.Mesh = BuildMesh(iqm, assets, skin);
+        if (shared?.Mesh is { } cachedMesh && GodotObject.IsInstanceValid(cachedMesh))
+        {
+            meshInstance.Mesh = cachedMesh;
+        }
+        else
+        {
+            using (Prof.Sample("iqm.mesh"))
+                meshInstance.Mesh = BuildMesh(iqm, assets, skin);
+            if (shared is not null)
+            {
+                shared.Mesh = (ArrayMesh)meshInstance.Mesh;
+                MarkShared(shared.Mesh);
+            }
+        }
 
         // Skin: bind poses = rest_global^-1 for each bone, generated from the rests we just set. This is the
-        // canonical Godot binding and matches our world-conjugated rests exactly (no manual inverse).
+        // canonical Godot binding and matches our world-conjugated rests exactly (no manual inverse). Identical
+        // across instances (the rests are), so it caches alongside the mesh; Godot makes a per-MeshInstance
+        // SkinReference internally, so sharing the resource keeps each wearer's pose independent.
         if (HasSkinning(iqm))
         {
-            meshInstance.Skin = skeleton.CreateSkinFromRestTransforms();
+            meshInstance.Skin = shared?.Skin is { } cachedSkin && GodotObject.IsInstanceValid(cachedSkin)
+                ? cachedSkin
+                : skeleton.CreateSkinFromRestTransforms();
+            if (shared is not null && !ReferenceEquals(shared.Skin, meshInstance.Skin))
+            {
+                shared.Skin = meshInstance.Skin;
+                MarkShared(shared.Skin);
+            }
         }
         // The MeshInstance must live under the Skeleton3D so its Skeleton NodePath resolves to it (here "..").
         skeleton.AddChild(meshInstance);

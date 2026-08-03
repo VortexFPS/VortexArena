@@ -173,6 +173,10 @@ public partial class PortalRenderer : Node3D
     /// into the x formula. <c>source_color</c> IS required: the SubViewport target stores tonemapped
     /// sRGB-ENCODED data — decode + the main viewport's re-encode is the identity round trip (sampling raw
     /// double-encodes and washes the view out too bright; user-verified both ways).</summary>
+    /// <summary>The one compiled portal shader program every portal's material binds (see the loop note).</summary>
+    private static Shader? _sharedPortalShader;
+    private static Shader SharedPortalShader => _sharedPortalShader ??= new Shader { Code = PortalShader };
+
     private const string PortalShader =
         "shader_type spatial;\n" +
         "render_mode unshaded, cull_disabled, depth_draw_opaque;\n" +
@@ -309,7 +313,12 @@ public partial class PortalRenderer : Node3D
             if (mainVp is not null)
             {
                 vp.World3D = mainVp.World3D;     // share the live scene (map, players, effects, sun)
-                vp.Msaa3D = mainVp.Msaa3D;
+                // (draws 2026-08-02) MSAA inherit is now a cvar: a 384-1024px portal texture sampled through a
+                // projective UV gains little from 4x MSAA and pays 4x the fragment/resolve cost — AND a
+                // differing portal MSAA level is a new PSO family the warm pass must cover, so the DEFAULT
+                // stays inherit (parity). `cl_portal_msaa 0` renders portals MSAA-off for the cheap path.
+                bool inheritMsaa = Api.Services is null || Api.Cvars.GetFloat("cl_portal_msaa") != 0f;
+                vp.Msaa3D = inheritMsaa ? mainVp.Msaa3D : Viewport.Msaa.Disabled;
                 vp.ScreenSpaceAA = mainVp.ScreenSpaceAA;
             }
             else
@@ -335,8 +344,10 @@ public partial class PortalRenderer : Node3D
             vp.AddChild(cam);
             cam.GlobalBasis = basis;
 
-            var shader = new Shader { Code = PortalShader };
-            var mat = new ShaderMaterial { Shader = shader };
+            // One shared Shader program for every portal (the code is a constant) — each portal's MATERIAL
+            // stays its own (it carries that portal's viewport texture + plane params). Previously each of the
+            // up-to-6 portals compiled an identical program with its own PSO family.
+            var mat = new ShaderMaterial { Shader = SharedPortalShader };
             mat.SetShaderParameter("portal_tex", vp.GetTexture());
             mat.SetShaderParameter("wz_center", Coords.ToGodot(surfOrigin));
             mat.SetShaderParameter("wz_right", Coords.ToGodot(t.InRight));
@@ -452,7 +463,24 @@ public partial class PortalRenderer : Node3D
             bool facing = NVec3.Dot(camPosQ - p.InOriginQ, p.InForwardQ) > 0f;
             bool onScreen = p.Notifier.IsOnScreen();
             bool visible = (facing && onScreen) || force;
-            p.Viewport.RenderTargetUpdateMode = visible ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+
+            // (draws 2026-08-02) `cl_portal_update_interval N` renders each visible portal every Nth frame
+            // (phase-staggered by portal index so two portals never stack on one frame); a held frame keeps
+            // the last texture — the same imperceptible-staleness contract the off-screen gate already relies
+            // on. Default 1 = every frame (parity). The measured full-rate cost was ~1.4 ms p50 + ~2x draws
+            // whenever a portal is visible (perf-campaign 07-06), so 2 halves the steady portal tax.
+            if (visible && !force && Api.Services is not null)
+            {
+                int interval = (int)Api.Cvars.GetFloat("cl_portal_update_interval");
+                if (interval > 1 && (Godot.Engine.GetProcessFrames() + (ulong)_portals.IndexOf(p)) % (ulong)interval != 0)
+                    visible = false; // hold last texture this frame
+            }
+
+            // Gate the write: RenderTargetUpdateMode is a RenderingServer call per assignment, and this loop
+            // used to re-assert it for every portal every frame even when nothing changed.
+            SubViewport.UpdateMode wantMode = visible ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+            if (p.Viewport.RenderTargetUpdateMode != wantMode)
+                p.Viewport.RenderTargetUpdateMode = wantMode;
             if (trace)
             {
                 GD.Print($"[portal] '{p.Surface.Name}' facing={facing} onScreen={onScreen} -> {(visible ? "RENDER" : "off")}"
@@ -520,6 +548,15 @@ public partial class PortalRenderer : Node3D
                 float screenH = mvp.GetVisibleRect().Size.Y;
                 float projPx = screenH * (2f * p.HalfU / planeDist)
                     / (2f * Mathf.Tan(Mathf.DegToRad(main.Fov) * 0.5f));
+                // (draws 2026-08-02) `cl_portal_min_px`: below this projected size the portal is not worth a
+                // scene render at all — freeze it on its last texture (0 = off, parity). The window is a few
+                // dozen pixels at that range; the stale image is unreadable anyway.
+                float minPx = Api.Services is not null ? Api.Cvars.GetFloat("cl_portal_min_px") : 0f;
+                if (minPx > 0f && projPx < minPx
+                    && p.Viewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Always)
+                {
+                    p.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+                }
                 float resScale = PortalResolutionScale();
                 int bucket = Mathf.Clamp(Mathf.CeilToInt(projPx * resScale / 128f), 1, 8) * 128;
                 float nowR = Time.GetTicksMsec() * 0.001f;

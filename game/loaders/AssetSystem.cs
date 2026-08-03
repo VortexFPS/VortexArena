@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using VortexArena.Formats.Materials;
 using VortexArena.Formats.Vfs;
@@ -123,6 +124,86 @@ public sealed class AssetSystem
         }
 
         ClearPredecodedImages();
+    }
+
+    // -------------------------------------------------------------------------------------------------
+    //  VRAM census (`r_vram_census`, perf 2026-08-02)
+    // -------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Inventory the resident texture cache: estimated GPU bytes per <see cref="TexCategory"/>
+    /// plus the top offenders by size. Built to answer "where do 3.4 GB go?" with names instead of guesses —
+    /// the 2026-08-02 re-measure showed <c>gl_texturecompression 1</c> moving total VRAM by ~0 (3459→3491 MB)
+    /// even though the compressor demonstrably ran, so the bulk must live outside the compressible classes.
+    /// Estimation: format bits-per-pixel × W×H, ×4/3 when mipmapped — close enough to rank, not exact
+    /// (the driver pads). Godot's own <c>vram</c> counter additionally includes mesh/render-target buffers,
+    /// so census-total &lt; monitor-total is expected; the DELTA is the non-texture share.
+    /// </summary>
+    public string VramCensus(int top = 25)
+    {
+        var perCat = new Dictionary<TexCategory, (long Bytes, int Count)>();
+        var rows = new List<(string Path, long Bytes, string Fmt)>();
+        long total = 0;
+        lock (_textureCacheGate)
+        {
+            foreach (var kv in _textureCache)
+            {
+                if (kv.Value is not Texture2D t || !GodotObject.IsInstanceValid(t))
+                    continue;
+                long bytes = EstimateTextureBytes(t, out string fmt);
+                total += bytes;
+                var cat = TextureCategories.Classify(kv.Key);
+                perCat.TryGetValue(cat, out (long Bytes, int Count) agg);
+                perCat[cat] = (agg.Bytes + bytes, agg.Count + 1);
+                rows.Add((kv.Key, bytes, fmt));
+            }
+        }
+
+        rows.Sort((a, b) => b.Bytes.CompareTo(a.Bytes));
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"[vram census] {rows.Count} resident textures, est {total / (1024.0 * 1024.0):F0} MB "
+            + "(textures only; Godot's vram monitor adds mesh/render-target buffers)");
+        sb.AppendLine($"  {CompressionStats()}");
+        foreach (var kv in perCat.OrderByDescending(k => k.Value.Bytes))
+            sb.AppendLine($"  {kv.Key,-16} {kv.Value.Bytes / (1024.0 * 1024.0),8:F1} MB in {kv.Value.Count} textures");
+        sb.AppendLine($"  top {Math.Min(top, rows.Count)}:");
+        foreach ((string path, long bytes, string fmt) in rows.Take(top))
+            sb.AppendLine($"    {bytes / (1024.0 * 1024.0),7:F1} MB  {fmt,-12} {path}");
+        return sb.ToString();
+    }
+
+    /// <summary>Estimated GPU bytes for a cached texture (format bpp × pixels, ×4/3 for mips).</summary>
+    private static long EstimateTextureBytes(Texture2D t, out string fmt)
+    {
+        long w = t.GetWidth(), h = t.GetHeight();
+        double bpp = 32;                      // uncompressed RGBA8 default
+        bool mips = true;
+        fmt = "rgba8";
+        if (t is ImageTexture it && it.GetImage() is { } img)
+        {
+            Image.Format f = img.GetFormat();
+            fmt = f.ToString().ToLowerInvariant();
+            mips = img.HasMipmaps();
+            bpp = f switch
+            {
+                Image.Format.Dxt1 => 4,                            // BC1
+                Image.Format.Dxt3 or Image.Format.Dxt5 => 8,       // BC2/BC3
+                Image.Format.RgtcR => 4,                           // BC4
+                Image.Format.RgtcRg => 8,                          // BC5
+                Image.Format.BptcRgba => 8,                        // BC7
+                Image.Format.BptcRgbf or Image.Format.BptcRgbfu => 8,
+                Image.Format.Rgb8 => 24,
+                Image.Format.L8 or Image.Format.R8 => 8,
+                Image.Format.La8 or Image.Format.Rg8 => 16,
+                Image.Format.Rf => 32,
+                Image.Format.Rgbaf => 128,
+                Image.Format.Rgbah => 64,
+                _ => 32,
+            };
+            img.Dispose(); // GetImage() returns a fresh CPU-side copy; census must not leak one per texture
+        }
+        long bytes = (long)(w * h * bpp / 8.0);
+        return mips ? bytes * 4 / 3 : bytes;
     }
 
     // -------------------------------------------------------------------------------------------------
@@ -465,6 +546,8 @@ public sealed class AssetSystem
         {
             mat.SetShaderParameter("normal_tex", norm);
             mat.SetShaderParameter("has_normal", true);
+            if (IsRgTexture(norm))
+                mat.SetShaderParameter("norm_rg", true); // BC5 two-channel — shader reconstructs Z
         }
         Texture2D? gloss = LoadTexture(baseName + "_gloss");
         if (gloss != null)
@@ -990,6 +1073,43 @@ public sealed class AssetSystem
     /// slow one). On the menu warm that lands on a worker and is free; on a cold in-match load it is on
     /// whichever thread asked. Failures are non-fatal — the uncompressed image simply uploads as before.</para>
     /// </summary>
+    // Compression engagement counters (drained into the session census — a build where the feature silently
+    // no-ops must name itself). _s3tcAvailable: -1 unprobed, 0 absent (template build), 1 present (editor).
+    private static int _compressOk, _compressFellBack, _compressFailed;
+    private static int _s3tcAvailable = -1, _bptcAvailable = -1;
+    private static bool _noEncoderWarned;
+
+    /// <summary>One-line engagement summary for the session census.</summary>
+    public static string CompressionStats()
+        => $"compression: mode {TextureCompression}, s3tc {(S3tcEncoderAvailable() ? "yes" : "NO (template lacks etcpak encoders; BC7 fallback)")}"
+         + $", ok {_compressOk}, bc7-fallback {_compressFellBack}, failed {_compressFailed}";
+
+    /// <summary>Probe once whether this build can encode S3TC (see the fallback note in MaybeCompress).</summary>
+    private static bool S3tcEncoderAvailable()
+    {
+        if (_s3tcAvailable < 0)
+            _s3tcAvailable = ProbeEncoder(Image.CompressMode.S3Tc);
+        return _s3tcAvailable == 1;
+    }
+
+    /// <summary>Probe once whether this build can encode BPTC/BC7 (cvtt is template-excluded unless built
+    /// with <c>cvtt_export_templates=yes</c>).</summary>
+    private static bool BptcEncoderAvailable()
+    {
+        if (_bptcAvailable < 0)
+            _bptcAvailable = ProbeEncoder(Image.CompressMode.Bptc);
+        return _bptcAvailable == 1;
+    }
+
+    private static int ProbeEncoder(Image.CompressMode mode)
+    {
+        var probe = Image.CreateEmpty(4, 4, false, Image.Format.Rgba8);
+        probe.Fill(Colors.White);
+        int ok = probe.Compress(mode, Image.CompressSource.Generic) == Error.Ok ? 1 : 0;
+        probe.Dispose();
+        return ok;
+    }
+
     private static void MaybeCompress(string vpath, Image image)
     {
         int mode = TextureCompression;
@@ -1015,6 +1135,49 @@ public sealed class AssetSystem
         // shaders to reconstruct Z first (the notes' option E).
         Image.CompressSource src = Image.CompressSource.Generic;
         Image.CompressMode target = mode >= 2 ? Image.CompressMode.Bptc : Image.CompressMode.S3Tc;
+
+        // (BC5 normals 2026-08-02) The Normal category now takes the industry path when the S3TC/RGTC
+        // encoder exists: CompressSource.Normal routes to two-channel BC5 (each channel independently
+        // block-coded — far better normal gradients than any color codec), and the consuming shaders
+        // reconstruct Z behind `norm_rg` (set from the IsRgTexture registry at bind time). The July failure
+        // mode — BC5 with shaders that read .z directly — is exactly what that flag closes. Without the
+        // encoder (unpatched template) normals fall through with everything else to BC7-Generic, which keeps
+        // a real blue channel and needs no flag.
+        if (TextureCategories.Classify(vpath) == TexCategory.Normal
+            && target == Image.CompressMode.S3Tc && S3tcEncoderAvailable())
+        {
+            src = Image.CompressSource.Normal;
+        }
+
+        // (2026-08-02) S3TC availability is a BUILD property, not a given: Godot's etcpak module registers the
+        // BC/ETC ENCODERS under `#ifdef TOOLS_ENABLED` (modules/etcpak/register_types.cpp, verified at
+        // 4.6.3-stable), so export templates ship decode-only and every S3Tc compress fails — the release runs
+        // printed 250 "skipped" lines while the editor compressed the same set fine. cvtt (BPTC) registers
+        // UNconditionally, so templates CAN encode BC7. Probe once and route S3Tc→Bptc when the S3TC encoder
+        // is absent: on today's template that trades 4 bpp DXT1 for 8 bpp BC7 on opaque color (half the
+        // saving, higher quality) and keeps the feature real instead of a silent no-op. The proper fix is the
+        // engine patch restoring etcpak's encoders in templates (tools/engine-patches/), after which the probe
+        // passes and this fallback goes quiet. Counters feed the session census (see CompressionStats).
+        if (target == Image.CompressMode.S3Tc && !S3tcEncoderAvailable())
+        {
+            target = Image.CompressMode.Bptc;
+            _compressFellBack++;
+        }
+        // No encoder at all (vortex1 template: etcpak encoders are TOOLS_ENABLED-gated AND the cvtt module
+        // is excluded from templates unless built with `cvtt_export_templates=yes` — both verified against
+        // 4.6.3-stable). One loud line, then uploads stay uncompressed; the census still reports the counts.
+        if (target == Image.CompressMode.Bptc && !BptcEncoderAvailable())
+        {
+            if (!_noEncoderWarned)
+            {
+                _noEncoderWarned = true;
+                GD.PrintErr("[AssetSystem] gl_texturecompression is ON but this build has NO block-compression "
+                    + "encoder (template built without etcpak encode + cvtt_export_templates) — textures upload "
+                    + "uncompressed. See tools/engine-patches/README.md.");
+            }
+            _compressFailed++;
+            return;
+        }
         try
         {
             // Scoped so the cost of this setting is attributable rather than folded into whatever frame the
@@ -1022,10 +1185,18 @@ public sealed class AssetSystem
             // from a capture only if it has its own line.
             using var _ = VortexArena.Common.Diagnostics.Prof.Sample("tex.compress");
             if (image.Compress(target, src) != Error.Ok)
+            {
+                _compressFailed++;
                 GD.Print($"[AssetSystem] texture compression skipped for '{vpath}' (unsupported source format).");
+            }
+            else
+            {
+                _compressOk++;
+            }
         }
         catch (Exception ex)
         {
+            _compressFailed++;
             GD.Print($"[AssetSystem] texture compression failed for '{vpath}': {ex.Message}; uploading uncompressed.");
         }
     }
@@ -1080,12 +1251,33 @@ public sealed class AssetSystem
         return image;
     }
 
+    // (BC5 normals 2026-08-02) Instance ids of textures whose GPU format is two-channel RGTC_RG — the
+    // industry-standard BC5 normal encoding, whose blue samples as 0. The shaders reconstruct Z behind a
+    // per-material `norm_rg` flag; this registry is how a bind site knows to set it. Filled at upload (the
+    // one place every texture passes through), id-keyed so it never keeps a freed texture alive.
+    private static readonly HashSet<ulong> _rgTextures = new();
+    private static readonly object _rgTexturesGate = new();
+
+    /// <summary>True when <paramref name="t"/> uploaded as two-channel RGTC_RG (BC5) — the consuming
+    /// material must set its <c>norm_rg</c> uniform so the shader reconstructs Z.</summary>
+    public static bool IsRgTexture(Texture2D? t)
+    {
+        if (t is null || !GodotObject.IsInstanceValid(t))
+            return false;
+        lock (_rgTexturesGate)
+            return _rgTextures.Contains(t.GetInstanceId());
+    }
+
     /// <summary>The GPU half, and the only part that belongs inside the upload gate.</summary>
     private static Texture2D? UploadImage(string vpath, Image image)
     {
         try
         {
-            return ImageTexture.CreateFromImage(image);
+            var tex = ImageTexture.CreateFromImage(image);
+            if (image.GetFormat() == Image.Format.RgtcRg)
+                lock (_rgTexturesGate)
+                    _rgTextures.Add(tex.GetInstanceId());
+            return tex;
         }
         catch (Exception ex)
         {

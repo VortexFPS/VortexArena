@@ -101,6 +101,14 @@ def frame_metrics(rows: list[dict], fl) -> dict:
         "hitch_time_ms": sum(v - p50 for v in ms if v > slow_cut),
         "slow_frames": sum(1 for v in ms if v > slow_cut),
         "slow_cut_ms": slow_cut,
+        # CPU-vs-GPU utilization shares (perf 2026-08-02, the "which side binds?" question made explicit).
+        # Each bucket's share of total wall time: proc/rcpu/rest are main-loop CPU phases (they sum with gpu
+        # OVERLAP — the GPU runs concurrently, so gpu_busy is its own axis, not part of the CPU sum). A frame
+        # is GPU-bound when the GPU is busy most of the frame; everything measured so far is CPU-bound.
+        "util_proc": sum(fl(r, "proc_ms") for r in rows if fl(r, "proc_ms") < 10000) / total_ms if total_ms > 0 else 0.0,
+        "util_rcpu": sum(fl(r, "rcpu_ms") for r in rows) / total_ms if total_ms > 0 else 0.0,
+        "util_rest": sum(fl(r, "rest_ms") for r in rows) / total_ms if total_ms > 0 else 0.0,
+        "util_gpu_busy": sum(fl(r, "gpu_ms") for r in rows) / total_ms if total_ms > 0 else 0.0,
     }
 
 
@@ -288,6 +296,14 @@ def fmt_report(d: dict) -> str:
         out.append(f"lows: 1%low {d['low1_fps']:.0f} fps  0.1%low {d['low01_fps']:.0f} fps")
         out.append(f"hitch time: {d['hitch_time_ms']:.0f}ms over budget across {d['slow_frames']} slow frames"
                    f" ({d['hitch_time_ms'] / max(1.0, d['duration_s'] * 10):.1f}% of session)")
+        if "util_gpu_busy" in d:
+            gpu_busy = d["util_gpu_busy"]
+            # >85% GPU-busy = the GPU gates the frame; anything else, the CPU (main thread) does. Every capture
+            # to date is CPU-bound — this line exists so a future shift (or a weaker GPU) announces itself.
+            verdict = "GPU-bound" if gpu_busy > 0.85 else "CPU-bound (main thread)"
+            out.append(f"utilization: proc {d['util_proc']:.0%} + rcpu {d['util_rcpu']:.0%}"
+                       f" + rest {d['util_rest']:.0%} of frame (main-loop CPU) | gpu busy {gpu_busy:.0%}"
+                       f" (idle {1 - gpu_busy:.0%}) -> {verdict}")
         pl = d.get("postload")
         if pl and pl.get("frames"):
             out.append(f"post-load (t>={d.get('postload_secs', 20.0):.0f}s): avg {pl['avg_fps']:.1f} fps"

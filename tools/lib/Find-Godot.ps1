@@ -74,7 +74,7 @@ function Test-GodotIsMono {
 function Write-GodotNotFound {
     param([string]$Root = '.')
     if ($env:GODOT) {
-        Write-Error "Godot not found: `$env:GODOT is set to '$env:GODOT', which does not exist. Fix or clear it — when set, it is used verbatim and nothing else is probed."
+        Write-Error "Godot not found: `$env:GODOT is set to '$env:GODOT', which does not exist. Fix or clear it - when set, it is used verbatim and nothing else is probed."
         return
     }
     $msg = @"

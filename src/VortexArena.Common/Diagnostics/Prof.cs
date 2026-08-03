@@ -183,15 +183,36 @@ public static class Prof
     public readonly struct ScopeToken : System.IDisposable
     {
         private readonly Accumulator? _acc;   // non-null ⇒ this token opened a real scope (and must close it)
-        internal ScopeToken(Accumulator acc) => _acc = acc;
+        private readonly int _depth;          // stack depth AFTER our push: our frame lives at Stack[_depth-1]
+        internal ScopeToken(Accumulator acc, int depth) { _acc = acc; _depth = depth; }
 
         public void Dispose()
         {
             Accumulator? acc = _acc;
-            if (acc is null || acc.Depth == 0)
+            if (acc is null)
                 return;
 
-            // Pop our frame (LIFO: `using` disposes in reverse open order, so the top IS us).
+            // Our frame was already popped: an outer scope repaired past us (we leaked and were closed by it,
+            // e.g. an exception path or a `using` spanning an await), or a double-Dispose. Charging anything
+            // here would corrupt a frame we don't own — the pre-identity-check bug this guard fixes.
+            if (acc.Depth < _depth)
+                return;
+
+            // Leaked INNER scopes above us: close them newest-first, each charged to its own recorded name,
+            // so one stranded frame can no longer skew every later pop on this thread. Rare — worth a
+            // forensic event naming the leaker so the missing Dispose gets fixed at the source.
+            while (acc.Depth > _depth)
+            {
+                Event($"scope leak: '{acc.Stack[acc.Depth - 1].Name}' closed by '{acc.Stack[_depth - 1].Name}'");
+                PopTop(acc);
+            }
+
+            PopTop(acc);
+        }
+
+        /// <summary>Pop the top frame, charging its elapsed/alloc/tree stats to its recorded name.</summary>
+        private static void PopTop(Accumulator acc)
+        {
             ref StackFrame top = ref acc.Stack[acc.Depth - 1];
             string name = top.Name;
             double elapsedMs = (Stopwatch.GetTimestamp() - top.Start) * MsPerTick;
@@ -241,7 +262,7 @@ public static class Prof
         };
         if (acc.IsMain)
             MainPhase = name;
-        return new ScopeToken(acc);
+        return new ScopeToken(acc, acc.Depth);
     }
 
     /// <summary>

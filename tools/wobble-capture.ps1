@@ -1,10 +1,10 @@
-# wobble-capture.ps1 — record a motion-trace + PresentMon pair and score it with wobble-report.py.
+# wobble-capture.ps1 - record a motion-trace + PresentMon pair and score it with wobble-report.py.
 #
 # The game side: run with  cl_motion_trace 1  (console or --cvar cl_motion_trace 1). The v2 trace
-# lands in ~\XonData\motion_trace_YYYYMMDD_HHMMSS.csv (timestamped — legs no longer overwrite).
+# lands in ~\XonData\motion_trace_YYYYMMDD_HHMMSS.csv (timestamped - legs no longer overwrite).
 # This script owns the display side: a PresentMon ETW capture of the game's presents, then the join.
 #
-# PresentMon: https://github.com/GameTechDev/PresentMon/releases — drop PresentMon-*-x64.exe into
+# PresentMon: https://github.com/GameTechDev/PresentMon/releases - drop PresentMon-*-x64.exe into
 # tools\bin\PresentMon.exe (or anywhere on PATH). ETW capture needs an elevated shell OR membership
 # in the "Performance Log Users" group.
 #
@@ -62,7 +62,7 @@ if ($pm) {
         $pmCsv = $null
     }
 } else {
-    Write-Host "(no PresentMon — sleeping $Seconds s so the motion trace covers the same window)"
+    Write-Host "(no PresentMon - sleeping $Seconds s so the motion trace covers the same window)"
     Start-Sleep -Seconds $Seconds
     $pmCsv = $null
 }
@@ -75,7 +75,7 @@ if (-not $userDir) { $userDir = Join-Path $env:USERPROFILE "XonData" }
 $trace = Get-ChildItem (Join-Path $userDir "motion_trace_*.csv") -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $trace) {
-    Write-Host "No motion_trace_*.csv in $userDir — was 'cl_motion_trace 1' set (v2 build)?" -ForegroundColor Yellow
+    Write-Host "No motion_trace_*.csv in $userDir - was 'cl_motion_trace 1' set (v2 build)?" -ForegroundColor Yellow
     exit 1
 }
 Write-Host "Trace: $($trace.FullName)"

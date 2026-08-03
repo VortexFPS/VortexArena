@@ -3,6 +3,7 @@
 // + the live per-tick input seam of ecs/systems/sv_physics.qc sys_phys_ai (:41-46).
 using System.Globalization;
 using System.Numerics;
+using VortexArena.Common.Diagnostics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Physics;
@@ -198,8 +199,9 @@ public sealed class BotPopulation
         // (f) population fill/trim (bot.qc:749-753): one add per frame; a failed spawn backs off 10s.
         if (time > _nextThink)
         {
-            if (!FixCount(time))
-                _nextThink = time + 10f;
+            using (Prof.Sample("bots.fixcount"))
+                if (!FixCount(time))
+                    _nextThink = time + 10f;
         }
 
         // (g) waypoint load-once (bot.qc:761-784): the first frame with bots present loads the map graph
@@ -222,6 +224,7 @@ public sealed class BotPopulation
         // match; the cursor walks the entity list once per graph load.
         if (Network is { } net && !_itemPrewarmDone)
         {
+            using var _prewarmScope = Prof.Sample("bots.prewarm");
             var all = Common.Services.Api.Entities.All;
             if (all is null)
                 _itemPrewarmDone = true;
@@ -269,6 +272,7 @@ public sealed class BotPopulation
         // cost so bots route AROUND hazards, complementing the per-frame havocbot_checkdanger brake in BotBrain.
         if (Network is not null && time >= _nextDangerTime)
         {
+            using var _dangerScope = Prof.Sample("bots.danger");
             float interval = Cvars.FloatOr("bot_ai_dangerdetectioninterval", 0.25f);
             // QC: catch up the clock if we fell more than 1.5 intervals behind, then advance one interval.
             if (_nextDangerTime < time - interval * 1.5f)

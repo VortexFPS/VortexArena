@@ -80,6 +80,7 @@ uniform sampler2D normal_tex : hint_normal;
 uniform sampler2D gloss_tex : hint_default_white;
 uniform sampler2D glow_tex : hint_default_black;
 uniform bool has_normal = false;
+uniform bool norm_rg = false;  // BC5/RGTC two-channel normal: reconstruct z = sqrt(1 - x^2 - y^2).
 uniform bool has_gloss = false;
 uniform bool has_glow = false;
 // frameA->frameB blend weight. Set every render frame from C# (the cheap ""one float"" steady-state cost).
@@ -114,7 +115,13 @@ void fragment() {
     // NOTE: deliberately NOT writing ALPHA — see the opaque note in the render_mode header.
 
     if (has_normal) {
-        NORMAL_MAP = texture(normal_tex, UV).rgb;
+        vec3 nmap = texture(normal_tex, UV).rgb;
+        if (norm_rg) {
+            // BC5 two-channel normal: reconstruct the encoded [0,1] blue for Godot's NORMAL_MAP decode.
+            vec2 nxy = nmap.rg * 2.0 - 1.0;
+            nmap.b = sqrt(max(0.0, 1.0 - dot(nxy, nxy))) * 0.5 + 0.5;
+        }
+        NORMAL_MAP = nmap;
     }
 
     // gloss is the inverse of roughness; sample green channel (matches PlayerSkinShader + WireCompanions).

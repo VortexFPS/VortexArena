@@ -108,6 +108,17 @@ public sealed class AssetLoader
         _skeletalParseCache = new(StringComparer.Ordinal);
     private readonly object _skeletalCacheGate = new();
 
+    // (2026-08-02) Built skinned GEOMETRY cache, keyed "vpath#skin" — the ArrayMesh + rest Skin every wearer
+    // of a model shares (IqmBuilder.SharedSkinnedGeometry; the DP model_t contract). Measured perf-NEUTRAL on
+    // the 6-bot bench (every model there builds once) — kept for N-wearer correctness and VRAM at scale:
+    // forcemodels, high player counts, corpse copies, mid-match joins. Main-thread only (RenderingServer-
+    // backed), so no gate: builds run on the main thread by construction (BuildSkeletalModel's contract).
+    // Lifetime = this loader (same as the material/texture caches); teardown discipline lives in the
+    // IsShared checks at the three mesh-dispose sites.
+    private readonly Dictionary<string, IqmBuilder.SharedSkinnedGeometry> _skeletalGeometryCache =
+        new(StringComparer.Ordinal);
+
+
     /// <summary>The virtual filesystem this loader reads from (mounted gamedirs/pk3s).</summary>
     public VirtualFileSystem Vfs => _vfs;
 
@@ -388,7 +399,12 @@ public sealed class AssetLoader
                 IqmData iqm = IqmReader.Read(bytes);
                 IReadOnlyList<FrameGroup>? groups = LoadFrameGroups(key);
                 SkinFile? skin = LoadSkin(key, skinIndex);
-                return new ModelParse(() => IqmBuilder.Build(iqm, _assets, groups, skin),
+                // The factory returns a fresh NODE per call (nodes can't share tree positions) but captures one
+                // SharedSkinnedGeometry, so the vertex work + GPU upload happen on the first build only and
+                // every later instance of this (model, skin) binds the same ArrayMesh — 69 of the shipped
+                // weapon models are IQM. Perf-neutral at 1 instance; pays at N (see the geometry-cache note).
+                var shared = new IqmBuilder.SharedSkinnedGeometry();
+                return new ModelParse(() => IqmBuilder.Build(iqm, _assets, groups, skin, null, null, shared),
                                       IqmEffectiveMaterials(iqm, skin));
             }
             if (magic.StartsWith(MagicDpm, StringComparison.Ordinal))
@@ -499,9 +515,15 @@ public sealed class AssetLoader
     /// and handed to the main thread once, the supported Godot threading pattern; ~130 ms of track-key work a
     /// player-model build no longer pays on the main thread). <see cref="BuildSkeletalModel"/> turns it into
     /// the scene parts on the main thread. This is the parse/build split the background asset streamer drives.</summary>
+
+    /// The built ArrayMesh + Skin are a pure function of it, so <see cref="BuildSkeletalModel"/> uses it to
+    /// share one pair across every wearer (see <see cref="IqmBuilder.SharedSkinnedGeometry"/>).</param>
+    /// <param name="GeometryKey">Identity of the geometry this parse builds — "&lt;normalized vpath&gt;#&lt;skin&gt;".
+    /// The built ArrayMesh + Skin are a pure function of it, so <see cref="BuildSkeletalModel"/> uses it to
+    /// share one pair across every wearer (see <see cref="IqmBuilder.SharedSkinnedGeometry"/>).</param>
     public sealed record SkeletalModelParse(
         IqmData Iqm, IReadOnlyList<FrameGroup>? Groups, ModelInfo? Info, SkinFile? Skin,
-        AnimationLibrary? Anims = null, string? DefaultClip = null);
+        AnimationLibrary? Anims = null, string? DefaultClip = null, string GeometryKey = "");
 
     /// <summary>
     /// OFF-THREAD phase of a skeletal-model load (S1): read + parse the IQM and its <c>_N.txt</c>/skin/frame-group
@@ -523,7 +545,7 @@ public sealed class AssetLoader
             {
                 Prof.Event($"anim cache HIT {key}");
                 return new SkeletalModelParse(hit.Iqm, hit.Groups, LoadModelInfo(vpath, skinIndex),
-                    LoadSkin(key, skinIndex), hit.Anims, hit.DefaultClip);
+                    LoadSkin(key, skinIndex), hit.Anims, hit.DefaultClip, $"{key}#{skinIndex}");
             }
         }
 
@@ -552,10 +574,23 @@ public sealed class AssetLoader
                     _skeletalParseCache[key] = (iqm, groups, anims, defaultClip);
             }
             Prof.Event($"anim cache MISS {key}");
+            // A fresh parse is expected under the loading screen and from the warm passes; anywhere else it is
+            // the mid-match model-build stall class (perf 2026-08-02: the deterministic ~600-860 ms t≈23 hitch).
+            // Print who missed on which loader so a cold-cache anomaly names itself in the session stdout.
+            GD.Print($"[AssetLoader] skeletal parse MISS '{key}' ({DescribeSkeletalParseCache()})");
             return new SkeletalModelParse(iqm, groups, LoadModelInfo(vpath, skinIndex), LoadSkin(key, skinIndex),
-                anims, defaultClip);
+                anims, defaultClip, $"{key}#{skinIndex}");
         }
         catch (Exception ex) { GD.PrintErr($"[AssetLoader] skeletal model '{key}' parse failed: {ex.Message}"); return null; }
+    }
+
+    /// <summary>Debug: identify this loader instance + the skeletal parse cache's current contents, for the
+    /// cold-cache forensics print (a mid-match parse MISS names the loader and what it believed was cached).</summary>
+    public string DescribeSkeletalParseCache()
+    {
+        lock (_skeletalCacheGate)
+            return $"loader#{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this):x} "
+                + $"cache n={_skeletalParseCache.Count}: [{string.Join(", ", _skeletalParseCache.Keys)}]";
     }
 
     /// <summary>
@@ -585,8 +620,16 @@ public sealed class AssetLoader
         if (parse is null) return null;
         try
         {
+            // Share the built ArrayMesh + Skin across every wearer of this (model, skin) — the first build
+            // fills the entry, the rest bind it. An empty key (a caller that predates GeometryKey) opts out
+            // and gets the old per-instance build.
+            IqmBuilder.SharedSkinnedGeometry? shared = null;
+            if (parse.GeometryKey.Length != 0
+                && !_skeletalGeometryCache.TryGetValue(parse.GeometryKey, out shared))
+                _skeletalGeometryCache[parse.GeometryKey] = shared = new IqmBuilder.SharedSkinnedGeometry();
+
             Node3D root = IqmBuilder.Build(parse.Iqm, _assets, parse.Groups, parse.Skin,
-                parse.Anims, parse.DefaultClip);
+                parse.Anims, parse.DefaultClip, shared);
             return new SkeletalModelParts(parse.Iqm, root, parse.Groups, parse.Info);
         }
         catch (Exception ex) { GD.PrintErr($"[AssetLoader] skeletal model build failed: {ex.Message}"); return null; }

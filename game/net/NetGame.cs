@@ -410,6 +410,11 @@ public sealed partial class NetGame : Node3D
     /// <summary>The map currently being served, for commands that re-host it.</summary>
     public string CurrentMap => _map;
 
+    /// <summary>This match's live texture/material facade, for diagnostics that inventory the ACTIVE caches
+    /// (`r_vram_census`) — with cl_persist_asset_cache this is the shared menu instance, else the match-local
+    /// one; either way it is the set actually resident. Null until Boot wired the loaders.</summary>
+    public Loaders.AssetSystem? LiveAssets => _assets?.Assets;
+
     // Render clock used to drive the prediction (Predict/SendInput) AND read the decaying stair/error offsets.
     // The reconciler arms those decays stamped with the SERVER time (in HandleSnapshot), so the clock we read
     // them with must track server time — but advance smoothly BETWEEN snapshots (a snapshot only lands every
@@ -3161,6 +3166,9 @@ public sealed partial class NetGame : Node3D
                         r.QueueFree();
             });
         GD.Print($"[NetGame] precached {sounds} combat sounds, {modelsWarmed} player models (rendered for pipeline warm).");
+        // Cold-cache forensics (perf 2026-08-02): name exactly what the roster warm parsed on which loader, so a
+        // later mid-match parse MISS (the ~600-860 ms t≈23 stall class) can be read against this line directly.
+        GD.Print($"[NetGame] roster warm set: [{string.Join(", ", models)}] → {_assets.DescribeSkeletalParseCache()}");
     }
 
     /// <summary>The stock player models the idle warmer warms after load (the local + erebus default are already
@@ -12601,7 +12609,13 @@ public sealed partial class NetGame : Node3D
 
     private void AddLight()
     {
-        AddChild(new DirectionalLight3D { Name = "Sun", RotationDegrees = new GVec3(-50f, -30f, 0f), ShadowEnabled = true });
+        // (draws 2026-08-02) The sun's shadow map was pure waste: 4 PSSM cascades into a 4096^2 atlas every
+        // frame whose output BOTH consumer shaders discard — LightmapShader's light() drops directional light
+        // (the world is lightmapped) and the grid-lit player path writes EMISSION with ALBEDO zeroed. That is
+        // extra draws (every caster x4 cascades), atlas renders, and per-pixel PCF taps at 4x MSAA, for pixels
+        // that never read the result. `r_sun_shadow 1` restores it for A/B or a future consumer.
+        bool sunShadow = (_sharedCvars?.GetFloat("r_sun_shadow") ?? 0f) != 0f;
+        AddChild(new DirectionalLight3D { Name = "Sun", RotationDegrees = new GVec3(-50f, -30f, 0f), ShadowEnabled = sunShadow });
 
         // The map's real Xonotic skybox (DP R_LoadSkyBox semantics), falling back to the procedural sky when
         // the map declares none. Same path GameDemo.AddLighting uses; gated on the BSP the client loaded.

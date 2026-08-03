@@ -170,6 +170,22 @@ public static class ClientSettings
         // client also skips drawing anything that slips through); margin = the half-extent of the bounds box.
         c.Register("r_pvs_cull_entities", "1");
         c.Register("r_pvs_cull_entities_margin", "64");
+        // (draws 2026-08-02) PVS-gate the map's ambient GpuParticles emitters and dynlights: previously every
+        // func_pointparticles/sparks emitter ran its GPU dispatch + draw every frame regardless of room, and a
+        // 2000qu dynlight two rooms away still entered the light cluster. ON by default (same contract as the
+        // world-cell cull these ride on); 0 restores always-on for A/B.
+        c.Register("r_pvs_cull_emitters", "1");
+        c.Register("r_pvs_cull_dynlights", "1");
+        // (draws 2026-08-02) The sun's shadow pass — output provably unconsumed by both world and model
+        // shaders, so OFF by default; kept as a cvar for A/B or a future shader that reads it.
+        c.Register("r_sun_shadow", "0");
+        // (draws 2026-08-02) Portal render tuning: render every Nth frame (1 = every frame, DP-parity),
+        // inherit the main viewport's MSAA (1 = parity; 0 = portals render MSAA-off — cheaper, and removes
+        // an MSAA-keyed PSO family the warm pass would otherwise have to cover), and skip portals whose
+        // projected size is under N px (0 = off).
+        c.Register("cl_portal_update_interval", "1");
+        c.Register("cl_portal_msaa", "1");
+        c.Register("cl_portal_min_px", "0");
         // (§12.5) Adaptive world-mesh cell size — scales the spatial split to map size to bound draw calls.
         // adaptive 0 = fixed r_world_cell_size (1024 = today). div ~= cells along the longest axis; min/max clamp.
         c.Register("r_world_cell_adaptive", "0");

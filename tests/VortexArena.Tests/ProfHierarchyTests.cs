@@ -111,6 +111,60 @@ public sealed class ProfHierarchyTests
         finally { Prof.Enabled = false; Drain(out _, out _, out _); }
     }
 
+    [Fact]
+    public void LeakedInnerScope_IsRepairedByOuterDispose()
+    {
+        Prof.Enabled = true;
+        try
+        {
+            Drain(out _, out _, out _);
+
+            // Leak "inner" (Dispose never called — the exception / using-spans-await class of bug), then close
+            // "outer". Before the depth-identity fix, outer's Dispose popped INNER's frame, stranding outer's
+            // frame forever and mis-charging every later pop on this thread.
+            var outer = Prof.Sample("outer");
+            var inner = Prof.Sample("inner");
+            Spin(2);
+            _ = inner; // intentionally not disposed
+            outer.Dispose();
+
+            Drain(out var incl, out _, out var parent);
+            Assert.True(incl.ContainsKey("outer"));
+            Assert.True(incl.ContainsKey("inner"));   // repaired: charged to its own name at unwind
+            Assert.Equal("outer", parent["inner"]);
+
+            // The stack is healthy again: a fresh root scope records as a root with sane magnitude.
+            using (Prof.Sample("after")) Spin(2);
+            Drain(out var incl2, out _, out var parent2);
+            Assert.True(incl2.ContainsKey("after"));
+            Assert.Equal("", parent2["after"]);
+            Assert.InRange(incl2["after"], 0.0, 1000.0); // not an aged cross-frame bogus total
+        }
+        finally { Prof.Enabled = false; Drain(out _, out _, out _); }
+    }
+
+    [Fact]
+    public void DoubleDispose_IsANoOp()
+    {
+        Prof.Enabled = true;
+        try
+        {
+            Drain(out _, out _, out _);
+
+            var a = Prof.Sample("a");
+            Spin(1);
+            a.Dispose();
+            a.Dispose(); // second Dispose owns nothing — must not pop or charge anyone else's frame
+
+            using (Prof.Sample("b")) Spin(1);
+            Drain(out var incl, out _, out var parent);
+            Assert.True(incl.ContainsKey("a"));
+            Assert.True(incl.ContainsKey("b"));
+            Assert.Equal("", parent["b"]); // stack healthy: the extra Dispose popped nothing
+        }
+        finally { Prof.Enabled = false; Drain(out _, out _, out _); }
+    }
+
     /// <summary>Burn a few hundred microseconds of wall time so the Stopwatch-based scope records a nonzero span
     /// (and child time is strictly inside parent time) without depending on Thread.Sleep resolution.</summary>
     private static void Spin(int ms)

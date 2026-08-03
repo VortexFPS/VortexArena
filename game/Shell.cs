@@ -233,6 +233,23 @@ public partial class Shell : Node
             Loaders.MissingTextures.RegisterCommand(
                 MenuState.Interp!, sharedAssets, () => _netGame?.CurrentMap ?? string.Empty);
 
+        // `r_vram_census [N]` — inventory the RESIDENT texture cache by category + top offenders (perf
+        // 2026-08-02: names where the ~3.4 GB actually lives; gl_texturecompression measured ~0 delta, so the
+        // bulk is outside the compressible classes). Prefers the live match's cache (the resident set),
+        // falling back to the shared menu instance before a match exists.
+        MenuState.Interp!.RegisterCommand("r_vram_census", args =>
+        {
+            Loaders.AssetSystem? sys = _netGame?.LiveAssets ?? MenuState.SharedAssets?.Assets;
+            if (sys is null) { Log.Info("[vram census] no asset system yet"); return; }
+            int top = args.Count > 0 && int.TryParse(args[0], out int n) ? n : 25;
+            foreach (string line in sys.VramCensus(top).TrimEnd().Split('\n'))
+                Log.Info(line);
+        });
+        // ...and the same census, once, in every profiler session summary — so a capture's "vram NMB" monitor
+        // line names its own composition without anyone having to remember the console command.
+        Client.FrameProfiler.VramCensusProvider =
+            () => (_netGame?.LiveAssets ?? MenuState.SharedAssets?.Assets)?.VramCensus(10) ?? "(no asset system)";
+
         // Editor view aids: the world-space alignment grid's cvars + its `editor_grid` / `editor_grid_size`
         // commands. Client-side and bindable; the grid node itself lives in the match scene (NetGame).
         Vmap.EditorGrid.RegisterDefaults(MenuState.Cvars);

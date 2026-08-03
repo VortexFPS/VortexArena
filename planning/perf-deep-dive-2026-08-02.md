@@ -706,6 +706,71 @@ work, task #13). Worth fixing, but it is a loading screen, not a felt in-match s
 104, `HSlider` 62, ~1,900 resident Control nodes) — constant, not spiking, and it does not correlate with the
 hitch timestamps. Resident menu widgets are a memory and tree-iteration cost, not the hitch cause.
 
+## 5j. The freeze took four laps, not one (2026-08-03) — and what each lap teaches
+
+§5i above declared victory after the trace budget; the next morning's runs took it back — same particle
+code, 6 freezes up to 841.8 ms, watchdog again ~99% in `particles.cpu`. The clean 01:53 run was a small-burst
+run, not a fixed build: the freeze scales with burst magnitude, and the morning slaughters simply got bigger.
+There were FOUR unbounded per-particle frame costs, and every lap the watchdog (never the tree — the tree
+kept reporting impossible 300–680% scope times on giant frames) named the survivor:
+
+1. **Bounce traces** (§5i) — necessary, insufficient. The first cut was also a first-come spend counter that
+   starved every particle above the budget in pool order; the comment promised a cursor the code didn't have.
+2. **Content checks** — `PointContents` per liquid-friction particle plus per Blood/Bubble/Rain/Snow particle
+   EVERY frame: tens of thousands of broadphase queries at a full pool. Capped the same run — freezes stayed.
+3. **The renderer depth sort** — `List.Sort` with a comparison delegate over up to 65k indices, recomputing
+   both distances per comparison through random ~100-byte struct reads: >1M delegate calls and ~2M
+   cache-missing distance computes in one frame. Found only after `particles.sim`/`particles.sync` child
+   scopes split the parent — the watchdog then said `particles.sim`, proving the sort fix necessary but,
+   again, insufficient.
+4. **The pool ceiling itself** — 65,536 simulated against 16,384 drawable (two fixed 8,192 MultiMesh
+   batches). Size is what turned the fair rings against us: at 65k live a trace-ring lap is 128 frames, so
+   the resume segments accumulated into map-length BVH sweeps and 1,024 of those was a freeze all by itself.
+
+**Landed shape** (`ParticleSim`, all tunable statics, `int.MaxValue` disables): fair rotating rings over
+live-particle ordinals — `TraceBudgetPerFrame` 512, `ContentBudgetPerFrame` 2048 — with 2× per-frame spend
+caps as the mega-burst backstop; resume sweeps from `Particle.LastTraced` (no tunneling between ring turns),
+length-clamped by `TraceMaxSegment` 1024 qu; cached `Particle.InLiquid` on skipped frames; pool ceiling
+16,384 = the drawable ceiling, so truncation past it is invisible by construction. Renderer: one sortable
+ulong key per particle (`~bits(distSq) << 32 | poolIndex` — non-negative float bits are order-isomorphic,
+the embedded index is DP's pool-order tie-break) + `Array.Sort(keys, indices)`; the overflow clamp now packs
+the NEAREST window (it used to keep the first `MaxInstances` of a farthest-first stream — i.e. keep the far
+particles and drop the ones in the player's face).
+
+**Parity:** pools at-or-under the ring widths are fully covered every frame — the C-reference replays are
+bit-identical, all 10 pass untouched. `ParticleBudgetRingTests` pins bounded-frame + no-starvation against
+the default budgets.
+
+**Measured** (stormkeep 200 s, 8 bots, release, morning machine-state that produced the 6-freeze run):
+post-load hitches >100 ms **6 → 0**, worst post-load frame **841.8 → 28.7 ms**, median 5.9 → 4.1 ms,
+avg 150 → 215 fps. `particles.*` no longer appears in the top-10 hitch list at all.
+
+## 5k. The equip pipeline compiles: we precached the wrong node (2026-08-03)
+
+Bryan's challenge — "I would figure that we would have precached all the weapons" — was correct, and the
+audit found the precise gap. MenuAssetWarmer + `PrecacheWeaponModelsAsync` warm every weapon's
+parse/texture/material caches, and the precache even warm-RENDERS the `v_` models offscreen. But since the
+r9 viewmodel rework the node a first-person equip actually renders is the **h_ hand rig** (DPM full-model
+rigs draw their own gun+hand mesh; IQM invisible-hand rigs carry the `v_` on a live bone), and the rig only
+ever got a throwaway attach-transform build, freed **unrendered**. A Vulkan pipeline is compiled on first
+DRAW of (shader × vertex format × pass) — a skinned rig is a different vertex format — so every weapon's
+first mid-match equip still sync-compiled. With `bot_ai_weapon_rotate 8` + spectate that is exactly the
+SYNC compile cluster at t≈88–95 s. The muzzle-flash models (`flash.md3`/`uziflash.md3`) were never precached
+anywhere and compiled on the first devastator/machinegun shot.
+
+**Landed:** the precache builds the REAL equip (`ViewModelEquip.Build`) per weapon and warm-renders it (also
+seeding the shared skeletal-geometry cache, so live equips reuse the mesh built here); muzzle models warm
+with the weapons. And the MenuAssetWarmer staging is now a **mid-match fallback** (Bryan's "graceful load"
+ask): a cold-model equip raises the placeholder, streams read/parse/texture/material through the background
+lane, and retries on a per-frame dictionary probe (`AssetLoader.IsModelPrepared`) until hot — no more
+synchronous cold builds on the equip frame. Measured: the t=88–95 s cluster is gone; ~2 post-load compile
+singles remain, worst 15.3 ms.
+
+**What remains on the hitch list** (same capture, post-load, worst first): scattered 20–29 ms CPU-LOGIC
+with `proc:other` ~15 ms (the watchdog says `(unscoped)` — genuinely unattributed main-thread work, now
+small enough to hunt calmly), ~22 ms VSYNC/PRESENT singles (`rest`-dominated, game-side quiet), and the two
+pipeline-compile singles. Nothing over 28.7 ms.
+
 ## 6. Measurement discipline updates
 
 - **Post-load boundary**: use `--postload 25` until a real world-entry marker exists; better, emit a

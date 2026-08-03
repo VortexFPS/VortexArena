@@ -682,11 +682,29 @@ EXTERNAL frame (`proc 2.5, gpu 1.1, rest 44.5`) — OS/compositor/driver, game-s
 mis-attributes across frame boundaries when a single scope spans a frame flip; the `ScopeToken` identity fix
 in §3 did not cover that case. **Trust the watchdog over the tree for giant frames.**
 
-**What is now at the top of the list** (same capture, post-load):
-1. `proc:other` — **27 hitches** dominated by it, watchdog `(unscoped)` won 40. 25–35 ms each. This is
-   scope-coverage debt: the largest remaining CPU hitch class is one we cannot see into. Scopes first.
-2. PIPELINE-COMPILE — 2 post-load, 15.0 and 39.6 ms.
-3. EXTERNAL — 2, up to 47.8 ms, outside our process.
+**What is now at the top of the list** — and a correction to make before chasing it. The run-summary line
+`scope coverage debt: proc:other dominated 27 hitch(es)` reads like proc:other is the top in-match problem.
+It is not: that counter spans the whole session and is dominated by the **load** phase. Split by phase:
+
+*Post-load (t > 40 s), 38 hitches, none over 100 ms:*
+1. **EXTERNAL — 47.8 ms**, the worst remaining frame, and it is not ours: `proc 2.5, gpu 1.1, rest 44.5`,
+   game-side quiet. OS/compositor/driver. 2 occurrences.
+2. **PIPELINE-COMPILE and its `proc:other` companions.** Only 5 post-load hitches have any `proc:other` at
+   all (max 16.2 ms), and **4 of the 5 sit within 0.0–2.4 s of a detected pipeline compile**, clustered at
+   t=88–95 s. So the unscoped time is largely first-sight shader/pipeline compilation the classifier only
+   partly attributes — not a missing Prof scope on one of our nodes. **The fix is pipeline warmup, not more
+   scopes.** Bots rotate weapons every 8 s here (`bot_ai_weapon_rotate 8`), which is what keeps dragging
+   never-before-drawn material/mesh/light combinations into view.
+3. Scattered CPU-LOGIC, 20–35 ms, no single dominant scope.
+
+*Load phase (t ≤ 40 s):* 24 reported hitches, 0.49 s of stall total, worst 39.6 ms — also all pipeline
+compiles and `proc:other`. The 847.5 ms "worst frame" in the fps summary is **not** among them: it falls in
+the window where hitch reporting is suppressed, i.e. it is a loading-screen frame (the `iqm.mesh` asset-build
+work, task #13). Worth fixing, but it is a loading screen, not a felt in-match stutter.
+
+**So the menu-residency lead is dead.** The node census is flat all session (`Label` 878→876, `CvarCheckBox`
+104, `HSlider` 62, ~1,900 resident Control nodes) — constant, not spiking, and it does not correlate with the
+hitch timestamps. Resident menu widgets are a memory and tree-iteration cost, not the hitch cause.
 
 ## 6. Measurement discipline updates
 

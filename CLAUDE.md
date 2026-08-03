@@ -13,6 +13,7 @@ stay independently runnable — **put real logic in the script, never in `vx`**.
 ```bash
 ./vx doctor                  # what is installed, what is missing, what to do about it (changes nothing)
 ./vx setup                   # bring a fresh clone to runnable: engine, maps, export templates
+./vx update                  # pull (ff-only), then name the follow-up: maps? engine? build?
 ./vx build                   # the Godot host
 ./vx run                     # launch it: the RELEASE dist/ export by default, `debug` for the editor project
 ./vx test                    # the suite

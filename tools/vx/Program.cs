@@ -34,6 +34,7 @@ internal static class Program
                 "doctor" => Doctor.Run(commandArgs, json),
                 "maps" => Maps.Run(commandArgs, json),
                 "setup" => Setup.Run(commandArgs, json),
+                "update" => Update.Run(commandArgs, json),
                 "engine" => Engine.Run(commandArgs, json),
                 "build" => Wrappers.Build(commandArgs),
                 "test" => Wrappers.Test(commandArgs),
@@ -90,6 +91,12 @@ internal static class Program
                                             dependencies it is missing, sudo included.
                                             Off by default: without it the exact
                                             command is printed and nothing is touched.
+              update      Pull, then say what the pull implies (maps/engine/build).
+                          Fast-forward only. A dirty tree stops and asks.
+                            --stash         set aside, pull, leave them stashed
+                            --keep          set aside, pull, re-apply on top
+                            --discard       throw them away (a stash is kept)
+                            --dry-run       print the plan, change nothing
               maps        Install the map packs pinned by data/maps.lock.json.
                             --verify-only   report drift, change nothing
                             --force         re-download everything

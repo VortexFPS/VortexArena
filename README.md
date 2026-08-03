@@ -137,6 +137,28 @@ prints its *search* command rather than guessing a name.
 command when something won't build. Its suggestions are resolved against the detected package manager too,
 so they're commands you can run rather than a menu of three distros to pick from.
 
+#### Keeping a clone current
+
+```bash
+./vx update         # git pull (fast-forward only), then tell you what the pull implies
+```
+
+A pull can change three things a clone won't notice on its own — the map lockfile, the engine-template
+lockfile, and the C# sources — so `vx update` diffs what moved and names the follow-up (`./vx maps`,
+`./vx engine`, `./vx build`) rather than leaving you with a half-updated tree.
+
+If you have uncommitted work it stops and asks, showing the file list first:
+
+| | what happens |
+|---|---|
+| **stash** | set aside, pull, leave them stashed — `git stash pop` when you want them |
+| **keep** | set aside, pull, re-apply on top; a conflict leaves the stash intact and the markers to resolve |
+| **discard** | throw them away — a labelled stash is still kept, so `git stash pop` undoes even this |
+
+`--stash` / `--keep` / `--discard` state the intent up front for scripts; without one, a non-interactive run
+refuses rather than guessing. It never authors a merge commit for you: on a diverged branch it stops and
+shows you the `--rebase` / `--no-ff` choice instead.
+
 #### Storage for a dev clone
 
 Budget **~5.3 GB** for a working setup. The parts:

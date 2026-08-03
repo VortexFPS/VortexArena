@@ -41,7 +41,8 @@ else
     EXTRA_ARGS=()
     [ -x "$EXE" ] || { echo "!!! release export missing at $EXE — run: ./vx export --preset $PRESET   (or PERF_DEBUG=1)"; exit 1; }
 
-    # Reproduce the PACKAGED content layout, exactly as run-release.sh does and for the same reason: the
+    # Reproduce the PACKAGED content layout. `./vx export` now does this itself (Wrappers.PlaceContent), so
+    # this block is a belt for a dist/ produced some other way — kept because the failure is silent: the
     # export excludes data/* from the pck, so an exported build resolves it through DataPaths.ResolveExported,
     # which probes exe-relative FIRST and only then the CWD. Without this the binary launches, mounts NOTHING,
     # self-quits and writes a session log full of flattering numbers — which is precisely how the first

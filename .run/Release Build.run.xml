@@ -1,9 +1,19 @@
 <component name="ProjectRunConfigurationManager">
+  <!--
+    Launches ./vx, not a script of its own. These configs used to invoke run-release.sh directly; that
+    script is gone and `./vx run` is the front door — it exports when the artifact is stale, places data/
+    beside the binary, and prints which build it picked.
+
+    Still ShConfigurationType through Git Bash: ./vx is POSIX sh, this repo already requires Git Bash for
+    ci/ci.sh, and it is the mechanism these configs were already using — so the only thing that changed is
+    which script runs. Rider's own Release/Debug switch does NOT affect what this launches: the exported
+    binary is release by construction, which is the entire reason these configs exist.
+  -->
   <configuration default="false" name="Release Build" type="ShConfigurationType">
     <option name="SCRIPT_TEXT" value="" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
-    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/run-release.sh" />
-    <option name="SCRIPT_OPTIONS" value="" />
+    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/vx" />
+    <option name="SCRIPT_OPTIONS" value="run" />
     <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
     <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <option name="INTERPRETER_PATH" value="C:\Program Files\Git\bin\bash.exe" />

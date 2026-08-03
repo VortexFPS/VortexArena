@@ -104,7 +104,8 @@ gap and what would close it are recorded in `engine.lock.json` under `unpinned_p
 to verify something. No backport is lost either way: the patch set is Windows-only.
 
 `tools/package.sh` with no target args packages every target whose export output exists under `dist/`.
-On Windows, `run-release.ps1` exports + launches the windows-client preset directly.
+To export and launch a single preset locally, `./vx run` does both (`./vx export --preset <p>` for the
+export alone).
 
 ## macOS note (best-effort)
 

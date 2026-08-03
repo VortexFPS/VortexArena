@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Package VortexArena distributions (T33 — ADR-0014; extended 2026-06 for the full release matrix).
-# Takes the export-preset outputs under dist/<target>/ (produced by `ci/ci.sh --export`, run-release.*,
+# Takes the export-preset outputs under dist/<target>/ (produced by `./vx export`, `ci/ci.sh --export`,
 # or the release workflow), lays the game assets beside each binary, adds the launcher + licenses + a
 # README, and zips each into a versioned "complete" archive (binary + Godot runtime + all Xonotic data
 # — one download, unzip and play). Mirrors the upstream layout: one install dir = binary + data +

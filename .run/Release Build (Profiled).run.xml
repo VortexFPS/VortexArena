@@ -1,9 +1,17 @@
 <component name="ProjectRunConfigurationManager">
+  <!--
+    See "Release Build.run.xml" for why this drives ./vx rather than a script of its own.
+
+    cl_frameprofiler 2 is passed explicitly rather than relied on as a default, because the profiler
+    defaults ON only in a Debug build — which this deliberately is not. docs/PERF-DEBUGGING.md.
+    (Note for editors: a double hyphen cannot appear inside an XML comment, so the flag is named in
+    SCRIPT_OPTIONS below rather than spelled out here.)
+  -->
   <configuration default="false" name="Release Build (Profiled)" type="ShConfigurationType">
     <option name="SCRIPT_TEXT" value="" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
-    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/run-release.sh" />
-    <option name="SCRIPT_OPTIONS" value="--host stormkeep --gametype dm --bots 4 --cvar cl_frameprofiler 2" />
+    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/vx" />
+    <option name="SCRIPT_OPTIONS" value="run --host stormkeep --gametype dm --bots 4 --cvar cl_frameprofiler 2" />
     <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
     <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <option name="INTERPRETER_PATH" value="C:\Program Files\Git\bin\bash.exe" />

@@ -9,8 +9,9 @@
 #
 # WHY THIS EXISTS. Every Godot-dependent script used to carry its own copy of
 #   GODOT="${GODOT:-/c/Program Files/Godot/Godot_v4.6.3-stable_mono_win64_console.exe}"
-# — one developer's Windows install path, as the DEFAULT, in ci/ci.sh, run-release.sh, tools/perf-run.sh
-# and tools/visual-qa.sh. On any other machine every one of those silently degraded (ci.sh skips the
+# — one developer's Windows install path, as the DEFAULT, in ci/ci.sh, run-release.sh (since retired into
+# `vx run`), tools/perf-run.sh and tools/visual-qa.sh. On any other machine every one of those
+# silently degraded (ci.sh skips the
 # headless smoke and still prints a pass) or failed somewhere far from the cause. Fixing that in one place
 # is Phase 0 of planning/bootstrap-and-task-runner-2026-08-01.md; `vx setup` will later install into
 # .godot-bin/, which is why that is probed before PATH.

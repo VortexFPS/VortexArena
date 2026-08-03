@@ -143,6 +143,11 @@ internal static class Wrappers
                                        () => Export(["--preset", preset])))
             return 1;
 
+        // Also checked on LAUNCH, not only on export: every dist/ built before vx owned this step has no
+        // data/ beside the binary, and the symptom — a game that starts, renders nothing and reports
+        // excellent frame times — looks like anything except a missing directory.
+        if (!PlaceContent(artifact)) return 1;
+
         // macOS exports a .app BUNDLE, not a bare executable — the thing to spawn is inside it.
         string launch = Directory.Exists(artifact)
             ? Path.Combine(artifact, "Contents", "MacOS", Path.GetFileNameWithoutExtension(artifact))
@@ -303,11 +308,17 @@ internal static class Wrappers
             string outPath = Path.Combine(Env.RepoRoot, outRel.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
             Console.WriteLine($"→ export {preset} → {outRel}");
-            int rc = Env.Exec(godot, ["--headless", "--path", Env.RepoRoot, "--export-release", preset, outPath]);
+            // ExecUntilDone, not Exec: headless --export-release routinely never exits after a SUCCESSFUL
+            // export. See Env.ExecUntilDone for the evidence; without it this command hangs forever on
+            // Windows, which is what run-release.sh existed to work around.
+            int rc = Env.ExecUntilDone(godot,
+                ["--headless", "--path", Env.RepoRoot, "--export-release", preset, outPath],
+                doneMarker: @"DONE.*savepack");
 
             // Godot's headless export exits NON-ZERO on a fully successful export often enough that
-            // run-release.sh stopped trusting the code entirely and gates on the artifact instead. Same
-            // judgement here: the binary existing is the result, the exit code is an opinion.
+            // run-release.sh stopped trusting the code entirely and gated on the artifact instead — a
+            // judgement inherited here when that script was retired: the binary existing is the result,
+            // the exit code is an opinion.
             if (!File.Exists(outPath) && !Directory.Exists(outPath))
             {
                 Console.Error.WriteLine($"vx export: {preset} produced no artifact at {outRel} (exit {rc})");
@@ -323,12 +334,96 @@ internal static class Wrappers
                 return 1;
             }
             Console.WriteLine($"   ok: {outRel}");
+
+            // An export is not FINISHED until its content is reachable — see PlaceContent.
+            if (!PlaceContent(outPath)) return 1;
         }
 
         // A fresh dist/ has no override.cfg, so without this an export silently re-enables the render thread
         // for `vx run` while `vx run debug` stays off — the switch would appear to work intermittently.
         RenderThread.Sync();
         return 0;
+    }
+
+    /// <summary>
+    /// Put <c>data/</c> where an EXPORTED binary will find it, and return false if that could not be done.
+    ///
+    /// <para><b>This is not a convenience.</b> <c>export_presets.cfg</c> deliberately excludes <c>data/*</c>
+    /// from the pck, so an exported build resolves content through <c>DataPaths.ResolveExported</c>, which
+    /// probes exe-relative FIRST and only then the CWD. Miss this step and the binary still launches — it
+    /// mounts NOTHING, renders an empty world, and (for a scripted run) self-quits leaving a session log full
+    /// of flattering numbers. That is not hypothetical: it is how the first capture of the menu-warm
+    /// investigation came back clean, and the note in tools/perf-run.sh says so in as many words.</para>
+    ///
+    /// <para>It lives HERE, in the command that produces the export, because it used to live in
+    /// <c>run-release.sh</c>, <c>tools/perf-run.sh</c> and <c>tools/perf-run.ps1</c> — three copies, and the
+    /// one command a person would actually reach for (<c>vx export</c>) had none of them. A dist/ that only
+    /// works because some other script visited it first is a trap with a long fuse.</para>
+    ///
+    /// <para>A LINK, not a copy: data/ is ~0.9 GB and it changes. On Windows a directory JUNCTION is tried
+    /// before a symlink, because junctions need no Developer Mode or elevation — the ordering matters, since
+    /// the fallback from a failed symlink is a very expensive surprise.</para>
+    /// </summary>
+    private static bool PlaceContent(string artifact)
+    {
+        string src = Path.Combine(Env.RepoRoot, "data");
+        if (!Directory.Exists(src))
+        {
+            Console.Error.WriteLine($"vx export: no content tree at {src}");
+            Console.Error.WriteLine("           ./vx maps      (fetches what data/maps.lock.json pins)");
+            return false;
+        }
+
+        // macOS keeps it INSIDE the bundle, matching tools/package.sh and DataPaths' ../Resources probe.
+        bool bundle = Directory.Exists(artifact) && artifact.EndsWith(".app", StringComparison.OrdinalIgnoreCase);
+        string dest = bundle
+            ? Path.Combine(artifact, "Contents", "Resources", "data")
+            : Path.Combine(Path.GetDirectoryName(artifact)!, "data");
+
+        if (Directory.Exists(dest) || File.Exists(dest))
+            return true;                                   // already linked (or a real copy someone made)
+
+        Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+        string how;
+        try
+        {
+            if (Env.IsWindows && Env.Which("cmd") is { } cmd
+                && Env.Run(cmd, "/c", "mklink", "/J", dest, src).Code == 0)
+                how = "junction";
+            else
+            {
+                Directory.CreateSymbolicLink(dest, src);
+                how = "symlink";
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"   note: could not link data/ ({ex.GetType().Name}) — copying instead, this is slow.");
+            try
+            {
+                CopyTree(new DirectoryInfo(src), new DirectoryInfo(dest));
+                how = "copy";
+            }
+            catch (Exception copyEx)
+            {
+                Console.Error.WriteLine($"vx export: could not place data/ beside the binary: {copyEx.Message}");
+                Console.Error.WriteLine($"           Do it by hand, or the build will launch and load nothing:");
+                Console.Error.WriteLine($"             {src}  ->  {dest}");
+                return false;
+            }
+        }
+
+        Console.WriteLine($"   content: data/ {how} at {Path.GetRelativePath(Env.RepoRoot, dest).Replace('\\', '/')}");
+        return true;
+    }
+
+    private static void CopyTree(DirectoryInfo from, DirectoryInfo to)
+    {
+        to.Create();
+        foreach (FileInfo f in from.GetFiles())
+            f.CopyTo(Path.Combine(to.FullName, f.Name), overwrite: true);
+        foreach (DirectoryInfo d in from.GetDirectories())
+            CopyTree(d, new DirectoryInfo(Path.Combine(to.FullName, d.Name)));
     }
 
     /// <summary>

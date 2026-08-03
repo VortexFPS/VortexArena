@@ -110,8 +110,74 @@ internal static class Env
     }
 
     /// <summary>
+    /// Run a command, mirroring its output live, and STOP WAITING once <paramref name="doneMarker"/> appears
+    /// — killing it if it has not exited <paramref name="graceSeconds"/> later.
+    ///
+    /// <para><b>This exists for exactly one reason: Godot's headless <c>--export-release</c> does not
+    /// reliably exit.</b> It prints <c>[ DONE ] savepack</c>, flushes the binary, and then sits there forever
+    /// on a lingering render/.NET thread. Verified still true on 4.6.3 (2026-08-03): a windows-client export
+    /// wrote its .exe at 17:33:57 and was still running, doing nothing, at 17:36:19 — a plain
+    /// <see cref="Exec"/> hangs until the caller gives up. It ALSO exits non-zero on fully successful
+    /// exports, which is why <c>vx export</c> gates on the artifact rather than the code.</para>
+    ///
+    /// <para>Ported from <c>run-release.sh</c>, which carried this workaround for months while
+    /// <c>vx export</c> — the command anyone would actually reach for — did not have it. Match the marker
+    /// LOOSELY (<c>DONE.*savepack</c>): Godot colorises it, so there are ANSI escapes between the <c>]</c>
+    /// and the word, and a too-strict pattern degrades silently into "hangs until the cap".</para>
+    /// </summary>
+    internal static int ExecUntilDone(string exe, IEnumerable<string> args, string doneMarker,
+                                      int graceSeconds = 2, int capSeconds = 600)
+    {
+        var psi = new ProcessStartInfo(exe)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = RepoRoot,
+        };
+        foreach (string a in args) psi.ArgumentList.Add(a);
+
+        using Process? p = Process.Start(psi);
+        if (p is null) { Console.Error.WriteLine($"vx: could not start {exe}"); return 127; }
+
+        var done = new ManualResetEventSlim(false);
+        var marker = new System.Text.RegularExpressions.Regex(doneMarker,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        void OnLine(string? line)
+        {
+            if (line is null) return;
+            Console.WriteLine(line);                       // the tool's own output IS the output
+            if (marker.IsMatch(line)) done.Set();
+        }
+
+        p.OutputDataReceived += (_, e) => OnLine(e.Data);
+        p.ErrorDataReceived += (_, e) => OnLine(e.Data);
+        p.BeginOutputReadLine();
+        p.BeginErrorReadLine();
+
+        // Whichever happens first: it exits on its own (fine), or it announces success and stops mattering.
+        int cap = capSeconds * 1000;
+        int waited = 0;
+        while (!p.HasExited && waited < cap)
+        {
+            if (done.Wait(250)) break;
+            waited += 250;
+        }
+
+        if (!p.HasExited)
+        {
+            if (done.IsSet)
+                Thread.Sleep(graceSeconds * 1000);         // let it finish flushing to disk before the kill
+            try { p.Kill(entireProcessTree: true); } catch { /* raced us to the exit */ }
+        }
+        p.WaitForExit(10_000);
+        return p.HasExited ? p.ExitCode : -1;
+    }
+
+    /// <summary>
     /// Run one of the repo's shell scripts. On Windows that needs a bash — Git Bash, which this tree
-    /// already requires (run-release.sh uses <c>/c/...</c> mount paths, and ci/ci.sh is bash-only). Finding
+    /// already requires (ci/ci.sh is bash-only, and the .run/ Rider configs drive ./vx through it). Finding
     /// it explicitly rather than assuming <c>bash</c> is on PATH keeps the failure legible: "install Git for
     /// Windows" is actionable where "the system cannot find the file specified" is not.
     /// </summary>

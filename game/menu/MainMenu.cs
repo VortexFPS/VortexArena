@@ -236,6 +236,14 @@ public partial class MainMenu : MenuScreen
 
     public override void _Process(double delta)
     {
+        // (perf 2026-08-03) The menu tree stays INSTANTIATED during a match — Shell only sets
+        // _menu.Visible = false — and Shell runs ProcessModeEnum.Always, so this kept running the full
+        // LayoutFrame() every frame while completely invisible: ~40 marshalled property writes (per-tile
+        // Lerp + Scale/Position/Modulate/Visible/MouseFilter, plus the brand modulate) for pixels nobody
+        // renders. Nothing here has an effect while hidden, and the layout is recomputed on the frame it
+        // reappears anyway (the animation restarts from _factor).
+        if (!IsVisibleInTree())
+            return;
         if (_active != null)
         {
             float dir = _opening ? 1f : -1f;

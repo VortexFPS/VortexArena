@@ -119,6 +119,21 @@ public partial class Md3Morph : Node3D
     private float _playhead;
     private bool _playing;
 
+    /// <summary>
+    /// (perf 2026-08-03) Single writer for <see cref="_playing"/>, so the Godot per-frame callback is only
+    /// ENABLED while this model is actually animating. One Md3Morph node exists per .md3 instance loaded
+    /// through AssetLoader.LoadModel — items, world weapon models, map props, effect models — so there can
+    /// be hundreds alive, and the overwhelming majority are statically posed with _playing false. Each idle
+    /// one was still paying the per-node _Process dispatch (two native<->managed crossings per frame) to
+    /// reach an immediate `if (!_playing) return`. SetProcess removes the node from the scene tree's
+    /// process list entirely, which is the only way to actually stop paying for it.
+    /// </summary>
+    private void SetPlaying(bool value)
+    {
+        _playing = value;
+        SetProcess(value);
+    }
+
     /// <summary>Global playback speed multiplier for clip playback.</summary>
     [Export] public float TimeScale { get; set; } = 1f;
 
@@ -305,7 +320,7 @@ public partial class Md3Morph : Node3D
         _current = clip;
         _hasClip = true;
         _playhead = 0f;
-        _playing = true;
+        SetPlaying(true);
         ApplyFrame(clip.FirstFrame, clip.FirstFrame, 0f);
         return true;
     }
@@ -318,8 +333,8 @@ public partial class Md3Morph : Node3D
         return Play(clipName);
     }
 
-    public void Pause() => _playing = false;
-    public void Resume() => _playing = true;
+    public void Pause() => SetPlaying(false);
+    public void Resume() => SetPlaying(true);
 
     /// <summary>
     /// Pin a single raw MD3 frame (QC <c>self.frame = N</c>), rebuilding the mesh and tags, with no playback.
@@ -327,7 +342,7 @@ public partial class Md3Morph : Node3D
     public void SetFrame(int frame)
     {
         _hasClip = false;
-        _playing = false;
+        SetPlaying(false);
         int f = Math.Clamp(frame, 0, Math.Max(0, _md3.FrameCount - 1));
         ApplyFrame(f, f, 0f);
     }
@@ -339,10 +354,14 @@ public partial class Md3Morph : Node3D
     public void LerpFrames(int frameA, int frameB, float t)
     {
         _hasClip = false;
-        _playing = false;
+        SetPlaying(false);
         int n = Math.Max(0, _md3.FrameCount - 1);
         ApplyFrame(Math.Clamp(frameA, 0, n), Math.Clamp(frameB, 0, n), Math.Clamp(t, 0f, 1f));
     }
+
+    /// <summary>Start with the per-frame callback OFF — <see cref="SetPlaying"/> arms it when a clip plays.
+    /// A statically-posed model (the common case) therefore never enters the process list at all.</summary>
+    public override void _Ready() => SetProcess(_playing);
 
     public override void _Process(double delta) => Advance((float)delta);
 
@@ -362,7 +381,7 @@ public partial class Md3Morph : Node3D
             else
             {
                 _playhead = span - 0.0001f;
-                _playing = false;
+                SetPlaying(false);
             }
         }
 

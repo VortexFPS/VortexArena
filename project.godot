@@ -64,6 +64,30 @@ common/physics_jitter_fix=0.0
 ; GPU cost ripple, confounding the variance-elimination measurements — reverted to engine defaults
 ; 2026-07-11. History: commit 391396f + planning/frametime-parity-audit-2026-07-11.md.)
 
+; (perf 2026-08-03) SEPARATE RENDER THREAD. Verified against the pinned 4.6.3 source, because
+; PERFORMANCE_REPORT.md's claim that this key was "removed in Godot 4 / stored unread" is WRONG:
+;   main/main.cpp:2722  separate_thread_render = (int)GLOBAL_DEF("rendering/driver/threads/thread_model",
+;                                                 OS::RENDER_THREAD_SAFE) == OS::RENDER_SEPARATE_THREAD;
+;   core/os/os.h:93-95  RENDER_THREAD_UNSAFE=0, RENDER_THREAD_SAFE=1, RENDER_SEPARATE_THREAD=2  (unchanged)
+;   rendering_server_default.cpp  draw(): if (create_thread) command_queue.push(_draw) ELSE _draw() INLINE
+; At the DEFAULT (Safe=1) the whole render pass - cull, render-list build, sort, submission, present - runs
+; INLINE on the main thread inside Main::iteration, right after SceneTree::process. That is precisely our
+; `rest` bucket, and it is why `rest` tracks draw count. With 2 the pass is pipelined onto its own thread,
+; so the frame becomes max(proc, draw) instead of proc + draw.
+; Cost: one frame of extra display latency, and upstream still labels it experimental (main.cpp:3417 prints
+; a warning WHEN ACTIVE - that log line is the ground-truth check that it engaged; an earlier test of this
+; setting concluded "inert" and was almost certainly reading a run where it never turned on).
+; Watch: godot#112452 (CommandQueueMT contention with background resource loading) is directly relevant to
+; BackgroundAssetStreamer/IdleWarmer - if streaming stalls appear, that is the suspect.
+driver/threads/thread_model=2
+; (perf 2026-08-03) DEPTH PREPASS OFF. It re-records the ENTIRE opaque render list a second time
+; (render_forward_clustered.cpp runs _render_list_with_draw_list over RENDER_LIST_OPAQUE for PASS_MODE_DEPTH,
+; then again for colour), i.e. it doubles opaque draw SUBMISSION - CPU work - to save overdraw, which is GPU
+; work we have in surplus (GPU idle ~84%). Upstream's own measurements (godot-proposals#4322) show it is a
+; net LOSS below ~10x full-screen overdraw. Note it is force-enabled anyway by SSAO/SSIL/SSR/SDFGI/VoxelGI,
+; all of which are off here. Also note the prepass draws are NOT counted by RenderingServer's draw-call
+; counter, so our "draws p50" has always undercounted by roughly the opaque count.
+driver/depth_prepass/enable=false
 textures/default_filters/anisotropic_filtering_level=3
 anti_aliasing/quality/msaa_3d=2
 ; (engine-perf 2026-06-16) Dither the final image to kill banding in the sky / large gradients. A pipeline-key

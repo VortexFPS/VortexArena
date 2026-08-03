@@ -751,7 +751,9 @@ public partial class CreditsScreen : MenuScreen
 
     public override void _Process(double delta)
     {
-        if (!_autoScroll || _scroll is null)
+        // (perf 2026-08-03) Gated on _autoScroll but NOT on visibility, so an opened-then-hidden credits
+        // pane kept auto-scrolling (writing ScrollVertical) through an entire match.
+        if (!_autoScroll || _scroll is null || !IsVisibleInTree())
             return;
 
         int max = (int)_scroll.GetVScrollBar().MaxValue - (int)_scroll.Size.Y;

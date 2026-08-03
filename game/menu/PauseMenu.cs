@@ -76,6 +76,11 @@ public partial class PauseMenu : MenuScreen
 
     public override void _Process(double delta)
     {
+        // (perf 2026-08-03) Once opened, this screen stays alive-but-hidden for the rest of the match
+        // (MenuRoot.Push keeps the stack), and Shell processes Always — so without this gate it ran a cvar
+        // read plus string compares every frame of gameplay. The button text only matters while visible.
+        if (!IsVisibleInTree())
+            return;
         // QC XonoticGameMenuDialog_draw: under g_campaign the Join! button becomes "Restart level"/"resetmatch".
         bool campaign = MenuState.Cvars.GetFloat("g_campaign") != 0f;
         if (campaign && _joinButton.Text == "Join!")
@@ -152,6 +157,10 @@ public partial class LeaveMatchButton : Button
 
     public override void _Process(double delta)
     {
+        // (perf 2026-08-03) Hidden for the whole match otherwise, and this wrote a marshalled STRING
+        // property (Text) plus Disabled every single frame. Both are display-only.
+        if (!IsVisibleInTree())
+            return;
         bool inMatch = MenuCommand.InMatch?.Invoke() ?? false;
         Disabled = !inMatch;
         // leaveMatchButton_getText: disabled → "Leave current match"; else (single network path) "Leave multiplayer".

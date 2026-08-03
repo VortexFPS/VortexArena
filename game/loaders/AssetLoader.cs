@@ -242,6 +242,23 @@ public sealed class AssetLoader
     }
 
     /// <summary>
+    /// True when <paramref name="vpath"/>'s parse is already in the model cache — i.e. a <see cref="LoadModel"/>
+    /// now would skip the read+parse and only pay the Godot build. A cached NEGATIVE (missing/unparsable file)
+    /// also counts as prepared: the load path will degrade to its placeholder immediately, which is not work
+    /// worth deferring. THREAD-SAFE (same gate as the cache). The graceful-load fallback probes this per frame
+    /// for a pending equip, so it must stay a dictionary lookup and nothing more.
+    /// </summary>
+    public bool IsModelPrepared(string vpath, int skinIndex = 0)
+    {
+        string key = AssetPaths.Normalize(vpath);
+        if (key.Length == 0 || key.EndsWith(".spr", StringComparison.OrdinalIgnoreCase))
+            return true;   // sprites/empty: LoadModel handles these synchronously either way
+        string cacheKey = skinIndex == 0 ? key : $"{key}#skin{skinIndex}";
+        lock (_modelCacheGate)
+            return _modelCache.ContainsKey(cacheKey);
+    }
+
+    /// <summary>
     /// Parse a model as raw <see cref="Md3Data"/> for the client's per-entity <c>ClientWorld.ModelResolver</c>
     /// (world items/gibs/monsters that render via the MD3 morph/snapshot path). Returns null for a missing file
     /// or a non-MD3 model (IQM/DPM go through <see cref="LoadModel"/>); cached per normalized vpath.

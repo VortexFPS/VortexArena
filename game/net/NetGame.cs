@@ -2596,7 +2596,9 @@ public sealed partial class NetGame : Node3D
         // override (every other weapon uses its static WorldModel).
         string vmOverride = WeaponViewModelOverride(id);
 
-        if (id == _equippedWeaponId && vmOverride == _equippedVmOverride)
+        // (_pendingEquipModel: a deferred cold-model equip must keep re-entering — the hidden path below can
+        // latch _equippedWeaponId while the placeholder is still up, and this early-out would then freeze it.)
+        if (id == _equippedWeaponId && vmOverride == _equippedVmOverride && _pendingEquipModel is null)
         {
             _switchDropLeft = -1f;        // a staged switch back to the current weapon dissolves
             _viewModel.Visible = !hidden; // no weapon/model change; just track the dead/holstered visibility edge
@@ -2658,6 +2660,28 @@ public sealed partial class NetGame : Node3D
         VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(id);
         // wr_viewmodel override replaces the model file (vmOverride = "v_<instrument>.md3"); else the static WorldModel.
         string vModel = string.IsNullOrEmpty(vmOverride) ? WeaponVModelPath(w) : "models/weapons/" + vmOverride;
+
+        // (graceful-load 2026-08-03) COLD equip fallback: when the model this equip will build from is not in
+        // the parse cache (cl_precache_all_weapons 0's lazy set, a Tuba instrument override, or any future
+        // unanticipated model), the old behaviour was to read+parse+build it synchronously RIGHT HERE — a
+        // mid-match stall on the frame the player switched. Instead: raise the placeholder bar now, stream the
+        // read/parse/texture/material work through the background lane, and retry this equip each frame (a
+        // dictionary probe) until the caches are hot — the real build then runs synchronously but cheap. The
+        // deferral latches nothing (_equippedWeaponId stays int.MinValue) so the retry re-enters cleanly, and
+        // the placeholder is only installed once per pending model (no per-frame rebuild churn).
+        if (!EnsureEquipModelsWarm(vModel))
+        {
+            if (_pendingEquipModel != vModel)
+            {
+                _pendingEquipModel = vModel;
+                _viewModel.SetWeaponPlaceholder(MuzzleEffectFor(w), "tag_shot", MuzzleModelFor(w));
+                _viewModel.Visible = true;
+            }
+            _equippedWeaponId = int.MinValue;   // not `id`: keep re-entering until the warm lands
+            return;
+        }
+        _pendingEquipModel = null;
+
         ViewModelEquip eq = ViewModelEquip.Build(_assets, vModel);
         _viewModel.SetWeaponModel(eq.Model, MuzzleEffectFor(w), "tag_shot", eq.Attach, MuzzleModelFor(w));
         // QC wepent.movedir (CL_WeaponEntity_SetModel): the weapon's registered model-local tag_shot offset —
@@ -2673,6 +2697,103 @@ public sealed partial class NetGame : Node3D
         // The server slot now runs the incoming weapon's raise think (can't fire until it lands) — hold fire
         // prediction for the same window so a held trigger doesn't pop the flash while the gun is still rising.
         _switchRaiseLeft = w?.SwitchDelayRaise() ?? 0f;
+    }
+
+    // ── graceful cold-model equip (2026-08-03) ─────────────────────────────────────────────────────────
+    // The MenuAssetWarmer/idle-warm pattern as a mid-match FALLBACK: anything the precache missed streams
+    // through the background lane instead of stalling the equip frame. See EnsureEquipModelsWarm.
+
+    /// <summary>The v_ path a deferred first-person equip is waiting on (placeholder up); null = none.</summary>
+    private string? _pendingEquipModel;
+
+    /// <summary>Model paths with a background warm currently IN FLIGHT (queued once, main-thread only).</summary>
+    private readonly System.Collections.Generic.HashSet<string> _bgModelWarms = new(System.StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Model paths whose background warm COMPLETED. Also the terminal state for a path the streamer
+    /// cannot prepare (a main-thread-only format): it is treated as warm so the equip falls back to the old
+    /// synchronous build — one stall, once — instead of re-queueing forever.</summary>
+    private readonly System.Collections.Generic.HashSet<string> _bgModelWarmsDone = new(System.StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True when every model the first-person equip will build from (the <c>v_</c> model and, when named
+    /// differently, its <c>h_</c> hand-rig sibling) is parse-cached — i.e. the synchronous
+    /// <see cref="ViewModelEquip.Build"/> right after this will skip the read+parse and only pay the node
+    /// build. Otherwise queues a one-shot background warm per cold path (read + parse + texture decode/upload
+    /// + material resolve, all on the streamer lane — the exact MenuAssetWarmer staging) and returns false;
+    /// the caller keeps the placeholder up and retries next frame (this probe is a dictionary lookup).
+    /// </summary>
+    private bool EnsureEquipModelsWarm(string vModel)
+    {
+        if (_assets is null || _streamer is null || !IsInsideTree())
+            return true;   // nothing to defer through — build synchronously, exactly the old behaviour
+
+        string hModel = vModel.Replace("/v_", "/h_").Replace(".md3", ".iqm");
+        bool warm = true;
+        foreach (string m in hModel == vModel ? new[] { vModel } : new[] { vModel, hModel })
+        {
+            if (_bgModelWarmsDone.Contains(m))
+                continue;                        // streamed already (or unpreparable — sync fallback)
+            if (_bgModelWarms.Contains(m))
+            {
+                warm = false;                    // still streaming — keep the placeholder up
+                continue;
+            }
+            if (_assets.IsModelPrepared(m))
+                continue;                        // already hot (precache or an earlier lazy load)
+            warm = false;
+            _bgModelWarms.Add(m);
+            QueueBackgroundModelWarm(m);
+        }
+        return warm;
+    }
+
+    /// <summary>
+    /// Stream one cold model's full warm through the background lane: read+parse+sidecars off-thread
+    /// (<see cref="AssetLoader.PrepareModel"/> — fills the parse cache), then each texture (read + decode +
+    /// GPU upload, off-thread), then each material (resolve under the upload gate, off-thread) — CHAINED one
+    /// at a time like the menu warm, so concurrent decodes don't gang up on the GC or the driver. High
+    /// priority: the player is looking at a placeholder gun right now.
+    /// </summary>
+    private void QueueBackgroundModelWarm(string path)
+    {
+        AssetLoader loader = _assets!;
+        _streamer!.Request(
+            () => loader.PrepareModel(path, 0),
+            mats =>
+            {
+                var materials = mats ?? (System.Collections.Generic.IReadOnlyList<string>)System.Array.Empty<string>();
+                var textures = new System.Collections.Generic.List<string>();
+                foreach (string m in materials)
+                    foreach (string t in loader.Assets.EnumerateMaterialTextureNames(m))
+                        if (!textures.Contains(t))
+                            textures.Add(t);
+                int ti = 0, mi = 0;
+                void NextMaterial()
+                {
+                    if (mi >= materials.Count)
+                    {
+                        _bgModelWarms.Remove(path);
+                        _bgModelWarmsDone.Add(path);   // unpreparable formats land here too — see the field note
+                        return;
+                    }
+                    string m = materials[mi++];
+                    _streamer.Request(
+                        () => { loader.Assets.WithUploadGate(() => loader.Assets.ResolveMaterial(m)); return m; },
+                        _ => NextMaterial(),
+                        VortexArena.Game.Client.BackgroundAssetStreamer.Priority.High, $"equip-warm mat {m}");
+                }
+                void NextTexture()
+                {
+                    if (ti >= textures.Count) { NextMaterial(); return; }
+                    string t = textures[ti++];
+                    _streamer.Request(
+                        () => { loader.Assets.WarmTextureOffThread(t); return t; },
+                        _ => NextTexture(),
+                        VortexArena.Game.Client.BackgroundAssetStreamer.Priority.High, $"equip-warm tex {t}");
+                }
+                NextTexture();
+            },
+            VortexArena.Game.Client.BackgroundAssetStreamer.Priority.High, label: $"equip-warm {path}");
     }
 
     /// <summary>
@@ -3049,6 +3170,18 @@ public sealed partial class NetGame : Node3D
                 // warm below (instead of freeing it unrendered). A miss just caches the failure.
                 if (_assets.LoadModel(vModel) is { } vRoot)
                     weaponWarmRoots.Add(vRoot);
+                // (hitch-fix 2026-08-03) ALSO warm the node a first-person equip actually RENDERS. Since the r9
+                // viewmodel rework the equipped node is the h_ HAND RIG — its own gun+hand mesh for the DPM
+                // full-model weapons, the animated skeleton carrying the v_ model for the IQM invisible-hand
+                // ones — but this precache only ever warm-rendered the bare v_ model, and the rig probe below
+                // (WeaponAttachTransform) frees its throwaway build UNRENDERED. So each rig's skinned-mesh
+                // pipelines still compiled on its first mid-match equip: release captures show exactly that
+                // signature (SYNC pipeline compiles + unscoped 15-40 ms frames clustered on the spectatee's
+                // weapon rotations, t≈88-95 s). Building the REAL equip here compiles those pipelines under
+                // the loading screen AND seeds the shared skeletal-geometry cache, so live equips then reuse
+                // this build's ArrayMesh instead of re-running the per-vertex conversion.
+                if (ViewModelEquip.Build(_assets, vModel).Model is { } eqRoot)
+                    weaponWarmRoots.Add(eqRoot);
                 // The hand rig is loaded by WeaponAttachTransform on each switch; warm it too (it builds +
                 // frees its own throwaway node internally and caches the attach transform's model).
                 ViewModelEquip.WeaponAttachTransform(_assets, vModel);
@@ -3065,6 +3198,15 @@ public sealed partial class NetGame : Node3D
                 if (!IsInsideTree()) return;
             }
         }
+        // The muzzle-flash MODELS (QC m_muzzlemodel: devastator/minelayer flash.md3, machinegun/shotgun
+        // uziflash.md3) spawn on the FIRST SHOT of those weapons and were never precached anywhere, so that
+        // first shot compiled their (additive-blend) pipelines mid-fight. Two tiny MD3s — warm-render them
+        // with the weapons.
+        if (!_dedicatedSlim)
+            foreach (string muzzle in new[] { "models/flash.md3", "models/uziflash.md3" })
+                if (_assets.LoadModel(muzzle) is { } mRoot)
+                    weaponWarmRoots.Add(mRoot);
+
         // Render the warmed v_ models offscreen for a few frames so their material pipelines COMPILE now (under
         // the loading screen) — Godot compiles a pipeline on first DRAW, so an un-drawn warm model left it
         // uncompiled. Then free them; the texture/material caches persist. Mirrors the player-roster warm.

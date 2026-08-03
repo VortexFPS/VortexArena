@@ -2674,6 +2674,7 @@ public sealed partial class NetGame : Node3D
             if (_pendingEquipModel != vModel)
             {
                 _pendingEquipModel = vModel;
+                ReleaseInstalledEquip();        // the outgoing cached model must not die with the placeholder install
                 _viewModel.SetWeaponPlaceholder(MuzzleEffectFor(w), "tag_shot", MuzzleModelFor(w));
                 _viewModel.Visible = true;
             }
@@ -2682,8 +2683,24 @@ public sealed partial class NetGame : Node3D
         }
         _pendingEquipModel = null;
 
-        ViewModelEquip eq = ViewModelEquip.Build(_assets, vModel);
-        _viewModel.SetWeaponModel(eq.Model, MuzzleEffectFor(w), "tag_shot", eq.Attach, MuzzleModelFor(w));
+        // (zero-hitch 2026-08-03) Per-weapon EQUIP CACHE. ViewModelEquip.Build assembles the full first-person
+        // node (skeleton + bone attachment + AnimationPlayer + meshes) synchronously — ~10 ms and ~1.5 MB per
+        // switch, the ng.viewfx hitch class in the release captures (bench rotations switch every 8 s; a real
+        // match switches constantly). Build each weapon's node ONCE, hand the outgoing node back to the cache
+        // on switch (ReleaseWeaponModel — detached, never freed), and reinstall on return: a switch back to a
+        // seen weapon is a reparent + state reset, microseconds. The map precache pre-seeds this cache with the
+        // exact nodes it warm-renders, so even the FIRST switch to each weapon reuses a prebuilt node.
+        ReleaseInstalledEquip();
+        if (!_viewEquipCache.TryGetValue(vModel, out (Node3D Node, Transform3D Attach) equip)
+            || !GodotObject.IsInstanceValid(equip.Node))
+        {
+            ViewModelEquip eq = ViewModelEquip.Build(_assets, vModel);
+            equip = (eq.Model!, eq.Attach);
+            if (eq.Model is not null)
+                _viewEquipCache[vModel] = equip;
+        }
+        _viewModel.SetWeaponModel(equip.Node, MuzzleEffectFor(w), "tag_shot", equip.Attach, MuzzleModelFor(w));
+        _installedEquipModel = equip.Node is not null ? vModel : null;
         // QC wepent.movedir (CL_WeaponEntity_SetModel): the weapon's registered model-local tag_shot offset —
         // the SAME value the server's SetupShot fires from — so the first-person flash spawns at the real
         // muzzle point (Base movedir_aligned), not wherever the compressed-view-space render tag lands.
@@ -2705,6 +2722,35 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>The v_ path a deferred first-person equip is waiting on (placeholder up); null = none.</summary>
     private string? _pendingEquipModel;
+
+    // ── per-weapon first-person equip cache (zero-hitch 2026-08-03) ────────────────────────────────────
+    // One built equip node per v_ model path, reused across every switch (see the note at the install
+    // site). Seeded by PrecacheWeaponModelsAsync with the same nodes it warm-renders; grown lazily for
+    // anything the precache skipped. Nodes in here are DETACHED while not installed; exactly one may be
+    // parented inside _viewModel at a time (_installedEquipModel names it).
+    private readonly System.Collections.Generic.Dictionary<string, (Node3D Node, Transform3D Attach)> _viewEquipCache =
+        new(System.StringComparer.OrdinalIgnoreCase);
+    private string? _installedEquipModel;
+
+    /// <summary>Detach the currently installed cached equip back to the cache (no-op when none/placeholder).</summary>
+    private void ReleaseInstalledEquip()
+    {
+        if (_installedEquipModel is null)
+            return;
+        _installedEquipModel = null;
+        if (_viewModel is not null && GodotObject.IsInstanceValid(_viewModel))
+            _viewModel.ReleaseWeaponModel();   // same object the cache already references — just detached
+    }
+
+    /// <summary>Free every cached equip node (match teardown). The installed one dies with the ViewModel tree.</summary>
+    private void FreeViewEquipCache()
+    {
+        foreach (System.Collections.Generic.KeyValuePair<string, (Node3D Node, Transform3D Attach)> kv in _viewEquipCache)
+            if (GodotObject.IsInstanceValid(kv.Value.Node) && kv.Value.Node.GetParent() is null)
+                kv.Value.Node.QueueFree();
+        _viewEquipCache.Clear();
+        _installedEquipModel = null;
+    }
 
     /// <summary>Model paths with a background warm currently IN FLIGHT (queued once, main-thread only).</summary>
     private readonly System.Collections.Generic.HashSet<string> _bgModelWarms = new(System.StringComparer.OrdinalIgnoreCase);
@@ -3180,8 +3226,15 @@ public sealed partial class NetGame : Node3D
                 // weapon rotations, t≈88-95 s). Building the REAL equip here compiles those pipelines under
                 // the loading screen AND seeds the shared skeletal-geometry cache, so live equips then reuse
                 // this build's ArrayMesh instead of re-running the per-vertex conversion.
-                if (ViewModelEquip.Build(_assets, vModel).Model is { } eqRoot)
+                ViewModelEquip eqBuilt = ViewModelEquip.Build(_assets, vModel);
+                if (eqBuilt.Model is { } eqRoot)
+                {
                     weaponWarmRoots.Add(eqRoot);
+                    // (zero-hitch 2026-08-03) The warmed equip node is KEPT, not thrown away: it seeds the
+                    // per-weapon equip cache, so the first real switch to this weapon reparents this exact
+                    // node instead of re-running the ~10 ms synchronous build (the ng.viewfx hitch class).
+                    _viewEquipCache[vModel] = (eqRoot, eqBuilt.Attach);
+                }
                 // The hand rig is loaded by WeaponAttachTransform on each switch; warm it too (it builds +
                 // frees its own throwaway node internally and caches the attach transform's model).
                 ViewModelEquip.WeaponAttachTransform(_assets, vModel);
@@ -3211,12 +3264,19 @@ public sealed partial class NetGame : Node3D
         // the loading screen) — Godot compiles a pipeline on first DRAW, so an un-drawn warm model left it
         // uncompiled. Then free them; the texture/material caches persist. Mirrors the player-roster warm.
         if (weaponWarmRoots.Count > 0)
+        {
+            // Cache-owned equip nodes survive the warm pass (WarmNodes detaches every instance before the
+            // callback); everything else (bare v_ warm roots, muzzle flashes) is still freed here.
+            var kept = new System.Collections.Generic.HashSet<Node3D>();
+            foreach ((Node3D Node, Transform3D Attach) v in _viewEquipCache.Values)
+                kept.Add(v.Node);
             VortexArena.Game.Client.GpuWarmPass.WarmNodes(this, weaponWarmRoots, () =>
             {
                 foreach (Node3D r in weaponWarmRoots)
-                    if (GodotObject.IsInstanceValid(r))
+                    if (!kept.Contains(r) && GodotObject.IsInstanceValid(r))
                         r.QueueFree();
             });
+        }
         GD.Print($"[NetGame] precached {warmed} weapon models, skipped {skipped} (lazy), {muzzles} muzzle tags.");
     }
 
@@ -3645,6 +3705,9 @@ public sealed partial class NetGame : Node3D
         if (_shutDown)
             return;
         _shutDown = true;
+
+        // Free the detached per-weapon equip nodes (the installed one dies with the ViewModel tree).
+        FreeViewEquipCache();
 
         // DS-4: this server is going away — drop the signal-handler's client-notice hook so it can't fire against
         // a torn-down transport (and a rehost re-registers a fresh one for the new _server).

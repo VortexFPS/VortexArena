@@ -278,6 +278,8 @@ public partial class FrameProfiler : CanvasLayer
         _lastGc2 = _initGc2 = GC.CollectionCount(2);
         _lastAllocBytes = GC.GetTotalAllocatedBytes(false);
         _lastGcPauseMs = _initGcPauseMs = GC.GetTotalPauseDuration().TotalMilliseconds;
+
+        ArmCensusSweep();   // first incremental sweep starts now, so the first snapshot has real numbers
         _launchWall = DateTime.Now;
 
         _view = new FrameProfilerGraph { Name = "Graph", Visible = false };
@@ -526,11 +528,15 @@ public partial class FrameProfiler : CanvasLayer
         if (ConsumeDumpRequest())
             DumpRingCsv();
 
+        // Advance the incremental node-census sweep (bounded interop per frame; idle when no sweep armed).
+        CensusStep();
+
         // (11) periodic steady-state snapshot.
         if (_snapshotClock >= SnapshotIntervalMs)
         {
             EmitSnapshot();
             _snapshotClock = 0.0;
+            ArmCensusSweep();   // next window's census completes within ~a second, printed at the NEXT emit
         }
 
         bool show = true;
@@ -843,17 +849,22 @@ public partial class FrameProfiler : CanvasLayer
             hitches += $" (+{_windowRecovery} recovery)";
         // (perf-investigation) scene-graph complexity — the suspected driver of the Godot-internal proc:other
         // floor on entity-heavy maps. nodes = total scene-tree nodes; robj = objects drawn this frame.
+        // (zero-hitch 2026-08-03) The whole periodic block is FILE-ONLY now. At mode>=2 these four lines
+        // used to echo to the console too — under a capture that stdout is a redirected pipe, and the echo
+        // burst (with the old synchronous census walk above it) put a 12-29 ms stall on the exact frame the
+        // snapshot printed, classified VSYNC/PRESENT or EXTERNAL, ~once per window. The session log (async
+        // writer thread) is what perf-report and every analysis read; the console gains nothing here.
         double nodeCount = Performance.GetMonitor(Performance.Monitor.ObjectNodeCount);
         double renderObjs = Performance.GetMonitor(Performance.Monitor.RenderTotalObjectsInFrame);
         Emit($"[frameprofile] scene: nodes {nodeCount:0} objs-drawn {renderObjs:0} draws {RecordAt(1)?.DrawCalls ?? 0:0} " +
              $"vram {Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / (1024.0 * 1024.0):0}MB",
-             toConsole: Mode() >= 2);
-        Emit($"[frameprofile] census: {NodeTypeCensus()}", toConsole: Mode() >= 2);
+             toConsole: false);
+        Emit($"[frameprofile] census: {_censusPublished}", toConsole: false);
         Emit($"[frameprofile] {_windowHist.Count} frames: p50 {_windowHist.Percentile(0.50):0.0} " +
              $"p95 {_windowHist.Percentile(0.95):0.0} p99 {_windowHist.Percentile(0.99):0.0} " +
              $"p99.9 {_windowHist.Percentile(0.999):0.0}ms (max {_windowHist.Max:0.0}) | " +
              $"{hitches} | alloc {_allocRateMbPerSec:0}MB/s heap {Bytes(_heapBytes)} | proc {_procMs:0.0} gpu {_renderGpuMs:0.0}",
-             toConsole: Mode() >= 2);
+             toConsole: false);
 
         // (perf-investigation) steady-state per-scope breakdown: the top scopes by total window-ms, printed as a
         // PER-FRAME AVERAGE (ms/frame) so two experiments are directly comparable without provoking a hitch. File
@@ -870,7 +881,7 @@ public partial class FrameProfiler : CanvasLayer
                 if (i > 0) sb.Append("  ");
                 sb.Append(top[i].Key).Append(' ').Append(perFrame.ToString("0.0"));
             }
-            Emit(sb.ToString(), toConsole: Mode() >= 2);
+            Emit(sb.ToString(), toConsole: false);
         }
 
         _windowHist.Reset();
@@ -1046,33 +1057,63 @@ public partial class FrameProfiler : CanvasLayer
     // GpuParticles3D / etc.). Reports the count of nodes with processing actually enabled, where it matters.
     private readonly Dictionary<string, int> _censusScratch = new();
     private readonly Dictionary<string, int> _censusProc = new();
-    private string NodeTypeCensus()
+    // (zero-hitch 2026-08-03) INCREMENTAL node census. The old NodeTypeCensus recursed the whole scene tree
+    // synchronously inside EmitSnapshot — 4+ native interop calls per node × ~3,500 nodes in ONE frame, every
+    // snapshot window. Cross-correlating the release captures showed 44 of the 50 post-load VSYNC/PRESENT +
+    // EXTERNAL "hitches" sitting within 150 ms of a [frameprofile] snapshot block: the profiler was the
+    // second-largest remaining hitch source in the game it was profiling. The walk is now spread across
+    // frames on a visit budget (~0.2 ms/frame while a sweep is active, idle otherwise); EmitSnapshot prints
+    // the last COMPLETED sweep and arms the next one. A sweep sees a mutating tree — freed nodes are skipped
+    // via IsInstanceValid and counts drift by a few nodes, which is nothing for a diagnostics census.
+    private readonly Stack<Node> _censusStack = new();
+    private string _censusPublished = "(census pending)";
+    private const int CensusVisitsPerFrame = 250;
+
+    /// <summary>Start a fresh census sweep (called right after each snapshot emit, so the next window's
+    /// census is complete long before it is printed).</summary>
+    private void ArmCensusSweep()
     {
+        _censusStack.Clear();
         _censusScratch.Clear();
         _censusProc.Clear();
         if (GetTree()?.Root is { } root)
-            CensusWalk(root);
-        var list = new List<KeyValuePair<string, int>>(_censusScratch);
-        list.Sort((a, b) => b.Value.CompareTo(a.Value));
-        var sb = new StringBuilder();
-        for (int i = 0; i < list.Count && i < 10; i++)
-        {
-            if (i > 0) sb.Append("  ");
-            _censusProc.TryGetValue(list[i].Key, out int proc);
-            sb.Append(list[i].Key).Append(' ').Append(list[i].Value);
-            if (proc > 0) sb.Append("(proc").Append(proc).Append(')');
-        }
-        return sb.ToString();
+            _censusStack.Push(root);
     }
-    private void CensusWalk(Node n)
+
+    /// <summary>Advance the active sweep by at most <see cref="CensusVisitsPerFrame"/> node visits. Publishes
+    /// the formatted result when the sweep completes. No-op (one branch) while idle.</summary>
+    private void CensusStep()
     {
-        string t = n.GetType().Name;
-        _censusScratch.TryGetValue(t, out int c); _censusScratch[t] = c + 1;
-        if (n.IsProcessing() || n.IsPhysicsProcessing())
-        { _censusProc.TryGetValue(t, out int p); _censusProc[t] = p + 1; }
-        int kids = n.GetChildCount();
-        for (int i = 0; i < kids; i++)
-            CensusWalk(n.GetChild(i));
+        if (_censusStack.Count == 0)
+            return;
+        int budget = CensusVisitsPerFrame;
+        while (budget-- > 0 && _censusStack.Count > 0)
+        {
+            Node n = _censusStack.Pop();
+            if (!GodotObject.IsInstanceValid(n))
+                continue;   // freed since it was pushed — a sweep spans frames, nodes die mid-sweep
+            string t = n.GetType().Name;
+            _censusScratch.TryGetValue(t, out int c); _censusScratch[t] = c + 1;
+            if (n.IsProcessing() || n.IsPhysicsProcessing())
+            { _censusProc.TryGetValue(t, out int p); _censusProc[t] = p + 1; }
+            int kids = n.GetChildCount();
+            for (int i = 0; i < kids; i++)
+                _censusStack.Push(n.GetChild(i));
+        }
+        if (_censusStack.Count == 0)
+        {
+            var list = new List<KeyValuePair<string, int>>(_censusScratch);
+            list.Sort((a, b) => b.Value.CompareTo(a.Value));
+            var sb = new StringBuilder();
+            for (int i = 0; i < list.Count && i < 10; i++)
+            {
+                if (i > 0) sb.Append("  ");
+                _censusProc.TryGetValue(list[i].Key, out int proc);
+                sb.Append(list[i].Key).Append(' ').Append(list[i].Value);
+                if (proc > 0) sb.Append("(proc").Append(proc).Append(')');
+            }
+            _censusPublished = sb.ToString();
+        }
     }
 
     private FrameRecord? RecordAt(int back)

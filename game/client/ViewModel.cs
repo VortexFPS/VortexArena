@@ -324,6 +324,40 @@ public partial class ViewModel : Node3D
     }
 
     /// <summary>Set a weapon that has no model yet (uses a placeholder bar) but still flashes correctly.</summary>
+    /// <summary>
+    /// (zero-hitch 2026-08-03) Detach and return the currently installed weapon model WITHOUT freeing it —
+    /// the host's per-weapon equip cache reuses the node on the next switch to this weapon, so the ~10 ms +
+    /// ~1.5 MB synchronous node build (the ng.viewfx hitch class in the release captures) happens once per
+    /// weapon per match instead of on every switch. Any extra root children (a legacy tag holder) are freed
+    /// as before; model-referencing state is reset exactly like an install does. Returns null when nothing
+    /// (or only a placeholder, which the caller does not cache) is installed — the caller treats null as
+    /// "let the next install free whatever is there".
+    /// </summary>
+    public Node3D? ReleaseWeaponModel()
+    {
+        Node3D? released = null;
+        foreach (Node c in _modelRoot.GetChildren())
+        {
+            // The FIRST model-shaped Node3D child is the installed model (SetWeaponModel adds exactly one);
+            // a placeholder install adds a "Placeholder" MeshInstance3D plus a bare tag_shot Marker3D —
+            // neither is cache-owned, so both are freed instead of returned.
+            if (released is null && c is Node3D n3 && n3 is not Marker3D && n3.Name != "Placeholder")
+            {
+                _modelRoot.RemoveChild(n3);
+                released = n3;
+            }
+            else
+            {
+                c.QueueFree();
+            }
+        }
+        _animator = null;
+        _iqmAnimPlayer = null;
+        _muzzleMarker = null;   // may live inside the released tree — never dereference it detached
+        ResetModelFx();
+        return released;
+    }
+
     public void SetWeaponPlaceholder(string muzzleEffect, string? muzzleTag = null, string muzzleModel = "")
     {
         MuzzleEffect = muzzleEffect;

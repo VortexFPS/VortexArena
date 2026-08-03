@@ -10,22 +10,30 @@ namespace VortexArena.Game.Client;
 /// Model gibs — the real limb/chunk meshes a player throws when gibbed, instead of a generic particle
 /// burst. The C# successor to CSQC's gibs.qc (the <c>net_gibsplash</c> handler + TossGib / Gib_Draw):
 /// a gib splash of "type 1" tosses an eye, a bloody skull, then per-amount a spray of arms, chests, legs and
-/// fast-flying chunks, each a bouncing MOVETYPE_BOUNCE body that fades out after cl_gibs_lifetime.
+/// fast-flying chunks, each a bouncing MOVETYPE_BOUNCE body. Physics (gravity + ground bounce + tumble) are
+/// integrated client-side, exactly as the QC gib is a pure client drawable advanced by
+/// Movetype_Physics_MatchTicrate.
 ///
-/// We load the real gib models from the mounted content (the MD3 limbs models/gibs/*.md3 and the Quake1
-/// <c>chunk.mdl</c>, now handled by the host loader) via the model loader; a small generated mesh is the
-/// fallback when the loader is unwired. Physics (gravity + ground bounce + tumble) are integrated client-side per tick,
-/// exactly as the QC gib is a pure client drawable advanced by Movetype_Physics_MatchTicrate.
+/// (zero-hitch 2026-08-03) STRUCT-ARRAY SIM + MULTIMESH RENDER — the ShellCasings recipe. The previous
+/// shape was one <c>GibBody : Node3D</c> per gib: at the 64 cap that is 64 scene nodes each with its own
+/// <c>_PhysicsProcess</c> native callback, 64 render objects/draws, and a slaughter's spawn/QueueFree churn
+/// burst (part of the draw-count spikes + unscoped/post-process hitch classes in the release captures).
+/// Now the ballistics live in ONE struct pool advanced by ONE <c>_PhysicsProcess</c>, rendered as one
+/// fixed-capacity <see cref="MultiMesh"/> batch PER DISTINCT GIB MODEL (~10 total: the limb set, eye,
+/// skull, chunk, the raptor shellfrag) — buffers sized once and never resized, zero per-gib nodes, zero
+/// steady-state allocation.
+///
+/// One deliberate visual deviation: end-of-life is the classic idTech CORPSE SINK (the gib settles into the
+/// floor over its fade window) instead of the old per-instance alpha fade — per-instance transparency does
+/// not compose with the shared skin ShaderMaterials under MultiMesh, and sinking bodies are period-correct.
 /// </summary>
 public sealed partial class ModelGibs : Node3D
 {
     /// <summary>Gib lifetime seconds (DP cl_gibs_lifetime default 14, trimmed so they don't pile up).</summary>
     [Export] public float GibLifetime { get; set; } = 8f;
 
-    /// <summary>Hard cap on live gibs (DP cl_gibs_maxcount).</summary>
+    /// <summary>Hard cap on live gibs (DP cl_gibs_maxcount). Also each model batch's fixed capacity.</summary>
     [Export] public int MaxGibs { get; set; } = 64;
-
-    private int _liveCount;
 
     /// <summary>Host model loader (e.g. <c>AssetLoader.LoadModel</c>); null =&gt; generated placeholder chunks.</summary>
     public Func<string, Node3D?>? ModelLoader { get; set; }
@@ -61,6 +69,44 @@ public sealed partial class ModelGibs : Node3D
         return all.ToArray();
     }
 
+    private const float Gravity = 800f;       // sv_gravity; gibs use gravity 1 (full)
+    private const float BounceFactor = 0.4f;  // gib bouncefactor-ish
+    private const float SinkDepth = 16f;      // Quake units the gib settles into the floor over its fade window
+
+    /// <summary>One simulated gib (pure data — no node, no allocation).</summary>
+    private struct Gib
+    {
+        public bool Active;
+        public int BatchIdx;         // which model batch renders it
+        public uint Seq;             // spawn order (oldest = lowest; the cap evicts by this)
+        public NVec3 PosQuake;
+        public NVec3 Vel;            // Quake space
+        public Basis Rot;            // accumulated tumble (Godot space)
+        public Vector3 AngularVel;   // rad/s per local axis (QC avelocity semantics preserved below)
+        public float Lifetime, FloorZ, Age;
+        public float GravityScale;   // QC .gravity (raptor shellfrags: 0.15)
+        public float AngularJitter;  // QC RaptorCBShellfragDraw: avelocity += randomvec()*15 per draw
+        public float FadeDuration;   // the sink window before death (was the alpha-fade window)
+        public bool DestroyOnTouch;  // chunk.mdl-style: splat on first ground contact
+        public bool Resting;
+    }
+
+    private Gib[] _pool = Array.Empty<Gib>();
+    private uint _spawnSeq;
+
+    /// <summary>One MultiMesh batch per distinct gib model (mesh/material resolved once via SharedMeshCache).</summary>
+    private sealed class Batch
+    {
+        public MultiMeshInstance3D Node = null!;
+        public MultiMesh Mesh = null!;
+        public Transform3D BaseXform;
+        public int Visible;
+    }
+
+    private readonly List<Batch> _batches = new();
+    private readonly Dictionary<string, int> _batchByModel = new(StringComparer.OrdinalIgnoreCase);
+    private int[] _packCounts = Array.Empty<int>();   // per-batch pack cursor, reused each frame
+
     /// <summary>
     /// Spawn a full gib splash at <paramref name="origin"/> (Quake space) with base <paramref name="velocity"/>,
     /// scaled by <paramref name="amount"/> (the QC gibbage multiplier, ~1..15). Bounces off the ground plane at
@@ -93,31 +139,24 @@ public sealed partial class ModelGibs : Node3D
         }
     }
 
-    /// <summary>Toss one gib of the given model. Public so callers can drop a single gib (e.g. a chunk).</summary>
+    /// <summary>Toss one gib of the given model. Public so callers can drop a single gib (e.g. a chunk).
+    /// Returns this node (legacy signature — gibs no longer have per-spawn nodes).</summary>
     public Node3D Toss(string modelPath, NVec3 origin, NVec3 baseVel, NVec3 randVel, float floorZ, bool destroyOnTouch)
     {
         // QC: velocity = vconst*velocity_scale + vrand*velocity_random + up. We fold the cvars into sane
         // constants (scale 1, random 1, up 100) so it reads like the default config.
         NVec3 vel = baseVel + randVel + new NVec3(0f, 0f, 100f);
-
-        Node3D mesh = BuildMesh(modelPath);
-        var gib = new GibBody
-        {
-            Name = "gib",
-            Position = Coords.ToGodot(origin),
-            VelocityQuake = vel,
-            Lifetime = GibLifetime * (1f + GD.Randf() * 0.15f),
-            FloorZ = floorZ,
-            DestroyOnTouch = destroyOnTouch,
-            AngularVel = RandomVecG() * (vel.Length() * 0.02f),
-        };
-        gib.AddChild(mesh);
-
-        AddChild(gib);
-        gib.OnFreed = () => _liveCount = Math.Max(0, _liveCount - 1);
-        _liveCount++;
-        CullIfNeeded();
-        return gib;
+        ref Gib g = ref AllocSlot(modelPath);
+        g.PosQuake = origin;
+        g.Vel = vel;
+        g.Lifetime = GibLifetime * (1f + GD.Randf() * 0.15f);
+        g.FloorZ = floorZ;
+        g.DestroyOnTouch = destroyOnTouch;
+        g.GravityScale = 1f;
+        g.AngularJitter = 0f;
+        g.FadeDuration = 1f;   // QC gibs fade over their last second — now the sink window
+        g.AngularVel = RandomVecG() * (vel.Length() * 0.02f);
+        return this;
     }
 
     /// <summary>
@@ -125,7 +164,7 @@ public sealed partial class ModelGibs : Node3D
     /// <c>RaptorCBShellfragDraw</c>, raptor_weapons.qc:244-284, dispatched from the DEATH_VH_RAPT_FRAGMENT burst
     /// FX in damageeffects.qc:353-360). Three bouncing <c>clusterbomb_fragment.md3</c> drawables thrown outward
     /// from the burst point: gravity 0.15, an avelocity = ±|velocity| seed plus a per-frame ±15 tumble jitter,
-    /// a 3s lifetime that fades over its final second (QC cnt = time+2, nextthink = time+3). Pure cosmetic
+    /// a 3s lifetime that settles over its final second (QC cnt = time+2, nextthink = time+3). Pure cosmetic
     /// debris — <paramref name="origin"/>/<paramref name="bombVel"/> are Quake space (the bursting bomb's pose).
     /// </summary>
     public void TossShellfrags(NVec3 origin, NVec3 bombVel)
@@ -135,82 +174,182 @@ public sealed partial class ModelGibs : Node3D
             // QC damageeffects.qc: vel = normalize(w_org - (w_org + force_dir*16)) + randomvec()*128. We lack the
             // surface backoff (force_dir) headless, so seed a small outward/upward bias + the dominant random spray.
             NVec3 vel = new NVec3(0f, 0f, 0.4f) + RandomVec() * 128f;
-            Node3D mesh = BuildMesh("models/vehicles/clusterbomb_fragment.md3");
-            var frag = new GibBody
-            {
-                Name = "raptor_cb_shellfrag",
-                Position = Coords.ToGodot(origin),
-                VelocityQuake = vel,
-                GravityScale = 0.15f,                       // QC sfrag.gravity = 0.15
-                Lifetime = 3f,                              // QC sfrag.nextthink = time + 3
-                FadeDuration = 1f,                          // QC cnt = time + 2 → fades over the final second
-                FloorZ = float.NegativeInfinity,
-                DestroyOnTouch = false,
-                // QC: avelocity = prandomvec() * vlen(velocity); plus a +15/draw jitter (AngularJitter).
-                AngularVel = RandomVecG() * vel.Length(),
-                AngularJitter = 15f,
-            };
-            frag.AddChild(mesh);
-            AddChild(frag);
-            frag.OnFreed = () => _liveCount = Math.Max(0, _liveCount - 1);
-            _liveCount++;
+            ref Gib g = ref AllocSlot("models/vehicles/clusterbomb_fragment.md3");
+            g.PosQuake = origin;
+            g.Vel = vel;
+            g.GravityScale = 0.15f;                     // QC sfrag.gravity = 0.15
+            g.Lifetime = 3f;                            // QC sfrag.nextthink = time + 3
+            g.FadeDuration = 1f;                        // QC cnt = time + 2 → settles over the final second
+            g.FloorZ = float.NegativeInfinity;
+            g.DestroyOnTouch = false;
+            // QC: avelocity = prandomvec() * vlen(velocity); plus a +15/draw jitter (AngularJitter).
+            g.AngularVel = RandomVecG() * vel.Length();
+            g.AngularJitter = 15f;
         }
-        CullIfNeeded();
     }
 
-    /// <summary>
-    /// (engine-perf 2026-06-16) Build one hidden instance per DISTINCT gib model for the offscreen GPU pipeline
-    /// warm pass (<see cref="GpuWarmPass"/>). The gib world-models render via the entity feed and are otherwise
-    /// un-warmed, so the FIRST combat death first-instances their (mesh,material) pipeline mid-match — a
-    /// synchronous SURFACE compile (the residual a RenderDoc capture pinned to the MD3-entity class). Uses the
-    /// SAME <see cref="BuildMesh"/> factory a live <see cref="Toss"/> uses, so it warms exactly what plays: the
-    /// real MD3 limb when <see cref="ModelLoader"/> resolves it, the generated chunk fallback otherwise. The
-    /// returned nodes are unparented — the warm pass parents, renders, and frees them.
-    /// </summary>
-    public List<Node3D> BuildWarmupInstances()
+    /// <summary>Claim a pool slot for one gib of <paramref name="modelPath"/> (evicting the oldest when
+    /// full — DP cl_gibs_maxcount) and stamp the shared fields; the caller fills the rest.</summary>
+    private ref Gib AllocSlot(string modelPath)
     {
-        var list = new List<Node3D>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        // One opaque instance (the first-draw variant) + one alpha-override instance (the final-second fade
-        // variant ApplyAlpha switches to — a distinct PSO otherwise compiled mid-match on the first gib fade).
-        void Warm(string path)
+        if (_pool.Length == 0)
+            _pool = new Gib[Math.Max(1, MaxGibs)];
+
+        int slot = -1;
+        uint oldest = uint.MaxValue; int oldestIdx = 0;
+        for (int i = 0; i < _pool.Length; i++)
         {
-            if (!seen.Add(path)) return;
-            list.Add(BuildMesh(path));
-            list.Add(GpuWarmPass.AlphaWarm(BuildMesh(path)));
+            if (!_pool[i].Active) { slot = i; break; }
+            if (_pool[i].Seq < oldest) { oldest = _pool[i].Seq; oldestIdx = i; }
         }
-        // AllModelPaths is the single list (limbs + eye + bloodyskull + the Quake1 chunk.mdl), shared with the
-        // menu-time warm so the set warmed at the menu and the set warmed here can never diverge.
-        foreach (string mdl in AllModelPaths) Warm(mdl);
-        return list;
+        if (slot < 0) slot = oldestIdx;
+
+        ref Gib g = ref _pool[slot];
+        g.Active = true;
+        g.Seq = ++_spawnSeq;
+        g.BatchIdx = EnsureBatch(modelPath);
+        g.Rot = Basis.Identity;
+        g.Age = 0f;
+        g.Resting = false;
+        return ref g;
+    }
+
+    /// <summary>ONE physics callback for every live gib (was one per gib). Advances the pool, then packs the
+    /// per-model MultiMesh instance transforms.</summary>
+    public override void _PhysicsProcess(double delta)
+    {
+        // #30 slowmo/pause: gib tosses are Base CSQC (cl.time-driven) — scale like the casings so gibs
+        // hang frozen at slowmo 0 instead of settling on wall clock.
+        float dt = VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
+        if (dt <= 0f)
+            return; // paused — hold everything in place
+
+        bool any = false;
+        for (int i = 0; i < _pool.Length; i++)
+            if (_pool[i].Active) { any = true; break; }
+        if (!any)
+        {
+            for (int b = 0; b < _batches.Count; b++)
+                if (_batches[b].Visible != 0) { _batches[b].Mesh.VisibleInstanceCount = 0; _batches[b].Visible = 0; }
+            return;
+        }
+
+        using var _scope = VortexArena.Game.Client.FrameProfiler.Scope("gibs"); // house rule: per-frame node → scoped
+
+        if (_packCounts.Length < _batches.Count)
+            _packCounts = new int[_batches.Count];
+        Array.Clear(_packCounts, 0, _packCounts.Length);
+
+        for (int i = 0; i < _pool.Length; i++)
+        {
+            ref Gib g = ref _pool[i];
+            if (!g.Active)
+                continue;
+
+            g.Age += dt;
+            if (g.Age >= g.Lifetime) { g.Active = false; continue; }
+
+            if (!g.Resting)
+            {
+                g.Vel.Z -= Gravity * g.GravityScale * dt;
+                // QC RaptorCBShellfragDraw: avelocity += randomvec() * 15 each draw — a continuous tumble jitter.
+                if (g.AngularJitter != 0f)
+                    g.AngularVel += RandomVecG() * (g.AngularJitter * dt);
+                NVec3 posQ = g.PosQuake + g.Vel * dt;
+
+                if (!float.IsNegativeInfinity(g.FloorZ) && posQ.Z <= g.FloorZ && g.Vel.Z < 0f)
+                {
+                    if (g.DestroyOnTouch)
+                    {
+                        // chunk.mdl-style: splat on first ground contact.
+                        g.Active = false;
+                        continue;
+                    }
+                    posQ.Z = g.FloorZ;
+                    g.Vel.Z = -g.Vel.Z * BounceFactor;
+                    g.Vel.X *= 0.6f;
+                    g.Vel.Y *= 0.6f;
+                    g.AngularVel *= 0.5f;
+                    if (g.Vel.Length() < 25f)
+                    {
+                        g.Resting = true;
+                        g.Vel = default;
+                    }
+                }
+                g.PosQuake = posQ;
+                // Tumble — the exact axis/component pairing of the old RotateObjectLocal calls (Up gets the
+                // avelocity Z component, Right gets X; the QC only ever spins these two).
+                g.Rot *= new Basis(Vector3.Up, g.AngularVel.Z * dt);
+                g.Rot *= new Basis(Vector3.Right, g.AngularVel.X * dt);
+            }
+
+            Batch b = _batches[g.BatchIdx];
+            int idx = _packCounts[g.BatchIdx]++;
+            if (idx >= MaxGibs)
+                continue;
+            // End-of-life corpse sink (see the class note): settle SinkDepth into the floor over FadeDuration.
+            float remaining = g.Lifetime - g.Age;
+            float sink = remaining < g.FadeDuration
+                ? (1f - Math.Clamp(remaining / Math.Max(0.001f, g.FadeDuration), 0f, 1f)) * SinkDepth : 0f;
+            Vector3 pos = Coords.ToGodot(g.PosQuake) + new Vector3(0f, -sink, 0f);
+            b.Mesh.SetInstanceTransform(idx, new Transform3D(g.Rot, pos) * b.BaseXform);
+        }
+
+        for (int b = 0; b < _batches.Count; b++)
+        {
+            int want = Math.Min(_packCounts[b], MaxGibs);
+            if (_batches[b].Visible != want) { _batches[b].Mesh.VisibleInstanceCount = want; _batches[b].Visible = want; }
+        }
     }
 
     // ------------------------------------------------------------------------------------------------
+    //  Batches + meshes
+    // ------------------------------------------------------------------------------------------------
 
-    private Node3D BuildMesh(string modelPath)
+    private int EnsureBatch(string modelPath)
     {
-        // All shipped gib models load through the host loader now, including the Quake1 chunk.mdl (MdlReader
-        // added 2026-07); GeneratedChunk stays as the fallback when the loader is unwired or a parse fails.
-        // [crash fix 2026-07-26] one built tree per gib model EVER; every gib shares its mesh
-        // (SharedMeshCache) — the per-gib Md3Builder ArrayMesh (~3-7 finalizer-thread frees/s in combat)
-        // was the #2 residual churn source.
-        if (ModelLoader is not null)
+        if (_batchByModel.TryGetValue(modelPath, out int idx))
+            return idx;
+        (Mesh mesh, Material? mat, Transform3D baseXf) = ResolveMesh(modelPath);
+        var mm = new MultiMesh
         {
-            MeshInstance3D? shared = SharedMeshCache.Instantiate(modelPath, () => ModelLoader(modelPath));
-            if (shared is not null)
-                return shared;
-        }
-        return GeneratedChunk();
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            Mesh = mesh,
+            InstanceCount = Math.Max(1, MaxGibs),   // fixed forever — never resized (GPU realloc)
+            VisibleInstanceCount = 0,
+        };
+        var node = new MultiMeshInstance3D
+        {
+            Name = "gibs_" + System.IO.Path.GetFileNameWithoutExtension(modelPath),
+            Multimesh = mm,
+            MaterialOverride = mat,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            GIMode = GeometryInstance3D.GIModeEnum.Disabled,
+            // Instances scatter across the map inside one batch — never cull the lot on a stale AABB.
+            ExtraCullMargin = 16384f,
+        };
+        AddChild(node);
+        _batches.Add(new Batch { Node = node, Mesh = mm, BaseXform = baseXf });
+        idx = _batches.Count - 1;
+        _batchByModel[modelPath] = idx;
+        return idx;
     }
 
-    // The fallback chunk mesh+material is identical for every generated gib, so build it once and share the Mesh
-    // resource across all instances (only the lightweight MeshInstance3D node is per-gib). Avoids constructing a
-    // BoxMesh + StandardMaterial3D — and compiling that material's shader on first draw — on the gib's frame.
-    private static BoxMesh? _chunkMesh;
-
-    /// <summary>A small reddish chunk used for chunk.mdl and any model that fails to load.</summary>
-    private static MeshInstance3D GeneratedChunk()
+    /// <summary>The gib mesh + material + the source node's own transform (folded into every instance).
+    /// Prefers the real model via <see cref="SharedMeshCache"/> ([crash fix 2026-07-26]: one built tree per
+    /// gib model EVER); generated chunk fallback when the loader is unwired or the parse fails.</summary>
+    private (Mesh, Material?, Transform3D) ResolveMesh(string modelPath)
     {
+        if (ModelLoader is not null && SharedMeshCache.Instantiate(modelPath, () => ModelLoader(modelPath)) is { } mi)
+        {
+            Material? mat = mi.MaterialOverride;
+            if (mat is null && mi.GetSurfaceOverrideMaterialCount() > 0)
+                mat = mi.GetSurfaceOverrideMaterial(0);
+            Mesh m = mi.Mesh;
+            Transform3D xf = mi.Transform;
+            mi.QueueFree();   // only needed its resolved (mesh, material, transform)
+            return (m, mat, xf);
+        }
         _chunkMesh ??= new BoxMesh
         {
             Size = new Vector3(4f, 4f, 4f),
@@ -220,23 +359,45 @@ public sealed partial class ModelGibs : Node3D
                 Roughness = 0.9f,
             },
         };
-        return new MeshInstance3D { Mesh = _chunkMesh };
+        return (_chunkMesh, null, Transform3D.Identity);
     }
 
-    private void CullIfNeeded()
+    private static BoxMesh? _chunkMesh;
+
+    /// <summary>
+    /// One hidden instance per DISTINCT gib model for the offscreen GPU pipeline warm pass — as MULTIMESH
+    /// instances, because instanced rendering is its own vertex format and therefore its own pipeline (warming
+    /// a plain MeshInstance3D would leave the live batches' pipelines cold). Same meshes/materials the live
+    /// batches resolve; <see cref="AllModelPaths"/> keeps this set and the spawnable set from drifting apart.
+    /// The warm pass parents, renders, and frees them.
+    /// </summary>
+    public List<Node3D> BuildWarmupInstances()
     {
-        if (_liveCount <= MaxGibs)
-            return;
-        foreach (Node child in GetChildren())
+        var list = new List<Node3D>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string mdl in AllModelPaths)
         {
-            if (child is GibBody gb && GodotObject.IsInstanceValid(gb))
+            if (!seen.Add(mdl))
+                continue;
+            (Mesh mesh, Material? mat, Transform3D baseXf) = ResolveMesh(mdl);
+            var mm = new MultiMesh
             {
-                gb.QueueFree();
-                _liveCount = Math.Max(0, _liveCount - 1);
-                if (_liveCount <= MaxGibs)
-                    break;
-            }
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                Mesh = mesh,
+                InstanceCount = 1,
+                VisibleInstanceCount = 1,
+            };
+            mm.SetInstanceTransform(0, baseXf);
+            list.Add(new MultiMeshInstance3D
+            {
+                Name = "gib_warm_" + System.IO.Path.GetFileNameWithoutExtension(mdl),
+                Multimesh = mm,
+                MaterialOverride = mat,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                GIMode = GeometryInstance3D.GIModeEnum.Disabled,
+            });
         }
+        return list;
     }
 
     private static NVec3 RandomVec()
@@ -244,100 +405,4 @@ public sealed partial class ModelGibs : Node3D
 
     private static Vector3 RandomVecG()
         => new((float)GD.RandRange(-1.0, 1.0), (float)GD.RandRange(-1.0, 1.0), (float)GD.RandRange(-1.0, 1.0));
-
-    // ================================================================================================
-    //  Per-gib ballistic body (the client MOVETYPE_BOUNCE analogue from Gib_Draw)
-    // ================================================================================================
-
-    public sealed partial class GibBody : Node3D
-    {
-        public NVec3 VelocityQuake;
-        public Vector3 AngularVel;
-        public float Lifetime = 8f;
-        public float FloorZ = float.NegativeInfinity;
-        public bool DestroyOnTouch;
-        public Action? OnFreed;
-
-        /// <summary>QC <c>.gravity</c> scale (1 = full sv_gravity). The raptor shellfrags use 0.15.</summary>
-        public float GravityScale = 1f;
-
-        /// <summary>Per-tick avelocity jitter (QC <c>RaptorCBShellfragDraw: avelocity += randomvec()*15</c>); 0 = none.</summary>
-        public float AngularJitter;
-
-        /// <summary>How long the final fade-out lasts (QC gibs fade over their last second; shellfrags fade
-        /// over the cnt..nextthink window, ~1s). The alpha ramps 0→1 over this many seconds before death.</summary>
-        public float FadeDuration = 1f;
-
-        private const float Gravity = 800f;       // sv_gravity; gibs use gravity 1 (full)
-        private const float BounceFactor = 0.4f;  // gib bouncefactor-ish
-        private float _age;
-        private bool _resting;
-
-        public override void _PhysicsProcess(double delta)
-        {
-            // #30 slowmo/pause: gib tosses are Base CSQC (cl.time-driven) — scale like the casings so gibs
-            // hang frozen at slowmo 0 instead of settling on wall clock.
-            float dt = VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
-            if (dt <= 0f)
-                return; // paused — hold everything in place
-            _age += dt;
-            if (_age >= Lifetime)
-            {
-                OnFreed?.Invoke();
-                QueueFree();
-                return;
-            }
-
-            if (!_resting)
-            {
-                VelocityQuake.Z -= Gravity * GravityScale * dt;
-                // QC RaptorCBShellfragDraw: avelocity += randomvec() * 15 each draw — a continuous tumble jitter.
-                if (AngularJitter != 0f)
-                    AngularVel += RandomVecG() * (AngularJitter * dt);
-                NVec3 posQ = Coords.ToQuake(Position) + VelocityQuake * dt;
-
-                if (!float.IsNegativeInfinity(FloorZ) && posQ.Z <= FloorZ && VelocityQuake.Z < 0f)
-                {
-                    if (DestroyOnTouch)
-                    {
-                        // chunk.mdl-style: splat on first ground contact.
-                        OnFreed?.Invoke();
-                        QueueFree();
-                        return;
-                    }
-                    posQ.Z = FloorZ;
-                    VelocityQuake.Z = -VelocityQuake.Z * BounceFactor;
-                    VelocityQuake.X *= 0.6f;
-                    VelocityQuake.Y *= 0.6f;
-                    AngularVel *= 0.5f;
-                    if (VelocityQuake.Length() < 25f)
-                    {
-                        _resting = true;
-                        VelocityQuake = default;
-                    }
-                }
-                Position = Coords.ToGodot(posQ);
-                RotateObjectLocal(Vector3.Up, AngularVel.Z * dt);
-                RotateObjectLocal(Vector3.Right, AngularVel.X * dt);
-            }
-
-            // Fade over the final FadeDuration seconds (QC sets alpha = bound(0, nextthink-time, 1)).
-            float remaining = Lifetime - _age;
-            if (remaining < FadeDuration)
-                ApplyAlpha(this, Math.Clamp(remaining / Math.Max(0.001f, FadeDuration), 0f, 1f));
-        }
-
-        private static void ApplyAlpha(Node node, float a)
-        {
-            // Per-INSTANCE fade (GeometryInstance3D.Transparency, Forward+). The old per-surface material
-            // write hit the AssetSystem-cached SHARED material — and since the SharedMeshCache merge the
-            // mesh is shared by every live gib of this model AND outlives the map (cl_persist_asset_cache):
-            // all gibs faded in lockstep, and a gib dying mid-fade left the cached material near-invisible
-            // for the rest of the session. Instance transparency touches no shared resource.
-            if (node is GeometryInstance3D gi)
-                gi.Transparency = 1f - a;
-            foreach (Node child in node.GetChildren())
-                ApplyAlpha(child, a);
-        }
-    }
 }

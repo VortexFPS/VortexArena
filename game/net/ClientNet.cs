@@ -528,7 +528,13 @@ public sealed class ClientNet : IDisposable
         // Push changed replicated cl_* cvars on the QC ReplicateVars cadence (piggybacks the input clock).
         PumpReplicatedCvars(now);
 
-        InputCommand cmd = _sampleInput();
+        // [zero-hitch 2026-08-03] cn.sample/cn.predict: the ng.input hitch class showed 14-18ms with its
+        // children near zero -- the cost is INSIDE SendInput, split between the input sampler and the
+        // prediction replay (a deep unacked buffer replays many movement steps in one frame). Scoped so
+        // the census names the half; the transmit tail below is byte-writing and stays unscoped.
+        InputCommand cmd;
+        using (VortexArena.Common.Diagnostics.Prof.Sample("cn.sample"))
+            cmd = _sampleInput();
         uint seq = _inputBuffer.Push(cmd);
         DbgPush++; // net_input_trace diagnostic
         _pushedSinceSend++;
@@ -536,7 +542,8 @@ public sealed class ClientNet : IDisposable
         // Re-predict from the last authoritative state with the freshly-extended input history so the local
         // view reflects this tick immediately (client-side prediction). We reconcile against the last server
         // state we have; if none yet, the reconciler simply replays from the current predicted state.
-        Predict(now);
+        using (VortexArena.Common.Diagnostics.Prof.Sample("cn.predict"))
+            Predict(now);
 
         // Send the redundant tail (unreliable): a single dropped datagram won't strand an input. Lead with the
         // newest snapshot we decoded so the server can delta the next snapshot against a baseline we hold. The

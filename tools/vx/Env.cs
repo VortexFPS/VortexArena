@@ -126,7 +126,7 @@ internal static class Env
     /// and the word, and a too-strict pattern degrades silently into "hangs until the cap".</para>
     /// </summary>
     internal static int ExecUntilDone(string exe, IEnumerable<string> args, string doneMarker,
-                                      int graceSeconds = 2, int capSeconds = 600)
+                                      int graceSeconds = 2, int capSeconds = 600, string? settleDir = null)
     {
         var psi = new ProcessStartInfo(exe)
         {
@@ -168,11 +168,62 @@ internal static class Env
         if (!p.HasExited)
         {
             if (done.IsSet)
-                Thread.Sleep(graceSeconds * 1000);         // let it finish flushing to disk before the kill
+            {
+                // Let it finish flushing before the kill. A FIXED grace is not enough for an export:
+                // Godot's .NET export copies the whole assembly set (185+ dlls) into
+                // data_<app>_<platform>/ AFTER the savepack marker, and killing 2 s in truncated that
+                // copy nondeterministically — a release build missing System.Security.Cryptography.dll
+                // (StartListenServer died at MasterAnnounce) with a leftover VortexArena.tmp beside the
+                // exe. So when the caller names the artifact dir, wait until it QUIESCES: no *.tmp
+                // remains and nothing has been (re)written for graceSeconds, capped at 120 s.
+                if (settleDir is not null && Directory.Exists(settleDir))
+                {
+                    var settle = System.Diagnostics.Stopwatch.StartNew();
+                    long last = DirNewestWriteTicks(settleDir);
+                    int stableMs = 0;
+                    while (settle.Elapsed.TotalSeconds < 120 && !p.HasExited)
+                    {
+                        Thread.Sleep(500);
+                        long now = DirNewestWriteTicks(settleDir);
+                        bool tmpLeft = Directory.EnumerateFiles(settleDir, "*.tmp", SearchOption.AllDirectories).Any();
+                        if (!tmpLeft && now == last)
+                        {
+                            stableMs += 500;
+                            if (stableMs >= graceSeconds * 1000) break;
+                        }
+                        else
+                        {
+                            stableMs = 0;
+                            last = now;
+                        }
+                    }
+                }
+                else
+                {
+                    Thread.Sleep(graceSeconds * 1000);
+                }
+            }
             try { p.Kill(entireProcessTree: true); } catch { /* raced us to the exit */ }
         }
         p.WaitForExit(10_000);
         return p.HasExited ? p.ExitCode : -1;
+    }
+
+    /// <summary>Newest LastWriteTimeUtc (ticks) across every file under <paramref name="dir"/> — the
+    /// change detector for <see cref="ExecUntilDone"/>'s settle wait. 0 for an empty/unreadable tree.</summary>
+    private static long DirNewestWriteTicks(string dir)
+    {
+        long newest = 0;
+        try
+        {
+            foreach (string f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                long t = File.GetLastWriteTimeUtc(f).Ticks;
+                if (t > newest) newest = t;
+            }
+        }
+        catch { /* mid-copy races are exactly what the next poll is for */ }
+        return newest;
     }
 
     /// <summary>

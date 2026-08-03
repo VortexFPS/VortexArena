@@ -325,9 +325,13 @@ internal static class Wrappers
             // ExecUntilDone, not Exec: headless --export-release routinely never exits after a SUCCESSFUL
             // export. See Env.ExecUntilDone for the evidence; without it this command hangs forever on
             // Windows, which is what run-release.sh existed to work around.
+            // settleDir: the savepack marker fires BEFORE the .NET export copies its assembly set —
+            // ExecUntilDone waits for the artifact dir to quiesce so the kill can't truncate that copy
+            // (a build missing one runtime dll dies at StartListenServer; see ExecUntilDone's note).
             int rc = Env.ExecUntilDone(godot,
                 ["--headless", "--path", Env.RepoRoot, "--export-release", preset, outPath],
-                doneMarker: @"DONE.*savepack");
+                doneMarker: @"DONE.*savepack",
+                settleDir: Path.GetDirectoryName(outPath));
 
             // Godot's headless export exits NON-ZERO on a fully successful export often enough that
             // run-release.sh stopped trusting the code entirely and gated on the artifact instead — a

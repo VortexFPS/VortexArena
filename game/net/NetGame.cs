@@ -1275,7 +1275,7 @@ public sealed partial class NetGame : Node3D
             _serverWorld!.Simulation.TickGate = _simGate;
             _serverThread = new ServerThread(
                 _serverWorld!, _server!,
-                static () => VortexArena.Engine.Simulation.SimulationLoop.TicRate);
+                () => _serverWorld!.Simulation.TickSeconds);   // live sys_ticrate paces the worker's sleep
             _serverThread.Start();
             GD.Print("[NetGame] sv_threaded 1 — server simulation running on a dedicated worker thread (XG-ServerSim).");
         }
@@ -1385,15 +1385,20 @@ public sealed partial class NetGame : Node3D
         int target = DedicatedLoopTarget();
         Godot.Engine.MaxFps = target;
         _dedicatedCapApplied = target;
-        int tickHz = (int)MathF.Round(1f / VortexArena.Engine.Simulation.SimulationLoop.TicRate); // 72
+        int tickHz = LiveTickHz();
         int pinned = (int)(_serverWorld?.Services.Cvars.GetFloat("sv_dedicated_fps") ?? 0f);
         GD.Print($"[NetGame] dedicated loop cap: Engine.MaxFps {target} " +
             $"({(pinned > 0 ? "sv_dedicated_fps" : $"sim tickrate {tickHz} Hz")}).");
     }
 
+    /// <summary>The LIVE server tick rate in Hz (sys_ticrate-driven), engine default when no world.</summary>
+    private int LiveTickHz()
+        => (int)MathF.Round(1f / (_serverWorld?.Simulation.TickSeconds
+                                  ?? VortexArena.Engine.Simulation.SimulationLoop.TicRate));
+
     private int DedicatedLoopTarget()
     {
-        int tickHz = (int)MathF.Round(1f / VortexArena.Engine.Simulation.SimulationLoop.TicRate); // 72
+        int tickHz = LiveTickHz();
         int pinned = (int)(_serverWorld?.Services.Cvars.GetFloat("sv_dedicated_fps") ?? 0f);
         return pinned > 0 ? pinned : tickHz;
     }
@@ -3867,7 +3872,7 @@ public sealed partial class NetGame : Node3D
         // cl_predictfire defaults ON: unset GetString reads "" → treat anything but "0" as on.
         _predictFireCv = (_sharedCvars?.GetString("cl_predictfire") ?? "") != "0";
         _perFrameInputCv = _sharedCvars?.GetFloat("cl_movement_perframe") is float pf && pf != 0f;
-        _netFpsCv = _sharedCvars?.GetFloat("cl_netfps") is float nf && nf > 0f ? nf : 72f;
+        _netFpsCv = _sharedCvars?.GetFloat("cl_netfps") is float nf && nf > 0f ? nf : 60f; // paired with the 60 Hz tick
         _sendAllCv = _sharedCvars?.GetFloat("cl_movement_send_all") is float sa && sa != 0f;
         // cl_netclock_smooth defaults ON (unset → on): treat anything but "0" as enabled.
         _netClockSmoothCv = (_sharedCvars?.GetString("cl_netclock_smooth") ?? "") != "0";
@@ -4534,7 +4539,10 @@ public sealed partial class NetGame : Node3D
                 // display frame rate (DeltaTime = TicRate), so the server advances this player at true wall-clock
                 // speed. Accumulate real delta and drain it in fixed quanta; cap the backlog so a hitch can't
                 // trigger a spiral-of-death.
-                const float tic = VortexArena.Engine.Simulation.SimulationLoop.TicRate;
+                // The LIVE server tick (handshake-replicated sys_ticrate) - this legacy path exists to
+                // emit exactly one command per SERVER tick, so it must follow the server's actual rate.
+                float tic = _client.ServerTickRate > 0f
+                    ? 1f / _client.ServerTickRate : VortexArena.Engine.Simulation.SimulationLoop.TicRate;
                 _inputDeltaTime = tic;
                 _inputAccum += dt * slowmo; // slowmo scales the client's command cadence to match the server's tick rate
                 if (_inputAccum > MaxInputBacklog) _inputAccum = MaxInputBacklog;

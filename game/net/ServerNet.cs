@@ -713,6 +713,11 @@ public sealed class ServerNet : IDisposable
         //     opt-in knob: the 2026-07-11 playtest found no felt benefit and timedrop + the soft cap already
         //     bound catch-up cost.
         var cv = _world.Services.Cvars;
+        // DP sys_ticrate, read live per host frame exactly like DP's host loop (sv.frametime = sys_ticrate):
+        // a console change retunes the next tick. Unset/0 falls back to the engine default (the setter clamps).
+        float ticrate = cv.GetFloat("sys_ticrate");
+        _world.Simulation.TickSeconds = ticrate > 0f ? ticrate : VortexArena.Engine.Simulation.SimulationLoop.TicRate;
+        _world.RefreshZeroInput();   // the default InputProvider's shared zero input follows the live tick too
         // The engine keeps wall-clock APIs out of the sim source (DeterminismTests) — the host injects the clock.
         _world.Simulation.WallClock ??= static () =>
             System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
@@ -2075,7 +2080,7 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.Reset();
         _scratchWriter.WriteByte((byte)NetControl.HandshakeAccept);
         _scratchWriter.WriteUShort(st.NetId);                     // your net entity id
-        _scratchWriter.WriteFloat(1f / SimulationLoopTicRate);     // server tick RATE in Hz (1/dt) for client timing
+        _scratchWriter.WriteFloat(1f / _world.Simulation.TickSeconds); // LIVE server tick RATE in Hz (1/dt) for client timing
         _scratchWriter.WriteString(_serverName);                   // server display name (for the client UI)
         // The current map + gametype so a pure remote client can load the BSP itself — rendering the world and
         // building its own prediction collision (NetGame.LoadClientMapFromServer). ClientNet.HandleAccept reads
@@ -2151,7 +2156,7 @@ public sealed class ServerNet : IDisposable
     private IMovementInput ProvideInput(Player p)
     {
         if (!_byPlayer.TryGetValue(p, out PeerState? st))
-            return ZeroInput;
+            return LiveZero();
 
         // QC applies exactly ONE usercmd per player per server frame; movement (SV_PlayerPhysics) and the weapon
         // driver (W_WeaponFrame) both read that same command. GameWorld calls InputProvider twice per tick — once
@@ -2262,9 +2267,9 @@ public sealed class ServerNet : IDisposable
         }
         else
         {
-            st.TickInput = ZeroInput;
+            st.TickInput = LiveZero();
             st.TickInputTime = now;
-            return ZeroInput;
+            return LiveZero();
         }
 
         IMovementInput resolved = ToMovementInput(cmd);
@@ -2364,9 +2369,9 @@ public sealed class ServerNet : IDisposable
             }
             else
             {
-                st.TickInput = ZeroInput;
+                st.TickInput = LiveZero();
                 st.TickInputTime = now;
-                return ZeroInput; // never had input → nothing to drive the weapon frame either
+                return LiveZero(); // never had input → nothing to drive the weapon frame either
             }
         }
 
@@ -2376,7 +2381,7 @@ public sealed class ServerNet : IDisposable
         InputCommand mergedCmd = last;
         mergedCmd.Buttons = (int)mergedButtons;
         mergedCmd.Impulse = 0;
-        mergedCmd.DeltaTime = SimulationLoopTicRate;
+        mergedCmd.DeltaTime = _world.Simulation.TickSeconds;   // one merged command spans exactly this tick
         IMovementInput merged = ToMovementInput(mergedCmd);
 
         // +use rising edge from the merged state (once per tick, like the legacy path).
@@ -2421,9 +2426,19 @@ public sealed class ServerNet : IDisposable
         return st.TickBatch; // per-frame: the real commands (possibly empty → zero moves, never fabricated)
     }
 
-    // Boxed once: typed as the interface so the hot ProvideInput paths return/store the same object instead of
-    // re-boxing the struct on every assignment to an IMovementInput-typed field/return.
-    private static readonly IMovementInput ZeroInput = new MovementInput { FrameTime = SimulationLoopTicRate };
+    // Boxed ONCE into the interface (the hot ProvideInput paths return/store the same boxed object instead
+    // of re-boxing the struct on every IMovementInput-typed assignment) and RE-boxed only when sys_ticrate
+    // changes the live tick length — one allocation per rate change, zero steady-state. Single-writer: only
+    // the server tick thread calls LiveZero.
+    private static IMovementInput ZeroInput = new MovementInput { FrameTime = SimulationLoopTicRate };
+
+    /// <summary>The shared boxed zero input, FrameTime following the live tick (sys_ticrate).</summary>
+    private IMovementInput LiveZero()
+    {
+        if (ZeroInput.FrameTime != _world.Simulation.TickSeconds)
+            ZeroInput = new MovementInput { FrameTime = _world.Simulation.TickSeconds };
+        return ZeroInput;
+    }
 
     // Scratch for the legacy input-queue trim (one-shot impulses carried by dropped commands); ProvideInput
     // runs on the sim thread only, so one shared buffer is safe.

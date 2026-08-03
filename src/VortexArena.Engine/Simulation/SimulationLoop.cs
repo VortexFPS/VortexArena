@@ -22,8 +22,22 @@ namespace VortexArena.Engine.Simulation;
 /// </summary>
 public sealed class SimulationLoop
 {
-    /// <summary>sys_ticrate = 1/72 s ≈ 0.0138889 (sv_main.c:166). The fixed tick length.</summary>
+    /// <summary>The COMPILE-TIME DEFAULT tick length — DP's engine default sys_ticrate 1/72 s ≈ 0.0138889
+    /// (sv_main.c:166). The LIVE tick length is <see cref="TickSeconds"/>, driven by the sys_ticrate cvar
+    /// (ServerNet.StepWorld reads it per frame, exactly DP's host loop). Tests and headless fallbacks that
+    /// never touch the cvar keep this value, so their determinism is unchanged.</summary>
     public const float TicRate = 1f / 72f;
+
+    private float _tickSeconds = TicRate;
+
+    /// <summary>The live tick length in seconds (DP sys_ticrate → sv.frametime). Clamped to DP's sane band
+    /// [1 ms, 100 ms] — the same bound DP applies so a typo'd cvar can't stall or spin the server. Applied on
+    /// the NEXT tick boundary (mid-Advance ticks that already ran keep their length).</summary>
+    public float TickSeconds
+    {
+        get => _tickSeconds;
+        set => _tickSeconds = float.IsFinite(value) && value > 0f ? System.Math.Clamp(value, 0.001f, 0.1f) : TicRate;
+    }
 
     /// <summary>DP sv_maxphysicsframesperserverframe-style HARD cap: never run more than this many ticks per
     /// Advance, and the spiral-of-death backlog threshold past which the accumulator is dropped.</summary>
@@ -217,11 +231,11 @@ public sealed class SimulationLoop
         bool budgeted = CatchupWallBudgetSeconds > 0f && WallClock is not null;
         double budgetStart = budgeted ? WallClock!() : 0.0;
         int ticks = 0;
-        while (_accumulator >= TicRate && ticks < softLimit)
+        while (_accumulator >= _tickSeconds && ticks < softLimit)
         {
             if (ticks > 0 && budgeted && WallClock!() - budgetStart >= CatchupWallBudgetSeconds)
                 break; // owed time stays banked: later frames drain it, or BacklogDropSeconds sheds it
-            _accumulator -= TicRate;
+            _accumulator -= _tickSeconds;
             if (TickGate is null)
                 Tick();
             else
@@ -232,7 +246,7 @@ public sealed class SimulationLoop
         // Spiral-of-death guard: drop the backlog only when it has grown past the HARD cap's worth of ticks —
         // i.e. the machine genuinely can't keep up, not a one-frame catch-up being smoothed by the soft cap.
         // A backlog within MaxTicksPerAdvance is preserved and drained over the next render frames.
-        if (_accumulator > MaxTicksPerAdvance * TicRate)
+        if (_accumulator > MaxTicksPerAdvance * _tickSeconds)
         {
             // Forensics: a drop means sim time just fell permanently behind wall clock — the event that (pre-fix)
             // turned a client input burst into standing input latency (see InputQueuePolicy). Visible in hitch dumps.
@@ -250,13 +264,13 @@ public sealed class SimulationLoop
     /// <summary>Run exactly one fixed tick of SV_Physics. Public so tests can step deterministically.</summary>
     public void Tick()
     {
-        FrameTime = TicRate;
-        _physics.FrameTime = TicRate;
+        FrameTime = _tickSeconds;
+        _physics.FrameTime = _tickSeconds;
         _physics.Time = Time;
 
         // publish the clock for QC-facing code (time/frametime globals)
         _services.ClockImpl.Time = Time;
-        _services.ClockImpl.FrameTime = TicRate;
+        _services.ClockImpl.FrameTime = _tickSeconds;
 
         // 1) StartFrame
         using (Prof.Sample("sim.start"))

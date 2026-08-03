@@ -75,6 +75,9 @@ public sealed class BotPopulation
     private float _lastSkillCvar = float.NaN; // QC the `skill` global resync (bot.qc:725-736)
     private int _tokenIndex;             // QC bot_strategytoken (index into _brains)
     private bool _tokenTaken = true;     // QC bot_strategytoken_taken (true → rotate next frame)
+
+    /// <summary>QC <c>bot_waypoint_queue_owner</c>: the one bot currently running an unstuck reachability scan.</summary>
+    private BotBrain? _unstuckQueueOwner;
     private int _seedCounter = 1;
     private float _autoskillNextThink;   // QC autoskill_nextthink (5 s autoskill recheck clock)
     private float _nextDangerTime;        // QC botframe_nextdangertime (danger-detection recompute clock)
@@ -104,7 +107,9 @@ public sealed class BotPopulation
         public bool Predicted => Input.Predicted;
     }
     private readonly Dictionary<Player, TickInput> _tickInputs = new();
-    private static readonly IMovementInput ZeroInput = new MovementInput { FrameTime = Engine.Simulation.SimulationLoop.TicRate };
+    // Boxed ONCE into the interface (no per-call boxing on the return) and RE-boxed only when sys_ticrate
+    // changes the live tick length - one allocation per rate change. Single-writer: the server tick thread.
+    private static IMovementInput ZeroInput = new MovementInput { FrameTime = Engine.Simulation.SimulationLoop.TicRate };
 
     /// <summary>The live brains, in connect order (QC bot_list). Exposed for tests/diagnostics.</summary>
     public IReadOnlyList<BotBrain> Brains => _brains;
@@ -294,7 +299,11 @@ public sealed class BotPopulation
     public IMovementInput InputFor(Player p, float dt)
     {
         if (!_byPlayer.TryGetValue(p, out BotBrain? brain))
+        {
+            if (ZeroInput.FrameTime != _world.Simulation.TickSeconds)  // follow the live tick (sys_ticrate)
+                ZeroInput = new MovementInput { FrameTime = _world.Simulation.TickSeconds };
             return ZeroInput;
+        }
         if (!_tickInputs.TryGetValue(p, out TickInput? cache))
             _tickInputs[p] = cache = new TickInput();
         float now = _world.Time;
@@ -534,6 +543,22 @@ public sealed class BotPopulation
             MovementHold = MovementHeld,
         };
         brain.OnStrategyTokenUsed = () => _tokenTaken = true;
+        // QC bot_waypoint_queue_owner (navigation.qc:1925-1932): one server-wide unstuck scan at a time, so a
+        // room full of wedged bots costs one reachability sweep rather than N.
+        brain.TryOwnUnstuckQueueHook = b =>
+        {
+            if (_unstuckQueueOwner is null || ReferenceEquals(_unstuckQueueOwner, b) || _unstuckQueueOwner.Bot.IsFreed)
+            {
+                _unstuckQueueOwner = b;
+                return true;
+            }
+            return false;
+        };
+        brain.ReleaseUnstuckQueueHook = b =>
+        {
+            if (ReferenceEquals(_unstuckQueueOwner, b))
+                _unstuckQueueOwner = null;
+        };
         _brains.Add(brain);
         _byPlayer[p] = brain;
         if (_currentBots >= 0)

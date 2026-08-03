@@ -360,6 +360,9 @@ public sealed class GameWorld
     /// </summary>
     public Func<Player, IMovementInput> InputProvider { get; set; } = static _ => ZeroInput;
 
+    /// <summary>Refresh the shared zero input's FrameTime to the live tick before a tick consumes it.</summary>
+    public void RefreshZeroInput() => ZeroInput.FrameTime = Simulation.TickSeconds;
+
     /// <summary>
     /// Per-frame (variable-dt) mode: the per-command movement batch for this player THIS tick — one entry per
     /// client render frame, each carrying its own dt — or null for the legacy one-command-per-tick path. When
@@ -369,7 +372,9 @@ public sealed class GameWorld
     /// </summary>
     public Func<Player, IReadOnlyList<IMovementInput>?>? TickMovementBatch { get; set; }
 
-    private static readonly MovementInput ZeroInput = new() { FrameTime = SimulationLoop.TicRate };
+    // FrameTime refreshed per use from the LIVE tick (sys_ticrate); single-writer (the server tick).
+    // NOT readonly: MovementInput is a struct, so RefreshZeroInput's field write needs a mutable field.
+    private static MovementInput ZeroInput = new() { FrameTime = SimulationLoop.TicRate };
 
     /// <summary>
     /// True when this world runs on the process-wide SHARED cvar store (the menu/console/client store handed in

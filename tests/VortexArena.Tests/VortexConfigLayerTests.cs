@@ -144,6 +144,20 @@ public class VortexConfigLayerTests
     /// upstream value and the point is that the layer's later <c>set</c> beats it. A layer that stopped
     /// loading would leave nades throwing crooked and nothing else would fail.
     /// </summary>
+    /// <summary>
+    /// The server runs 60 Hz (Bryan 2026-08-03). sys_ticrate lineage: DP engine default 0.0138889 (72.2 Hz),
+    /// Xonotic ships 0.015625 (64 Hz) in xonotic-common.cfg; the Vortex layer sets 0.0166667. Loads the REAL
+    /// server chain like the nade test, so a layer that stopped loading fails here loudly.
+    /// </summary>
+    [Fact]
+    public void Layer_Sets_The_60Hz_Tick()
+    {
+        RequireCoreContent();
+        var cvars = new CvarService();
+        ConfigLoader.LoadServerConfig(cvars, DiskReader);
+        Assert.Equal(0.0166667f, cvars.GetFloat("sys_ticrate"), 5);
+    }
+
     [Fact]
     public void Layer_Centers_The_Nade_Throw()
     {

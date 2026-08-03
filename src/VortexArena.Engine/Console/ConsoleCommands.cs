@@ -38,6 +38,27 @@ public sealed class ConsoleCommands
     private static readonly string[] InterpreterBuiltins =
         { "set", "seta", "set_temp", "seta_temp", "setp", "alias", "unalias", "exec", "unset", "cvar_reset" };
 
+    /// <summary>
+    /// Help strings for <see cref="InterpreterBuiltins"/> (DP's <c>Cmd_AddCommand</c> descriptions for the same
+    /// verbs). They live here rather than on the interpreter because the interpreter handles them inside its
+    /// dispatch switch — they are never registered, so there is no <c>RegisterCommand</c> call to hang a
+    /// description off. <c>search</c> and Tab completion read them through <see cref="InterpreterBuiltinHelp"/>.
+    /// </summary>
+    private static string InterpreterBuiltinHelp(string name) => name switch
+    {
+        "set" => "create or change a cvar: set <name> <value> [\"description\"]",
+        "seta" => "like set, but also marks the cvar to be saved to the user config",
+        "set_temp" => "like set, but the value is restored at the end of the map",
+        "seta_temp" => "like seta, but the value is restored at the end of the map",
+        "setp" => "like set, but marks the cvar private (its value is not shown to other players)",
+        "alias" => "create a script function: alias <name> \"<commands>\" (no body removes it)",
+        "unalias" => "remove an alias created with alias",
+        "exec" => "execute a script file: exec <file.cfg>",
+        "unset" => "remove a cvar entirely",
+        "cvar_reset" => "reset a cvar to its default value",
+        _ => "",
+    };
+
     /// <param name="interp">The shared command buffer to register on (also gets the unknown-command router).</param>
     /// <param name="cvars">The cvar store the cvar builtins act on (the front-end's shared store).</param>
     /// <param name="print">Sink for one line of console output.</param>
@@ -62,50 +83,102 @@ public sealed class ConsoleCommands
         _remoteSender = remoteSender;
 
         Register();
+
+        // The Tab-completion engine (DP Con_CompleteCommandLine). Built here because it needs exactly the three
+        // things this class already holds — the command buffer, the cvar store, and the builtin help table — and
+        // because the overlay should have one obvious place to reach it. Its filesystem/map/key hooks are wired
+        // by the host afterwards; without them it still does the full command/cvar/alias completion.
+        Completion = new CommandCompletion(interp, cvars, InterpreterBuiltins, InterpreterBuiltinHelp);
     }
+
+    /// <summary>Tab completion over this console's commands, cvars and aliases (DP <c>Con_CompleteCommandLine</c>).
+    /// Wire its <see cref="CommandCompletion.FileSearch"/>/<see cref="CommandCompletion.MapNames"/>/
+    /// <see cref="CommandCompletion.KeyNames"/> hooks from the host to get argument completion too.</summary>
+    public CommandCompletion Completion { get; }
 
     private void Register()
     {
-        _interp.RegisterCommand("echo", a => _print(JoinTail(a, 1)));
-        _interp.RegisterCommand("clear", _ => _clear?.Invoke());
+        // Every registration carries DP's Cmd_AddCommand fourth argument — the one-line help. It is what
+        // `search`/`apropos` matches keywords against and what Tab completion prints beside each candidate;
+        // without it the whole command half of the console is undiscoverable.
+        _interp.RegisterCommand("echo", a => _print(JoinTail(a, 1)),
+            "print a message to the console");
+        _interp.RegisterCommand("clear", _ => _clear?.Invoke(),
+            "clear the console scrollback");
 
-        _interp.RegisterCommand("toggle", CmdToggle);
-        _interp.RegisterCommand("cycle", CmdToggle); // cycle <cvar> v1 v2 … — same advance-through-values logic
-        _interp.RegisterCommand("inc", a => CmdIncDec(a, +1f));
-        _interp.RegisterCommand("dec", a => CmdIncDec(a, -1f));
+        _interp.RegisterCommand("toggle", CmdToggle,
+            "flip a cvar between 0 and 1, or step it through the listed values: toggle <cvar> [value1 value2 ...]");
+        _interp.RegisterCommand("cycle", CmdToggle, // cycle <cvar> v1 v2 … — same advance-through-values logic
+            "step a cvar through the listed values, wrapping at the end: cycle <cvar> <value1> <value2> ...");
+        _interp.RegisterCommand("inc", a => CmdIncDec(a, +1f),
+            "increase a cvar by 1, or by the given step: inc <cvar> [step]");
+        _interp.RegisterCommand("dec", a => CmdIncDec(a, -1f),
+            "decrease a cvar by 1, or by the given step: dec <cvar> [step]");
 
-        _interp.RegisterCommand("cvar", CmdCvar);
-        _interp.RegisterCommand("cvarlist", CmdCvarList);
-        _interp.RegisterCommand("cvar_orphans", CmdCvarOrphans);
-        _interp.RegisterCommand("cmdlist", CmdCmdList);
-        _interp.RegisterCommand("apropos", CmdApropos);
-        _interp.RegisterCommand("search", CmdApropos); // friendlier alias for apropos (search commands+cvars by substring)
-        _interp.RegisterCommand("help", CmdHelp);
+        _interp.RegisterCommand("cvar", CmdCvar,
+            "print a cvar's value and default, or set it: cvar <name> [value]");
+        _interp.RegisterCommand("cvarlist", CmdCvarList,
+            "list every cvar, optionally filtered by a substring: cvarlist [filter]");
+        _interp.RegisterCommand("cvar_orphans", CmdCvarOrphans,
+            "list cvars some code read while they were absent from the store (they silently returned 0/\"\")");
+        _interp.RegisterCommand("cvar_changes", CmdCvarChanges,
+            "list every cvar whose value differs from the shipped default — what your setup actually changes: "
+            + "cvar_changes [filter]");
+        _interp.RegisterCommand("diff", CmdCvarChanges, // friendlier name for the same report
+            "list every cvar whose value differs from the shipped default: diff [filter]");
+        _interp.RegisterCommand("cmdlist", CmdCmdList,
+            "list every console command, optionally filtered by a substring: cmdlist [filter]");
+        _interp.RegisterCommand("apropos", CmdApropos,
+            "find cvars and commands by keyword, searching names AND descriptions; best match printed last");
+        _interp.RegisterCommand("search", CmdApropos, // friendlier name for apropos
+            "find cvars and commands by keyword, searching names AND descriptions; best match printed last");
+        _interp.RegisterCommand("help", CmdHelp,
+            "describe a command or cvar, or print the console's own quick reference: help [name]");
 
-        _interp.RegisterCommand("bind", CmdBind);
-        _interp.RegisterCommand("unbind", a => { if (a.Count >= 2) BindTable.Unbind(a[1]); });
-        _interp.RegisterCommand("unbindall", _ => BindTable.UnbindAll());
-        _interp.RegisterCommand("bindlist", _ => CmdBindList());
+        _interp.RegisterCommand("bind", CmdBind,
+            "bind a key to a command, or show what it is bound to: bind <key> [command]");
+        _interp.RegisterCommand("unbind", a => { if (a.Count >= 2) BindTable.Unbind(a[1]); },
+            "remove the binding from a key: unbind <key>");
+        _interp.RegisterCommand("unbindall", _ => BindTable.UnbindAll(),
+            "remove all key bindings");
+        _interp.RegisterCommand("bindlist", _ => CmdBindList(),
+            "list every bound key and the command it runs");
 
-        _interp.RegisterCommand("name", CmdName);
-        _interp.RegisterCommand("developer", CmdDeveloper);
+        _interp.RegisterCommand("name", CmdName,
+            "set your player name: name <newname>");
+        _interp.RegisterCommand("developer", CmdDeveloper,
+            "set the developer log level (0 = normal, 1+ reveals buffered debug/trace lines in the console)");
 
         // DP/QC `cl_cmd sendcvar <name>` (qcsrc/client/command/cl_cmd.qc:395-428, minus the cl_cmd prefix —
         // the menu's "Apply immediately" button and the QC binds issue the bare `sendcvar cl_weaponpriority`):
         // read the cvar from the local store and push it to the live game as `sentcvar <name> "<value>"` (the
         // server-side per-client replication command). The QC client-side cl_weaponpriority W_FixWeaponOrder
         // pre-send fixup is skipped — the server applies the same fixup on receive (Commands.CmdSentCvar).
-        _interp.RegisterCommand("sendcvar", CmdSendCvar);
+        _interp.RegisterCommand("sendcvar", CmdSendCvar,
+            "send a replicated client cvar's current value to the server: sendcvar <cvar>");
 
         // ---- generic commands (DP common/command/generic.qc + rpn.qc) — present in ALL programs (menu/
         //      client/server) in QC, so they live on the SHARED console surface here too. Pure cvar/string ops.
-        _interp.RegisterCommand("rpn", a => Rpn.Run(a, _cvars, _print));
-        _interp.RegisterCommand("addtolist", CmdAddToList);
-        _interp.RegisterCommand("removefromlist", CmdRemoveFromList);
-        _interp.RegisterCommand("maplist", CmdMaplist);
-        _interp.RegisterCommand("nextframe", CmdNextFrame);
-        _interp.RegisterCommand("settemp", CmdSettemp);
-        _interp.RegisterCommand("settemp_restore", CmdSettempRestore);
+        _interp.RegisterCommand("rpn", a => Rpn.Run(a, _cvars, _print),
+            "reverse-polish calculator over cvars: rpn <expression>");
+        _interp.RegisterCommand("addtolist", CmdAddToList,
+            "append a value to a space-separated list cvar if not already present: addtolist <cvar> <value>");
+        _interp.RegisterCommand("removefromlist", CmdRemoveFromList,
+            "remove a value from a space-separated list cvar: removefromlist <cvar> <value>");
+        _interp.RegisterCommand("maplist", CmdMaplist,
+            "edit the g_maplist rotation: maplist add|remove|shuffle|cleanup [map]");
+        _interp.RegisterCommand("nextframe", CmdNextFrame,
+            "run a command on the next server frame: nextframe <command>");
+        _interp.RegisterCommand("settemp", CmdSettemp,
+            "set a cvar, remembering its old value for settemp_restore: settemp <cvar> <value>");
+        _interp.RegisterCommand("settemp_restore", CmdSettempRestore,
+            "restore every cvar changed by settemp to the value it had before");
+
+        // ---- console-surface commands (DP console.c): dump the scrollback, list/replay the input history.
+        _interp.RegisterCommand("condump", CmdCondump,
+            "write the console scrollback to a file: condump [filename] (default condump.txt)");
+        _interp.RegisterCommand("history", CmdHistory,
+            "list the console input history; `history -c` clears it, `history <n>` shows the last n lines");
 
         // route everything else (a gameplay/client command like kill/say/team) to the live game, and persist
         // `seta` to the user config the way DP's CVAR_SAVE flag does.
@@ -153,15 +226,23 @@ public sealed class ConsoleCommands
         PrintCvar(name);
     }
 
-    private void PrintCvar(string name)
+    /// <summary>
+    /// DP <c>Cvar_PrintHelp</c> (cvar.c:274): <c>^3name^7 is "value" ["default"] description</c>. The name is
+    /// yellow, the description trails the value, and the default is always shown — DP prints both
+    /// unconditionally so a glance tells you whether the value is stock. <paramref name="full"/> false drops the
+    /// description (DP's <c>full</c> flag; the terse <c>cvarlist</c> uses it).
+    /// </summary>
+    private void PrintCvar(string name, bool full = true)
     {
         string val = _cvars.GetString(name);
         string def = _cvars.GetDefault(name);
-        _print(string.Equals(val, def, StringComparison.Ordinal) || string.IsNullOrEmpty(def)
-            ? $"\"{name}\" is \"{val}\""
-            : $"\"{name}\" is \"{val}\" [default \"{def}\"]");
+        string desc = full ? _cvars.GetDescription(name) : "";
+        string line = $"^3{name}^7 is \"{val}^7\" [\"{def}^7\"]";
+        _print(desc.Length > 0 ? line + " " + desc : line);
     }
 
+    /// <summary>DP <c>Cvar_List_f</c>: every cvar (optionally prefix/substring filtered) in
+    /// <c>Cvar_PrintHelp</c> form — name, value, default, description.</summary>
     private void CmdCvarList(IReadOnlyList<string> a)
     {
         string? filter = a.Count >= 2 ? a[1] : null;
@@ -170,7 +251,7 @@ public sealed class ConsoleCommands
         {
             if (filter != null && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
                 continue;
-            _print($"{name} \"{_cvars.GetString(name)}\"");
+            PrintCvar(name);
             n++;
         }
         _print($"{n} cvar(s)");
@@ -192,45 +273,296 @@ public sealed class ConsoleCommands
         _print($"{orphans.Count} cvar(s) read but never registered or set (default to 0/\"\", hidden from cvarlist).");
     }
 
+    /// <summary>
+    /// <c>cvar_changes</c> / <c>diff</c> — QC's <c>cvar_changes</c> (server/world.qc builds the same report for
+    /// the server browser): every cvar whose live value differs from the baseline the shipped cfg tree locked in
+    /// at boot. In other words, everything your <c>config.cfg</c>, this session's console edits, the menu and any
+    /// <c>--cvar</c> pin have actually changed — the answer to "what is different about MY install".
+    ///
+    /// <para>Split into two blocks, because they answer different questions. <b>Saved</b> is what
+    /// <c>config.cfg</c> will be written with (DP <c>Cvar_WriteVariables</c>: archived AND changed), i.e. what
+    /// follows you to the next launch. <b>Session only</b> is changed but NOT archived — a console <c>set</c> on
+    /// a server-op or debug cvar, or a <c>--cvar</c> pin — which is exactly the class of change that makes a
+    /// machine behave oddly and then evaporates on restart, so it is worth seeing separately.</para>
+    /// </summary>
+    private void CmdCvarChanges(IReadOnlyList<string> a)
+    {
+        string? filter = a.Count >= 2 ? a[1] : null;
+
+        var saved = new List<string>();
+        var session = new List<string>();
+        foreach (string name in _cvars.Names.OrderBy(x => x, StringComparer.Ordinal))
+        {
+            if (filter != null && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+            if (!_cvars.IsModified(name))
+                continue;
+            (_cvars.IsArchived(name) ? saved : session).Add(name);
+        }
+
+        if (saved.Count == 0 && session.Count == 0)
+        {
+            _print(filter is null
+                ? "No cvars differ from their shipped defaults — this is a stock configuration."
+                : $"No cvars matching \"{filter}\" differ from their shipped defaults.");
+            return;
+        }
+
+        if (saved.Count > 0)
+        {
+            _print($"^5{saved.Count}^7 saved to your config (persist across launches):");
+            foreach (string name in saved)
+                _print("  " + FormatChange(name));
+        }
+        if (session.Count > 0)
+        {
+            _print($"^5{session.Count}^7 changed for this session only (not saved — a console `set`, "
+                 + "a --cvar pin, or a server-op/debug cvar):");
+            foreach (string name in session)
+                _print("  " + FormatChange(name));
+        }
+    }
+
+    /// <summary>One <c>cvar_changes</c> row: <c>name  "now"  (default "was")  description</c>.</summary>
+    private string FormatChange(string name)
+    {
+        string desc = _cvars.GetDescription(name);
+        string line = $"^3{name}^7 \"{_cvars.GetString(name)}^7\" ^8(was \"{_cvars.GetDefault(name)}^8\")^7";
+        return desc.Length > 0 ? line + " " + desc : line;
+    }
+
     private void CmdCmdList(IReadOnlyList<string> a)
     {
         string? filter = a.Count >= 2 ? a[1] : null;
         var names = AllCommandNames()
             .Where(name => filter == null || name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();
         foreach (string name in names)
-            _print(name);
+        {
+            // DP Cmd_List_f prints each command with its description; an alias shows its body instead.
+            string help = _interp.CommandDescription(name);
+            if (help.Length == 0 && InterpreterBuiltins.Contains(name, StringComparer.OrdinalIgnoreCase))
+                help = InterpreterBuiltinHelp(name);
+            if (help.Length == 0 && _interp.Aliases.TryGetValue(name, out string? body))
+            {
+                _print($"^5{name}^7: {Ellipsis(body, 100)}");
+                continue;
+            }
+            _print(help.Length > 0 ? $"^2{name}^7: {help}" : $"^2{name}^7");
+        }
         _print($"{names.Count} command(s)");
     }
 
+    /// <summary>How many hits <c>search</c> prints before it starts dropping the least likely ones.</summary>
+    private const int MaxSearchResults = 60;
+
+    /// <summary>
+    /// <c>search</c> / <c>apropos</c> — DP <c>Cmd_Apropos_f</c> (cmd.c:1400), widened two ways.
+    ///
+    /// <para>DP matched ONE glob against each name and description; every argument here is a separate keyword and
+    /// ALL of them must appear, in the name or in the description. That is what makes a plain-English query work:
+    /// <c>search max fps</c> finds <c>cl_maxfps</c>, which no single-pattern search ever could. A keyword carrying
+    /// <c>*</c>/<c>?</c> is still globbed, so DP's <c>apropos g_balance_*</c> form is unchanged.</para>
+    ///
+    /// <para>Ranked, and printed WORST FIRST so the most likely answer is the last line — directly above the
+    /// prompt, where it survives a long result set scrolling past. When the set overflows
+    /// <see cref="MaxSearchResults"/> it is the LEAST likely end that is dropped, and the header says how many.</para>
+    /// </summary>
     private void CmdApropos(IReadOnlyList<string> a)
     {
-        if (a.Count < 2) { _print($"usage: {a[0]} <substring>"); return; }
-        string q = a[1];
-        bool any = false;
-        foreach (string name in AllCommandNames().OrderBy(x => x, StringComparer.Ordinal))
-            if (name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) { _print($"command  {name}"); any = true; }
-        foreach (string name in _cvars.Names.OrderBy(x => x, StringComparer.Ordinal))
-            if (name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) { _print($"cvar     {name} \"{_cvars.GetString(name)}\""); any = true; }
-        if (!any) _print($"nothing matching \"{q}\"");
+        if (a.Count < 2)
+        {
+            _print($"usage: {a[0]} <keyword> [keyword ...] — matches cvar/command names AND their descriptions;");
+            _print("       best match is printed LAST. Wildcards (* ?) work in any keyword.");
+            return;
+        }
+
+        var keywords = new List<string>();
+        for (int i = 1; i < a.Count; i++)
+            if (a[i].Length > 0)
+                keywords.Add(a[i]);
+
+        List<SearchHit> hits = ConsoleSearch.Rank(keywords, EnumerateSearchable());
+        if (hits.Count == 0)
+        {
+            _print($"nothing matching \"{string.Join(' ', keywords)}\"");
+            return;
+        }
+
+        // The header carries the count because the RESULTS end at the prompt: a trailing summary line (DP's
+        // "%i results") would push the best match one line further away, which is the line this ordering exists
+        // to protect.
+        int shown = Math.Min(hits.Count, MaxSearchResults);
+        int dropped = hits.Count - shown;
+        _print(dropped > 0
+            ? $"^5{hits.Count}^7 result{(hits.Count == 1 ? "" : "s")} for \"{string.Join(' ', keywords)}\" — best last, {dropped} less likely omitted:"
+            : $"^5{hits.Count}^7 result{(hits.Count == 1 ? "" : "s")} for \"{string.Join(' ', keywords)}\" — best last:");
+
+        for (int i = hits.Count - shown; i < hits.Count; i++)
+            PrintSearchHit(hits[i]);
     }
+
+    /// <summary>Every console entity <c>search</c> looks through: cvars (with their help strings), registered
+    /// commands + interpreter builtins (ditto), and aliases (matched on their body, DP's <c>alias-&gt;value</c>).</summary>
+    private IEnumerable<SearchCandidate> EnumerateSearchable()
+    {
+        foreach (string name in _cvars.Names)
+            yield return new SearchCandidate(SearchKind.Cvar, name, _cvars.GetDescription(name));
+        foreach (string name in _interp.CommandNames)
+            yield return new SearchCandidate(SearchKind.Command, name, _interp.CommandDescription(name));
+        foreach (string name in InterpreterBuiltins)
+            yield return new SearchCandidate(SearchKind.Command, name, InterpreterBuiltinHelp(name));
+        foreach (var kv in _interp.Aliases)
+            yield return new SearchCandidate(SearchKind.Alias, kv.Key, kv.Value);
+    }
+
+    /// <summary>One search hit, in DP's <c>Cmd_Apropos_f</c> shape and colours (cvar ^3, command ^2, alias ^5).</summary>
+    private void PrintSearchHit(in SearchHit h)
+    {
+        switch (h.Kind)
+        {
+            case SearchKind.Cvar:
+                _print("cvar    " + FormatCvarHelp(h.Name));
+                break;
+            case SearchKind.Alias:
+                // An alias body can be a whole script; keep the line readable.
+                _print($"alias   ^5{h.Name}^7: {Ellipsis(h.Description, 120)}");
+                break;
+            default:
+                _print(h.Description.Length > 0
+                    ? $"command ^2{h.Name}^7: {h.Description}"
+                    : $"command ^2{h.Name}^7");
+                break;
+        }
+    }
+
+    /// <summary>DP <c>Cvar_PrintHelp</c>'s text, as a string (the search/completion printers wrap it themselves).</summary>
+    private string FormatCvarHelp(string name)
+    {
+        string desc = _cvars.GetDescription(name);
+        string line = $"^3{name}^7 is \"{_cvars.GetString(name)}^7\" [\"{_cvars.GetDefault(name)}^7\"]";
+        return desc.Length > 0 ? line + " " + desc : line;
+    }
+
+    private static string Ellipsis(string s, int max)
+        => s.Length <= max ? s : s.Substring(0, max - 1) + "…";
 
     private void CmdHelp(IReadOnlyList<string> a)
     {
         if (a.Count >= 2)
         {
             string name = a[1];
-            if (AllCommandNames().Contains(name, StringComparer.OrdinalIgnoreCase))
-                _print($"\"{name}\" is a command");
+            if (_interp.CommandNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                string d = _interp.CommandDescription(name);
+                _print(d.Length > 0 ? $"command ^2{name}^7: {d}" : $"^2{name}^7 is a command");
+            }
+            else if (InterpreterBuiltins.Contains(name, StringComparer.OrdinalIgnoreCase))
+                _print($"command ^2{name}^7: {InterpreterBuiltinHelp(name)}");
+            else if (_interp.Aliases.TryGetValue(name, out string? body))
+                _print($"alias   ^5{name}^7: {body}");
             else if (_cvars.Has(name))
                 PrintCvar(name);
             else
                 _print($"no command or cvar named \"{name}\"");
             return;
         }
-        _print("VortexArena console — type a command or `cvar value`. Try: cmdlist, cvarlist [filter], search <text>,");
-        _print("bind <key> <command>, exec <file.cfg>, toggle <cvar>, connect <addr>, disconnect, quit.");
+        // Laid out in fixed character columns — the console renders in a monospace face precisely so tables like
+        // this one line up. The colour code wraps the PADDED field so the padding is counted in visible
+        // characters, not in the raw string (a ^3 costs two characters and no width).
+        static string Cell(string name, int width) => "^3" + name.PadRight(width) + "^7";
+        void Row(string a, string b, string c = "", string d = "")
+            => _print("  " + Cell(a, 18) + b.PadRight(c.Length > 0 ? 20 : 0) + Cell(c, c.Length > 0 ? 18 : 0) + d);
+
+        _print("VortexArena console — type a command, or `cvar value` to change a setting.");
+        Row("search <words>", "find a cvar or command by keyword — searches descriptions too, best match last");
+        Row("help <name>", "what one cvar or command does, with its current value and default");
+        Row("cvarlist [filter]", "list cvars", "cmdlist [filter]", "list commands");
+        Row("cvar_changes", "what YOUR setup changes from the shipped defaults");
+        Row("bind <key> <cmd>", "bind a key", "bindlist", "list every bind");
+        Row("toggle <cvar>", "flip a setting", "exec <file.cfg>", "run a script");
+        Row("connect <addr>", "join a server", "disconnect", "leave the match");
+        Row("map <name>", "host a match", "condump [file]", "save this scrollback");
+        _print("Keys: ^3Tab^7 complete · ^3Up^7/^3Down^7 history · ^3Ctrl+R^7 search history · " +
+               "^3PgUp^7/^3PgDn^7 scroll · ^3Ctrl+L^7 clear · ^3Ctrl+-^7/^3Ctrl+=^7 text size");
+    }
+
+    // =============================================================================================
+    //  console-surface commands (DP console.c Con_ConDump_f + keys.c Key_History_f)
+    // =============================================================================================
+
+    /// <summary>Host hook: the console scrollback as plain text, for <c>condump</c>. Wired by the overlay (which
+    /// owns the scrollback); null on a headless console, where <c>condump</c> reports it has nothing to dump.</summary>
+    public Func<string>? ScrollbackProvider { get; set; }
+
+    /// <summary>Host hook: write <c>(path, text)</c> to the user data directory, returning the path actually
+    /// written (for the confirmation line) or null on failure. Wired by the overlay; null → <c>condump</c> is
+    /// reported as unavailable rather than silently doing nothing.</summary>
+    public Func<string, string, string?>? FileWriter { get; set; }
+
+    /// <summary>The input history the <c>history</c> command lists. Wired by the overlay, which owns it.</summary>
+    public ConsoleHistory? History { get; set; }
+
+    /// <summary>
+    /// DP <c>Con_ConDump_f</c> (console.c:802): write the console scrollback to a file. DP defaults the name to
+    /// <c>condump.txt</c> and appends <c>.txt</c> when the argument has no extension; <c>condump_stripcolors</c>
+    /// controls whether <c>^</c> codes survive into the file (default: they do not, so the dump is readable in a
+    /// text editor).
+    /// </summary>
+    private void CmdCondump(IReadOnlyList<string> a)
+    {
+        if (ScrollbackProvider is null || FileWriter is null)
+        {
+            _print("condump: no console scrollback here (this console has no display).");
+            return;
+        }
+        string name = a.Count >= 2 ? a[1] : "condump.txt";
+        if (name.IndexOf('.') < 0)
+            name += ".txt";
+
+        string text = ScrollbackProvider() ?? "";
+        // DP condump_stripcolors (default 0): the dump keeps its ^-codes unless you ask otherwise, so it can be
+        // fed back into the game verbatim; turn it on for something readable to paste into a bug report.
+        // GetFloat, not GetString, so an unregistered cvar reads 0 (= keep the codes) rather than "" != "0".
+        if (_cvars.GetFloat("condump_stripcolors") != 0f)
+            text = VortexArena.Common.Diagnostics.Log.StripColors(text);
+
+        string? written = FileWriter(name, text);
+        _print(written is null
+            ? $"condump: could not write \"{name}\"."
+            : $"Dumped console text to {written}.");
+    }
+
+    /// <summary>
+    /// DP <c>Key_History_f</c> (keys.c:300): <c>history</c> lists the input history, <c>history -c</c> clears it,
+    /// <c>history &lt;n&gt;</c> lists only the last n lines.
+    /// </summary>
+    private void CmdHistory(IReadOnlyList<string> a)
+    {
+        if (History is not { } h)
+        {
+            _print("history: unavailable (this console has no input line).");
+            return;
+        }
+        if (a.Count >= 2 && a[1] == "-c")
+        {
+            h.Clear();
+            _print("Command history cleared.");
+            return;
+        }
+
+        int from = 0;
+        if (a.Count >= 2 && int.TryParse(a[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
+            && n > 0 && n <= h.Count)
+            from = h.Count - n;
+
+        int width = h.Count.ToString(CultureInfo.InvariantCulture).Length;
+        for (int i = from; i < h.Count; i++)
+            _print($"^3{(i + 1).ToString(CultureInfo.InvariantCulture).PadLeft(width)}^7 {h.Lines[i]}");
+        if (h.Count == 0)
+            _print("(no command history yet)");
     }
 
     // =============================================================================================

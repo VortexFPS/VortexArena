@@ -78,8 +78,22 @@ public static class ConfigLoader
     /// </summary>
     public static ConfigInterpreter Load(ICvarService cvars, Func<string, string?> readFile,
         Action<string>? archiveHook, params string[] entryFiles)
+        => Load(cvars, readFile, archiveHook, descriptionHook: null, entryFiles);
+
+    /// <summary>
+    /// <see cref="Load(ICvarService, Func{string, string?}, Action{string}, string[])"/> plus a
+    /// <c>set name value "description"</c> help-string callback (<see cref="ConfigInterpreter.CvarDescriptionHook"/>).
+    /// The client passes <c>CvarService.SetDescription</c> so the shipped tree's own help strings back
+    /// <c>search</c>/<c>apropos</c> and Tab completion; headless callers that never show a console pass null.
+    /// </summary>
+    public static ConfigInterpreter Load(ICvarService cvars, Func<string, string?> readFile,
+        Action<string>? archiveHook, Action<string, string>? descriptionHook, params string[] entryFiles)
     {
-        var interp = new ConfigInterpreter(cvars, readFile) { CvarArchiveHook = archiveHook };
+        var interp = new ConfigInterpreter(cvars, readFile)
+        {
+            CvarArchiveHook = archiveHook,
+            CvarDescriptionHook = descriptionHook,
+        };
         // `${* asis}` = "run my arguments as-is" — the passthrough form used by stock configs when these aren't
         // redefined to a no-op by the dedicated-server detection (which lives in the client/common tree we skip).
         interp.DefineAlias("if_client", "${* asis}");

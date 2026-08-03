@@ -62,7 +62,9 @@ powershell -NoProfile -Command "Get-Process Godot*,VortexArena* -ErrorAction Sil
 BEFORE=$(ls -t "$LOGDIR"/*.log 2>/dev/null | head -1)
 echo ">>> [$LABEL] $MAP + $BOTS bots, ${SECS}s  extra: $*"
 # Pinned capture profile (later --cvar wins, so caller flags override the pins — see perf-run.ps1
-# for the rationale per pin; cl_maxfps 0 = truly uncapped since 2026-07-06, captures measure peak).
+# for the rationale per pin; cl_maxfps 0 = truly uncapped since 2026-07-06, captures measure peak;
+# cl_frameprofiler_rendertime 1 buys the rcpu/gpu split that the game defaults OFF, and both arms of
+# an A/B pay it equally — never diff a rendertime=1 capture against a rendertime=0 one).
 # PERF_SCENARIO=idle opts out of the demo (spectated-bot gameplay) scenario.
 SCENARIO_ARGS=()
 if [ "${PERF_SCENARIO:-demo}" = "demo" ]; then
@@ -76,6 +78,7 @@ fi
 # box. EXTRA_ARGS is empty on every non-PERF_DEBUG run, i.e. every release capture.
 run_with_timeout $((SECS+60)) "$EXE" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} --host "$MAP" --gametype dm --bots "$BOTS" \
     --cvar cl_frameprofiler 2 --cvar cl_frameprofiler_hitchms 8 \
+    --cvar cl_frameprofiler_rendertime 1 \
     --cvar cl_autopause 0 --cvar cl_portal_render 0 --cvar vid_vsync 0 --cvar cl_maxfps 0 \
     ${SCENARIO_ARGS[@]+"${SCENARIO_ARGS[@]}"} \
     "$@" --quit-after-seconds "$SECS" > "$ROOT/_scratch/perf_${LABEL}.out" 2>&1

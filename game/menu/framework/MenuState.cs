@@ -211,11 +211,23 @@ public static class MenuState
                 // vortex-common.cfg LAST: it is the Vortex divergence layer (D8/§11) and relies on
                 // last-wins `set` to override the upstream chain without any xonotic-*.cfg being edited.
                 // It also has to land before LockDefaults below, which it does — see the G15 note there.
+                // The description hook carries DP's cvar_t.description: the third argument of
+                // `set name value "help text"`. The shipped tree writes ~3000 of them and they were being
+                // discarded, which is why `search` could only ever match cvar NAMES.
                 _interp = ConfigLoader.Load(_cvars, reader, name => _cvars.MarkArchived(name),
+                    (name, desc) => _cvars.SetDescription(name, desc),
                     "xonotic-client.cfg", "xonotic-server.cfg", "notifications.cfg",
                     ConfigLoader.VortexCommonEntry);
                 VortexArena.Common.Diagnostics.Log.Info($"[MenuState] config: {_interp.CvarsAssigned} cvars from {_interp.FilesExecuted} cfg files " +
                          $"({_interp.AliasesDefined} aliases, {_interp.FilesMissing} missing).");
+
+                // The other half of DP's cvar_t.description: the ENGINE cvars the cfgs above assign bare
+                // (cl_maxfps, con_textsize, vid_vsync, r_*) declare their help string in DarkPlaces C source,
+                // not in any cfg. Loaded AFTER the tree so the tree's own descriptions win (SetDescription is
+                // first-writer-wins). Metadata only — it never creates or assigns a cvar.
+                int help = VortexArena.Engine.Console.CvarHelpTable.Load(_cvars, reader);
+                if (help > 0)
+                    VortexArena.Common.Diagnostics.Log.Info($"[MenuState] cvar help: {help} engine descriptions.");
             }
             catch (Exception ex)
             {

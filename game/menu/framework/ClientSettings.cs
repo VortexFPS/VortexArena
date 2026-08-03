@@ -156,6 +156,40 @@ public static class ClientSettings
         c.Register("cl_showfps", "0", save);
         c.Register("cl_showping", "0", save);
         c.Register("cl_showposition", "0", save);
+
+        // ---- the drop-down console's look (DP cl_screen.c + console.c) ------------------------------------
+        // Xonotic's xonotic-client.cfg assigns most of these, but bare (`scr_conalpha 1`), so with no content
+        // tree mounted — CI, a bare run — the console would render at every-cvar-is-zero: invisible text on an
+        // invisible background. These are DP's own registered defaults, so the console looks right either way,
+        // and the values the cfg tree sets still win (Register keeps an existing value). CvarFlags.Save on the
+        // ones DP declares CF_ARCHIVE.
+        c.Register("scr_conheight", "0.5", save,
+            "fraction of screen height occupied by console");
+        c.Register("scr_conalpha", "1", save,
+            "opacity of console background gfx/conback (when console isn't forced fullscreen)");
+        c.Register("scr_conalphafactor", "1", save,
+            "opacity of console background gfx/conback relative to scr_conalpha; when 0, gfx/conback is not drawn");
+        c.Register("scr_conalpha2factor", "0", save,
+            "opacity of console background gfx/conback2 relative to scr_conalpha; when 0, gfx/conback2 is not drawn");
+        c.Register("scr_conalpha3factor", "0", save,
+            "opacity of console background gfx/conback3 relative to scr_conalpha; when 0, gfx/conback3 is not drawn");
+        c.Register("scr_conbrightness", "1", save,
+            "brightness of console background (0 = black, 1 = image)");
+        c.Register("scr_conscroll_x", "0", save, "scroll speed of gfx/conback in x direction");
+        c.Register("scr_conscroll_y", "0", save, "scroll speed of gfx/conback in y direction");
+        c.Register("scr_conscroll2_x", "0", save, "scroll speed of gfx/conback2 in x direction");
+        c.Register("scr_conscroll2_y", "0", save, "scroll speed of gfx/conback2 in y direction");
+        c.Register("scr_conscroll3_x", "0", save, "scroll speed of gfx/conback3 in x direction");
+        c.Register("scr_conscroll3_y", "0", save, "scroll speed of gfx/conback3 in y direction");
+        c.Register("con_textsize", "8", save, "console text size in virtual 2D pixels");
+        c.Register("con_closeontoggleconsole", "1", save,
+            "allows toggleconsole binds to close the console as well; when set to 2, this even works when not " +
+            "at the start of the line in console input");
+        c.Register("condump_stripcolors", "0", save, "strip color codes from console dumps");
+        // The virtual 2D canvas DP measures con_textsize against (Xonotic ships 800x600). The console scales its
+        // font by viewportHeight / vid_conheight, so a 10px con_textsize reads the same at every resolution.
+        c.Register("vid_conwidth", "800", save, "virtual width of 2D graphics system");
+        c.Register("vid_conheight", "600", save, "virtual height of 2D graphics system");
         // PVS-cull escape hatch. WorldPvsCuller registers this in _Ready — which only runs inside a match — so a
         // menu-only session would leave it "allocated, default unknown"; register it eagerly at boot (idempotent
         // with WorldPvsCuller's own Register) so it's a declared cvar with a known default. The whole r_*/cl_*
@@ -524,18 +558,28 @@ public static class ClientSettings
         // worst-case sustainable rate is smoother than uncapped, and it bounds the per-frame Godot-interop alloc
         // rate (godot#105750). With vid_vsync 2 (mailbox) leave it at 0 (uncapped).
         int maxFps = (int)c.GetFloat("cl_maxfps");
-        // "Auto" = the DP-shipped default (256) ONLY: not an fps target anyone chose, and it lets the CPU
-        // outrun the swapchain on a fast GPU -> present-jitter hitches, so it gets the engaging ceiling
-        // max(144, refresh). Every EXPLICIT choice is the player's and is honored as-is — including the
-        // menu's "Unlimited" (0 -> Engine.MaxFps 0, truly uncapped). (2026-07-06: 0 was previously folded
-        // into the auto case, silently capping "Unlimited" at 144 — Bryan's uncap request; the perf harness
-        // also captures uncapped now so peak frame time and its dips are measured, not masked by the cap.)
-        int appliedFps = maxFps == 256
-            ? System.Math.Max(144, (int)DisplayServer.ScreenGetRefreshRate())
-            : maxFps;
+        // "Auto" = the player has NOT chosen a cap, so cl_maxfps is still sitting at the value the shipped cfg
+        // tree left there. That is not an fps target anyone picked, and uncapped lets the CPU outrun the
+        // swapchain on a fast GPU -> present-jitter hitches, so it gets the engaging ceiling max(144, refresh).
+        // Every explicit choice is honored as-is — including the menu's "Unlimited" (0 -> truly uncapped).
+        //
+        // (2026-08-03) This used to test `maxfps == 256` — the shipped default's VALUE — as the stand-in for
+        // "nobody picked it". That silently overrode any player who picked 256, which is precisely the number
+        // the settings slider and the stock config both put in front of them: `cl_maxfps 256` reported a cap of
+        // 144 and no amount of setting it again could move it. WasSetByUser answers the actual question (was
+        // this written after the shipped baseline was locked), so choosing the default value now means what it
+        // says. Note the refresh rate itself is unreliable on this platform (Godot under-reports borderless
+        // panels as 60Hz — same root cause as the delta_smooth note in project.godot), which is another reason
+        // not to let the heuristic touch a value the player actually typed.
+        bool chosen = c.WasSetByUser("cl_maxfps");
+        int appliedFps = chosen
+            ? maxFps
+            : System.Math.Max(144, (int)DisplayServer.ScreenGetRefreshRate());
         Godot.Engine.MaxFps = appliedFps;
         VortexArena.Common.Diagnostics.Log.Info(
-            $"[video] cl_maxfps {maxFps} -> Engine.MaxFps {appliedFps} (refresh {DisplayServer.ScreenGetRefreshRate():0}Hz)");
+            $"[video] cl_maxfps {maxFps} -> Engine.MaxFps {appliedFps} "
+            + $"({(chosen ? "your setting" : $"auto: nothing set a cap, using max(144, refresh)")}; "
+            + $"refresh {DisplayServer.ScreenGetRefreshRate():0}Hz)");
     }
 
     /// <summary>

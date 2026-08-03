@@ -212,6 +212,14 @@ public abstract partial class HudPanel : Control
 
     public override void _EnterTree()
     {
+        // A HUD panel NEVER eats mouse input (QC hud_cursormode is off outside configure mode). This has to live
+        // on the base, not on whoever adds the panel: a panel is laid out in viewport coordinates and the
+        // screen-global ones (FpsPanel) are sized to the WHOLE viewport, so a panel left at Godot's default
+        // MouseFilter.Stop is an invisible full-screen click-blocker. Harmless while every panel sat on the HUD
+        // layer beneath the menu; the moment one is hosted above the menu (EngineOverlay, layer 120) it swallows
+        // every click in the front-end.
+        MouseFilter = MouseFilterEnum.Ignore;
+
         // React to live cvar edits (console `set hud_*` / menu sliders) by marking the snapshot dirty so the
         // next LoadConfig re-resolves immediately. Leak-safe: unsubscribed in _ExitTree.
         if (!_subscribed)
@@ -359,6 +367,34 @@ public abstract partial class HudPanel : Control
 
     /// <summary>Read <c>hud_panel_&lt;id&gt;_&lt;suffix&gt;</c> as a raw string ("" when unset).</summary>
     protected string CvarStr(string suffix) => MenuState.Cvars.GetString($"hud_panel_{PanelId}_{suffix}");
+
+    /// <summary>
+    /// The mode of a DP-style <c>show*</c> visibility toggle: the menu-bound alias (<c>showfps</c>) when set,
+    /// else DP's native <c>cl_</c> spelling (<c>cl_showfps</c>), else 0.
+    ///
+    /// <para><b>Why this exists rather than each panel reading the cvar itself</b> (2026-08-03). FpsPanel,
+    /// PingPanel and PositionPanel each read <c>Api.Cvars</c> — the AMBIENT SIM store, which a match swaps to
+    /// the server world's services. The client's <c>showfps</c> is simply absent there, so the toggles read 0
+    /// no matter what the player set. Two of the three defaulted on in debug builds, which hid the bug
+    /// completely: the counter a developer saw was the debug default, never their setting, and a release build
+    /// showed nothing at all. (Reproduced with <c>--cvar showfps 2</c>, which drew <c>"82 fps"</c> — mode 1,
+    /// the debug default — instead of mspf.) <c>showping</c> had no debug default and so had never worked in
+    /// any build.</para>
+    ///
+    /// <para>The store below is the CLIENT one — what the video-settings checkbox binds, what <c>config.cfg</c>
+    /// loads into, what <c>--cvar</c> and a console <c>set</c> reach — i.e. the one every other accessor in this
+    /// file already uses. Shared here so a fourth panel cannot reintroduce the split.</para>
+    /// </summary>
+    protected static int ShowToggleMode(string alias, string dpName)
+    {
+        int mode = (int)GlobalF(alias, 0f);
+        return mode != 0 ? mode : (int)GlobalF(dpName, 0f);
+    }
+
+    /// <summary>True when the player has changed NEITHER spelling from its default — the gate a panel uses
+    /// before defaulting itself on in a debug build, so an explicit choice is never overridden.</summary>
+    protected static bool ShowToggleUntouched(string alias, string dpName)
+        => !MenuState.Cvars.IsModified(alias) && !MenuState.Cvars.IsModified(dpName);
 
     /// <summary>Read <c>hud_panel_&lt;id&gt;_&lt;suffix&gt;</c> as a float (unset → <paramref name="fallback"/>).</summary>
     protected float CvarF(string suffix, float fallback)

@@ -39,6 +39,9 @@ namespace VortexArena.Game.Client;
 ///         a hitch must also exceed <see cref="HitchFactor"/>× the rolling median.</item>
 ///   <item><c>cl_frameprofiler_watchdog</c> — 1 (default) runs the sampling watchdog thread that attributes
 ///         stalls inside un-scoped code; 0 disables it.</item>
+///   <item><c>cl_frameprofiler_rendertime</c> — 0 (default) / 1 measures the <c>rcpu</c> and <c>gpu</c> columns.
+///         Off by default because reading them syncs the main thread against the render thread every frame;
+///         the perf scripts turn it on. See <see cref="RenderTimeEnabled"/>.</item>
 ///   <item><c>cl_frameprofiler_dump</c> — transient: writes the forensic ring to <c>frameprofile_ring.csv</c>.</item>
 /// </list></para>
 ///
@@ -95,7 +98,11 @@ public partial class FrameProfiler : CanvasLayer
           // (E3/E5) the map editor's per-frame work: crosshair picking + drag tracking, and the line-overlay
           // rebuild. Both are inert outside an editor session but scoped so an editing session's cost is
           // attributed rather than inflating proc:other.
-          "editor.ctrl", "editor.gizmos", "editor.world" };
+          "editor.ctrl", "editor.gizmos", "editor.world",
+          // The two session-lifetime overlays that tick outside a match as well as inside it: the engine screen
+          // overlay (showfps — DP draws it from SCR_DrawScreen, so it exists at the menu too) and the drop-down
+          // console (which early-outs while closed, but animates its scrolling conback layers while open).
+          "engineoverlay", "console" };
           // NOTE (2026-07-31): there is deliberately no "menu.warm" entry. MenuAssetWarmer briefly had one while
           // it still drained work on the main thread; it now owns none (everything runs on the streamer lane, so
           // its whole main-thread cost is the drain already counted as stream.build) and has no _Process at all.
@@ -134,6 +141,9 @@ public partial class FrameProfiler : CanvasLayer
     {
         public ulong FrameId;
         public double Ms, ProcMs, RcpuMs, GpuMs, PhysMs;
+        // Whether RcpuMs/GpuMs are MEASURED or merely zero (cl_frameprofiler_rendertime — see RenderTimeEnabled).
+        // Classify must not read an unmeasured zero as evidence of a quiet render thread.
+        public bool RenderTimed;
         public long AllocBytes;
         public int G0, G1, G2;
         public double GcPauseMs;
@@ -307,7 +317,8 @@ public partial class FrameProfiler : CanvasLayer
     private const string ColumnsLegend =
         "columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | " +
         "rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | " +
-        "pipe=shader-pipeline compiles";
+        "pipe=shader-pipeline compiles  [rcpu/gpu read 0 and rest widens to ms-proc unless " +
+        "cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag]";
 
     public override void _Input(InputEvent @event)
     {
@@ -325,10 +336,12 @@ public partial class FrameProfiler : CanvasLayer
         TryRegisterDefaults();
         int mode = Mode();
         Prof.Enabled = mode >= 1;
+        bool wantRenderTime = RenderTimeEnabled();
 
-        // Start/stop recording + watchdog with the active state.
+        // Start/stop recording + watchdog with the active state. The banner records whether rcpu/gpu are live,
+        // so a capture file can never be read as "the GPU was idle" when it really means "nobody looked".
         if (mode >= 1 && !_sessionLog.Active)
-            _sessionLog.Start(_launchWall, _envBanner, ColumnsLegend);
+            _sessionLog.Start(_launchWall, $"{_envBanner} rendertime={(wantRenderTime ? 1 : 0)}", ColumnsLegend);
         if (mode >= 1 && _watchdog is null && WatchdogEnabled())
             _watchdog = new PhaseWatchdog();
 
@@ -356,11 +369,21 @@ public partial class FrameProfiler : CanvasLayer
         double ms = delta * 1000.0;
 
         _physMs = Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess) * 1000.0;
-        if (!_measureArmed && GetViewport() is { } vp)
+
+        // rcpu/gpu are OPT-IN — see RenderTimeEnabled for the cost of reading them. Arm AND disarm off the cvar
+        // so a mid-session toggle takes effect both ways, and zero the pair on the way down so a stale reading
+        // can never be mistaken for a live one.
+        if (wantRenderTime && !_measureArmed && GetViewport() is { } vp)
         {
             _viewportRid = vp.GetViewportRid();
             RenderingServer.ViewportSetMeasureRenderTime(_viewportRid, true);
             _measureArmed = true;
+        }
+        else if (!wantRenderTime && _measureArmed)
+        {
+            RenderingServer.ViewportSetMeasureRenderTime(_viewportRid, false);
+            _measureArmed = false;
+            _renderCpuMs = _renderGpuMs = 0.0;
         }
         if (_measureArmed)
         {
@@ -392,7 +415,7 @@ public partial class FrameProfiler : CanvasLayer
         if (_pending is { } fin)
         {
             fin.Ms = ms;
-            fin.RcpuMs = _renderCpuMs; fin.GpuMs = _renderGpuMs;
+            fin.RcpuMs = _renderCpuMs; fin.GpuMs = _renderGpuMs; fin.RenderTimed = _measureArmed;
             fin.DrawCalls = drawCalls;
             fin.PipeCanvas = dCanvas; fin.PipeMesh = dMesh; fin.PipeSurface = dSurface; fin.PipeDraw = dDraw; fin.PipeSpec = dSpec;
             fin.PipeCompiles = dCanvas + dMesh + dSurface + dDraw + dSpec;
@@ -649,6 +672,13 @@ public partial class FrameProfiler : CanvasLayer
             // attribute this rest-dominated tail to GC, not the compositor.
             if (RecentGcEvent(out double recentPauseMs))
                 return (HitchClass.GcPause, $"gen2/GC-pause tail (prior frame paused {recentPauseMs:0.0}ms; this frame rest-dominated)");
+
+            // EXTERNAL says "the cost is outside this process" — a claim resting on rcpu AND gpu both being
+            // small. With cl_frameprofiler_rendertime off they are not small, they are UNMEASURED, and `rest`
+            // has quietly absorbed the render-thread submit that would have contradicted the verdict. Blaming
+            // the compositor for our own draw submission is exactly the wrong place to send the next hour.
+            if (!rec.RenderTimed)
+                return (HitchClass.Unknown, UnmeasuredReason(restMs));
             return (HitchClass.External,
                 $"rest-dominated (late {rec.LateMs:0.0}ms), game-side quiet — OS/compositor/driver");
         }
@@ -660,10 +690,23 @@ public partial class FrameProfiler : CanvasLayer
             return (HitchClass.GpuBound, $"gpu {rec.GpuMs:0.0}ms, {rec.DrawCalls:0} draws");
 
         if (restMs >= 0.55 * ms)
+        {
+            // Same trap as EXTERNAL above: "present-bound" is only distinguishable from "render-CPU-bound" when
+            // rcpu was actually read out of `rest`.
+            if (!rec.RenderTimed)
+                return (HitchClass.Unknown, UnmeasuredReason(restMs));
             return (HitchClass.VsyncPresent, $"present/vsync-bound (rest {restMs:0.0}ms, gpu {rec.GpuMs:0.0}ms)");
+        }
 
         return (HitchClass.Unknown, $"mixed — {dom} {domMs:0.0}ms");
     }
+
+    /// <summary>The verdict for a frame spent outside <c>_Process</c> while the render-time split is off: it
+    /// could be render-thread submit, the GPU, or present, and there is no evidence here to pick between them.
+    /// Name the cvar that would settle it instead of guessing — see <see cref="RenderTimeEnabled"/>.</summary>
+    private static string UnmeasuredReason(double restMs)
+        => $"{restMs:0.0}ms outside _Process, render/present split unmeasured "
+         + "(set cl_frameprofiler_rendertime 1 and re-run to attribute it)";
 
     /// <summary>(P11) Name the ALLOCATOR on a GC hitch, not just the pause: the scope with the biggest per-scope
     /// allocation this frame, when it is a meaningful share (≥1 MB and ≥25% of the frame's total).</summary>
@@ -877,8 +920,10 @@ public partial class FrameProfiler : CanvasLayer
 
         // (perf 2026-08-02) One-shot VRAM census at session end: which texture categories own the resident
         // set, so a "vram 3.4GB" monitor line in the log answers itself. Provider-injected (NetGame wires the
-        // live AssetSystem); one-shot because the census walks the cache with GetImage() CPU copies — cheap
-        // once at quit, unacceptable per-frame.
+        // live AssetSystem). It is a plain dictionary walk over facts recorded at upload — it does NOT read
+        // anything back off the GPU (2026-08-03: it used to, one RenderingServer sync per texture) — but it
+        // stays one-shot regardless, since a per-frame inventory of the whole resident set is nobody's idea
+        // of cheap.
         if (VramCensusProvider is { } census)
         {
             try
@@ -1370,6 +1415,9 @@ public partial class FrameProfiler : CanvasLayer
         // (P7) Opt-in on-screen flash when a ≥2×floor hitch fires (class + ms at the graph) — for feel-testing
         // sessions where the console isn't being watched.
         cvars.Register("cl_frameprofiler_alert", "0");
+        // (threaded-renderer sync 2026-08-03) Opt-in per-frame rcpu/gpu measurement. Default 0 because reading it
+        // stalls the main thread on the render thread every frame; the perf scripts pass 1. See RenderTimeEnabled.
+        cvars.Register("cl_frameprofiler_rendertime", "0");
         // Transient trigger (NOT archived): `set cl_frameprofiler_dump 1` writes the forensic ring CSV + re-arms.
         cvars.Register("cl_frameprofiler_dump", "0");
     }
@@ -1398,6 +1446,29 @@ public partial class FrameProfiler : CanvasLayer
     {
         CvarService? cv = ClientCvars();
         return cv is not null && cv.GetFloat("cl_frameprofiler_alert") != 0f;
+    }
+
+    /// <summary>
+    /// Whether to measure this viewport's render CPU/GPU times (<c>cl_frameprofiler_rendertime</c>, default OFF).
+    ///
+    /// <para><b>Why it is opt-in.</b> Reading them is <c>viewport_get_measured_render_time_cpu/gpu</c>, and under
+    /// the THREADED renderer this project runs (<c>rendering/driver/threads/thread_model=2</c> in project.godot)
+    /// each call blocks the main thread until the render thread drains — twice per frame, every frame the
+    /// profiler was on. A debug build says so, loudly: 6,210 "causing RenderingServer synchronizations on every
+    /// frame" warnings in one 45-second run (2026-08-03). A release build compiles the WARNING out and keeps the
+    /// STALL, which is the worse half — <c>tools/perf-run.ps1</c> captures on the release export, so the
+    /// profiler was perturbing the very frames it existed to measure.</para>
+    ///
+    /// <para><b>What turning it off costs.</b> <c>rcpu</c>/<c>gpu</c> read 0, <c>rest</c> widens to "everything
+    /// outside <c>_Process</c>", and the three verdicts built on the split — GPU-BOUND, VSYNC/PRESENT and
+    /// EXTERNAL — lose their evidence. <see cref="Classify"/> returns UNKNOWN naming this cvar rather than
+    /// guessing; see <see cref="UnmeasuredReason"/>. So: off for playing and ordinary dev, ON for any capture
+    /// that means to attribute draw-side cost, which is why the perf scripts pass it.</para>
+    /// </summary>
+    private static bool RenderTimeEnabled()
+    {
+        CvarService? cv = ClientCvars();
+        return cv is not null && cv.GetFloat("cl_frameprofiler_rendertime") != 0f;
     }
 
     private static double HitchFloorMs()

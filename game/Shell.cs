@@ -128,6 +128,49 @@ public partial class Shell : Node
         }
     }
 
+    /// <summary>
+    /// DP's <c>+command</c> command line (<c>COM_AddCommandLine</c> / <c>Host_AddConfigText</c>): every argument
+    /// beginning <c>+</c> is a console command, taking the arguments after it up to the next <c>+</c>/<c>--</c>
+    /// flag — <c>vortex +toggleconsole</c>, <c>+exec mytest.cfg</c>, <c>+connect 10.0.0.4</c>. This is how a
+    /// Xonotic player scripts a launch, and the port had no equivalent.
+    ///
+    /// <para>Run LAST in the boot sequence — after the config tree, the user config, the <c>--cvar</c> pins and
+    /// the console's own command registrations — so a <c>+</c> command sees the fully-built console and is the
+    /// final word, exactly as it is in DP. Deferred by one frame so a command that changes scenes
+    /// (<c>+map</c>, <c>+connect</c>) does not re-enter the tree from inside <c>_Ready</c>.</para>
+    /// </summary>
+    private void RunBootCommands()
+    {
+        string[] args = OS.GetCmdlineArgs();
+        var lines = new List<string>();
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i].Length < 2 || args[i][0] != '+')
+                continue;
+            var parts = new List<string> { args[i][1..] };
+            // Everything up to the next +command or --flag belongs to this command.
+            while (i + 1 < args.Length && args[i + 1].Length > 0
+                   && args[i + 1][0] != '+' && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                parts.Add(args[++i]);
+            lines.Add(string.Join(' ', parts));
+        }
+        if (lines.Count == 0)
+            return;
+
+        Callable.From(() =>
+        {
+            foreach (string line in lines)
+            {
+                VortexArena.Common.Diagnostics.Log.Info($"[shell] +{line}");
+                try { MenuState.Interp?.ExecuteLine(line); }
+                catch (Exception ex)
+                {
+                    VortexArena.Common.Diagnostics.Log.Severe($"[shell] +{line} failed: {ex.Message}");
+                }
+            }
+        }).CallDeferred();
+    }
+
     /// <summary>DS-5: exec the operator's server.cfg on a server-host boot only (a pure client / model viewer never
     /// runs it). `--serverconfig &lt;name&gt;` overrides the filename (DP <c>-serverconfig</c>). The exec itself is a
     /// no-op when the file is absent, so this gate is really just "don't even look for it on a non-host boot".</summary>
@@ -165,6 +208,19 @@ public partial class Shell : Node
         ClientSettings.ApplyAll();
 
         WireCommandHooks();
+
+        // Let the 2D overlays resolve content textures from the SHARED (session-lifetime) asset loader. NetGame
+        // used to be the only place that wired this, so anything drawn outside a match — the console's
+        // gfx/conback background above all — had no way to load its art and silently fell back. NetGame still
+        // re-points it at its own loader when a match starts; same content tree, so the swap is invisible.
+        if (MenuState.SharedAssets is { } bootAssets)
+            Game.Hud.TextureCache.VfsResolver ??= bootAssets.LoadTexture;
+
+        // --- the engine screen overlay (DP SCR_DrawScreen's own readouts, chiefly `showfps`). Created HERE, once
+        //     for the session, rather than inside the match HUD: DP never drew showfps from the QC HUD, so in
+        //     Xonotic it is on screen at the menu and on the loading screen too. Hosting it in NetGame's Hud was
+        //     why the port's showfps only worked inside a live match. ---
+        AddChild(new Game.Hud.EngineOverlay { Name = "EngineOverlay" });
 
         // --- in-game developer console (backtick), on its own high CanvasLayer above the menu/HUD. Shares the
         //     boot command interpreter (MenuState.Interp) so typed lines interpret exactly like a .cfg, routes
@@ -310,6 +366,10 @@ public partial class Shell : Node
             // dismiss (see MaybeShowStartupDisclaimer).
             MaybeShowStartupDisclaimer();
         }
+
+        // DP's `+command` command line, last: after every config, pin and registration above, so a launch-time
+        // console command is the final word (and can act on the boot path chosen just now).
+        RunBootCommands();
     }
 
     /// <summary>

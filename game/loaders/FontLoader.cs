@@ -38,6 +38,10 @@ public sealed class FontLoader
         ["xolonium-bold"] = new[] { "fonts/xolonium-bold.otf", "fonts/xolonium-bold.ttf" },
         ["dejavu"] = new[] { "fonts/DejaVuSans.ttf", "fonts/dejavusans.ttf" },
         ["dejavusans"] = new[] { "fonts/DejaVuSans.ttf", "fonts/dejavusans.ttf" },
+        // The console face. DP renders the drop-down console in a fixed-width font (FONT_CONSOLE), which is what
+        // makes its column-formatted completion and cvarlist output line up; Xonotic ships this one for it.
+        ["dejavusansmono"] = new[] { "fonts/DejaVuSansMono.ttf", "fonts/dejavusansmono.ttf" },
+        ["mono"] = new[] { "fonts/DejaVuSansMono.ttf", "fonts/dejavusansmono.ttf" },
         ["nimbussansl"] = new[] { "fonts/nimbussansl.otf", "fonts/NimbusSansL.otf" },
         ["unifont"] = new[] { "fonts/unifont.ttf", "fonts/Unifont.ttf" },
     };

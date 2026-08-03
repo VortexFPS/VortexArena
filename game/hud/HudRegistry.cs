@@ -33,6 +33,17 @@ public static class HudRegistry
         "chat", "mapvote", "scoreboard",
     };
 
+    /// <summary>
+    /// Panels that are <see cref="HudPanel"/>s for their drawing helpers but are NOT part of the match HUD —
+    /// they live on <see cref="EngineOverlay"/>, which exists for the whole session. Excluded from discovery so
+    /// the in-game <see cref="Hud"/> does not create a second instance that would draw on top of the first.
+    ///
+    /// <para><see cref="FpsPanel"/> is here because DP draws <c>showfps</c> from <c>SCR_DrawScreen</c>, not from
+    /// the QC HUD: it is on screen at the menu too. Ping and position readouts stay in the HUD — they report
+    /// live match state and have nothing to say outside one.</para>
+    /// </summary>
+    public static readonly IReadOnlyList<Type> EngineGlobal = new[] { typeof(FpsPanel) };
+
     private static List<Type>? _types;
 
     /// <summary>All concrete <see cref="HudPanel"/> subclasses, in draw order (built once, cached).</summary>
@@ -42,6 +53,7 @@ public static class HudRegistry
     {
         var found = Assembly.GetExecutingAssembly().GetTypes()
             .Where(t => t.IsClass && !t.IsAbstract && typeof(HudPanel).IsAssignableFrom(t))
+            .Where(t => !EngineGlobal.Contains(t))
             .ToList();
 
         int Rank(Type t)

@@ -275,12 +275,13 @@ public sealed class HudNotifications
         if (string.Equals(token, "item_centime", StringComparison.Ordinal))
         {
             // QC ftos(autocvar_notification_item_centerprinttime); read the cvar if present, else the 1.5 default.
-            if (VortexArena.Common.Services.Api.Services is not null)
-            {
-                float v = VortexArena.Common.Services.Api.Cvars.GetFloat("notification_item_centerprinttime");
-                if (v != 0f) return v;
-            }
-            return ItemCenterprintTime;
+            // (2026-08-03) Reads the CLIENT store, like every other cvar in the HUD. This used to go through
+            // Api.Cvars — the ambient sim store, which a match swaps to the server world — where a cvar that
+            // lives in the boot cfg tree (notifications.cfg `seta`s it) is simply absent. It read 0 and fell
+            // straight through to the constant below, so the player's setting did nothing and the value was
+            // right anyway: the exact silent failure that hid the same bug in FpsPanel. See ShowToggleMode.
+            float v = VortexArena.Game.Menu.MenuState.Cvars.GetFloat("notification_item_centerprinttime");
+            return v != 0f ? v : ItemCenterprintTime;
         }
         // fN → the (N-1)th float arg (QC's f1..f4 map to arg_slot via the same numbered tokens).
         if (token.Length >= 2 && (token[0] == 'f' || token[0] == 'F')

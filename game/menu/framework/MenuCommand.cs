@@ -109,6 +109,14 @@ public static class MenuCommand
     public static Func<bool>? InMatch;
 
     /// <summary>
+    /// The display names of everyone on the server right now, colour codes included — DP's <c>cl.scores[].name</c>
+    /// as consumed by <c>Nicks_CompleteCountPossible</c> (console.c:2570). Feeds the console's nick completion, so
+    /// <c>kick Play&lt;Tab&gt;</c> finishes the name instead of guessing at it. Wired by the play path from each
+    /// scoreboard update; null (empty) at the menu, where there is nobody to complete.
+    /// </summary>
+    public static Func<IReadOnlyList<string>>? PlayerNames;
+
+    /// <summary>
     /// Run a command string (possibly several <c>;</c>-separated statements with <c>$cvar</c> expansions).
     /// Safe to call with user-authored text; never throws.
     /// </summary>

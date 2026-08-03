@@ -172,39 +172,53 @@ public sealed class AssetSystem
         return sb.ToString();
     }
 
-    /// <summary>Estimated GPU bytes for a cached texture (format bpp × pixels, ×4/3 for mips).</summary>
+    /// <summary>
+    /// Estimated GPU bytes for a cached texture (format bpp × pixels, ×4/3 for mips).
+    ///
+    /// <para>Reads format and mip-ness from <see cref="_texMeta"/> — recorded at upload — rather than from the
+    /// texture itself. <c>Texture2D.GetImage()</c> would answer both questions directly, but it is a
+    /// <c>texture_2d_get</c> on the RenderingServer: under a THREADED renderer that blocks the main thread
+    /// until the render thread drains, and Godot logs "causing RenderingServer synchronizations on every
+    /// frame" once per texture, so a 25-row census printed 25 warnings and stalled as many times.
+    /// <c>GetWidth</c>/<c>GetHeight</c> stay — those are cached on the Texture2D and never reach the server.</para>
+    /// </summary>
     private static long EstimateTextureBytes(Texture2D t, out string fmt)
     {
         long w = t.GetWidth(), h = t.GetHeight();
-        double bpp = 32;                      // uncompressed RGBA8 default
-        bool mips = true;
-        fmt = "rgba8";
-        if (t is ImageTexture it && it.GetImage() is { } img)
-        {
-            Image.Format f = img.GetFormat();
-            fmt = f.ToString().ToLowerInvariant();
-            mips = img.HasMipmaps();
-            bpp = f switch
-            {
-                Image.Format.Dxt1 => 4,                            // BC1
-                Image.Format.Dxt3 or Image.Format.Dxt5 => 8,       // BC2/BC3
-                Image.Format.RgtcR => 4,                           // BC4
-                Image.Format.RgtcRg => 8,                          // BC5
-                Image.Format.BptcRgba => 8,                        // BC7
-                Image.Format.BptcRgbf or Image.Format.BptcRgbfu => 8,
-                Image.Format.Rgb8 => 24,
-                Image.Format.L8 or Image.Format.R8 => 8,
-                Image.Format.La8 or Image.Format.Rg8 => 16,
-                Image.Format.Rf => 32,
-                Image.Format.Rgbaf => 128,
-                Image.Format.Rgbah => 64,
-                _ => 32,
-            };
-            img.Dispose(); // GetImage() returns a fresh CPU-side copy; census must not leak one per texture
-        }
+        TexMeta meta;
+        bool known;
+        lock (_texMetaGate)
+            known = _texMeta.TryGetValue(t.GetInstanceId(), out meta);
+
+        // Unknown means a texture that did not come from UploadImage (an engine singleton, a Godot-side
+        // resource). Assume the uncompressed worst case exactly as this did before, and mark the row `?` so a
+        // guessed size is never read as a measured one.
+        fmt = known ? meta.Format.ToString().ToLowerInvariant() : "rgba8?";
+        bool mips = !known || meta.Mipmaps;
+        double bpp = known ? BitsPerPixel(meta.Format) : 32;
+
         long bytes = (long)(w * h * bpp / 8.0);
         return mips ? bytes * 4 / 3 : bytes;
     }
+
+    /// <summary>Bits per pixel of a GPU image format; the BC classes are their block size spread over the
+    /// block's pixels. Close enough to rank, not exact — the driver pads.</summary>
+    private static double BitsPerPixel(Image.Format f) => f switch
+    {
+        Image.Format.Dxt1 => 4,                            // BC1
+        Image.Format.Dxt3 or Image.Format.Dxt5 => 8,       // BC2/BC3
+        Image.Format.RgtcR => 4,                           // BC4
+        Image.Format.RgtcRg => 8,                          // BC5
+        Image.Format.BptcRgba => 8,                        // BC7
+        Image.Format.BptcRgbf or Image.Format.BptcRgbfu => 8,
+        Image.Format.Rgb8 => 24,
+        Image.Format.L8 or Image.Format.R8 => 8,
+        Image.Format.La8 or Image.Format.Rg8 => 16,
+        Image.Format.Rf => 32,
+        Image.Format.Rgbaf => 128,
+        Image.Format.Rgbah => 64,
+        _ => 32,                                           // uncompressed RGBA8 and anything unlisted
+    };
 
     // -------------------------------------------------------------------------------------------------
     //  Shader dictionary
@@ -1079,10 +1093,29 @@ public sealed class AssetSystem
     private static int _s3tcAvailable = -1, _bptcAvailable = -1;
     private static bool _noEncoderWarned;
 
-    /// <summary>One-line engagement summary for the session census.</summary>
+    /// <summary>
+    /// One-line engagement summary for the session census.
+    ///
+    /// <para>Reports the encoder probe's CACHED result and never forces one. That distinction is load-bearing:
+    /// <see cref="ProbeEncoder"/> calls <c>Image.Compress</c>, and in Godot 4.4+ that routes to the Betsy GPU
+    /// compressor, which spins up a background thread owning its own <see cref="RenderingDevice"/>. Godot then
+    /// finalizes that device off the render thread at exit ("This function (finalize) can only be called from
+    /// the render thread", plus two leaked <c>Object</c> instances — Betsy's compressor is a bare <c>Object</c>).
+    /// A census that probed eagerly booted all of that in runs that never compressed a single texture, including
+    /// every <c>gl_texturecompression 0</c> run. Verified: headless (no RenderingDevice, so no Betsy) never
+    /// leaks.</para>
+    /// </summary>
     public static string CompressionStats()
-        => $"compression: mode {TextureCompression}, s3tc {(S3tcEncoderAvailable() ? "yes" : "NO (template lacks etcpak encoders; BC7 fallback)")}"
-         + $", ok {_compressOk}, bc7-fallback {_compressFellBack}, failed {_compressFailed}";
+    {
+        string s3tc = _s3tcAvailable switch
+        {
+            1 => "yes",
+            0 => "NO (template lacks etcpak encoders; BC7 fallback)",
+            _ => "unprobed (nothing compressed this session)",
+        };
+        return $"compression: mode {TextureCompression}, s3tc {s3tc}"
+             + $", ok {_compressOk}, bc7-fallback {_compressFellBack}, failed {_compressFailed}";
+    }
 
     /// <summary>Probe once whether this build can encode S3TC (see the fallback note in MaybeCompress).</summary>
     private static bool S3tcEncoderAvailable()
@@ -1251,12 +1284,20 @@ public sealed class AssetSystem
         return image;
     }
 
-    // (BC5 normals 2026-08-02) Instance ids of textures whose GPU format is two-channel RGTC_RG — the
-    // industry-standard BC5 normal encoding, whose blue samples as 0. The shaders reconstruct Z behind a
-    // per-material `norm_rg` flag; this registry is how a bind site knows to set it. Filled at upload (the
-    // one place every texture passes through), id-keyed so it never keeps a freed texture alive.
-    private static readonly HashSet<ulong> _rgTextures = new();
-    private static readonly object _rgTexturesGate = new();
+    // (BC5 normals 2026-08-02; widened to format+mips 2026-08-03) What each uploaded texture actually became
+    // on the GPU, keyed by instance id. Filled at upload — the one place every cached texture passes through —
+    // and id-keyed so it never keeps a freed texture alive.
+    //
+    // Two readers, and the point of the registry is that neither has to ask the RenderingServer:
+    //   * bind sites: an RGTC_RG (BC5) normal map samples blue as 0, so the material must set `norm_rg` and
+    //     let the shader reconstruct Z (IsRgTexture).
+    //   * the VRAM census: bits-per-pixel and the ×4/3 mip factor (EstimateTextureBytes).
+    // The census used to read those back with Texture2D.GetImage(), which is a synchronous round trip to the
+    // render thread — see EstimateTextureBytes for what that costs under the threaded renderer. Both facts are
+    // free here: they are properties of the Image we are holding anyway.
+    private readonly record struct TexMeta(Image.Format Format, bool Mipmaps);
+    private static readonly Dictionary<ulong, TexMeta> _texMeta = new();
+    private static readonly object _texMetaGate = new();
 
     /// <summary>True when <paramref name="t"/> uploaded as two-channel RGTC_RG (BC5) — the consuming
     /// material must set its <c>norm_rg</c> uniform so the shader reconstructs Z.</summary>
@@ -1264,8 +1305,8 @@ public sealed class AssetSystem
     {
         if (t is null || !GodotObject.IsInstanceValid(t))
             return false;
-        lock (_rgTexturesGate)
-            return _rgTextures.Contains(t.GetInstanceId());
+        lock (_texMetaGate)
+            return _texMeta.TryGetValue(t.GetInstanceId(), out TexMeta m) && m.Format == Image.Format.RgtcRg;
     }
 
     /// <summary>The GPU half, and the only part that belongs inside the upload gate.</summary>
@@ -1274,9 +1315,11 @@ public sealed class AssetSystem
         try
         {
             var tex = ImageTexture.CreateFromImage(image);
-            if (image.GetFormat() == Image.Format.RgtcRg)
-                lock (_rgTexturesGate)
-                    _rgTextures.Add(tex.GetInstanceId());
+            // Record what went up while we still have the Image in hand. Asking the texture later means
+            // asking the render thread; see _texMeta.
+            var meta = new TexMeta(image.GetFormat(), image.HasMipmaps());
+            lock (_texMetaGate)
+                _texMeta[tex.GetInstanceId()] = meta;
             return tex;
         }
         catch (Exception ex)

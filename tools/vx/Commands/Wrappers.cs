@@ -40,14 +40,163 @@ internal static class Wrappers
 
     // ---- the engine -----------------------------------------------------------------------------------
 
-    /// <summary>Launch the client on the PROJECT (not an export). Extra args go to the game unchanged.</summary>
+    /// <summary>
+    /// Launch the client. Extra args go to the game unchanged.
+    ///
+    /// <para><b>Which build you get, which used to be invisible.</b> Two very different things can be meant by
+    /// "run the game", and they do not behave the same:</para>
+    /// <list type="bullet">
+    ///   <item><b>default</b> — the Godot editor binary on the PROJECT (<c>--path &lt;root&gt;</c>), loading the
+    ///         Debug C# assembly from <c>.godot/mono/temp/bin/Debug/</c>. <c>OS.IsDebugBuild()</c> is TRUE here,
+    ///         and that is not cosmetic: the frame profiler defaults on, <c>showfps</c>/<c>showposition</c>
+    ///         default on, and frame times are not release-representative. Fast to iterate — <c>./vx build</c>
+    ///         and relaunch.</item>
+    ///   <item><b><c>--release</c></b> — the EXPORTED client from <c>dist/</c>, i.e. what a player runs. The one
+    ///         perf work must use (docs/PERF-DEBUGGING.md: capture on the release export, not Debug).</item>
+    /// </list>
+    ///
+    /// <para>Both print which they picked before launching, because guessing wrong costs an afternoon of
+    /// measuring the wrong build.</para>
+    /// </summary>
     internal static int RunClient(string[] args)
+    {
+        bool release = args.Contains("--release");
+        bool skipCheck = args.Contains("--no-build-check") || args.Contains("-n");
+        string[] gameArgs = args
+            .Where(a => a is not ("--release" or "--no-build-check" or "-n"))
+            .ToArray();
+
+        return release ? RunRelease(gameArgs, skipCheck) : RunProject(gameArgs, skipCheck);
+    }
+
+    private static int RunProject(string[] gameArgs, bool skipCheck)
     {
         string? godot = Env.FindGodot();
         if (godot is null) { NoGodot(); return 1; }
+
+        string dll = Path.Combine(Env.RepoRoot, ".godot", "mono", "temp", "bin", "Debug", "VortexArena.dll");
+        if (!skipCheck && !EnsureFresh(dll, "the Debug assembly", "./vx build", () => Build([])))
+            return 1;
+
+        Console.WriteLine("→ project, Debug C# (editor engine; OS.IsDebugBuild() is true — profiler and "
+                        + "showfps default ON, frame times are not release-representative)");
         var argv = new List<string> { "--path", Env.RepoRoot };
-        argv.AddRange(args);
+        argv.AddRange(gameArgs);
         return Env.Exec(godot, argv);
+    }
+
+    private static int RunRelease(string[] gameArgs, bool skipCheck)
+    {
+        (string preset, string outRel) = Presets.First(p => p.Preset == DefaultPreset());
+        string artifact = Path.Combine(Env.RepoRoot, outRel.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(artifact) && !Directory.Exists(artifact))
+        {
+            Console.Error.WriteLine($"vx run --release: nothing exported at {outRel}");
+            Console.Error.WriteLine($"                  ./vx export --preset {preset}");
+            return 1;
+        }
+        if (!skipCheck && !EnsureFresh(artifact, $"the {preset} export", $"./vx export --preset {preset}",
+                                       () => Export(["--preset", preset])))
+            return 1;
+
+        // macOS exports a .app BUNDLE, not a bare executable — the thing to spawn is inside it.
+        string launch = Directory.Exists(artifact)
+            ? Path.Combine(artifact, "Contents", "MacOS", Path.GetFileNameWithoutExtension(artifact))
+            : artifact;
+
+        Console.WriteLine($"→ {outRel}, release export (what a player runs)");
+        // Launch from the install dir, exactly as a player would — tools/perf-run.ps1 has the same note: the
+        // packaged content layout is resolved relative to the binary.
+        return Env.Exec(launch, gameArgs, Path.GetDirectoryName(artifact));
+    }
+
+    /// <summary>
+    /// Warn when the artifact about to be launched is older than the sources that produced it, and offer to
+    /// rebuild it. Returns true to proceed with the launch, false only when a rebuild was asked for and failed
+    /// (launching a half-built tree after that would just bury the compiler error).
+    ///
+    /// <para>Deliberately advisory. It is a modification-time comparison, not a dependency graph — it can be
+    /// fooled by a touched-but-unchanged file, and it does not know about content, shaders or the cfg tree. So
+    /// declining is a first-class answer, and a non-interactive caller (CI, a script, anything with stdin
+    /// redirected) is warned and launched rather than being blocked on a prompt nobody will ever answer.</para>
+    /// </summary>
+    private static bool EnsureFresh(string artifact, string what, string howToBuild, Func<int> build)
+    {
+        if (NewestSource() is not { } newest)
+            return true;                                   // unreadable tree — never block a launch on this
+
+        DateTime built = File.Exists(artifact) ? File.GetLastWriteTimeUtc(artifact)
+                       : Directory.Exists(artifact) ? Directory.GetLastWriteTimeUtc(artifact)
+                       : DateTime.MinValue;
+        if (built >= newest.When)
+            return true;
+
+        Console.Error.WriteLine(built == DateTime.MinValue
+            ? $"vx run: {what} has not been built yet."
+            : $"vx run: {what} is older than {newest.Path} — it may not include your latest changes.");
+
+        if (Console.IsInputRedirected)
+        {
+            Console.Error.WriteLine($"        Launching it anyway (no terminal to ask at). Build with: {howToBuild}");
+            return true;
+        }
+
+        Console.Error.Write($"        Rebuild now ({howToBuild})? [Y/n] ");
+        string? answer = Console.ReadLine()?.Trim();
+        if (answer is { Length: > 0 } a && (a[0] is 'n' or 'N'))
+            return true;                                   // deliberately launching the stale one
+
+        int rc = build();
+        if (rc != 0)
+        {
+            Console.Error.WriteLine($"vx run: build failed (exit {rc}) — not launching.");
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The most recently modified build INPUT, or null when the tree cannot be read.
+    ///
+    /// <para>Walks <c>game/</c> and <c>src/</c> for <c>*.cs</c> plus the project files. <c>obj/</c> and
+    /// <c>bin/</c> are skipped because they are build OUTPUTS: they are always newer than the sources that
+    /// produced them, so counting them would report every single launch as stale. Timestamps come off the
+    /// directory enumeration rather than a stat per file, which keeps ~800 files well under the threshold
+    /// where anyone would notice this running before a launch.</para>
+    /// </summary>
+    private static (string Path, DateTime When)? NewestSource()
+    {
+        try
+        {
+            string newestPath = "";
+            DateTime newest = DateTime.MinValue;
+
+            void Consider(FileInfo f)
+            {
+                if (f.LastWriteTimeUtc > newest) { newest = f.LastWriteTimeUtc; newestPath = f.FullName; }
+            }
+
+            char sep = Path.DirectorySeparatorChar;
+            foreach (string dir in new[] { "game", "src" })
+            {
+                var root = new DirectoryInfo(Path.Combine(Env.RepoRoot, dir));
+                if (!root.Exists) continue;
+                foreach (FileInfo f in root.EnumerateFiles("*.cs", SearchOption.AllDirectories))
+                    if (!f.FullName.Contains($"{sep}obj{sep}") && !f.FullName.Contains($"{sep}bin{sep}"))
+                        Consider(f);
+            }
+            foreach (string proj in new[] { "VortexArena.csproj", "Directory.Build.props" })
+            {
+                var f = new FileInfo(Path.Combine(Env.RepoRoot, proj));
+                if (f.Exists) Consider(f);
+            }
+
+            return newest == DateTime.MinValue ? null : (Path.GetRelativePath(Env.RepoRoot, newestPath), newest);
+        }
+        catch (Exception)
+        {
+            return null;   // a staleness heuristic must never be the reason the game won't start
+        }
     }
 
     /// <summary>

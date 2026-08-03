@@ -14,6 +14,7 @@ stay independently runnable — **put real logic in the script, never in `vx`**.
 ./vx doctor                  # what is installed, what is missing, what to do about it (changes nothing)
 ./vx setup                   # bring a fresh clone to runnable: engine, maps, export templates
 ./vx build                   # the Godot host
+./vx run                     # launch it: project+Debug C# by default, `--release` for the dist/ export
 ./vx test                    # the suite
 ./vx ci                      # the authoritative local gate
 ```
@@ -39,6 +40,10 @@ smoke: **docs/RUNNING.md**.
   `tools/perf-report.py`). Measure before theorizing; capture on the release export, not Debug.
 - **Movement / netcode** → **docs/TROUBLESHOOTING.md** + **docs/NET-DEBUGGING.md** (`net_input_trace`).
 - **Cvars** → **docs/reference/CVARS.md** (regen: `python tools/find-cvars.py`). Prefix = authority, not reader.
+  Cvar/command **help strings** back `search`/`apropos` and Tab completion; the engine half is generated
+  (`python tools/extract-engine-cvar-help.py` → `data/core.pk3dir/engine-cvar-help.txt`, needs `../Base`).
+- **The developer console** (keys, completion, `search`, styling cvars) → **docs/RUNNING.md → "The developer
+  console"**. `+<command>` on the command line runs console commands at boot.
 - Past investigations → `planning/*.md` postmortems (verified, dated).
 
 ## House rules

@@ -22,7 +22,7 @@ namespace VortexArena.Game.Hud;
 /// resolved per-frame, NOT a hardcoded anchor table — so a console <c>set</c> or the menu HUD dialogs move/skin
 /// panels live.
 ///
-/// Port extras kept: <see cref="FpsPanel"/>/<see cref="PingPanel"/> (self-managing their own visibility — exempt
+/// Port extras kept: <see cref="PingPanel"/>/<see cref="PositionPanel"/> (self-managing their own visibility — exempt
 /// from the gating loop), <see cref="MinigameRenderer"/>/<see cref="MinigameMenu"/> (click-capturing, added
 /// directly, not panels), the Pong key-drive, and the <c>FrameProfiler</c> scope.
 /// </summary>
@@ -50,7 +50,6 @@ public partial class Hud : CanvasLayer
     public ItemsTimePanel ItemsTime { get; private set; } = null!;
     public PhysicsPanel Physics { get; private set; } = null!;
     public MapVotePanel MapVote { get; private set; } = null!;
-    public FpsPanel Fps { get; private set; } = null!;
     public PingPanel Ping { get; private set; } = null!;
     public PositionPanel Position { get; private set; } = null!;
 
@@ -105,7 +104,9 @@ public partial class Hud : CanvasLayer
 
     // Panels that drive their OWN Visible + redraw in their own _Process (port extras) — the manager only
     // refreshes their cvar layout, it never sets their Visible (else it would fight them frame-to-frame).
-    private static readonly HashSet<Type> SelfManaged = new() { typeof(FpsPanel), typeof(PingPanel), typeof(PositionPanel) };
+    // (FpsPanel used to be here too. It moved to EngineOverlay — DP draws showfps from the engine screen pass,
+    // so it must survive outside a match; see HudRegistry.EngineGlobal.)
+    private static readonly HashSet<Type> SelfManaged = new() { typeof(PingPanel), typeof(PositionPanel) };
 
     // Panels conditionally shown by the net/match layer or by a gameplay event (kept hidden until shown), and
     // the newly-discovered Radar (no data wiring yet). Matches the old manager's `{ Visible = false }` set.
@@ -114,7 +115,7 @@ public partial class Hud : CanvasLayer
     private static readonly HashSet<string> StartHiddenIds = new()
     {
         "racetimer", "checkpoints", "vote", "modicons", "itemstime", "mapvote",
-        "vehicle", "fps", "ping", "position", "radar",
+        "vehicle", "ping", "position", "radar",
     };
 
     private string _skin = "luma";
@@ -157,7 +158,6 @@ public partial class Hud : CanvasLayer
         ItemsTime    = Get<ItemsTimePanel>();
         Physics      = Get<PhysicsPanel>();
         MapVote      = Get<MapVotePanel>();
-        Fps          = Get<FpsPanel>();
         Ping         = Get<PingPanel>();
         Position     = Get<PositionPanel>();
 
@@ -479,7 +479,8 @@ public partial class Hud : CanvasLayer
 
     private void Add(HudPanel panel)
     {
-        panel.MouseFilter = Control.MouseFilterEnum.Ignore; // HUD never eats input (QC hud_cursormode off)
+        // (MouseFilter.Ignore is asserted by HudPanel._EnterTree — it is a property of being a panel, not of
+        // being added by this manager. See the comment there.)
         AddChild(panel);
         _panels.Add(panel);
     }

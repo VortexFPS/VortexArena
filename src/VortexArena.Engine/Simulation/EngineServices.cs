@@ -372,7 +372,26 @@ public sealed class CvarService : ICvarService
         // its registered default — never force-dumped. This is the half my first cut dropped (it gated the escape
         // on !DefaultLocked alone), which is why every late-registered-but-unchanged cvar bloated config.cfg.
         public bool Allocated;
+        // Written after LockDefaults, i.e. by the user's config.cfg, the console, the menu or a --cvar pin —
+        // never by the shipped cfg tree. See CvarService.WasSetByUser.
+        public bool UserSet;
     }
+
+    /// <summary>
+    /// DP <c>cvar_t.description</c> — the one-line help string <c>apropos</c>/<c>search</c> and Tab completion
+    /// print. Held BESIDE the value table rather than on <see cref="Var"/> so the packaged engine help table can
+    /// be loaded in one pass without caring whether each cvar exists yet (a description for a name the port never
+    /// registers is simply never surfaced: every reader walks <see cref="Names"/> and looks the description up,
+    /// not the other way round).
+    ///
+    /// <para>Three sources, in the order they land: the shipped cfg tree's <c>set name value "description"</c>
+    /// third argument (the bulk — ~3000 Xonotic cvars), the packaged DP engine help table for the engine cvars
+    /// those cfgs assign bare (<c>cl_maxfps</c>, <c>vid_*</c>, <c>r_*</c>…), and a C# <see cref="Register"/> that
+    /// passes one. Concurrent because a threaded listen server may <see cref="Register"/> off the main thread
+    /// while the console reads; it is never touched per-frame, so the dictionary's cost is irrelevant here.</para>
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _descriptions =
+        new(StringComparer.Ordinal);
 
     // WS1 stage 3 (sv_threaded): DUAL-MODE backing. Default = a plain Dictionary — the tick's hot path does
     // hundreds of GetFloat reads per player-move, and a ConcurrentDictionary there measured +32% ms/tick
@@ -475,6 +494,11 @@ public sealed class CvarService : ICvarService
         }
         if ((v.Flags & CvarFlags.ReadOnly) != 0)
             return;
+        // Everything the shipped cfg tree does happens BEFORE LockDefaults; everything after it is the user's
+        // config.cfg, the console, the menu or a --cvar pin. That is the whole basis of WasSetByUser, and it is
+        // recorded even when the value is unchanged — writing a cvar's own default is still a choice.
+        if (_defaultsLocked)
+            v.UserSet = true;
         bool changed = !string.Equals(v.Value, value, StringComparison.Ordinal);
         v.Value = value;
         v.FloatValue = ParseFloat(value);
@@ -483,7 +507,17 @@ public sealed class CvarService : ICvarService
     }
 
     public void Register(string name, string defaultValue, CvarFlags flags = CvarFlags.None)
+        => Register(name, defaultValue, flags, description: null);
+
+    /// <summary>
+    /// <see cref="Register(string, string, CvarFlags)"/> with DP's fourth <c>Cvar_RegisterVariable</c> field: the
+    /// one-line help string <c>apropos</c>/<c>search</c>/<c>cvarlist -d</c> and Tab completion print. Optional —
+    /// most port cvars inherit their description from the shipped cfg tree's <c>set … "description"</c> instead.
+    /// </summary>
+    public void Register(string name, string defaultValue, CvarFlags flags, string? description)
     {
+        if (!string.IsNullOrEmpty(description))
+            SetDescription(name, description!);
         if (TryGetVar(name, out var existing))
         {
             // Idempotent for the VALUE (keep whatever a cfg/user already set), but a Register DECLARES the cvar:
@@ -542,6 +576,24 @@ public sealed class CvarService : ICvarService
 
     /// <summary>The cvar's baseline default (registered default, or the first value a cfg set). "" if unknown.</summary>
     public string GetDefault(string name) => TryGetVar(name, out var v) ? v.Default : "";
+
+    /// <summary>
+    /// Attach DP's help string to a cvar name (see <see cref="_descriptions"/>). First writer wins for a given
+    /// name and a blank never overwrites: the cfg tree's own <c>set … "description"</c> is the authority for
+    /// Xonotic cvars, and the packaged engine table — loaded after it — only fills the gaps. Safe to call for a
+    /// cvar that does not exist (or never will); nothing reads a description except through a live cvar name.
+    /// </summary>
+    public void SetDescription(string name, string description)
+    {
+        if (string.IsNullOrEmpty(name) || string.IsNullOrWhiteSpace(description))
+            return;
+        _descriptions.TryAdd(name, description);
+    }
+
+    /// <summary>The cvar's one-line help string, or "" when nothing has described it (DP prints it after the
+    /// value in <c>Cvar_PrintHelp</c>; <c>search</c> matches keywords against it).</summary>
+    public string GetDescription(string name)
+        => _descriptions.TryGetValue(name, out string? d) ? d : "";
 
     /// <summary>True when the cvar's current value differs from its default (the reset dialogs flag these).</summary>
     public bool IsModified(string name)
@@ -610,7 +662,23 @@ public sealed class CvarService : ICvarService
             v.HasDefault = true;
             v.DefaultLocked = true;
         }
+        _defaultsLocked = true;
     }
+
+    /// <summary>True once <see cref="LockDefaults"/> has run — after which every <see cref="Set"/> is a user act.</summary>
+    private bool _defaultsLocked;
+
+    /// <summary>
+    /// Did anything write this cvar AFTER the shipped baseline was locked — i.e. the user's <c>config.cfg</c>, a
+    /// console <c>set</c>, a menu widget, or a <c>--cvar</c> pin?
+    ///
+    /// <para>Distinct from <see cref="IsModified"/>, and the distinction matters wherever code wants to know
+    /// "did the player CHOOSE this" rather than "is this different from stock". A setting deliberately set to
+    /// the same number as the shipped default is a choice; <see cref="IsModified"/> cannot see it, and code that
+    /// leans on a magic value instead (<c>cl_maxfps == 256 means nobody picked it</c>) silently overrides the
+    /// player the moment they pick that exact value.</para>
+    /// </summary>
+    public bool WasSetByUser(string name) => TryGetVar(name, out var v) && v.UserSet;
 
     /// <summary>
     /// The archived cvars to write to <c>user://config.cfg</c> — DP <c>Cvar_WriteVariables</c>'s EXACT rule

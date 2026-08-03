@@ -95,30 +95,18 @@ public partial class PositionPanel : HudPanel
     /// changed the cvar from its default (so devs always see it, releases stay opt-in) — mirrors FpsPanel.</summary>
     private static int ShowMode()
     {
-        if (Api.Services is null)
-            return OS.IsDebugBuild() ? 1 : 0;
-
-        ICvarService cv = Api.Cvars;
-        int mode = (int)cv.GetFloat("showposition");
-        if (mode == 0)
-            mode = (int)cv.GetFloat("cl_showposition");
+        int mode = ShowToggleMode("showposition", "cl_showposition");
         if (mode != 0)
             return mode;
 
-        if (OS.IsDebugBuild() && cv is CvarService cs && !cs.IsModified("showposition") && !cs.IsModified("cl_showposition"))
+        if (OS.IsDebugBuild() && ShowToggleUntouched("showposition", "cl_showposition"))
             return 1;
         return 0;
     }
 
     /// <summary>Whether the ping line currently occupies its row (so we stack above it rather than over it). The
     /// ping readout sits one row above FPS when enabled; mirrors PingPanel's enable gate (no debug default).</summary>
-    private static bool PingActive()
-    {
-        if (Api.Services is null)
-            return false;
-        ICvarService cv = Api.Cvars;
-        return (int)cv.GetFloat("showping") != 0 || (int)cv.GetFloat("cl_showping") != 0;
-    }
+    private static bool PingActive() => ShowToggleMode("showping", "cl_showping") != 0;
 
     protected override void DrawPanel()
     {

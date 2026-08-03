@@ -74,7 +74,8 @@ input on a fresh connection. Fix: reconfigure each peer's throttle on connect to
 
 ## Related diagnostics
 
-- `cl_frameprofiler 1` — frame-time + GC hitch monitor (the `proc/rcpu/gpu/rest` breakdown).
+- `cl_frameprofiler 1` — frame-time + GC hitch monitor (the `proc/rcpu/gpu/rest` breakdown; add
+  `cl_frameprofiler_rendertime 1` for the `rcpu`/`gpu` half, which is off by default — see PERF-DEBUGGING.md).
 - `developer 1`/`2` — engine log verbosity (the `[reconcile] origin SNAP …` and `PREDICTION DESYNC` traces).
 - `--camera-trace <scenario> <out>` — headless deterministic capture of predicted/view origin + reconcile error
   (see `tools/camera-ref/`).

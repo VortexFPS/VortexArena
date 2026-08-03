@@ -184,8 +184,10 @@ public class ConsoleTests
         cvars.Set("sv_gravity", "800");
         cvars.Set("cl_foo", "1");
         interp.ExecuteLine("cvarlist sv_");
-        Assert.Contains(output, s => s.StartsWith("sv_gravity"));
-        Assert.DoesNotContain(output, s => s.StartsWith("cl_foo"));
+        // DP Cvar_PrintHelp's shape: the name is colour-coded (^3) and followed by value + default, so match on
+        // the name rather than the start of the line.
+        Assert.Contains(output, s => s.Contains("sv_gravity") && s.Contains("\"800"));
+        Assert.DoesNotContain(output, s => s.Contains("cl_foo"));
     }
 
     [Fact]

@@ -41,6 +41,9 @@ public sealed class ConfigInterpreter
     /// <summary>Host-registered commands (e.g. a <c>bind</c> sink) consulted before alias/cvar fallback.</summary>
     private readonly Dictionary<string, Action<IReadOnlyList<string>>> _commands = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>DP <c>cmd_function_t.description</c>: name → one-line help, for the commands that supplied one.</summary>
+    private readonly Dictionary<string, string> _commandHelp = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Files currently on the <c>exec</c> stack — prevents infinite reentrant include recursion.</summary>
     private readonly HashSet<string> _execStack = new(StringComparer.OrdinalIgnoreCase);
 
@@ -128,6 +131,15 @@ public sealed class ConfigInterpreter
     /// </summary>
     public Action<string>? CvarArchiveHook { get; set; }
 
+    /// <summary>
+    /// Optional host callback fired with <c>(name, description)</c> for a <c>set name value "description"</c>
+    /// line — DP's third <c>Cvar_Set_f</c> argument, which becomes <c>cvar_t.description</c> and is what
+    /// <c>apropos</c>/<c>search</c> matches keywords against and <c>cvarlist -d</c> prints. The shipped Xonotic
+    /// tree carries ~3000 of these, so wiring this hook at boot is what makes a description search over the real
+    /// cvar corpus possible at all. Null (the default) simply drops the third argument, as before.
+    /// </summary>
+    public Action<string, string>? CvarDescriptionHook { get; set; }
+
     private void Diag(string message)
     {
         if (_diagnostics.Count < MaxDiagnostics)
@@ -137,9 +149,20 @@ public sealed class ConfigInterpreter
     /// <summary>
     /// Register a host command handler (DP <c>Cmd_AddCommand</c>) consulted before the alias/cvar fallback —
     /// e.g. a <c>bind</c> collector, or a test probe. Returning normally consumes the command.
+    /// <paramref name="description"/> is DP's <c>Cmd_AddCommand</c> fourth argument: the one-line help
+    /// <c>search</c>/<c>apropos</c> matches keywords against and Tab completion prints. Optional — a command
+    /// registered without one is still callable, it just has nothing to describe itself with.
     /// </summary>
-    public void RegisterCommand(string name, Action<IReadOnlyList<string>> handler)
-        => _commands[name] = handler;
+    public void RegisterCommand(string name, Action<IReadOnlyList<string>> handler, string? description = null)
+    {
+        _commands[name] = handler;
+        if (!string.IsNullOrWhiteSpace(description))
+            _commandHelp[name] = description!;
+    }
+
+    /// <summary>The one-line help for a registered command (DP <c>cmd_function_t.description</c>), or "".</summary>
+    public string CommandDescription(string name)
+        => _commandHelp.TryGetValue(name, out string? d) ? d : "";
 
     /// <summary>Pre-seed an alias (DP engine aliases). Body is stored raw and expanded on invocation.</summary>
     public void DefineAlias(string name, string body) => _aliases[name] = body;
@@ -318,6 +341,11 @@ public sealed class ConfigInterpreter
         string value = argv.Count >= 3 ? argv[2] : "";
         SafeSet(name, value);
         CvarsAssigned++;
+        // DP Cvar_Set_f's third argument is the cvar's help string, not part of the value. It used to be
+        // discarded here; the shipped tree spends ~3000 lines writing them, and `search`/Tab completion are
+        // useless without them, so hand it to the host.
+        if (argv.Count >= 4 && argv[3].Length > 0)
+            CvarDescriptionHook?.Invoke(name, argv[3]);
         // `seta`/`seta_temp` carry DP's CVAR_SAVE (archive) bit; let the host persist them (no-op during cfg load).
         if (argv[0].StartsWith("seta", StringComparison.OrdinalIgnoreCase))
             CvarArchiveHook?.Invoke(name);

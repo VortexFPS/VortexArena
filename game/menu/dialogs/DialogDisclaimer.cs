@@ -113,24 +113,28 @@ public partial class DialogDisclaimer : MenuScreen, ISelfFramedDialog
         return row;
     }
 
-    /// <summary>A Discord entry: a themed button that opens the invite, with the raw URL beneath it.</summary>
-    private static VBoxContainer LinkRow(string label, string url)
+    /// <summary>
+    /// A Discord entry: a themed button that opens the invite, inset from the dialog's text column so it reads
+    /// as an action rather than as another full-width block.
+    ///
+    /// <para>The raw <c>discord.gg/…</c> URL used to be printed under each button as a copy-by-hand fallback.
+    /// It is gone: two lines of unreadable invite code in the middle of the dialog cost more than they bought,
+    /// and the destination is still visible on hover (the tooltip) for anyone who wants to check it before
+    /// clicking.</para>
+    /// </summary>
+    private static MarginContainer LinkRow(string label, string url)
     {
-        var box = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        box.AddThemeConstantOverride("separation", 2);
+        // Inset both sides so the buttons stay centred in the column with air around them.
+        var inset = new MarginContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        inset.AddThemeConstantOverride("margin_left", 90);
+        inset.AddThemeConstantOverride("margin_right", 90);
 
         var button = MakeButton(label, () => OpenUrl(url));
-        button.TooltipText = url;
-        box.AddChild(button);
+        button.TooltipText = url;   // the destination, on demand, without spending a line on it
+        button.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        inset.AddChild(button);
 
-        // Copy-by-hand fallback (and an honest preview of where the button goes, so the destination isn't hidden
-        // behind a label). Dim + smaller so it reads as a caption rather than a second line of body text.
-        var caption = new Label { Text = url, HorizontalAlignment = HorizontalAlignment.Center };
-        caption.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.72f));
-        caption.AddThemeFontSizeOverride("font_size", MenuSkin.BodySize - 3);
-        box.AddChild(caption);
-
-        return box;
+        return inset;
     }
 
     /// <summary>Hand the invite to the OS browser. Logged so a failure to launch one is visible in the console.</summary>

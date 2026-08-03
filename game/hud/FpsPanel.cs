@@ -105,20 +105,14 @@ public partial class FpsPanel : HudPanel
     /// </summary>
     private static int ShowMode()
     {
-        if (Api.Services is null)
-            return OS.IsDebugBuild() ? 1 : 0;
-
-        ICvarService cv = Api.Cvars;
-        int mode = (int)cv.GetFloat("showfps");
-        if (mode == 0)
-            mode = (int)cv.GetFloat("cl_showfps");
+        int mode = ShowToggleMode("showfps", "cl_showfps");
         if (mode != 0)
             return mode;
 
         // Debug default-on, but never override an explicit player choice. IsModified is false when the cvar is
         // absent OR still at its default, so a fresh/default store enables it in debug while a player who turned
         // it on (mode != 0 above) or to a non-default value gets their setting honoured.
-        if (OS.IsDebugBuild() && cv is CvarService cs && !cs.IsModified("showfps") && !cs.IsModified("cl_showfps"))
+        if (OS.IsDebugBuild() && ShowToggleUntouched("showfps", "cl_showfps"))
             return 1;
         return 0;
     }

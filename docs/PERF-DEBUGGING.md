@@ -120,6 +120,7 @@ session hitch counter; **F11** expands the live scope tree; `set cl_frameprofile
 | `VSYNC/PRESENT` | present/vsync pacing | An engaging `cl_maxfps` cap fixes most (`hitch-resolution-2026-06-14.md` §2 — a cap only helps *below* what the machine can render). `·recovery` tails: fix the primary instead. |
 | `EXTERNAL` | rest-dominated AND game-side quiet AND the watchdog agrees | Genuinely OS/compositor/driver. Since 2026-07-03 the watchdog can veto this verdict — if you still see EXTERNAL with a named watchdog scope, that's a profiler bug, not the OS. |
 | `MIXED` | nothing dominated | Usually a small compound frame; look at the tree in the `.log`. |
+| `MIXED` (`render/present split unmeasured`) | the frame was spent outside `_Process` but `cl_frameprofiler_rendertime` was 0 | Not a verdict — an abstention. GPU-BOUND / VSYNC/PRESENT / EXTERNAL are indistinguishable without `rcpu`; re-run with the cvar at 1 (the perf scripts already do). |
 
 ## The tools
 
@@ -137,7 +138,24 @@ session hitch counter; **F11** expands the live scope tree; `set cl_frameprofile
 
 Cvars: `cl_frameprofiler` (0/1/2; debug builds default 1), `cl_frameprofiler_hitchms` (floor, default 12;
 a hitch must also exceed 1.8× the rolling median), `cl_frameprofiler_watchdog` (default 1),
-`cl_frameprofiler_alert` (default 0).
+`cl_frameprofiler_alert` (default 0), `cl_frameprofiler_rendertime` (default **0** — read on).
+
+### `cl_frameprofiler_rendertime`: the `rcpu`/`gpu` columns are opt-in (2026-08-03)
+
+Measuring them is `viewport_get_measured_render_time_cpu/gpu`, and under the threaded renderer this project
+runs (`rendering/driver/threads/thread_model=2`) each call **blocks the main thread until the render thread
+drains** — twice a frame, every frame the profiler was on. A debug build says so out loud (6,210
+`causing RenderingServer synchronizations on every frame` warnings in one 45 s run); a release build compiles
+the *warning* out and keeps the *stall*, and captures run on the release export — so the profiler was
+perturbing the frames it existed to measure. It now defaults **off**.
+
+- **`tools/perf-run.ps1` / `.sh` pin it to 1**, so every real capture keeps the split. Nothing to remember.
+- **Reading a log**: the env banner ends in `rendertime=0` or `rendertime=1`. Never diff a `1` capture
+  against a `0` one — the sync is real cost and only one arm paid it.
+- **With it off**, `rcpu`/`gpu` read 0 and `rest` widens to "everything outside `_Process`". `GPU-BOUND`,
+  `VSYNC/PRESENT` and `EXTERNAL` all lose the evidence that separates them, so those frames classify as
+  `MIXED` with the reason `render/present split unmeasured` instead of guessing. Seeing that in a hitch log
+  means *turn the cvar on and re-run*, not "the profiler broke".
 
 ## Discipline (what past hunts taught — the postmortems)
 

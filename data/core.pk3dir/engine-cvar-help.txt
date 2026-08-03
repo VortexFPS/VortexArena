@@ -1,0 +1,1398 @@
+# DarkPlaces engine cvar help strings — GENERATED, do not hand-edit.
+# Regenerate: python tools/extract-engine-cvar-help.py
+#
+# Source: the `cvar_t x = {flags, "name", "default", "description"}` declarations in
+# the DarkPlaces C sources (Base/darkplaces). Xonotic's own cvars carry their descriptions
+# in the cfg tree instead (`set name value "description"`), which the config interpreter
+# reads directly; this table covers only the engine cvars the cfgs assign bare.
+#
+# One `name<TAB>description` per line. A description is attached only to a cvar the port
+# actually has, so entries for unimplemented engine features are inert.
+# 1386 entries.
+
+_cl_color	internal storage cvar for current player colors (changed by color command)
+_cl_name	player name
+_host_isclient	If 1, clientside is active.
+_snd_mixahead	how much sound to mix ahead of time
+ambient_fade	rate of volume fading when moving from one environment to another
+ambient_level	volume of environment noises (water and wind)
+apple_mouse_noaccel	disables mouse acceleration while DarkPlaces is active
+bgmvolume	volume of background music (such as CD music or replacement files such as sound/cdtracks/track002.ogg)
+bottomcolor	color of your pants
+cdaudioinitialized	indicates if CD Audio system is active
+chase_active	enables chase cam
+chase_back	chase cam distance from the player
+chase_overhead	chase cam looks straight down if this is not zero
+chase_pitchangle	chase cam pitch angle
+chase_stevie	(GOODVSBAD2 only) chase cam view from above
+chase_up	chase cam distance from the player
+cl_anglespeedkey	how much +speed multiplies keyboard turning speed
+cl_areagrid_link_SOLID_NOT	set to 0 to prevent SOLID_NOT entities from being linked to the area grid, and unlink any that are already linked (in the code paths that would otherwise link them), for better performance
+cl_autodemo	records every game played, using the date/time and map name to name the demo file
+cl_autodemo_delete	3: automatically delete every newly recorded demo unless this cvar is set to 2 during a game, in case something interesting happened (cvar will be automatically set back to 3); 0: keep every newly recorded demo unless this cvar is set to 1 during a game, in case nothing interesting happened (cvar will be automatically set back to 0). Technically speaking, the value is a bitmask: bit 1 defines behaviour for all demos, bit 0 overrides behaviour for the demo currently being recorded
+cl_autodemo_nameformat	The format of the cl_autodemo filename, followed by the map name (the date is encoded using strftime escapes)
+cl_backspeed	backward movement speed
+cl_beams_instantaimhack	makes your lightning gun aiming update instantly
+cl_beams_lightatend	make a light at the end of the beam
+cl_beams_polygons	use beam polygons instead of models
+cl_beams_quakepositionhack	makes your lightning gun appear to fire from your waist (as in Quake and QuakeWorld)
+cl_bob	view bobbing amount
+cl_bob2	sideways view bobbing amount
+cl_bob2cycle	sideways view bobbing speed
+cl_bob2smooth	how fast the view goes back when you stop touching the ground
+cl_bob_limit	limits bobbing to this much distance from view_ofs
+cl_bob_limit_heightcheck	check ceiling and floor height against cl_bob_limit and scale down all view bobbing if could result in camera being in solid
+cl_bob_limit_heightcheck_dontcrosswatersurface	limit cl_bob_limit to not crossing liquid surfaces also
+cl_bob_velocity_limit	limits the xyspeed value in the bobbing code
+cl_bobcycle	view bobbing speed
+cl_bobfall	how much the view swings down when falling (influenced by the speed you hit the ground with)
+cl_bobfallcycle	speed of the bobfall swing
+cl_bobfallminspeed	necessary amount of speed for bob-falling to occur
+cl_bobmodel	enables gun bobbing
+cl_bobmodel_classic	classic Quake-style forward gun bobbing
+cl_bobmodel_forward	gun bobbing forward movement amount
+cl_bobmodel_side	gun bobbing sideways sway amount
+cl_bobmodel_speed	gun bobbing speed
+cl_bobmodel_up	gun bobbing upward movement amount
+cl_bobup	view bobbing adjustment that makes the up or down swing of the bob last longer
+cl_capturevideo	enables saving of video to a .avi file using uncompressed I420 colorspace and PCM audio, note that scr_screenshot_gammaboost affects the brightness of the output)
+cl_capturevideo_demo_stop	automatically stops video recording when demo ends
+cl_capturevideo_fps	how many frames per second to save (29.97 for NTSC, 30 for typical PC video, 15 can be useful)
+cl_capturevideo_framestep	when set to n >= 1, render n frames to capture one (useful for motion blur like effects)
+cl_capturevideo_height	scales all frames to this resolution before saving the video
+cl_capturevideo_nameformat	prefix for saved videos (the date is encoded using strftime escapes)
+cl_capturevideo_number	number to append to video filename, incremented each time a capture begins
+cl_capturevideo_ogg	save captured video data as Ogg/Vorbis/Theora streams
+cl_capturevideo_ogg_theora_bitrate	video bitrate (45 to 2000 kbps), or -1 to use quality only; higher is better; setting both to -1 achieves unlimited quality
+cl_capturevideo_ogg_theora_keyframe_auto_threshold	threshold for key frame decision (0 to 100)
+cl_capturevideo_ogg_theora_keyframe_bitrate_multiplier	how much more bit rate to use for keyframes, specified as a factor of at least 1
+cl_capturevideo_ogg_theora_keyframe_maxinterval	maximum keyframe interval (1 to 1000)
+cl_capturevideo_ogg_theora_keyframe_mininterval	minimum keyframe interval (1 to 1000)
+cl_capturevideo_ogg_theora_noise_sensitivity	video noise sensitivity (0 to 6); lower is better
+cl_capturevideo_ogg_theora_quality	video quality factor (0 to 63), or -1 to use bitrate only; higher is better; setting both to -1 achieves unlimited quality
+cl_capturevideo_ogg_theora_sharpness	sharpness (0 to 2); lower is sharper
+cl_capturevideo_ogg_theora_vp3compat	make VP3 compatible theora streams
+cl_capturevideo_ogg_vorbis_quality	audio quality (-1 to 10); higher is better
+cl_capturevideo_printfps	prints the frames per second captured in capturevideo (is only written to stdout and any log file, not to the console as that would be visible on the video), value is seconds of wall time between prints
+cl_capturevideo_realtime	causes video saving to operate in realtime (mostly useful while playing, not while capturing demos), this can produce a much lower quality video due to poor sound/video sync and will abort saving if your machine stalls for over a minute
+cl_capturevideo_width	scales all frames to this resolution before saving the video
+cl_csqc_generatemousemoveevents	enables calls to CSQC_InputEvent with type 2, for compliance with EXT_CSQC spec
+cl_deathfade	fade screen to dark red when dead, value represents how fast the fade is (higher is faster)
+cl_deathnoviewmodel	hides gun model when dead
+cl_deathscoreboard	shows scoreboard (+showscores) while dead
+cl_decals	enables decals (bullet holes, blood, etc)
+cl_decals_bias	distance to bias decals from surface to prevent depth fighting
+cl_decals_fadetime	how long decals take to fade away
+cl_decals_max	maximum number of decals allowed to exist in the world at once
+cl_decals_models	enables decals on animated models
+cl_decals_newsystem_bloodsmears	enable use of particle velocity as decal projection direction rather than surface normal
+cl_decals_newsystem_immediatebloodstain	0: no on-spawn blood stains; 1: on-spawn blood stains for pt_blood; 2: always use on-spawn blood stains
+cl_decals_newsystem_intensitymultiplier	boosts intensity of decals (because the distance fade can make them hard to see otherwise)
+cl_decals_time	how long before decals start to fade away
+cl_demo_mousegrab	Allows reading the mouse input while playing demos. Useful for camera mods developed in csqc. (0: never, 1: always)
+cl_dlights_decaybrightness	reduces brightness of light flashes over time
+cl_dlights_decayradius	reduces size of light flashes over time
+cl_explosions_alpha_end	end alpha of an explosion shell (just before it disappears)
+cl_explosions_alpha_start	starting alpha of an explosion shell
+cl_explosions_lifetime	how long an explosion shell lasts
+cl_explosions_size_end	ending alpha of an explosion shell (just before it disappears)
+cl_explosions_size_start	starting size of an explosion shell
+cl_followmodel	enables gun following
+cl_followmodel_side_highpass	gun following sideways highpass in 1/s
+cl_followmodel_side_highpass1	gun following sideways pre-highpass in 1/s
+cl_followmodel_side_limit	gun following sideways limit
+cl_followmodel_side_lowpass	gun following sideways lowpass in 1/s
+cl_followmodel_side_speed	gun following sideways speed
+cl_followmodel_up_highpass	gun following upward highpass in 1/s
+cl_followmodel_up_highpass1	gun following upward pre-highpass in 1/s
+cl_followmodel_up_limit	gun following upward limit
+cl_followmodel_up_lowpass	gun following upward lowpass in 1/s
+cl_followmodel_up_speed	gun following upward speed
+cl_forwardspeed	forward movement speed
+cl_gameplayfix_nudgeoutofsolid_separation	keep objects this distance apart to prevent collision issues on seams
+cl_gameplayfix_soundsmovewithentities	causes sounds made by lifts, players, projectiles, and any other entities, to move with the entity, so for example a rocket noise follows the rocket rather than staying at the starting position
+cl_iplog_name	name of iplog file containing player addresses for iplog_list command and automatic ip logging when parsing status command
+cl_itembobheight	how much items bob up and down (try 8)
+cl_itembobspeed	how frequently items bob up and down
+cl_joinbeforedownloadsfinish	if non-zero the game will begin after the map is loaded before other downloads finish
+cl_leanmodel	enables gun leaning
+cl_leanmodel_side_highpass	gun leaning sideways highpass in 1/s
+cl_leanmodel_side_highpass1	gun leaning sideways pre-highpass in 1/s
+cl_leanmodel_side_limit	gun leaning sideways limit
+cl_leanmodel_side_lowpass	gun leaning sideways lowpass in 1/s
+cl_leanmodel_side_speed	gun leaning sideways speed
+cl_leanmodel_up_highpass	gun leaning upward highpass in 1/s
+cl_leanmodel_up_highpass1	gun leaning upward pre-highpass in 1/s
+cl_leanmodel_up_limit	gun leaning upward limit
+cl_leanmodel_up_lowpass	gun leaning upward lowpass in 1/s
+cl_leanmodel_up_speed	gun leaning upward speed
+cl_lerpanim_maxdelta_framegroups	maximum frame delta for smoothing between framegroups (when 0, one network frame)
+cl_lerpanim_maxdelta_server	maximum frame delta for smoothing between server-controlled animation frames (when 0, one network frame)
+cl_lerpexcess	maximum allowed lerp excess (hides, not fixes, some packet loss)
+cl_maxfps	maximum fps cap, 0 = unlimited, if game is running faster than this it will wait before running another frame (useful to make cpu time available to other programs)
+cl_maxfps_alwayssleep	gives up some processing time to other applications each frame, value in milliseconds, disabled if a timedemo is running
+cl_maxidlefps	maximum fps cap when the game is not the active window (makes cpu time available to other programs
+cl_minfps	minimum fps target - while the rendering performance is below this, it will drift toward lower quality
+cl_minfps_fade	how fast the quality adapts to varying framerate
+cl_minfps_force	also apply quality reductions in timedemo/capturevideo
+cl_minfps_qualityhysteresis	reduce all quality increments by this to reduce flickering
+cl_minfps_qualitymax	highest allowed drawdistance multiplier
+cl_minfps_qualitymin	lowest allowed drawdistance multiplier
+cl_minfps_qualitymultiply	multiplier for quality changes in quality change per second render time (1 assumes linearity of quality and render time)
+cl_minfps_qualitystepmax	maximum quality change in a single frame
+cl_movecliptokeyboard	if set to 1, any move is clipped to the nine keyboard states; if set to 2, only the direction is clipped, not the amount
+cl_movement	enables clientside prediction of your player movement on DP servers (use cl_nopred for QWSV servers)
+cl_movement_accelerate	how fast you accelerate (should match sv_accelerate)
+cl_movement_airaccel_qw	ratio of QW-style air control as opposed to simple acceleration (reduces speed gain when zigzagging) (should match sv_airaccel_qw); when < 0, the speed is clamped against the maximum allowed forward speed after the move
+cl_movement_airaccel_sideways_friction	anti-sideways movement stabilization (should match sv_airaccel_sideways_friction); when < 0, only so much friction is applied that braking (by accelerating backwards) cannot be stronger
+cl_movement_airaccelerate	how fast you accelerate while in the air (should match sv_airaccelerate), if less than 0 the cl_movement_accelerate variable is used instead
+cl_movement_edgefriction	how much to slow down when you may be about to fall off a ledge (should match edgefriction)
+cl_movement_friction	how fast you slow down (should match sv_friction)
+cl_movement_jumpvelocity	how fast you move upward when you begin a jump (should match the quakec code)
+cl_movement_maxairspeed	how fast you can move while in the air (should match sv_maxairspeed)
+cl_movement_maxspeed	how fast you can move (should match sv_maxspeed)
+cl_movement_minping	whether to use prediction when ping is lower than this value in milliseconds
+cl_movement_nettimeout	stops predicting moves when server is lagging badly (avoids major performance problems), timeout in seconds
+cl_movement_replay	use engine prediction
+cl_movement_stepheight	how tall a step you can step in one instant (should match sv_stepheight)
+cl_movement_stopspeed	speed below which you will be slowed rapidly to a stop rather than sliding endlessly (should match sv_stopspeed)
+cl_movement_track_canjump	track if the player released the jump key between two jumps to decide if he is able to jump or not; when off, this causes some "sliding" slightly above the floor when the jump key is held too long; if the mod allows repeated jumping by holding space all the time, this has to be set to zero too
+cl_movement_wallfriction	how fast you slow down while sliding along a wall (should match sv_wallfriction)
+cl_movement_wateraccelerate	how fast you accelerate while in water (should match sv_wateraccelerate), if less than 0 the cl_movement_accelerate variable is used instead
+cl_movement_waterfriction	how fast you slow down (should match sv_waterfriction), if less than 0 the cl_movement_friction variable is used instead
+cl_movespeedkey	how much +speed multiplies keyboard movement speed
+cl_netfps	how many input packets to send to server each second
+cl_netimmediatebuttons	sends extra packets whenever your buttons change or an impulse is used (basically: whenever you click fire or change weapon)
+cl_netrepeatinput	how many packets in a row can be lost without movement issues when using cl_movement (technically how many input messages to repeat in each packet that have not yet been acknowledged by the server), only affects DP7 and later servers (Quake uses 0, QuakeWorld uses 2, and just for comparison Quake3 uses 1)
+cl_nettimesyncboundmode	method of restricting client time to valid values, 0 = no correction, 1 = tight bounding (jerky with packet loss), 2 = loose bounding (corrects it if out of bounds), 3 = leniant bounding (ignores temporary errors due to varying framerate), 4 = slow adjustment method from Quake3, 5 = slightly nicer version of Quake3 method, 6 = tight bounding + mode 5, 7 = jitter compensated dynamic adjustment rate
+cl_nettimesyncboundtolerance	how much error is tolerated by bounding check, as a fraction of frametime, 0.25 = up to 25% margin of error tolerated, 1 = use only new time, 0 = use only old time (same effect as setting cl_nettimesyncfactor to 1) (only affects bound modes 2 and 3)
+cl_nettimesyncfactor	rate at which client time adapts to match server time, 1 = instantly, 0.125 = slowly, 0 = not at all (only applied in bound modes 0, 1, 2, 3)
+cl_nodelta	disables delta compression of non-player entities in QW network protocol
+cl_nolerp	network update smoothing
+cl_noplayershadow	hide player shadow
+cl_nopred	(QWSV only) disables player movement prediction when playing on QWSV servers (this setting is separate from cl_movement because player expectations are different when playing on DP vs QW servers)
+cl_particles	enables particle effects
+cl_particles_alpha	multiplies opacity of particles
+cl_particles_blood	enables blood effects
+cl_particles_blood_alpha	opacity of blood, does not affect decals
+cl_particles_blood_bloodhack	make certain quake particle() calls create blood effects instead
+cl_particles_blood_decal_alpha	opacity of blood decal
+cl_particles_blood_decal_scalemax	maximal random scale of decal
+cl_particles_blood_decal_scalemin	minimal random scale of decal
+cl_particles_bubbles	enables bubbles (used by multiple effects)
+cl_particles_bulletimpacts	enables bulletimpact effects
+cl_particles_collisions	allow costly collision detection on particles (sparks that bounce, particles not going through walls, blood hitting surfaces, etc)
+cl_particles_explosions_shell	enables polygonal shell from explosions
+cl_particles_explosions_sparks	enables sparks from explosions
+cl_particles_forcetraileffects	force trails to be displayed even if a non-trail draw primitive was used (debug/compat feature)
+cl_particles_quake	0: Fancy particles; 1: Disc particles like GLQuake; 2: Square particles like software-rendered Quake
+cl_particles_quality	multiplies number of particles
+cl_particles_rain	enables rain effects
+cl_particles_size	multiplies particle size
+cl_particles_smoke	enables smoke (used by multiple effects)
+cl_particles_smoke_alpha	smoke brightness
+cl_particles_smoke_alphafade	brightness fade per second
+cl_particles_snow	enables snow effects
+cl_particles_sparks	enables sparks (used by multiple effects)
+cl_particles_visculling	perform a costly check if each particle is visible before drawing
+cl_pitchspeed	keyboard pitch turning speed
+cl_port	forces client to use chosen port number if not 0
+cl_prydoncursor	enables a mouse pointer which is able to click on entities in the world, useful for point and click mods, see PRYDON_CLIENTCURSOR extension in dpextensions.qc
+cl_prydoncursor_notrace	disables traceline used in prydon cursor reporting to the game, saving some cpu time
+cl_readpicture_force	when enabled, the low quality pictures read by ReadPicture() are preferred over the high quality pictures on the file system
+cl_rollangle	how much to tilt the view when strafing
+cl_rollspeed	how much strafing is necessary to tilt the view
+cl_serverextension_download	indicates whether the server supports the download command
+cl_showblur	shows the current alpha level of motionblur
+cl_showdate	shows current date (useful on screenshots)
+cl_showdate_format	format string for date
+cl_showfps	shows your rendered fps (frames per second)
+cl_shownet	1 = print packet size, 2 = print packet message list
+cl_showsound	shows number of active sound sources, sound latency, and other statistics
+cl_showspeed	shows your current speed (qu per second); number selects unit: 1 = qu/s, 2 = m/s, 3 = km/h, 4 = mph, 5 = knots
+cl_showspeed_factor	multiplier of the centimeter for cl_showspeed. 1 unit = 1 inch in Quake, so this should be 2.54 for Quake, etc
+cl_showtex	shows the name of the texture on the crosshair (for map debugging)
+cl_showtime	shows current time of day (useful on screenshots)
+cl_showtime_format	format string for time of day
+cl_showtopspeed	shows your top speed (kept on screen for max 3 seconds); value -1 takes over the unit from cl_showspeed, otherwise it's an unit number just like in cl_showspeed
+cl_sidespeed	strafe movement speed
+cl_smoothviewheight	time of the averaging to the viewheight value so that it creates a smooth transition. higher values = longer transition, 0 for instant transition.
+cl_sound_hknighthit	sound to play during TE_KNIGHTSPIKE (empty cvar disables sound)
+cl_sound_r_exp3	sound to play during TE_EXPLOSION and related effects (empty cvar disables sound)
+cl_sound_ric1	sound to play with 5% chance during TE_SPIKE/TE_SUPERSPIKE (empty cvar disables sound)
+cl_sound_ric2	sound to play with 5% chance during TE_SPIKE/TE_SUPERSPIKE (empty cvar disables sound)
+cl_sound_ric3	sound to play with 10% chance during TE_SPIKE/TE_SUPERSPIKE (empty cvar disables sound)
+cl_sound_ric_gunshot	specifies if and when the related cl_sound_ric and cl_sound_tink sounds apply to TE_GUNSHOT/TE_GUNSHOTQUAD, 0 = no sound, 1 = TE_GUNSHOT, 2 = TE_GUNSHOTQUAD, 3 = TE_GUNSHOT and TE_GUNSHOTQUAD
+cl_sound_tink1	sound to play with 80% chance during TE_SPIKE/TE_SUPERSPIKE (empty cvar disables sound)
+cl_sound_wizardhit	sound to play during TE_WIZSPIKE (empty cvar disables sound)
+cl_stainmaps	stains lightmaps, much faster than decals but blurred
+cl_stainmaps_clearonload	clear stainmaps on map restart
+cl_stairsmoothspeed	how fast your view moves upward/downward when running up/down stairs
+cl_startdemos	1 enables the `startdemos` loop used in Quake and some mods, 0 goes straight to the menu
+cl_upspeed	vertical movement speed (while swimming or flying)
+cl_video_brightness	brightness of video, 1 = fullbright, 0.75 - 3/4 etc.
+cl_video_fadein	fading-from-black effect once video is started, in seconds
+cl_video_fadeout	fading-to-black effect once video is ended, in seconds
+cl_video_keepaspectratio	keeps aspect ratio of fullscreen videos, leaving black color on unfilled areas, a value of 2 let video to be stretched horizontally with top & bottom being sliced out
+cl_video_libavw_minheight	if videos height is lesser than minimal, thay will be upscaled
+cl_video_libavw_minwidth	if videos width is lesser than minimal, thay will be upscaled
+cl_video_libavw_scaler	selects a scaler for libavcode played videos. Scalers are: 0 - bilinear, 1 - bicubic, 2 - x, 3 - point, 4 - area, 5 - bicublin, 6 - gauss, 7 - sinc, 8 - lanczos, 9 - spline.
+cl_video_scale	scale of video, 1 = fullscreen, 0.75 - 3/4 of screen etc.
+cl_video_scale_vpos	vertical align of scaled video, -1 is top, 1 is bottom
+cl_video_stipple	draw interlacing-like effect on videos, similar to scr_stipple but static and used only with video playing.
+cl_video_subtitles	show subtitles for videos (if they are present)
+cl_video_subtitles_lines	how many lines to occupy for subtitles
+cl_video_subtitles_textsize	textsize for subtitles
+cl_viewmodel_scale	changes size of gun model, lower values prevent poking into walls but cause strange artifacts on lighting and especially r_stereo/vid_stereobuffer options where the size of the gun becomes visible
+cl_worldbasename	name of current worldmodel without maps/ prefix or extension
+cl_worldmessage	title of current level
+cl_worldname	name of current worldmodel
+cl_worldnamenoextension	name of current worldmodel without extension
+cl_yawspeed	keyboard yaw turning speed
+cmdline	contains commandline the engine was launched with
+collision_bih_fullrecursion	debugging option to disable the bih recursion optimizations by iterating the entire tree
+collision_cache	store results of collision traces for next frame to reuse if possible (optimization)
+collision_debug_tracelineasbox	workaround for any bugs in Collision_TraceLineBrushFloat by using Collision_TraceBrushBrushFloat
+collision_extendmovelength	internal bias on trace length to ensure detection of collisions within the collision_impactnudge distance so that short moves do not degrade across frames (this does not alter the final trace length)
+collision_extendtraceboxlength	internal bias for tracebox() qc builtin to account for collision_impactnudge (this does not alter the final trace length)
+collision_extendtracelinelength	internal bias for traceline() qc builtin to account for collision_impactnudge (this does not alter the final trace length)
+collision_impactnudge	how much to back off from the impact
+collision_triangle_axialsides	generate axially-aligned edge planes on triangles - otherwise use perpendicular edge planes
+collision_triangle_bevelsides	generate sloped edge planes on triangles - if 0, see axialedgeplanes
+con_chat	how many chat lines to show in a dedicated chat area
+con_chatpos	where to put chat (negative: lines from bottom of screen, positive: lines below notify, 0: at top)
+con_chatrect	use con_chatrect_x and _y to position con_notify and con_chat freely instead of con_chatpos
+con_chatrect_x	where to put chat, relative x coordinate of left edge on screen (use con_chatwidth for width)
+con_chatrect_y	where to put chat, relative y coordinate of top edge on screen (use con_chat for line count)
+con_chatsize	chat text size in virtual 2D pixels (if con_chat is enabled)
+con_chatsound	enables chat sound to play on message
+con_chatsound_file	The sound to play for chat messages
+con_chatsound_team_file	The sound to play for team chat messages
+con_chatsound_team_mask	Magic ASCII code that denotes a team chat message
+con_chattime	how long chat lines last, in seconds
+con_chatwidth	relative chat window width
+con_closeontoggleconsole	allows toggleconsole binds to close the console as well; when set to 2, this even works when not at the start of the line in console input; when set to 3, this works even if the toggleconsole key is the color tag
+con_completion_exec	completion pattern for the exec command
+con_completion_playdemo	completion pattern for the playdemo command
+con_completion_timedemo	completion pattern for the timedemo command
+con_nickcompletion	tab-complete nicks in console and message input
+con_nickcompletion_flags	Bitfield: 0: add nothing after completion. 1: add the last color after completion. 2: add a quote when starting a quote instead of the color. 4: will replace 1, will force color, even after a quote. 8: ignore non-alphanumerics. 16: ignore spaces.
+con_notify	how many notify lines to show
+con_notifyalign	how to align notify lines: 0 = left, 0.5 = center, 1 = right, empty string = game default)
+con_notifysize	notify text size in virtual 2D pixels
+con_notifytime	how long notify lines last, in seconds
+con_textsize	console text size in virtual 2D pixels
+condump_stripcolors	strip color codes from console dumps
+coop	coop mode, 0 = no coop, 1 = coop mode, multiple players playing through the singleplayer game (coop mode also shuts off deathmatch)
+crosshair	selects crosshair to use (0 is none)
+crosshair_color_alpha	how opaque the crosshair should be
+crosshair_color_blue	customizable crosshair color
+crosshair_color_green	customizable crosshair color
+crosshair_color_red	customizable crosshair color
+crosshair_size	adjusts size of the crosshair on the screen
+crypto_aeslevel	whether to support AES encryption in authenticated connections (0 = no, 1 = supported, 2 = requested, 3 = required)
+crypto_developer	print extra info about crypto handshake
+crypto_servercpudebug	print statistics about time usage by crypto
+crypto_servercpumaxtime	maximum allowed crypto CPU time per frame (0 = no limit)
+crypto_servercpupercent	allowed crypto CPU load in percent for server operation (0 = no limit, faster)
+csqc_lowres	make EXT_CSQC functions CSQC_UpdateView(), setproperty(), getproperty() use the virtual 2D resolution (FTEQW/QSS behaviour) instead of the real resolution (DP behaviour); this mode is always used for the CSQC_SIMPLE (aka hud-only) CSQC_DrawHud() parameters; see cvars vid_conheight and vid_conwidth
+csqc_polygons_defaultmaterial_nocullface	use 'cull none' behavior in the default shader for rendering R_PolygonBegin - warning: enabling this is not consistent with FTEQW behavior on this feature
+csqc_progcrc	CRC of csprogs.dat file to load (-1 is none), only used during level changes and then reset to -1
+csqc_progname	name of csprogs.dat file to load
+csqc_progsize	file size of csprogs.dat file to load (-1 is none), only used during level changes and then reset to -1
+csqc_usedemoprogs	use csprogs stored in demos
+curl_enabled	whether libcurl may be used to GET files or POST data
+curl_maxdownloads	maximum number of concurrent HTTP/FTP downloads
+curl_maxspeed	maximum download speed (KiB/s)
+curl_useragent	send the User-Agent string (note: turning this off may break stuff)
+curl_useragent_append	a string to append to the User-Agent string (useful for name and version number of your mod)
+cutscene	enables cutscenes in nehahra, can be used by other mods
+deathmatch	deathmatch mode, values depend on mod but typically 0 = no deathmatch, 1 = normal deathmatch with respawning weapons, 2 = weapons stay (players can only pick up new weapons)
+developer	shows debugging messages and information (recommended for all developers and level designers); the value -1 also suppresses buffering and logging these messages
+developer_curl	whether verbose libcurl output should be printed to stderr
+developer_entityparsing	prints detailed network entities information each time a packet is received
+developer_extra	prints additional debugging messages, often very verbose!
+developer_font	prints debug messages about fonts
+developer_insane	prints huge streams of information about internal workings, entire contents of files being read/written, etc. Not recommended!
+developer_loadfile	prints name and size of every file loaded via the FS_LoadFile function (which is almost everything)
+developer_loading	prints information about files as they are loaded or unloaded successfully
+developer_memory	prints debugging information about memory allocations
+developer_memorydebug	enables memory corruption checks (very slow)
+developer_memorylargerthanmb	prints debugging information about memory allocations over this size
+developer_networkentities	prints received entities, value is 0-10 (higher for more info, 10 being the most verbose)
+developer_networking	prints all received and sent packets (recommended only for debugging)
+developer_texturelogging	produces a textures.log file containing names of skins and map textures the engine tried to load
+edgefriction	how much you slow down when nearing a ledge you might fall off, multiplier of sv_friction (Quake used 2, QuakeWorld used 1 due to a bug in physics code)
+forceqmenu	enables the quake menu instead of the quakec menu.dat (if present)
+fov	field of vision, 1-170 degrees, default 90, some players use 110-130
+fraglimit	ends level if this many frags is reached by any player
+freelook	mouse controls pitch instead of forward/back
+fs_empty_files_in_pack_mark_deletions	if enabled, empty files in a pak/pk3 count as not existing but cancel the search in further packs, effectively allowing patch pak/pk3 files to 'delete' files
+fs_gamedir	the list of currently selected gamedirs (use the 'gamedir' command to change this)
+fs_unload_dlcache	if enabled, unload dlcache's loaded pak/pk3 files when changing server and/or map WARNING: disabling unloading can cause servers to override assets of other servers, "memory leaking" by dlcache assets never unloading and many more issues
+gamecfg	unused cvar in quake, can be used by mods
+gameversion	version of game data (mod-specific) to be sent to querying clients
+gameversion_max	maximum version of game data (mod-specific), when client and server gameversion mismatch in the server browser the server is shown as incompatible; if -1, gameversion is used alone
+gameversion_min	minimum version of game data (mod-specific), when client and server gameversion mismatch in the server browser the server is shown as incompatible; if -1, gameversion is used alone
+gl_debug	enables OpenGL 4.3 debug output, 0 = off, 1 = HIGH severity only, 2 = also MEDIUM severity, 3 = also LOW severity messages. (note: enabling may not take effect until vid_restart on some drivers, and only X11 and Windows are known to support the debug context)
+gl_finish	make the cpu wait for the graphics processor at the end of each rendered frame (can help with strange input or video lag problems on some machines)
+gl_flashblend	render bright coronas for dynamic lights instead of actual lighting, fast but ugly
+gl_fogblue	nehahra fog color blue value (for Nehahra compatibility only)
+gl_fogdensity	nehahra fog density (recommend values below 0.1) (for Nehahra compatibility only)
+gl_fogenable	nehahra fog enable (for Nehahra compatibility only)
+gl_fogend	nehahra fog end distance (for Nehahra compatibility only)
+gl_foggreen	nehahra fog color green value (for Nehahra compatibility only)
+gl_fogred	nehahra fog color red value (for Nehahra compatibility only)
+gl_fogstart	nehahra fog start distance (for Nehahra compatibility only)
+gl_info_driver	name of driver library (opengl32.dll, libGL.so.1, or whatever).
+gl_info_extensions	indicates extension list found by engine, space separated.
+gl_info_renderer	indicates graphics chip model and other information
+gl_info_vendor	indicates brand of graphics chip
+gl_info_version	indicates version of current renderer. begins with 1.0.0, 1.1.0, 1.2.0, 1.3.1 etc.
+gl_lightmaps	draws only lightmaps, no texture (for level designers), a value of 2 keeps normalmap shading
+gl_max_lightmapsize	maximum allowed texture size for lightmap textures, use larger values to improve rendering speed, as long as there is enough video memory available (setting it too high for the hardware will cause very bad performance)
+gl_max_size	maximum allowed texture size, can be used to reduce video memory usage, limited by hardware capabilities (typically 2048, 4096, or 8192)
+gl_paranoid	enables OpenGL error checking and other tests
+gl_picmip	reduces resolution of textures by powers of 2, for example 1 will halve width/height, reducing texture memory usage by 75%
+gl_picmip_other	extra picmip level for other textures (may be negative, which will then reduce gl_picmip for these)
+gl_picmip_sprites	extra picmip level for sprite textures (may be negative, which will then reduce gl_picmip for these)
+gl_picmip_world	extra picmip level for world textures (may be negative, which will then reduce gl_picmip for these)
+gl_polyblend	tints view while underwater, hurt, etc
+gl_printcheckerror	prints all OpenGL error checks, useful to identify location of driver crashes
+gl_skyclip	nehahra farclip distance - the real fog end (for Nehahra compatibility only)
+gl_texture_anisotropy	anisotropic filtering quality (if supported by hardware), 1 sample (no anisotropy) and 8 sample (8 tap anisotropy) are recommended values
+gl_texturecompression	whether to compress textures, a value of 0 disables compression (even if the individual cvars are 1), 1 enables fast (low quality) compression at startup, 2 enables slow (high quality) compression at startup
+gl_texturecompression_2d	whether to compress 2d (hud/menu) textures other than the font
+gl_texturecompression_color	whether to compress colormap (diffuse) textures
+gl_texturecompression_gloss	whether to compress glossmap (specular) textures
+gl_texturecompression_glow	whether to compress glowmap (luma) textures
+gl_texturecompression_lightcubemaps	whether to compress light cubemaps (spotlights and other light projection images)
+gl_texturecompression_normal	whether to compress normalmap (normalmap) textures
+gl_texturecompression_q3bspdeluxemaps	whether to compress deluxemaps in q3bsp format levels (only levels compiled with q3map2 -deluxe have these)
+gl_texturecompression_q3bsplightmaps	whether to compress lightmaps in q3bsp format levels
+gl_texturecompression_reflectmask	whether to compress reflection cubemap masks (mask of which areas of the texture should reflect the generic shiny cubemap)
+gl_texturecompression_sky	whether to compress sky textures
+gl_texturecompression_sprites	whether to compress sprites
+halflifebsp	indicates the current map is hlbsp format (useful to know because of different bounding box sizes)
+host_framerate	locks frame timing to this value in seconds, 0.05 is 20fps for example, note that this can easily run too fast, use cl_maxfps if you want to limit your framerate instead, or sys_ticrate to limit server speed
+host_limitlocal	whether to apply rate limiting to the local player in a listen server (only useful for testing)
+host_speeds	reports how much time is used in server/graphics/sound
+host_timescale	controls game speed, 0.5 is half speed, 2 is double speed
+hostname	server message to show in server browser
+in_pitch_max	how far you can aim downward (quake used 80)
+in_pitch_min	how far you can aim upward (quake used -70)
+joy_active	indicates that a joystick is active (detected and enabled)
+joy_axisforward	which joystick axis to query for forward/backward movement
+joy_axiskeyevents	generate uparrow/leftarrow etc. keyevents for joystick axes, use if your joystick driver is not generating them
+joy_axiskeyevents_deadzone	deadzone value for axes
+joy_axispitch	which joystick axis to query for looking up/down
+joy_axisroll	which joystick axis to query for tilting head right/left
+joy_axisside	which joystick axis to query for right/left movement
+joy_axisup	which joystick axis to query for up/down movement
+joy_axisyaw	which joystick axis to query for looking right/left
+joy_deadzoneforward	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_deadzonepitch	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_deadzoneroll	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_deadzoneside	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_deadzoneup	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_deadzoneyaw	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_detected	number of joysticks detected by engine
+joy_enable	enables joystick support
+joy_index	selects which joystick to use if you have multiple (0 uses the first controller, 1 uses the second, ...)
+joy_sdl2_trigger_deadzone	deadzone for triggers to be registered as key presses
+joy_sensitivityforward	movement multiplier
+joy_sensitivitypitch	movement multiplier
+joy_sensitivityroll	movement multiplier
+joy_sensitivityside	movement multiplier
+joy_sensitivityup	movement multiplier
+joy_sensitivityyaw	movement multiplier
+joy_x360_axisforward	which joystick axis to query for forward/backward movement
+joy_x360_axispitch	which joystick axis to query for looking up/down
+joy_x360_axisroll	which joystick axis to query for tilting head right/left
+joy_x360_axisside	which joystick axis to query for right/left movement
+joy_x360_axisup	which joystick axis to query for up/down movement
+joy_x360_axisyaw	which joystick axis to query for looking right/left
+joy_x360_deadzoneforward	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_x360_deadzonepitch	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_x360_deadzoneroll	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_x360_deadzoneside	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_x360_deadzoneup	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_x360_deadzoneyaw	deadzone tolerance, suggested values are in the range 0 to 0.01
+joy_x360_sensitivityforward	movement multiplier
+joy_x360_sensitivitypitch	movement multiplier
+joy_x360_sensitivityroll	movement multiplier
+joy_x360_sensitivityside	movement multiplier
+joy_x360_sensitivityup	movement multiplier
+joy_x360_sensitivityyaw	movement multiplier
+joy_xinputavailable	indicates which devices are being reported by the Windows XInput API (first controller = 1, second = 2, third = 4, fourth = 8, added together)
+locksession	Lock the session? 0 = no, 1 = yes and abort on failure, 2 = yes and continue on failure
+locs_enable	enables replacement of certain % codes in chat messages: %l (location), %d (last death location), %h (health), %a (armor), %x (rockets), %c (cells), %r (rocket launcher status), %p (powerup status), %w (weapon status), %t (current time in level)
+locs_show	shows defined locations for editing purposes
+log_dest_udp	UDP address to log messages to (in QW rcon compatible format); multiple destinations can be separated by spaces; DO NOT SPECIFY DNS NAMES HERE
+log_file	filename to log messages to
+log_file_stripcolors	strip color codes from log messages
+lookspring	returns pitch to level with the floor when no longer holding a pitch key
+lookstrafe	move instead of turning
+m_accelerate	linear mouse acceleration factor (set to 1 to disable the linear acceleration and use only the power or natural acceleration; set to 0 to disable all acceleration)
+m_accelerate_filter	linear mouse acceleration factor filtering lowpass constant in seconds (set to 0 for no filtering)
+m_accelerate_maxspeed	above this speed in px/s, full acceleration is done, with a linear slope between (applied only on linear acceleration)
+m_accelerate_minspeed	below this speed in px/s, no acceleration is done, with a linear slope between (applied only on linear acceleration)
+m_accelerate_natural_accelsenscap	Horizontal asymptote that sets the maximum value for the natural mouse acceleration curve, value 2, for example, means that the maximum sensitivity is 2 times the base sensitivity
+m_accelerate_natural_offset	below this speed in px/ms, no natural acceleration is done
+m_accelerate_natural_strength	How quickly the accelsensitivity approaches the m_accelerate_natural_accelsenscap, values are compressed between 0 and 1 but higher numbers are allowed
+m_accelerate_power	acceleration power (must be above 1 to be useful)
+m_accelerate_power_offset	below this speed in px/ms, no power acceleration is done
+m_accelerate_power_senscap	maximum acceleration factor generated by power acceleration; use 0 for unbounded
+m_accelerate_power_strength	strength of the power mouse acceleration effect
+m_filter	smoothes mouse movement, less responsive but smoother aiming
+m_forward	mouse forward speed multiplier
+m_pitch	mouse pitch speed multiplier
+m_side	mouse side speed multiplier
+m_yaw	mouse yaw speed multiplier
+mastervolume	master volume
+menu_options_colorcontrol_correctionvalue	intensity value that matches up to white/black dither pattern, should be 0.5 for linear color
+menu_progs	name of quakec menu.dat file
+mod_alias_force_animated	if set to an non-empty string, overrides the is-animated flag of any alias models (for benchmarking)
+mod_alias_supporttagscale	support scaling factors in bone/tag attachment matrices as supported by MD3
+mod_bsp_portalize	enables portal generation from BSP tree (takes a minute or more and GBs of memory when loading a complex map), used by r_drawportals, r_useportalculling, r_shadow_realtime_dlight_portalculling, r_shadow_realtime_world_compileportalculling
+mod_generatelightmaps_borderpixels	extra space around polygons to prevent sampling artifacts
+mod_generatelightmaps_gridradius	sampling area around each lightgrid cell center
+mod_generatelightmaps_gridsamples	number of shadow tests done per lightgrid cell
+mod_generatelightmaps_lightmapradius	sampling area around each lightmap pixel
+mod_generatelightmaps_lightmapsamples	number of shadow tests done per lightmap pixel
+mod_generatelightmaps_texturesize	size of lightmap textures
+mod_generatelightmaps_unitspersample	lightmap resolution
+mod_generatelightmaps_vertexradius	sampling area around each vertex
+mod_generatelightmaps_vertexsamples	number of shadow tests done per vertex
+mod_noshader_default_offsetmapping	use offsetmapping by default on all surfaces that are not using q3 shader files
+mod_obj_orientation	fix orientation of OBJ models to the usual conventions (if zero, use coordinates as is)
+mod_q1bsp_polygoncollisions	disables use of precomputed cliphulls and instead collides with polygons (uses Bounding Interval Hierarchy optimizations)
+mod_q1bsp_traceoutofsolid	enables tracebox to move an entity that's stuck in solid brushwork out to empty space, 1 matches FTEQW and QSS and is required by many community maps (items/monsters will be missing otherwise), 0 matches old versions of DP and the original Quake engine (if your map or QC needs 0 it's buggy)
+mod_q1bsp_zero_hullsize_cutoff	bboxes with an X dimension smaller than this will use the smallest cliphull (0x0x0) instead of being rounded up to the player cliphull (32x32x56) in Q1BSP, or crouching player (32x32x36) in HLBSP
+mod_q2bsp_littransparentsurfaces	allows lighting on rain in 3v3gloom3 and other cases of transparent surfaces that have lightmaps that were ignored by quake2
+mod_q3bsp_curves_collisions	enables collisions with curves (SLOW)
+mod_q3bsp_curves_subdivisions_maxtess	maximum number of subdivisions for collision purposes (prevents curves beyond a certain detail level, limits smoothing)
+mod_q3bsp_curves_subdivisions_maxvertices	maximum vertices allowed per subdivided curve for collision purposes
+mod_q3bsp_curves_subdivisions_mintess	minimum number of subdivisions for collision purposes (values above 0 will smooth curves that don't need it)
+mod_q3bsp_curves_subdivisions_tolerance	maximum error tolerance on curve subdivision for collision purposes (usually a larger error tolerance than for rendering)
+mod_q3bsp_lightgrid_bsp_surfaces	apply lightgrid lighting to bsp models other than the world rather than using their lightmaps (experimental/debug tool)
+mod_q3bsp_lightgrid_texture	directly apply the lightgrid as a global texture rather than only reading it at the entity origin
+mod_q3bsp_lightgrid_world_surfaces	apply lightgrid lighting to the world bsp geometry rather than using lightmaps (experimental/debug tool)
+mod_q3bsp_lightmapmergepower	merges the quake3 128x128 lightmap textures into larger lightmap group textures to speed up rendering, 1 = 256x256, 2 = 512x512, 3 = 1024x1024, 4 = 2048x2048, 5 = 4096x4096, ...
+mod_q3bsp_nolightmaps	do not load lightmaps in Q3BSP maps (to save video RAM, but be warned: it looks ugly)
+mod_q3bsp_optimizedtraceline	whether to use optimized traceline code for line traces (as opposed to tracebox code)
+mod_q3bsp_sRGBlightmaps	treat lightmaps from Q3 maps as sRGB when vid_sRGB is active
+mod_q3bsp_tracelineofsight_brushes	enables culling of entities behind detail brushes, curves, etc
+mod_q3shader_default_offsetmapping	use offsetmapping by default on all surfaces that are using q3 shader files
+mod_q3shader_default_offsetmapping_bias	default bias used for offsetmapping
+mod_q3shader_default_offsetmapping_scale	default scale used for offsetmapping
+mod_q3shader_default_polygonfactor	biases depth values of 'polygonoffset' shaders to prevent z-fighting artifacts
+mod_q3shader_default_polygonoffset	biases depth values of 'polygonoffset' shaders to prevent z-fighting artifacts
+mod_q3shader_default_refractive_index	angle of refraction specified as n to apply when a photon is refracted, example values are: 1.0003 = air, water = 1.333, crown glass = 1.517, flint glass = 1.655, diamond = 2.417
+mod_q3shader_force_addalpha	treat GL_ONE GL_ONE (or add) blendfunc as GL_SRC_ALPHA GL_ONE for compatibility with older DarkPlaces releases
+mod_q3shader_force_terrain_alphaflag	for multilayered terrain shaders force TEXF_ALPHA flag on both layers
+mod_recalculatenodeboxes	enables use of generated node bounding boxes based on BSP tree portal reconstruction, rather than the node boxes supplied by the map compiler
+music_playlist_index	selects which of the music_playlist_ variables is the active one, -1 disables playlists
+nehx00	nehahra data storage cvar (used in singleplayer)
+nehx01	nehahra data storage cvar (used in singleplayer)
+nehx02	nehahra data storage cvar (used in singleplayer)
+nehx03	nehahra data storage cvar (used in singleplayer)
+nehx04	nehahra data storage cvar (used in singleplayer)
+nehx05	nehahra data storage cvar (used in singleplayer)
+nehx06	nehahra data storage cvar (used in singleplayer)
+nehx07	nehahra data storage cvar (used in singleplayer)
+nehx08	nehahra data storage cvar (used in singleplayer)
+nehx09	nehahra data storage cvar (used in singleplayer)
+nehx10	nehahra data storage cvar (used in singleplayer)
+nehx11	nehahra data storage cvar (used in singleplayer)
+nehx12	nehahra data storage cvar (used in singleplayer)
+nehx13	nehahra data storage cvar (used in singleplayer)
+nehx14	nehahra data storage cvar (used in singleplayer)
+nehx15	nehahra data storage cvar (used in singleplayer)
+nehx16	nehahra data storage cvar (used in singleplayer)
+nehx17	nehahra data storage cvar (used in singleplayer)
+nehx18	nehahra data storage cvar (used in singleplayer)
+nehx19	nehahra data storage cvar (used in singleplayer)
+net_address	network address to open ipv4 ports on (if empty, use default interfaces)
+net_address_ipv6	network address to open ipv6 ports on (if empty, use default interfaces)
+net_burstreserve	how much of the burst time to reserve for packet size spikes
+net_challengefloodblockingtimeout	when a challenge packet is received, it will block all future challenge packets from that IP address for this many seconds (cuts down on challenge floods). DarkPlaces clients retry once per second, so this should be <= 1. Failure here may lead to connect attempts failing.
+net_connect_entnum_ofs	entity number offset of human clients (for developer testing only)
+net_connectfloodblockingtimeout	when a connection packet is received, it will block all future connect packets from that IP address for this many seconds (cuts down on connect floods). Note that this does not include retries from the same IP; these are handled earlier and let in.
+net_connecttimeout	after requesting a connection, the client must reply within this many seconds or be dropped (cuts down on connect floods). Must be above 10 seconds.
+net_fakelag	lags local loopback connection by this much ping time (useful to play more fairly on your own server with people with higher pings)
+net_fakeloss_receive	drops this percentage of incoming packets, useful for testing network protocol robustness (jerky movement, effects failing to start, sounds failing to play, etc)
+net_fakeloss_send	drops this percentage of outgoing packets, useful for testing network protocol robustness (jerky movement, prediction errors, etc)
+net_getstatusfloodblockingtimeout	when a getstatus packet is received, it will block all future getstatus packets from that IP address for this many seconds (cuts down on getstatus floods). DarkPlaces retries every net_slist_timeout seconds, and qstat retries once per second, so this should be <= 1. Failure here may lead to server not showing up in the server list.
+net_graph	shows a graph of packet sizes and other information, 0 = off, 1 = show client netgraph, 2 = show client and server netgraphs (when hosting a server)
+net_messagetimeout	drops players who have not sent any packets for this many seconds
+net_slist_debug	enables verbose messages for master server queries
+net_slist_favorites	contains a list of IP addresses and ports to always query explicitly
+net_slist_interval	minimum number of seconds to wait between getstatus queries to the same DP server, must be >= server's net_getstatusfloodblockingtimeout
+net_slist_maxping	server query responses are ignored if their ping in milliseconds is higher than this
+net_slist_maxtries	how many times to ask the same server for information (more times gives better ping reports but takes longer)
+net_slist_pause	when set to 1, the server list sorting in the menu won't update until it is set back to 0
+net_slist_queriesperframe	maximum number of server information requests to send each rendered frame (guards against low framerates causing problems)
+net_slist_queriespersecond	how many server information requests to send per second
+net_slist_timeout	minimum number of seconds to wait between status queries to the same QW server, determines which response belongs to which query so low values will cause impossible pings; also a warning is printed if a dpmaster query fails to complete within this time
+net_sourceaddresscheck	compare the source IP address for replies (more secure, may break some bad multihoming setups
+net_test	internal development use only, leave it alone (usually does nothing anyway)
+net_tos_dscp	DiffServ Codepoint for network sockets (may need game restart to apply)
+net_usesizelimit	use packet size limiting (0: never, 1: in non-CSQC mode, 2: always)
+noaim	QW option to disable vertical autoaim
+noexit	kills anyone attempting to use an exit
+nomonsters	unused cvar in quake, can be used by mods
+nosound	disables sound
+pausable	allow players to pause or not (otherwise, only the server admin can)
+physics_ode	run ODE physics (VERY experimental and potentially buggy)
+physics_ode_allowconvex	allow usage of Convex Hull primitive type on trimeshes that have custom 'collisionconvex' mesh. If disabled, trimesh primitive type are used.
+physics_ode_autodisable	automatic disabling of objects which dont move for long period of time, makes object stacking a lot faster
+physics_ode_autodisable_steps	how many steps object should be dormant to be autodisabled
+physics_ode_autodisable_threshold_angular	body will be disabled if it's angular move below this value
+physics_ode_autodisable_threshold_linear	body will be disabled if it's linear move below this value
+physics_ode_autodisable_threshold_samples	average threshold with this number of samples
+physics_ode_autodisable_time	how many seconds object should be dormant to be autodisabled
+physics_ode_constantstep	use constant step instead of variable step which tends to increase stability, if set to 1 uses sys_ticrate, instead uses it's own value
+physics_ode_contact_cfm	contact solver cfm parameter - Constraint Force Mixing (see ODE User Guide)
+physics_ode_contact_erp	contact solver erp parameter - Error Restitution Percent (see ODE User Guide)
+physics_ode_contact_maxpoints	maximal number of contact points between 2 objects, higher = stable (and slower), can be up to 32
+physics_ode_contact_mu	contact solver mu parameter - friction pyramid approximation 1 (see ODE User Guide)
+physics_ode_contactsurfacelayer	allows objects to overlap this many units to reduce jitter
+physics_ode_iterationsperframe	divisor for time step, runs multiple physics steps per frame
+physics_ode_movelimit	clamp velocity if a single move would exceed this percentage of object thickness, to prevent flying through walls, be aware that behavior depends of step type
+physics_ode_printstats	print ODE stats each frame
+physics_ode_quadtree_depth	desired subdivision level of quadtree culling space
+physics_ode_spinlimit	reset spin velocity if it gets too large
+physics_ode_trick_fixnan	engine trick that checks and fixes NaN velocity/origin/angles on objects, a value of 2 makes console prints on each fix
+physics_ode_world_cfm	world solver cfm parameter - Constraint Force Mixing (see ODE User Guide); not touched when -1
+physics_ode_world_damping	enabled damping scale (see ODE User Guide), this scales all damping values, be aware that behavior depends of step type
+physics_ode_world_damping_angular	world angular damping scale (see ODE User Guide); use defaults when set to -1
+physics_ode_world_damping_angular_threshold	world angular damping threshold (see ODE User Guide); use defaults when set to -1
+physics_ode_world_damping_linear	world linear damping scale (see ODE User Guide); use defaults when set to -1
+physics_ode_world_damping_linear_threshold	world linear damping threshold (see ODE User Guide); use defaults when set to -1
+physics_ode_world_erp	world solver erp parameter - Error Restitution Percent (see ODE User Guide); use defaults when set to -1
+physics_ode_world_gravitymod	multiplies gravity got from sv_gravity, this may be needed to tweak if strong damping is used
+physics_ode_worldstep_iterations	parameter to dWorldQuickStep
+playermodel	current player model in Nexuiz/Xonotic
+playerskin	current player skin in Nexuiz/Xonotic
+pmodel	current player model number in nehahra
+port	server port for players to connect to
+pr_checkextension	indicates to QuakeC that the standard quakec extensions system is available (if 0, quakec should not attempt to use extensions)
+prvm_backtraceforwarnings	print a backtrace for warnings too
+prvm_breakpointdump	write a savegame on breakpoint to breakpoint-server.dmp
+prvm_coverage	report and count coverage events (1: per-function, 2: coverage() builtin, 4: per-statement)
+prvm_errordump	write a savegame on crash to crash-server.dmp
+prvm_gameplayfix_div0is0	When set to 1, floating point division by 0 will return zero instead of returning the IEEE standardized result (likely nan or inf). Other ways of getting non-finite values are not affected, and the warning will still print.
+prvm_garbagecollection_enable	automatically scan for and free resources that are not referenced by the code being executed in the VM
+prvm_garbagecollection_notify	print out a notification for each resource freed by garbage collection (set developer >= 1 to see these)
+prvm_garbagecollection_scan_limit	scan this many fields or resources per second to free up unreferenced resources
+prvm_garbagecollection_strings	automatically call strunzone() on strings that are not referenced
+prvm_language	when set, loads PROGSFILE.LANGUAGENAME.po and common.LANGUAGENAME.po for string translations; when set to dump, PROGSFILE.pot is written from the strings in the progs
+prvm_leaktest	try to detect memory leaks in strings or entities
+prvm_leaktest_follow_targetname	if set, target/targetname links are considered when leak testing; this should normally not be required, as entities created during startup - e.g. info_notnull - are never considered leaky
+prvm_leaktest_ignore_classnames	classnames of entities to NOT leak check because they are found by find(world, classname, ...) but are actually spawned by QC code (NOT map entities)
+prvm_reuseedicts_neverinsameframe	never allows re-use of freed entity slots during same frame
+prvm_reuseedicts_startuptime	allows immediate re-use of freed entity slots during start of new level (value in seconds)
+prvm_statementprofiling	counts how many times each QuakeC statement has been executed, these counts are displayed in prvm_printfunction output (if enabled)
+prvm_stringdebug	Print debug and warning messages related to strings
+prvm_timeprofiling	counts how long each function has been executed, these counts are displayed in prvm_profile output (if enabled)
+prvm_traceqc	prints every QuakeC statement as it is executed (only for really thorough debugging!)
+qport	identification key for playing on qw servers (allows you to maintain a connection to a quakeworld server even if your port changes)
+r_ambient	brightens map, value is 0-128
+r_batch_debugdynamicvertexpath	force the dynamic batching code path for debugging purposes
+r_batch_dynamicbuffer	use vertex/index buffers for drawing dynamic and copytriangles batches
+r_batch_multidraw	issue multiple glDrawElements calls when rendering a batch of surfaces with the same texture (otherwise the index data is copied to make it one draw)
+r_batch_multidraw_mintriangles	minimum number of triangles to activate multidraw path (copying small groups of triangles may be faster)
+r_bloom	enables bloom effect (makes bright pixels affect neighboring pixels)
+r_bloom_blur	how large the glow is
+r_bloom_brighten	how bright the glow is, after subtract/power
+r_bloom_colorexponent	how exaggerated the glow is
+r_bloom_colorscale	how bright the glow is
+r_bloom_colorsubtract	reduces bloom colors by a certain amount
+r_bloom_resolution	what resolution to perform the bloom effect at (independent of screen resolution)
+r_bloom_scenebrightness	global rendering brightness when bloom is enabled
+r_celoutlines	cartoon-style outlines (requires r_shadow_deferred)
+r_celshading	cartoon-style light shading (OpenGL 2.x only)
+r_colorfringe	Chromatic aberration. Values higher than 0.025 will noticeably distort the image
+r_colormap_palette	name of a palette lmp file to override the shirt/pants colors of player models. It consists of 16 shirt colors, 16 scoreboard shirt colors, 16 pants colors and 16 scoreboard pants colors
+r_coronas	brightness of corona flare effects around certain lights, 0 disables corona effects
+r_coronas_occlusionquery	fades coronas according to visibility, requires OpenGL 4.4
+r_coronas_occlusionsizescale	size of light source for corona occlusion checksum the proportion of hidden pixels controls corona intensity
+r_cullentities_trace	probabistically cull invisible entities
+r_cullentities_trace_delay	number of seconds until the entity gets actually culled
+r_cullentities_trace_enlarge	box enlargement for entity culling
+r_cullentities_trace_entityocclusion	check for occluding entities such as doors, not just world hull
+r_cullentities_trace_expand	box expanded by this many units for entity culling
+r_cullentities_trace_eyejitter	randomly offset rays from the eye by this much to reduce the odds of flickering
+r_cullentities_trace_pad	accept traces that hit within this many units of the box
+r_cullentities_trace_samples	number of samples to test for entity culling (in addition to center sample)
+r_cullentities_trace_tempentitysamples	number of samples to test for entity culling of temp entities (including all CSQC entities), -1 disables trace culling on these entities to prevent flicker (pvs still applies)
+r_damageblur	screen motionblur based on damage - value represents intensity, somewhere around 0.5 recommended - NOTE: bad performance on multi-gpu!
+r_deformvertexes	allows use of deformvertexes in shader files (can be turned off to check performance impact)
+r_depthfirst	renders a depth-only version of the scene before normal rendering begins to eliminate overdraw, values: 0 = off, 1 = world depth, 2 = world and model depth
+r_draw2d	draw 2D stuff (dangerous to turn off)
+r_drawdecals	enables drawing of decals
+r_drawdecals_drawdistance	decals further than drawdistance*size will not be drawn
+r_draweffects	renders temporary sprite effects
+r_drawentities	draw entities (doors, players, projectiles, etc)
+r_drawexplosions	enables rendering of explosion shells (see also cl_particles_explosions_shell)
+r_drawexteriormodel	draw your player model (e.g. in chase cam, reflections)
+r_drawfog	allows one to disable fog rendering
+r_drawparticles	enables drawing of particles
+r_drawparticles_drawdistance	particles further than drawdistance*size will not be drawn
+r_drawparticles_nearclip_max	particles closer than drawnearclip_min will be faded
+r_drawparticles_nearclip_min	particles closer than drawnearclip_min will not be drawn
+r_drawportals	shows portals (separating polygons) in world interior in quake1 maps
+r_drawviewmodel	draw your weapon model
+r_drawworld	draw world (most static stuff)
+r_dynamic	enables dynamic lights (rocket glow and such)
+r_editlights	enables .rtlights file editing mode
+r_editlights_current_ambient	ambient intensity of selected light
+r_editlights_current_angles	angles of selected light
+r_editlights_current_color	color of selected light
+r_editlights_current_corona	corona intensity of selected light
+r_editlights_current_coronasize	corona size of selected light
+r_editlights_current_cubemap	cubemap of selected light
+r_editlights_current_diffuse	diffuse intensity of selected light
+r_editlights_current_normalmode	normalmode flag of selected light
+r_editlights_current_origin	origin of selected light
+r_editlights_current_radius	radius of selected light
+r_editlights_current_realtimemode	realtimemode flag of selected light
+r_editlights_current_shadows	shadows flag of selected light
+r_editlights_current_specular	specular intensity of selected light
+r_editlights_current_style	style of selected light
+r_editlights_cursordistance	maximum distance of cursor from eye
+r_editlights_cursorgrid	snaps cursor to this grid size
+r_editlights_cursorpushback	how far to pull the cursor back toward the eye
+r_editlights_cursorpushoff	how far to push the cursor off the impacted surface
+r_editlights_drawproperties	draw properties of currently selected light
+r_editlights_quakelightsizescale	changes size of light entities loaded from a map
+r_explosionclip	enables collision detection for explosion shell (so that it flattens against walls and floors)
+r_farclip_base	farclip (furthest visible distance) for rendering when r_useinfinitefarclip is 0
+r_farclip_world	adds map size to farclip multiplied by this value
+r_fixtrans_auto	automatically fixtrans textures (when set to 2, it also saves the fixed versions to a fixtrans directory)
+r_fog_clear	clears renderbuffer with fog color before render starts
+r_fog_exp2	uses GL_EXP2 fog (as in Nehahra) rather than realistic GL_EXP fog
+r_font_always_reload	reload a font even given the same loadfont command. useful for trying out different versions of the same font file
+r_font_antialias	0 = monochrome, 1 = grey
+r_font_compress	use texture compression on font textures to save video memory
+r_font_disable_freetype	disable freetype support for fonts entirely
+r_font_disable_incmaps	always to load a full glyph map for individual unmapped character, even when it will mean extreme resources waste
+r_font_diskcache	[deprecated, not effective] save font textures to disk for future loading rather than generating them every time
+r_font_hinting	0 = no hinting, 1 = light autohinting, 2 = full autohinting, 3 = full hinting
+r_font_kerning	Use kerning if available
+r_font_nonpoweroftwo	use nonpoweroftwo textures for font (saves memory, potentially slower)
+r_font_postprocess_blur	font blur amount
+r_font_postprocess_outline	font outline amount
+r_font_postprocess_shadow_x	font shadow X shift amount, applied during outlining
+r_font_postprocess_shadow_y	font shadow Y shift amount, applied during outlining
+r_font_postprocess_shadow_z	font shadow Z shift amount, applied during blurring
+r_font_size_snapping	stick to good looking font sizes whenever possible - bad when the mod doesn't support it!
+r_framedatasize	size of renderer data cache used during one frame (for skeletal animation caching, light processing, etc)
+r_fullbright	makes map very bright and renders faster
+r_fullbright_directed	render fullbright things (unlit worldmodel and EF_FULLBRIGHT entities, but not fullbright shaders) using a constant light direction instead to add more depth while keeping uniform brightness
+r_fullbright_directed_ambient	ambient light multiplier for directed fullbright
+r_fullbright_directed_diffuse	diffuse light multiplier for directed fullbright
+r_fullbright_directed_pitch	constant pitch direction ('height') of the fake light source to use for fullbright
+r_fullbright_directed_pitch_relative	whether r_fullbright_directed_pitch is interpreted as absolute (0) or relative (1) pitch
+r_fullbrights	enables glowing pixels in quake textures (changes need r_restart to take effect)
+r_fxaa	fast approximate anti aliasing
+r_glsl_deluxemapping	use per pixel lighting on deluxemap-compiled q3bsp maps (or a value of 2 forces deluxemap shading even without deluxemaps)
+r_glsl_offsetmapping	offset mapping effect (also known as parallax mapping or virtual displacement mapping)
+r_glsl_offsetmapping_lod	apply distance-based level-of-detail correction to number of offsetmappig steps, effectively making it render faster on large open-area maps
+r_glsl_offsetmapping_lod_distance	first LOD level distance, second level (-50% steps) is 2x of this, third (33%) - 3x etc.
+r_glsl_offsetmapping_reliefmapping	relief mapping effect (higher quality)
+r_glsl_offsetmapping_reliefmapping_refinesteps	relief mapping refine steps (these are a binary search executed as the last step as given by r_glsl_offsetmapping_reliefmapping_steps)
+r_glsl_offsetmapping_reliefmapping_steps	relief mapping steps (note: too high values may be not supported by your GPU)
+r_glsl_offsetmapping_scale	how deep the offset mapping effect is
+r_glsl_offsetmapping_steps	offset mapping steps (note: too high values may be not supported by your GPU)
+r_glsl_postprocess	use a GLSL postprocessing shader
+r_glsl_postprocess_uservec1	a 4-component vector to pass as uservec1 to the postprocessing shader (only useful if default.glsl has been customized)
+r_glsl_postprocess_uservec1_enable	enables postprocessing uservec1 usage, creates USERVEC1 define (only useful if default.glsl has been customized)
+r_glsl_postprocess_uservec2	a 4-component vector to pass as uservec2 to the postprocessing shader (only useful if default.glsl has been customized)
+r_glsl_postprocess_uservec2_enable	enables postprocessing uservec2 usage, creates USERVEC1 define (only useful if default.glsl has been customized)
+r_glsl_postprocess_uservec3	a 4-component vector to pass as uservec3 to the postprocessing shader (only useful if default.glsl has been customized)
+r_glsl_postprocess_uservec3_enable	enables postprocessing uservec3 usage, creates USERVEC1 define (only useful if default.glsl has been customized)
+r_glsl_postprocess_uservec4	a 4-component vector to pass as uservec4 to the postprocessing shader (only useful if default.glsl has been customized)
+r_glsl_postprocess_uservec4_enable	enables postprocessing uservec4 usage, creates USERVEC1 define (only useful if default.glsl has been customized)
+r_glsl_saturation	saturation multiplier (only working in glsl!)
+r_glsl_saturation_redcompensate	a 'vampire sight' addition to desaturation effect, does compensation for red color, r_glsl_restart is required
+r_glsl_skeletal	render skeletal models faster using a gpu-skinning technique
+r_glsl_vertextextureblend_usebothalphas	use both alpha layers on vertex blended surfaces, each alpha layer sets amount of 'blend leak' on another layer, requires mod_q3shader_force_terrain_alphaflag on.
+r_hdr_glowintensity	how bright light emitting textures should appear
+r_hdr_irisadaptation	adjust scene brightness according to light intensity at player location
+r_hdr_irisadaptation_fade_down	fade rate at which value adjusts to brightness
+r_hdr_irisadaptation_fade_up	fade rate at which value adjusts to darkness
+r_hdr_irisadaptation_maxvalue	maximum value that can result from multiplier / brightness
+r_hdr_irisadaptation_minvalue	minimum value that can result from multiplier / brightness
+r_hdr_irisadaptation_multiplier	brightness at which value will be 1.0
+r_hdr_irisadaptation_radius	lighting within this many units of the eye is averaged
+r_hdr_irisadaptation_value	current value as scenebrightness multiplier, changes continuously when irisadaptation is active
+r_hdr_scenebrightness	global rendering brightness
+r_labelsprites_roundtopixels	try to make label sprites sharper by rounding their size to 0.5x or 1x and by rounding their position to whole pixels if possible
+r_labelsprites_scale	global scale to apply to label sprites before conversion to HUD coordinates
+r_lerpimages	bilinear filters images when scaling them up to power of 2 size (mode 1), looks better than glquake (mode 0)
+r_lerplightstyles	enable animation smoothing on flickering lights
+r_lerpmodels	enables animation smoothing on models
+r_lerpsprites	enables animation smoothing on sprites
+r_letterbox	reduces vertical height of view to simulate a letterboxed movie effect (can be used by mods for cutscenes)
+r_lightningbeam_color_blue	color of the lightning beam effect
+r_lightningbeam_color_green	color of the lightning beam effect
+r_lightningbeam_color_red	color of the lightning beam effect
+r_lightningbeam_qmbtexture	load the qmb textures/particles/lightning.pcx texture instead of generating one, can look better
+r_lightningbeam_repeatdistance	how far to stretch the texture along the lightning beam effect
+r_lightningbeam_scroll	speed of texture scrolling on the lightning beam effect
+r_lightningbeam_thickness	thickness of the lightning beam effect
+r_lockpvs	disables pvs switching, allows you to walk around and inspect what is visible from a given location in the map (anything not visible from your current location will not be drawn)
+r_lockvisibility	disables visibility updates, allows you to walk around and inspect what is visible from a given viewpoint in the map (anything offscreen at the moment this is enabled will not be drawn)
+r_mipnormalmaps	mipmaps normalmaps (turning it off looks sharper but may have aliasing)
+r_mipskins	mipmaps model skins so they render faster in the distance and do not display noise artifacts, can cause discoloration of skins if they contain undesirable border colors
+r_mipsprites	mipmaps sprites so they render faster in the distance and do not display noise artifacts
+r_motionblur	screen motionblur - value represents intensity, somewhere around 0.5 recommended - NOTE: bad performance on multi-gpu!
+r_motionblur_averaging	sliding average reaction time for velocity (higher = slower adaption to change)
+r_motionblur_maxblur	maxmimum amount of blur
+r_motionblur_minblur	factor of blur to apply at all times (always have this amount of blur no matter what the other factors are)
+r_motionblur_mousefactor	factoring in of mouse acceleration to the blur equation - the faster the player turns their mouse, the more blur they get
+r_motionblur_mousefactor_maxspeed	upper value of mouse acceleration when it reaches the peak factor into blur equation
+r_motionblur_mousefactor_minspeed	lower value of mouse acceleration when it starts to factor into blur equation
+r_motionblur_randomize	randomizing coefficient to workaround ghosting
+r_motionblur_velocityfactor	factoring in of player velocity to the blur equation - the faster the player moves around the map, the more blur they get
+r_motionblur_velocityfactor_maxspeed	upper value of velocity when it reaches the peak factor into blur equation
+r_motionblur_velocityfactor_minspeed	lower value of velocity when it starts to factor into blur equation
+r_nearclip	distance from camera of nearclip plane
+r_nearest_2d	use nearest filtering on all 2d textures (including conchars)
+r_nearest_conchars	use nearest filtering on conchars texture
+r_nolerp_list	comma separated list of models that will not have their animations smoothed
+r_nosurftextures	pretends there was no texture lump found in the q1bsp/hlbsp loading (useful for debugging this rare case)
+r_novis	draws whole level, see also sv_cullentities_pvs 0
+r_overheadsprites_perspective	fake perspective effect for SPR_OVERHEAD sprites
+r_overheadsprites_pushback	how far to pull the SPR_OVERHEAD sprites toward the eye (used to avoid intersections with 3D models)
+r_overheadsprites_scalex	additional scale for overhead sprites for x axis
+r_overheadsprites_scaley	additional scale for overhead sprites for y axis
+r_picmipsprites	make gl_picmip affect sprites too (saves some graphics memory in sprite heavy games) (setting this to 0 is a shorthand for gl_picmip_sprites -9999999)
+r_picmipworld	whether gl_picmip shall apply to world textures too (setting this to 0 is a shorthand for gl_picmip_world -9999999)
+r_polygonoffset_decals_factor	biases depth values of decals to prevent z-fighting artifacts
+r_polygonoffset_decals_offset	biases depth values of decals to prevent z-fighting artifacts
+r_polygonoffset_submodel_factor	biases depth values of world submodels such as doors, to prevent z-fighting artifacts in Quake maps
+r_polygonoffset_submodel_offset	biases depth values of world submodels such as doors, to prevent z-fighting artifacts in Quake maps
+r_q1bsp_lightmap_updates_combine	combine lightmap texture updates to make fewer glTexSubImage2D calls, modes: 0 = immediately upload lightmaps (may be thousands of small 3x3 updates), 1 = combine to one call, 2 = combine to one full texture update (glTexImage2D) which tells the driver it does not need to lock the resource (faster on most drivers)
+r_q1bsp_lightmap_updates_enabled	allow lightmaps to be updated on Q1BSP maps (don't turn this off except for debugging)
+r_q1bsp_lightmap_updates_hidden_surfaces	update lightmaps on surfaces that are not visible, so that updates only occur on frames where lightstyles changed value (animation or light switches), only makes sense with combine = 2
+r_q1bsp_skymasking	allows sky polygons in quake1 maps to obscure other geometry
+r_q3bsp_renderskydepth	draws sky depth masking in q3 maps (as in q1 maps), this means for example that sky polygons can hide other things
+r_render	enables rendering 3D views (you want this on!)
+r_rendertarget_debug	replaces the view with the contents of the specified render target (by number - note that these can fluctuate depending on scene)
+r_renderview	enables rendering 3D views (you want this on!)
+r_shadow_bouncegrid	perform particle tracing for indirect lighting (Global Illumination / radiosity) using a 3D texture covering the scene, only active on levels with realtime lights active (r_shadow_realtime_world is usually required for these)
+r_shadow_bouncegrid_blur	apply a 1-radius blur on bouncegrid to denoise it and deal with boundary issues with surfaces
+r_shadow_bouncegrid_dynamic_bounceminimumintensity	stop bouncing once intensity drops below this fraction of the original particle color
+r_shadow_bouncegrid_dynamic_culllightpaths	skip accumulating light in the bouncegrid texture where the light paths are out of view (dynamic mode only)
+r_shadow_bouncegrid_dynamic_directionalshading	use diffuse shading rather than ambient, 3D texture becomes 8x as many pixels to hold the additional data
+r_shadow_bouncegrid_dynamic_dlightparticlemultiplier	if set to a high value like 16 this can make dlights look great, but 0 is recommended for performance reasons
+r_shadow_bouncegrid_dynamic_hitmodels	enables hitting character model geometry (SLOW)
+r_shadow_bouncegrid_dynamic_lightradiusscale	particles stop at this fraction of light radius (can be more than 1)
+r_shadow_bouncegrid_dynamic_maxbounce	maximum number of bounces for a particle (minimum is 0)
+r_shadow_bouncegrid_dynamic_maxphotons	upper bound on photons to shoot per update, divided proportionately between lights - normally the number of photons is calculated by energyperphoton
+r_shadow_bouncegrid_dynamic_quality	amount of photons that should be fired (this is multiplied by spacing ^ 2 to make it adaptive with spacing changes)
+r_shadow_bouncegrid_dynamic_spacing	unit size of bouncegrid pixel
+r_shadow_bouncegrid_dynamic_updateinterval	update bouncegrid texture once per this many seconds, useful values are 0, 0.05, or 1000000
+r_shadow_bouncegrid_dynamic_x	maximum texture size of bouncegrid on X axis
+r_shadow_bouncegrid_dynamic_y	maximum texture size of bouncegrid on Y axis
+r_shadow_bouncegrid_dynamic_z	maximum texture size of bouncegrid on Z axis
+r_shadow_bouncegrid_floatcolors	upload texture as RGBA16F (or RGBA32F when set to 2) rather than RGBA8 format - this gives more dynamic range and accuracy
+r_shadow_bouncegrid_includedirectlighting	allows direct lighting to be recorded, not just indirect (gives an effect somewhat like r_shadow_realtime_world_lightmaps)
+r_shadow_bouncegrid_intensity	overall brightness of bouncegrid texture
+r_shadow_bouncegrid_lightpathsize	radius (in game units) of the light path for accumulation of light in the bouncegrid texture
+r_shadow_bouncegrid_normalizevectors	normalize random vectors (otherwise their length can vary, which dims the lighting further from the light)
+r_shadow_bouncegrid_particlebounceintensity	amount of energy carried over after each bounce, this is a multiplier of texture color and the result is clamped to 1 or less, to prevent adding energy on each bounce
+r_shadow_bouncegrid_particleintensity	brightness of particles contributing to bouncegrid texture
+r_shadow_bouncegrid_rng_seed	0+ = use this number as RNG seed, -1 = use time instead for disco-like craziness in dynamic mode
+r_shadow_bouncegrid_rng_type	0 = Lehmer 128bit RNG (slow but high quality), 1 = lhcheeserand 32bit RNG (quick)
+r_shadow_bouncegrid_static	use static radiosity solution (high quality) rather than dynamic (splotchy)
+r_shadow_bouncegrid_static_bounceminimumintensity	stop bouncing once intensity drops below this fraction of the original particle color
+r_shadow_bouncegrid_static_directionalshading	whether to use directionalshading when in static mode
+r_shadow_bouncegrid_static_lightradiusscale	particles stop at this fraction of light radius (can be more than 1) when in static mode
+r_shadow_bouncegrid_static_maxbounce	maximum number of bounces for a particle (minimum is 0) in static mode
+r_shadow_bouncegrid_static_maxphotons	upper bound on photons in static mode
+r_shadow_bouncegrid_static_quality	amount of photons that should be fired (this is multiplied by spacing ^ 2 to make it adaptive with spacing changes)
+r_shadow_bouncegrid_static_spacing	unit size of bouncegrid pixel when in static mode
+r_shadow_bouncegrid_subsamples	when generating the texture, sample this many points along each dimension (multisampling uses more compute but not more memory bandwidth)
+r_shadow_bouncegrid_threaded	enables use of taskqueue_maxthreads to perform the traces and slice rendering of bouncegrid
+r_shadow_bumpscale_basetexture	generate fake bumpmaps from diffuse textures at this bumpyness, try 4 to match tenebrae, higher values increase depth, requires r_restart to take effect
+r_shadow_bumpscale_bumpmap	what magnitude to interpret _bump.tga textures as, higher values increase depth, requires r_restart to take effect
+r_shadow_culllights_pvs	check if light overlaps any visible bsp leafs when determining if the light is visible
+r_shadow_culllights_trace	use raytraces from the eye to random places within light bounds to determine if the light is visible
+r_shadow_culllights_trace_delay	light will be considered visible for this many seconds after any trace connects
+r_shadow_culllights_trace_enlarge	make light bounds bigger by *(1.0+enlarge)
+r_shadow_culllights_trace_expand	make light bounds bigger by this many units
+r_shadow_culllights_trace_eyejitter	offset eye location randomly by this much
+r_shadow_culllights_trace_pad	accept traces that hit within this many units of the light bounds
+r_shadow_culllights_trace_samples	use this many traces to random positions (in addition to center trace)
+r_shadow_culllights_trace_tempsamples	use this many traces if the light was created by csqc (no inter-frame caching), -1 disables the check (to avoid flicker entirely)
+r_shadow_debuglight	renders only one light, for level design purposes or debugging
+r_shadow_deferred	uses image-based lighting instead of geometry-based lighting, the method used renders a depth image and a normalmap image, renders lights into separate diffuse and specular images, and then combines this into the normal rendering, requires r_shadow_shadowmapping
+r_shadow_frontsidecasting	whether to cast shadows from illuminated triangles (front side of model) or unlit triangles (back side of model)
+r_shadow_gloss	0 disables gloss (specularity) rendering, 1 uses gloss if textures are found, 2 forces a flat metallic specular effect on everything without textures (similar to tenebrae)
+r_shadow_gloss2exponent	same as r_shadow_glossexponent but for forced gloss (gloss 2) surfaces
+r_shadow_gloss2intensity	how bright the forced flat gloss should look if r_shadow_gloss is 2
+r_shadow_glossexact	use exact reflection math for gloss (slightly slower, but should look a tad better)
+r_shadow_glossexponent	how 'sharp' the gloss should appear (specular power)
+r_shadow_glossintensity	how bright textured glossmaps should look if r_shadow_gloss is 1 or 2
+r_shadow_lightattenuationdividebias	changes attenuation texture generation
+r_shadow_lightattenuationlinearscale	changes attenuation texture generation
+r_shadow_lightintensityscale	renders all world lights brighter or darker
+r_shadow_lightradiusscale	renders all world lights larger or smaller
+r_shadow_projectdistance	how far to cast shadows
+r_shadow_realtime_dlight	enables rendering of dynamic lights such as explosions and rocket light
+r_shadow_realtime_dlight_portalculling	enables portal optimization on dynamic lights (slow!)
+r_shadow_realtime_dlight_shadows	enables rendering of shadows from dynamic lights
+r_shadow_realtime_dlight_svbspculling	enables svbsp optimization on dynamic lights (very slow!)
+r_shadow_realtime_world	enables rendering of full world lighting (whether loaded from the map, or a .rtlights file, or a .ent file, or a .lights file produced by hlight)
+r_shadow_realtime_world_compile	enables compilation of world lights for higher performance rendering
+r_shadow_realtime_world_compileportalculling	enables portal-based culling optimization during compilation (overrides compilesvbsp)
+r_shadow_realtime_world_compileshadow	enables compilation of shadows from world lights for higher performance rendering
+r_shadow_realtime_world_compilesvbsp	enables svbsp optimization during compilation (slower than compileportalculling but more exact)
+r_shadow_realtime_world_importlightentitiesfrommap	load lights from .ent file or map entities at startup if no .rtlights or .lights file is present (if set to 2, always use the .ent or map entities)
+r_shadow_realtime_world_lightmaps	brightness to render lightmaps when using full world lighting, try 0.5 for a tenebrae-like appearance
+r_shadow_realtime_world_shadows	enables rendering of shadows from world lights
+r_shadow_scissor	use scissor optimization of light rendering (restricts rendering to the portion of the screen affected by the light)
+r_shadow_shadowmapping	enables use of shadowmapping (shadow rendering by depth texture sampling)
+r_shadow_shadowmapping_bias	shadowmap bias parameter (this is multiplied by nearclip * 1024 / lodsize)
+r_shadow_shadowmapping_bordersize	shadowmap size bias for filtering
+r_shadow_shadowmapping_depthbits	requested minimum shadowmap texture depth bits
+r_shadow_shadowmapping_filterquality	shadowmap filter modes: -1 = auto-select, 0 = no filtering, 1 = bilinear, 2 = bilinear 2x2 blur (fast), 3 = 3x3 blur (moderate), 4 = 4x4 blur (slow)
+r_shadow_shadowmapping_lod_bias	shadowmap size bias
+r_shadow_shadowmapping_lod_scale	shadowmap size scaling parameter
+r_shadow_shadowmapping_maxsize	limit of shadowmap side size - can not be more than 1/8th of atlassize because lights store 6 sides (2x3 grid) and sometimes 12 sides (4x3 grid for shadows from EF_NOSELFSHADOW entities) and there are multiple lights...
+r_shadow_shadowmapping_minsize	limit of shadowmap side size - must be at least r_shadow_shadowmapping_bordersize+2
+r_shadow_shadowmapping_nearclip	shadowmap nearclip in world units
+r_shadow_shadowmapping_polygonfactor	slope-dependent shadowmapping bias
+r_shadow_shadowmapping_polygonoffset	constant shadowmapping bias
+r_shadow_shadowmapping_precision	makes shadowmaps have a maximum resolution of this number of pixels per light source radius unit such that, for example, at precision 0.5 a light with radius 200 will have a maximum resolution of 100 pixels
+r_shadow_shadowmapping_texturesize	size of shadowmap atlas texture - all shadowmaps are packed into this texture at frame start
+r_shadow_shadowmapping_useshadowsampler	whether to use sampler2DShadow if available
+r_shadow_shadowmapping_vsdct	enables use of virtual shadow depth cube texture
+r_shadow_sortsurfaces	improve performance by sorting illuminated surfaces by texture
+r_shadow_usebihculling	use BIH (Bounding Interval Hierarchy) for culling lit surfaces instead of BSP (Binary Space Partitioning)
+r_shadow_usenormalmap	enables use of directional shading on lights
+r_shadows	casts fake stencil shadows from models onto the world (rtlights are unaffected by this); when set to 2, always cast the shadows in the direction set by r_shadows_throwdirection, otherwise use the model lighting.
+r_shadows_castfrombmodels	do cast shadows from bmodels
+r_shadows_darken	how much shadowed areas will be darkened
+r_shadows_drawafterrtlighting	draw fake shadows AFTER realtime lightning is drawn. May be useful for simulating fast sunlight on large outdoor maps with only one noshadow rtlight. The price is less realistic appearance of dynamic light shadows.
+r_shadows_focus	offset the shadowed area focus
+r_shadows_shadowmapbias	sets shadowmap bias for fake shadows. -1 sets the value of r_shadow_shadowmapping_bias. Needs shadowmapping ON.
+r_shadows_shadowmapscale	higher values increase shadowmap quality at a cost of area covered (multiply global shadowmap precision) for fake shadows. Needs shadowmapping ON.
+r_shadows_throwdirection	override throwing direction for r_shadows 2
+r_shadows_throwdistance	how far to cast shadows from models
+r_showbboxes	shows bounding boxes of server entities, value controls opacity scaling (1 = 10%, 10 = 100%)
+r_showbboxes_client	shows bounding boxes of clientside qc entities, value controls opacity scaling (1 = 10%, 10 = 100%)
+r_showcollisionbrushes	draws collision brushes in quake3 maps (mode 1), mode 2 disables rendering of world (trippy!)
+r_showcollisionbrushes_polygonfactor	expands outward the brush polygons a little bit, used to make collision brushes appear infront of walls
+r_showcollisionbrushes_polygonoffset	nudges brush polygon depth in hardware depth units, used to make collision brushes appear infront of walls
+r_showdisabledepthtest	disables depth testing on r_show* cvars, allowing you to see what hidden geometry the graphics card is processing
+r_showlighting	shows areas lit by lights, useful for finding out why some areas of a map render slowly (bright orange = lots of passes = slow), a value of 2 disables depth testing which can be interesting but not very useful
+r_shownormals	shows per-vertex surface normals and tangent vectors for bumpmapped lighting
+r_showoverdraw	shows overlapping geometry
+r_showparticleedges	renders a debug outline to show the polygon shape of each particle, for debugging rendering bugs with specific view types
+r_showspriteedges	renders a debug outline to show the polygon shape of each sprite frame rendered (may be 2 or more in case of interpolated animations), for debugging rendering bugs with specific view types
+r_showsurfaces	1 shows surfaces as different colors, or a value of 3 shows an approximation to vertex or object color (for a very approximate view of the game)
+r_showtris	shows triangle outlines, value controls brightness (can be above 1)
+r_skeletal_debugbone	development cvar for testing skeletal model code
+r_skeletal_debugbonecomponent	development cvar for testing skeletal model code
+r_skeletal_debugbonevalue	development cvar for testing skeletal model code
+r_skeletal_debugtranslatex	development cvar for testing skeletal model code
+r_skeletal_debugtranslatey	development cvar for testing skeletal model code
+r_skeletal_debugtranslatez	development cvar for testing skeletal model code
+r_skeletal_use_sse	use SSE for skeletal model animation
+r_sky	enables sky rendering (black otherwise)
+r_sky_scissor	limit rendering of sky to approximately the area of the sky surfaces
+r_skyscroll1	speed at which upper clouds layer scrolls in quake sky
+r_skyscroll2	speed at which lower clouds layer scrolls in quake sky
+r_smoothnormals_areaweighting	uses significantly faster (and supposedly higher quality) area-weighted vertex normals and tangent vectors rather than summing normalized triangle normals and tangents
+r_sortentities	sort entities before drawing (might be faster)
+r_speeds	displays rendering statistics and per-subsystem timings
+r_speeds_graph	display a graph of renderer statistics
+r_speeds_graph_filter_r	Red - display the specified renderer statistic r_speeds_graph_filter_g batch_batches Green - display the specified renderer statistic r_speeds_graph_filter_b batch_triangles Blue - display the specified renderer statistic r_speeds_graph_filter_y fast_triangles Yellow - display the specified renderer statistic r_speeds_graph_filter_c copytriangles_triangles Cyan - display the specified renderer statistic r_speeds_graph_filter_m dynamic_triangles Magenta - display the specified renderer statistic r_speeds_graph_filter_w animcache_shade_vertices White - display the specified renderer statistic r_speeds_graph_filter_o animcache_shape_vertices Orange - display the specified renderer statistic
+r_speeds_graph_height	size of graph
+r_speeds_graph_length	number of frames in statistics graph, can be from 4 to 8192
+r_speeds_graph_maxdefault	if the minimum and maximum observed values are closer than this, use this value as the graph range (keeps small numbers from being big graphs)
+r_speeds_graph_maxtimedelta	maximum timedelta to display in the graph (this value will be the top line)
+r_speeds_graph_seconds	number of seconds in graph, can be from 0.1 to 120
+r_speeds_graph_width	size of graph
+r_speeds_graph_x	position of graph
+r_speeds_graph_y	position of graph
+r_stereo_angle	separation angle of eyes (makes the views look different directions, as an example, 90 gives a 90 degree separation where the views are 45 degrees left and 45 degrees right)
+r_stereo_horizontal	aspect skewed side by side view for special decoder/display hardware
+r_stereo_redblue	red/blue anaglyph stereo glasses (note: most of these glasses are actually red/cyan, try that one too)
+r_stereo_redcyan	red/cyan anaglyph stereo glasses, the kind given away at drive-in movies like Creature From The Black Lagoon In 3D
+r_stereo_redgreen	red/green anaglyph stereo glasses (for those who don't mind yellow)
+r_stereo_separation	separation distance of eyes in the world (negative values are only useful for cross-eyed viewing)
+r_stereo_sidebyside	side by side views for those who can't afford glasses but can afford eye strain (note: use a negative r_stereo_separation if you want cross-eyed viewing)
+r_stereo_vertical	aspect skewed top and bottom view for special decoder/display hardware
+r_subdivide_size	how large water polygons should be (smaller values produce more polygons which give better warping effects)
+r_subdivisions_maxtess	maximum number of subdivisions (prevents curves beyond a certain detail level, limits smoothing)
+r_subdivisions_maxvertices	maximum vertices allowed per subdivided curve
+r_subdivisions_mintess	minimum number of subdivisions (values above 0 will smooth curves that don't need it)
+r_subdivisions_tolerance	maximum error tolerance on curve subdivision for rendering purposes (in other words, the curves will be given as many polygons as necessary to represent curves at this quality)
+r_test	internal development use only, leave it alone (usually does nothing anyway)
+r_textbrightness	additional brightness for text color codes (0 keeps colors as is, 1 makes them all white)
+r_textcontrast	additional contrast for text color codes (1 keeps colors as is, 0 makes them all black)
+r_textshadow	draws a shadow on all text to improve readability (note: value controls offset, 1 = 1 pixel, 1.5 = 1.5 pixels, etc)
+r_texture_dds_load	load compressed dds/filename.dds texture instead of filename.tga, if the file exists (requires driver support)
+r_texture_dds_load_alphamode	0: trust DDPF_ALPHAPIXELS flag, 1: texture format and brute force search if ambiguous, 2: texture format only
+r_texture_dds_load_logfailure	log missing DDS textures to ddstexturefailures.log, 0: done log, 1: log with no optional textures (_norm, glow etc.). 2: log all
+r_texture_dds_save	save compressed dds/filename.dds texture when filename.tga is loaded, so that it can be loaded instead next time
+r_texture_dds_swdecode	0: don't software decode DDS, 1: software decode DDS if unsupported, 2: always software decode DDS
+r_texture_jpeg_fastpicmip	perform gl_picmip during decompression for JPEG files (faster)
+r_track_sprites	track SPR_LABEL* sprites by putting them as indicator at the screen border to rotate to
+r_track_sprites_flags	1: Rotate sprites accordingly, 2: Make it a continuous rotation
+r_track_sprites_scaleh	height scaling of tracked sprites
+r_track_sprites_scalew	width scaling of tracked sprites
+r_transparent	allows use of transparent surfaces (can be turned off to check performance impact)
+r_transparent_alphatocoverage	enables GL_ALPHA_TO_COVERAGE antialiasing technique on alphablend and alphatest surfaces when using vid_samples 2 or higher
+r_transparent_sortarraysize	number of distance-sorting layers
+r_transparent_sortmaxdist	upper distance limit for transparent sorting
+r_transparent_sortmindist	lower distance limit for transparent sorting
+r_transparent_sortsurfacesbynearest	sort entity and world surfaces by nearest point on bounding box instead of using the center of the bounding box, usually reduces sorting artifacts
+r_transparent_useplanardistance	sort transparent meshes by distance from view plane rather than spherical distance to the chosen point
+r_transparentdepthmasking	enables depth writes on transparent meshes whose materially is normally opaque, this prevents seeing the inside of a transparent mesh
+r_trippy	easter egg
+r_usedepthtextures	use depth texture instead of depth renderbuffer where possible, uses less video memory but may render slower (or faster) depending on hardware
+r_useinfinitefarclip	enables use of a special kind of projection matrix that has an extremely large farclip
+r_useportalculling	improve framerate with r_novis 1 by using portal culling - still not as good as compiled visibility data in the map, but it helps (a value of 2 forces use of this even with vis data, which improves framerates in maps without too much complexity, but hurts in extremely complex maps, which is why 2 is not the default mode)
+r_usesurfaceculling	skip off-screen surfaces (1 = cull surfaces if the map is likely to benefit, 2 = always cull surfaces)
+r_viewfbo	enables use of an 8bit (1) or 16bit (2) or 32bit (3) per component float framebuffer render, which may be at a different resolution than the video mode; the default setting of 0 uses a framebuffer render when required, and renders directly to the screen otherwise
+r_viewmodel_quake	Quake-style weapon viewmodel angle adjustment
+r_viewscale	scaling factor for resolution of the fbo rendering method, must be > 0, can be above 1 for a costly antialiasing behavior, typical values are 0.5 for 1/4th as many pixels rendered, or 1 for normal rendering
+r_viewscale_fpsscaling	change resolution based on framerate
+r_viewscale_fpsscaling_min	worst acceptable quality
+r_viewscale_fpsscaling_multiply	adjust quality up or down by the frametime difference from 1.0/target, multiplied by this factor
+r_viewscale_fpsscaling_stepmax	largest adjustment to hit the target framerate (this value prevents wild overshooting of the estimate)
+r_viewscale_fpsscaling_stepsize	smallest adjustment to hit the target framerate (this value prevents minute oscillations)
+r_viewscale_fpsscaling_target	desired framerate
+r_vis_trace	test if each portal or leaf is visible using tracelines
+r_vis_trace_delay	keep a portal visible for this many seconds
+r_vis_trace_enlarge	make portal bounds bigger for tests by (1+this)*size
+r_vis_trace_expand	make portal bounds bigger for tests by this many units
+r_vis_trace_eyejitter	use a random offset of this much on the start of each traceline
+r_vis_trace_pad	accept traces that hit within this many units of the portal
+r_vis_trace_samples	use this many randomly positioned tracelines each frame to refresh the visible timer
+r_vis_trace_surfaces	also use tracelines to cull surfaces
+r_water	whether to use reflections and refraction on water surfaces (note: r_wateralpha must be set below 1)
+r_water_cameraentitiesonly	whether to only show QC-defined reflections/refractions (typically used for camera- or portal-like effects)
+r_water_clippingplanebias	a rather technical setting which avoids black pixels around water edges
+r_water_hideplayer	if set to 1 then player will be hidden in refraction views, if set to 2 then player will also be hidden in reflection views, player is always visible in camera views
+r_water_lowquality	special option to accelerate water rendering: 1 disables all dynamic lights, 2 disables particles too
+r_water_reflectdistort	how much water reflections shimmer
+r_water_refractdistort	how much water refractions shimmer
+r_water_resolutionmultiplier	multiplier for screen resolution when rendering refracted/reflected scenes, 1 is full quality, lower values are faster
+r_water_scissormode	scissor (1) or cull (2) or both (3) water renders
+r_wateralpha	opacity of water polygons
+r_waterscroll	makes water scroll around, value controls how much
+r_waterwarp	warp view while underwater
+rate	connection speed
+rate_burstsize	rate control burst size
+rcon_address	server address to send rcon commands to (when not connected to a server)
+rcon_password	password to authenticate rcon commands; NOTE: changing rcon_secure clears rcon_password, so set rcon_secure always before rcon_password; may be set to a string of the form user1:pass1 user2:pass2 user3:pass3 to allow multiple user accounts - the client then has to specify ONE of these combinations
+rcon_restricted_commands	allowed commands for rcon when the restricted mode password was used
+rcon_restricted_password	password to authenticate rcon commands in restricted mode; may be set to a string of the form user1:pass1 user2:pass2 user3:pass3 to allow multiple user accounts - the client then has to specify ONE of these combinations
+rcon_secure	force secure rcon authentication (1 = time based, 2 = challenge based); NOTE: changing rcon_secure clears rcon_password, so set rcon_secure always before rcon_password
+rcon_secure_challengetimeout	challenge-based secure rcon: time out requests if no challenge came within this time interval
+rcon_secure_maxdiff	maximum time difference between rcon request and server system clock (to protect against replay attack)
+registered	indicates if this is running registered quake (whether gfx/pop.lmp was found)
+samelevel	repeats same level if level ends (due to timelimit or someone hitting an exit)
+saved1	unused cvar in quake that is saved to config.cfg on exit, can be used by mods
+saved2	unused cvar in quake that is saved to config.cfg on exit, can be used by mods
+saved3	unused cvar in quake that is saved to config.cfg on exit, can be used by mods
+saved4	unused cvar in quake that is saved to config.cfg on exit, can be used by mods
+savedgamecfg	unused cvar in quake that is saved to config.cfg on exit, can be used by mods
+sbar_alpha_bg	opacity value of the statusbar background image
+sbar_alpha_fg	opacity value of the statusbar weapon/item icons and numbers
+sbar_flagstatus_pos	pixel position of the Nexuiz flag status icons, from the bottom
+sbar_flagstatus_right	moves Nexuiz flag status icons to the right
+sbar_gametime	shows an overlay for the time left in the current match/level (or current game time if there is no timelimit set)
+sbar_hudselector	selects which of the builtin hud layouts to use (meaning is somewhat dependent on gamemode, so nexuiz has a very different set of hud layouts than quake for example)
+sbar_info_pos	pixel position of the info strings (such as showfps), from the bottom
+sbar_miniscoreboard_size	sets the size of the mini deathmatch overlay in items, or disables it when set to 0, or sets it to a sane default when set to -1
+sbar_scorerank	shows an overlay for your score (or team score) and rank in the scoreboard
+scr_centertime	how long centerprint messages show
+scr_conalpha	opacity of console background gfx/conback (when console isn't forced fullscreen)
+scr_conalpha2factor	opacity of console background gfx/conback2 relative to scr_conalpha; when 0, gfx/conback2 is not drawn
+scr_conalpha3factor	opacity of console background gfx/conback3 relative to scr_conalpha; when 0, gfx/conback3 is not drawn
+scr_conalphafactor	opacity of console background gfx/conback relative to scr_conalpha; when 0, gfx/conback is not drawn
+scr_conbrightness	brightness of console background (0 = black, 1 = image)
+scr_conforcewhiledisconnected	1 forces fullscreen console while disconnected, 2 also forces it when the listen server has started but the client is still loading
+scr_conheight	fraction of screen height occupied by console (reduced as necessary for visibility of loading progress and infobar)
+scr_conscroll2_x	scroll speed of gfx/conback2 in x direction
+scr_conscroll2_y	scroll speed of gfx/conback2 in y direction
+scr_conscroll3_x	scroll speed of gfx/conback3 in x direction
+scr_conscroll3_y	scroll speed of gfx/conback3 in y direction
+scr_conscroll_x	scroll speed of gfx/conback in x direction
+scr_conscroll_y	scroll speed of gfx/conback in y direction
+scr_infobar_height	the height of the infobar items
+scr_loadingscreen_background	show the last visible background during loading screen (costs one screenful of video memory)
+scr_loadingscreen_barcolor	rgb color of loadingscreen progress bar
+scr_loadingscreen_barheight	the height of the loadingscreen progress bar
+scr_loadingscreen_count	number of loading screen files to use randomly (named loading.tga, loading2.tga, loading3.tga, ...)
+scr_loadingscreen_firstforstartup	remove loading.tga from random scr_loadingscreen_count selection and only display it on client startup, 0 = normal, 1 = firstforstartup
+scr_loadingscreen_maxfps	maximum FPS for loading screen so it will not update very often (this reduces loading time with lots of models)
+scr_loadingscreen_picture	picture shown during loading
+scr_loadingscreen_scale	scale factor of the background
+scr_loadingscreen_scale_base	0 = console pixels, 1 = video pixels
+scr_loadingscreen_scale_limit	0 = no limit, 1 = until first edge hits screen edge, 2 = until last edge hits screen edge, 3 = until width hits screen width, 4 = until height hits screen height
+scr_menuforcewhiledisconnected	forces menu while disconnected
+scr_printspeed	speed of intermission printing (episode end texts), a value of 0 disables the slow printing
+scr_refresh	allows you to completely shut off rendering for benchmarking purposes
+scr_sbarscale	current vid_height/vid_conheight, for compatibility with csprogs that read this cvar (found in Fitzquake-derived engines and FTEQW; despite the name it's not specific to the status bar)
+scr_screenshot_alpha	try to write an alpha channel to screenshots (debugging feature)
+scr_screenshot_gammaboost	gamma correction on saved screenshots and videos, 1.0 saves unmodified images
+scr_screenshot_jpeg	save jpeg instead of targa or PNG
+scr_screenshot_jpeg_quality	image quality of saved jpeg
+scr_screenshot_name	prefix name for saved screenshots (changes based on -game commandline, as well as which game mode is running; the date is encoded using strftime escapes)
+scr_screenshot_name_in_mapdir	if set to 1, screenshots are placed in a subdirectory named like the map they are from
+scr_screenshot_png	save png instead of targa
+scr_screenshot_timestamp	use a timestamp based number of the type YYYYMMDDHHMMSSsss instead of sequential numbering
+scr_stipple	interlacing-like stippling of the display
+scratch1	unused cvar in quake, can be used by mods
+scratch2	unused cvar in quake, can be used by mods
+scratch3	unused cvar in quake, can be used by mods
+scratch4	unused cvar in quake, can be used by mods
+sensitivity	mouse speed multiplier
+sessionid	ID of the current session (use the -sessionid parameter to set it); this is always either empty or begins with a dot (.)
+showbrand	shows gfx/brand.tga in a corner of the screen (different values select different positions, including centered)
+showpause	show pause icon when game is paused
+showram	show ram icon if low on surface cache memory (not used)
+showturtle	show turtle icon when framerate is too low
+skill	difficulty level of game, affects monster layouts in levels, 0 = easy, 1 = normal, 2 = hard, 3 = nightmare (same layout as hard but monsters fire twice)
+skin	QW player skin name (example: base)
+snd_attenuation_decibel	Decibel sound attenuation per sound radius distance
+snd_attenuation_exponent	Exponent of (1-radius) in sound attenuation formula
+snd_bufferlength	Desired length of the SDL2 audio buffer in milliseconds, smaller values reduce latency but can lead to underflow if the system is heavily loaded. Affects only how many sample frames are requested (which will be a power of 2 between 512 and 8192 inclusive)
+snd_cdautopause	pause the CD track while the game is paused
+snd_channel0volume	volume multiplier of the auto-allocate entity channel
+snd_channel1volume	volume multiplier of the 1st entity channel
+snd_channel2volume	volume multiplier of the 2nd entity channel
+snd_channel3volume	volume multiplier of the 3rd entity channel
+snd_channel4volume	volume multiplier of the 4th entity channel
+snd_channel5volume	volume multiplier of the 5th entity channel
+snd_channel6volume	volume multiplier of the 6th entity channel
+snd_channel7volume	volume multiplier of the 7th entity channel
+snd_channellayout	channel layout. Can be 0 (auto - snd_restart needed), 1 (standard layout), or 2 (ALSA layout)
+snd_channels	number of channels for the sound output (2 for stereo; up to 8 supported for 3D sound)
+snd_csqcchannel0volume	volume multiplier of the auto-allocate entity channel CSQC entities (DEPRECATED)
+snd_csqcchannel1volume	volume multiplier of the 1st entity channel of CSQC entities (DEPRECATED)
+snd_csqcchannel2volume	volume multiplier of the 2nd entity channel of CSQC entities (DEPRECATED)
+snd_csqcchannel3volume	volume multiplier of the 3rd entity channel of CSQC entities (DEPRECATED)
+snd_csqcchannel4volume	volume multiplier of the 4th entity channel of CSQC entities (DEPRECATED)
+snd_csqcchannel5volume	volume multiplier of the 5th entity channel of CSQC entities (DEPRECATED)
+snd_csqcchannel6volume	volume multiplier of the 6th entity channel of CSQC entities (DEPRECATED)
+snd_csqcchannel7volume	volume multiplier of the 7th entity channel of CSQC entities (DEPRECATED)
+snd_entchannel0volume	volume multiplier of the auto-allocate entity channel of regular entities (DEPRECATED)
+snd_entchannel1volume	volume multiplier of the 1st entity channel of regular entities (DEPRECATED)
+snd_entchannel2volume	volume multiplier of the 2nd entity channel of regular entities (DEPRECATED)
+snd_entchannel3volume	volume multiplier of the 3rd entity channel of regular entities (DEPRECATED)
+snd_entchannel4volume	volume multiplier of the 4th entity channel of regular entities (DEPRECATED)
+snd_entchannel5volume	volume multiplier of the 5th entity channel of regular entities (DEPRECATED)
+snd_entchannel6volume	volume multiplier of the 6th entity channel of regular entities (DEPRECATED)
+snd_entchannel7volume	volume multiplier of the 7th entity channel of regular entities (DEPRECATED)
+snd_identicalsoundrandomization_tics	if nonzero, how many tics to limit sound randomization as defined by snd_identicalsoundrandomization_time
+snd_identicalsoundrandomization_time	how much seconds to randomly skip (positive) or delay (negative) sounds when multiple identical sounds are started on the same frame
+snd_initialized	indicates the sound subsystem is active
+snd_maxchannelvolume	maximum volume of a single sound
+snd_mutewhenidle	1 disables sound output when game window is inactive, 2 disables it only when the window is minimised
+snd_playerchannel0volume	volume multiplier of the auto-allocate entity channel of player entities (DEPRECATED)
+snd_playerchannel1volume	volume multiplier of the 1st entity channel of player entities (DEPRECATED)
+snd_playerchannel2volume	volume multiplier of the 2nd entity channel of player entities (DEPRECATED)
+snd_playerchannel3volume	volume multiplier of the 3rd entity channel of player entities (DEPRECATED)
+snd_playerchannel4volume	volume multiplier of the 4th entity channel of player entities (DEPRECATED)
+snd_playerchannel5volume	volume multiplier of the 5th entity channel of player entities (DEPRECATED)
+snd_playerchannel6volume	volume multiplier of the 6th entity channel of player entities (DEPRECATED)
+snd_playerchannel7volume	volume multiplier of the 7th entity channel of player entities (DEPRECATED)
+snd_precache	loads sounds before they are used
+snd_show	shows some statistics about sound mixing
+snd_softclip	Use soft-clipping. Soft-clipping can make the sound more smooth if very high volume levels are used. Enable this option if the dynamic range of the loudspeakers is very low. WARNING: This feature creates distortion and should be considered a last resort.
+snd_soundradius	radius of weapon sounds and other standard sound effects (monster idle noises are half this radius and flickering light noises are one third of this radius)
+snd_spatialization_control	enable spatialization control (headphone friendly mode)
+snd_spatialization_max	maximum spatialization of sounds
+snd_spatialization_max_radius	use maximum spatialization below this radius
+snd_spatialization_min	minimum spatializazion of sounds
+snd_spatialization_min_radius	use minimum spatialization above to this radius
+snd_spatialization_occlusion	enable occlusion testing on spatialized sounds, which simply quiets sounds that are blocked by the world; 1 enables PVS method, 2 enables LineOfSight method, 3 enables both
+snd_spatialization_power	exponent of the spatialization falloff curve (0: logarithmic)
+snd_spatialization_prologic	use dolby prologic (I, II or IIx) encoding (snd_channels must be 2)
+snd_spatialization_prologic_frontangle	the angle between the front speakers and the center speaker
+snd_speed	sound output frequency, in hertz
+snd_startloopingsounds	whether to start sounds that would loop (you want this to be 1); existing sounds are not affected
+snd_startnonloopingsounds	whether to start sounds that would not loop (you want this to be 1); existing sounds are not affected
+snd_staticvolume	volume of ambient sound effects (such as swampy sounds at the start of e1m2)
+snd_streaming	enables keeping compressed ogg sound files compressed, decompressing them only as needed, otherwise they will be decompressed completely at load (may use a lot of memory); when set to 2, streaming is performed even if this would waste memory
+snd_streaming_length	decompress sounds completely if they are less than this play time when snd_streaming is 1
+snd_swapstereo	swaps left/right speakers for old ISA soundblaster cards
+snd_waterfx	underwater sound filter strength
+snd_width	sound output precision, in bytes - 1 = 8bit, 2 = 16bit, 4 = 32bit float
+snd_worldchannel0volume	volume multiplier of the auto-allocate entity channel of the world entity (DEPRECATED)
+snd_worldchannel1volume	volume multiplier of the 1st entity channel of the world entity (DEPRECATED)
+snd_worldchannel2volume	volume multiplier of the 2nd entity channel of the world entity (DEPRECATED)
+snd_worldchannel3volume	volume multiplier of the 3rd entity channel of the world entity (DEPRECATED)
+snd_worldchannel4volume	volume multiplier of the 4th entity channel of the world entity (DEPRECATED)
+snd_worldchannel5volume	volume multiplier of the 5th entity channel of the world entity (DEPRECATED)
+snd_worldchannel6volume	volume multiplier of the 6th entity channel of the world entity (DEPRECATED)
+snd_worldchannel7volume	volume multiplier of the 7th entity channel of the world entity (DEPRECATED)
+sv_accelerate	rate at which a player accelerates to sv_maxspeed
+sv_adminnick	nick name to use for admin messages instead of host name
+sv_aim	maximum cosine angle for quake's vertical autoaim, a value above 1 completely disables the autoaim, quake used 0.93
+sv_airaccel_qw	ratio of QW-style air control as opposed to simple acceleration; when < 0, the speed is clamped against the maximum allowed forward speed after the move
+sv_airaccel_qw_stretchfactor	when set, the maximum acceleration increase the player may get compared to forward-acceleration when strafejumping
+sv_airaccel_sideways_friction	anti-sideways movement stabilization (reduces speed gain when zigzagging); when < 0, only so much friction is applied that braking (by accelerating backwards) cannot be stronger
+sv_airaccelerate	rate at which a player accelerates to sv_maxairspeed while in the air, if less than 0 the sv_accelerate variable is used instead
+sv_aircontrol	CPMA-style air control
+sv_aircontrol_penalty	deceleration while using CPMA-style air control
+sv_aircontrol_power	CPMA-style air control exponent
+sv_airspeedlimit_nonqw	when set, this is a soft speed limit while in air when using airaccel_qw not equal to 1
+sv_airstopaccelerate	when set, replacement for sv_airaccelerate when moving backwards
+sv_airstrafeaccel_qw	when set, replacement for sv_airaccel_qw when just strafing
+sv_airstrafeaccelerate	when set, replacement for sv_airaccelerate when just strafing
+sv_allowdownloads	whether to allow clients to download files from the server (does not affect http downloads)
+sv_allowdownloads_archive	whether to allow downloads of archives (pak/pk3)
+sv_allowdownloads_config	whether to allow downloads of config files (cfg)
+sv_allowdownloads_dlcache	whether to allow downloads of dlcache files (dlcache/)
+sv_allowdownloads_inarchive	whether to allow downloads from archives (pak/pk3)
+sv_areadebug	disables physics culling for debugging purposes (only for development)
+sv_areagrid_link_SOLID_NOT	set to 0 to prevent SOLID_NOT entities from being linked to the area grid, and unlink any that are already linked (in the code paths that would otherwise link them), for better performance
+sv_areagrid_mingridsize	minimum areagrid cell size, smaller values work better for lots of small objects, higher values for large objects
+sv_autodemo_perclient	set to 1 to enable autorecorded per-client demos (they'll start to record at the beginning of a match); set it to 2 to also record client->server packets (for debugging)
+sv_autodemo_perclient_discardable	Allow game code to decide whether a demo should be kept or discarded.
+sv_autodemo_perclient_nameformat	The format of the sv_autodemo_perclient filename, followed by the map name, the client number and the IP address + port number, separated by underscores (the date is encoded using strftime escapes)
+sv_cheats	enables cheat commands in any game, and cheat impulses in dpmod
+sv_checkforpacketsduringsleep	uses select() function to wait between frames which can be interrupted by packets being received, instead of Sleep()/usleep()/SDL_Sleep() functions which do not check for packets
+sv_clmovement_enable	whether to allow clients to use cl_movement prediction, which can cause choppy movement on the server which may annoy other players
+sv_clmovement_inputtimeout	when a client does not send input for this many seconds (max 0.1), force them to move anyway (unlike QuakeWorld)
+sv_clmovement_minping	if client ping is below this time in milliseconds, then their ability to use cl_movement prediction is disabled for a while (as they don't need it)
+sv_clmovement_minping_disabletime	when client falls below minping, disable their prediction for this many milliseconds (should be at least 1000 or else their prediction may turn on/off frequently)
+sv_cullentities_nevercullbmodels	if enabled the clients are always notified of moving doors and lifts and other submodels of world (warning: eats a lot of network bandwidth on some levels!)
+sv_cullentities_pvs	fast but loose culling of hidden entities
+sv_cullentities_stats	displays stats on network entities culled by various methods for each client
+sv_cullentities_trace	somewhat slow but very tight culling of hidden entities, minimizes network traffic and makes wallhack cheats useless
+sv_cullentities_trace_delay	number of seconds until the entity gets actually culled (also applies to portal camera eyes even if sv_cullentities_trace is 0)
+sv_cullentities_trace_delay_players	number of seconds until the entity gets actually culled if it is a player entity
+sv_cullentities_trace_enlarge	box enlargement for entity culling (also applies to portal camera eyes even if sv_cullentities_trace is 0)
+sv_cullentities_trace_entityocclusion	also check if doors and other bsp models are in the way
+sv_cullentities_trace_expand	box is expanded by this many units for entity culling (also applies to portal camera eyes even if sv_cullentities_trace is 0)
+sv_cullentities_trace_eyejitter	jitter the eye by this much for each trace (also applies to portal camera eyes even if sv_cullentities_trace is 0)
+sv_cullentities_trace_prediction	also trace from the predicted player position
+sv_cullentities_trace_prediction_time	maximum ping time to predict in seconds
+sv_cullentities_trace_samples	number of samples to test for entity culling
+sv_cullentities_trace_samples_extra	number of samples to test for entity culling when the entity affects its surroundings by e.g. dlight (also applies to portal camera eyes even if sv_cullentities_trace is 0)
+sv_cullentities_trace_samples_players	number of samples to test for entity culling when the entity is a player entity
+sv_cullentities_trace_spectators	enables trace entity culling for clients that are spectating
+sv_curl_defaulturl	default autodownload source URL
+sv_curl_maxspeed	maximum download speed for clients downloading from sv_curl_defaulturl (KiB/s)
+sv_curl_serverpackages	list of required files for the clients, separated by spaces
+sv_debugmove	disables collision detection optimizations for debugging purposes
+sv_dedicated	for scripts and SVQC to detect when they're running on a dedicated server
+sv_disablenotify	suppress broadcast prints when certain cvars are changed (CF_NOTIFY flag in engine code)
+sv_echobprint	prints gamecode bprint() calls to server console
+sv_entfields_noescapes	Space-separated list of fields in which backslashes won't be parsed as escapes when loading entities from .bsp or .ent files. This is a workaround for buggy maps with unescaped backslashes used as path separators (only forward slashes are allowed in Quake VFS paths).
+sv_entpatch	enables loading of .ent files to override entities in the bsp (for example Threewave CTF server pack contains .ent patch files enabling play of CTF on id1 maps)
+sv_freezenonclients	freezes time, except for players, allowing you to walk around and take screenshots of explosions
+sv_friction	how fast you slow down
+sv_gameplayfix_blowupfallenzombies	causes findradius to detect SOLID_NOT entities such as zombies and corpses on the floor, allowing splash damage to apply to them
+sv_gameplayfix_consistentplayerprethink	improves fairness in multiplayer by running all PlayerPreThink functions (which fire weapons) before performing physics, then running all PlayerPostThink functions
+sv_gameplayfix_delayprojectiles	causes entities to not move on the same frame they are spawned, meaning that projectiles wait until the next frame to perform their first move, giving proper interpolation and rocket trails, but making weapons harder to use at low framerates
+sv_gameplayfix_downtracesupportsongroundflag	prevents very short moves from clearing onground (which may make the player stick to the floor at high netfps), fixes groundentity not being set when walking onto a mover with sv_gameplayfix_nogravityonground
+sv_gameplayfix_droptofloorstartsolid	prevents items and monsters that start in a solid area from falling out of the level (makes droptofloor treat trace_startsolid as an acceptable outcome)
+sv_gameplayfix_droptofloorstartsolid_nudgetocorrect	tries to nudge stuck items and monsters out of walls before droptofloor is performed
+sv_gameplayfix_easierwaterjump	changes water jumping to make it easier to get out of water (exactly like in QuakeWorld)
+sv_gameplayfix_findradiusdistancetobox	causes findradius to check the distance to the corner of a box rather than the center of the box, makes findradius detect bmodels such as very large doors that would otherwise be unaffected by splash damage
+sv_gameplayfix_fixedcheckwatertransition	fix two very stupid bugs in SV_CheckWaterTransition when watertype is CONTENTS_EMPTY (the bugs causes waterlevel to be 1 on first frame, -1 on second frame - the fix makes it 0 on both frames)
+sv_gameplayfix_gravityunaffectedbyticrate	fix some ticrate issues in physics.
+sv_gameplayfix_grenadebouncedownslopes	prevents MOVETYPE_BOUNCE (grenades) from getting stuck when fired down a downward sloping surface
+sv_gameplayfix_impactbeforeonground	enables a bug from old DP versions in which entity .touch functions are called before FL_ONGROUND is set when a collision is detected in SV_FlyMove() (used by MOVETYPE_WALK and MOVETYPE_STEP), Quake 1.5 and Combat+ mods require this, it breaks id1 fiends
+sv_gameplayfix_multiplethinksperframe	allows entities to think more often than the server framerate, primarily useful for very high fire rate weapons
+sv_gameplayfix_noairborncorpse	causes entities (corpses, items, etc) sitting ontop of moving entities (players) to fall when the moving entity (player) is no longer supporting them
+sv_gameplayfix_noairborncorpse_allowsuspendeditems	causes entities sitting ontop of objects that are instantaneously remove to float in midair (special hack to allow a common level design trick for floating items)
+sv_gameplayfix_nogravityonground	turn off gravity when on ground (to get rid of sliding)
+sv_gameplayfix_nosquashentities	Entity hitboxes will not be resized or disabled when they are crushed by movers, and will continue to be affected by movers.
+sv_gameplayfix_nostepmoveonsteepslopes	crude fix which prevents MOVETYPE_STEP (not swimming or flying) to move on slopes whose angle is bigger than 45 degree
+sv_gameplayfix_nudgeoutofsolid	attempts to fix physics errors where an object ended up in solid for some reason, smarter than sv_gameplayfix_unstick* except on Q1BSP with mod_q1bsp_polygoncollisions disabled (there it falls back to the unsticking method)
+sv_gameplayfix_nudgeoutofsolid_separation	keep objects this distance apart to prevent collision issues on seams
+sv_gameplayfix_q1bsptracelinereportstexture	enables mods to get accurate trace_texture results on q1bsp by using a surface-hitting traceline implementation rather than the standard solidbsp method, q3bsp always reports texture accurately
+sv_gameplayfix_q2airaccelerate	Quake2-style air acceleration
+sv_gameplayfix_setmodelrealbox	fixes a bug in Quake that made setmodel always set the entity box to ('-16 -16 -16', '16 16 16') rather than properly checking the model box, breaks some poorly coded mods
+sv_gameplayfix_slidemoveprojectiles	allows MOVETYPE_FLY/FLYMISSILE/TOSS/BOUNCE/BOUNCEMISSILE entities to finish their move in a frame even if they hit something, fixes 'gravity accumulation' bug for grenades on steep slopes
+sv_gameplayfix_stepdown	attempts to step down stairs, not just up them (prevents the familiar thud..thud..thud.. when running down stairs and slopes)
+sv_gameplayfix_stepmultipletimes	applies step-up onto a ledge more than once in a single frame, when running quickly up stairs
+sv_gameplayfix_swiminbmodels	causes pointcontents (used to determine if you are in a liquid) to check bmodel entities as well as the world model, so you can swim around in (possibly moving) water bmodel entities
+sv_gameplayfix_unstickentities	hack to check if entities are crossing world collision hull and try to move them to the right position. Quake didn't do this so maps shouldn't depend on it.
+sv_gameplayfix_unstickplayers	big hack to try and fix the rare case of MOVETYPE_WALK entities getting stuck in the world clipping hull. Quake did something similar.
+sv_gameplayfix_upwardvelocityclearsongroundflag	prevents monsters, items, and most other objects from being stuck to the floor when pushed around by damage, and other situations in mods
+sv_gravity	how fast you fall (512 = roughly earth gravity)
+sv_heartbeatperiod	how often to send heartbeat in seconds (only used if sv_public is 1)
+sv_idealpitchscale	how much to look up/down slopes and stairs when not using freelook
+sv_init_frame_count	number of frames to run to allow everything to settle before letting clients connect
+sv_jumpstep	whether you can step up while jumping
+sv_jumpvelocity	cvar that can be used by QuakeC code for jump velocity
+sv_lagreporting_always	report lag even in singleplayer, listen, an empty dedicated server, or during intermission
+sv_lagreporting_strict	log any extra frames run to catch up after a holdup (only applies when sv_maxphysicsframesperserverframe > 1)
+sv_legacy_bbox_expand	before linking an entity to the area grid, decrease its mins and increase its maxs by '1 1 1', or '15 15 1' if it has flag FL_ITEM (this is the Quake/QuakeWorld behaviour); disable to make SVQC bboxes consistent with CSQC which never does this expansion
+sv_mapformat_is_quake2	indicates the current map is q2bsp format (useful to know because of different entity behaviors, .frame on submodels and other things)
+sv_mapformat_is_quake3	indicates the current map is q3bsp format (useful to know because of different entity behaviors)
+sv_master1	user-chosen master server 1 sv_master2 user-chosen master server 2 sv_master3 user-chosen master server 3 sv_master4 user-chosen master server 4 sv_masterextra1 dpmaster.deathmask.net dpmaster.deathmask.net - default master server 1 (admin: Willis) sv_masterextra2 dpmaster.tchr.no dpmaster.tchr.no - default master server 2 (admin: tChr) sv_masterextra3 dpm.dpmaster.org:27777 dpm.dpmaster.org - default master server 3 (admin: gazby/soylent_cow)
+sv_maxairspeed	maximum speed a player can accelerate to when airborn (note that it is possible to completely stop by moving the opposite direction)
+sv_maxairstrafespeed	when set, replacement for sv_maxairspeed when just strafing
+sv_maxphysicsframesperserverframe	maximum number of physics frames per server frame
+sv_maxrate	upper limit on client rate cvar, should reflect your network connection quality
+sv_maxspeed	maximum speed a player can accelerate to when on ground (can be exceeded by tricks)
+sv_maxvelocity	universal speed limit on all entities
+sv_namechangetimer	how often to allow name changes, in seconds (prevents people from using animated names and other tricks
+sv_nostep	prevents MOVETYPE_STEP entities (monsters) from moving
+sv_onlycsqcnetworking	disables legacy entity networking code for higher performance (except on clients, which can still be legacy)
+sv_playerphysicsqc	enables QuakeC function to override player physics
+sv_progs	selects which quakec progs.dat file to run
+sv_protocolname	selects network protocol to host for (values include QUAKE, QUAKEDP, NEHAHRAMOVIE, DP1 and up)
+sv_public	1: advertises this server on the master server (so that players can find it in the server browser); 0: allow direct queries only; -1: do not respond to direct queries; -2: do not allow anyone to connect; -3: already block at getchallenge level
+sv_public_rejectreason	Rejection reason for connects when sv_public is -2
+sv_qcstats	Disables engine sending of stats 220 and above, for use by certain games such as Xonotic, NOTE: it's strongly recommended that SVQC send correct STAT_MOVEVARS_TICRATE and STAT_MOVEVARS_TIMESCALE
+sv_qwmaster1	user-chosen qwmaster server 1 sv_qwmaster2 user-chosen qwmaster server 2 sv_qwmaster3 user-chosen qwmaster server 3 sv_qwmaster4 user-chosen qwmaster server 4 sv_qwmasterextra1 master.quakeservers.net:27000 QW master in Germany, admin: unknown sv_qwmasterextra2 qwmaster.fodquake.net:27000 QW master in Germany, same IP as asgaard.morphos-team.net, admin: bigfoot sv_qwmasterextra3 master.quakeworld.nu:27000 QW master in Sweden, admin: unknown
+sv_random_seed	random seed; when set, on every map start this random seed is used to initialize the random number generator. Don't touch it unless for benchmarking or debugging
+sv_rollangle	how much to tilt the view when strafing
+sv_rollspeed	how much strafing is necessary to tilt the view
+sv_sendentities_csqc_randomize_order	Randomize the order of sending CSQC entities (should behave better when packet size or bandwidth limits are exceeded).
+sv_sound_land	sound to play when MOVETYPE_STEP entity hits the ground at high speed (empty cvar disables the sound)
+sv_sound_watersplash	sound to play when MOVETYPE_FLY/TOSS/BOUNCE/STEP entity enters or leaves water (empty cvar disables the sound)
+sv_status_privacy	do not show IP addresses in 'status' replies to clients
+sv_status_show_qcstatus	show the 'qcstatus' field in status replies, not the 'frags' field. Turn this on if your mod uses this field, and the 'frags' field on the other hand has no meaningful value.
+sv_stepheight	how high you can step up (TW_SV_STEPCONTROL extension)
+sv_stopspeed	how fast you come to a complete stop
+sv_threaded	enables a separate thread for server code, improving performance, especially when hosting a game while playing, EXPERIMENTAL, may be crashy
+sv_wallfriction	how much you slow down when sliding along a wall
+sv_warsowbunny_accel	how fast you accelerate until after reaching sv_maxspeed (it gets harder as you near sv_warsowbunny_topspeed)
+sv_warsowbunny_airforwardaccel	how fast you accelerate until you reach sv_maxspeed
+sv_warsowbunny_backtosideratio	lower values make it easier to change direction without losing speed; the drawback is "understeering" in sharp turns
+sv_warsowbunny_topspeed	soft speed limit (can get faster with rjs and on ramps)
+sv_warsowbunny_turnaccel	max sharpness of turns (also master switch for the sv_warsowbunny_* mode; set this to 9 to enable)
+sv_wateraccelerate	rate at which a player accelerates to sv_maxspeed while in water, if less than 0 the sv_accelerate variable is used instead
+sv_waterfriction	how fast you slow down in water, if less than 0 the sv_friction variable is used instead
+sv_worldbasename	name of current worldmodel without maps/ prefix or extension
+sv_worldmessage	title of current level
+sv_worldname	name of current worldmodel
+sv_worldnamenoextension	name of current worldmodel without extension
+sv_writepicture_quality	WritePicture quality offset (higher means better quality, but slower)
+sys_colortranslation	terminal console color translation (supported values: -1 = print codes without translation, 0 = strip color codes, 1 = translate to ANSI codes, 2 = translate DP RGB to 24-bit and Quake colors to ANSI, 3 = translate all colors to 24-bit RGB)
+sys_debugsleep	write requested and attained sleep times to standard output, to be used with gnuplot
+sys_libdir	Default engine library directory
+sys_memsize_physical	physical memory size in MB (or empty if unknown)
+sys_memsize_virtual	virtual memory size in MB (or empty if unknown)
+sys_specialcharactertranslation	terminal console conchars to ASCII translation (set to 0 if your conchars.tga is for an 8bit character set or if you want raw output)
+sys_stdout	0: nothing is written to stdout (-nostdout cmdline option sets this), 1: normal messages are written to stdout, 2: normal messages are written to stderr (-stderr cmdline option sets this)
+sys_stdout_blocks	1: writes to stdout and stderr streams will block (causing a stutter or complete halt) if the buffer is full, ensuring no messages are lost at a price
+sys_ticrate	how long a server frame is in seconds, 0.05 is 20fps server rate, 0.1 is 10fps (can not be set higher than 0.1), 0 runs as many server frames as possible (makes games against bots a little smoother, overwhelms network players), 1/72 matches QuakeWorld physics
+sys_usenoclockbutbenchmark	don't use ANY real timing, and simulate a clock (for benchmarking); the game then runs as fast as possible. Run a QC mod with bots that does some stuff, then does a quit at the end, to benchmark a server. NEVER do this on a public server.
+sys_usequeryperformancecounter	use windows QueryPerformanceCounter timer (which has issues on systems lacking constant-rate TSCs synchronised across all cores, such as ancient PCs or VMs) for timing rather than timeGetTime function (which is low precision and had issues on some old motherboards)
+sys_usesdldelay	use SDL_Delay() (low precision, for debugging)
+sys_usesdlgetticks	use SDL_GetTicks() timer (low precision, for debugging)
+taskqueue_maxthreads	maximum number of threads to start up as needed based on task count
+taskqueue_minthreads	minimum number of threads to keep active for executing tasks
+taskqueue_tasksperthread	expected amount of work that a single thread can do in a frame - the number of threads being used depends on the average workload in recent frames
+team	QW team (4 character limit, example: blue)
+teamplay	teamplay mode, values depend on mod but typically 0 = no teams, 1 = no team damage no self damage, 2 = team damage and self damage, some mods support 3 = no team damage but can damage self
+temp1	general cvar for mods to use, in stock id1 this selects which death animation to use on players (0 = random death, other values select specific death scenes)
+timedemo_screenshotframelist	when performing a timedemo, take screenshots of each frame in this space-separated list - example: 1 201 401
+timeformat	time format to use on timestamped console messages
+timelimit	ends level at this time (in minutes)
+timestamps	prints timestamps on console messages
+topcolor	color of your shirt
+utf8_enable	Enable UTF-8 support. For compatibility, this is disabled by default in most games.
+v_brightness	brightness of black, useful for monitors that are too dark
+v_centermove	how long before the view begins to center itself (if freelook/+mlook/+jlook/+klook are off)
+v_centerspeed	how fast the view centers itself
+v_color_black_b	desired color of black
+v_color_black_g	desired color of black
+v_color_black_r	desired color of black
+v_color_enable	enables black-grey-white color correction curve controls
+v_color_grey_b	desired color of grey
+v_color_grey_g	desired color of grey
+v_color_grey_r	desired color of grey
+v_color_white_b	desired color of white
+v_color_white_g	desired color of white
+v_color_white_r	desired color of white
+v_contrast	brightness of white (values above 1 give a brighter image with increased color saturation, unlike v_gamma)
+v_contrastboost	by how much to multiply the contrast in dark areas (1 is no change)
+v_deathtilt	whether to use sideways view when dead
+v_deathtiltangle	what roll angle to use when tilting the view while dead
+v_flipped	mirror the screen (poor man's left handed mode)
+v_gamma	inverse gamma correction value, a brightness effect that does not affect white or black, and tends to make the image grey and dull
+v_glslgamma_2d	applies GLSL gamma to 2d pictures (HUD, fonts)
+v_glslgamma_video	applies GLSL gamma to played video, could be a fraction, requires r_glslgamma_2d 1.
+v_idlescale	how much of the quake 'drunken view' effect to use
+v_ipitch_cycle	v_idlescale pitch speed
+v_ipitch_level	v_idlescale pitch amount
+v_iroll_cycle	v_idlescale roll speed
+v_iroll_level	v_idlescale roll amount
+v_isometric	changes view to isometric (non-perspective)
+v_isometric_flipcullface	flips the backface culling
+v_isometric_locked_orientation	camera rotation is fixed
+v_isometric_relx	camera position*forward
+v_isometric_rely	camera position*left
+v_isometric_relz	camera position*up
+v_isometric_rot_pitch	camera rotation
+v_isometric_rot_roll	camera rotation
+v_isometric_rot_yaw	camera rotation
+v_isometric_tx	camera position (player-relative)
+v_isometric_ty	camera position (player-relative)
+v_isometric_tz	camera position (player-relative)
+v_isometric_usevieworiginculling	check visibility to the player location (can look pretty weird)
+v_isometric_verticalfov	vertical field of view in game units (horizontal is computed using aspect ratio based on this)
+v_isometric_xx	camera matrix
+v_isometric_xy	camera matrix
+v_isometric_xz	camera matrix
+v_isometric_yx	camera matrix
+v_isometric_yy	camera matrix
+v_isometric_yz	camera matrix
+v_isometric_zx	camera matrix
+v_isometric_zy	camera matrix
+v_isometric_zz	camera matrix
+v_iyaw_cycle	v_idlescale yaw speed
+v_iyaw_level	v_idlescale yaw amount
+v_kickpitch	how much a view kick from damage pitches your view
+v_kickroll	how much a view kick from damage rolls your view
+v_kicktime	how long a view kick from damage lasts
+v_psycho	easter egg - R.I.P. zinx http://obits.al.com/obituaries/birmingham/obituary.aspx?n=christopher-robert-lais&pid=186080667
+v_yshearing	be all out of gum (set this to the maximum angle to allow Y shearing for - try values like 75)
+vid_bitsperpixel	how many bits per pixel to render at (this is not currently configurable)
+vid_borderless	make the window borderless by removing all window decorations. has no effect in fullscreen mode
+vid_conheight	virtual height of 2D graphics system
+vid_conwidth	virtual width of 2D graphics system (note: changes may be overwritten, see vid_conwidthauto)
+vid_conwidthauto	automatically update vid_conwidth to match aspect ratio
+vid_desktopfullscreen	force desktop resolution and refresh rate (disable modesetting), also use some OS-dependent tricks for better fullscreen integration; disabling may reveal OS/driver/SDL bugs with multi-monitor configurations
+vid_display	which monitor to render on, numbered from 0 (system default)
+vid_fullscreen	use fullscreen (1) or windowed (0)
+vid_grabkeyboard	whether to grab the keyboard when mouse is active (prevents use of volume control keys, music player keys, etc on some keyboards)
+vid_height	resolution
+vid_ignore_taskbar	in windowed mode, prevent the Windows taskbar and window borders from affecting the size and placement of the window. it will be aligned centered and uses the unaltered vid_width/vid_height values
+vid_info_displaycount	how many monitors are currently available, updated by hotplug events
+vid_minheight	minimum vid_height that is acceptable (to be set in default.cfg in mods)
+vid_minimize_on_focus_loss	whether to minimize the fullscreen window if it loses focus (such as by alt+tab)
+vid_minwidth	minimum vid_width that is acceptable (to be set in default.cfg in mods)
+vid_mouse	whether to use the mouse in windowed mode (fullscreen always does)
+vid_mouse_clickthrough	mouse behavior in windowed mode: 0 = click to focus, 1 = allow interaction even if the window is not focused (click-through behaviour, can be useful when using third-party game overlays)
+vid_pixelheight	adjusts vertical field of vision to account for non-square pixels (1280x1024 on a CRT monitor for example)
+vid_refreshrate	refresh rate to use, in hz (higher values feel smoother, if supported by your monitor), 0 uses the default
+vid_resizable	0: window not resizable, 1: resizable, 2: window can be resized but the framebuffer isn't adjusted
+vid_sRGB	if hardware is capable, modify rendering to be gamma corrected for the sRGB color standard (computer monitors, TVs), recommended
+vid_sRGB_fallback	do an approximate sRGB fallback if not properly supported by hardware (2: also use the fallback if framebuffer is 8bit, 3: always use the fallback even if sRGB is supported)
+vid_samples	how many anti-aliasing samples per pixel to request from the graphics driver (4 is recommended, 1 is faster)
+vid_stereobuffer	enables 'quad-buffered' stereo rendering for stereo shutterglasses, HMD (head mounted display) devices, or polarized stereo LCDs, if supported by your drivers
+vid_stick_mouse	have the mouse stuck in the center of the screen
+vid_touchscreen	Use touchscreen-style input (no mouse grab, track mouse motion only while button is down, screen areas for mimicing joystick axes and buttons
+vid_touchscreen_density	Standard quantized screen density multiplier (see Android documentation for DisplayMetrics), similar values are given on iPhoneOS
+vid_touchscreen_outlinealpha	opacity of touchscreen area outlines
+vid_touchscreen_overlayalpha	opacity of touchscreen area icons
+vid_touchscreen_showkeyboard	shows the platform's screen keyboard for text entry, can be set by csqc or menu qc if it wants to receive text input, does nothing if the platform has no screen keyboard
+vid_touchscreen_supportshowkeyboard	indicates if the platform supports a virtual keyboard
+vid_touchscreen_xdpi	Horizontal DPI of the screen (only valid on Android currently)
+vid_touchscreen_ydpi	Vertical DPI of the screen (only valid on Android currently)
+vid_vsync	sync to vertical blank, prevents 'tearing' (seeing part of one frame and part of another on the screen at the same time) at the cost of latency, >= 1 always syncs and <= -1 is adaptive (stops syncing if the framerate drops, unsupported by some platforms), automatically disabled when doing timedemo benchmarks
+vid_width	resolution
+viewsize	how large the view should be, 110 disables inventory bar, 120 disables status bar
+volume	volume of sound effects

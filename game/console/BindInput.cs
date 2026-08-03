@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Godot;
 using VortexArena.Common.Config;
@@ -280,6 +281,38 @@ public static class BindInput
         MouseButton.WheelDown => "MWHEELDOWN",
         _ => null,
     };
+
+    /// <summary>
+    /// Every key string the console can meaningfully complete for <c>bind</c>/<c>unbind</c>: the canonical mouse
+    /// names, A–Z and 0–9, and each named key from the engine table in the spelling
+    /// <see cref="TranslateEngineKey"/> produces (which is what <see cref="BindTable"/> is keyed by, so a
+    /// completed name binds rather than silently doing nothing).
+    ///
+    /// <para>A port addition — DP does not complete key names at all; its Tab falls through to matching
+    /// <c>MOUSE1</c> against cvar names and finds nothing. Built once and cached.</para>
+    /// </summary>
+    public static IReadOnlyList<string> CompletionKeyNames => _completionKeyNames ??= BuildKeyNames();
+
+    private static IReadOnlyList<string>? _completionKeyNames;
+
+    private static IReadOnlyList<string> BuildKeyNames()
+    {
+        var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "MOUSE1", "MOUSE2", "MOUSE3", "MOUSE4", "MOUSE5", "MWHEELUP", "MWHEELDOWN",
+        };
+        for (char c = 'A'; c <= 'Z'; c++)
+            names.Add(c.ToString());
+        for (char c = '0'; c <= '9'; c++)
+            names.Add(c.ToString());
+        foreach (Key godot in EngineNameToGodotKey.Values)
+        {
+            string s = OS.GetKeycodeString(godot);
+            if (!string.IsNullOrEmpty(s))
+                names.Add(s);
+        }
+        return names.ToList();
+    }
 
     // =====================================================================================================
     //  engine key name → canonical key string (keys.c key name table → what a live event encodes to)

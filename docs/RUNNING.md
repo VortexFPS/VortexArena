@@ -254,6 +254,32 @@ Headless doesn't render. To walk around the scene:
 6. To frame a **specific spot on a map** (an item pickup, a lightmap seam, a prop) without walking there, add
    `--observe "<x y z> [yaw pitch]"` (+ optional `--look-at "<x y z>"`) — see Tricks → *Observer camera* below.
 
+### `./vx run` — and which build you actually get
+
+```bash
+./vx run                      # the PROJECT: editor engine + Debug C#
+```
+
+This is step 4 above with the paths resolved for you. Extra args pass through to the game unchanged
+(`./vx run --host stormkeep --bots 2`). Two things to know:
+
+| | `./vx run` (default) | `./vx run --release` |
+|---|---|---|
+| what runs | Godot editor binary on `project.godot`, loading `.godot/mono/temp/bin/Debug/` | the export at `dist/<platform>/` — what a player runs |
+| `OS.IsDebugBuild()` | **true** | false |
+| consequences | frame profiler defaults on; `showfps`/`showposition` default on; frame times **not** release-representative | ships-as-shipped |
+| iterate by | `./vx build` (seconds) | `./vx export` (minutes) |
+
+**Never measure performance on the default.** `docs/PERF-DEBUGGING.md` says capture on the release export, and
+this is why: half the diagnostics that are on by default in the left column do not exist in the right one.
+`./vx run` prints which of the two it picked before launching, so a capture can't quietly be the wrong build.
+
+Before launching, both forms compare the newest `game/`+`src/` source against the artifact they are about to
+run and offer to rebuild if it's older (~tens of ms for ~800 files, i.e. invisible next to engine startup).
+It is a modification-time heuristic, not a dependency graph, so declining is a normal answer and a
+non-interactive caller (CI, a script, stdin redirected) is warned and launched rather than blocked on a prompt.
+Skip it entirely with **`-n`** / `--no-build-check`.
+
 ---
 
 ## Visual QA (T5 — Wave A5)
@@ -371,6 +397,13 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - **`Main.cs`** parses the boot flags (above) and constructs the `Shell`, which owns the menu↔match lifecycle.
   `--map <name>` boots a match on any of the 31 official maps in `xonotic-20230620-maps.pk3` (e.g. `solarium`,
   `afterslime`); `--model <name>` boots the model viewer on `models/player/<name>.iqm`.
+- **`+<command> [args]`** runs a console command at boot — DarkPlaces' `+command` command line, so
+  `./vx run +toggleconsole`, `+exec mytest.cfg`, `+connect 10.0.0.4` and `+search max fps` all work the way a
+  Xonotic player expects. Each `+` takes the arguments after it up to the next `+` or `--`, and they run **last**
+  in the boot sequence (after the cfg tree, `config.cfg`, the `--cvar` pins and the console's own
+  registrations), so a launch-time command is always the final word. This is also the only way to script the
+  console for a `--screenshot` capture — `--screenshot shot.png +toggleconsole +clear +help` photographs the
+  console with a known state on screen.
 - **`--data <dir>`** overrides the content mount (default `res://data`, resolved project-relative — a
   `res://`/`user://` or absolute OS path also works). Mainly an escape hatch for a packaged build whose data dir
   isn't beside the binary, or to point a dev build at an external gamedir.
@@ -452,8 +485,67 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 
 ---
 
+## The developer console
+
+Backtick (`` ` ``) toggles it, anywhere — menu, loading screen, match. Typed lines go through the *same*
+`ConfigInterpreter` that loads the `.cfg` tree, so the console interprets a line exactly as a config file would.
+
+**Finding things.** `search <words>` is the entry point and takes several keywords, matching them against
+**descriptions** as well as names, over cvars, commands *and* aliases alike — so `search max fps` finds
+`cl_maxfps`, `search crosshair color` finds `crosshair_color`, and `search scrollback` finds the `condump`
+command through its help string. Results are ranked and printed **worst first, best last**, so the answer is on
+the line directly above the prompt after a long list has scrolled by. `apropos` is the same command under DP's
+name; a keyword carrying `*`/`?` is globbed, so `search g_balance_blaster_*` still works. `help <name>` explains
+one thing; bare `help` prints the console's own quick reference.
+
+**`cvar_changes`** (alias `diff`) prints everything your setup changes from the shipped defaults, in two blocks:
+what is saved to `config.cfg` and follows you to the next launch, and what is changed for this session only (a
+console `set`, a `--cvar` pin, or a server-op/debug cvar). That second block is the one that explains a machine
+behaving oddly in a way that evaporates on restart.
+
+Descriptions come from three places, first writer wins: the shipped cfg tree's `set name value "description"`
+third argument (~3000 Xonotic cvars, captured by `ConfigInterpreter.CvarDescriptionHook`), the packaged
+`data/core.pk3dir/engine-cvar-help.txt` for the ~1400 engine cvars the cfgs assign bare (regenerate with
+`python tools/extract-engine-cvar-help.py`, which needs the DarkPlaces checkout), and C# `Register(…, description)`.
+
+**Tab completion** groups its results the way DP does — *N possible commands / variables / aliases*, each with
+its help string, a cvar also showing value and default — and advances the line to the longest prefix common to
+all of them. Past a dozen matches it switches to packed name-only columns. The first argument completes by
+command: map names for `map`/`devmap`/`chmap`/`gotomap`…, files for anything with a `con_completion_<command>`
+pattern (`exec` → `*.cfg`), and key names for `bind`/`unbind`. **Ctrl+Tab** appends a cvar's current value to its
+name so you can edit it in place.
+
+**Keys** (the ones Godot's `LineEdit` doesn't already give you; DP `Key_Console`):
+
+| | |
+|---|---|
+| `Up`/`Down`, `Ctrl+P`/`Ctrl+N` | history; the half-typed line comes back at the end |
+| `Ctrl+R` / `Ctrl+Shift+R` | search history backwards / forwards (repeat to keep walking; `Up` fetches) |
+| `Ctrl+F` | list every history line matching what's typed |
+| `Ctrl+,` / `Ctrl+.` | oldest / newest history line |
+| `PgUp`/`PgDn`, `Ctrl+`them | scroll back a half / quarter page — `Ctrl+Home`/`Ctrl+End` for the ends |
+| `Ctrl+U` / `Ctrl+Q` | discard the line / park it in history without running it |
+| `Ctrl+L` | clear the screen |
+| `Ctrl+-` / `Ctrl+=` / `Ctrl+0` | `con_textsize` down / up / back to default |
+| `Ctrl+V` | paste, folding newlines into `; ` so a multi-line snippet runs as one line |
+
+History persists to `~/XonData/console_history.txt`; `history [-c|<n>]` lists or clears it. `condump [file]`
+writes the scrollback to the user directory (`condump_stripcolors 1` drops the `^` codes).
+
+**Look.** The drop-down draws Xonotic's own `gfx/conback{,2,3}` art, composited per
+`scr_conalpha × scr_conalpha{,2,3}factor`, tinted by `scr_conbrightness`, each layer scrolling at its
+`scr_conscroll*_x/y` rate — DP `Con_DrawConsole`. `scr_conheight` is the drop-down's fraction of the screen and
+`con_textsize` the text size in the `vid_conheight` virtual canvas, so it reads the same at any resolution. The
+face is DejaVu Sans Mono (DP's `FONT_CONSOLE`) because the completion and `cvarlist` output are laid out in
+character columns.
+
+---
+
 ## Tricks & techniques (grow this)
 
+- **Drive the console from the command line:** `+<command> [args]` (DP's `+command`) runs console commands at
+  boot, last of everything. Pairs with `--screenshot` to photograph the console in a known state:
+  `--screenshot shot.png +toggleconsole +clear +search max fps`.
 - **Headless smoke test in an agent/CI:** use the one-liner above; assert `hard errors: 0`. This is the cheapest
   "did my change break runtime startup / asset loading" check without a GPU.
 - **Frame budget:** `--quit-after <frames>` (frames, not seconds). ~200 frames is plenty to hit `_Ready` + a few
@@ -568,6 +660,11 @@ ToS/welcome/team-select, tools, confirms). Architecture:
     thread's innermost open scope during an over-budget frame, so a stall inside un-scoped code is attributed
     (`watchdog: 38/41 samples in 'sim.move'`). Near-zero main-thread cost; reports `(unscoped)` when stuck
     outside any scope (⇒ a candidate for a new `Prof.Sample`).
+  - **The `rcpu`/`gpu` columns are opt-in (`cl_frameprofiler_rendertime`, default 0, added 2026-08-03).**
+    Reading them syncs the main thread against the render thread every frame under the threaded renderer, so
+    ordinary play and dev sessions no longer pay for them; `tools/perf-run.ps1`/`.sh` pin the cvar to 1 so real
+    captures keep the split. With it off, draw-side hitches classify `MIXED — render/present split unmeasured`
+    rather than being misattributed to the compositor. Full rationale: **docs/PERF-DEBUGGING.md**.
   - **Overlay (1–4).** Stacked category bars (proc/rcpu/rest, GPU marker, red cap on a pipe/GC frame), a header
     with fps + 1%-low + session hitch count, a pinned last-hitch verdict, and **`F11`** to toggle an expanded
     panel showing the top live scopes vs their baselines.

@@ -373,6 +373,26 @@ public sealed class ClientNet : IDisposable
     public bool ImmediateButtons { get; set; } = true;
     private int _lastSentButtons; // last transmitted button bits (for the ImmediateButtons change-detect)
 
+    /// <summary>
+    /// Input commands pushed since the last datagram actually went out. The redundant tail is sized to cover ALL
+    /// of them — see <see cref="SendInput"/>'s "no command is ever stranded" note.
+    /// </summary>
+    private int _pushedSinceSend;
+
+    /// <summary>
+    /// Ceiling on commands per input datagram, so the redundant tail cannot exceed the MTU: one serialized
+    /// <see cref="InputCommand"/> is ~29 bytes, so 40 ≈ 1.2 KB of payload. When the frame rate would push past
+    /// this between two rate-gated sends, <see cref="SendInput"/> transmits early rather than dropping the
+    /// excess — the packet rate rises a little above ~2900 fps (at the default <c>cl_netfps</c> 72), which is a
+    /// far better trade than silently deleting simulated time. Also stays well inside
+    /// <see cref="PredictionBuffer.Capacity"/> (128), so every command in the tail is still resident.
+    /// </summary>
+    private const int MaxCommandsPerDatagram = 40;
+
+    /// <summary>Extra commands beyond the strictly-needed ones, so a single lost datagram doesn't strand an
+    /// input (the original redundancy's whole purpose).</summary>
+    private const int DropMargin = 3;
+
     /// <summary>(Fix B) Set by the host each frame when the last render frame was a HITCH (dt &gt; threshold) — i.e. the
     /// shared listen-server thread stalled (GC / heavy map streaming). Arms the post-hitch stall hold in
     /// <see cref="HandleSnapshot"/>: a moderate (non-teleport) correction right after a stall is the server being
@@ -511,6 +531,7 @@ public sealed class ClientNet : IDisposable
         InputCommand cmd = _sampleInput();
         uint seq = _inputBuffer.Push(cmd);
         DbgPush++; // net_input_trace diagnostic
+        _pushedSinceSend++;
 
         // Re-predict from the last authoritative state with the freshly-extended input history so the local
         // view reflects this tick immediately (client-side prediction). We reconcile against the last server
@@ -527,9 +548,22 @@ public sealed class ClientNet : IDisposable
         // cl_netfps. Button changes are infrequent (you don't toggle fire 144×/s), so this doesn't flood the link —
         // it just removes the up-to-one-interval (~13.9 ms) wait a fire would otherwise sit through.
         bool important = cmd.Impulse != 0 || (ImmediateButtons && cmd.Buttons != _lastSentButtons);
-        if (important || InputSendInterval <= 0f || now - _lastInputSend >= InputSendInterval)
+        // Never let more commands pile up than one datagram can carry: transmit early instead of stranding them.
+        bool tailFull = _pushedSinceSend >= MaxCommandsPerDatagram - DropMargin;
+        if (important || tailFull || InputSendInterval <= 0f || now - _lastInputSend >= InputSendInterval)
         {
-            int redundancy = InputSendInterval > 0f ? (int)(InputSendInterval * ServerTickRate) + 3 : 3;
+            // NO COMMAND IS EVER STRANDED. The tail must span every command pushed since the last datagram, not
+            // a fixed "one tick's worth" — because each command carries its OWN DeltaTime and the server
+            // integrates per command, so a command that never reaches the wire is simulated time the server
+            // never advances. The old size, `(int)(InputSendInterval * ServerTickRate) + 3`, worked out to 4
+            // commands at the default cl_netfps 72: fine up to ~288 fps, and quietly lossy above it. Measured
+            // uncapped on a 3080: 626 commands generated, 482 delivered — 23% of the player's simulated time
+            // deleted, which is felt as the whole world moving in slow motion (and gets worse the faster the
+            // machine renders). DarkPlaces never has this problem because its move frametime is
+            // `cl.cmd.time - cl.movecmd[1].time` (cl_input.c:1840) and the queue only shifts once a move is
+            // actually sent, so a suppressed frame's time rolls into the next delivered move. We keep per-frame
+            // commands (Path A predicts every frame), so the equivalent guarantee is to carry them all.
+            int redundancy = Math.Min(MaxCommandsPerDatagram, _pushedSinceSend + DropMargin);
             _writer.Reset();
             _writer.WriteByte((byte)NetControl.InputFrame);
             _writer.WriteUShort(_snapHistory.LastDecodedSeq);
@@ -551,6 +585,7 @@ public sealed class ClientNet : IDisposable
             _transport.Flush();
             _lastInputSend = now;
             _lastSentButtons = cmd.Buttons; // for the cl_netimmediatebuttons change-detect above
+            _pushedSinceSend = 0;
         }
         return seq;
     }

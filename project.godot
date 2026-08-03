@@ -79,6 +79,16 @@ common/physics_jitter_fix=0.0
 ; setting concluded "inert" and was almost certainly reading a run where it never turned on).
 ; Watch: godot#112452 (CommandQueueMT contention with background resource loading) is directly relevant to
 ; BackgroundAssetStreamer/IdleWarmer - if streaming stalls appear, that is the suspect.
+;
+; KNOWN, BENIGN, NOT OURS - every exit under this setting ends with:
+;     ERROR: This function (finalize) can only be called from the render thread.  (rendering_device.cpp)
+;     WARNING: ObjectDB instances leaked at exit  (2 raw `Object`s; --verbose names no class)
+; A/B-verified 2026-08-03 on identical 20s stormkeep runs: thread_model=1 exits with 0 of each, =2 with 1 of
+; each. It is upstream's C#-plus-separate-thread teardown order (godot#104263: GodotObject.Dispose() finalizes
+; RD resources off the render thread; godot#96931 is the deadlock sibling), and this codebase constructs no
+; raw GodotObject at all - grep says so. It fires AFTER the profiler summary and the VRAM census, after the
+; session log is flushed and the config is saved, and the process still exits 0. Do NOT spend an afternoon on
+; it; if it ever becomes a nonzero exit or eats the config save, THAT is the regression worth chasing.
 driver/threads/thread_model=2
 ; (perf 2026-08-03) DEPTH PREPASS OFF. It re-records the ENTIRE opaque render list a second time
 ; (render_forward_clustered.cpp runs _render_list_with_draw_list over RENDER_LIST_OPAQUE for PASS_MODE_DEPTH,

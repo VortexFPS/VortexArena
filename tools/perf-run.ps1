@@ -111,9 +111,17 @@ $before = Get-ChildItem $logDir -Filter "session-*.log" -ErrorAction SilentlyCon
 #                       not hiding variance behind a cap. NOTE: uncapped hitch COUNTS are not
 #                       comparable to capped runs (the hitch threshold rides the median); diff ms/lows.
 #                       For a shipped-cap A/B: -Cvar "cl_maxfps 144".
+#   cl_frameprofiler_rendertime 1
+#                       measures the rcpu/gpu columns. Default OFF in the game (reading them stalls the
+#                       main thread on the render thread every frame under thread_model=2), but a capture
+#                       is exactly the case that wants the split: without it GPU-BOUND, VSYNC/PRESENT and
+#                       EXTERNAL cannot be told apart and every draw-side hitch lands in UNKNOWN. The
+#                       sync it costs is paid by BOTH arms of an A/B, so a diff stays honest - do not
+#                       compare a rendertime=1 capture against a rendertime=0 one (the banner records it).
 $exeArgs += @("--host", $Map, "--gametype", $Gametype, "--bots", "$Bots",
               "--cvar", "cl_frameprofiler", "2",
               "--cvar", "cl_frameprofiler_hitchms", "8",
+              "--cvar", "cl_frameprofiler_rendertime", "1",
               "--cvar", "cl_autopause", "0",
               "--cvar", "cl_portal_render", "0",
               "--cvar", "vid_vsync", "0",

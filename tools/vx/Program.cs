@@ -98,6 +98,12 @@ internal static class Program
               build       Build the Godot host.        --config Debug|Release
               test        Run the suite.               --filter <expr>
               run         Launch the client.           extra args go to the game
+                            --release       the exported client from dist/ (what a
+                                            player runs) instead of the project, whose
+                                            C# is Debug and OS.IsDebugBuild() is true
+                            -n, --no-build-check
+                                            skip the "sources are newer than the build,
+                                            rebuild?" prompt and launch immediately
               server      Headless dedicated server.   [map] [args...]
               export      Export a release preset.     --preset <p> | --all
               package     Zip the exports.             (tools/package.sh)

@@ -4884,9 +4884,13 @@ public sealed partial class NetGame : Node3D
         }
 
         target = Math.Max(target, 60); // floor: never governor below 60
+        // An explicit player cap stays the upper bound. "Explicit" = the player actually wrote cl_maxfps (config,
+        // console, menu, --cvar) — NOT "the value isn't 256". The old `userCap != 256` test read the shipped
+        // default's VALUE as a proxy for "nobody chose this" and so ignored anyone who picked 256, which is the
+        // number the settings slider and the stock config both offer. Same bug, same fix, as ApplyMaxFps.
         int userCap = (int)(_sharedCvars?.GetFloat("cl_maxfps") ?? 0f);
-        if (userCap > 0 && userCap != 256)
-            target = Math.Min(target, userCap); // an explicit player cap stays the upper bound
+        if (userCap > 0 && (_sharedCvars?.WasSetByUser("cl_maxfps") ?? false))
+            target = Math.Min(target, userCap);
 
         if (_govSaved < 0) _govSaved = Godot.Engine.MaxFps;
         if (target != _govApplied)
@@ -6844,6 +6848,11 @@ public sealed partial class NetGame : Node3D
             _lastFedModeStatus = ms;
             _scoreboard.Title = ScoreboardTitle();
             _scoreboard.SetWireRows(sb, _client.LocalNetId, ms?.EliminatedNetIds); // grey-out (QC eliminatedPlayers)
+            // Publish the roster for the console's nick completion (DP Nicks_CompleteBuildList reads the same
+            // cl.scores[].name table this block carries). Snapshotted per update rather than read live, so a Tab
+            // press never walks the wire object off the net thread.
+            string[] nicks = sb.Rows.Select(r => r.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToArray();
+            Menu.MenuCommand.PlayerNames = () => nicks;
             // QC Scoreboard_Rankings_Draw: feed the networked race/CTS rankings (best-first (time, holder)) so the
             // scoreboard's rankings block is live in race modes (empty otherwise → DrawRankings hides it). The local
             // name (QC entcs_GetName(player_localnum)) drives the self-row highlight.

@@ -61,16 +61,7 @@ public partial class PingPanel : HudPanel
     /// <summary>The effective <c>cl_showping</c> mode: 0 = off, non-zero = show. Reads <c>showping</c> (the
     /// menu-bound name) then <c>cl_showping</c>. Off by default — no debug default-on (ping is ~0 on a listen
     /// server, so showing it unprompted is noise; it's an opt-in like a real ping toggle).</summary>
-    private static int ShowMode()
-    {
-        if (Api.Services is null)
-            return 0;
-        ICvarService cv = Api.Cvars;
-        int mode = (int)cv.GetFloat("showping");
-        if (mode == 0)
-            mode = (int)cv.GetFloat("cl_showping");
-        return mode;
-    }
+    private static int ShowMode() => ShowToggleMode("showping", "cl_showping");
 
     protected override void DrawPanel()
     {

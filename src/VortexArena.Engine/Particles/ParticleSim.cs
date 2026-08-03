@@ -137,6 +137,17 @@ public sealed class ParticleSim
     /// fidelity and the default, so the sim is byte-identical until a frame-time target is opted into.
     /// </summary>
     public static float QualityScale = 1f;
+
+    /// <summary>
+    /// Max world bounce-traces per frame (see the note at the trace site). Static + mutable so it can be
+    /// tuned or disabled (int.MaxValue restores the old unbounded behaviour) without a rebuild. 512 sweeps
+    /// is well inside a frame's budget while still resolving every visible collision within a few frames at
+    /// realistic particle counts.
+    /// </summary>
+    public static int TraceBudgetPerFrame = 512;
+
+    // Traces spent this frame, reset in Update. Sim is single-threaded (client main), so a plain field.
+    private int _tracesThisFrame;
     private bool CvBool(string name) => (Cvars ?? Api.Cvars).GetFloat(name) != 0f;
 
     /// <summary>The resolved tracer: the injected client world-only tracer, or the ambient fallback (tests).</summary>
@@ -574,6 +585,7 @@ public sealed class ParticleSim
         // frametime = bound(0, time - updatetime, 1); updatetime = bound(time-1, updatetime+frametime, time+1).
         // (cl_particles.c:2921-2922) — _updateTime starts at 0, so the first frametime is `time` clamped to 1.
         _currentTime = time;   // publish the sim clock so spawns this frame read the same `now`
+        _tracesThisFrame = 0;  // re-arm the per-frame bounce-trace budget (see TraceBudgetPerFrame)
         float frametime = time - _updateTime;
         if (frametime < 0f) frametime = 0f; else if (frametime > 1f) frametime = 1f;
         float lo = time - 1f, hi = time + 1f;
@@ -632,8 +644,24 @@ public sealed class ParticleSim
                     Vector3 oldorg = p.Org;
                     p.Org += p.Vel * frametime;
 
-                    if (p.Bounce != 0f && collisions && p.Vel.Length() != 0f)
+                    // (hitch fix 2026-08-03) PER-FRAME TRACE BUDGET. The bounce trace below is a full world
+                    // BSP sweep, and it ran for EVERY bouncing particle EVERY frame with no bound — the pool
+                    // ceiling is 65536, so one big burst turns into tens of thousands of traces in a single
+                    // frame. Measured on stormkeep: repeated 758-880 ms mid-match freezes with the watchdog
+                    // putting ~1864/1870 samples inside particles.cpu. (The MultiMesh realloc fixed just
+                    // before this was a correlate of the same bursts, not the cause — its events are gone and
+                    // the freezes remained.)
+                    //
+                    // Budget: at most TraceBudgetPerFrame sweeps per frame, resuming next frame where this
+                    // one stopped (_traceCursor), so no particle is starved — a skipped particle simply flies
+                    // ballistically for a frame or two before its next collision check. That is a far smaller
+                    // fidelity change than it sounds: DP itself only traces at frame granularity, so a bounce
+                    // is already resolved up to a frame late, and the visible signature (a spark dying on
+                    // contact) survives because the particle still gets traced within a few frames.
+                    bool mayTrace = _tracesThisFrame < TraceBudgetPerFrame;
+                    if (p.Bounce != 0f && collisions && mayTrace && p.Vel.LengthSquared() != 0f)
                     {
+                        _tracesThisFrame++;
                         int hitmask = SuperContents.Solid |
                             ((p.TypeIndex == ParticleType.Rain || p.TypeIndex == ParticleType.Snow) ? SuperContents.LiquidsMask : 0);
                         // DP's per-frame bounce trace (cl_particles.c:2984) is CL_TraceLine(..., MOVE_NORMAL, ...,

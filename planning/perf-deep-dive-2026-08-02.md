@@ -635,6 +635,59 @@ joins the process list. Plus `DamageTextLayer` got the empty early-out its sibli
 off in `HudPanel._Ready`". There is no such `_Ready`. They work because their `_Process` overrides were
 deleted — the next migration must delete, not rely on a mechanism that doesn't exist.
 
+## 5i. THE MID-MATCH FREEZE: unbounded particle bounce traces (fixed 2026-08-03)
+
+**This was the hitch that made the game feel bad.** Repeated multi-hundred-millisecond mid-match freezes on
+stormkeep — 767.6 / 833.8 / 837.3 / 874.3 / 879.9 ms, five of them in one 200 s capture, all *after* load.
+
+**The false lead.** The frame tree named `particles.cpu`, and the event log showed
+`particles: fp_premul capacity -> 2048 (GPU realloc); -> 4096 (GPU realloc)` on the hitch frames. That looked
+conclusive: a MultiMesh `InstanceCount` write reallocates the GPU buffer. `FaithfulParticleRenderer` was
+changed to a fixed `MaxInstances = 8192` allocation with `VisibleInstanceCount` as the per-frame limiter
+(the grow-then-decay policy is gone — that change is right and stays). Result: **every realloc event
+disappeared and every freeze remained** — 879.9 ms still there. The reallocs were a *correlate* of the same
+bursts, not the cause. Worth stating plainly because the evidence for the wrong answer was strong.
+
+**The actual cause** — `ParticleSim.Update`, the bounce trace. Every bouncing particle got a full world BSP
+sweep every frame, with no bound of any kind. The pool ceiling is 65,536. One heavy burst therefore means
+tens of thousands of world sweeps in a single frame, and at a realistic ~25 µs per sweep on a map this size
+that lands exactly in the 700–900 ms range observed. It is also self-amplifying: a long frame means a large
+`frametime`, which means each particle steps further, which means each sweep crosses more BSP nodes, which
+makes the *next* frame worse.
+
+**The fix** — a per-frame trace budget, `ParticleSim.TraceBudgetPerFrame` (default 512), with a cursor that
+resumes next frame where this one stopped, so no particle is starved. A particle that misses its budget flies
+ballistically for a frame or two before its next collision check. The fidelity cost is small for a real
+reason: DP only traces at frame granularity anyway, so a bounce is already resolved up to a frame late, and
+the visible signature (a spark dying against a wall) survives because the particle is still traced within a
+few frames. Set `TraceBudgetPerFrame = int.MaxValue` to restore the old unbounded behaviour. All 4111 tests
+pass unchanged — the budget never binds during the C-reference parity replays.
+
+**Measured, stormkeep 200 s, 8 bots, release export, same scenario:**
+
+| | before | after |
+|---|---|---|
+| post-load hitches > 100 ms | 7 | **0** |
+| worst post-load hitch | 879.9 ms | **47.8 ms** |
+| worst *CPU-side* post-load hitch | 879.9 ms | **34.9 ms** |
+| median frame | 5.8 ms | 4.1 ms |
+| avg fps | 156 | 216 |
+
+`particles.cpu` now reads **0.9 ms** in the hitch trees it still appears in. The remaining 47.8 ms is an
+EXTERNAL frame (`proc 2.5, gpu 1.1, rest 44.5`) — OS/compositor/driver, game-side quiet.
+
+**Lesson for the profiler, unresolved:** during these freezes `particles.cpu` reported 2966 ms *inside an
+880 ms frame* (337 %), which is impossible. The independent sampling watchdog was the trustworthy signal
+(1864/1870 samples in `particles.cpu`) and it is what actually located this. Scope accounting still
+mis-attributes across frame boundaries when a single scope spans a frame flip; the `ScopeToken` identity fix
+in §3 did not cover that case. **Trust the watchdog over the tree for giant frames.**
+
+**What is now at the top of the list** (same capture, post-load):
+1. `proc:other` — **27 hitches** dominated by it, watchdog `(unscoped)` won 40. 25–35 ms each. This is
+   scope-coverage debt: the largest remaining CPU hitch class is one we cannot see into. Scopes first.
+2. PIPELINE-COMPILE — 2 post-load, 15.0 and 39.6 ms.
+3. EXTERNAL — 2, up to 47.8 ms, outside our process.
+
 ## 6. Measurement discipline updates
 
 - **Post-load boundary**: use `--postload 25` until a real world-entry marker exists; better, emit a

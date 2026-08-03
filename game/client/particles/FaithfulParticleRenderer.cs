@@ -65,18 +65,13 @@ public sealed partial class FaithfulParticleRenderer : Node3D
         public int Count;
         // Scratch indices into the pool for this batch (filled each Sync, sorted, then packed).
         public readonly List<int> Indices = new();
-        // (§11 R6) Capacity-decay bookkeeping: the upload is always the FULL capacity buffer (the
-        // MultimeshSetBuffer contract), so capacity must track the RECENT peak, not the all-session peak.
-        public int PeakSinceCheck;
-        public float NextDecayAt;
     }
 
-    // (§11 R6) Batch capacity policy: pre-size so a typical first burst never grows mid-burst, grow in
-    // power-of-two steps (one realloc per doubling instead of one per new highwater), and every
-    // DecaySeconds shrink back toward the recent peak so the steady-state per-frame upload (capacity ×
-    // 80 B) tracks actual usage after a heavy firefight instead of staying at the session maximum.
-    private const int InitialInstances = 512;
-    private const float DecaySeconds = 10f;
+    // (hitch fix 2026-08-03) Fixed instance capacity — see the note in the pack loop. Sized to cover a
+    // heavy firefight in one allocation so MultiMesh.InstanceCount is never written after creation (that
+    // write is a GPU buffer realloc, and a render-thread rendezvous once thread_model=Separate is on).
+    // 8192 is 2x the largest capacity the old grow path was observed reaching (4096) on stormkeep.
+    private const int MaxInstances = 8192;
 
     private Batch? _premul;   // DP GL_ONE / GL_ONE_MINUS_SRC_ALPHA — alpha AND additive particles
     private Batch? _invmod;   // DP GL_ZERO / GL_ONE_MINUS_SRC_COLOR — dst·(1−src) via blend_mul
@@ -341,9 +336,9 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             UseColors = true,
             UseCustomData = true,
             Mesh = quad,
-            // (§11 R6) Pre-size so the GPU buffer exists before the first burst (no mid-burst realloc) —
+            // Pre-size so the GPU buffer exists before the first burst and is NEVER resized afterwards —
             // VisibleInstanceCount 0 keeps the uninitialized instances from drawing until the first Sync.
-            InstanceCount = InitialInstances,
+            InstanceCount = MaxInstances,
             VisibleInstanceCount = 0,
         };
 
@@ -368,7 +363,12 @@ public sealed partial class FaithfulParticleRenderer : Node3D
         };
         AddChild(node);
 
-        return new Batch { Node = node, Mesh = mm, Material = mat };
+        // Buffer sized once, to match the fixed InstanceCount above — the pack loop never reallocates it.
+        return new Batch
+        {
+            Node = node, Mesh = mm, Material = mat,
+            Buffer = new float[MaxInstances * FloatsPerInstance],
+        };
     }
 
     /// <summary>
@@ -529,33 +529,19 @@ public sealed partial class FaithfulParticleRenderer : Node3D
 
         // Reuse the buffer; InstanceCount tracks the buffer capacity and VisibleInstanceCount limits
         // what's drawn, so the per-frame path allocates NOTHING (only a native marshal copy in the upload).
-        // Capacity grows in power-of-two steps and decays toward the recent peak (§11 R6, fields above).
-        int need = n * FloatsPerInstance;
-        if (b.Buffer.Length < need)
-        {
-            int cap = Math.Max(InitialInstances, (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)n));
-            b.Buffer = new float[cap * FloatsPerInstance];
-            b.Mesh.InstanceCount = cap;
-            VortexArena.Common.Diagnostics.Prof.Event($"particles: {b.Node.Name} capacity -> {cap} (GPU realloc)");
-        }
-        b.PeakSinceCheck = Math.Max(b.PeakSinceCheck, n);
-        if (time + DecaySeconds < b.NextDecayAt)
-            b.NextDecayAt = time + DecaySeconds;   // sim clock went backwards (map change) — re-arm
-        if (time >= b.NextDecayAt)
-        {
-            int capInst = b.Buffer.Length / FloatsPerInstance;
-            int target = Math.Max(InitialInstances,
-                (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(1, b.PeakSinceCheck)));
-            if (target < capInst)
-            {
-                // One quiet realloc back to the recent peak's tier; PeakSinceCheck ≥ n, so target fits n.
-                b.Buffer = new float[target * FloatsPerInstance];
-                b.Mesh.InstanceCount = target;
-                VortexArena.Common.Diagnostics.Prof.Event($"particles: {b.Node.Name} capacity decay -> {target}");
-            }
-            b.PeakSinceCheck = 0;
-            b.NextDecayAt = time + DecaySeconds;
-        }
+        // (hitch fix 2026-08-03) CAPACITY IS FIXED. Writing MultiMesh.InstanceCount frees and re-creates the
+        // GPU instance buffer, and under the separate render thread that realloc has to rendezvous with the
+        // render thread — measured as 678-836 ms stalls MID-MATCH on stormkeep, watchdog 6869/6973 samples in
+        // particles.cpu, with the frame's own events reading "fp_premul capacity -> 2048 (GPU realloc);
+        // -> 4096 (GPU realloc)". The old grow-then-decay policy made that permanent rather than one-off: a
+        // firefight grew the buffer, DecaySeconds later it shrank back, and the next firefight paid again.
+        // Now the buffer is sized once at MaxInstances and never resized; VisibleInstanceCount (set by the
+        // caller) is what limits drawing, which is the cheap per-frame knob the MultiMesh contract intends.
+        // Cost is memory, and it is small: MaxInstances x 20 floats x 4 B ~= 0.65 MB per batch.
+        // Overflow beyond MaxInstances is CLAMPED rather than reallocated - dropping the tail of one
+        // extreme burst is invisible next to an 800 ms freeze, and the sim's own pool ceiling bounds n.
+        if (n > MaxInstances)
+            n = MaxInstances;
         float[] buf = b.Buffer;
 
         for (int k = 0; k < n; k++)

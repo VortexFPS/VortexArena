@@ -145,17 +145,18 @@ public class VortexConfigLayerTests
     /// loading would leave nades throwing crooked and nothing else would fail.
     /// </summary>
     /// <summary>
-    /// The server runs 60 Hz (Bryan 2026-08-03). sys_ticrate lineage: DP engine default 0.0138889 (72.2 Hz),
-    /// Xonotic ships 0.015625 (64 Hz) in xonotic-common.cfg; the Vortex layer sets 0.0166667. Loads the REAL
-    /// server chain like the nade test, so a layer that stopped loading fails here loudly.
+    /// The server runs 64 Hz -- Xonotic's SHIPPED default (xonotic-common.cfg sys_ticrate 0.015625, paired
+    /// with cl_netfps 64), which is what Vortex matches (Bryan 2026-08-03). The DP ENGINE default (1/72 s)
+    /// is what the port used to hardcode. Loads the REAL server chain like the nade test, so a layer that
+    /// stopped loading fails here loudly. 1/64 is exactly representable in float, hence the exact Equal.
     /// </summary>
     [Fact]
-    public void Layer_Sets_The_60Hz_Tick()
+    public void Layer_Sets_The_64Hz_Tick()
     {
         RequireCoreContent();
         var cvars = new CvarService();
         ConfigLoader.LoadServerConfig(cvars, DiskReader);
-        Assert.Equal(0.0166667f, cvars.GetFloat("sys_ticrate"), 5);
+        Assert.Equal(0.015625f, cvars.GetFloat("sys_ticrate"));
     }
 
     [Fact]

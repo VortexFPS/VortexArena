@@ -3872,7 +3872,7 @@ public sealed partial class NetGame : Node3D
         // cl_predictfire defaults ON: unset GetString reads "" → treat anything but "0" as on.
         _predictFireCv = (_sharedCvars?.GetString("cl_predictfire") ?? "") != "0";
         _perFrameInputCv = _sharedCvars?.GetFloat("cl_movement_perframe") is float pf && pf != 0f;
-        _netFpsCv = _sharedCvars?.GetFloat("cl_netfps") is float nf && nf > 0f ? nf : 60f; // paired with the 60 Hz tick
+        _netFpsCv = _sharedCvars?.GetFloat("cl_netfps") is float nf && nf > 0f ? nf : 64f; // paired with the 64 Hz tick
         _sendAllCv = _sharedCvars?.GetFloat("cl_movement_send_all") is float sa && sa != 0f;
         // cl_netclock_smooth defaults ON (unset → on): treat anything but "0" as enabled.
         _netClockSmoothCv = (_sharedCvars?.GetString("cl_netclock_smooth") ?? "") != "0";

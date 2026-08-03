@@ -290,10 +290,10 @@ public static class ClientSettings
         // (intermediate frames coalesce above ~cl_netfps×redundancy fps, exactly like Darkplaces); 1 = send every
         // predicted frame so the server replays the IDENTICAL command sequence and reconcile stays ~0 (more
         // bandwidth, ideal on a listen server). Read live by NetGame so it A/B-toggles in-session.
-        // Paired with the Vortex 60 Hz server tick (sys_ticrate 0.0166667 in vortex-server.cfg) the way
-        // Xonotic pairs cl_netfps 64 with its 64 Hz tick ("should match or be a multiple of sys_ticrate",
-        // xonotic-client.cfg:779). DP's engine default is 72.
-        c.Register("cl_netfps", "60", save);
+        // Paired with the 64 Hz server tick (sys_ticrate 0.015625 in vortex-server.cfg) exactly the way
+        // Xonotic pairs cl_netfps 64 with its shipped 64 Hz tick ("should match or be a multiple of
+        // sys_ticrate", xonotic-client.cfg:779). DP's engine default is 72.
+        c.Register("cl_netfps", "64", save);
         c.Register("cl_movement_send_all", "0");
         // cl_netimmediatebuttons (DP-faithful, default ON): send a command IMMEDIATELY (bypassing the cl_netfps rate
         // gate) when it carries an impulse or a button-state change (fire/jump/crouch press/release), so above 72 fps

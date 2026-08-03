@@ -112,7 +112,7 @@ public static class Cvars
         // runs zero ticks — caught by MaxVelocityClampTests); 0/unset maps to the exact constant. Xonotic
         // SHIPS 0.015625 (64 Hz) in xonotic-common.cfg; the VORTEX config layer sets 0.0166667 (60 Hz) in
         // vortex-server.cfg (Bryan 2026-08-03) — see the cfg for the reasoning + the one-line reverts.
-        new("sys_ticrate", "0", "seconds of sim time per server tick (DP sys_ticrate). 0 = engine default (exact 1/72 s, DP parity); 0.0166667 = 60 Hz (the Vortex default via vortex-server.cfg); 0.015625 = 64 Hz (Xonotic ships)"),
+        new("sys_ticrate", "0", "seconds of sim time per server tick (DP sys_ticrate). 0 = engine default (exact 1/72 s, DP parity); 0.015625 = 64 Hz (Xonotic\u0027s shipped default, and the Vortex default via vortex-server.cfg)"),
 
         new("sv_overload_timedrop", "1", "1 = DP parity: cap owed sim backlog at 0.1s, shedding the excess (overload = brief uniform slow-motion); 0 = legacy preserve-and-burst catch-up"),
         new("sv_catchup_wallbudget_ms", "0", "wall-clock ms a frame may spend running catch-up ticks before deferring the rest (first owed tick always runs; DP aborttime analogue); 0 = unlimited (default — the 2026-07-11 playtest found no felt benefit; the timedrop + soft cap already bound catch-up)"),

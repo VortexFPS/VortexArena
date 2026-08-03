@@ -41,28 +41,28 @@ public class SimulationTickRateTests
     }
 
     [Fact]
-    public void SixtyHz_TicksSixtyTimesPerSecond_AndPublishesTheLength()
+    public void SixtyFourHz_TicksSixtyFourTimesPerSecond_AndPublishesTheLength()
     {
         var sim = NewSim();
-        sim.TickSeconds = 1f / 60f;   // the Vortex default (vortex-server.cfg sys_ticrate 0.0166667)
+        sim.TickSeconds = 0.015625f;   // the Vortex default = Xonotic's shipped default (1/64, exact in float)
 
         int ticks = 0;
         for (int i = 0; i < 100; i++)
             ticks += sim.Advance(0.01f);   // 1.0 s of real time
-        Assert.InRange(ticks, 59, 60);
+        Assert.InRange(ticks, 63, 64);
 
         // sv.frametime + the QC-facing clock both carry the LIVE length after a tick ran.
-        Assert.Equal(1f / 60f, sim.FrameTime, 6);
+        Assert.Equal(0.015625f, sim.FrameTime);
         // Sim time advanced by ticks * tick-length (the accumulator holds the sub-tick remainder).
-        Assert.Equal(ticks * (1f / 60f), sim.Time, 4);
+        Assert.Equal(ticks * 0.015625f, sim.Time, 4);
     }
 
     /// <summary>The REAL boot path: a private-store world with the disk config chain must come up at the
-    /// layer's 60 Hz BEFORE any tick or handshake runs (the boot-apply in GameWorld.Boot). This reproduces
+    /// layer's 64 Hz BEFORE any tick or handshake runs (the boot-apply in GameWorld.Boot). This reproduces
     /// the release-capture path (sv_threaded listen world: private store + ConfigReader) in-process, so a
     /// regression here is caught in milliseconds instead of a 4-minute capture.</summary>
     [Fact]
-    public void BootedWorld_WithConfigChain_ComesUpAt60Hz()
+    public void BootedWorld_WithConfigChain_ComesUpAt64Hz()
     {
         string root = FindRepoRoot();
         var world = new VortexArena.Server.GameWorld(NewCollision());
@@ -72,7 +72,7 @@ public class SimulationTickRateTests
             return System.IO.File.Exists(p) ? System.IO.File.ReadAllText(p) : null;
         };
         world.Boot();
-        Assert.Equal(0.0166667f, world.Simulation.TickSeconds, 5);
+        Assert.Equal(0.015625f, world.Simulation.TickSeconds);   // 1/64 exact in float
     }
 
     private static CollisionWorld NewCollision()

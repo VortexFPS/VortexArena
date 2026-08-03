@@ -138,6 +138,29 @@ public class VortexConfigLayerTests
     }
 
     /// <summary>
+    /// Nades leave down the crosshair. Upstream biases them sideways twice — <c>g_nades_throw_offset</c>
+    /// "0 -25 0" spawns 25qu to the thrower's left (mutators.cfg:198) while the throw velocity carries a
+    /// rightward term — so this loads the REAL server chain, not the layer alone: mutators.cfg ships the
+    /// upstream value and the point is that the layer's later <c>set</c> beats it. A layer that stopped
+    /// loading would leave nades throwing crooked and nothing else would fail.
+    /// </summary>
+    [Fact]
+    public void Layer_Centers_The_Nade_Throw()
+    {
+        RequireCoreContent();
+        var cvars = new CvarService();
+        ConfigLoader.LoadServerConfig(cvars, DiskReader);
+
+        // Overrides mutators.cfg:198's "0 -25 0".
+        Assert.Equal("0 0 0", cvars.GetString("g_nades_throw_offset"));
+
+        // Port-added: upstream hardcodes these weights in sv_nades.qc with a right component (0.05 on the
+        // weapon_drop path, 0.1 on offhand). "forward right up" — the middle term is the one that matters.
+        Assert.Equal("0.75 0 0.2", cvars.GetString("g_nades_throw_dir"));
+        Assert.Equal("0.7 0 0.2", cvars.GetString("g_nades_throw_dir_offhand"));
+    }
+
+    /// <summary>
     /// Every file <c>vortex-common.cfg</c> execs must exist. A missing one is a no-op by design, which is
     /// what lets the layer ship incrementally — but it also means a typo in an <c>exec</c> line is
     /// invisible. Pinning <c>FilesMissing</c> to zero is what keeps that counter usable as a signal.

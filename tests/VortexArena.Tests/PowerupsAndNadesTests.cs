@@ -310,6 +310,114 @@ public class PowerupsAndNadesTests
         Assert.True(speed2 > speed1 * 1.5f, $"longer charge => more force: {speed1} -> {speed2}");
     }
 
+    /// <summary>
+    /// VORTEX DEVIATION from Base: nades leave down the crosshair. Base biases the throw sideways twice over
+    /// — a leftward spawn (g_nades_throw_offset "0 -25 0") plus a rightward velocity (v_right * 0.05 on the
+    /// weapon_drop path, * 0.1 on the offhand path) — so a Xonotic nade crosses the aim line once and never
+    /// travels along it. Both paths are checked from an off-axis view, so this is a claim about the view
+    /// basis and not an accident of the world axes lining up.
+    /// </summary>
+    [Fact]
+    public void Nade_Throw_IsCentered_OnTheCrosshair()
+    {
+        var facade = Boot();
+        facade.Cvars.Set("g_nades", "1");
+        facade.Cvars.Set("g_nades_spread", "0"); // isolate the systematic bias from the random cone
+        facade.GameClock.FrameTime = 1f / 72f;
+
+        var viewAngles = new Vector3(-12f, 35f, 0f);
+        VortexArena.Common.Math.QMath.AngleVectors(viewAngles, out Vector3 fwd, out Vector3 right, out _);
+
+        // offhand (+hook) path -> g_nades_throw_dir_offhand
+        facade.GameClock.Time = 10f;
+        var p1 = NewPlayer(); p1.OffhandWeapon = "nade"; p1.NadeRefire = 0f; p1.ViewAngles = viewAngles;
+        NadeThrow.OffhandThink(p1, keyPressed: true);
+        Entity offhand = p1.Nade!;  // Toss mutates the held nade in place, so capture it before release
+        facade.GameClock.Time = 12f;
+        NadeThrow.OffhandThink(p1, keyPressed: false);
+
+        // weapon_drop path -> g_nades_throw_dir
+        facade.GameClock.Time = 20f;
+        var p2 = NewPlayer(); p2.OffhandWeapon = "nade"; p2.NadeRefire = 0f; p2.ViewAngles = viewAngles;
+        NadeThrow.CheckThrow(p2);   // first press primes
+        Entity drop = p2.Nade!;
+        facade.GameClock.Time = 22f;
+        NadeThrow.CheckThrow(p2);   // second press throws
+
+        foreach ((Entity nade, Entity thrower, string path) in
+                 new[] { (offhand, p1, "offhand"), (drop, p2, "weapon_drop") })
+        {
+            Assert.True(Vector3.Dot(nade.Velocity, fwd) > 0f, $"{path}: throw should go forwards");
+
+            float sideways = MathF.Abs(Vector3.Dot(nade.Velocity, right)) / nade.Velocity.Length();
+            Assert.True(sideways < 1e-4f, $"{path}: throw should travel down the crosshair (sideways {sideways:F5})");
+
+            // ...and leave from the eye, not 25qu off to one side.
+            Assert.Equal(0f, Vector3.Dot(nade.Origin - (thrower.Origin + thrower.ViewOfs), right), 2);
+        }
+    }
+
+    /// <summary>The throw direction is a cvar, not a literal — restoring Base's weights restores Base's aim.</summary>
+    [Fact]
+    public void Nade_ThrowDirection_IsCvarControlled()
+    {
+        var facade = Boot();
+        facade.Cvars.Set("g_nades", "1");
+        facade.Cvars.Set("g_nades_spread", "0");
+        facade.GameClock.FrameTime = 1f / 72f;
+
+        // Base's hardcoded weights, as "forward right up".
+        facade.Cvars.Set("g_nades_throw_dir_offhand", "0.7 0.1 0.2");
+        facade.Cvars.Set("g_nades_throw_dir", "0.75 0.05 0.2");
+
+        var viewAngles = new Vector3(0f, 35f, 0f);
+        VortexArena.Common.Math.QMath.AngleVectors(viewAngles, out Vector3 fwd, out Vector3 right, out _);
+
+        facade.GameClock.Time = 10f;
+        var p1 = NewPlayer(); p1.OffhandWeapon = "nade"; p1.NadeRefire = 0f; p1.ViewAngles = viewAngles;
+        NadeThrow.OffhandThink(p1, keyPressed: true);
+        Entity offhand = p1.Nade!;
+        facade.GameClock.Time = 12f;
+        NadeThrow.OffhandThink(p1, keyPressed: false);
+
+        facade.GameClock.Time = 20f;
+        var p2 = NewPlayer(); p2.OffhandWeapon = "nade"; p2.NadeRefire = 0f; p2.ViewAngles = viewAngles;
+        NadeThrow.CheckThrow(p2);
+        Entity drop = p2.Nade!;
+        facade.GameClock.Time = 22f;
+        NadeThrow.CheckThrow(p2);
+
+        Assert.Equal(8.13f, SidewaysDegrees(offhand.Velocity, fwd, right), 1); // atan(0.1 / 0.7)
+        Assert.Equal(3.81f, SidewaysDegrees(drop.Velocity, fwd, right), 1);    // atan(0.05 / 0.75)
+    }
+
+    /// <summary>g_nades_throw_offset still moves the spawn point — only its DEFAULT changed to centered.</summary>
+    [Fact]
+    public void Nade_ThrowOffset_IsCvarControlled()
+    {
+        var facade = Boot();
+        facade.Cvars.Set("g_nades", "1");
+        facade.Cvars.Set("g_nades_spread", "0");
+        facade.GameClock.FrameTime = 1f / 72f;
+        facade.Cvars.Set("g_nades_throw_offset", "0 -25 0"); // Base's default: 25qu to the thrower's left
+
+        var viewAngles = new Vector3(0f, 35f, 0f);
+        VortexArena.Common.Math.QMath.AngleVectors(viewAngles, out _, out Vector3 right, out _);
+
+        facade.GameClock.Time = 10f;
+        var p = NewPlayer(); p.OffhandWeapon = "nade"; p.NadeRefire = 0f; p.ViewAngles = viewAngles;
+        NadeThrow.OffhandThink(p, keyPressed: true);
+        Entity nade = p.Nade!;
+        facade.GameClock.Time = 12f;
+        NadeThrow.OffhandThink(p, keyPressed: false);
+
+        Assert.Equal(-25f, Vector3.Dot(nade.Origin - (p.Origin + p.ViewOfs), right), 1);
+    }
+
+    /// <summary>Signed angle in degrees between a throw velocity and the crosshair; positive = to the right.</summary>
+    private static float SidewaysDegrees(Vector3 v, Vector3 forward, Vector3 right)
+        => MathF.Atan2(Vector3.Dot(v, right), Vector3.Dot(v, forward)) * (180f / MathF.PI);
+
     [Fact]
     public void Nade_CannotPrime_BeforeRefire()
     {

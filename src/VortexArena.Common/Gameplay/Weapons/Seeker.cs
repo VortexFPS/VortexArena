@@ -636,6 +636,10 @@ public sealed class Seeker : Weapon
     // in type 1 the missiles ARE the primary (lead at missile_speed). The flac/secondary is not bot-driven (the
     // homing missiles do the work), so the default primary-only press stands; this hook only supplies the per-type
     // lead speed. Non-lobbed, so the brain's straight-line lead applies.
+    // QC wr_aim passes shot_accurate = false to bot_aim (seeker.qc:536,538): this weapon fires on a
+    // deliberately WIDE fire-deviation cone (f = 1.6), independent of whether it is hitscan.
+    public override bool? BotAimAccurate() => false;
+
     public override float BotAimShotSpeed(float defaultSpeed)
         => Type == 1 ? Missile.Speed : Tag.Speed;
 }

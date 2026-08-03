@@ -46,6 +46,19 @@ public sealed class GoalRater
     public bool HasGoal => _has;
     public GoalRating Best => _best;
 
+    /// <summary>
+    /// QC <c>.ignoregoal</c> (roles.qc:140 <c>if (it == this.ignoregoal) continue;</c>): a goal the danger probe
+    /// found unreachable, skipped DURING rating so the rest of the pass still competes. The brain stamps this
+    /// before running the role and clears it when <see cref="IgnoreGoalUntil"/> lapses.
+    ///
+    /// <para>The port used to apply it to the WINNER of the whole pass instead, so one bad goal blanked the
+    /// entire rating and the bot got nothing at all. See planning/bot-ai-parity-2026-08-03.md D24.</para>
+    /// </summary>
+    public Entity? IgnoreGoal;
+
+    /// <summary>Sim time at which <see cref="IgnoreGoal"/> stops applying (QC <c>.ignoregoaltime</c>).</summary>
+    public float IgnoreGoalUntil;
+
     /// <summary>Scratch buffer reused across this rater's FindInRadius/FindByClass scans (sim-thread, token-gated,
     /// so never re-entered): one List per brain instead of an iterator per goal-rating call. The list overloads
     /// clear it on entry, so each scan must be fully consumed before the next reuses it (none here nest a find
@@ -75,19 +88,66 @@ public sealed class GoalRater
         return net?.ComputeRouteCosts(from, onGround);
     }
 
-    /// <summary>Rate a candidate goal (QC navigation_routerating): value <paramref name="f"/> discounted by distance.</summary>
+    /// <summary>
+    /// Rate a candidate goal (QC navigation_routerating): value <paramref name="f"/> discounted by travel cost.
+    ///
+    /// <para>An UNREACHABLE candidate is not rated at all. QC gates the whole rating on
+    /// <c>if (nwp &amp;&amp; nwp.wpcost &lt; 10000000)</c> (navigation.qc:1408) — a goal the route flood never
+    /// reached simply does not compete. The port used to fall back to a straight-line cost, so bots picked goals
+    /// behind walls and across gaps and then walked into geometry until a watchdog fired; worse, the unreachable
+    /// candidate still set <see cref="HasGoal"/>, which suppressed the roam fallback that would have given the bot
+    /// a reachable goal. See planning/bot-ai-parity-2026-08-03.md D5.</para>
+    /// </summary>
     public void Rate(Vector3 from, Entity? target, Vector3 goalPos, float f, float rangeBias)
     {
         if (f <= 0f) return;
-        // QC navigation_routerating distance term: the Dijkstra path cost over the waypoint graph (.wpcost). When
-        // the route field is seeded and the goal is graph-reachable, use it; else fall back to a straight-line
-        // cost in the same unit (distance/MaxSpeed) so the rangebias scale matches the graph path.
+        // QC roles.qc:140: the ignored goal is skipped as a CANDIDATE, leaving the rest of the pass intact.
+        if (target is not null && ReferenceEquals(target, IgnoreGoal) && Api.Clock.Time < IgnoreGoalUntil)
+            return;
         float cost = float.PositiveInfinity;
         if (_routeSeeded && _routeNet is not null)
+        {
             cost = _routeNet.RouteCostTo(target, goalPos); // entity goals ride the QC nearest-waypoint cache
-        if (float.IsPositiveInfinity(cost))
+            if (float.IsPositiveInfinity(cost))
+                return; // QC: nwp.wpcost >= 10000000 — the flood never reached it, so it is not a candidate
+        }
+        else
+        {
+            // No route field (graphless roaming / tests): straight-line cost in the same unit.
             cost = (goalPos - from).Length() / System.MathF.Max(1f, Cvars.MaxSpeed);
-        float rating = f * (rangeBias / (rangeBias + cost));
+        }
+        Commit(goalPos, target, RatingFor(f, rangeBias, cost));
+    }
+
+    /// <summary>
+    /// QC navigation_routerating's rating formula (navigation.qc:1225-1226, :1418).
+    ///
+    /// <para><b><paramref name="rangeBias"/> must be converted to travel-cost units</b>
+    /// (<c>waypoint_getlinearcost</c>): it is authored as a distance in qu, while <paramref name="cost"/> is a
+    /// time in seconds. The port used to compare the two directly, which made the distance factor span
+    /// 0.9986..0.9917 with the stock rangebias 2000 — a 0.7% spread across an entire map. Goal choice was
+    /// effectively distance-blind: every bot walked to the single highest-value item on the map from anywhere,
+    /// and all of Base's per-call-site rangebias tuning (2000 items, 4000 assault, 5000 dom/race, 10000 CTF/ons,
+    /// 100000 KH keys) collapsed into one behaviour. See planning/bot-ai-parity-2026-08-03.md F7.</para>
+    ///
+    /// <para><b>Intended divergence:</b> QC also converts <paramref name="f"/> (navigation.qc:1226). That is a
+    /// single constant scale applied to every candidate in a pass (the denominator is maxspeed and skill, both
+    /// fixed for the pass), so it cannot change which goal wins — it only rescales the numbers. We leave
+    /// <paramref name="f"/> in raw item-value units so ratings stay on the readable BOT_RATING_* scale the
+    /// per-item tests pin, and so a debug overlay shows "8000" rather than "20.1".</para>
+    /// </summary>
+    private float RatingFor(float f, float rangeBias, float cost)
+    {
+        float bias = LinearCost(rangeBias);
+        return f * (bias / (bias + cost));
+    }
+
+    /// <summary>QC <c>waypoint_getlinearcost</c>: a distance in qu expressed as the time to walk it.</summary>
+    private float LinearCost(float dist)
+        => _routeNet is not null ? _routeNet.LinearCost(dist) : dist / System.MathF.Max(1f, Cvars.MaxSpeed);
+
+    private void Commit(Vector3 goalPos, Entity? target, float rating)
+    {
         if (!_has || rating > _best.Rating)
         {
             _best = new GoalRating(goalPos, target, rating);
@@ -102,17 +162,18 @@ public sealed class GoalRater
     public void RateWaypoint(Vector3 from, Waypoint wp, float f, float rangeBias)
     {
         if (f <= 0f) return;
-        float cost = float.PositiveInfinity;
+        float cost;
         if (_routeSeeded && _routeNet is not null)
-            cost = _routeNet.RouteCostToWaypoint(wp);
-        if (float.IsPositiveInfinity(cost))
-            cost = (wp.Center - from).Length() / System.MathF.Max(1f, Cvars.MaxSpeed);
-        float rating = f * (rangeBias / (rangeBias + cost));
-        if (!_has || rating > _best.Rating)
         {
-            _best = new GoalRating(wp.Center, null, rating);
-            _has = true;
+            cost = _routeNet.RouteCostToWaypoint(wp);
+            if (float.IsPositiveInfinity(cost))
+                return; // unreachable in the flood — not a candidate (QC navigation.qc:1408)
         }
+        else
+        {
+            cost = (wp.Center - from).Length() / System.MathF.Max(1f, Cvars.MaxSpeed);
+        }
+        Commit(wp.Center, null, RatingFor(f, rangeBias, cost));
     }
 
     public void End() { /* QC navigation_goalrating_end commits navigation_bestgoal; we expose Best directly */ }
@@ -242,9 +303,96 @@ public static class BotRoles
             var pos = (it.AbsMin + it.AbsMax) * 0.5f;
             if (pos == Vector3.Zero) pos = it.Origin;
 
+            // QC roles.qc:143-163 — "Check if the item can be picked up safely". A bot that routes to an item
+            // sitting in lava brakes at the edge, marks the goal unreachable, and re-rates from the same spot;
+            // with the danger probe that reads as a bot oscillating at a hazard lip forever.
+            if (IsLoot(it))
+            {
+                // Dropped loot: only rate it once it has landed, and not if it landed in lava.
+                if (!it.OnGround) continue;
+                var down = Api.Trace.Trace(pos, Vector3.Zero, Vector3.Zero,
+                    pos - new Vector3(0f, 0f, 1500f), MoveFilter.NoMonsters, null);
+                if (InLava(down.EndPos + new Vector3(0f, 0f, 1f))) continue;
+            }
+            else if (InLava(it.Origin + (it.Mins + it.Maxs) * 0.5f))
+            {
+                continue;
+            }
+
+            if (!PickableCheckPlayers(brain, org, it, pos)) continue;
+
             float value = ItemValue(brain, it, ref arsenal);
             rater.Rate(org, it, pos, value * ratingScale, 2000f);
         }
+    }
+
+    /// <summary>QC <c>ITEM_IS_LOOT</c>: a weapon/ammo a player dropped, as opposed to a map spawn.</summary>
+    private static bool IsLoot(Entity it) => it.IsLoot;
+
+    /// <summary>QC <c>IN_LAVA(point)</c>: is this point inside a lava volume?</summary>
+    private static bool InLava(Vector3 point)
+        => Api.Services is not null && (Api.Trace.PointContents(point) & Contents.Lava) != 0;
+
+    /// <summary>
+    /// QC <c>havocbot_goalrating_item_pickable_check_players</c> (roles.qc:60-104): in TEAM games, don't race a
+    /// teammate for a pickup neither of you urgently needs.
+    ///
+    /// <para>Finds the nearest teammate who could be left to take this item and the nearest enemy, then rates
+    /// it only if an enemy is closer than that teammate (contest it), the teammate is beyond
+    /// <c>bot_ai_friends_aware_pickup_radius</c> (nobody's claim), or the bot is practically standing on it.
+    /// Without this every bot on a team converges on the same pickup, they funnel into one doorway and
+    /// body-block each other — a very common flavour of the reported corner-sticking.</para>
+    ///
+    /// <para>Note QC's <c>if (!IS_REAL_CLIENT(it)) continue;</c> at roles.qc:73-74: the deference is only ever
+    /// extended to HUMAN teammates. Bots do not defer to each other, so a team of bots still competes; the rule
+    /// exists to stop bots stealing items out from under the players they are playing with.</para>
+    /// </summary>
+    private static bool PickableCheckPlayers(BotBrain brain, Vector3 org, Entity item, Vector3 itemOrg)
+    {
+        if (!Teamplay.IsTeamGame) return true;
+
+        var bot = brain.Bot;
+        float friendDist2 = float.MaxValue, enemyDist2 = float.MaxValue;
+        foreach (Player p in brain.Players())
+        {
+            if (ReferenceEquals(p, bot) || p.IsDead || p.IsFreed) continue;
+            float d2 = (p.Origin - itemOrg).LengthSquared();
+            if (p.Team == bot.Team)
+            {
+                if (p.IsBot) continue;                   // QC IS_REAL_CLIENT: defer to humans only
+                if (d2 > friendDist2) continue;
+                if (CanBeLeftToTeammate(bot, p, item)) friendDist2 = d2;
+            }
+            else if (d2 < enemyDist2)
+            {
+                enemyDist2 = d2;
+            }
+        }
+
+        float radius = Cvars.FloatOr("bot_ai_friends_aware_pickup_radius", 500f);
+        float mine2 = (itemOrg - org).LengthSquared();
+        return (enemyDist2 < friendDist2 && mine2 < enemyDist2)
+            || friendDist2 > radius * radius
+            || (mine2 < friendDist2 && mine2 < 200f * 200f);
+    }
+
+    /// <summary>
+    /// QC <c>havocbot_goalrating_item_can_be_left_to_teammate</c> (roles.qc:45-58): would this teammate get
+    /// more out of the item than we would? Each clause is "the item gives X and they have no more X than us".
+    /// </summary>
+    private static bool CanBeLeftToTeammate(Player bot, Player mate, Entity item)
+    {
+        if (item.GetResource(ResourceType.Health) > 0f
+            && mate.GetResource(ResourceType.Health) <= bot.GetResource(ResourceType.Health)) return true;
+        if (item.GetResource(ResourceType.Armor) > 0f
+            && mate.GetResource(ResourceType.Armor) <= bot.GetResource(ResourceType.Armor)) return true;
+        if (!string.IsNullOrEmpty(item.WeaponNetName)
+            && Weapons.ByName(item.WeaponNetName) is { } w && !Inventory.HasWeapon(mate, w)) return true;
+        if (IsPowerup(item)) return true;
+        if (bot.UnlimitedAmmo) return true;
+        foreach (ResourceType ammo in AmmoResources)
+            if (item.GetResource(ammo) > 0f && mate.GetResource(ammo) <= bot.GetResource(ammo)) return true;
+        return false;
     }
 
     /// <summary>
@@ -305,8 +453,12 @@ public static class BotRoles
             var hv = new Vector3(e.Velocity.X, e.Velocity.Y, 0f);
             if (hv.LengthSquared() > maxSpeed2) continue;
 
-            // health/armor advantage and low skill both increase aggression (QC t factor)
-            float advantage = (bot.Health - e.Health) / 150f;
+            // QC roles.qc:201 — the advantage term is (health + ARMOR) on both sides, not health alone. With
+            // armor dropped, a fully-kitted bot (100/100 against an enemy's 100/0) read itself as even and
+            // clamped to t = 1 instead of ~1.67, so it stopped pressing fights it was winning and took item
+            // goals instead.
+            float advantage = ((bot.Health + bot.GetResource(ResourceType.Armor))
+                             - (e.Health + e.GetResource(ResourceType.Armor))) / 150f;
             float t = System.Math.Clamp(1f + advantage, 0f, 3f);
             // QC skill>3: fold in live Strength/Shield timers (StatusEffects_gettime, roles.qc:203-210) —
             // press the advantage while OUR powerup has >1s left; back off a powered-up enemy. The -1 keeps

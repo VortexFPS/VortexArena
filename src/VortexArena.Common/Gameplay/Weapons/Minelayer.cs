@@ -535,6 +535,10 @@ public sealed class Minelayer : Weapon
     //   cancel if self-damage would kill the bot (skill>6.5 veto). Suppress primary when detonating.
     // Plugs into BotBrain.BotWantsDetonate (the brain calls this regardless of primary-fire and, when it
     // returns true, suppresses primary + sets ATCK2 — exactly the QC "don't fire at the same time" pattern).
+    // QC wr_aim passes shot_accurate = false to bot_aim (minelayer.qc:385): this weapon fires on a
+    // deliberately WIDE fire-deviation cone (f = 1.6), independent of whether it is hitscan.
+    public override bool? BotAimAccurate() => false;
+
     public override bool BotWantsDetonate(
         Entity actor, WeaponSlot slot, float skill,
         System.Collections.Generic.IEnumerable<Entity> targets,

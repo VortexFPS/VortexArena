@@ -208,6 +208,10 @@ public sealed class Fireball : Weapon
     // toggle is clear it leads/fires the slow primary fireball; once it rolls onto the secondary it lobs firemines
     // until it rolls back. The brain leads + decides the shot generically (via BotAimShotSpeed below); this hook
     // only picks WHICH button that decided shot is routed to and advances the QC toggle's random flip.
+    // QC wr_aim passes shot_accurate = false to bot_aim (fireball.qc:350,359): this weapon fires on a
+    // deliberately WIDE fire-deviation cone (f = 1.6), independent of whether it is hitscan.
+    public override bool? BotAimAccurate() => false;
+
     public override bool BotWantsSecondary(float enemyDistance, float skill, ref BotAimState ctx)
     {
         // ctx.SecondaryToggle mirrors actor.bot_primary_fireballmooth. The button QC presses THIS frame is the

@@ -437,9 +437,21 @@ public class BotLiveLoopTests
 
     /// <summary>
     /// Run two bots at <paramref name="skill"/> on a flat floor and collect the HORIZONTAL magnitude of the
-    /// wish-move on every frame a bot has a live enemy. The generic CombatMovement always emits a NORMALISED
+    /// wish-move on every frame a bot has a live enemy AND a goal to walk to. Steering emits a NORMALISED
     /// direction scaled to run speed, so its magnitude is pinned at MaxSpeed; the SUPERBOT jitter overrides
     /// X/Y with raw crandom()*maxspeed values, so its magnitude varies. That difference is the discriminator.
+    ///
+    /// <para>The "and a goal" filter is load-bearing. QC <c>havocbot_movetogoal</c> opens with
+    /// <c>CS(this).movement = '0 0 0'</c> (havocbot.qc:457), so a bot with no current goal emits NO movement
+    /// even mid-fight — Base has no combat strafe below SUPERBOT. This harness used to measure the port's
+    /// invented CombatMovement, which filled those frames with a run-speed strafe; with that removed (parity
+    /// report D7) the goal-less frames correctly read zero and would swamp the signal.</para>
+    ///
+    /// <para>Airborne frames are excluded for the same kind of reason: QC's <c>do_break</c> is
+    /// <c>normalize(velocity) * -1</c> in FULL 3D (havocbot.qc:1172), so a falling bot's brake carries a large
+    /// +Z that the <c>normalize(dir + ...)</c> fold turns into a vertical wish component, shrinking the
+    /// horizontal part. That is faithful and inert — <c>move.Z</c> is read only by SwimMove/LadderMove/FlyBranch,
+    /// never WalkMove — but it makes the horizontal magnitude a meaningless metric mid-fall.</para>
     /// </summary>
     private static List<float> CombatMoveMagnitudes(float skill)
     {
@@ -458,7 +470,7 @@ public class BotLiveLoopTests
         {
             foreach (BotBrain b in world.Bots.Brains)
             {
-                if (b.Enemy is null || b.Bot.IsDead) continue;
+                if (b.Enemy is null || b.Bot.IsDead || !b.Nav.HasGoal || !b.Bot.OnGround) continue;
                 Vector3 m = b.LastInput.MoveValues;
                 mags.Add(new Vector2(m.X, m.Y).Length());
             }
@@ -483,7 +495,7 @@ public class BotLiveLoopTests
     public void NonSuperbot_CombatMoveStaysPinnedToRunSpeed()
     {
         // The control: below the SUPERBOT threshold the jitter must not engage, so every in-combat wish-move
-        // keeps the normalised run-speed magnitude CombatMovement produces. This is what guards the new code
+        // keeps the normalised run-speed magnitude the steering fold produces. This is what guards the jitter
         // from leaking into ordinary play.
         List<float> mags = CombatMoveMagnitudes(10f);
         Assert.True(mags.Count > 50, $"not enough in-combat frames to judge ({mags.Count})");

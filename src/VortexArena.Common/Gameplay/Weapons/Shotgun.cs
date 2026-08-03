@@ -209,6 +209,10 @@ public sealed class Shotgun : Weapon
     // within melee_range, otherwise ATCK (the pellet fan). The brain has already decided the shot via the
     // generic BotAim; this hook only owns the primary-vs-secondary button pick. Returning true routes the shot
     // onto ATCK2.
+    // QC wr_aim passes shot_accurate = false to bot_aim (shotgun.qc:270,272): this weapon fires on a
+    // deliberately WIDE fire-deviation cone (f = 1.6), independent of whether it is hitscan.
+    public override bool? BotAimAccurate() => false;
+
     public override bool BotWantsSecondary(float enemyDistance, float skill, ref BotAimState ctx)
         => enemyDistance <= Secondary.MeleeRange;
 

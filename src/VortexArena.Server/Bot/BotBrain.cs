@@ -121,6 +121,52 @@ public sealed class BotBrain
     /// </summary>
     public bool StrategyTokenHeld = true;
 
+    /// <summary>
+    /// The unstuck machinery (QC navigation_unstuck + AI_STATUS_STUCK). See <see cref="BotUnstuck"/>.
+    /// </summary>
+    public BotUnstuck Unstuck { get; }
+
+    /// <summary>
+    /// Claim the server-wide unstuck-scan token (QC <c>bot_waypoint_queue_owner</c>): only one bot at a time
+    /// runs the reachability scan, so a room full of wedged bots costs one scan, not N. Set by the population;
+    /// the standalone/bench path (no population) always succeeds.
+    /// </summary>
+    public Func<BotBrain, bool>? TryOwnUnstuckQueueHook;
+
+    /// <summary>Release the unstuck-scan token (QC <c>bot_waypoint_queue_owner = NULL</c>).</summary>
+    public Action<BotBrain>? ReleaseUnstuckQueueHook;
+
+    internal bool TryOwnUnstuckQueue() => TryOwnUnstuckQueueHook?.Invoke(this) ?? true;
+
+    internal void ReleaseUnstuckQueue() => ReleaseUnstuckQueueHook?.Invoke(this);
+
+    /// <summary>A draw from this bot's RNG (QC <c>random()</c>), for the unstuck wander re-roll.</summary>
+    internal float NextRandom() => (float)_rng.NextDouble();
+
+    /// <summary>
+    /// QC <c>point_line_vec(p, l0, ldir)</c> (lib/vector.qh): the perpendicular offset from point
+    /// <paramref name="p"/> to the line through <paramref name="lineFrom"/> along <paramref name="lineDir"/> —
+    /// i.e. "how far off the centreline am I, and which way back". Returns the vector pointing from the line
+    /// TO the point, so negating it steers back onto the path.
+    /// </summary>
+    private static Vector3 PointLineVec(Vector3 p, Vector3 lineFrom, Vector3 lineDir)
+    {
+        Vector3 d = QMath.Normalize(lineDir);
+        if (d == Vector3.Zero) return Vector3.Zero;
+        Vector3 rel = p - lineFrom;
+        return rel - d * QMath.Dot(rel, d);
+    }
+
+    /// <summary>
+    /// QC <c>navigation_goalrating_timeout_expire(t)</c>: push the next strategy pass out by
+    /// <paramref name="seconds"/> so an unstuck wander goal gets a moment to play out.
+    /// </summary>
+    internal void DelayStrategy(float seconds)
+    {
+        _strategyForced = false;
+        _strategyTime = Now + seconds;
+    }
+
     /// <summary>Fired when the holder actually consumes the token (QC <c>bot_strategytoken_taken = true</c>).</summary>
     public Action? OnStrategyTokenUsed;
 
@@ -223,6 +269,7 @@ public sealed class BotBrain
         _rng = seed == 0 ? new Random() : new Random(seed);
         Aim = new BotAim(seed);
         Nav = new BotNavigation();
+        Unstuck = new BotUnstuck(this);
 
         // sync hull/view from the entity (QC PL_MIN/PL_MAX, view_ofs)
         Nav.Mins = bot.Mins != Vector3.Zero ? bot.Mins : Nav.Mins;
@@ -505,11 +552,26 @@ public sealed class BotBrain
         // via the goal-rating timeout (QC navigation_goalrating_timeout inside each role → GoalRatingTimedOut
         // here). [parity 2026-07-11: the old pass ran the WHOLE role on the 7s clock, so objective role
         // switches — "I just grabbed the flag", "our flag was stolen" — lagged by up to a full interval.]
-        if (StrategyTokenHeld)
+        // 1c) QC bot_think:150-151 — a STUCK bot runs navigation_unstuck INSTEAD of its role, every think, until
+        // it finds somewhere it can actually walk to. This is Base's only escape from "nothing rates", and
+        // without it every other rating defect terminates in a bot standing still forever.
+        if (Unstuck.IsStuck)
+        {
+            using (VortexArena.Common.Diagnostics.Prof.Sample("bot.unstuck"))
+                Unstuck.Think(bot, Network, Nav);
+        }
+
+        // QC navigation_goalrating_start/_end short-circuit entirely while AI_STATUS_STUCK is set
+        // (navigation.qc:1833, :1848), so the role does not run and cannot re-raise the flag it is escaping.
+        if (StrategyTokenHeld && !Unstuck.IsStuck)
         {
             using var _stratScope = VortexArena.Common.Diagnostics.Prof.Sample("bot.strategy"); // [profiling] flood + role rating
             _ratingRan = false;
             _frameSeeds = null;
+            // QC .ignoregoal / .ignoregoaltime: hand them to the rater so the ignored goal is skipped as a
+            // CANDIDATE during the pass (roles.qc:140) instead of blanking the pass winner afterwards.
+            _rater.IgnoreGoal = _ignoreGoal;
+            _rater.IgnoreGoalUntil = _ignoreGoalTime;
             using (VortexArena.Common.Diagnostics.Prof.Sample("bot.rate")) // [profiling] role state machine + goal-rating loop
                 Role(this, _rater);
             if (_ratingRan)
@@ -517,19 +579,14 @@ public sealed class BotBrain
                 bool captured = false;
                 if (_rater.HasGoal)
                 {
-                    var g = _rater.Best;
-                    // QC .ignoregoal: skip a goal that danger marked unreachable, for ignoregoal_timeout secs.
-                    if (!(g.Target is not null && ReferenceEquals(g.Target, _ignoreGoal) && now < _ignoreGoalTime))
-                    {
-                        // Capture the rating + seed snapshot; the route build runs at the NEXT think (block 0).
-                        _pendingGoal = g;
-                        _pendingGoalSet = true;
-                        captured = true;
-                        _pendingSeeds.Clear();
-                        if (_frameSeeds is not null)
-                            for (int i = 0; i < _frameSeeds.Count; i++)
-                                _pendingSeeds.Add(_frameSeeds[i]);
-                    }
+                    // Capture the rating + seed snapshot; the route build runs at the NEXT think (block 0).
+                    _pendingGoal = _rater.Best;
+                    _pendingGoalSet = true;
+                    captured = true;
+                    _pendingSeeds.Clear();
+                    if (_frameSeeds is not null)
+                        for (int i = 0; i < _frameSeeds.Count; i++)
+                            _pendingSeeds.Add(_frameSeeds[i]);
                 }
                 // QC navigation_goalrating_timeout_set (navigation.qc:20-26): a MOVABLE goal (a player — enemy,
                 // flag/ball/key carrier) re-rates on the shorter movingtarget interval; static goals on the
@@ -543,7 +600,17 @@ public sealed class BotBrain
                 // timer, never per-think (the roles gate on GoalRatingTimedOut). A captured pass re-checks
                 // after its route build.
                 if (!captured && !Nav.HasGoal)
+                {
                     _strategyTime = now + 2f;
+                    // QC navigation_goalrating_end (navigation.qc:1861-1867): a pass with no goal ENTITY raises
+                    // AI_STATUS_STUCK, handing the bot to navigation_unstuck above. Without this the bot just
+                    // re-rates from the same spot every 2 s and fails identically, forever.
+                    Unstuck.NoteRatingProducedNothing();
+                }
+                else if (captured)
+                {
+                    Unstuck.Clear();
+                }
             }
 
             // QC havocbot_ai:68-100: a SWIMMING bot with no goal (and none pending from this pass) pushes the
@@ -567,18 +634,30 @@ public sealed class BotBrain
         using (VortexArena.Common.Diagnostics.Prof.Sample("bot.steer")) // [profiling] waypoint steering + tracewalks
             move = Nav.Steer(bot, Aim.ViewAngles.Y, onGround);
 
-        // 3b) no-progress watchdog (QC havocbot_checkgoaldistance): >0.5s without closing on the goal →
-        // drop the route and force a re-rate on the next token hold (covers navigation_unstuck's main value).
+        // 3b) no-progress watchdog (QC havocbot_checkgoaldistance, havocbot.qc:1102-1128): >0.5s without closing
+        // on the goal → drop the route and force a re-rate on the next token hold. (The terminal "nothing is
+        // reachable from here" case is navigation_unstuck's job — see Unstuck above; this watchdog only handles
+        // "this particular route stopped working".)
         if (Nav.HasGoal && Nav.CheckGoalProgress(bot, now))
         {
             Nav.ClearRoute();
             _strategyForced = true;
         }
 
+        // 3b-ii) QC havocbot_ai:875-879 + navigation_goalrating_timeout_force: running the goal stack dry means
+        // the bot has arrived and needs somewhere new to go. Force the re-rate rather than letting it idle out
+        // the 7 s strategy interval standing on the goal it just reached.
+        if (!Nav.HasGoal && !_pendingGoalSet && !_strategyForced)
+            _strategyForced = true;
+
         // 3c) danger ahead (QC havocbot_movetogoal:1136-1182 → havocbot_checkdanger): probe the ground under
         // the point we're about to occupy; lava/slime/void/cliff → brake; a trigger_hurt under a high goal →
         // the goal is unreachable (clear + ignore it for bot_ai_ignoregoal_timeout).
         bool dangerBrakeEngaged = false; // QC do_break/evadedanger this frame (forbids bunnyhop, havocbot.qc:1315)
+        // QC's two world-space correction vectors, folded into the wish-move at havocbot.qc:1269 rather than
+        // replacing it. Both stay zero unless the danger probe below arms them.
+        Vector3 dangerBrake = Vector3.Zero;   // QC do_break
+        Vector3 evadeDanger = Vector3.Zero;   // QC evadedanger
         _triggerHurtEscape = false;      // QC trigger_hurt escape intent (skill>6), set by the danger probe below
         using (VortexArena.Common.Diagnostics.Prof.Sample("bot.danger")) // [profiling] danger probes (ground/hazard traces)
         if (Nav.Current is Vector3 cur)
@@ -613,25 +692,37 @@ public sealed class BotBrain
             if (danger)
             {
                 dangerBrakeEngaged = true; // QC: do_break/evadedanger set → bunnyhop forbidden this frame
-                // QC evadedanger: steer ALONG the safe edge, not straight back. Probe the danger to our left and
-                // right of the flight path; if one side is clear, blend a sideways component toward it so the bot
-                // sidesteps the hazard rather than reversing off it. Fall back to the reverse-velocity brake only
-                // when both sides are dangerous (a dead-end ledge).
-                Vector3 fwdFlat = new(cur.X - bot.Origin.X, cur.Y - bot.Origin.Y, 0f);
-                Vector3 fdir = fwdFlat.LengthSquared() > 0f ? QMath.Normalize(fwdFlat) : Vector3.Zero;
-                Vector3 sideDir = new(-fdir.Y, fdir.X, 0f); // left of the flight path
-                Vector3 probeBase = bot.Origin + Aim.ViewOffset;
-                int leftR = BotDanger.CheckDanger(bot, probeBase, probeBase + (fdir + sideDir) * 48f, cur.Z,
-                    Nav.Mins, Nav.Maxs, onGround, jumpHeld || Nav.WantJump, moving: true, committed: false);
-                int rightR = BotDanger.CheckDanger(bot, probeBase, probeBase + (fdir - sideDir) * 48f, cur.Z,
-                    Nav.Mins, Nav.Maxs, onGround, jumpHeld || Nav.WantJump, moving: true, committed: false);
-                bool leftSafe = leftR == 0, rightSafe = rightR == 0;
-                Vector3 evadeWorld;
-                if (leftSafe && !rightSafe) evadeWorld = sideDir - fdir * 0.5f;       // peel left along the edge
-                else if (rightSafe && !leftSafe) evadeWorld = -sideDir - fdir * 0.5f; // peel right
-                else evadeWorld = -bot.Velocity;                                     // both bad: brake straight back
-                move = Nav.WorldToLocalMove(evadeWorld, Aim.ViewAngles.Y);
-                if (Nav.GoalEntity is Player) // QC: a player goal past danger is unreachable
+
+                // QC havocbot.qc:1249-1268 — evadedanger is a CORRECTION BACK ONTO THE PATH, computed only for
+                // a bot already running (>0.8 maxspeed) between two graph waypoints. It measures how far the
+                // bot's projected position has drifted off the goalcurrent_prev -> destorg centreline and pushes
+                // back toward it, scaled so low-skill bots give hazards a wider berth. Everything else about the
+                // danger response is just a status bit.
+                //
+                // The port used to REPLACE the whole wish-move with a sideways peel on any danger result, with
+                // no speed gate: around a railing, a stairwell, or any room with a hole in the floor the bot
+                // oscillated between "advance" and "peel" and never traversed. See parity report D6.
+                float speed = bot.Velocity.Length();
+                if (speed > Nav.MaxSpeed * 0.8f && Nav.HasPrevGoal && Nav.CurrentIsWaypoint)
+                {
+                    Vector3 p = bot.Origin + bot.Velocity * 0.2f;
+                    Vector3 lineFrom = new(Nav.PrevGoalPos.X, Nav.PrevGoalPos.Y, p.Z);
+                    Vector3 lineDir = new(cur.X - Nav.PrevGoalPos.X, cur.Y - Nav.PrevGoalPos.Y, 0f);
+                    Vector3 off = PointLineVec(p, lineFrom, lineDir);
+                    float offLen = off.Length();
+                    if (offLen > 20f)
+                    {
+                        if (offLen > 40f)
+                            dangerBrake = QMath.Normalize(bot.Velocity) * -1f; // QC do_break
+                        // QC: "Noobs fear dangers a lot and take more distance from them".
+                        evadeDanger = QMath.Normalize(off)
+                            * QMath.Bound(1f, 3f - (Skill + bot.BotDodgeSkill), 3f);
+                    }
+                }
+
+                // QC havocbot.qc:1158-1163: only the IMMEDIATE goal being a player makes danger mean
+                // "unreachable"; a routed-through waypoint just gets the status bit.
+                if (Nav.CurrentGoalEntityIsPlayer)
                 {
                     _ignoreGoal = Nav.GoalEntity;
                     _ignoreGoalTime = now + Cvars.FloatOr("bot_ai_ignoregoal_timeout", 3f);
@@ -644,6 +735,8 @@ public sealed class BotBrain
         // 4) aim
         bool wantAttack = false;
         bool wantAttack2 = false;
+        // QC .dodge_enemy_factor (havocbot.qc:1195, applied at :1252): 1 = full commitment to the path.
+        float dodgeEnemyFactor = 1f;
         using var _aimScope = VortexArena.Common.Diagnostics.Prof.Sample("bot.aim"); // [profiling] aim + fire decision + dodge (rest of think)
         Aim.UpdateShotVectors(bot.Origin);
         if (now >= _aimTime)
@@ -696,9 +789,19 @@ public sealed class BotBrain
                 wantAttack = false;
                 wantAttack2 = false;
             }
-            // combat movement (QC havocbot_dodge + the retreat-when-outgunned behaviour): strafe to dodge
-            // incoming fire and, if much weaker than the enemy, back away while still facing it.
-            move = CombatMovement(enemy, move, now);
+            // QC havocbot.qc:1262-1266 `dir *= dodge_enemy_factor`: with an enemy in direct sight the whole
+            // wish-move is SCALED DOWN (never redirected) so the bot commits less hard to its path while
+            // fighting. That is the entire combat-movement effect at normal skill — Base has no combat strafe
+            // below SUPERBOT; the random-direction jitter at havocbot.qc:1280 is `skill > 100` only.
+            //
+            // The port used to substitute an invented strafe/retreat that REPLACED the navigation move whenever
+            // an enemy existed, held one direction for up to 0.8 s, and probed nothing on the strafe axis. With
+            // the sticky-enemy window that covered most of the time a bot spends near other players, which is
+            // exactly when the corner-sticking was observed. See parity report D7.
+            var losTr = Api.Trace.Trace(bot.Origin, (enemy.AbsMin + enemy.AbsMax) * 0.5f,
+                Vector3.Zero, Vector3.Zero, MoveFilter.NoMonsters, null);
+            if (losTr.Ent is Player)
+                dodgeEnemyFactor = QMath.Bound(0f, (Skill + bot.BotDodgeSkill) / 7f, 1f);
         }
         else if (Nav.Current is Vector3 goalPos)
         {
@@ -717,7 +820,7 @@ public sealed class BotBrain
         // 4c) projectile dodge (QC havocbot_dodge fold in havocbot_movetogoal:1185-1204,1269,1320-1330):
         // SUPERBOT bots specifically swerve away from incoming bolts/hazards on the bot_dodge danger list.
         // Computed in world space, scaled by skill, then blended into the (local-frame) wish-move just like
-        // QC's `dir = normalize(dir + dodge + ...)`. Folded AFTER CombatMovement so it isn't clobbered.
+        // QC's `dir = normalize(dir + dodge + ...)` — composed with the rest in block 4c-i below.
         bool dodgeJump = false;
         Vector3 worldDodge = HavocbotDodge();
         if (worldDodge != Vector3.Zero)
@@ -738,14 +841,22 @@ public sealed class BotBrain
                 // QC: a dodge with an upward component may add a jump (skill-scaled chance); a SUPERBOT
                 // dodges decisively, so apply the upward dodge jump deterministically here.
                 if (worldDodge.Z > 0f) dodgeJump = true;
-                Vector3 localDodge = Nav.WorldToLocalMove(worldDodge, Aim.ViewAngles.Y) * dodgeScale;
-                Vector3 sum = new(move.X + localDodge.X, move.Y + localDodge.Y, 0f);
-                if (sum != Vector3.Zero)
-                {
-                    sum = QMath.Normalize(sum) * Nav.MaxSpeed;
-                    move = new Vector3(sum.X, sum.Y, move.Z); // preserve navigation/combat vertical
-                }
+                worldDodge *= dodgeScale;
             }
+        }
+
+        // 4c-i) THE fold (QC havocbot.qc:1252 + :1269):
+        //     dir *= dodge_enemy_factor;
+        //     dir = normalize(dir + dodge + do_break + evadedanger);
+        // One composition of the navigation direction with every world-space correction, then a single
+        // projection into the local move frame. The port used to apply each correction separately — the danger
+        // response overwrote the move, the combat strafe overwrote that, and the dodge was folded in local space
+        // after the fact — so whichever ran last won and the others were silently discarded.
+        if (Nav.HasGoal)
+        {
+            Vector3 composed = Nav.LastWorldDir * dodgeEnemyFactor + worldDodge + dangerBrake + evadeDanger
+                + Nav.LastBrake;
+            move = Nav.ComposeMove(bot, composed, Aim.ViewAngles.Y, Nav.LastGoalPos);
         }
 
         // 4c-ii) SUPERBOT combat jitter (QC havocbot_movetogoal:1280-1306). A superbot fighting with nothing
@@ -820,7 +931,10 @@ public sealed class BotBrain
         if (wantJump)
             _jumpTime = now;        // QC bot_jump_time: keep jump held ~0.2s so ramp jumps register
         if (wantAttack || wantAttack2)
-            _lastAttackTime = now;  // QC last-attack time for the bot_ai_weapon_combo hold window
+        {
+            _lastAttackTime = now;              // QC last-attack time
+            LastFiredWeapon = ChosenWeapon;     // QC havocbot_ai:157 `lastfiredweapon = m_weapon.m_id`
+        }
         return Emit(bot, move, wantJump || jumpHeld, Nav.WantCrouch, wantAttack, wantAttack2, dt, wantJetpack);
     }
 
@@ -867,24 +981,44 @@ public sealed class BotBrain
         if (shotSpeed > 0f && CurrentWeaponIsLobbed())
             dir = Aim.BallisticArc(lead, shotSpeed, ProjectileGravity());
 
-        // QC wr_aim's shot_accurate argument: hitscan shots are accurate by default; a weapon may override (the
-        // Devastator relaxes accuracy when its rockets are guidable — devastator.qc:356-357).
-        bool accurate = ChosenWeapon?.BotAimAccurate() ?? (shotSpeed <= 0f);
+        // QC wr_aim's shot_accurate argument: a per-weapon LITERAL, not an inference from hitscan-ness. The
+        // weapon base returns true (the majority); Shotgun/OkShotgun/Minelayer/Fireball/Seeker override to
+        // false and the Devastator computes it. See Weapon.BotAimAccurate and F4 in the parity report.
+        bool accurate = ChosenWeapon?.BotAimAccurate() ?? true;
         float maxDev = Aim.MaxFireDeviation(lead, Skill, accurate);
         Aim.AimAt(dir, Bot.Origin, Skill, dt, now, maxDev, hasEnemy: true);
 
-        // line of fire check (QC traceline shotorg -> enemy center): don't shoot a wall/teammate
-        var tr = Api.Trace.Trace(Aim.ShotOrigin, Vector3.Zero, Vector3.Zero, enemyCenter, MoveFilter.Normal, Bot);
-        bool clear = tr.Fraction >= 1f || ReferenceEquals(tr.Ent, enemy) || (tr.Ent is not null && ShouldAttack(Bot, tr.Ent));
-        if (!clear)
-            return false;
+        // QC bot_aim runs the LOS traceline only on the NON-ballistic arm (aim.qc:395-402 sits in the `else` of
+        // the applygravity branch): a lobbed shot is meant to arc over the cover between bot and target, so
+        // vetoing it on that cover would silence every mortar bot behind a lip. See F14.
+        if (!(shotSpeed > 0f && CurrentWeaponIsLobbed()))
+        {
+            // QC bot_aim overrides the hit mask for the whole function — dphitcontentsmask = SOLID|BODY|CORPSE
+            // (aim.qc:343-344) — so this trace is TRANSPARENT to DPCONTENTS_PLAYERCLIP, exactly like the real
+            // shot's W_SetupShot (tracing.qc:41-50). Without the override the bot's default SlideBox mask
+            // includes PlayerClip, so every common/clip brush (railings, ledge caps, doorway smoothing — most
+            // stock maps) reads as "line of fire blocked" and the bot holds fire at a visible enemy.
+            // Save/restore around the trace, the same idiom LagComp.cs:52-53 uses.
+            // See planning/bot-ai-parity-2026-08-03.md F3.
+            int savedMask = Bot.DpHitContentsMask;
+            Bot.DpHitContentsMask = BotAimHitContentsMask;
+            TraceResult tr;
+            try
+            {
+                tr = Api.Trace.Trace(Aim.ShotOrigin, Vector3.Zero, Vector3.Zero, enemyCenter, MoveFilter.Normal, Bot);
+            }
+            finally
+            {
+                Bot.DpHitContentsMask = savedMask;
+            }
+            bool clear = tr.Fraction >= 1f || ReferenceEquals(tr.Ent, enemy)
+                || (tr.Ent is not null && ShouldAttack(Bot, tr.Ent));
+            if (!clear)
+                return false;
+        }
 
         return Aim.ShouldFire(now);
     }
-
-    // combat-movement state (QC havocbot_dodge: a strafe direction that flips on a clock).
-    private float _dodgeFlipTime;
-    private float _dodgeSign = 1f;
 
     // QC .randomdirection / .randomdirectiontime (havocbot.qh) — the SUPERBOT combat-jitter latch: the rolled
     // local-frame move (X forward, Y side) and the sim time it was rolled at. 0 == never rolled.
@@ -896,44 +1030,33 @@ public sealed class BotBrain
 
     // QC the bot's last-attack time (used by bot_ai_weapon_combo: hold the combo weapon for combo_threshold
     // seconds after firing). Stamped when a fire button is emitted this frame.
+    /// <summary>
+    /// QC <c>bot_aim</c>'s hit-mask override (aim.qc:344): <c>DPCONTENTS_SOLID|BODY|CORPSE</c>. Transparent to
+    /// PlayerClip (so the bot's line-of-fire test agrees with where its bullet actually goes — W_SetupShot sets
+    /// the identical mask, tracing.qc:41-50) and opaque to corpses.
+    /// </summary>
+    private const int BotAimHitContentsMask =
+        VortexArena.Engine.Collision.SuperContents.Solid
+        | VortexArena.Engine.Collision.SuperContents.Body
+        | VortexArena.Engine.Collision.SuperContents.Corpse;
+
     private float _lastAttackTime;
 
     /// <summary>
-    /// Adjust the wish-move while engaging an enemy (QC <c>havocbot_dodge</c> + the retreat behaviour): add a
-    /// perpendicular strafe (dodging) whose direction flips on a skill-scaled clock, and bias the move toward
-    /// or away from the enemy by health advantage — a healthier bot closes in, an outgunned one backs off.
-    /// Returns the blended local-frame move (X forward, Y side), preserving the navigation's vertical/jump.
+    /// QC <c>.lastfiredweapon</c> (havocbot.qc:157): the weapon whose wr_aim actually pressed the trigger.
+    /// The combo rule compares this against the held weapon, so a bot that has not fired yet never combos.
+    /// Stamped by <see cref="Emit"/> each firing think; public because it is per-bot state a debug overlay
+    /// (and the fire-rate tests) read, exactly as the QC field is readable from anywhere.
     /// </summary>
-    private Vector3 CombatMovement(Entity enemy, Vector3 navMove, float now)
-    {
-        // flip the strafe direction periodically (lower skill = slower, more predictable dodging).
-        if (now >= _dodgeFlipTime)
-        {
-            _dodgeFlipTime = now + 0.4f + (float)_rng.NextDouble() * (1.2f - System.Math.Min(Skill, 10f) * 0.1f);
-            _dodgeSign = _rng.Next(2) == 0 ? -1f : 1f;
-        }
+    public Weapon? LastFiredWeapon { get; set; }
 
-        // health advantage: >0 means we're stronger (close in), <0 weaker (retreat).
-        float myHp = Bot.Health + Bot.GetResource(ResourceType.Armor);
-        float enHp = enemy.Health + enemy.GetResource(ResourceType.Armor);
-        float advantage = (myHp - enHp) / 150f; // QC-style 150 normalizer
-        float closeBias = System.Math.Clamp(advantage, -1f, 1f); // +1 charge, -1 flee
-
-        // base combat move: forward = closeBias (toward/away), side = strafe; keep some navigation pull so the
-        // bot still drifts toward its goal/items while fighting.
-        float fwd = closeBias;
-        float side = _dodgeSign * 0.8f;
-
-        var combat = new Vector3(fwd, side, 0f);
-        if (combat != Vector3.Zero) combat = QMath.Normalize(combat);
-
-        // blend: mostly combat movement, a little of the navigation move, scaled to run speed. Preserve the
-        // navigation's vertical component (jump-up onto ledges) untouched.
-        Vector3 navLocal = navMove == Vector3.Zero ? Vector3.Zero : QMath.Normalize(navMove);
-        Vector3 blended = QMath.Normalize(combat * 0.75f + new Vector3(navLocal.X, navLocal.Y, 0f) * 0.25f);
-        float speed = Nav.MaxSpeed;
-        return new Vector3(blended.X * speed, blended.Y * speed, navMove.Z);
-    }
+    /// <summary>
+    /// QC <c>.lastcombotime</c> (havocbot.qc:1535): weapon switching is locked for 1 s after a combo.
+    /// Starts at negative infinity, not 0 — the lockout must only apply after a combo has actually happened.
+    /// A 0 default makes <c>Now - _lastComboTime &lt; 1</c> true for the first second of the map, which would
+    /// freeze every bot on whatever weapon it spawned with.
+    /// </summary>
+    private float _lastComboTime = float.NegativeInfinity;
 
     /// <summary>
     /// QC <c>havocbot_dodge</c> (server/bot/default/havocbot/havocbot.qc:1773): scan the danger list
@@ -941,7 +1064,7 @@ public sealed class BotBrain
     /// flagged <see cref="Entity.BotDodge"/>, e.g. an in-flight Blaster bolt or a turret beam) and return a
     /// WORLD-space unit vector pointing away from the most dangerous incoming/nearby hazard, or zero if none.
     /// SUPERBOT-gated in Base ("disabled because too expensive ... re-enable only for bots with high enough
-    /// skill"), so non-SUPERBOT bots never specifically dodge bolts (they still strafe via CombatMovement).
+    /// skill"), so non-SUPERBOT bots never specifically dodge bolts (matching Base, which has no combat strafe below SUPERBOT).
     /// The caller scales + folds this into the move (QC: <c>dir = normalize(dir + dodge + ...)</c>).
     /// </summary>
     private Vector3 HavocbotDodge()
@@ -1035,12 +1158,35 @@ public sealed class BotBrain
             return;
         }
 
-        // QC bot_ai_weapon_combo: within combo_threshold seconds after our last attack, keep the current
-        // (combo-capable splash) weapon for the follow-up combo shot rather than re-picking by range.
-        if (enemy is not null && Cvars.Bool("bot_ai_weapon_combo") && ChosenWeapon is { } held
-            && (held.SpawnFlags & WeaponFlags.TypeSplash) != 0
-            && Now - _lastAttackTime < Cvars.FloatOr("bot_ai_weapon_combo_threshold", 0.4f))
-            return; // hold the current weapon for the combo (QC keeps switchweapon on the combo window)
+        // ---- QC havocbot_chooseweapon combo rule (havocbot.qc:1535-1558) ----
+        //
+        // The combo is a SKIP, not a hold. When the weapon we just fired is a slow one still working off its
+        // refire, `combo` is set and each priority loop then SKIPS that weapon (`m_weapon.m_id == w && combo
+        // -> continue`, havocbot.qc:1573/1587/1600), so the bot switches to a second weapon and shoots with
+        // that during the first one's cooldown. A one-second lockout after a combo (:1535) stops it flapping.
+        //
+        // The port used to `return` here instead, pinning the bot to the weapon on cooldown — the exact
+        // opposite — and because _lastAttackTime is restamped on every firing think, the early return also
+        // disabled range-based weapon selection for the whole engagement whenever the held weapon was
+        // TypeSplash (which includes Blaster, the spawn weapon). See planning/bot-ai-parity-2026-08-03.md F2.
+        if (enemy is not null && Now - _lastComboTime < 1f)
+            return; // QC: "Do not change weapon during the next second after a combo"
+
+        bool combo = false;
+        if (enemy is not null && ChosenWeapon is { } held && Cvars.Bool("bot_ai_weapon_combo")
+            && ReferenceEquals(held, LastFiredWeapon))
+        {
+            // QC: af = ATTACK_FINISHED(this, weaponentity); combo when it reaches past the skill-scaled
+            // threshold, i.e. the held weapon is mid-refire for long enough that a second gun is worth it.
+            float af = Bot.WeaponState(new WeaponSlot(0)).AttackFinished;
+            float ct = Cvars.FloatOr("bot_ai_weapon_combo_threshold", 0.4f);
+            float comboTime = Now + ct * (4f - 0.3f * (Skill + Bot.BotWeaponSkill));
+            if (af > comboTime)
+            {
+                combo = true;
+                _lastComboTime = Now;
+            }
+        }
 
         string distBand;
         if (enemy is null)
@@ -1052,14 +1198,18 @@ public sealed class BotBrain
             float dist = (enemy.Origin - Bot.Origin).Length();
             float distClose = 300f, distFar = 850f; // bot_ai_custom_weapon_priority_distances ships "300 850"
             ReadDistances(ref distClose, ref distFar);
+            // QC applies the per-bot range preference as a power-of-two scale on the measured distance
+            // (havocbot.qc:1565), so a "sniper" bot reaches for its long-range gun sooner.
+            dist = System.Math.Clamp(dist - 200f, 10f, 10000f) * MathF.Pow(2f, Bot.BotRangePreference);
             distBand = dist > distFar ? "bot_ai_custom_weapon_priority_far"
                 : (dist <= distClose ? "bot_ai_custom_weapon_priority_close"
                 : "bot_ai_custom_weapon_priority_mid");
         }
 
-        // QC havocbot_chooseweapon: first owned weapon in the band's priority list; fall back to the old
-        // type-bucket / any-owned pick if the bot owns none of the listed weapons (defensive — non-stock lists).
-        Weapon? best = PickFromPriority(distBand) ?? PickOwned(false, false);
+        // QC havocbot_chooseweapon: first owned weapon WITH AMMO in the band's priority list, skipping the
+        // combo weapon and anything mid-reload; fall back to the old type-bucket / any-owned pick if the bot
+        // owns none of the listed weapons (defensive — non-stock lists).
+        Weapon? best = PickFromPriority(distBand, combo) ?? PickOwned(false, false);
 
         if (best is not null)
         {
@@ -1067,6 +1217,33 @@ public sealed class BotBrain
             if (Bot.OwnedWeaponSet.Has(best))
                 Inventory.SwitchWeapon(Bot, best);
         }
+    }
+
+    /// <summary>
+    /// QC <c>havocbot_chooseweapon_checkreload</c> (havocbot.qc:1472-1491): don't switch INTO a weapon that is
+    /// scheduled for reloading while another weapon with ammo is available — the bot would raise it and then
+    /// hold a dead trigger for the whole reload. Skill &lt; 5 bots skip the check (QC: so they still reload at
+    /// all, and are a bit more stupid in combat).
+    /// </summary>
+    private bool ChooseWeaponCheckReload(Weapon w)
+    {
+        if (Skill < 5f) return false;
+
+        var st = Bot.WeaponState(new WeaponSlot(0));
+        if (Weapon.GetWeaponLoad(st, w.RegistryId) >= 0)
+            return false; // not scheduled for reload
+
+        if (Bot.UnlimitedAmmo || (Bot.Items & (int)ItemFlag.UnlimitedAmmo) != 0)
+            return true;
+        foreach (string netName in Bot.OwnedWeapons)
+        {
+            Weapon? other = Weapons.ByName(netName);
+            if (other is not null && other != w
+                && (other.WrCheckAmmo(Bot, new WeaponSlot(0), false)
+                    || other.WrCheckAmmo(Bot, new WeaponSlot(0), true)))
+                return true; // other weapon available — leave this one reloading
+        }
+        return false;
     }
 
     /// <summary>
@@ -1123,15 +1300,28 @@ public sealed class BotBrain
     /// prefer e.g. Vortex at range and Shotgun up close exactly like stock. Returns null if none of the listed
     /// weapons are owned (the caller then falls back to any owned weapon).
     /// </summary>
-    private Weapon? PickFromPriority(string cvarName)
+    private Weapon? PickFromPriority(string cvarName, bool combo = false)
     {
         string list = Api.Cvars.GetString(cvarName);
         if (string.IsNullOrWhiteSpace(list)) return null;
         foreach (string netName in list.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
         {
-            if (!Bot.OwnedWeapons.Contains(netName)) continue;
             Weapon? w = Weapons.ByName(netName);
-            if (w is not null) return w; // first owned in priority order wins (QC's ordered list scan)
+            if (w is null) continue;
+
+            // QC client_hasweapon(this, w, weaponentity, andammo = true, complain = false) — havocbot.qc:1516,
+            // 1571, 1585, 1598. OWNERSHIP IS NOT ENOUGH: an owned-but-dry weapon is skipped so the loop falls
+            // through to the next entry. Without this the bot re-equips its empty top-priority gun every
+            // ChooseWeapon tick, the fire gate's ammo auto-switch yanks it straight back, and the slot spends
+            // its life in drop/raise where every shot is rejected.
+            // See planning/bot-ai-parity-2026-08-03.md F1.
+            if (!Inventory.ClientHasWeapon(Bot, w, andAmmo: true, complain: false)) continue;
+
+            // QC (havocbot.qc:1573/1587/1600): skip the weapon we just fired when a combo is in play, and skip
+            // anything scheduled for reloading.
+            if ((combo && ReferenceEquals(w, ChosenWeapon)) || ChooseWeaponCheckReload(w)) continue;
+
+            return w; // first eligible in priority order wins (QC's ordered list scan)
         }
         return null;
     }

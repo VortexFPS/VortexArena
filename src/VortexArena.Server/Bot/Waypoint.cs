@@ -73,6 +73,15 @@ public sealed class Waypoint
     /// <summary>Outgoing links (QC <c>wp00..wp31</c>). Each carries a precomputed travel cost.</summary>
     public readonly List<WaypointLink> Links = new();
 
+    /// <summary>
+    /// Destinations of this waypoint's HARDWIRED (map-author-authored) outgoing links — QC's separate
+    /// <c>wphw00..wphw07</c> list (waypoints.qc:283-320). Deliberately NOT a <see cref="WaypointFlags"/> bit:
+    /// Base marks a hardwired link on a side channel precisely so the source keeps its ordinary auto-links,
+    /// and consumers ask <see cref="WaypointNetwork.IsHardwiredLink"/> rather than reading wpflags. Null
+    /// until the first mark (most waypoints have none).
+    /// </summary>
+    public HashSet<Waypoint>? HardwiredTo;
+
     public bool IsBox => Mins != Vector3.Zero || Maxs != Vector3.Zero;
 
     /// <summary>World-space lower bound (QC <c>.absmin</c>).</summary>
@@ -420,6 +429,21 @@ public sealed class WaypointNetwork
     private static bool ForbidOutgoing(Waypoint w)
         => w.IsBox || (w.Flags & (WaypointFlags.Jump | WaypointFlags.Support)) != 0;
 
+    /// <summary>
+    /// Record <paramref name="to"/> as a hardwired destination of <paramref name="from"/>
+    /// (QC <c>waypoint_mark_hardwiredlink</c>, waypoints.qc:301-320).
+    /// </summary>
+    private static void MarkHardwired(Waypoint from, Waypoint to)
+        => (from.HardwiredTo ??= new HashSet<Waypoint>()).Add(to);
+
+    /// <summary>
+    /// Is the link from → to a map-author hardwired link (QC <c>waypoint_is_hardwiredlink</c>,
+    /// waypoints.qc:283-299)? Several movement behaviours consult this — notably the ledge brake, which must
+    /// not fight a deliberate hand-authored drop (havocbot.qc:1166).
+    /// </summary>
+    public static bool IsHardwiredLink(Waypoint? from, Waypoint? to)
+        => from?.HardwiredTo is { } hw && to is not null && hw.Contains(to);
+
     // bbox overlap (QC boxesoverlap on absmin/absmax).
     private static bool BoxesOverlap(Waypoint a, Waypoint b)
     {
@@ -508,6 +532,80 @@ public sealed class WaypointNetwork
         bool spawnItemWaypoints = forItemsCvar != 0 || !haveSpawns;
 
         int before = _nodes.Count;
+
+        foreach (var e in entities)
+        {
+            if (e is null || e.IsFreed) continue;
+            string cn = e.ClassName ?? "";
+
+            // items + spawn points → a stand-on-it point waypoint, floor-snapped (QC waypoint_fixorigin).
+            bool isItem = (e.Flags & VortexArena.Common.Framework.EntFlags.Item) != 0;
+            bool isSpawn = cn.StartsWith("info_player", StringComparison.Ordinal);
+            if (isItem || isSpawn)
+            {
+                if (isItem && !spawnItemWaypoints) continue; // QC bot_waypoints_for_items gate
+                Add(FixOrigin(e.Origin),
+                    WaypointFlags.Generated | (isItem ? WaypointFlags.Item : WaypointFlags.None));
+            }
+        }
+
+        GenerateTeleporterWaypoints(entities);
+
+        if (autoLink)
+            AutoLink();
+        return _nodes.Count - before;
+    }
+
+    /// <summary>
+    /// Does this graph contain at least one hand-authored (non-<see cref="WaypointFlags.Generated"/>) waypoint?
+    /// QC navigation_unstuck (navigation.qc:1913-1920) refuses to wander on a purely auto-generated graph —
+    /// there is nothing there a mapper vouched for. Cached: the node set is fixed after the load phase.
+    /// </summary>
+    public bool HasUserWaypoints
+    {
+        get
+        {
+            if (_hasUserWaypoints is { } cached && _hasUserWaypointsCount == _nodes.Count)
+                return cached;
+            bool any = false;
+            foreach (Waypoint wp in _nodes)
+                if (!wp.HasFlag(WaypointFlags.Generated)) { any = true; break; }
+            _hasUserWaypoints = any;
+            _hasUserWaypointsCount = _nodes.Count;
+            return any;
+        }
+    }
+
+    private bool? _hasUserWaypoints;
+    private int _hasUserWaypointsCount = -1;
+
+    /// <summary>
+    /// Spawn the ENTITY-derived teleporter/jumppad waypoints (QC <c>waypoint_spawnforteleporter</c> /
+    /// <c>waypoint_spawnforteleporter_boxes</c>, waypoints.qc:2010-2068): a box waypoint covering the
+    /// trigger volume, a point waypoint floor-snapped at its destination, and a one-way link between them
+    /// costed by the trigger's travel TIME.
+    ///
+    /// <para><b>This runs on the hand-authored-file path too, not just the fileless fallback.</b> In Base
+    /// these waypoints are spawned by the map entities themselves as they spawn (jumppads.qc:720,
+    /// teleporters.qc:260), which happens BEFORE <c>waypoint_load_links</c> (bot.qc:781) — so the shipped
+    /// <c>.waypoints.cache</c> contains links whose endpoints are these generated nodes. Skipping this pass
+    /// when a <c>.waypoints</c> file exists left the graph with no edge through any jumppad or teleporter AND
+    /// silently dropped every cache line that referenced one (53-61 lines per map). See
+    /// planning/bot-ai-parity-2026-08-03.md D3.</para>
+    ///
+    /// Idempotent by construction: it only ever adds, so call it exactly once per network build.
+    /// </summary>
+    public int GenerateTeleporterWaypoints(IReadOnlyList<VortexArena.Common.Framework.Entity> entities)
+    {
+        ArgumentNullException.ThrowIfNull(entities);
+
+        // index destinations by targetname so a trigger's .target resolves to its exit point.
+        var byTargetName = new Dictionary<string, VortexArena.Common.Framework.Entity>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in entities)
+            if (!string.IsNullOrEmpty(e.TargetName) && !byTargetName.ContainsKey(e.TargetName))
+                byTargetName[e.TargetName] = e;
+
+        int before = _nodes.Count;
         var destWaypoints = new Dictionary<VortexArena.Common.Framework.Entity, Waypoint>(ReferenceEqualityComparer.Instance);
 
         Waypoint DestFor(VortexArena.Common.Framework.Entity dst)
@@ -524,40 +622,29 @@ public sealed class WaypointNetwork
         {
             if (e is null || e.IsFreed) continue;
             string cn = e.ClassName ?? "";
-
-            // items + spawn points → a stand-on-it point waypoint, floor-snapped (QC waypoint_fixorigin).
-            bool isItem = (e.Flags & VortexArena.Common.Framework.EntFlags.Item) != 0;
-            bool isSpawn = cn.StartsWith("info_player", StringComparison.Ordinal);
-            if (isItem || isSpawn)
-            {
-                if (isItem && !spawnItemWaypoints) continue; // QC bot_waypoints_for_items gate
-                Add(FixOrigin(e.Origin),
-                    WaypointFlags.Generated | (isItem ? WaypointFlags.Item : WaypointFlags.None));
-                continue;
-            }
-
-            // teleporter / jumppad triggers → a box waypoint with a one-way Teleport link to the destination.
             bool isTeleport = cn == "trigger_teleport";
             bool isJumppad = cn == "trigger_push" || cn == "trigger_push_velocity";
-            if (isTeleport || isJumppad)
-            {
-                VortexArena.Common.Framework.Entity? dst = null;
-                if (!string.IsNullOrEmpty(e.Target)) byTargetName.TryGetValue(e.Target, out dst);
-                var box = Add(e.Origin, e.Mins, e.Maxs, WaypointFlags.Generated | WaypointFlags.Teleport);
-                if (dst is not null)
-                {
-                    var destWp = DestFor(dst);
-                    // QC waypoint_spawnforteleporter cost = the trigger's travel TIME, not the plain box→dest walk
-                    // cost: a teleporter is ~instant (a tiny fixed cost) while a jumppad's cost is the ballistic
-                    // flight time of its launch arc (waypoint_spawnforteleporter_wz / trigger_push_get_push_time).
-                    float cost = isJumppad ? JumppadFlightCost(e, box, destWp) : 0.05f;
-                    Link(box, destWp, cost: cost); // one-way: enter the trigger → arrive at the destination
-                }
-            }
-        }
+            if (!isTeleport && !isJumppad) continue;
 
-        if (autoLink)
-            AutoLink();
+            VortexArena.Common.Framework.Entity? dst = null;
+            if (!string.IsNullOrEmpty(e.Target)) byTargetName.TryGetValue(e.Target, out dst);
+
+            // QC waypoint_spawnforteleporter (waypoints.qc:2066): the box is the trigger volume GROWN by the
+            // player hull (absmin - PL_MAX, absmax - PL_MIN), so "the bot's origin is inside the box" is true
+            // exactly when the bot's hull would be touching the trigger. A box sized to the raw brush pops the
+            // goal late (or never, for a thin pad) and the bot walks past its own jumppad.
+            Vector3 mins = e.Mins - _playerMaxs;
+            Vector3 maxs = e.Maxs - _playerMins;
+            var box = Add(e.Origin, mins, maxs, WaypointFlags.Generated | WaypointFlags.Teleport);
+            if (dst is null) continue;
+
+            var destWp = DestFor(dst);
+            // QC waypoint_spawnforteleporter cost = the trigger's travel TIME, not the plain box→dest walk
+            // cost: a teleporter is ~instant (a tiny fixed cost) while a jumppad's cost is the ballistic
+            // flight time of its launch arc (waypoint_spawnforteleporter_wz / trigger_push_get_push_time).
+            float cost = isJumppad ? JumppadFlightCost(e, box, destWp) : 0.05f;
+            Link(box, destWp, cost: cost); // one-way: enter the trigger → arrive at the destination
+        }
         return _nodes.Count - before;
     }
 
@@ -1283,6 +1370,11 @@ public sealed class WaypointNetwork
             // → LinearCost reads Skill); QC reads the global skill live at each waypoint_getlinearcost call.
             net.Skill = skill;
             net.BunnyhopSkillOffset = bunnyhopSkillOffset;
+            // QC spawns the teleporter/jumppad waypoints from the map ENTITIES (jumppads.qc:720,
+            // teleporters.qc:260) before waypoint_load_links (bot.qc:781), so they must exist BEFORE the cache
+            // is parsed — the cache links to them by coordinate and FindAt silently drops a line whose endpoint
+            // has no node. See GenerateTeleporterWaypoints.
+            net.GenerateTeleporterWaypoints(entities);
             bool haveCache = !string.IsNullOrWhiteSpace(linkCacheText);
             if (haveCache)
                 net.LoadLinks(linkCacheText!);
@@ -1365,22 +1457,31 @@ public sealed class WaypointNetwork
 
             if (!isSpecial)
             {
-                // Normal hardwired link: always added + the source kept off the auto-relinker
-                // (QC waypoint_addlink + waypoint_mark_hardwiredlink). CustomJp stands in for the absent
-                // dedicated hardwired-link concept (it sets WPFLAGMASK_NORELINK so AutoLink skips this source).
-                from.Flags |= WaypointFlags.CustomJp;
+                // Normal hardwired link: added, and recorded on the side channel so the auto-relinker leaves it
+                // alone (QC waypoint_addlink + waypoint_mark_hardwiredlink, waypoints.qc:301-320).
+                //
+                // It must NOT set a wpflags bit. The port used to stamp CustomJp here as a stand-in, which put
+                // the source into WPFLAGMASK_NORELINK and made it refuse every auto-link — turning a node with
+                // one hand-authored exit into a near-dead-end, and letting a later '*' special link from the
+                // same source pass a filter Base would have failed it on. Base marks hardwired links on
+                // wphw00..07 and never touches wpflags. See planning/bot-ai-parity-2026-08-03.md D2.
+                MarkHardwired(from, to);
                 Link(from, to);
             }
             else
             {
                 // Special link: QC adds it ONLY when the source is a NORELINK source AND it is a JUMP/SUPPORT
                 // waypoint or a TELEPORT box (waypoints.qc:1569-1573). Otherwise the special link is dropped.
+                // The NORELINK test reads the source's OWN flags as loaded from the .waypoints file.
                 bool norelink = (from.Flags & (WaypointFlags.Teleport | WaypointFlags.Ladder
                     | WaypointFlags.Jump | WaypointFlags.CustomJp | WaypointFlags.Support)) != 0;
                 bool jumpOrSupport = (from.Flags & (WaypointFlags.Jump | WaypointFlags.Support)) != 0;
                 bool teleportBox = from.IsBox && from.HasFlag(WaypointFlags.Teleport);
                 if (norelink && (jumpOrSupport || teleportBox))
+                {
+                    MarkHardwired(from, to);
                     Link(from, to);
+                }
             }
         }
     }
@@ -1489,11 +1590,14 @@ public sealed class WaypointNetwork
         _findHashCount = _nodes.Count;
     }
 
-    // Nearest node whose Origin is within <paramref name="radius"/> of <paramref name="pos"/>, or null. Used to
-    // match a cache/hardwired link endpoint back to its node. O(1) via the spatial hash (the old O(nodes) scan was
-    // the dominant cost of the first-bot-frame waypoint load). Falls back to a linear scan if the requested radius
-    // exceeds one grid cell (the 27-cell probe could miss beyond that) — never the case for the shipped files.
-    private Waypoint? FindAt(Vector3 pos, float radius = 1f)
+    /// <summary>
+    /// Nearest node whose Origin is within <paramref name="radius"/> of <paramref name="pos"/>, or null. Used to
+    /// match a cache/hardwired link endpoint back to its node (QC <c>findradius(pos, 1)</c>). O(1) via the spatial
+    /// hash (the old O(nodes) scan was the dominant cost of the first-bot-frame waypoint load). Falls back to a
+    /// linear scan if the requested radius exceeds one grid cell (the 27-cell probe could miss beyond that) —
+    /// never the case for the shipped files.
+    /// </summary>
+    public Waypoint? FindAt(Vector3 pos, float radius = 1f)
     {
         float r2 = radius * radius;
         if (radius > FindHashCell)

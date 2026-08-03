@@ -137,6 +137,10 @@ public sealed class OkShotgun : Weapon
     // METHOD(OverkillShotgun, wr_aim) — okshotgun.qc:4-9. Beyond bot_range the bot presses the SECONDARY
     // (the no-damage blaster, used as a ranged poke / mobility tool); within range it presses the pellet
     // primary. Returning true routes the already-decided shot onto ATCK2 (BotBrain), matching QC's range split.
+    // QC wr_aim passes shot_accurate = false to bot_aim (okshotgun.qc:7,9): this weapon fires on a
+    // deliberately WIDE fire-deviation cone (f = 1.6), independent of whether it is hitscan.
+    public override bool? BotAimAccurate() => false;
+
     public override bool BotWantsSecondary(float enemyDistance, float skill, ref BotAimState ctx)
         => enemyDistance > Cvars.BotRange;
 

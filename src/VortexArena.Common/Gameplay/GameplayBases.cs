@@ -213,12 +213,19 @@ public abstract partial class Weapon : IRegistered
     public virtual bool? BotAimLobbed => null;
 
     /// <summary>
-    /// QC <c>wr_aim</c>'s <c>shot_accurate</c> argument to <c>bot_aim</c> (the fire-deviation cone tightness):
-    /// <c>null</c> = use the brain's default (hitscan ⇒ accurate, projectile ⇒ relaxed). The Devastator returns
-    /// <c>false</c> when its rockets are guidable (<c>guiderate &lt; 50</c>) — "no need to fire with high accuracy
-    /// on large distances if rockets can be guided" (devastator.qc:356-357).
+    /// QC <c>wr_aim</c>'s <c>shot_accurate</c> argument to <c>bot_aim</c> — the base multiplier on the
+    /// fire-deviation cone (<c>f = shot_accurate ? 1 : 1.6</c>, aim.qc:372).
+    ///
+    /// <para><b>It is a per-weapon literal, and it is deliberately NOT correlated with hitscan-ness.</b> The
+    /// hitscan Shotgun passes <c>false</c> (its pellet spread makes precision pointless, so it fires on a wide
+    /// cone) while the projectile Blaster/Crylink/Electro/Hagar/HLAC/Mortar/Porto all pass <c>true</c>. The port
+    /// used to infer this from <c>TypeHitscan</c>, which got the Shotgun — the weapon a bot holds for most of a
+    /// stock DM life — a cone 73% of Base's, and every projectile weapon one 37.5% too wide. Overridden to
+    /// <c>false</c> by the five weapons Base marks inaccurate; the Devastator overrides it dynamically
+    /// (devastator.qc:356-357: no need for accuracy at range when the rocket can be guided).
+    /// See planning/bot-ai-parity-2026-08-03.md F4.</para>
     /// </summary>
-    public virtual bool? BotAimAccurate() => null;
+    public virtual bool? BotAimAccurate() => true;
 
     /// <summary>
     /// QC <c>wr_aim</c>'s auto-detonation decision (the skill ≥ 2 block of devastator.qc:360-450): decide whether

@@ -122,6 +122,41 @@ public sealed class Player : Entity
     /// </summary>
     public float BotAimSkill;
 
+    // ---- the remaining READSKILL per-bot modifier columns (server/bot/default/bot.qc:264-290) ----
+    // All default 0, which is the population mean of the shipped bots.txt — so an unset column leaves the
+    // AVERAGE bot faithful and only loses the spread. Filled by BotPopulation's bots.txt parse.
+
+    /// <summary>QC <c>.havocbot_keyboardskill</c> (bot.qc:275, column 6): shifts the keyboard-quantisation clock.</summary>
+    public float BotKeyboardSkill;
+
+    /// <summary>QC <c>.bot_dodgeskill</c> (bot.qc:277, column 8): scales dodge strength and the evade standoff.</summary>
+    public float BotDodgeSkill;
+
+    /// <summary>QC <c>.bot_pingskill</c> (bot.qc:279, column 9): shifts the simulated ping / reflex delay.</summary>
+    public float BotPingSkill;
+
+    /// <summary>QC <c>.bot_weaponskill</c> (bot.qc:281, column 10): shifts the weapon-combo threshold.</summary>
+    public float BotWeaponSkill;
+
+    /// <summary>
+    /// QC <c>.bot_rangepreference</c> (bot.qc:283, column 12): a power-of-two scale on the measured enemy
+    /// distance in weapon selection (havocbot.qc:1565), so a "sniper" bot reaches its long-range gun sooner
+    /// and a "spammer" stays on close-range weapons further out.
+    /// </summary>
+    public float BotRangePreference;
+
+    /// <summary>QC <c>.bot_offsetskill</c> (bot.qc:286, column 14): scales the injected aim error.</summary>
+    public float BotOffsetSkill;
+
+    /// <summary>QC <c>.bot_mouseskill</c> (bot.qc:287, column 15): scales the aim turn rate.</summary>
+    public float BotMouseSkill;
+
+    /// <summary>QC <c>.bot_thinkskill</c> (bot.qc:289, column 16): shifts the aim-think (mouse commit) clock.</summary>
+    public float BotThinkSkill;
+
+    /// <summary>QC <c>.bot_aiskill</c> (bot.qc:290, column 17): shifts the bot_think interval (reaction rate).</summary>
+    public float BotAiSkill;
+
     /// <summary>QC <c>.maycheat</c>: a per-player override that always permits cheats regardless of <c>sv_cheats</c>.</summary>
     public bool MayCheat;
 

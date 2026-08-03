@@ -1,5 +1,6 @@
 using System.Numerics;
 using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
 using VortexArena.Common.Math;
 using VortexArena.Common.Physics;
 using VortexArena.Common.Services;
@@ -127,6 +128,8 @@ public sealed class BotNavigation
         _goals.Clear();
         GoalEntity = null;
         LastTeleportTime = 0f;
+        PrevGoalWp = null;
+        HasPrevGoal = false;
         ResetGoalProgress();
     }
 
@@ -201,7 +204,14 @@ public sealed class BotNavigation
     public void PopRoute()
     {
         if (_goals.Count > 0)
+        {
+            // QC .goalcurrent_prev: the node just left. Several behaviours key off it — the hardwired-link
+            // brake skip, the evade-danger centreline, the post-JUMP-waypoint launch.
+            PrevGoalWp = _goals[0].Wp;
+            PrevGoalPos = _goals[0].Pos;
+            HasPrevGoal = true;
             _goals.RemoveAt(0);
+        }
         ResetGoalProgress(); // a fresh goal re-arms the no-progress watchdog (QC resets goalcurrent_distance_*)
     }
 
@@ -376,11 +386,19 @@ public sealed class BotNavigation
         if (!onLadder && onGround && diff.Z > StepHeightLive && flat.Length() < Maxs.X * 2f)
             WantJump = true;
 
-        // ---- dangerous edge / fall ahead -> brake (QC do_break, simplified) ----
-        // Skipped for jumppad/teleport/jump goals (we WANT to commit) and ladders (controlled descent).
+        // ---- dangerous edge / fall ahead -> brake (QC do_break, havocbot.qc:1165-1174) ----
+        // Skipped for jumppad/teleport/jump goals (we WANT to commit), ladders (controlled descent), and a
+        // hardwired link (a hand-authored drop the mapper intends the bot to take).
         Vector3 brake = Vector3.Zero;
-        bool committing = (goal.Flags & (WaypointFlags.Teleport | WaypointFlags.Jump)) != 0 || onLadder;
-        if (!committing && onGround && diff.Z < -120f && flat.Length() < 250f)
+        bool committing = (goal.Flags & (WaypointFlags.Teleport | WaypointFlags.Jump)) != 0 || onLadder
+            || WaypointNetwork.IsHardwiredLink(PrevGoalWp, goal.Wp);
+        // QC's gate is `!IS_ONGROUND || xy-speed > maxspeed * 0.3` — the comment above it reads "slow down if
+        // bot is in the air and goal is under it", so the AIRBORNE case is the primary one. The port required
+        // onGround with no speed term, which is the exact inverse: it braked a slow bot walking off a step that
+        // Base lets go, and never braked the falling bot Base is actually aiming at. With `normalize(dir+brake)`
+        // that made every route leg descending >120qu self-cancelling. See parity report D17.
+        float xySpeed = new Vector2(bot.Velocity.X, bot.Velocity.Y).Length();
+        if (!committing && (!onGround || xySpeed > MaxSpeed * 0.3f) && diff.Z < -120f && flat.Length() < 250f)
         {
             // The goal is far below and not far ahead horizontally: there may be a ledge. Probe straight
             // down ahead of us; if the drop is large, slow down so we don't overrun a deadly edge.
@@ -390,28 +408,21 @@ public sealed class BotNavigation
                 brake = QMath.Normalize(bot.Velocity) * -1f;
         }
 
-        Vector3 worldMove = QMath.Normalize(dir + brake);
-        if (worldMove == Vector3.Zero)
-            worldMove = dir;
+        // QC havocbot.qc:1043 + :1155: the steering direction is FLATDIR — the horizontal bearing to the goal.
+        // Using the full 3D direction scales horizontal speed by cos(elevation): 71% for a goal 45deg above,
+        // ~0% at the foot of a ledge with the waypoint overhead, so the bot crept exactly where it was trying
+        // to climb and then tripped the 0.5s no-progress watchdog. Vertical intent is carried by WantJump and
+        // the ladder bias below, not by shortening the run. See parity report D8.
+        Vector3 worldMove = flatdir;
         // On a ladder, bias the move strongly upward so the climb works (QC pushes +z on ladders).
         if (onLadder && diff.Z > 0f)
             worldMove = QMath.Normalize(worldMove + new Vector3(0f, 0f, 1f));
 
-        // ---- project world direction into the bot's local move frame ----
-        // Use yaw-only basis (QC makevectors(v_angle.y * '0 1 0')) so forward/side don't tilt with pitch.
-        QMath.AngleVectors(new Vector3(0f, viewYaw, 0f), out var forward, out var right, out var up);
-        float fwd = QMath.Dot(worldMove, forward);
-        float side = QMath.Dot(worldMove, right);
-        float vert = QMath.Dot(worldMove, up);
-
-        // ---- keyboard-movement emulation (QC havocbot_keyboard_movement, havocbot.qc:272-341) ----
-        // Below skill 10 the bot doesn't move with a fully analog wish-move: it quantizes the analog direction
-        // onto keyboard keys (forward/back/strafe, with skill tiers that gate diagonals) on a skill-scaled
-        // clock, then blends back toward the analog move as it nears the goal (so close-in maneuvering stays
-        // smooth). This makes low-skill bots strafe/turn coarser, matching stock. (fwd/side/vert are already the
-        // normalized -1..1 move = QC's CS(this).movement / sv_maxspeed.)
-        if (Skill < 10f)
-            KeyboardMovement(bot, goal.Pos, ref fwd, ref side, ref vert);
+        // The brain folds its danger/dodge corrections onto this before the local projection (QC composes
+        // `dir = normalize(dir + dodge + do_break + evadedanger)` once, at havocbot.qc:1269).
+        LastWorldDir = worldMove;
+        LastBrake = brake;
+        LastGoalPos = goal.Pos;
 
         // ---- bunnyhop tuning (QC havocbot_bunnyhop): keep jumping to maintain speed toward a far goal ----
         // QC havocbot.qc:1315 forbids bunnyhop when do_break/evadedanger is set this frame. The Steer-internal
@@ -420,6 +431,71 @@ public sealed class BotNavigation
         // is reported via WantBunnyhop (not WantJump) so the brain owns the final danger-suppression decision.
         if (brake == Vector3.Zero && Bunnyhop(bot, dir, onGround, goal, attacking: false))
             WantBunnyhop = true;
+
+        return ComposeMove(bot, worldMove + brake, viewYaw, goal.Pos);
+    }
+
+    /// <summary>
+    /// The world direction <see cref="Steer"/> settled on before any brain-side correction (QC's <c>dir</c> at
+    /// havocbot.qc:1155, the input to the <c>normalize(dir + dodge + do_break + evadedanger)</c> fold).
+    /// </summary>
+    public Vector3 LastWorldDir { get; private set; }
+
+    /// <summary>Steer's own ledge brake this frame (QC <c>do_break</c>), so the brain can re-fold it.</summary>
+    public Vector3 LastBrake { get; private set; }
+
+    /// <summary>The goal point <see cref="Steer"/> aimed at, for a brain-side recompose.</summary>
+    public Vector3 LastGoalPos { get; private set; }
+
+    /// <summary>
+    /// The previous goal's waypoint (QC <c>.goalcurrent_prev</c>) — the node the bot most recently left. Drives
+    /// the hardwired-link brake skip and the evade-danger centreline.
+    /// </summary>
+    public Waypoint? PrevGoalWp { get; private set; }
+
+    /// <summary>Previous goal position (QC <c>goalcurrent_prev.origin</c>), valid when <see cref="HasPrevGoal"/>.</summary>
+    public Vector3 PrevGoalPos { get; private set; }
+
+    /// <summary>Whether a previous goal has been recorded this route.</summary>
+    public bool HasPrevGoal { get; private set; }
+
+    /// <summary>True when the current goal is a graph waypoint (QC <c>goalcurrent.classname == "waypoint"</c>).</summary>
+    public bool CurrentIsWaypoint => _goals.Count > 0 && _goals[0].Wp is not null;
+
+    /// <summary>
+    /// True when the IMMEDIATE goal is a player (QC <c>IS_PLAYER(this.goalcurrent)</c>). Distinct from
+    /// "<see cref="GoalEntity"/> is a player": the goal stack may be routing THROUGH waypoints toward a player,
+    /// and QC only treats danger as "unreachable" when the player is the step the bot is walking to right now.
+    /// Blacklisting on the final target instead would ban a chase the bot has barely started.
+    /// </summary>
+    public bool CurrentGoalEntityIsPlayer
+        => _goals.Count > 0 && _goals[0].Wp is null && GoalEntity is Player;
+
+    /// <summary>
+    /// Project a world wish-direction into the bot's local move frame and apply the keyboard quantisation
+    /// (QC makevectors(v_angle.y) + havocbot_keyboard_movement). Split out of <see cref="Steer"/> so the brain
+    /// can fold its dodge/danger corrections into the WORLD direction first, the way QC composes them in one
+    /// place at havocbot.qc:1269, instead of overwriting the already-projected local move.
+    /// </summary>
+    public Vector3 ComposeMove(Entity bot, Vector3 worldDir, float viewYaw, Vector3 goalPos)
+    {
+        Vector3 world = QMath.Normalize(worldDir);
+        if (world == Vector3.Zero)
+            world = LastWorldDir;
+
+        // Use yaw-only basis (QC makevectors(v_angle.y * '0 1 0')) so forward/side don't tilt with pitch.
+        QMath.AngleVectors(new Vector3(0f, viewYaw, 0f), out var forward, out var right, out var up);
+        float fwd = QMath.Dot(world, forward);
+        float side = QMath.Dot(world, right);
+        float vert = QMath.Dot(world, up);
+
+        // ---- keyboard-movement emulation (QC havocbot_keyboard_movement, havocbot.qc:272-341) ----
+        // Below skill 10 the bot doesn't move with a fully analog wish-move: it quantizes the analog direction
+        // onto keyboard keys (forward/back/strafe, with skill tiers that gate diagonals) on a skill-scaled
+        // clock, then blends back toward the analog move as it nears the goal (so close-in maneuvering stays
+        // smooth). This makes low-skill bots strafe/turn coarser, matching stock.
+        if (Skill < 10f)
+            KeyboardMovement(bot, goalPos, ref fwd, ref side, ref vert);
 
         return new Vector3(fwd, side, vert) * MaxSpeed;
     }

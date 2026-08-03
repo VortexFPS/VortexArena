@@ -554,6 +554,20 @@ public partial class ClientWorld : Node3D
     /// <see cref="ProjectileRenderer"/> and everything else to an <see cref="EntityNode"/> (+ animator).
     /// Safe to call every snapshot for the same entity — it creates on first sight, updates thereafter.
     /// </summary>
+    // (GC audit 2026-08-03) Per-entity vehicle-classification cache — see the note at the call site.
+    private struct VehicleKindCacheEntry { public string? Cls; public string? Model; public VehicleCatalog.VehicleKind Kind; }
+    private readonly System.Collections.Generic.Dictionary<int, VehicleKindCacheEntry> _vehicleKindCache = new();
+
+    private VehicleCatalog.VehicleKind ClassifyVehicleCached(Entity e)
+    {
+        if (_vehicleKindCache.TryGetValue(e.Index, out VehicleKindCacheEntry c)
+            && c.Cls == e.ClassName && c.Model == e.Model)
+            return c.Kind;
+        VehicleCatalog.VehicleKind kind = VehicleCatalog.Classify(e.ClassName + " " + e.Model);
+        _vehicleKindCache[e.Index] = new VehicleKindCacheEntry { Cls = e.ClassName, Model = e.Model, Kind = kind };
+        return kind;
+    }
+
     public void OnEntityUpdate(Entity entity) => OnEntityUpdate(entity, frameDriven: false);
 
     /// <summary>
@@ -579,7 +593,12 @@ public partial class ClientWorld : Node3D
 
         // Vehicles get the dedicated visual driver (rotors/barrels/engine/gibs/heal-beam) instead of a plain
         // model node (Racer/Raptor/Spiderbot/Bumblebee — the bulk of the client vehicle TODOs).
-        if (VehicleCatalog.Classify(entity.ClassName + " " + entity.Model) != VehicleCatalog.VehicleKind.None)
+        // (GC audit 2026-08-03) CACHED: the old inline `Classify(ClassName + " " + Model)` built a fresh
+        // concat string PER ENTITY PER FRAME — the single largest steady allocator in the game (~3 MB/s of
+        // the ~15 MB/s ambient churn at 88 entities; the cev.drive line of the new allocator census). The
+        // verdict only changes when the identity strings change, so it is cached per entity index and
+        // re-derived on an (alloc-free) value mismatch.
+        if (ClassifyVehicleCached(entity) != VehicleCatalog.VehicleKind.None)
         {
             UpdateVehicle(entity);
             return;

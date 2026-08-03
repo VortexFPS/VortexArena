@@ -525,6 +525,7 @@ public sealed partial class DecalSplats : Node3D
     private float _now;                // client splat clock (accumulated _Process delta; spawn stamps + uniform)
     private bool _meshDirty;
     private float _nextPruneAt;        // slow sweep so an idle screen drops fully-faded quads
+    private float _nextRebuildAt;      // rebuild throttle — see the note in _Process (GC audit 2026-08-03)
     private bool _atlasApplied;
 
     private void EnsureMergedNode()
@@ -644,9 +645,15 @@ public sealed partial class DecalSplats : Node3D
         using var _scope = VortexArena.Game.Client.FrameProfiler.Scope("decals.splat"); // [profiling] out of proc:other
         _mergedMat?.SetShaderParameter(NowParam, _now);
 
-        if (_meshDirty)
+        // (GC audit 2026-08-03) REBUILD THROTTLE: sustained combat splats nearly every frame, and each
+        // rebuild allocates the four concatenated mesh arrays (~44 B/vertex — the decals.splat line of the
+        // allocator census, ~1.5 MB/s at the cap). Batching dirty adds to a 50 ms cadence cuts that ~3-5x;
+        // a wall mark appearing up to 50 ms late is imperceptible (and the marks' fade math is shader-side
+        // off the spawn stamp, so timing stays exact regardless of when the quad reaches the GPU).
+        if (_meshDirty && _now >= _nextRebuildAt)
         {
             RebuildMergedMesh();
+            _nextRebuildAt = _now + 0.05f;
             _nextPruneAt = _now + 2f;
         }
         else if (_now >= _nextPruneAt)

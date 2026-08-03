@@ -103,11 +103,17 @@ public sealed partial class ClientEntityView : Node
             }
 
             _seen.Add(id);
-            DriveEntity(id, s, origin, angles);
+            // (GC audit 2026-08-03) cev.drive: the per-entity proxy fill + render handoff — split from the
+            // parent so the allocator census can tell the loop/interp half from the drive/render half.
+            using (FrameProfiler.Scope("cev.drive"))
+                DriveEntity(id, s, origin, angles);
         }
 
-        CullDeparted();
-        _viewEntities.Process();
+        using (FrameProfiler.Scope("cev.cull"))
+        {
+            CullDeparted();
+            _viewEntities.Process();
+        }
     }
 
     // =====================================================================================

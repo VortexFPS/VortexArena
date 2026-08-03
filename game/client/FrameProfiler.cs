@@ -245,6 +245,7 @@ public partial class FrameProfiler : CanvasLayer
     // (perf-investigation) per-scope inclusive-ms summed over the snapshot window → a steady-state top-scope
     // breakdown printed each snapshot, so every experiment yields comparable per-frame averages without a hitch.
     private readonly Dictionary<string, double> _windowScopeMs = new();
+    private readonly Dictionary<string, double> _windowScopeAlloc = new();   // bytes per scope this window (GC audit)
     private int _initGc0, _initGc1, _initGc2;
     private double _initGcPauseMs;
     private long _sessionAllocTotal;
@@ -516,6 +517,13 @@ public partial class FrameProfiler : CanvasLayer
             // (perf-investigation) sum into the snapshot window for the steady-state top-scope dump.
             _windowScopeMs.TryGetValue(kv.Key, out double ws);
             _windowScopeMs[kv.Key] = ws + kv.Value;
+            // (GC audit 2026-08-03) same aggregation for ALLOCATION, so the snapshot can print a
+            // steady-state allocator census (KB/s per scope) instead of only hitch-frame samples.
+            if (bytes > 0)
+            {
+                _windowScopeAlloc.TryGetValue(kv.Key, out double wa);
+                _windowScopeAlloc[kv.Key] = wa + bytes;
+            }
         }
         _eventScratch.Clear();
         Prof.DrainEvents(_eventScratch);
@@ -884,8 +892,31 @@ public partial class FrameProfiler : CanvasLayer
             Emit(sb.ToString(), toConsole: false);
         }
 
+        // (GC audit 2026-08-03) The steady-state ALLOCATOR census: top scopes by bytes over the window,
+        // as KB/s — the evidence line for the 15 MB/s ambient churn (hitch trees only sample the hitch
+        // frames, which biased every earlier read of who allocates). File-only like the rest.
+        if (_windowScopeAlloc.Count > 0 && _windowHist.Count > 0)
+        {
+            double winSeconds = _windowHist.Count * (_windowHist.Mean / 1000.0);
+            if (winSeconds > 0.5)
+            {
+                var topA = new List<KeyValuePair<string, double>>(_windowScopeAlloc);
+                topA.Sort((a, b) => b.Value.CompareTo(a.Value));
+                var sa = new StringBuilder("[frameprofile] alloc/s: ");
+                for (int i = 0; i < topA.Count && i < 10; i++)
+                {
+                    double kbs = topA[i].Value / 1024.0 / winSeconds;
+                    if (kbs < 8.0) break;
+                    if (i > 0) sa.Append("  ");
+                    sa.Append(topA[i].Key).Append(' ').Append(kbs.ToString("0")).Append("KB");
+                }
+                Emit(sa.ToString(), toConsole: false);
+            }
+        }
+
         _windowHist.Reset();
         _windowScopeMs.Clear();
+        _windowScopeAlloc.Clear();
         Array.Clear(_windowHitchByClass);
         _windowRecovery = 0;
     }

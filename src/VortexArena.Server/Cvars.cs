@@ -104,22 +104,15 @@ public static class Cvars
         // wall-clock-budgets the catch-up loop (:2676 aborttime) — the game runs briefly, uniformly slow instead
         // of paying its time-debt with burst ticks that spike the already-slow frames (the r16 wobble oscillator).
         // DP sys_ticrate (sv_main.c:166; the "server physics rate" every DP admin knows): seconds of sim
-        // time per fixed server tick, read LIVE each host frame by ServerNet.StepWorld -> SimulationLoop.
-        // TickSeconds (clamped [0.001, 0.1] like DP's sane band), so changing it in the console retunes the
-        // running server exactly like DP. Lineage of the default: the DP ENGINE default is 0.0138889 (72.2 Hz)
-        // and this registration keeps it for parity; Xonotic SHIPS 0.015625 (64 Hz) in xonotic-common.cfg; the
-        // VORTEX config layer sets 0.0166667 (60 Hz) in vortex-server.cfg (Bryan 2026-08-03) - see the cfg for
-        // the reasoning and the one-line revert to either upstream value.
-        new("sys_ticrate", "0.0138889", "seconds of sim time per server tick (DP sys_ticrate). 0.0166667 = 60 Hz (Vortex default via cfg), 0.015625 = 64 Hz (Xonotic ships), 0.0138889 = 72 Hz (DP engine default)"),
-
-        // DP sys_ticrate (sv_main.c:166; the "server physics rate" every DP admin knows): seconds of sim
-        // time per fixed server tick, read LIVE each host frame by ServerNet.StepWorld -> SimulationLoop.
-        // TickSeconds (clamped [0.001, 0.1] like DP's sane band), so changing it in the console retunes the
-        // running server exactly like DP. Lineage of the default: the DP ENGINE default is 0.0138889 (72.2 Hz)
-        // and this registration keeps it for parity; Xonotic SHIPS 0.015625 (64 Hz) in xonotic-common.cfg; the
-        // VORTEX config layer sets 0.0166667 (60 Hz) in vortex-server.cfg (Bryan 2026-08-03) - see the cfg for
-        // the reasoning and the one-line revert to either upstream value.
-        new("sys_ticrate", "0.0138889", "seconds of sim time per server tick (DP sys_ticrate). 0.0166667 = 60 Hz (Vortex default via cfg), 0.015625 = 64 Hz (Xonotic ships), 0.0138889 = 72 Hz (DP engine default)"),
+        // time per fixed server tick, applied at GameWorld.Boot and re-read LIVE each host frame by
+        // ServerNet.StepWorld -> SimulationLoop.TickSeconds (clamped [0.001, 0.1] like DP's sane band), so a
+        // console change retunes the running server exactly like DP. Lineage: the DP ENGINE default is 1/72 s
+        // (72.2 Hz) — registered here as the sentinel "0" because the decimal string 0.0138889 parses a hair
+        // ABOVE the exact binary 1/72 the sim compares against (an Advance by exactly one tick-quantum then
+        // runs zero ticks — caught by MaxVelocityClampTests); 0/unset maps to the exact constant. Xonotic
+        // SHIPS 0.015625 (64 Hz) in xonotic-common.cfg; the VORTEX config layer sets 0.0166667 (60 Hz) in
+        // vortex-server.cfg (Bryan 2026-08-03) — see the cfg for the reasoning + the one-line reverts.
+        new("sys_ticrate", "0", "seconds of sim time per server tick (DP sys_ticrate). 0 = engine default (exact 1/72 s, DP parity); 0.0166667 = 60 Hz (the Vortex default via vortex-server.cfg); 0.015625 = 64 Hz (Xonotic ships)"),
 
         new("sv_overload_timedrop", "1", "1 = DP parity: cap owed sim backlog at 0.1s, shedding the excess (overload = brief uniform slow-motion); 0 = legacy preserve-and-burst catch-up"),
         new("sv_catchup_wallbudget_ms", "0", "wall-clock ms a frame may spend running catch-up ticks before deferring the rest (first owed tick always runs; DP aborttime analogue); 0 = unlimited (default — the 2026-07-11 playtest found no felt benefit; the timedrop + soft cap already bound catch-up)"),

@@ -340,6 +340,11 @@ public sealed class Reconciler
         // Stair smoothing is no longer measured here per-tick (the old per-tick delta model perpetually re-armed
         // on slopes); it is driven per RENDER FRAME from the live predicted Z in GetStairSmoothOffset.
         Predicted = s;
+        // Re-arm the incremental-predict cache: this full replay IS the fresh base (see Predict).
+        _incBaseAck = ackedSeq;
+        _incBaseState = serverState;
+        _incThroughSeq = newest;
+        _incValid = true;
         return s;
     }
 
@@ -358,8 +363,35 @@ public sealed class Reconciler
     public PredictedState Predict(in PredictedState serverState, uint ackedSeq, in PlayerState vars, float now)
     {
         _ = now; // stair smoothing now runs per-frame in GetStairSmoothOffset, not per replayed tick
-        PredictedState s = serverState;
         uint newest = _input.NextSeq - 1;
+
+        // [zero-hitch 2026-08-03] INCREMENTAL replay. The full unacked replay below used to run on EVERY
+        // input tick: fine at a 3-6 command depth, but when the listen server's ack runs late under combat
+        // the depth grows to dozens and each render frame re-simulates the whole window - the measured
+        // 15-21 ms cn.predict spikes (and the deeper the ack lag, the more expensive every frame, exactly
+        // when the machine is already struggling). Between snapshots NOTHING the replay depends on can
+        // change: (serverState, ackedSeq) are only reassigned by HandleSnapshot, `vars` is only reassigned
+        // there too (and InvalidatePrediction covers the one hold-path corner), and every snapshot runs
+        // Reconcile - a full replay that re-arms this cache. So when the base is unchanged, stepping ONLY
+        // the commands pushed since the last call produces the bit-identical state for the cost of ~one
+        // movement step per frame, regardless of ack depth. Pinned by PredictionIncrementalTests.
+        if (_incValid && ackedSeq == _incBaseAck && newest >= _incThroughSeq
+            && serverState.Origin == _incBaseState.Origin
+            && serverState.Velocity == _incBaseState.Velocity
+            && serverState.OnGround == _incBaseState.OnGround)
+        {
+            PredictedState inc = Predicted;
+            for (uint seq = _incThroughSeq + 1; seq <= newest; seq++)
+            {
+                if (!_input.TryGet(seq, out InputCommand cmd)) continue;
+                _movement.Step(ref inc, in cmd, in vars);
+            }
+            _incThroughSeq = newest;
+            Predicted = inc;
+            return inc;
+        }
+
+        PredictedState s = serverState;
         for (uint seq = ackedSeq + 1; seq <= newest; seq++)
         {
             if (!_input.TryGet(seq, out InputCommand cmd)) continue;
@@ -367,8 +399,27 @@ public sealed class Reconciler
         }
 
         Predicted = s;
+        _incBaseAck = ackedSeq;
+        _incBaseState = serverState;
+        _incThroughSeq = newest;
+        _incValid = true;
         return s;
     }
+
+    // --- incremental-predict cache (see Predict). The BASE STATE is compared bitwise on every hit: a
+    // caller that passes a DIFFERENT authoritative state under the same ack (the stair tests do; a
+    // hitch-hold release could) must full-replay, so the cache is sound against any call pattern rather
+    // than relying on ClientNet's snapshot discipline. -------------------------------------------------
+    private uint _incBaseAck;
+    private PredictedState _incBaseState;
+    private uint _incThroughSeq;
+    private bool _incValid;
+
+    /// <summary>Drop the incremental-predict cache: the next <see cref="Predict"/> full-replays. Call when
+    /// anything OUTSIDE (serverState, ackedSeq, the input buffer) that the replay depends on changes - the
+    /// movevars reassignment is the one live case (ClientNet's snapshot decode, incl. the hitch-hold corner
+    /// where the vars can change on a snapshot whose Reconcile is skipped).</summary>
+    public void InvalidatePrediction() => _incValid = false;
 
     /// <summary>
     /// Accumulate a prediction error into the decaying smoother. Port of <c>CSQCPlayer_SetPredictionError</c>,

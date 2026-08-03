@@ -57,6 +57,41 @@ public class SimulationTickRateTests
         Assert.Equal(ticks * (1f / 60f), sim.Time, 4);
     }
 
+    /// <summary>The REAL boot path: a private-store world with the disk config chain must come up at the
+    /// layer's 60 Hz BEFORE any tick or handshake runs (the boot-apply in GameWorld.Boot). This reproduces
+    /// the release-capture path (sv_threaded listen world: private store + ConfigReader) in-process, so a
+    /// regression here is caught in milliseconds instead of a 4-minute capture.</summary>
+    [Fact]
+    public void BootedWorld_WithConfigChain_ComesUpAt60Hz()
+    {
+        string root = FindRepoRoot();
+        var world = new VortexArena.Server.GameWorld(NewCollision());
+        world.ConfigReader = path =>
+        {
+            string p = System.IO.Path.Combine(root, "data", "core.pk3dir", path.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            return System.IO.File.Exists(p) ? System.IO.File.ReadAllText(p) : null;
+        };
+        world.Boot();
+        Assert.Equal(0.0166667f, world.Simulation.TickSeconds, 5);
+    }
+
+    private static CollisionWorld NewCollision()
+    {
+        var world = new CollisionWorld();
+        world.AddBrush(Brush.FromBox(new Vector3(-4096, -4096, -64), new Vector3(4096, 4096, 0), SuperContents.Solid));
+        world.BuildGrid();
+        return world;
+    }
+
+    private static string FindRepoRoot()
+    {
+        string dir = System.AppContext.BaseDirectory;
+        while (dir is not null && !System.IO.File.Exists(System.IO.Path.Combine(dir, "VortexArena.csproj")))
+            dir = System.IO.Path.GetDirectoryName(dir)!;
+        Assert.NotNull(dir);
+        return dir!;
+    }
+
     [Fact]
     public void GarbageValues_ClampToTheSaneBand()
     {

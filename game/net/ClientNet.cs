@@ -1280,6 +1280,7 @@ public sealed class ClientNet : IDisposable
             {
                 MoveVarsBlock.Apply(Api.Cvars, mv);
                 _vars = VarsFromCvars();
+                _reconciler.InvalidatePrediction(); // movevars changed: the incremental replay base is stale
             }
         }
 
@@ -1300,12 +1301,14 @@ public sealed class ClientNet : IDisposable
                     MovementParameters.PredictionOverride = null;
                     if (Api.Services is not null)
                         _vars = VarsFromCvars(); // back to the replicated global movevars
+                    _reconciler.InvalidatePrediction(); // movevars changed: the incremental replay base is stale
                 }
                 else
                 {
                     MovementParameters mp = MovementParameters.FromValues(resolved);
                     MovementParameters.PredictionOverride = mp;
                     _vars = ToPlayerVars(mp); // keep the carried stat subset honest for its consumers
+                    _reconciler.InvalidatePrediction(); // movevars changed: the incremental replay base is stale
                 }
             }
         }

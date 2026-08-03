@@ -477,6 +477,18 @@ public sealed class GameWorld
             LoadedConfig = ConfigLoader.LoadServerConfig(Api.Cvars, ConfigReader);
             loadedTree = true;
         }
+
+        // Apply sys_ticrate AT BOOT, not just per-frame (ServerNet.StepWorld re-reads it live): the very
+        // first things that consume the tick length — the handshake's tick-rate stamp (which the client's
+        // reconciler + legacy input pacing latch for the whole session) and tick 0 itself — run BEFORE the
+        // first StepWorld, and were seeing the compile-time default (the "tickrate 72 Hz" handshake on a
+        // 60 Hz server). Unset/0 (tests, bare worlds) keeps the engine default via the setter's fallback.
+        float bootTicrate = Api.Cvars.GetFloat("sys_ticrate");
+        Simulation.TickSeconds = bootTicrate > 0f ? bootTicrate : SimulationLoop.TicRate;
+        VortexArena.Common.Diagnostics.Log.Info(
+            $"[GameWorld] tick rate: sys_ticrate={bootTicrate} -> {1f / Simulation.TickSeconds:0.#} Hz" +
+            (bootTicrate <= 0f ? " (engine default; cfg layer not in this store)" : "") +
+            $" [sharedStore={_usingSharedStore}, cfgLoaded={loadedTree}]");
         // Re-derive the cached weapon-balance block whenever the store holds authentic g_balance_* values: either
         // we just loaded the cfg tree, or we're on the shared store the menu already loaded it into. (A private
         // store with no ConfigReader — most tests — keeps the registration-time fallback balance, as before.)

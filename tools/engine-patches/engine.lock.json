@@ -220,8 +220,21 @@
           "4.06 -> 5.46/6.17 ms; features-off control still slow = the template, not the features; see",
           "perf-deep-dive-2026-08-02.md 5c). The etcpak patch itself is correct and stays in patches[];",
           "build vortex2 VIA THE CI WORKFLOW (same toolchain as this binary), verify a capture pair against",
-          "this baseline, then re-pin. Until then release builds compress via the BC7 fallback",
-          "(AssetSystem.MaybeCompress probes S3TC and routes to cvtt), which ships in all templates."
+          "this baseline, then re-pin.",
+          "",
+          "CORRECTION 2026-08-03: the line here used to say release builds still compress 'via the BC7",
+          "fallback ... which ships in all templates'. THAT IS FALSE and it mattered — it reads as",
+          "'compression works in release', when in fact NOTHING compresses in a release export today.",
+          "modules/cvtt/config.py gates the whole module on `env.editor_build or env[cvtt_export_templates]`,",
+          "so cvtt ships in NO stock template — which is exactly why engine.scons above gained",
+          "cvtt_export_templates=yes. But that flag and the etcpak patch both landed in 148acefd WITHOUT",
+          "rebuilding this artifact, so the pinned binary predates both. Observed on an export from it:",
+          "  ERROR: Parameter \"_image_compress_bc_func\" is null.      (etcpak — patch not in this build)",
+          "  ERROR: Parameter \"_image_compress_bptc_func\" is null.    (cvtt  — flag not in this build)",
+          "i.e. gl_texturecompression is still the silent no-op 148acefd set out to fix, and the ~3.4 GB ->",
+          "~1.6 GB VRAM win is NOT shipped. ci.sh's smoke cannot catch this: it boots the PROJECT, where the",
+          "editor build registers both encoders; only an EXPORT hits the gap. Re-pinning vortex2 is what",
+          "closes it."
         ]
       },
       "linux": {

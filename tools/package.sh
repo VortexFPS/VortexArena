@@ -116,6 +116,21 @@ fi
 copy_assets() {  # copy_assets <dest-data-dir>
     local dest="$1"
     info "  content → ${dest#$DIST/}"
+
+    # UNLINK FIRST. `dest` is dist/<target>/data, which is exactly where `./vx export` leaves a LINK to the
+    # repo's data/ so an exported build can find content without a 0.9 GB copy (Wrappers.PlaceContent).
+    # Packaging must replace that with a REAL directory, and writing through it instead is bad twice over:
+    #   rsync -a --delete  → source and destination resolve to the SAME tree, and --delete is pointed at
+    #                        the committed content tree rather than at a staging copy.
+    #   cp fallback        → `rm -rf "$dest"` one resolved link away from deleting data/ outright.
+    # Removing the link (never its target) makes both paths operate on a fresh directory, which is what
+    # every later step already assumes. -L catches Unix symlinks and, under Git Bash/MSYS, the Windows
+    # junction `vx export` prefers there.
+    if [ -L "$dest" ]; then
+        info "  (replacing the dev link at ${dest#$DIST/} with a real copy)"
+        rm -f "$dest"
+    fi
+
     mkdir -p "$dest"
     # The .git exclusion is gone with the pk3dir clones it existed for: content is committed to this
     # repo now, so there are no nested checkouts under it to strip.

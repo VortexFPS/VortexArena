@@ -143,20 +143,34 @@ internal static class Wrappers
                                        () => Export(["--preset", preset])))
             return 1;
 
-        // Also checked on LAUNCH, not only on export: every dist/ built before vx owned this step has no
-        // data/ beside the binary, and the symptom — a game that starts, renders nothing and reports
-        // excellent frame times — looks like anything except a missing directory.
-        if (!PlaceContent(artifact)) return 1;
+        // Clean here too, not only on export: a dist/ built before 2026-08-03 still carries the link, and
+        // this is the command most likely to be the next thing run in such a tree.
+        CleanStaleContentLink(artifact);
 
         // macOS exports a .app BUNDLE, not a bare executable — the thing to spawn is inside it.
         string launch = Directory.Exists(artifact)
             ? Path.Combine(artifact, "Contents", "MacOS", Path.GetFileNameWithoutExtension(artifact))
             : artifact;
 
+        // CONTENT COMES FROM --data, not from a link beside the binary. The export excludes data/* from the
+        // pck, and dist/<preset>/ holds only the binary — so point the game at the repo's tree with the flag
+        // Main.cs already has. This replaced a symlink/junction (2026-08-03): same result, nothing left on
+        // disk afterwards, and no path that tools/package.sh can later rsync --delete through.
+        //
+        // An explicit --data from the caller WINS: overriding someone who is deliberately pointing a build at
+        // a different gamedir would defeat the only reason the flag exists.
+        var argv = new List<string>();
+        if (!gameArgs.Contains("--data"))
+        {
+            argv.Add("--data");
+            argv.Add(Path.Combine(Env.RepoRoot, "data"));
+        }
+        argv.AddRange(gameArgs);
+
         Console.WriteLine($"→ {outRel}, release export (what a player runs)");
-        // Launch from the install dir, exactly as a player would — tools/perf-run.ps1 has the same note: the
-        // packaged content layout is resolved relative to the binary.
-        return Env.Exec(launch, gameArgs, Path.GetDirectoryName(artifact));
+        // Launched from the install dir, exactly as a player would. That no longer decides where content is
+        // found — --data does — but it still governs where relative paths in game args land.
+        return Env.Exec(launch, argv, Path.GetDirectoryName(artifact));
     }
 
     /// <summary>
@@ -334,9 +348,13 @@ internal static class Wrappers
                 return 1;
             }
             Console.WriteLine($"   ok: {outRel}");
+            CleanStaleContentLink(outPath);
 
-            // An export is not FINISHED until its content is reachable — see PlaceContent.
-            if (!PlaceContent(outPath)) return 1;
+            // The export carries no content: export_presets.cfg excludes data/* from the pck. Said out loud
+            // because the failure is silent — a bare double-click launches, mounts NOTHING and renders an
+            // empty world, and perf-run.sh's notes record that exact shape eating an investigation.
+            Console.WriteLine("   note: no content beside the binary — `./vx run` passes --data, "
+                            + "`tools/package.sh` makes a real install");
         }
 
         // A fresh dist/ has no override.cfg, so without this an export silently re-enables the render thread
@@ -346,84 +364,65 @@ internal static class Wrappers
     }
 
     /// <summary>
-    /// Put <c>data/</c> where an EXPORTED binary will find it, and return false if that could not be done.
-    ///
-    /// <para><b>This is not a convenience.</b> <c>export_presets.cfg</c> deliberately excludes <c>data/*</c>
-    /// from the pck, so an exported build resolves content through <c>DataPaths.ResolveExported</c>, which
-    /// probes exe-relative FIRST and only then the CWD. Miss this step and the binary still launches — it
-    /// mounts NOTHING, renders an empty world, and (for a scripted run) self-quits leaving a session log full
-    /// of flattering numbers. That is not hypothetical: it is how the first capture of the menu-warm
-    /// investigation came back clean, and the note in tools/perf-run.sh says so in as many words.</para>
-    ///
-    /// <para>It lives HERE, in the command that produces the export, because it used to live in
-    /// <c>run-release.sh</c>, <c>tools/perf-run.sh</c> and <c>tools/perf-run.ps1</c> — three copies, and the
-    /// one command a person would actually reach for (<c>vx export</c>) had none of them. A dist/ that only
-    /// works because some other script visited it first is a trap with a long fuse.</para>
-    ///
-    /// <para>A LINK, not a copy: data/ is ~0.9 GB and it changes. On Windows a directory JUNCTION is tried
-    /// before a symlink, because junctions need no Developer Mode or elevation — the ordering matters, since
-    /// the fallback from a failed symlink is a very expensive surprise.</para>
+    /// Repo-relative paths of every leftover <c>data/</c> LINK beside an export. For <see cref="Doctor"/>,
+    /// which reports rather than removes — the removal lives in <see cref="CleanStaleContentLink"/>.
     /// </summary>
-    private static bool PlaceContent(string artifact)
+    internal static IEnumerable<string> StaleContentLinks()
     {
-        string src = Path.Combine(Env.RepoRoot, "data");
-        if (!Directory.Exists(src))
+        foreach ((_, string outRel) in Presets)
         {
-            Console.Error.WriteLine($"vx export: no content tree at {src}");
-            Console.Error.WriteLine("           ./vx maps      (fetches what data/maps.lock.json pins)");
-            return false;
+            string artifact = Path.Combine(Env.RepoRoot, outRel.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(artifact) && !Directory.Exists(artifact)) continue;
+            string dest = ContentSibling(artifact);
+            string? link = null;
+            try { link = new DirectoryInfo(dest) is { Exists: true } d ? d.LinkTarget : null; }
+            catch { /* unreadable is not a finding */ }
+            if (link is not null)
+                yield return Path.GetRelativePath(Env.RepoRoot, dest).Replace('\\', '/');
         }
+    }
 
+    /// <summary>Where an exported binary of this artifact would look for <c>data/</c>.</summary>
+    private static string ContentSibling(string artifact)
         // macOS keeps it INSIDE the bundle, matching tools/package.sh and DataPaths' ../Resources probe.
-        bool bundle = Directory.Exists(artifact) && artifact.EndsWith(".app", StringComparison.OrdinalIgnoreCase);
-        string dest = bundle
+        => Directory.Exists(artifact) && artifact.EndsWith(".app", StringComparison.OrdinalIgnoreCase)
             ? Path.Combine(artifact, "Contents", "Resources", "data")
             : Path.Combine(Path.GetDirectoryName(artifact)!, "data");
 
-        if (Directory.Exists(dest) || File.Exists(dest))
-            return true;                                   // already linked (or a real copy someone made)
-
-        Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-        string how;
+    /// <summary>
+    /// Remove a <c>data/</c> LINK left beside an export by the retired scripts — and nothing else, ever.
+    ///
+    /// <para><b>Why there is anything to clean.</b> Until 2026-08-03 the only way an exported build found
+    /// content was a symlink/junction to the repo's <c>data/</c>, dropped next to the binary by
+    /// <c>run-release.sh</c>, <c>tools/perf-run.*</c> and briefly by <c>vx export</c> itself. That is now
+    /// obsolete — <c>vx run</c> passes <c>--data</c> (Main.cs) — but the links are still sitting in every
+    /// <c>dist/</c> that predates the change, and they are not inert: <c>tools/package.sh</c> writes to this
+    /// exact path, so an <c>rsync --delete</c> or an <c>rm -rf</c> aimed here resolves into the COMMITTED
+    /// content tree. Clearing them is the point, not tidiness.</para>
+    ///
+    /// <para><b>LINKS ONLY.</b> A real directory here is a packaged install (<c>tools/package.sh</c> puts a
+    /// genuine ~1.6 GB copy in exactly this place), and deleting somebody's build because it was in the way
+    /// would be a far worse bug than the one being fixed. <c>LinkTarget</c> is the discriminator and
+    /// <c>Directory.Delete</c> on a reparse point removes the link rather than recursing into its target —
+    /// both verified against a real junction before this shipped.</para>
+    /// </summary>
+    private static void CleanStaleContentLink(string artifact)
+    {
+        string dest = ContentSibling(artifact);
         try
         {
-            if (Env.IsWindows && Env.Which("cmd") is { } cmd
-                && Env.Run(cmd, "/c", "mklink", "/J", dest, src).Code == 0)
-                how = "junction";
-            else
-            {
-                Directory.CreateSymbolicLink(dest, src);
-                how = "symlink";
-            }
+            var di = new DirectoryInfo(dest);
+            if (!di.Exists || di.LinkTarget is null)
+                return;                                    // absent, or a real directory — leave it alone
+            Directory.Delete(dest);                        // the reparse point, never what it points at
+            Console.WriteLine($"   cleaned: stale data/ link at "
+                            + $"{Path.GetRelativePath(Env.RepoRoot, dest).Replace('\\', '/')} (--data replaces it)");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"   note: could not link data/ ({ex.GetType().Name}) — copying instead, this is slow.");
-            try
-            {
-                CopyTree(new DirectoryInfo(src), new DirectoryInfo(dest));
-                how = "copy";
-            }
-            catch (Exception copyEx)
-            {
-                Console.Error.WriteLine($"vx export: could not place data/ beside the binary: {copyEx.Message}");
-                Console.Error.WriteLine($"           Do it by hand, or the build will launch and load nothing:");
-                Console.Error.WriteLine($"             {src}  ->  {dest}");
-                return false;
-            }
+            // Never fatal: a link we could not remove is the state we were already in.
+            Console.Error.WriteLine($"   note: could not remove the stale data/ link at {dest}: {ex.Message}");
         }
-
-        Console.WriteLine($"   content: data/ {how} at {Path.GetRelativePath(Env.RepoRoot, dest).Replace('\\', '/')}");
-        return true;
-    }
-
-    private static void CopyTree(DirectoryInfo from, DirectoryInfo to)
-    {
-        to.Create();
-        foreach (FileInfo f in from.GetFiles())
-            f.CopyTo(Path.Combine(to.FullName, f.Name), overwrite: true);
-        foreach (DirectoryInfo d in from.GetDirectories())
-            CopyTree(d, new DirectoryInfo(Path.Combine(to.FullName, d.Name)));
     }
 
     /// <summary>

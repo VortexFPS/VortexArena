@@ -310,6 +310,25 @@ It is a modification-time heuristic, not a dependency graph, so declining is a n
 non-interactive caller (CI, a script, stdin redirected) is warned and launched rather than blocked on a prompt.
 Skip it entirely with **`-n`** / `--no-build-check`.
 
+### Where an exported build gets its content
+
+`export_presets.cfg` excludes `data/*` from the pck, so **`dist/<preset>/` holds only the binary** and the
+content has to be named. `./vx run` does that with `--data <repo>/data`; `tools/perf-run.*` do the same.
+
+Until 2026-08-03 this worked differently: `run-release.sh` and `perf-run.*` dropped a **symlink/junction** at
+`dist/<preset>/data` pointing at the repo tree. That is retired, and clearing the leftovers is not
+housekeeping — `tools/package.sh` writes to that exact path, so an `rsync --delete` or `rm -rf` aimed there
+resolved straight into the committed content tree.
+
+- `./vx doctor` reports any leftover link it finds.
+- `./vx export` and `./vx run` remove them — **the link only**. A *real* directory there is a packaged install
+  (`package.sh` puts a genuine ~1.6 GB copy in the same place) and is never touched.
+- `package.sh` replaces a link with a real copy before writing, so packaging over an old tree is safe.
+
+**A bare `dist/<preset>/VortexArena.exe` therefore loads nothing** — it starts, mounts no content and renders
+an empty world. That is expected: use `./vx run`, or `tools/package.sh` for something to hand to someone.
+`vx export` prints a reminder to that effect.
+
 ---
 
 ## Visual QA (T5 — Wave A5)
@@ -435,8 +454,10 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   console for a `--screenshot` capture — `--screenshot shot.png +toggleconsole +clear +help` photographs the
   console with a known state on screen.
 - **`--data <dir>`** overrides the content mount (default `res://data`, resolved project-relative — a
-  `res://`/`user://` or absolute OS path also works). Mainly an escape hatch for a packaged build whose data dir
-  isn't beside the binary, or to point a dev build at an external gamedir.
+  `res://`/`user://` or absolute OS path also works). Point a dev build at an external gamedir, or give a
+  packaged build a data dir that isn't beside it. **`./vx run` passes this automatically** (`--data
+  <repo>/data`), which is what lets `dist/<preset>/` hold nothing but the binary — pass your own `--data` and
+  vx defers to it.
 - **`ModelViewer.ModelName`** (`game/ModelViewer.cs`) is the model-viewer's settable seam — the bare hero name
   (`erebus`) or an explicit `models/...iqm` vpath, fed from the `--model` flag.
 - **`nuget.config`** adds the editor's bundled package source — needed for `dotnet` to restore `Godot.NET.Sdk

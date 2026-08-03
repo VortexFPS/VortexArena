@@ -65,16 +65,27 @@ if ($DebugBuild) {
     if (-not (Test-Path $exe)) {
         throw "release export missing at $exe - export the windows-client preset first (or use -DebugBuild for a non-representative debug run)"
     }
-    # The export excludes data/* from the pck, so the exported build finds content via
-    # DataPaths.ResolveExported: exe-relative first, CWD only as a last resort. Start-Process below does NOT
-    # inherit PowerShell's $PWD (it uses the .NET current directory), so the CWD probe is not something a
-    # capture should depend on - a run that silently mounts NO content still boots, still self-quits, and
-    # still writes a session log full of flattering numbers for a game that loaded nothing. Link data/ beside
-    # the binary (the packaged layout) so the exe-relative probe always wins.
+    # The export excludes data/* from the pck, and Start-Process below does NOT inherit PowerShell's $PWD
+    # (it uses the .NET current directory), so content must be named explicitly: a run that silently mounts
+    # NO content still boots, still self-quits, and still writes a session log full of flattering numbers for
+    # a game that loaded nothing.
+    #
+    # This used to create a junction at dist\<preset>\data. `--data` (Main.cs) is the same guarantee with
+    # nothing left on disk - and the junction was not free: tools/package.sh writes to that exact path, so an
+    # rsync --delete or rm -rf aimed there resolved straight into the committed content tree. It does not
+    # perturb the capture either: --data changes path resolution at startup, not frame times. (2026-08-03)
+    $exeArgs += @("--data", (Join-Path $root "data"))
+
+    # A junction left by an older perf-run / run-release.ps1 is now obsolete AND is the hazard above, so
+    # clear it - but ONLY when it really is a reparse point. A real directory here is a packaged install
+    # (tools/package.sh puts a genuine ~1.6 GB copy in exactly this place) and must never be removed.
     $dataLink = Join-Path (Split-Path $exe) "data"
-    if (-not (Test-Path $dataLink)) {
-        New-Item -ItemType Junction -Path $dataLink -Target (Join-Path $root "data") | Out-Null
+    $linkItem = Get-Item $dataLink -Force -ErrorAction SilentlyContinue
+    if ($null -ne $linkItem -and $linkItem.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+        [IO.Directory]::Delete($dataLink)   # the reparse point, never its target
+        Write-Host ">>> removed a stale data/ junction at $dataLink (--data replaces it)"
     }
+
     $workDir = Split-Path $exe   # launch from the install dir, exactly as a player would
 }
 

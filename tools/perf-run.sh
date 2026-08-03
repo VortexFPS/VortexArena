@@ -41,22 +41,17 @@ else
     EXTRA_ARGS=()
     [ -x "$EXE" ] || { echo "!!! release export missing at $EXE — run: ./vx export --preset $PRESET   (or PERF_DEBUG=1)"; exit 1; }
 
-    # Reproduce the PACKAGED content layout. `./vx export` now does this itself (Wrappers.PlaceContent), so
-    # this block is a belt for a dist/ produced some other way — kept because the failure is silent: the
-    # export excludes data/* from the pck, so an exported build resolves it through DataPaths.ResolveExported,
-    # which probes exe-relative FIRST and only then the CWD. Without this the binary launches, mounts NOTHING,
-    # self-quits and writes a session log full of flattering numbers — which is precisely how the first
-    # capture of the menu-warm investigation came back clean. macOS keeps it inside the bundle at
-    # Contents/Resources/data (tools/package.sh); the other platforms put it beside the binary.
-    case "$(uname -s)" in
-        Darwin) DATA_DEST="$ROOT/dist/macos-client/VortexArena.app/Contents/Resources/data" ;;
-        *)      DATA_DEST="$(dirname "$EXE")/data" ;;
-    esac
-    if [ ! -e "$DATA_DEST" ]; then
-        mkdir -p "$(dirname "$DATA_DEST")"
-        ln -s "$ROOT/data" "$DATA_DEST" 2>/dev/null || cp -R "$ROOT/data" "$DATA_DEST"
-        echo ">>> placed data/ for the exported build at $DATA_DEST"
-    fi
+    # POINT the build at the content; do not lay content out around it. The export excludes data/* from the
+    # pck, so without this the binary launches, mounts NOTHING, self-quits and writes a session log full of
+    # flattering numbers for a game that loaded nothing — which is precisely how the first capture of the
+    # menu-warm investigation came back clean. That is still the failure being guarded against; only the
+    # remedy changed (2026-08-03).
+    #
+    # This used to symlink/junction data/ beside the binary. `--data` (Main.cs) is the same guarantee with
+    # nothing left on disk — and the link was not free: tools/package.sh writes to that exact path, so an
+    # rsync --delete or rm -rf aimed there resolved straight into the committed content tree. It also does
+    # not perturb the capture: --data changes path resolution at startup, not frame times.
+    EXTRA_ARGS+=(--data "$ROOT/data")
 fi
 
 powershell -NoProfile -Command "Get-Process Godot*,VortexArena* -ErrorAction SilentlyContinue | Stop-Process -Force" 2>/dev/null
@@ -76,7 +71,8 @@ if [ "${PERF_SCENARIO:-demo}" = "demo" ]; then
 fi
 # ${arr[@]+"${arr[@]}"} rather than "${arr[@]}": under `set -u`, macOS's bash 3.2 treats expanding an EMPTY
 # array as an unbound variable and aborts. bash 4.4+ does not, which is why this only ever failed off the dev
-# box. EXTRA_ARGS is empty on every non-PERF_DEBUG run, i.e. every release capture.
+# box. EXTRA_ARGS carries --path on a PERF_DEBUG run and --data on a release capture, so it is no longer
+# empty either way — the guard stays regardless, since which branch fills it is not this line's business.
 run_with_timeout $((SECS+60)) "$EXE" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} --host "$MAP" --gametype dm --bots "$BOTS" \
     --cvar cl_frameprofiler 2 --cvar cl_frameprofiler_hitchms 8 \
     --cvar cl_frameprofiler_rendertime 1 \

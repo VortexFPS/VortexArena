@@ -208,6 +208,16 @@ internal static class Doctor
         yield return new Check(".godot-bin/", Directory.Exists(bin) ? Status.Ok : Status.Warn,
             Directory.Exists(bin) ? "present" : "absent (fine — Godot may be installed system-wide)");
 
+        // Stale content links (retired 2026-08-03 in favour of --data). Reported rather than removed, because
+        // doctor changes nothing — but reported at all because these are not inert: tools/package.sh writes to
+        // this exact path, so an rsync --delete or rm -rf aimed there resolves into the committed content tree.
+        string[] staleLinks = Wrappers.StaleContentLinks().ToArray();
+        if (staleLinks.Length > 0)
+            yield return new Check("dist/ content links", Status.Warn,
+                $"{staleLinks.Length} leftover data/ link(s): {string.Join(", ", staleLinks)}",
+                Fix: "obsolete since `vx run` began passing --data; `./vx export` removes them, or delete the "
+                   + "LINK by hand (never its target)");
+
         // Reported ALWAYS, not only when overridden. An override.cfg is untracked, persists across sessions
         // and is invisible from inside the game, so the state this tree is in has to be sayable out loud —
         // otherwise it becomes the thing that quietly explains a frame-time result nobody can reproduce.

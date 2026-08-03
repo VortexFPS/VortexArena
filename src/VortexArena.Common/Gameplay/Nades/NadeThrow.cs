@@ -24,6 +24,24 @@ public static class NadeThrow
     private const float DefMaxForce = 2000f;  // g_nades_nade_maxforce
     private const float DefSpread = 0.04f;    // g_nades_spread
 
+    // VORTEX DEVIATION from Base — the throw is CENTERED on the crosshair, and the direction weights are
+    // cvars instead of literals. Base hardcodes a rightward bias in both throw paths (sv_nades.qc:629
+    // `v_forward * 0.75 + v_up * 0.2 + v_right * 0.05`, :678 `... + v_right * 0.1`) and pairs it with a
+    // leftward spawn offset (g_nades_throw_offset "0 -25 0"), so a Xonotic nade leaves ~25qu to your LEFT
+    // and flies 3.8 deg (weapon_drop) / 8.1 deg (offhand) to your RIGHT — it crosses the aim line once and
+    // never travels down it. Both biases date to Mario, Jun 2013 (66318bb5b, 56cc3610e). We zero the right
+    // component; the vectors stay tunable so a server can dial the bias back in.
+    // The shipped defaults live in data/core.pk3dir/vortex-server.cfg (the D8 layer — upstream's
+    // mutators.cfg is never edited). These constants are the no-cfg-tree fallback and must match it.
+    // Zeroing barely touches range: |(0.75,0,0.2)| is 0.2% shorter than |(0.75,0.05,0.2)|, |(0.7,0,0.2)|
+    // 0.9% shorter than |(0.7,0.1,0.2)| — the force ramp is unchanged.
+
+    /// <summary>g_nades_throw_dir fallback — the weapon_drop path, as (forward, right, up) weights.</summary>
+    private static readonly Vector3 DefThrowDir = new(0.75f, 0f, 0.2f);
+
+    /// <summary>g_nades_throw_dir_offhand fallback — the +hook path, as (forward, right, up) weights.</summary>
+    private static readonly Vector3 DefThrowDirOffhand = new(0.7f, 0f, 0.2f);
+
     /// <summary>
     /// Port of <c>spawn_held_nade(player, nowner, ntime, ntype, pntype)</c> (sv_nades.qc:530): create the
     /// held nade entity (and its first-person fake-nade) of the resolved type, tinted by the player, primed
@@ -144,7 +162,7 @@ public static class NadeThrow
             player.NadeAltButton = false;
             if (Now() >= player.Nade.NadeTimePrimed + 1f)
             {
-                Vector3 dir = ChargeDir(player, 0.75f, 0.2f, 0.05f, out float force);
+                Vector3 dir = ChargeDir(player, ThrowDir("g_nades_throw_dir", DefThrowDir), out float force);
                 NadeProjectile.Toss(player, true, dir * force, 0f);
             }
         }
@@ -167,7 +185,7 @@ public static class NadeThrow
         }
         else if (player.Nade is not null && Now() >= player.Nade.NadeTimePrimed + 1f)
         {
-            Vector3 dir = ChargeDir(player, 0.7f, 0.2f, 0.1f, out float force);
+            Vector3 dir = ChargeDir(player, ThrowDir("g_nades_throw_dir_offhand", DefThrowDirOffhand), out float force);
             NadeProjectile.Toss(player, false, dir * force, 0f);
         }
     }
@@ -192,10 +210,10 @@ public static class NadeThrow
 
     /// <summary>
     /// QC the charge-force computation (sv_nades.qc:646-650 / 695-699): force ramps from minforce to maxforce
-    /// over the nade lifetime since priming; direction is a forward-biased spread cone. The fwd/up/right
-    /// weights differ between the weapon-drop path (0.75/0.2/0.05) and the offhand path (0.7/0.2/0.1).
+    /// over the nade lifetime since priming; direction is a forward-biased spread cone. <paramref name="weights"/>
+    /// is the throw direction in the view basis — (forward, right, up), from g_nades_throw_dir[_offhand].
     /// </summary>
-    private static Vector3 ChargeDir(Entity player, float fwdW, float upW, float rightW, out float force)
+    private static Vector3 ChargeDir(Entity player, Vector3 weights, out float force)
     {
         Vector3 viewAngles = player.ViewAngles == Vector3.Zero ? player.Angles : player.ViewAngles;
         QMath.AngleVectors(viewAngles, out Vector3 forward, out Vector3 right, out Vector3 up);
@@ -206,9 +224,33 @@ public static class NadeThrow
         float maxF = Cvar("g_nades_nade_maxforce", DefMaxForce);
         force = minF + held * (maxF - minF);
 
-        Vector3 dir = forward * fwdW + up * upW + right * rightW;
+        Vector3 dir = forward * weights.X + right * weights.Y + up * weights.Z;
         // QC W_CalculateSpread(dir, g_nades_spread, g_projectiles_spread_style, false).
         return WeaponFiring.CalculateSpread(dir, Cvar("g_nades_spread", DefSpread), mustNormalize: false);
+    }
+
+    /// <summary>
+    /// Read a throw-direction cvar as (forward, right, up) weights. An all-zero vector would leave the nade
+    /// with no velocity at all, so it falls back like a malformed value rather than dropping the nade at the
+    /// thrower's feet — clearing the bias is what "0.75 0 0.2" is for.
+    /// </summary>
+    private static Vector3 ThrowDir(string name, Vector3 fallback)
+    {
+        Vector3 v = CvarVec3(name, fallback);
+        return v == Vector3.Zero ? fallback : v;
+    }
+
+    /// <summary>
+    /// Read a <c>"x y z"</c> cvar into a vector, falling back whole on a missing or malformed value (the
+    /// <see cref="VecParse"/> contract: no zero-fill, no partial results). Shared by the two throw-direction
+    /// cvars and <c>g_nades_throw_offset</c>.
+    /// </summary>
+    internal static Vector3 CvarVec3(string name, Vector3 fallback)
+    {
+        if (Api.Services is null) return fallback;
+        return VecParse.TryParseFloats(Api.Cvars.GetString(name), 3, out float[] v)
+            ? new Vector3(v[0], v[1], v[2])
+            : fallback;
     }
 
     // ===================================================================================================

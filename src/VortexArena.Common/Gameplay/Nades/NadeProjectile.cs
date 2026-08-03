@@ -52,7 +52,11 @@ public static class NadeProjectile
         }
 
         // QC: makevectors(e.v_angle); W_SetupShot(...); origin = w_shotorg + throw_offset. The headless muzzle
-        // is the thrower eye + the configured throw offset rotated into the view basis.
+        // is the thrower eye + the configured throw offset rotated into the view basis. (Base's w_shotorg also
+        // carries the gun-alignment offset from the weapon's movedir, tracing.qc:73-77 — one more lateral term
+        // the port has never had. With g_nades_throw_offset now zero the nade leaves the eye dead centre.)
+        // The startsolid tracebox below is MoveFilter.NoMonsters, which only collides with Solid.Bsp, so a
+        // centred spawn cannot trip it on the thrower's own bbox — only on real world geometry.
         Vector3 viewAngles = thrower.ViewAngles == Vector3.Zero ? thrower.Angles : thrower.ViewAngles;
         QMath.AngleVectors(viewAngles, out Vector3 forward, out Vector3 right, out Vector3 up);
         Vector3 off = ThrowOffset();
@@ -298,18 +302,12 @@ public static class NadeProjectile
             picker.Nade.NadeTimePrimed = thenade.NadeTimePrimed;
     }
 
-    /// <summary>QC <c>autocvar_g_nades_throw_offset</c> (default "0 -25 0").</summary>
-    internal static Vector3 ThrowOffset()
-    {
-        if (Api.Services is null) return new Vector3(0f, -25f, 0f);
-        string s = Api.Cvars.GetString("g_nades_throw_offset");
-        if (string.IsNullOrEmpty(s)) return new Vector3(0f, -25f, 0f);
-        string[] p = s.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (p.Length != 3) return new Vector3(0f, -25f, 0f);
-        static float F(string x) => float.TryParse(x, System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : 0f;
-        return new Vector3(F(p[0]), F(p[1]), F(p[2]));
-    }
+    /// <summary>
+    /// QC <c>autocvar_g_nades_throw_offset</c>, as (forward, right, up) in the thrower's view basis.
+    /// VORTEX DEVIATION: defaults to ZERO (centered on the crosshair) where Base defaults to "0 -25 0",
+    /// i.e. 25qu to the thrower's LEFT — see the deviation note in <see cref="NadeThrow"/>.
+    /// </summary>
+    internal static Vector3 ThrowOffset() => NadeThrow.CvarVec3("g_nades_throw_offset", Vector3.Zero);
 
     internal static float Cvar(string name, float fallback)
     {

@@ -130,6 +130,13 @@ public sealed class ParticleSim
     public ITraceService? Trace { get; set; }
 
     private float Cv(string name) => (Cvars ?? Api.Cvars).GetFloat(name);
+
+    /// <summary>
+    /// Spawn-count multiplier published by the client's adaptive-quality controller (Godot-side
+    /// <c>AdaptiveQuality.Scale</c>; this library stays Godot-free, so the host pushes it here). 1 = full
+    /// fidelity and the default, so the sim is byte-identical until a frame-time target is opted into.
+    /// </summary>
+    public static float QualityScale = 1f;
     private bool CvBool(string name) => (Cvars ?? Api.Cvars).GetFloat(name) != 0f;
 
     /// <summary>The resolved tracer: the injected client world-only tracer, or the ambient fallback (tests).</summary>
@@ -159,7 +166,12 @@ public sealed class ParticleSim
         if (!CvBool(ParticleCvars.Particles)) return;
 
         float now = _currentTime;   // the sim clock (set by Update), NOT Api.Clock — see _currentTime.
-        float quality = Cv(ParticleCvars.Quality);
+        // (perf 2026-08-03) The adaptive-quality controller scales the spawn count exactly like DP's
+        // cl_minfps quality scalar scales its own particle work: this sim is pure CPU (per-particle
+        // integrate + world traces) and leads ~19% of stormkeep frames, so it is the largest CPU cost that
+        // degrades gracefully. QualityScale is 1 (identity) whenever the controller is disabled, which is
+        // the default — so this multiply changes nothing until a player opts into a frame-time target.
+        float quality = Cv(ParticleCvars.Quality) * QualityScale;
 
         // VectorLerp(originmins, 0.5, originmaxs, center) (1600).
         Vector3 center = originMins + (originMaxs - originMins) * 0.5f;

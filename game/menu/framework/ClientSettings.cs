@@ -41,6 +41,7 @@ public static class ClientSettings
         RegisterStairSmoothDefaults(MenuState.Cvars);
         RegisterEngineClientDefaults(MenuState.Cvars);
         RegisterParticleDefaults(MenuState.Cvars);
+        Client.AdaptiveQuality.RegisterDefaults(MenuState.Cvars);
         ApplyTextureCompression();
     }
 

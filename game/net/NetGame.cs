@@ -3845,6 +3845,13 @@ public sealed partial class NetGame : Node3D
         if (_dedicatedNoClient)
             return;
 
+        // (perf 2026-08-03) Adaptive quality: measure the REAL frame interval and publish the scalar the
+        // CPU-heavy subsystems scale their work by (see AdaptiveQuality — off unless cl_minfps is set).
+        // `rawDt` is wall time, deliberately not the conditioned/scaled game delta: the controller must
+        // steer on what the player actually experiences.
+        VortexArena.Game.Client.AdaptiveQuality.Update(rawDt, _sharedCvars);
+        VortexArena.Engine.Particles.ParticleSim.QualityScale = VortexArena.Game.Client.AdaptiveQuality.Scale;
+
         // (perf 2.0) ng.feeds: the music/announcer/host-mutator HUD-feed run — sub-scoped so the ng.process
         // residual shrinks to genuinely-unattributed work (frame-budget decomposition, perf-campaign doc).
         using (VortexArena.Game.Client.FrameProfiler.Scope("ng.feeds"))

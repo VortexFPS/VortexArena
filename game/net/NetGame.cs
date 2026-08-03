@@ -1273,6 +1273,13 @@ public sealed partial class NetGame : Node3D
             // WS1 per-tick gating: the worker holds the gate around EACH tick (not the whole step), so a
             // render-thread per-trace wait is bounded by one tick.
             _serverWorld!.Simulation.TickGate = _simGate;
+            // (zero-hitch 2026-08-03, cn.predict residual) The MAIN thread gets a per-thread ambient whose
+            // Trace BOUNDS its wait on that gate: a combat tick holds it 10-25 ms, and one prediction trace
+            // landing mid-tick ate the remainder as a frame hitch. Under contention the trace degrades to a
+            // gate-free static-world twin (DP's own client prediction never sees live entities either) and
+            // the fallback count is surfaced as cn.tracefb beside sv.gatewait_ms. Cleared in Shutdown.
+            Api.SetThreadServices(new VortexArena.Engine.Collision.MainThreadPredictionServices(
+                _serverWorld!.Services, _serverWorld!.Collision, _simGate));
             _serverThread = new ServerThread(
                 _serverWorld!, _server!,
                 () => _serverWorld!.Simulation.TickSeconds);   // live sys_ticrate paces the worker's sleep
@@ -3714,6 +3721,10 @@ public sealed partial class NetGame : Node3D
         // Free the detached per-weapon equip nodes (the installed one dies with the ViewModel tree).
         FreeViewEquipCache();
 
+        // Revert the main thread's bounded-trace ambient (threaded hosts only; no-op otherwise). Without
+        // this a rehost/menu return would keep routing main-thread traces at a torn-down world's gate.
+        Api.ClearThreadServices();
+
         // DS-4: this server is going away — drop the signal-handler's client-notice hook so it can't fire against
         // a torn-down transport (and a rehost re-registers a fresh one for the new _server).
         GracefulShutdownHook = null;
@@ -3963,6 +3974,13 @@ public sealed partial class NetGame : Node3D
                 * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
             VortexArena.Engine.Collision.TraceService.GateWaitTicks = 0;
             VortexArena.Common.Diagnostics.Prof.Mark("sv.gatewait_ms", gateWaitMs);
+            // Bounded-tracer degradations this frame (see BoundedGateTracer): >0 on a frame means the sim
+            // gate was contended past the timeout and those traces ran against the static world instead.
+            int fb = VortexArena.Engine.Collision.BoundedGateTracer.FallbacksSinceRead;
+            VortexArena.Engine.Collision.BoundedGateTracer.FallbacksSinceRead = 0;
+            VortexArena.Engine.Collision.BoundedGateTracer.ResetFrame();   // re-arm the per-frame wait budget
+            if (fb > 0)
+                VortexArena.Common.Diagnostics.Prof.Mark("cn.tracefb", fb);
         }
 
         // DP CL_Input: apply the frame's accumulated mouse-look FIRST, so everything below (input sampling,

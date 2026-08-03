@@ -503,6 +503,70 @@ baseline — it turns the compression default from a loud no-op into the measure
 (3) the template-codegen investigation (a ~25% swing hides real wins if either arm is thermally dirty —
 re-run the local-vs-CI comparison cold before drawing the LTO conclusion).
 
+## 5f. What Base/DP does that we don't (audit 2026-08-03, `../Base` + `../Base/darkplaces`)
+
+Ranked by value to a CPU-bound port. Every line has Base evidence; several invert an assumption we made.
+
+**1. Sound: DP never pushes positions from script — the engine PULLS them.** A channel stores
+`entnum`/`entchannel` (`snd_main.c:1547`), and every `S_Update` re-derives the origin from the entity,
+including CSQC tag matrices (`snd_main.c:1200-1228`, `csprogs.c:1172`); `cl_gameplayfix_soundsmovewithentities`
+defaults 1. Xonotic QC calls `sound()` only on state transitions — start once, stop once
+(`csqcmodel_hooks.qc:691-706`). **Our per-frame `GlobalPosition` + volume push is work Base does at no
+level.** Today's change-gating is a band-aid; the real fix is to PARENT the `AudioStreamPlayer3D` to the
+emitter's node so Godot's own transform propagation does it, and the push disappears. DP also merges
+duplicate static sounds into one channel ("so we don't mix five torches every frame", `snd_main.c:2169`)
+and keeps channels in a flat fixed array, not a managed live-sound list.
+
+**2. LOD is computed and DISCARDED in this port** (`ClientWorld.ApplyLod` → `_ = SelectLodIndex(...)`),
+yet the stock models ship `_lod1`/`_lod2` (e.g. `erebus_lod1.iqm`). Worse, Base's threshold is far nearer
+than the cvar names suggest: `f = (dist * viewzoom + 100) * detailreduction`, `/ view_quality`
+(`csqcmodel_hooks.qc:84-85`) with `cl_playerdetailreduction 4` in every profile below ultra
+(`effects-normal.cfg:8`) — so **LOD1 lands at ~156 qu and LOD2 at ~668 qu**, not 1024/3072. We render
+full detail everywhere. Wiring the swap is a real, unexploited win (fewer verts, and fewer bones to pose
+if the LOD rigs are reduced — verify before claiming the bone half).
+
+**3. Adaptive quality feedback — the single most applicable design for a 2.0 ms target.**
+`CL_UpdateScreen` (`cl_screen.c:2130-2213`) EMA-filters measured render time, computes an adjustment
+toward `1/cl_minfps`, applies one-sided hysteresis, clamps the per-frame step
+(`cl_minfps_qualitystepmax 0.1`) and the range (`0.25..1`), then publishes `r_refdef.view.quality`, which
+LOD (`view.qc:1685`), particle draw distance (`cl_particles.c:2935`) and offsetmapping all consume. A
+CPU-bound port with a frame-time target should have exactly this loop.
+
+**4. Our per-entity PVS shape vs DP's.** Today's memo (97.5% of descents skipped) reaches a similar place
+by a different route. DP: world visibility resolved ONCE per frame into flat `world_leafvisible[]` /
+`world_surfacevisible[]` byte arrays (`gl_rsurf.c:511-524`), then per entity an ITERATIVE descent with an
+explicit `nodestack[1024]`, returning at the first visible leaf (`model_brush.c:394+`) — no recursion, no
+PVS bit decoding per entity, no allocation (viewcache arrays resized only when counts change). Server-side
+it caches each entity's cluster list ON THE ENTITY, recomputed only when the cull box moves, capped at
+`MAX_ENTITYCLUSTERS 16` (`sv_send.c:659-675`), so the per-client test is ≤16 bit tests. Also: frustum
+culling tests ONE corner selected by precomputed plane signbits, 5 dot products, near plane skipped
+(`gl_rmain.c:3436-3467`).
+
+**5. Things Base deliberately does NOT do — check we haven't over-built them.** Xonotic ships
+`r_cullentities_trace 0` (client) and leaves it to `sv_cullentities_trace 1`
+(`xonotic-client.cfg:987`, `xonotic-server.cfg:591`). `cl_particles_visculling` defaults 0 — no PVS test
+per particle. CSQC predraw is NOT visibility-gated (`clvm_cmds.c:811`), and effects/glowmod are recomputed
+from scratch every frame with no dirty flags (`csqcmodel_hooks.qc:546`, `:339`) — the cost control is that
+each branch is a test on a usually-zero mask. Where our port added change-detection machinery around cheap
+work, that machinery may cost more than the work.
+
+**6. Skeletal: Base does TWO `skel_build` calls per player per frame.** Bones are pre-sorted into
+contiguous UPPER/LOWER runs once at skeleton creation (`player_skeleton.qc:67-82`), then each run is one
+engine call whose C body loops the bones (`clvm_cmds.c:4651`), blending dual quaternions over 7×int16
+poses (`model_alias.c:65-135`). Per-bone QC work is only the aim bones. Our `PushBones` does per-bone
+managed→native interop — the `RenderingServer.SkeletonBoneSetTransform` route (§5b) is the equivalent
+shape. Setup work is gated on `modelindex`/`skin` change (`player_skeleton.qc:19`), as is `animdecide`.
+
+**7. Allocation discipline.** All transient render data comes from a frame-scoped bump allocator reset by
+rewinding a pointer (`R_FrameData_Alloc`, `gl_rmain.c:3521-3571`); array "clears" are generation/sequence
+counters, not memsets (`sv_ents.c:396`; the collision trace cache bumps a 1-byte sequence,
+`collision.c:1548-1571`). DP also ships per-phase timers as a first-class feature (`R_TimeReport`,
+including "audioprep"/"audiospatialize") — the same instinct as our `Prof` scopes.
+
+**8. Fixed-timestep systems with interpolation and an fps floor** (`ecs/lib.qh:34-62`): the sim advances
+in fixed `dt` with an accumulator clamped by `minfps`, then components interpolate by the remainder. A
+port running everything at render rate lost that decoupling.
+
 ## 6. Measurement discipline updates
 
 - **Post-load boundary**: use `--postload 25` until a real world-entry marker exists; better, emit a

@@ -54,3 +54,25 @@ known:
   - name: "vid_vsync"
     note: "port default 0 (off). Measured -0.5 ms/frame and better lows than the previous mailbox
       default — perf-campaign Phase 1c. Assigned nowhere in Base's chain."
+
+  # ── Centered nade throw, carried by data/core.pk3dir/vortex-server.cfg ─────────────────────────
+  # Xonotic biases a thrown nade sideways twice, in opposite directions: a leftward SPAWN (the cvar
+  # below) and a rightward VELOCITY (weights hardcoded in sv_nades.qc:629/678, which the port turns
+  # into the two cvars below). The nade therefore starts left of the crosshair and drifts right,
+  # crossing the aim line once and diverging past it — there is no range at which it goes where the
+  # player is looking. Both biases are Mario, Jun 2013 (66318bb5b, 56cc3610e); no upstream commit ever
+  # states a rationale for either. See planning/parity/registry/mutator-nades.yaml for the full trail.
+  - name: "g_nades_throw_offset"
+    note: "port default \"0 0 0\" (centered) over Base's \"0 -25 0\" — v_right genuinely points right
+      (AngleVectors gives (0,-1,0) at zero angles), so Base's negative y spawns the nade 25qu to the
+      thrower's LEFT. Behavior of the cvar is unchanged; only the default moved, so setting it back to
+      \"0 -25 0\" restores Base exactly. VortexConfigLayerTests.Layer_Centers_The_Nade_Throw pins it."
+  - name: "g_nades_throw_dir"
+    note: "port-ADDED name — Base hardcodes this weight vector as `v_forward * 0.75 + v_up * 0.2 +
+      v_right * 0.05` (sv_nades.qc:629), the weapon_drop throw path. Read as \"forward right up\" by
+      NadeThrow.ChargeDir. Port default drops the right term (Base's aims 3.81 deg right of the
+      crosshair); the vector's length still scales throw force, so zeroing it shortens the throw 0.2%."
+  - name: "g_nades_throw_dir_offhand"
+    note: "port-ADDED name, the '+hook' offhand throw path — Base hardcodes `v_forward * 0.7 + v_up *
+      0.2 + v_right * 0.1` (sv_nades.qc:678), which aims 8.13 deg right of the crosshair. Same
+      \"forward right up\" form; zeroing the right term shortens the throw 0.9%."

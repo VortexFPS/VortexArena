@@ -125,8 +125,8 @@ features:
       - { name: "g_nades_nade_minforce", base: "400 (mutators.cfg:205)", port: "400", match: true }
       - { name: "g_nades_nade_maxforce", base: "2000 (mutators.cfg:206)", port: "2000", match: true }
       - { name: "g_nades_spread", base: "0.04 (mutators.cfg:197)", port: "0.04", match: true }
-      - { name: "dir_weights_weapondrop", base: "fwd0.75 up0.2 right0.05", port: "0.75/0.2/0.05", match: true }
-      - { name: "dir_weights_offhand", base: "fwd0.7 up0.2 right0.1", port: "0.7/0.2/0.1", match: true }
+      - { name: "dir_weights_weapondrop", base: "fwd0.75 up0.2 right0.05 (hardcoded sv_nades.qc:629)", port: "g_nades_throw_dir \"0.75 0 0.2\" (vortex-server.cfg)", match: false }
+      - { name: "dir_weights_offhand", base: "fwd0.7 up0.2 right0.1 (hardcoded sv_nades.qc:678)", port: "g_nades_throw_dir_offhand \"0.7 0 0.2\" (vortex-server.cfg)", match: false }
       - { name: "min_charge_time", base: "1s since prime", port: "1s (NadeTimePrimed+1)", match: true }
     status:
       logic: faithful
@@ -135,14 +135,30 @@ features:
       presentation: na
       audio: na
       liveness: live
-    intended_divergence: false
-    divergence_rationale: null
+    intended_divergence: true
+    divergence_rationale: >
+      DESIGN 2026-08-02: Vortex throws nades CENTERED on the crosshair. Base hardcodes a rightward velocity
+      bias in both throw paths — v_right * 0.05 on weapon_drop (3.81 deg off-axis) and v_right * 0.1 on
+      offhand (8.13 deg) — which, paired with the leftward g_nades_throw_offset (see
+      mutator-nades.toss.projectile), means a Xonotic nade crosses the aim line exactly once and never
+      travels along it. Origin: Mario, 2013-06-05 (66318bb5b "Begin making nades a separate mutator");
+      carried verbatim ever since, through k9er's 2025 file split (34e6c26b9) and otta8634's 2025 reformat
+      (f748474fed). No upstream commit ever states a rationale for the right component.
+      The weights are now CVARS rather than literals, as (forward, right, up) in the view basis, defaulted by
+      the D8 config layer (data/core.pk3dir/vortex-server.cfg — the upstream mutators.cfg stays pristine), so
+      the Base feel is one config line away: g_nades_throw_dir "0.75 0.05 0.2"; g_nades_throw_dir_offhand
+      "0.7 0.1 0.2". The C# fallbacks in NadeThrow (used when no cfg tree is mounted) match the layer's values.
+      Zeroing the right term barely touches range — the weight vector's length (which scales the throw force)
+      drops 0.2% on weapon_drop and 0.9% on offhand; the minforce/maxforce ramp itself is untouched and still
+      matches Base exactly.
     gaps: []
     verification:
       - { kind: test, ref: "PowerupsAndNadesTests.Nade_Throw_ForceRampsWithChargeTime / Nade_CannotPrime_BeforeRefire", result: pass }
+      - { kind: test, ref: "PowerupsAndNadesTests.Nade_Throw_IsCentered_OnTheCrosshair — both paths, off-axis view, sideways velocity fraction < 1e-4", result: pass }
+      - { kind: test, ref: "PowerupsAndNadesTests.Nade_ThrowDirection_IsCvarControlled — Base weights restored via cvar reproduce 8.13 deg / 3.81 deg exactly", result: pass }
       - { kind: code, ref: "Now LIVE: ChargeDir reached from OffhandThink (offhand weights) + CheckThrow (weapon_drop weights), both live", result: pass }
     confidence: high
-    notes: "force = minforce + (held/lifetime)*(maxforce-minforce); spread via WeaponFiring.CalculateSpread(dir, g_nades_spread, mustNormalize:false). Both path direction weights match QC. liveness dead->live."
+    notes: "force = minforce + (held/lifetime)*(maxforce-minforce); spread via WeaponFiring.CalculateSpread(dir, g_nades_spread, mustNormalize:false). Force ramp + spread match QC; the direction weights are an INTENDED divergence (centered) and are now cvar-driven. liveness dead->live."
 
   - id: mutator-nades.toss.projectile
     name: "toss_nade: launch physics (size, newton-style, health, fuse)"
@@ -154,7 +170,7 @@ features:
     constants:
       - { name: "g_nades_nade_health", base: "25 (mutators.cfg:207)", port: "25", match: true }
       - { name: "g_nades_nade_refire", base: "6 (mutators.cfg:208)", port: "6", match: true }
-      - { name: "g_nades_throw_offset", base: "\"0 -25 0\" (mutators.cfg:198)", port: "0,-25,0", match: true }
+      - { name: "g_nades_throw_offset", base: "\"0 -25 0\" (mutators.cfg:198)", port: "\"0 0 0\" centered (vortex-server.cfg overrides the shipped mutators.cfg)", match: false }
       - { name: "nade_size", base: "32 (16 if small)", port: "32/16", match: true }
       - { name: "newton_style", base: "0 absolute / 1 relative / 2 velocity-only (mutators.cfg:213)", port: "0/1/2", match: false }
       - { name: "vertical_dribble", base: "v_angle.x in [70,110] + crouch -> '0 0 100'", port: "same", match: true }
@@ -165,15 +181,31 @@ features:
       presentation: na
       audio: na
       liveness: live
-    intended_divergence: false
-    divergence_rationale: null
+    intended_divergence: true
+    divergence_rationale: >
+      DESIGN 2026-08-02: g_nades_throw_offset now defaults to "0 0 0" (centered) instead of Base's
+      "0 -25 0", which spawns the nade 25qu to the thrower's LEFT (v_right is genuinely rightward —
+      AngleVectors gives (0,-1,0) at zero angles — so a negative y is leftward). Paired with the rightward
+      velocity bias (see mutator-nades.throw.charge_force), Base's nade leaves left of the crosshair and
+      flies right of it. Origin: Mario, 2013-06-15 (56cc3610e "Move thrown nades to the side a bit more",
+      which raised a hardcoded v_right*-10 to v_right*-25); Mario 2015-03-17 (1e10293f6) then added the
+      g_nades_throw_offset cvar at "0 -20 0" WITHOUT removing the hardcoded -25, so Base shipped a 45qu
+      offset until Martin Taibr folded the two together in 2017-08-07 (2416db2a5 "cleanup nade offset"),
+      landing on today's -25 with a TODO noting the value is a floor-edge-bounce compromise for OK promode.
+      The cvar is unchanged in behavior — only its default moved, via the D8 config layer
+      (data/core.pk3dir/vortex-server.cfg; the shipped mutators.cfg is left pristine and still says
+      "0 -25 0") — so `g_nades_throw_offset "0 -25 0"` restores Base exactly. Note the port's spawn base has
+      always been the EYE, not Base's w_shotorg, so the port never carried the gun-alignment lateral term
+      (tracing.qc:73-77) on top.
     gaps:
       - "Newton-style 0 is implemented as pure absolute _velocity rather than W_CalculateProjectileVelocity(e, e.velocity, _velocity, true); for non-default g_projectiles_newton_style this diverges from Base's velocity blending (style 0 is the shipped default, so identical at defaults)."
     verification:
       - { kind: code, ref: "NadeProjectile.Toss vs toss_nade (size/movetype/health/takedamage/event_damage/refire/dphitcontentsmask) — match except newton-0", result: pass }
       - { kind: code, ref: "Now LIVE: Toss reached from OffhandThink/CheckThrow/auto-toss/death-toss/vehicle-toss, all live", result: pass }
+      - { kind: test, ref: "PowerupsAndNadesTests.Nade_ThrowOffset_IsCvarControlled — setting the cvar to Base's \"0 -25 0\" reproduces a 25qu leftward spawn", result: pass }
+      - { kind: code, ref: "Centered spawn cannot regress into the startsolid fallback: the guard tracebox is MoveFilter.NoMonsters, which skips every non-Solid.Bsp toucher (TraceService.cs:300), so the thrower's own bbox is transparent to it", result: pass }
     confidence: high
-    notes: "MOVETYPE_BOUNCE, DAMAGE_AIM, event_damage routed via GtEventDamage (live damage seam), DamageForceScale kept 0 to avoid double knockback (nade_damage adds force manually). dphitcontentsmask via Projectiles.MakeTrigger; QC's translocate/spawn/monster PLAYERCLIP|BOTCLIP variant collapsed to the SOLID|BODY|CORPSE default. liveness dead->live."
+    notes: "MOVETYPE_BOUNCE, DAMAGE_AIM, event_damage routed via GtEventDamage (live damage seam), DamageForceScale kept 0 to avoid double knockback (nade_damage adds force manually). dphitcontentsmask via Projectiles.MakeTrigger; QC's translocate/spawn/monster PLAYERCLIP|BOTCLIP variant collapsed to the SOLID|BODY|CORPSE default. values stays `partial` for the newton-0 gap (unintended); the throw_offset default is an INTENDED divergence. liveness dead->live."
 
   - id: mutator-nades.touch.bounce_pickup_detonate
     name: "nade_touch: owner pass-through, pickup, bounce, impact detonate"

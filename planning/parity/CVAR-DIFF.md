@@ -1,9 +1,9 @@
 # Cvar default diff — Base vs port
 
-_Generated 2026-07-30 by `tools/parity-cvar-diff.py`. Entries simulated on both trees: `xonotic-client.cfg`, `xonotic-server.cfg`, `notifications.cfg`, `vortex-common.cfg` (the port's real boot chain — ConfigLoader/MenuState)._
+_Generated 2026-08-02 by `tools/parity-cvar-diff.py`. Entries simulated on both trees: `xonotic-client.cfg`, `xonotic-server.cfg`, `notifications.cfg`, `vortex-common.cfg` (the port's real boot chain — ConfigLoader/MenuState)._
 
 Base tree: `C:\Users\Bryan\Projects\Vortex\Base\data\xonotic-data.pk3dir` — 6013 effective cvars from 25 files.
-Port tree: `C:\Users\Bryan\Projects\Vortex\VortexArena\data\core.pk3dir` — 6016 effective cvars from 31 files.
+Port tree: `C:\Users\Bryan\Projects\Vortex\VortexArena\data\core.pk3dir` — 6018 effective cvars from 31 files.
 
 Findings are LEADS for triage, not verdicts: confirm each on the live path, then either fix it
 or record it in [cvar-diff-known.yaml](cvar-diff-known.yaml) (intended divergences) so it stops
@@ -19,9 +19,11 @@ re-flagging — the same discipline as `intended_divergence` in the registry.
 - exec'd by port only: `vortex-server.cfg`
 - missing exec targets: Base ['vortex-common.cfg'] / port []
 
-## 2. Effective value diffs (0)
+## 2. Effective value diffs (1)
 
-none.
+| cvar | Base | port | set by |
+|---|---|---|---|
+| `hostname` | `Xonotic  Server` | `Vortex  Server` | vortex-server.cfg |
 
 ## 3. One-sided cvars (Base-only: 0, port-only: 0)
 
@@ -52,10 +54,10 @@ with the Base effective value. Bites on any path that reads before/without the c
 | `scoreboard_columns` | `default` | `` | game/hud/ScoreboardPanel.cs:2711 | Register |
 | `hud_panel_weapons_ammo_full_nails` | `320` | `200` | game/hud/WeaponsPanel.cs:642 | Register |
 | `hud_panel_weapons_orderbyimpulse` | `1` | `0` | game/hud/WeaponsPanel.cs:658 | Register |
-| `cl_netfps` | `64` | `72` | game/menu/framework/ClientSettings.cs:154 | Register |
-| `cl_movement_errorcompensation` | `1` | `0` | game/menu/framework/ClientSettings.cs:240 | Register |
-| `volume` | `1` | `0.7` | game/menu/framework/ClientSettings.cs:626 | Register |
-| `bgmvolume` | `0.75` | `1` | game/menu/framework/ClientSettings.cs:627 | Register |
+| `cl_netfps` | `64` | `72` | game/menu/framework/ClientSettings.cs:242 | Register |
+| `cl_movement_errorcompensation` | `1` | `0` | game/menu/framework/ClientSettings.cs:328 | Register |
+| `volume` | `1` | `0.7` | game/menu/framework/ClientSettings.cs:734 | Register |
+| `bgmvolume` | `0.75` | `1` | game/menu/framework/ClientSettings.cs:735 | Register |
 | `g_powerups` | `-1` | `0` | src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:513 | fallback |
 | `g_pickup_items` | `-1` | `0` | src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:515 | fallback |
 | `g_ctf_allow_vehicle_carry` | `1` | `0` | src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:2155 | fallback |
@@ -76,7 +78,7 @@ with the Base effective value. Bites on any path that reads before/without the c
 | `g_instagib_extralives` | `1` | `0` | src/VortexArena.Common/Gameplay/Vehicles/Bumblebee.cs:806 | fallback |
 | `g_vehicles_enter` | `0` | `1` | src/VortexArena.Common/Gameplay/Vehicles/VehicleCommon.cs:852 | fallback |
 | `g_rm_laser_damage` | `80` | `150` | src/VortexArena.Common/Gameplay/Weapons/Vaporizer.cs:447 | fallback |
-| `g_sandbox` | `0` | `g_sandbox <subcommand> [args] — sandbox build mode (object_spawn/edit/attach/…)` | src/VortexArena.Server/Commands.cs:892 | Register |
+| `g_sandbox` | `0` | `g_sandbox <subcommand> [args] — sandbox build mode (object_spawn/edit/attach/…)` | src/VortexArena.Server/Commands.cs:917 | Register |
 | `g_warmup_start_ammo_cells` | `90` | `30` | src/VortexArena.Server/Cvars.cs:291 | table |
 | `g_balance_contents_playerdamage_drowning` | `20` | `30` | src/VortexArena.Server/Cvars.cs:296 | table |
 | `g_balance_contents_playerdamage_lava_burn_time` | `2.5` | `5` | src/VortexArena.Server/Cvars.cs:300 | table |
@@ -87,16 +89,16 @@ with the Base effective value. Bites on any path that reads before/without the c
 | `bot_ai_custom_weapon_priority_close` | `vaporizer oknex vortex okshotgun shotgun okmachinegun machinegun arc hlac tuba seeker hagar crylink mortar electro devastator blaster fireball rifle minelayer` | `` | src/VortexArena.Server/Cvars.cs:374 | table |
 | `sv_maxidle_alsokickspectators` | `1` | `0` | src/VortexArena.Server/Cvars.cs:391 | table |
 | `sv_maxidle_slots_countbots` | `1` | `0` | src/VortexArena.Server/Cvars.cs:393 | table |
-| `hostname` | `Xonotic  Server` | `Xonotic VortexArena Server` | src/VortexArena.Server/Cvars.cs:400 | table |
-| `sv_eventlog_console` | `1` | `0` | src/VortexArena.Server/Cvars.cs:454 | table |
-| `sv_eventlog_files_nameprefix` | `xonotic` | `ServerLog-` | src/VortexArena.Server/Cvars.cs:457 | table |
-| `g_playerstats_gamereport_uri` | `https://stats.xonotic.org/stats/submit` | `` | src/VortexArena.Server/Cvars.cs:461 | table |
-| `lastlevel` | `` | `0` | src/VortexArena.Server/Cvars.cs:533 | table |
-| `g_pickup_items` | `-1` | `1` | src/VortexArena.Server/Cvars.cs:550 | table |
-| `g_pickup_weapons_anyway` | `1` | `0` | src/VortexArena.Server/Cvars.cs:553 | table |
-| `g_powerups` | `-1` | `1` | src/VortexArena.Server/Cvars.cs:556 | table |
+| `hostname` | `Xonotic  Server` | `Vortex Arena Server` | src/VortexArena.Server/Cvars.cs:400 | table |
+| `sv_eventlog_console` | `1` | `0` | src/VortexArena.Server/Cvars.cs:482 | table |
+| `sv_eventlog_files_nameprefix` | `xonotic` | `ServerLog-` | src/VortexArena.Server/Cvars.cs:485 | table |
+| `g_playerstats_gamereport_uri` | `https://stats.xonotic.org/stats/submit` | `` | src/VortexArena.Server/Cvars.cs:489 | table |
+| `lastlevel` | `` | `0` | src/VortexArena.Server/Cvars.cs:561 | table |
+| `g_pickup_items` | `-1` | `1` | src/VortexArena.Server/Cvars.cs:578 | table |
+| `g_pickup_weapons_anyway` | `1` | `0` | src/VortexArena.Server/Cvars.cs:581 | table |
+| `g_powerups` | `-1` | `1` | src/VortexArena.Server/Cvars.cs:584 | table |
 
-## 5. Base-effective cvars never referenced in port source (1548)
+## 5. Base-effective cvars never referenced in port source (1523)
 
 No string-literal occurrence anywhere under src/ or game/ — dead-setting candidates (the
 graphics-stub class) or subsystems the port genuinely lacks. Interpolated reads
@@ -109,18 +111,18 @@ may be read via string concat — check before filing). `g_physics_<set>_*` and
 - `help_` ×72: `help_msg_0`, `help_msg_1`, `help_msg_10`, `help_msg_11`, `help_msg_12`, `help_msg_13`, `help_msg_14`, `help_msg_15` …
 - `sv_` ×69: `sv_accuracy_data_send`, `sv_accuracy_data_share`, `sv_allowdownloads`, `sv_allowdownloads_inarchive`, `sv_areagrid_link_SOLID_NOT`, `sv_autopause`, `sv_clmovement_inputtimeout`, `sv_cullentities_trace` …
 - `r_` ×41: `r_bloom_blur`, `r_bloom_brighten`, `r_bloom_colorexponent`, `r_bloom_colorscale`, `r_bloom_colorsubtract`, `r_bloom_resolution`, `r_bloom_scenebrightness`, `r_cullentities_trace` …
-- `menu_` ×28: `menu_cl_gunalign`, `menu_forced_saved_cvars`, `menu_gamemenu`, `menu_mouse_speed`, `menu_no_music_nor_welcome`, `menu_picmip_bypass`, `menu_reverted_nonsaved_cvars`, `menu_showboxes` …
 - `scoreboard_` ×24: `scoreboard_accuracy`, `scoreboard_accuracy_border_thickness`, `scoreboard_accuracy_doublerows`, `scoreboard_accuracy_nocolors`, `scoreboard_alpha_bg`, `scoreboard_alpha_fg`, `scoreboard_alpha_name`, `scoreboard_alpha_name_self` …
 - `scr_` ×22: `scr_conalpha`, `scr_conalpha2factor`, `scr_conalpha3factor`, `scr_conalphafactor`, `scr_conbrightness`, `scr_conforcewhiledisconnected`, `scr_conscroll2_x`, `scr_conscroll2_y` …
 - `_` ×19: `_backup_con_chatvars_set`, `_cl_rate`, `_con_chat_maximized`, `_hud_panel_quickmenu_file_from_server`, `_hud_showbinds_reload`, `_menu_credits_export`, `_menu_initialized`, `_menu_vid_desktopfullscreen` …
 - `con_` ×17: `con_chat`, `con_chatpos`, `con_chatwidth`, `con_completion_chmap`, `con_completion_devmap`, `con_completion_exec`, `con_completion_gotomap`, `con_completion_playdemo` …
-- `(bare)` ×16: `debugdraw`, `debugtrace`, `edgefriction`, `freelook`, `joyadvanced`, `joyadvaxisr`, `joyadvaxisx`, `joyadvaxisy` …
+- `(bare)` ×15: `debugdraw`, `debugtrace`, `edgefriction`, `freelook`, `joyadvanced`, `joyadvaxisr`, `joyadvaxisx`, `joyadvaxisy` …
 - `hud_` ×15: `hud_contents`, `hud_contents_blur`, `hud_contents_blur_alpha`, `hud_contents_factor`, `hud_contents_lava_color`, `hud_contents_slime_color`, `hud_contents_water_color`, `hud_cursormode` …
 - `camera_` ×12: `camera_chase_smoothly`, `camera_enable`, `camera_forward_follows`, `camera_free`, `camera_look_attenuation`, `camera_look_player`, `camera_mouse_threshold`, `camera_reset` …
-- `gl_` ×12: `gl_flashblend`, `gl_picmip_other`, `gl_picmip_sprites`, `gl_picmip_world`, `gl_polyblend`, `gl_texturecompression_2d`, `gl_texturecompression_color`, `gl_texturecompression_gloss` …
+- `menu_` ×11: `menu_cl_gunalign`, `menu_forced_saved_cvars`, `menu_gamemenu`, `menu_mouse_speed`, `menu_no_music_nor_welcome`, `menu_picmip_bypass`, `menu_reverted_nonsaved_cvars`, `menu_showboxes` …
 - `vid_` ×8: `vid_conwidth`, `vid_desktopfullscreen`, `vid_gl13`, `vid_netwmfullscreen`, `vid_pixelheight`, `vid_sRGB`, `vid_sRGB_fallback`, `vid_x11_display`
 - `joy_` ×7: `joy_deadzoneforward`, `joy_deadzonepitch`, `joy_deadzoneside`, `joy_deadzoneup`, `joy_deadzoneyaw`, `joy_sensitivitypitch`, `joy_sensitivityyaw`
 - `bot_` ×5: `bot_ai_dodgeupdateinterval`, `bot_ai_navigation_jetpack`, `bot_ai_navigation_jetpack_mindistance`, `bot_debug_goalstack`, `bot_debug_tracewalk`
+- `gl_` ×5: `gl_flashblend`, `gl_picmip_other`, `gl_picmip_sprites`, `gl_picmip_world`, `gl_polyblend`
 - `accuracy_` ×4: `accuracy_color0`, `accuracy_color1`, `accuracy_color2`, `accuracy_color_levels`
 - `mod_` ×4: `mod_q3bsp_sRGBlightmaps`, `mod_q3shader_default_polygonfactor`, `mod_q3shader_default_polygonoffset`, `mod_q3shader_force_terrain_alphaflag`
 - `debug_` ×3: `debug_text_3d_default_align`, `debug_text_3d_default_duration`, `debug_text_3d_default_velocity`

@@ -1,6 +1,13 @@
 {
- "generated": "2026-07-30",
- "value_diffs": [],
+ "generated": "2026-08-02",
+ "value_diffs": [
+  {
+   "name": "hostname",
+   "base": "Xonotic  Server",
+   "port": "Vortex  Server",
+   "src": "vortex-server.cfg"
+  }
+ ],
  "base_only": [],
  "port_only": [],
  "code_mismatch": [
@@ -99,28 +106,28 @@
    "name": "cl_netfps",
    "base": "64",
    "code": "72",
-   "where": "game/menu/framework/ClientSettings.cs:154",
+   "where": "game/menu/framework/ClientSettings.cs:242",
    "kind": "Register"
   },
   {
    "name": "cl_movement_errorcompensation",
    "base": "1",
    "code": "0",
-   "where": "game/menu/framework/ClientSettings.cs:240",
+   "where": "game/menu/framework/ClientSettings.cs:328",
    "kind": "Register"
   },
   {
    "name": "volume",
    "base": "1",
    "code": "0.7",
-   "where": "game/menu/framework/ClientSettings.cs:626",
+   "where": "game/menu/framework/ClientSettings.cs:734",
    "kind": "Register"
   },
   {
    "name": "bgmvolume",
    "base": "0.75",
    "code": "1",
-   "where": "game/menu/framework/ClientSettings.cs:627",
+   "where": "game/menu/framework/ClientSettings.cs:735",
    "kind": "Register"
   },
   {
@@ -267,7 +274,7 @@
    "name": "g_sandbox",
    "base": "0",
    "code": "g_sandbox <subcommand> [args] \u2014 sandbox build mode (object_spawn/edit/attach/\u2026)",
-   "where": "src/VortexArena.Server/Commands.cs:892",
+   "where": "src/VortexArena.Server/Commands.cs:917",
    "kind": "Register"
   },
   {
@@ -343,7 +350,7 @@
   {
    "name": "hostname",
    "base": "Xonotic  Server",
-   "code": "Xonotic VortexArena Server",
+   "code": "Vortex Arena Server",
    "where": "src/VortexArena.Server/Cvars.cs:400",
    "kind": "table"
   },
@@ -351,49 +358,49 @@
    "name": "sv_eventlog_console",
    "base": "1",
    "code": "0",
-   "where": "src/VortexArena.Server/Cvars.cs:454",
+   "where": "src/VortexArena.Server/Cvars.cs:482",
    "kind": "table"
   },
   {
    "name": "sv_eventlog_files_nameprefix",
    "base": "xonotic",
    "code": "ServerLog-",
-   "where": "src/VortexArena.Server/Cvars.cs:457",
+   "where": "src/VortexArena.Server/Cvars.cs:485",
    "kind": "table"
   },
   {
    "name": "g_playerstats_gamereport_uri",
    "base": "https://stats.xonotic.org/stats/submit",
    "code": "",
-   "where": "src/VortexArena.Server/Cvars.cs:461",
+   "where": "src/VortexArena.Server/Cvars.cs:489",
    "kind": "table"
   },
   {
    "name": "lastlevel",
    "base": "",
    "code": "0",
-   "where": "src/VortexArena.Server/Cvars.cs:533",
+   "where": "src/VortexArena.Server/Cvars.cs:561",
    "kind": "table"
   },
   {
    "name": "g_pickup_items",
    "base": "-1",
    "code": "1",
-   "where": "src/VortexArena.Server/Cvars.cs:550",
+   "where": "src/VortexArena.Server/Cvars.cs:578",
    "kind": "table"
   },
   {
    "name": "g_pickup_weapons_anyway",
    "base": "1",
    "code": "0",
-   "where": "src/VortexArena.Server/Cvars.cs:553",
+   "where": "src/VortexArena.Server/Cvars.cs:581",
    "kind": "table"
   },
   {
    "name": "g_powerups",
    "base": "-1",
    "code": "1",
-   "where": "src/VortexArena.Server/Cvars.cs:556",
+   "where": "src/VortexArena.Server/Cvars.cs:584",
    "kind": "table"
   }
  ],
@@ -1525,13 +1532,6 @@
   "gl_picmip_sprites",
   "gl_picmip_world",
   "gl_polyblend",
-  "gl_texturecompression_2d",
-  "gl_texturecompression_color",
-  "gl_texturecompression_gloss",
-  "gl_texturecompression_glow",
-  "gl_texturecompression_lightcubemaps",
-  "gl_texturecompression_q3bsplightmaps",
-  "gl_texturecompression_sky",
   "help_msg_0",
   "help_msg_1",
   "help_msg_10",
@@ -1636,7 +1636,6 @@
   "joyyawsensitivity",
   "locs_enable",
   "loddebug",
-  "maxplayers",
   "menu_cl_gunalign",
   "menu_forced_saved_cvars",
   "menu_gamemenu",
@@ -1645,23 +1644,6 @@
   "menu_picmip_bypass",
   "menu_reverted_nonsaved_cvars",
   "menu_showboxes",
-  "menu_slist_categories_CAT_DEFRAG_override",
-  "menu_slist_categories_CAT_FAVORITED_override",
-  "menu_slist_categories_CAT_INSTAGIB_override",
-  "menu_slist_categories_CAT_MODIFIED_override",
-  "menu_slist_categories_CAT_NORMAL_override",
-  "menu_slist_categories_CAT_OVERKILL_override",
-  "menu_slist_categories_CAT_RECOMMENDED_override",
-  "menu_slist_categories_CAT_SERVERS_override",
-  "menu_slist_categories_CAT_XPM_override",
-  "menu_slist_categories_onlyifmultiple",
-  "menu_slist_modfilter",
-  "menu_slist_modimpurity",
-  "menu_slist_recommendations",
-  "menu_slist_recommendations_maxping",
-  "menu_slist_recommendations_minfreeslots",
-  "menu_slist_recommendations_minhumans",
-  "menu_slist_recommendations_purethreshold",
   "menu_slowmo",
   "menu_use_default_hostname",
   "menu_vid_allowdualscreenresolution",

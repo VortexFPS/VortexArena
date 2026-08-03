@@ -80,6 +80,11 @@ common/physics_jitter_fix=0.0
 ; Watch: godot#112452 (CommandQueueMT contention with background resource loading) is directly relevant to
 ; BackgroundAssetStreamer/IdleWarmer - if streaming stalls appear, that is the suspect.
 ;
+; TO BACK IT OUT ON ONE MACHINE, DO NOT EDIT THIS LINE: `./vx build --no-render-thread` writes an
+; override.cfg (gitignored, and ignored by --export-release, so it cannot ride along in a commit or leak
+; into a release), `--render-thread` removes it, and `./vx doctor` reports which state a tree is in.
+; docs/RUNNING.md -> "--no-render-thread". Editing the value here changes it for EVERYONE.
+;
 ; KNOWN, BENIGN, NOT OURS - every exit under this setting ends with:
 ;     ERROR: This function (finalize) can only be called from the render thread.  (rendering_device.cpp)
 ;     WARNING: ObjectDB instances leaked at exit  (2 raw `Object`s; --verbose names no class)

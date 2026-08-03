@@ -21,6 +21,24 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 PROJ="$ROOT/tools/vx/Vx.csproj"
 DLL="$ROOT/tools/vx/bin/Release/net8.0/vx.dll"
 
+# Every project in this tree targets net8.0, and a host that has only a NEWER .NET refuses to START a net8.0
+# app even though the BUILD just succeeded: global.json rolls the SDK forward, and nothing rolled the RUNTIME
+# forward. The symptom names the wrong culprit —
+#
+#     Framework: 'Microsoft.NETCore.App', version '8.0.0'
+#     The following frameworks were found:  10.0.3 at [/opt/dotnet-sdk-bin-10.0/shared/...]
+#
+# — so it reads as "install 8.0", and on a distro that installs each SDK under its OWN prefix (Gentoo's
+# /opt/dotnet-sdk-bin-<ver>, via eselect dotnet) doing that DOES NOT HELP: the 10.0 host only ever looks
+# inside its own root, so the freshly-installed 8.0 is invisible to it. Reported 2026-08-03 on Calculate
+# Linux, twice — once before installing 8.0 and once after.
+#
+# EXPORTED, not just set, and that is the load-bearing part: every `dotnet` vx goes on to run — the build
+# below, and `vx build` / `vx test` / `vx ci` on the other side of the handover — inherits it. Vx.csproj
+# carries the same policy properly in vx.runtimeconfig.json, but only for a dll rebuilt since; this covers
+# the stale one, which is the exact moment someone hits this. An explicit value from the caller wins.
+export DOTNET_ROLL_FORWARD="${DOTNET_ROLL_FORWARD:-LatestMajor}"
+
 if ! command -v dotnet >/dev/null 2>&1; then
     cat >&2 <<'EOF'
 

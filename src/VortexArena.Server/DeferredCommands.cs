@@ -68,7 +68,13 @@ public sealed class DeferredCommands
         {
             float remaining = e.FireTime - now;
             // DP prints current->delay (the field it decrements each frame) with %9.2f.
-            lines.Add($"-> In {remaining,9:0.00}: {e.Command}");
+            //
+            // INVARIANT, not CurrentCulture: C's %9.2f is locale-independent in DP's C locale, and plain
+            // interpolation here is not — under ru_RU this printed "-> In      1,50: restart", which is both
+            // wrong against DP and unparseable by anything that reads console output back. Caught on a
+            // contributor's Russian-locale box, 2026-08-03; the same hazard is unfixed across the tree
+            // (~191 culture-sensitive format/parse sites), so this is one site, not the class of bug.
+            lines.Add(FormattableString.Invariant($"-> In {remaining,9:0.00}: {e.Command}"));
         }
         return lines;
     }

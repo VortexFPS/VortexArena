@@ -41,6 +41,12 @@ _scratch/*
 # (TestResults/) are already covered by the [Tt]est[Rr]esults/ rule above.
 /dist/
 
+# Per-machine ProjectSettings overrides, e.g. `./vx build --no-render-thread`. Godot merges this over
+# project.godot when it RUNS the project and ignores it when the editor exports, so it is a local fallback
+# by construction — and untracked on purpose, because a machine-specific workaround riding along in someone
+# else's commit is precisely what having a separate file avoids.
+/override.cfg
+
 # Repo-local Godot install. tools/lib/find-godot.sh probes this BEFORE PATH, so a clone can pin its own
 # engine without touching the machine and two clones can disagree about the version; `./vx setup` will
 # install here. Never committed — it is a ~100 MB binary, and which one you want is a per-machine choice.

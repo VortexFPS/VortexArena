@@ -14,9 +14,28 @@
     See planning/bootstrap-and-task-runner-2026-08-01.md.
   -->
 
+  <!--
+    RollForward is the RUNTIME half of what global.json already does for the SDK, and leaving it out cost a
+    contributor their first run (2026-08-03, Calculate Linux / Gentoo, dotnet-sdk-bin-10.0):
+
+        You must install or update .NET to run this application.
+        Framework: 'Microsoft.NETCore.App', version '8.0.0' (x64)
+        The following frameworks were found:  10.0.3 at [/opt/dotnet-sdk-bin-10.0/shared/...]
+
+    The BUILD succeeded — global.json's rollForward latestMajor let SDK 10 compile a net8.0 assembly. Only
+    the LAUNCH failed, because the host's default policy rolls forward on patch WITHIN a major and stops:
+    a net8.0 app will not start on a 10.x runtime unless it says so. Distros that ship exactly one .NET are
+    the common case, so "install 8.0 as well" is the wrong ask when the tool is version-agnostic anyway —
+    vx uses nothing newer than the BCL and has no PackageReference to constrain it.
+
+    LatestMajor rather than Major: pick the newest runtime present, not the oldest that satisfies us, so a
+    box with 8 and 10 behaves like a box with 10. Both shims also export DOTNET_ROLL_FORWARD as a belt —
+    this property only reaches a dll that has been REBUILT since, and the shim is what rebuilds it.
+  -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
     <AssemblyName>vx</AssemblyName>
     <RootNamespace>Vx</RootNamespace>
     <Nullable>enable</Nullable>

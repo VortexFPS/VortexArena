@@ -59,6 +59,35 @@ dotnet build VortexArena.csproj -c Debug
 
 The SourceGen analyzer: `dotnet build src/VortexArena.SourceGen/VortexArena.SourceGen.csproj`.
 
+### `--no-render-thread` — when the separate render thread is the problem
+
+`project.godot` ships `rendering/driver/threads/thread_model=2` (separate render thread): the render pass is
+pipelined onto its own thread, so the frame costs `max(proc, draw)` instead of `proc + draw`. That was worth
++13% fps on the dev box — and upstream still labels the mode **experimental**, with open reports around
+resize, particles, and `CommandQueueMT` contention with background loading
+([godot#112452](https://github.com/godotengine/godot/issues/112452), directly relevant to
+`BackgroundAssetStreamer`/`IdleWarmer`). If a machine hits one of those, back it out:
+
+```bash
+./vx build --no-render-thread     # Godot's default (thread_model=1); ./vx build --render-thread undoes it
+```
+
+- **It is sticky.** The flag writes an `override.cfg` — a Godot mechanism, merged over `project.godot` at
+  startup — and it stays until you pass `--render-thread`. `./vx doctor` reports the state and `./vx run`
+  says so on every launch, because it changes frame times and is otherwise invisible from inside the game.
+- **It is written in two places**, because Godot resolves `override.cfg` relative to whatever is running:
+  the repo root (for `./vx run debug`, which runs the project directory) and `dist/<preset>/` next to each
+  exported binary (for `./vx run`). `./vx export` re-applies it, so a fresh export doesn't silently come
+  back with the render thread on.
+- **It cannot leak into a release.** `--export-release` puts the engine in editor mode, and editor mode
+  passes `p_ignore_override = true` — so the exporter serialises project settings that never saw the file.
+  A clone with the override on still produces a stock export. (Verified against the pinned 4.6.3 source:
+  `project_settings.cpp:749-750`, `main.cpp:1637-1640` and `main.cpp:2056`.)
+- `override.cfg` is gitignored, so the workaround can't ride along in an unrelated commit.
+
+**A player** hitting the same bug doesn't need vx: drop a file called `override.cfg` next to the game
+executable containing `[rendering]` and `driver/threads/thread_model=1`, on their own two lines.
+
 ---
 
 ## CI (GitHub Actions + the local mirror)

@@ -26,6 +26,17 @@ internal static class Wrappers
         // `--clean` is the explicit full-rebuild escape (dotnet clean for that config, then build).
         string config = ValueOf(args, "--config") ?? (args.Contains("debug") || args.Contains("--debug") ? "Debug" : "Release");
         bool clean = args.Contains("--clean");
+
+        // --no-render-thread / --render-thread do not affect the C# compile at all — they are a Godot
+        // PROJECT SETTING, applied here because "build me a client that works on this machine" is when a
+        // person reaches for it, and because doing it as part of the build is what makes it stick for the
+        // `vx run` that follows. See RenderThread for the whole mechanism.
+        if (RenderThreadFlag(args) is { } separate)
+        {
+            int rc = RenderThread.Apply(separate);
+            if (rc != 0) return rc;
+        }
+
         string? dotnet = Env.Which("dotnet");
         if (dotnet is null) { NoDotnet(); return 1; }
         string proj = Path.Combine(Env.RepoRoot, "VortexArena.csproj");
@@ -81,8 +92,23 @@ internal static class Wrappers
         bool debug = args.Contains("debug") || args.Contains("--debug");
         bool skipCheck = args.Contains("--no-build-check") || args.Contains("-n");
         string[] gameArgs = args
-            .Where(a => a is not ("debug" or "--debug" or "--release" or "--no-build-check" or "-n"))
+            .Where(a => a is not ("debug" or "--debug" or "--release" or "--no-build-check" or "-n"
+                                  or "--no-render-thread" or "--render-thread"))
             .ToArray();
+
+        // Accepted here as well as on `build` because this is where someone chasing a crash actually is.
+        if (RenderThreadFlag(args) is { } separate)
+        {
+            int rc = RenderThread.Apply(separate);
+            if (rc != 0) return rc;
+        }
+        else if (RenderThread.DisabledAtRoot())
+        {
+            // Unprompted, every launch, for the same reason both run paths announce which build they picked:
+            // this changes frame times, it persists across sessions, and it is invisible in the game.
+            Console.WriteLine("→ separate render thread OFF (override.cfg) — frame times are not comparable "
+                            + "to a default build");
+        }
 
         return debug ? RunProject(gameArgs, skipCheck) : RunRelease(gameArgs, skipCheck);
     }
@@ -235,7 +261,7 @@ internal static class Wrappers
     // ---- release ---------------------------------------------------------------------------------------
 
     /// <summary>Export presets and their output binary, mirroring export_presets.cfg and package.sh.</summary>
-    private static readonly (string Preset, string Out)[] Presets =
+    internal static readonly (string Preset, string Out)[] Presets =
     [
         ("windows-client",  "dist/windows-client/VortexArena.exe"),
         ("linux-client",    "dist/linux-client/VortexArena.x86_64"),
@@ -298,6 +324,10 @@ internal static class Wrappers
             }
             Console.WriteLine($"   ok: {outRel}");
         }
+
+        // A fresh dist/ has no override.cfg, so without this an export silently re-enables the render thread
+        // for `vx run` while `vx run debug` stays off — the switch would appear to work intermittently.
+        RenderThread.Sync();
         return 0;
     }
 
@@ -372,6 +402,16 @@ internal static class Wrappers
         int i = Array.IndexOf(args, flag);
         return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
     }
+
+    /// <summary>
+    /// The requested render-thread state, or null when neither flag was given. Returning null rather than
+    /// defaulting to true is the point: the switch is STICKY (it is a file on disk), so a plain `vx build`
+    /// must leave it exactly as the last explicit instruction set it.
+    /// </summary>
+    private static bool? RenderThreadFlag(string[] args)
+        => args.Contains("--no-render-thread") ? false
+         : args.Contains("--render-thread") ? true
+         : null;
 
     /// <summary>Everything except <paramref name="consumed"/> and its value, so extra flags reach the tool.</summary>
     private static IEnumerable<string> PassThrough(string[] args, string consumed)

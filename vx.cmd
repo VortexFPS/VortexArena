@@ -19,6 +19,15 @@ set "VX_PROJ=%VX_ROOT%\tools\vx\Vx.csproj"
 set "VX_OUTDIR=%VX_ROOT%\tools\vx\bin\Release\net8.0"
 set "VX_DLL=%VX_OUTDIR%\vx.dll"
 
+REM Every project in this tree targets net8.0, and a host that has only a NEWER .NET refuses to START a
+REM net8.0 app even though the build just succeeded ("Framework: 'Microsoft.NETCore.App', version '8.0.0' ...
+REM The following frameworks were found: 10.0.3"). global.json rolls the SDK forward; this rolls the RUNTIME
+REM forward, for this dll and for every `dotnet` vx goes on to run. See ./vx for the full note - it is a
+REM Linux report, but the same policy gap exists wherever the installed runtime is newer than the target.
+REM Unlike the other names here it is NOT VX_-prefixed on purpose: the .NET host is the intended reader.
+REM (Unset-guarded so an explicit value from the caller wins.)
+if not defined DOTNET_ROLL_FORWARD set "DOTNET_ROLL_FORWARD=LatestMajor"
+
 where dotnet >nul 2>&1
 if errorlevel 1 (
     echo.

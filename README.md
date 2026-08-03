@@ -116,12 +116,26 @@ cd VortexArena
 ```
 
 `vx setup` has profiles for the different jobs — `--profile play`, `dev`, `server`, `ci` — and everything it
-installs goes into **`.godot-bin/` inside the clone**, never system-wide. Uninstalling is `rm -rf`, and two
-clones can pin two different engine versions. It never runs `sudo`; system packages are printed for you to
-run yourself.
+installs on its own authority goes into **`.godot-bin/` inside the clone**, never system-wide. Uninstalling is
+`rm -rf`, and two clones can pin two different engine versions.
+
+System packages are a separate, opt-in step. By default `vx setup` prints the exact command for **your**
+package manager — it detects `apt`, `dnf`, `pacman`, `zypper`, `apk`, `emerge`, `xbps`, `eopkg`, `brew`,
+`port`, `winget`, `choco` and `scoop` from `/etc/os-release` plus what's actually on `PATH` — and changes
+nothing. Add `--install-deps` and those become numbered steps in the plan, each showing the literal command
+line, run only after you confirm it:
+
+```bash
+./vx setup --install-deps
+```
+
+That path will run `sudo`, having shown you what it is about to run. The `ci` and `launcher` profiles refuse
+system installs outright, since both run unattended. When a package name isn't known for your manager, vx
+prints its *search* command rather than guessing a name.
 
 `./vx doctor` reports what's installed and what's missing without changing anything, which is the right first
-command when something won't build.
+command when something won't build. Its suggestions are resolved against the detected package manager too,
+so they're commands you can run rather than a menu of three distros to pick from.
 
 #### Storage for a dev clone
 

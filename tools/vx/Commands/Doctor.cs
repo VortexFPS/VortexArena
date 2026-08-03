@@ -59,6 +59,30 @@ internal static class Doctor
             bool ok = int.TryParse(newest.Split('.')[0], out int major) && major >= 8;
             yield return new Check(".NET SDK", ok ? Status.Ok : Status.Missing, $"{newest}  ({dotnet})",
                 Required: true, Fix: ok ? null : "need 8.0 or newer — https://dotnet.microsoft.com/download");
+
+            // The RUNTIME is a separate question from the SDK, and conflating them cost a contributor two
+            // rounds of "install .NET 8" that changed nothing (2026-08-03, Gentoo/Calculate: SDK 8 and 10
+            // both merged, but each lives under its own /opt prefix and the selected 10.0 host only ever
+            // looks inside its own root). Everything here targets net8.0; a host with no 8.x refuses to
+            // start it unless something rolls forward, which the shims now do — so this is reported as
+            // WORKING-BUT-WORTH-KNOWING rather than as a fault, and named so the next person recognises
+            // the error text when they meet it outside vx.
+            string[] runtimes = Env.Run(dotnet, "--list-runtimes").Out
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Where(l => l.StartsWith("Microsoft.NETCore.App ", StringComparison.Ordinal))
+                .Select(l => l.Split(' ')[1])
+                .ToArray();
+            if (runtimes.Length == 0)
+                yield return new Check(".NET runtime", Status.Warn, "none reported by --list-runtimes",
+                    Fix: "the SDK normally carries one; a partial install is the usual cause");
+            else
+            {
+                bool native = runtimes.Any(r => r.StartsWith("8.", StringComparison.Ordinal));
+                yield return new Check(".NET runtime", Status.Ok,
+                    $"{string.Join(", ", runtimes)}"
+                    + (native ? "  (8.x present — no roll-forward needed)"
+                              : "  (no 8.x — rolling net8.0 forward via DOTNET_ROLL_FORWARD=LatestMajor)"));
+            }
         }
 
         // --- Python: still required until the fetchers migrate (plan, stage 2) -----------------------
@@ -68,10 +92,12 @@ internal static class Doctor
             string envSet = Environment.GetEnvironmentVariable("PYTHON") is { Length: > 0 } p
                 ? $"$PYTHON is set to '{p}' but is not a working Python >= 3.8"
                 : "not found (tried python3, python)";
+            // The suggestion is resolved against the DETECTED package manager rather than named as a
+            // three-distro guess, which is what it used to be. See Packages for why that mattered.
             yield return new Check("Python 3", Status.Missing, envSet, Required: true,
-                Fix: Env.IsMacOS ? "xcode-select --install"
+                Fix: Packages.Advice("python3", Env.IsMacOS ? "xcode-select --install"
                     : Env.IsWindows ? "https://www.python.org/downloads/  (tick 'Add python.exe to PATH')"
-                    : "apt/dnf/pacman install python3");
+                    : "install python3 with your distro's package manager"));
         }
         else
         {
@@ -105,7 +131,8 @@ internal static class Doctor
         // --- git -------------------------------------------------------------------------------------
         string? git = Env.Which("git");
         yield return git is null
-            ? new Check("git", Status.Missing, "not on PATH", Required: true, Fix: "install git")
+            ? new Check("git", Status.Missing, "not on PATH", Required: true,
+                Fix: Packages.Advice("git", "install git — https://git-scm.com/downloads"))
             : new Check("git", Status.Ok, Env.Run(git, "--version").Out);
 
         // --- Godot: needed to RUN or EXPORT, not to build or test ------------------------------------
@@ -131,14 +158,23 @@ internal static class Doctor
         string? to = Env.Which("timeout") ?? Env.Which("gtimeout");
         yield return new Check("timeout", to is null ? Status.Warn : Status.Ok,
             to ?? "absent — tools/lib/run-timeout.sh uses its shell fallback",
-            Fix: to is null && Env.IsMacOS ? "optional: brew install coreutils (provides gtimeout)" : null);
+            Fix: to is null && Env.IsMacOS
+                ? $"optional: {Packages.Advice("coreutils", "brew install coreutils")}  (provides gtimeout)"
+                : null);
 
         // --- helpers the fetch/package paths shell out to ---------------------------------------------
         foreach (string t in new[] { "curl", "unzip" })
         {
             string? hit = Env.Which(t);
-            yield return new Check(t, hit is null ? Status.Warn : Status.Ok, hit ?? "not on PATH");
+            yield return new Check(t, hit is null ? Status.Warn : Status.Ok, hit ?? "not on PATH",
+                Fix: hit is null ? Packages.Advice(t, $"install {t}") : null);
         }
+
+        // Named explicitly so `--install-deps` is a discoverable option rather than one buried in --help,
+        // and so a machine where detection FAILED says so here instead of silently offering worse advice.
+        yield return Packages.Detected is null
+            ? new Check("package manager", Status.Warn, "none recognised on PATH — suggestions fall back to download links")
+            : new Check("package manager", Status.Ok, $"{Packages.Detected.Id}  ({Packages.Detected.Exe})");
     }
 
     private static IEnumerable<Check> Content()
@@ -171,6 +207,17 @@ internal static class Doctor
         string bin = Path.Combine(root, ".godot-bin");
         yield return new Check(".godot-bin/", Directory.Exists(bin) ? Status.Ok : Status.Warn,
             Directory.Exists(bin) ? "present" : "absent (fine — Godot may be installed system-wide)");
+
+        // Reported ALWAYS, not only when overridden. An override.cfg is untracked, persists across sessions
+        // and is invisible from inside the game, so the state this tree is in has to be sayable out loud —
+        // otherwise it becomes the thing that quietly explains a frame-time result nobody can reproduce.
+        List<RenderThread.Site> sites = RenderThread.Sites();
+        RenderThread.Site[] off = sites.Where(s => s.Overridden).ToArray();
+        yield return off.Length == 0
+            ? new Check("render thread", Status.Ok, "separate (project.godot thread_model=2)")
+            : new Check("render thread", Status.Warn,
+                $"DISABLED for {off.Length} of {sites.Count} target(s): {string.Join(", ", off.Select(s => s.Label))}",
+                Fix: "frame times are not comparable to a default build — './vx build --render-thread' restores it");
     }
 
     // ---------------------------------------------------------------------------------------------------

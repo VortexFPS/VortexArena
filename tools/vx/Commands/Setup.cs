@@ -9,32 +9,63 @@ namespace Vx.Commands;
 ///
 /// <para><b>Install policy, which is the part worth getting right.</b> Installing software is the most
 /// invasive thing a setup script does and where these tools usually earn their reputation. So: nothing
-/// happens without an explicit yes (<c>--yes</c>, or an interactive confirmation — never a default); no
-/// <c>sudo</c> is ever run, only printed for the person to run themselves; and everything vx installs goes
-/// into <c>.godot-bin/</c> INSIDE the clone rather than system-wide, so uninstalling is <c>rm -rf</c> and
-/// two clones can pin two engine versions. Every action prints the command it is really running.</para>
+/// happens without an explicit yes (<c>--yes</c>, or an interactive confirmation — never a default), and
+/// everything vx installs on its own authority goes into <c>.godot-bin/</c> INSIDE the clone rather than
+/// system-wide, so uninstalling is <c>rm -rf</c> and two clones can pin two engine versions. Every action
+/// prints the command it is really running.</para>
 ///
-/// <para>Package managers are a suggestion, not a mechanism: missing system dependencies are reported with
-/// the exact command for the platform and never wrapped, because when one fails the person needs to see the
-/// real command rather than vx's abstraction of it.</para>
+/// <para><b>System packages are opt-in twice</b> (<c>--install-deps</c>, 2026-08-03). The rule used to be
+/// that vx never ran a package manager at all — it printed <c>"apt/dnf/pacman install python3"</c> and left
+/// the rest to you. That held up badly the first time someone outside the usual three distros tried it: on a
+/// Gentoo derivative the right answer is <c>emerge dev-lang/python</c>, which that string does not contain
+/// and does not hint at. So the line moved, but only by one step:</para>
+/// <list type="bullet">
+///   <item><b>By default, still nothing.</b> The exact command for the DETECTED manager is printed and the
+///         machine is untouched — strictly better advice than before, same blast radius.</item>
+///   <item><b><c>--install-deps</c> adds them to the plan</b>, where they are listed with the literal
+///         command line and then gated on the same confirmation as everything else. Two deliberate acts:
+///         asking for the flag, and confirming the plan.</item>
+///   <item><b>sudo is run, not printed</b> — but only along that path, only with stdio attached so the
+///         password prompt is the real one, and only after the command has been shown. It is never wrapped:
+///         when a package manager fails, the person needs to see what actually ran.</item>
+/// </list>
+/// <para>The <c>ci</c> and <c>launcher</c> profiles refuse system installs outright. Both run unattended, a
+/// sudo prompt there is a hang rather than a question, and neither should be reshaping a host it does not
+/// own. Package-name and manager detection live in <see cref="Packages"/>.</para>
 /// </summary>
 internal static class Setup
 {
-    private sealed record Profile(string Name, string Blurb, bool Godot, bool Maps, bool Templates, bool MayPrompt);
+    /// <param name="MaySystemInstall">
+    /// Whether <c>--install-deps</c> is honoured at all. False for the two unattended profiles: reshaping a
+    /// host you were merely invoked on is not the same permission as setting up the clone you were pointed at.
+    /// </param>
+    private sealed record Profile(string Name, string Blurb, bool Godot, bool Maps, bool Templates,
+                                  bool MayPrompt, bool MaySystemInstall);
 
     private static readonly Profile[] Profiles =
     [
-        new("play",     "run the game: engine + maps",                    true,  true,  true,  true),
-        new("dev",      "develop: engine + maps + export templates",      true,  true,  true,  true),
-        new("server",   "dedicated server: maps only, no editor",         false, true,  true,  true),
-        new("ci",       "non-interactive; installs nothing it is not told to", true,  true,  true,  false),
-        new("launcher", "invoked by VortexLauncher; content only",        false, true,  true,  false),
+        new("play",     "run the game: engine + maps",                    true,  true,  true,  true,  true),
+        new("dev",      "develop: engine + maps + export templates",      true,  true,  true,  true,  true),
+        new("server",   "dedicated server: maps only, no editor",         false, true,  true,  true,  true),
+        new("ci",       "non-interactive; installs nothing it is not told to", true,  true,  true,  false, false),
+        new("launcher", "invoked by VortexLauncher; content only",        false, true,  true,  false, false),
+    ];
+
+    /// <summary>System dependencies vx knows how to name, in the order a fresh clone needs them.</summary>
+    private static readonly (string Dep, Func<bool> Missing, string Fallback)[] SystemDeps =
+    [
+        ("python3", () => Env.FindPython() is null,
+            "install Python 3 — https://www.python.org/downloads/ (tick 'Add to PATH')"),
+        ("git", () => Env.Which("git") is null, "install git — https://git-scm.com/downloads"),
+        ("curl", () => Env.Which("curl") is null, "install curl"),
+        ("unzip", () => Env.Which("unzip") is null, "install unzip"),
     ];
 
     internal static int Run(string[] args, bool json)
     {
         bool yes = args.Contains("--yes") || args.Contains("-y");
         bool dryRun = args.Contains("--dry-run");
+        bool installDeps = args.Contains("--install-deps");
         string? profileName = ValueOf(args, "--profile");
 
         // Interactive only when there is a human AND no profile was named. A profile is the non-interactive
@@ -73,10 +104,36 @@ internal static class Setup
 
         if (Env.Which("dotnet") is null)
             manual.Add("install the .NET SDK 8.0+ — https://dotnet.microsoft.com/download");
-        if (Env.FindPython() is null)
-            manual.Add(Env.IsMacOS ? "xcode-select --install    (provides python3)"
-                : Env.IsWindows ? "install Python 3 — https://www.python.org/downloads/ (tick 'Add to PATH')"
-                : "sudo apt install python3    (or dnf/pacman equivalent)");
+
+        string[] missingDeps = SystemDeps.Where(d => d.Missing()).Select(d => d.Dep).ToArray();
+        if (missingDeps.Length > 0)
+        {
+            bool canInstall = installDeps && profile.MaySystemInstall && Packages.Detected is not null;
+            if (canInstall)
+            {
+                // Named in the plan line with the LITERAL command, because "install 2 packages" is not
+                // something anyone can meaningfully consent to and this is the one step that touches the
+                // machine rather than the clone.
+                string[] known = missingDeps.Where(d => Packages.NameFor(d) is not null).ToArray();
+                if (known.Length > 0)
+                    plan.Add(($"{Packages.Detected!.InstallCommand(known.Select(Packages.NameFor)!)}",
+                              () => Packages.Install(known)));
+                foreach (string d in missingDeps.Except(known))
+                    manual.Add(Packages.Advice(d, Fallback(d)));
+            }
+            else
+            {
+                foreach (string d in missingDeps)
+                    manual.Add(Packages.Advice(d, Fallback(d)));
+
+                if (installDeps && !profile.MaySystemInstall)
+                    manual.Add($"(--install-deps is ignored for the '{profile.Name}' profile — it runs unattended)");
+                else if (installDeps && Packages.Detected is null)
+                    manual.Add("(--install-deps found no supported package manager on PATH)");
+                else if (Packages.Detected is not null)
+                    manual.Add($"...or re-run with --install-deps to have vx run {Packages.Detected.Id} for you");
+            }
+        }
 
         if (profile.Godot && Env.FindGodot() is null)
             plan.Add(($"install Godot {GodotVersion()} (mono) into .godot-bin/", InstallGodot));
@@ -89,7 +146,9 @@ internal static class Setup
 
         if (manual.Count > 0)
         {
-            Console.WriteLine("These are yours to install — vx will not run a package manager or sudo for you:");
+            Console.WriteLine(Packages.Detected is null
+                ? "These are yours to install — no package manager vx recognises is on PATH:"
+                : $"These are yours to install ({Packages.Detected.Id} detected):");
             foreach (string m in manual) Console.WriteLine($"  • {m}");
             Console.WriteLine();
         }
@@ -168,6 +227,15 @@ internal static class Setup
         int i = Array.IndexOf(args, flag);
         return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
     }
+
+    /// <summary>
+    /// What to say about <paramref name="dep"/> when no package manager can name it. Apple's python3 is the
+    /// one case where the answer is not a package at all but a Command Line Tools install.
+    /// </summary>
+    private static string Fallback(string dep)
+        => dep == "python3" && Env.IsMacOS
+            ? "xcode-select --install    (provides python3)"
+            : SystemDeps.First(d => d.Dep == dep).Fallback;
 
     private static JsonNode GodotLock()
     {

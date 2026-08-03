@@ -84,6 +84,12 @@ internal static class Program
                             --profile <p>   play | dev | server | ci | launcher
                             --yes           proceed without confirming
                             --dry-run       print the plan, change nothing
+                            --install-deps  let vx run the detected system package
+                                            manager (apt/dnf/pacman/zypper/apk/
+                                            emerge/xbps/eopkg/brew/winget/...) for
+                                            dependencies it is missing, sudo included.
+                                            Off by default: without it the exact
+                                            command is printed and nothing is touched.
               maps        Install the map packs pinned by data/maps.lock.json.
                             --verify-only   report drift, change nothing
                             --force         re-download everything
@@ -99,6 +105,14 @@ internal static class Program
                             debug           build the Debug config (what `vx run
                                             debug` loads); --config also accepted
                             --clean         full rebuild (dotnet clean first)
+                            --no-render-thread
+                                            fall back to Godot's default single-
+                                            threaded rendering, for a machine that
+                                            hits one of the upstream experimental-
+                                            mode bugs. STICKY (writes override.cfg)
+                                            and it costs frame time — `vx doctor`
+                                            reports it, `vx run` says so on launch.
+                            --render-thread put it back
               test        Run the suite.               --filter <expr>
               run         Launch the client — the RELEASE export from dist/ (what a
                           player runs). Extra args go to the game.

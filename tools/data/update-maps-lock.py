@@ -71,9 +71,14 @@ def main() -> int:
 
     manifest = (json.loads(args.manifest.read_text(encoding="utf-8")) if args.manifest
                 else fetch_manifest(args.repo, args.tag))
-    packs_in = manifest.get("packs")
+    # build/publish.py emits {"schema", "version", "archives": {name: {file, sha256, size}}}. The lockfile
+    # calls the same thing `packs`, and its URL must use the archive's real ASSET filename — `shared` ships
+    # version-stamped (shared-2026.08.pk3) while maps do not — even though fetch-maps.py installs every one
+    # locally as <name>.pk3.
+    packs_in = manifest.get("archives") or manifest.get("packs")
     if not packs_in:
-        sys.exit("error: manifest has no `packs` — is it the maps manifest and not the launcher's?")
+        sys.exit("error: manifest has neither `archives` nor `packs` — is this the maps manifest "
+                 "and not the launcher's latest.json?")
 
     lock = json.loads(LOCKFILE.read_text(encoding="utf-8"))
     old = lock.get("packs", {})
@@ -82,10 +87,11 @@ def main() -> int:
     packs_out: dict[str, dict] = {}
     for name in sorted(packs_in):
         entry = packs_in[name]
+        asset = entry.get("file") or f"{name}.pk3"
         packs_out[name] = {
             "size": entry["size"],
             "sha256": entry["sha256"],
-            "urls": [f"https://github.com/{args.repo}/releases/download/{tag}/{name}.pk3"],
+            "urls": [f"https://github.com/{args.repo}/releases/download/{tag}/{asset}"],
         }
 
     added = sorted(set(packs_out) - set(old))

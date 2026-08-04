@@ -306,7 +306,7 @@ public static class BotRoles
             // QC roles.qc:143-163 — "Check if the item can be picked up safely". A bot that routes to an item
             // sitting in lava brakes at the edge, marks the goal unreachable, and re-rates from the same spot;
             // with the danger probe that reads as a bot oscillating at a hazard lip forever.
-            if (IsLoot(it))
+            if (it.ItemIsLoot)   // QC ITEM_IS_LOOT: a dropped weapon/ammo, not a map spawn
             {
                 // Dropped loot: only rate it once it has landed, and not if it landed in lava.
                 if (!it.OnGround) continue;
@@ -326,12 +326,11 @@ public static class BotRoles
         }
     }
 
-    /// <summary>QC <c>ITEM_IS_LOOT</c>: a weapon/ammo a player dropped, as opposed to a map spawn.</summary>
-    private static bool IsLoot(Entity it) => it.IsLoot;
-
-    /// <summary>QC <c>IN_LAVA(point)</c>: is this point inside a lava volume?</summary>
+    /// <summary>QC <c>IN_LAVA(point)</c>: is this point inside a lava (or slime) volume?</summary>
     private static bool InLava(Vector3 point)
-        => Api.Services is not null && (Api.Trace.PointContents(point) & Contents.Lava) != 0;
+        => Api.Services is not null
+           && (Api.Trace.PointContents(point)
+               & (Engine.Collision.SuperContents.Lava | Engine.Collision.SuperContents.Slime)) != 0;
 
     /// <summary>
     /// QC <c>havocbot_goalrating_item_pickable_check_players</c> (roles.qc:60-104): in TEAM games, don't race a
@@ -349,7 +348,7 @@ public static class BotRoles
     /// </summary>
     private static bool PickableCheckPlayers(BotBrain brain, Vector3 org, Entity item, Vector3 itemOrg)
     {
-        if (!Teamplay.IsTeamGame) return true;
+        if (!Cvars.Teamplay) return true;
 
         var bot = brain.Bot;
         float friendDist2 = float.MaxValue, enemyDist2 = float.MaxValue;
@@ -386,8 +385,8 @@ public static class BotRoles
             && mate.GetResource(ResourceType.Health) <= bot.GetResource(ResourceType.Health)) return true;
         if (item.GetResource(ResourceType.Armor) > 0f
             && mate.GetResource(ResourceType.Armor) <= bot.GetResource(ResourceType.Armor)) return true;
-        if (!string.IsNullOrEmpty(item.WeaponNetName)
-            && Weapons.ByName(item.WeaponNetName) is { } w && !Inventory.HasWeapon(mate, w)) return true;
+        if (!string.IsNullOrEmpty(item.NetName)
+            && Weapons.ByName(item.NetName) is { } w && !Inventory.HasWeapon(mate, w)) return true;
         if (IsPowerup(item)) return true;
         if (bot.UnlimitedAmmo) return true;
         foreach (ResourceType ammo in AmmoResources)
@@ -477,7 +476,15 @@ public static class BotRoles
                 }
             }
             t += System.Math.Max(0f, 8f - brain.Skill) * 0.05f;
-            rater.Rate(org, e, e.Origin, ratingScale * t * RatingEnemy, 2000f);
+            // QC roles.qc:212 is `ratingscale *= t` — it COMPOUNDS across the loop, mutating the running scale
+            // rather than applying t to a fixed base. So each enemy in radius raises the weight of the next,
+            // and with 3+ enemies nearby enemy goals climb well above item goals: the bot commits to the fight
+            // instead of wandering off for a pickup. Reproducing the mutation, including QC's `if (ratingscale
+            // > 0)` guard — a t of 0 (badly outgunned) latches the scale at zero and stops rating enemies for
+            // the rest of the pass, which is the bot deciding this crowd is not worth engaging at all.
+            ratingScale *= t;
+            if (ratingScale > 0f)
+                rater.Rate(org, e, e.Origin, ratingScale * RatingEnemy, 2000f);
         }
     }
 

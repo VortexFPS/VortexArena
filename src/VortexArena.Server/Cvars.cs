@@ -342,7 +342,6 @@ public static class Cvars
         new("bot_god", "0"),
         new("bot_nofire", "0"),
         new("bot_ignore_bots", "0"),
-        new("bot_typefrag", "0"),
         new("bot_wander_enable", "1"),
 
         // ---- bot AI tuning (bot cvars; defaults from xonotic-server.cfg:135-183) ----
@@ -380,9 +379,18 @@ public static class Cvars
         new("bot_ai_bunnyhop_turn_angle_max", "80"),
         new("bot_ai_bunnyhop_turn_angle_reduction", "40"),
         new("bot_ai_custom_weapon_priority_distances", "300 850"),
-        new("bot_ai_custom_weapon_priority_far", ""),
-        new("bot_ai_custom_weapon_priority_mid", ""),
-        new("bot_ai_custom_weapon_priority_close", ""),
+        // The shipped xonotic-server.cfg values, NOT empty strings. These are the fallbacks used when the cfg
+        // tree is not mounted (headless tests, a bare host), and an empty list makes PickFromPriority return
+        // null so the bot falls through to "highest-impulse owned weapon" — a different weapon choice than
+        // stock at every range. The file's own contract at the top of this section says these must not drift
+        // from stock; they had.
+        new("bot_ai_custom_weapon_priority_far", "vaporizer oknex vortex rifle electro devastator mortar hagar hlac crylink blaster okmachinegun machinegun fireball seeker okshotgun shotgun tuba minelayer"),
+        new("bot_ai_custom_weapon_priority_mid", "vaporizer devastator oknex vortex fireball seeker mortar electro okmachinegun machinegun arc crylink hlac hagar okshotgun shotgun blaster rifle tuba minelayer"),
+        new("bot_ai_custom_weapon_priority_close", "vaporizer oknex vortex okshotgun shotgun okmachinegun machinegun arc hlac tuba seeker hagar crylink mortar electro devastator blaster fireball rifle minelayer"),
+        // QC api.qh:8 / xonotic-server.cfg:373. Was never registered, and Waypoint.cs read it with a hardcoded
+        // fallback of 2 against Base's 0 — so it was both invisible to `search`/apropos and inverted.
+        new("g_waypoints_for_items", "0",
+            "make waypoints out of items; 0 = never, 1 = unless the mapper prevents it, 2 = always"),
         new("bot_navigation_ignoreplayers", "0"),
 
         // ---- idle kick (QC server/client.qc PlayerFrame sv_maxidle block) ----

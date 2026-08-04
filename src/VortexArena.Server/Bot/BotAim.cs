@@ -56,6 +56,15 @@ public sealed class BotAim
     /// </summary>
     public float AimSkill;
 
+    /// <summary>QC <c>.bot_offsetskill</c> (aim.qc:197): scales the injected aim error for this bot.</summary>
+    public float OffsetSkill;
+
+    /// <summary>QC <c>.bot_mouseskill</c> (aim.qc:294): scales this bot's view turn rate.</summary>
+    public float MouseSkill;
+
+    /// <summary>QC <c>.bot_thinkskill</c> (aim.qc:263-264): shifts this bot's aim-think (mouse commit) clock.</summary>
+    public float ThinkSkill;
+
     /// <summary>
     /// Current view angles in degrees (pitch X, yaw Y, roll Z) — QC <c>.v_angle</c>. The brain copies this
     /// into the per-frame MovementInput.ViewAngles. Pitch uses Quake convention (down-positive).
@@ -202,7 +211,7 @@ public sealed class BotAim
         if (now >= _badAimTime)
         {
             _badAimTime = MathF.Max(_badAimTime + 0.2f + 0.3f * Random01(), now);
-            float f = QMath.Clamp(1f - 0.1f * effSkill, 0f, 1f);
+            float f = QMath.Clamp(1f - 0.1f * (effSkill + OffsetSkill), 0f, 1f);   // QC aim.qc:197
             _badAimOffset = RandomVec() * f * offsetCvar;
             _badAimOffset.X *= 0.7f; // less vertical error
         }
@@ -225,7 +234,11 @@ public sealed class BotAim
         _f4 += (_f3 - _f4) * QMath.Clamp(filt4, 0f, 1f);
         _f5 += (_f4 - _f5) * QMath.Clamp(filt5, 0f, 1f);
 
-        float blend = QMath.Clamp(effSkill, 0f, 10f) * 0.1f;
+        // QC aim.qc:242 is bound(0, skill + bot_aimskill, 10) — the port applied bot_aimskill to the fire
+        // CONE but not here, which is worse than not applying it at all: a good-aim bot got a tightened cone
+        // without the matching lead, so its shots at a moving target fell outside the very cone its aimskill
+        // had narrowed.
+        float blend = QMath.Clamp(effSkill + AimSkill, 0f, 10f) * 0.1f;
         desiredang += blend * (_f1 * mix1 + _f2 * mix2 + _f3 * mix3 + _f4 * mix4 + _f5 * mix5);
         desiredang.X = QMath.Clamp(desiredang.X, -90f, 90f);
 
@@ -233,8 +246,8 @@ public sealed class BotAim
         diffang = WrapPitchYaw(desiredang - _mouseaim);
         if (now >= _aimThinkTime)
         {
-            _aimThinkTime = MathF.Max(_aimThinkTime + 0.5f - 0.05f * effSkill, now);
-            _mouseaim += diffang * (1f - Random01() * 0.1f * QMath.Bound(1f, 10f - effSkill, 10f));
+            _aimThinkTime = MathF.Max(_aimThinkTime + 0.5f - 0.05f * (effSkill + ThinkSkill), now); // QC aim.qc:263
+            _mouseaim += diffang * (1f - Random01() * 0.1f * QMath.Bound(1f, 10f - (effSkill + ThinkSkill), 10f));
         }
 
         diffang = WrapPitchYaw(_mouseaim - desiredang);
@@ -246,7 +259,7 @@ public sealed class BotAim
 
         float fixedrate = fixedRate / QMath.Bound(1f, dist, 1000f);
         float r = MathF.Max(fixedrate, blendRate);
-        r = QMath.Bound(deltaT, r * deltaT * (2f + MathF.Pow(effSkill, 3f) * 0.005f - Random01()), 1f);
+        r = QMath.Bound(deltaT, r * deltaT * (2f + MathF.Pow(effSkill + MouseSkill, 3f) * 0.005f - Random01()), 1f); // QC aim.qc:294
         ViewAngles += diffang * (r + (1f - r) * QMath.Clamp(1f - mouseCvar, 0f, 1f));
         ViewAngles.Z = 0f;
         ViewAngles.Y -= MathF.Floor(ViewAngles.Y / 360f) * 360f;

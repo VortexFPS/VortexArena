@@ -82,6 +82,17 @@ public sealed class Waypoint
     /// </summary>
     public HashSet<Waypoint>? HardwiredTo;
 
+    /// <summary>
+    /// QC <c>SUPPORT_WP</c> (waypoints.qh:54, aliased onto <c>.goalentity</c>): set to the SUPPORT waypoint that
+    /// linked TO this one (waypoints.qc:1141). Its purpose is asymmetry — a mapper drops a SUPPORT waypoint at a
+    /// spot bots kept getting stuck at, and the pair must only ever be traversed in the authored direction. A
+    /// node carrying this back-pointer therefore refuses further INCOMING auto-links (waypoints.qc:1213), and
+    /// a SUPPORT node itself refuses OUTGOING ones (:1227). Without the back-pointer the port re-linked those
+    /// nodes from every direction, routing bots into precisely the spot the SUPPORT waypoint was placed to get
+    /// them out of. 13 ship across the map set. See planning/bot-ai-parity-2026-08-03.md D30.
+    /// </summary>
+    public Waypoint? SupportedBy;
+
     public bool IsBox => Mins != Vector3.Zero || Maxs != Vector3.Zero;
 
     /// <summary>World-space lower bound (QC <c>.absmin</c>).</summary>
@@ -262,6 +273,37 @@ public sealed class WaypointNetwork
     }
 
     /// <summary>
+    /// QC <c>move_out_of_solid</c> (waypoints.qc:469): if the player hull is embedded at
+    /// <paramref name="origin"/>, try short nudges along each axis to free it. False if it stays stuck.
+    ///
+    /// <para>The embedded test uses a slightly SHRUNK hull. A waypoint that has been floor-snapped rests with
+    /// its hull touching the surface, and a full-size probe there reports startsolid on mere contact — which is
+    /// every well-placed waypoint on the map, not a defect.</para>
+    /// </summary>
+    private static bool TryFreeFromSolid(ref Vector3 origin)
+    {
+        Vector3 mins = _playerMins + new Vector3(1f, 1f, 1f);
+        Vector3 maxs = _playerMaxs - new Vector3(1f, 1f, 1f);
+        if (!Api.Trace.Trace(origin, mins, maxs, origin, MoveFilter.NoMonsters, null).StartSolid)
+            return true;
+        Span<Vector3> nudges = stackalloc Vector3[]
+        {
+            new(0f, 0f, 8f), new(0f, 0f, 16f), new(0f, 0f, 24f),
+            new(8f, 0f, 0f), new(-8f, 0f, 0f), new(0f, 8f, 0f), new(0f, -8f, 0f),
+        };
+        foreach (Vector3 n in nudges)
+        {
+            Vector3 probe = origin + n;
+            if (!Api.Trace.Trace(probe, mins, maxs, probe, MoveFilter.NoMonsters, null).StartSolid)
+            {
+                origin = probe;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Rebuild the whole node list to <paramref name="count"/> entries — the undo journal's restore path.
     ///
     /// Two passes on purpose. Every node must exist before any link is wired, because a link holds a
@@ -342,6 +384,7 @@ public sealed class WaypointNetwork
 
     private static void AddLinkOnce(Waypoint a, Waypoint b, float cost)
     {
+        NoteSupportLink(a, b);   // QC waypoint_addlink:1140-1141
         for (int i = 0; i < a.Links.Count; i++)
         {
             if (ReferenceEquals(a.Links[i].To, b))
@@ -409,30 +452,49 @@ public sealed class WaypointNetwork
 
                 // outgoing a→b: forbidden if a is a box / JUMP / SUPPORT source, or a refused (NORELINK) source.
                 // (QC :1212-1223; the it.SUPPORT_WP incoming-forbid has no port back-pointer and is omitted.)
-                if ((a.Flags & addlinkRefuse) == 0 && !ForbidOutgoing(a))
+                if ((a.Flags & addlinkRefuse) == 0 && !ForbidOutgoing(a) && !ForbidIncoming(b))
                 {
-                    bool reach = !canTrace || BotTracewalk.CanWalk(ab, ba, _playerMins, _playerMaxs, b.IsBox ? (b.AbsMax.Z - ba.Z) : 0f);
+                        // QC waypoint_think:1189-1206 sizes the test hull from the CROUCH flags of the pair: a link
+                    // into or out of a crouch waypoint describes a low passage, and probing it with the standing
+                    // hull says "blocked" every time — so the two crouch waypoints that ship (erbium) could
+                    // neither be entered nor left through the gap they exist to describe (D29).
+                    Vector3 hullMins = _playerMins, hullMaxs = _playerMaxs;
+                    if (aCrouch || bCrouch) { hullMins = _crouchMins; hullMaxs = _crouchMaxs; }
+                    bool reach = !canTrace || BotTracewalk.CanWalk(ab, ba, hullMins, hullMaxs, b.IsBox ? (b.AbsMax.Z - ba.Z) : 0f);
                     if (reach && a.Links.Count < maxLinksPerNode) LinkAuto(a, b);
                 }
 
                 // reverse b→a: same forbid rules with the roles swapped. (QC :1226-1237)
-                if ((b.Flags & addlinkRefuse) == 0 && !ForbidOutgoing(b))
+                if ((b.Flags & addlinkRefuse) == 0 && !ForbidOutgoing(b) && !ForbidIncoming(a))
                 {
-                    bool reach = !canTrace || BotTracewalk.CanWalk(ba, ab, _playerMins, _playerMaxs, a.IsBox ? (a.AbsMax.Z - ab.Z) : 0f);
+                    Vector3 rHullMins = _playerMins, rHullMaxs = _playerMaxs;
+                    if (aCrouch || bCrouch) { rHullMins = _crouchMins; rHullMaxs = _crouchMaxs; }
+                    bool reach = !canTrace || BotTracewalk.CanWalk(ba, ab, rHullMins, rHullMaxs, a.IsBox ? (a.AbsMax.Z - ab.Z) : 0f);
                     if (reach && b.Links.Count < maxLinksPerNode) LinkAuto(b, a);
                 }
             }
         }
     }
 
-    // QC waypoint_think (:1212/:1226): a box / JUMP / SUPPORT source forbids its OUTGOING auto-links.
+    // QC waypoint_think (:1212/:1226): a box / JUMP / SUPPORT source forbids its OUTGOING auto-links, and a
+    // node that a SUPPORT waypoint links to forbids further INCOMING ones.
     private static bool ForbidOutgoing(Waypoint w)
-        => w.IsBox || (w.Flags & (WaypointFlags.Jump | WaypointFlags.Support)) != 0;
+        => w.IsBox || (w.Flags & (WaypointFlags.Jump | WaypointFlags.Support)) != 0
+           || w.SupportedBy is not null;
+
+    private static bool ForbidIncoming(Waypoint w) => w.SupportedBy is not null;
 
     /// <summary>
     /// Record <paramref name="to"/> as a hardwired destination of <paramref name="from"/>
     /// (QC <c>waypoint_mark_hardwiredlink</c>, waypoints.qc:301-320).
     /// </summary>
+    /// <summary>QC waypoint_addlink:1140-1141 — a link FROM a SUPPORT waypoint stamps the back-pointer.</summary>
+    private static void NoteSupportLink(Waypoint from, Waypoint to)
+    {
+        if (from.HasFlag(WaypointFlags.Support))
+            to.SupportedBy = from;
+    }
+
     private static void MarkHardwired(Waypoint from, Waypoint to)
         => (from.HardwiredTo ??= new HashSet<Waypoint>()).Add(to);
 
@@ -467,6 +529,12 @@ public sealed class WaypointNetwork
     private static readonly Vector3 _playerMins = new(-16f, -16f, -24f);
     private static readonly Vector3 _playerMaxs = new(16f, 16f, 45f);
 
+    /// <summary>Crouched hull (QC PL_CROUCH_MIN_CONST/PL_CROUCH_MAX_CONST, common/constants.qh:52-55): same
+    /// footprint, lower ceiling. Used for links to or from a CROUCH waypoint, which describe a low passage the
+    /// standing hull cannot fit through.</summary>
+    private static readonly Vector3 _crouchMins = new(-16f, -16f, -24f);
+    private static readonly Vector3 _crouchMaxs = new(16f, 16f, 25f);
+
     /// <summary>
     /// Walk-distance budget for STRATEGY-TIME tracewalks (variance program 2026-07-11 — the residual bot-tick
     /// tail: Release p99 6.2ms / max 17.1ms, all in bot.strategy/bot.seed long walks). Covers the full seed-ring
@@ -488,6 +556,14 @@ public sealed class WaypointNetwork
     {
         if (Api.Services is null)
             return position + new Vector3(0f, 0f, 24f);
+
+        // QC waypoint_spawn's move_out_of_solid (waypoints.qc:469), applied HERE rather than in Add(): this is
+        // the derived path, where an origin comes from an item/teleporter entity that may well sit inside
+        // geometry. A node embedded in a wall stays in the graph as a routing target forever — the bot walks
+        // into the brush it is inside and the arrival test never satisfies. Authored origins (the .waypoints
+        // loader, the editor) are deliberately left exactly where they were put.
+        // See planning/bot-ai-parity-2026-08-03.md D26.
+        TryFreeFromSolid(ref position);
 
         Vector3 endpos = position + new Vector3(0f, 0f, -3000f);
         Entity? ignore = null;
@@ -517,19 +593,16 @@ public sealed class WaypointNetwork
             if (!string.IsNullOrEmpty(e.TargetName) && !byTargetName.ContainsKey(e.TargetName))
                 byTargetName[e.TargetName] = e;
 
-        // QC bot_waypoints_for_items = autocvar_g_waypoints_for_items (world.qc:937): "0" never, "1" unless the
-        // map disables it, "2" always; waypoint_spawnforitem (waypoints.qc:2004) early-returns when 0. This is
-        // the FILELESS auto-generate fallback (a port-only playability helper that does not exist in Base), so
-        // item waypoints are kept ON by default to give bots goals to navigate — but a host that EXPLICITLY
-        // enables the cvar (1/2) still gets them, and the gate is wired so the value is honoured rather than
-        // ignored. We only suppress when the host turned items off AND there are spawn points to keep the graph
-        // connected (so the fallback never collapses to an empty graph).
-        int forItemsCvar = (int)Cvars.FloatOr("g_waypoints_for_items", 2f);
-        bool haveSpawns = false;
-        foreach (var e in entities)
-            if (e is { IsFreed: false } && (e.ClassName ?? "").StartsWith("info_player", StringComparison.Ordinal))
-            { haveSpawns = true; break; }
-        bool spawnItemWaypoints = forItemsCvar != 0 || !haveSpawns;
+        // This path runs ONLY when the map ships no .waypoints file at all, i.e. it has no bot support
+        // whatsoever — a port-only playability helper with no counterpart in Base, which simply leaves such a
+        // map unplayable for bots. Item waypoints are therefore always spawned here: they are most of what
+        // gives a bot anywhere to go, and "some goals" beats "no goals" every time.
+        //
+        // Deliberately NOT gated on g_waypoints_for_items. That cvar governs QC's waypoint_spawnforitem
+        // (waypoints.qc:2004) on the NORMAL path and ships 0, so reading it here would switch this fallback off
+        // for every map that has spawn points — overloading a Base cvar to control port-only behaviour it was
+        // never written for, and inverting the helper's purpose in the process.
+        const bool spawnItemWaypoints = true;
 
         int before = _nodes.Count;
 
@@ -1375,7 +1448,14 @@ public sealed class WaypointNetwork
             // is parsed — the cache links to them by coordinate and FindAt silently drops a line whose endpoint
             // has no node. See GenerateTeleporterWaypoints.
             net.GenerateTeleporterWaypoints(entities);
-            bool haveCache = !string.IsNullOrWhiteSpace(linkCacheText);
+            // QC waypoint_load_links:1359-1377 — a cache is only usable if it was built FROM these waypoints.
+            // It records the //WAYPOINT_TIME of the .waypoints file it was generated against; if they differ
+            // (or the format version is older) QC discards it and relinks from scratch. The port had no such
+            // check, which was harmless only while no cache shipped. Now that they do, a stale one would
+            // silently produce a half-wired graph — links bound to nodes that have since moved — which is the
+            // same failure the whole waypoint effort exists to remove, arriving by a different door.
+            bool haveCache = !string.IsNullOrWhiteSpace(linkCacheText)
+                             && CacheMatchesWaypoints(waypointFileText!, linkCacheText!);
             if (haveCache)
                 net.LoadLinks(linkCacheText!);
             if (!string.IsNullOrWhiteSpace(hardwiredText))
@@ -1391,6 +1471,38 @@ public sealed class WaypointNetwork
         auto.BunnyhopSkillOffset = bunnyhopSkillOffset;
         auto.GenerateFromEntities(entities);
         return auto;
+    }
+
+    /// <summary>
+    /// Does this link cache belong to these waypoints (QC waypoint_load_links' version/time gate)? Compares the
+    /// <c>//WAYPOINT_TIME</c> stamp both files carry. A cache with no stamp is accepted — some hand-made files
+    /// omit it, and rejecting those would throw away a working graph.
+    /// </summary>
+    private static bool CacheMatchesWaypoints(string waypointText, string cacheText)
+    {
+        string? wpTime = HeaderValue(waypointText, "//WAYPOINT_TIME");
+        string? cacheTime = HeaderValue(cacheText, "//WAYPOINT_TIME");
+        if (wpTime is null || cacheTime is null)
+            return true;
+        if (string.Equals(wpTime, cacheTime, StringComparison.Ordinal))
+            return true;
+        VortexArena.Common.Diagnostics.Log.Info(
+            $"[bots] waypoint link cache is stale (built for {cacheTime}, waypoints are {wpTime}) — relinking");
+        return false;
+    }
+
+    /// <summary>First value of a <c>//KEY value</c> header line, or null.</summary>
+    private static string? HeaderValue(string text, string key)
+    {
+        using var reader = new StringReader(text);
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (!line.StartsWith("//", StringComparison.Ordinal)) return null; // past the header block
+            if (line.StartsWith(key, StringComparison.Ordinal))
+                return line[key.Length..].Trim();
+        }
+        return null;
     }
 
     /// <summary>

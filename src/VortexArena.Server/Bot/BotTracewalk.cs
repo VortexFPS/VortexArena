@@ -23,10 +23,25 @@ namespace VortexArena.Server.Bot;
 /// </summary>
 public static class BotTracewalk
 {
-    // QC step constants (stepheightvec.z = sv_stepheight = 34; jumpstepheightvec adds a jump's worth).
-    private const float StepHeight = 34f;
-    private const float JumpStepHeight = 48f;  // QC jumpstepheightvec.z (stepheight + a small jump lift)
-    private const float JumpHeight = 130f;     // QC jumpheight_vec.z (apparent jump apex)
+    // QC bot_calculate_stepheightvec (bot.qc:615-621) DERIVES these from the physics cvars and recomputes them
+    // on cvar change; they are not constants. The port had jumpstepheightvec hardcoded at 48 against Base's
+    // stepheight + 0.85*apex (~70 at stock), i.e. ~28% more pessimistic — so tracewalk rejected links and
+    // routes a real player clears easily, and the bot read reachable ground as unreachable.
+    // See planning/bot-ai-parity-2026-08-03.md D22.
+    private static float StepHeight => Cvars.FloatOr("sv_stepheight", 34f);
+
+    /// <summary>QC jumpheight_vec.z — the apparent jump apex sv_jumpvelocity^2 / (2 * sv_gravity).</summary>
+    private static float JumpHeight
+    {
+        get
+        {
+            float jv = Cvars.JumpVelocity, g = Cvars.Gravity;
+            return g > 0f ? (jv * jv) / (2f * g) : 0f;
+        }
+    }
+
+    /// <summary>QC jumpstepheightvec.z — stepheight + 0.85 * apex ("reduce it a bit to make the jumps easy").</summary>
+    private static float JumpStepHeight => StepHeight + JumpHeight * 0.85f;
     private const float StepDist = 32f;        // QC stepdist
     private const int MaxIterations = 256;     // safety cap (a long path is many 32u steps)
 
@@ -95,7 +110,11 @@ public static class BotTracewalk
         // and deliberately SHORT: this sweep runs once per step and its length dominates the step's trace cost
         // (the 65536u column sweep was the single most expensive query in the measured strategy tails).
         // Unbounded keeps QC's full column drop (auto-link parity — long falls ARE valid link paths).
-        float downReach = budgeted ? 200f : 65536f;
+        // QC uses the full column (navigation.qc:695) and simply takes trace_endpos. A 200qu cap made every
+        // descent deeper than that read as unreachable DURING STRATEGY, which is most drop-downs on a real map
+        // (D23). Keep a bound — the sweep length dominates step cost and that is why the cap exists — but set
+        // it well past anything a player survives, so it clips runaway sweeps rather than real routes.
+        float downReach = budgeted ? 4096f : 65536f;
 
         Vector3 end2 = end;
         if (endHeight > 0f) end2.Z += endHeight;
@@ -254,6 +273,20 @@ public static class BotTracewalk
 
     private static float Clamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
 
+    // STILL OPEN — bot_navigation_ignoreplayers (parity report D14).
+    //
+    // QC bot.qc:737 computes `bot_navigation_movemode = ignoreplayers ? MOVE_NOMONSTERS : MOVE_NORMAL` and
+    // threads it into every tracewalk, so at the shipped default (0) a teammate standing in a doorway makes
+    // that line unwalkable and the bot re-routes instead of grinding into them. The port is stuck on
+    // NOMONSTERS, i.e. it always behaves as if the cvar were 1.
+    //
+    // It cannot simply be switched on: QC hands tracewalk an ignore entity (the bot, or a dedicated
+    // waypoint_tracewalk_ent during graph building), and NONE of this port's eight CanWalk call sites pass
+    // one. Under MOVE_NORMAL with a null ignore, the very first hull probe collides with the walking bot's own
+    // body, every walk reports startsolid, nothing is reachable and bots stop moving entirely — measured, not
+    // theorised. Honouring the cvar means plumbing the walker through CanWalk first, and a dedicated trace
+    // entity through AutoLink (which must stay player-blind regardless: the port builds the graph lazily on the
+    // first frame with bots present, so live player positions would otherwise be baked into the link set).
     private static TraceResult Box(Vector3 from, Vector3 mins, Vector3 maxs, Vector3 to, Entity? ignore)
         => Api.Trace.Trace(from, mins, maxs, to, MoveFilter.NoMonsters, ignore);
 }

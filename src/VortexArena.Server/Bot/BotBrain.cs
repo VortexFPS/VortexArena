@@ -31,6 +31,14 @@ public sealed class BotBrain
     private const float EnemyDetectionInterval = 2f;         // bot_ai_enemydetectioninterval
     private const float ChooseWeaponInterval = 0.5f;         // bot_ai_chooseweaponinterval
     private const float AimInterval = 0.1f;                  // havocbot_aim cadence
+
+    // These three were `private const` while their cvars sat registered and unread, so an operator lowering
+    // bot_ai_enemydetectioninterval to make bots re-acquire faster — the natural first move when investigating
+    // "bots don't shoot enough" — got no effect at all, and no way to discover why. Read live now; the
+    // fallbacks are the shipped defaults, so stock behaviour is unchanged.
+    private static float EnemyDetectionRadiusLive => Cvars.FloatOr("bot_ai_enemydetectionradius", EnemyDetectionRadius);
+    private static float EnemyDetectionIntervalLive => Cvars.FloatOr("bot_ai_enemydetectioninterval", EnemyDetectionInterval);
+    private static float ChooseWeaponIntervalLive => Cvars.FloatOr("bot_ai_chooseweaponinterval", ChooseWeaponInterval);
     private const float DefaultShotSpeed = 0f;               // 0 => treat unknown weapons as hitscan (no lead)
 
     /// <summary>
@@ -55,7 +63,7 @@ public sealed class BotBrain
 
     /// <summary>
     /// Supplies the set of players the bot can see/fight (QC the client list). Set by
-    /// <see cref="BotController"/> to its roster, because in this port clients are not in the engine entity
+    /// <see cref="BotPopulation"/> to its roster, because in this port clients are not in the engine entity
     /// table so <c>FindByClass("player")</c> can't find them. When null, falls back to the entity table.
     /// </summary>
     public Func<IEnumerable<Player>>? PlayerProvider;
@@ -458,8 +466,10 @@ public sealed class BotBrain
         else
         {
             float interval = Cvars.FloatOr("bot_ai_thinkinterval", 0.05f);
+            // QC bot.qc:75: min(14 / (skill + bot_aiskill + 14), 1) — the per-bot reaction-rate spread. Without
+            // it every bot re-aims, re-decides fire and re-steers on the identical clock.
             _nextThink = MathF.Max(now, _nextThink)
-                + MathF.Max(0.01f, interval * MathF.Min(14f / (Skill + 14f), 1f));
+                + MathF.Max(0.01f, interval * MathF.Min(14f / (Skill + bot.BotAiSkill + 14f), 1f));
         }
 
         // QC aim.qc reads the per-bot skill modifiers (skill + this.bot_aggresskill / bot_aimskill) live each
@@ -467,6 +477,10 @@ public sealed class BotBrain
         // onto the aimer so the fire decision + max-fire-deviation carry the bot's aggression/aim personality.
         Aim.AggresSkill = bot.BotAggresSkill;
         Aim.AimSkill = bot.BotAimSkill;
+        Aim.OffsetSkill = bot.BotOffsetSkill;
+        Aim.MouseSkill = bot.BotMouseSkill;
+        Aim.ThinkSkill = bot.BotThinkSkill;
+        Nav.MoveSkill = bot.BotMoveSkill;
 
         // ---- button baseline (QC clears all buttons each think; JUMP stays held for ramp jumps) ----
         bool jumpHeld = !bot.IsDead && now < _jumpTime + 0.2f; // QC bot_think:112
@@ -541,7 +555,7 @@ public sealed class BotBrain
         // 1b) weapon selection: pick the best owned weapon for the enemy's range (QC havocbot_chooseweapon).
         if (now >= _chooseWeaponTime)
         {
-            _chooseWeaponTime = now + ChooseWeaponInterval;
+            _chooseWeaponTime = now + ChooseWeaponIntervalLive;
             ChooseWeapon(bot.Enemy);
         }
 
@@ -629,6 +643,9 @@ public sealed class BotBrain
         }
 
         // 3) navigation: steer toward current goal -> wish-move + jump/crouch
+        // QC havocbot.qc:136-137 sets AI_STATUS_ATTACKING when the bot has an enemy, before movetogoal runs;
+        // the bunnyhop gate reads it (havocbot.qc:217).
+        Nav.Attacking = bot.Enemy is { IsFreed: false };
         bool onGround = bot.OnGround;
         Vector3 move;
         using (VortexArena.Common.Diagnostics.Prof.Sample("bot.steer")) // [profiling] waypoint steering + tracewalks
@@ -659,6 +676,14 @@ public sealed class BotBrain
         Vector3 dangerBrake = Vector3.Zero;   // QC do_break
         Vector3 evadeDanger = Vector3.Zero;   // QC evadedanger
         _triggerHurtEscape = false;      // QC trigger_hurt escape intent (skill>6), set by the danger probe below
+        // QC havocbot.qc:407-409 — havocbot_checkdanger short-circuits while the bot is COMMITTED: mid-jumppad
+        // flight, traversing a hardwired link, or launching off a JUMP waypoint. Those are deliberate
+        // trajectories through space that a ground-based danger probe reads as "about to fall into a pit", so
+        // without the skip the bot brakes in mid-air on exactly the manoeuvres it is supposed to commit to.
+        // BotDanger honoured this parameter all along; every call site passed false. (parity report, D-list)
+        bool committed = bot.JumpPadCount > 0
+            || WaypointNetwork.IsHardwiredLink(Nav.PrevGoalWp, Nav.CurrentWp)
+            || (Nav.PrevGoalWp is not null && Nav.PrevGoalWp.HasFlag(WaypointFlags.Jump));
         using (VortexArena.Common.Diagnostics.Prof.Sample("bot.danger")) // [profiling] danger probes (ground/hazard traces)
         if (Nav.Current is Vector3 cur)
         {
@@ -831,7 +856,7 @@ public sealed class BotBrain
             // QC: don't dodge into a known danger (lava/cliff) — probe the spot we'd swerve toward.
             Vector3 eye = bot.Origin + Aim.ViewOffset;
             int dr = BotDanger.CheckDanger(bot, eye, eye + worldDodge * 32f, bot.Origin.Z, Nav.Mins, Nav.Maxs,
-                onGround, jumpHeld || Nav.WantJump, moving: true, committed: false);
+                onGround, jumpHeld || Nav.WantJump, moving: true, committed: committed);
             if (dr is > 0 and < 4)
             {
                 worldDodge = Vector3.Zero; // QC: dodge = '0 0 0' when checkdanger trips
@@ -1496,13 +1521,13 @@ public sealed class BotBrain
 
         if (now < _chooseEnemyTime)
             return;
-        _chooseEnemyTime = now + (superbot ? 0.1f : EnemyDetectionInterval);
+        _chooseEnemyTime = now + (superbot ? 0.1f : EnemyDetectionIntervalLive);
 
         Vector3 eye = Bot.Origin + Aim.ViewOffset;
         Entity? best = null;
         // QC: non-SUPERBOT rates by squared distance (nearest wins); SUPERBOT by bound(50,hp+armor,250)*dist
         // (prefer the weak/close kill) — a LOWER rating is better in both, so the radius² seeds the ceiling.
-        float bestRating = EnemyDetectionRadius * EnemyDetectionRadius;
+        float bestRating = EnemyDetectionRadiusLive * EnemyDetectionRadiusLive;
 
         void Consider(Entity e)
         {
@@ -1542,7 +1567,7 @@ public sealed class BotBrain
         // and any map monsters. (No turret system exists in the port yet.)
         if (Api.Services is not null)
         {
-            Api.Entities.FindInRadius(Bot.Origin, EnemyDetectionRadius, _monsterScratch);
+            Api.Entities.FindInRadius(Bot.Origin, EnemyDetectionRadiusLive, _monsterScratch);
             for (int i = 0; i < _monsterScratch.Count; i++)
             {
                 Entity m = _monsterScratch[i];

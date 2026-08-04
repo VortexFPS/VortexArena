@@ -439,18 +439,30 @@ public sealed class BotPopulation
     /// The brain is created by the ClientManager OnBotConnected hook → <see cref="RegisterBot"/>.</summary>
     private BotBrain? SpawnBot(string? name, float? skill)
     {
-        (string botName, string model, string skin, int forcedTeam, int color, float aggresSkill, float aimSkill)
+        (string botName, string model, string skin, int forcedTeam, int color, BotSkills skills)
             = string.IsNullOrWhiteSpace(name)
                 ? PickNameAndModel()
-                : (name!, "", "", 0, -1, 0f, 0f);
+                : (name!, "", "", 0, -1, default(BotSkills));
 
         ClientManager.ClientInfo info = _world.Clients.ClientConnect(isBot: true, netName: botName);
         Player p = info.Player;
         p.BotSkill = skill ?? Cvars.Skill;                  // QC the global `skill` cvar seeds new bots
         // QC the bots.txt per-bot fire-skill modifiers (bot.qc:282/285): carried so the aim fire decision +
         // max-fire-deviation reflect each bot's aggression/aim personality (default 0 when no column present).
-        p.BotAggresSkill = aggresSkill;
-        p.BotAimSkill = aimSkill;
+        // QC bot.qc:275-290 — the full READSKILL set, stamped onto the bot so aim, movement, weapon choice and
+        // reaction rate all carry this bot's personality rather than one shared skill number.
+        p.BotKeyboardSkill   = skills.Keyboard;
+        p.BotMoveSkill       = skills.Move;
+        p.BotDodgeSkill      = skills.Dodge;
+        p.BotPingSkill       = skills.Ping;
+        p.BotWeaponSkill     = skills.Weapon;
+        p.BotAggresSkill     = skills.Aggres;
+        p.BotRangePreference = skills.RangePreference;
+        p.BotAimSkill        = skills.Aim;
+        p.BotOffsetSkill     = skills.Offset;
+        p.BotMouseSkill      = skills.Mouse;
+        p.BotThinkSkill      = skills.Think;
+        p.BotAiSkill         = skills.Ai;
 
         // QC bot_forced_team (bot.qc:255-262 / client.qc:592): a bots.txt-pinned team (argv5) overrides the
         // auto-balance that ClientConnect just ran — but only in teamplay and not under bot_vs_human/2-team.
@@ -725,9 +737,20 @@ public sealed class BotPopulation
     // can apply faithfully: shirt/pants → ClientColors (16*shirt+pants), and the two fire-relevant skill
     // modifiers bot_aggresskill (argv11) + bot_aimskill (argv13) → the aim fire decision. The remaining 10 skill
     // columns stay folded into the single BotSkill knob (the documented skill.modifiers intended divergence).
+    /// <summary>
+    /// The 12 READSKILL per-bot modifier columns (QC bot.qc:264-290). Each is
+    /// <c>stof(argv(prio)) * w</c> when the cell is filled, else a random draw
+    /// <c>(2*random()-1) * r * w</c> — so a BLANK cell is not always 0: the four columns with r &gt; 0
+    /// (keyboard, offset, mouse, think) get genuine per-bot variance from an empty cell, which is where much
+    /// of a Xonotic roster's personality comes from. Suppressed in campaign mode, like QC.
+    /// </summary>
+    private readonly record struct BotSkills(
+        float Keyboard, float Move, float Dodge, float Ping, float Weapon, float Aggres,
+        float RangePreference, float Aim, float Offset, float Mouse, float Think, float Ai);
+
     private readonly record struct BotRow(
         string Name, string Model, string Skin, int ForcedTeam,
-        int Color, float AggresSkill, float AimSkill);
+        int Color, BotSkills Skills);
     private List<BotRow>? _botRows; // parsed once per world
 
     /// <summary>
@@ -738,7 +761,7 @@ public sealed class BotPopulation
     /// small built-in name table when the file isn't mounted. The skin/shirt/pants columns and the 12 skill
     /// modifiers are unported (single-knob skill; see residuals).
     /// </summary>
-    private (string name, string model, string skin, int forcedTeam, int color, float aggresSkill, float aimSkill) PickNameAndModel()
+    private (string name, string model, string skin, int forcedTeam, int color, BotSkills skills) PickNameAndModel()
     {
         _botRows ??= ParseBotFile();
 
@@ -760,7 +783,7 @@ public sealed class BotPopulation
 
         string baseName = "Bot", model = "", skin = "";
         int forcedTeam = 0, color = -1;
-        float aggresSkill = 0f, aimSkill = 0f;
+        BotSkills skills = default;
         if (candidates.Count > 0)
         {
             BotRow row = candidates[_nameRng.Next(candidates.Count)];
@@ -769,8 +792,7 @@ public sealed class BotPopulation
             skin = row.Skin;
             forcedTeam = row.ForcedTeam;
             color = row.Color;
-            aggresSkill = row.AggresSkill;
-            aimSkill = row.AimSkill;
+            skills = row.Skills;
         }
 
         string name = prefix + baseName + suffix;
@@ -789,7 +811,7 @@ public sealed class BotPopulation
             color = _nameRng.Next(15) * 16 + _nameRng.Next(15);
 
         string modelPath = string.IsNullOrEmpty(model) ? "" : $"models/player/{model}.iqm"; // QC appends .iqm
-        return (name, modelPath, skin, forcedTeam, color, aggresSkill, aimSkill);
+        return (name, modelPath, skin, forcedTeam, color, skills);
     }
 
     private readonly Random _nameRng = new(12345);
@@ -850,17 +872,29 @@ public sealed class BotPopulation
                 // The 12 READSKILL columns start at argv(6) (QC prio = 6). Only the two fire-relevant modifiers
                 // are carried: bot_aggresskill = stof(argv(11)) * 1 (prio 11), bot_aimskill = stof(argv(13)) * 2
                 // (prio 13). Blank cells → 0 (the stock READSKILL reward factor for both is 0).
-                float aggresSkill = ReadSkillColumn(f, 11, 1f);
-                float aimSkill = ReadSkillColumn(f, 13, 2f);
+                // QC READSKILL table, prio starting at 6 (bot.qc:275-290): (weight, randomReward).
+                var skills = new BotSkills(
+                    Keyboard:        ReadSkillColumn(f, 6, 0.5f, 0.5f),
+                    Move:            ReadSkillColumn(f, 7, 2f, 0f),
+                    Dodge:           ReadSkillColumn(f, 8, 2f, 0f),
+                    Ping:            ReadSkillColumn(f, 9, 0.5f, 0f),
+                    Weapon:          ReadSkillColumn(f, 10, 2f, 0f),
+                    Aggres:          ReadSkillColumn(f, 11, 1f, 0f),
+                    RangePreference: ReadSkillColumn(f, 12, 1f, 0f),
+                    Aim:             ReadSkillColumn(f, 13, 2f, 0f),
+                    Offset:          ReadSkillColumn(f, 14, 2f, 0.5f),
+                    Mouse:           ReadSkillColumn(f, 15, 1f, 0.5f),
+                    Think:           ReadSkillColumn(f, 16, 1f, 0.5f),
+                    Ai:              ReadSkillColumn(f, 17, 2f, 0f));
                 rows.Add(new BotRow(f[0].Trim(), f.Length > 1 ? f[1].Trim() : "", skin, forcedTeam,
-                    color, aggresSkill, aimSkill));
+                    color, skills));
             }
         }
         if (rows.Count == 0)
         {
             // no bots.txt mounted: the old built-in table (kept so a bare test floor still names its bots).
             foreach (string n in new[] { "Hellfire", "Toxic", "Scorcher", "Discbot", "Nexus", "Eureka", "Sensible", "Mystery" })
-                rows.Add(new BotRow(n, "", "", 0, -1, 0f, 0f));
+                rows.Add(new BotRow(n, "", "", 0, -1, default));
         }
         return rows;
     }
@@ -878,13 +912,23 @@ public sealed class BotPopulation
     /// <summary>QC READSKILL(f, w, r) (bot.qc:266-272) for a present cell: <c>stof(argv(prio)) * w</c>. A blank
     /// cell returns 0 (the carried columns both have stock reward factor r = 0, so absent → 0; the random
     /// per-bot variance of the r&gt;0 columns is the documented single-knob skill.modifiers divergence).</summary>
-    private static float ReadSkillColumn(string[] f, int idx, float weight)
+    private static float ReadSkillColumn(string[] f, int idx, float weight, float randomReward)
     {
-        if (idx >= f.Length) return 0f;
-        string s = f[idx].Trim();
-        if (s.Length == 0) return 0f;
-        return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v * weight : 0f;
+        string s = idx < f.Length ? f[idx].Trim() : "";
+        if (s.Length > 0
+            && float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+            return v * weight;
+
+        // QC's else-branch: `(!autocvar_g_campaign) * (2 * random() - 1) * r * w`. A blank cell is NOT
+        // automatically zero — for the four columns with r > 0 it draws genuine per-bot variance, which is
+        // most of where a roster's personality comes from. Campaign play suppresses it so its opponents are
+        // reproducible.
+        if (randomReward <= 0f || Cvars.Bool("g_campaign")) return 0f;
+        return (2f * (float)_skillRng.NextDouble() - 1f) * randomReward * weight;
     }
+
+    /// <summary>RNG for the READSKILL random-variance columns (QC <c>random()</c> during bot_setnameandstuff).</summary>
+    private static readonly System.Random _skillRng = new();
 
 #if VA_BOTPLAYER
     // =============================================================================================

@@ -14,7 +14,7 @@ namespace VortexArena.Tests;
 
 /// <summary>
 /// T39 — the HavocBot LIVE-LOOP wiring (QC bot_serverframe / bot_fixcount / sys_phys_ai): the gap these pin
-/// is that BotBrain/BotController were complete but had ZERO live callers, so <c>--bots N</c> spawned inert
+/// is that BotBrain was complete but had ZERO live callers, so <c>--bots N</c> spawned inert
 /// standing bots. Covered here:
 ///   - the pure bot_fixcount target math (bot_number / minplayers fill, bot_vs_human, caps, empty-server);
 ///   - the GameWorld integration: bot_number fills one bot per frame after the 2.5s sentinel, the bots spawn

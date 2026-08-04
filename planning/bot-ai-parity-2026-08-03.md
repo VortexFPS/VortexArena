@@ -452,6 +452,26 @@ authoring waypoints for Vortex-original maps.
 
 ---
 
+## Implementation status (2026-08-03)
+
+All seven stages implemented; full suite green (4227 tests). Landed items are annotated in place below.
+**What was NOT done, and why:**
+
+| # | Item | Why it is still open |
+|---|---|---|
+| D14 | `bot_navigation_ignoreplayers` | **Attempted and reverted.** Switching tracewalk to `MOVE_NORMAL` needs an ignore entity, and none of the eight `CanWalk` call sites pass one — so every walk collided with the walking bot's own body, nothing was reachable, and bots stopped moving entirely (caught by the live-loop test). Needs the walker plumbed through `CanWalk`, plus a dedicated trace entity for `AutoLink` (which must stay player-blind: the port builds the graph lazily on the first frame with bots present, so live player positions would be baked into the link set). |
+| D12, D25 | Tracewalk budget (96/tick), seed caps (12 walks / 8 seeds / 2250qu) | Both are deliberate perf bounds from the 2026-07-11 variance program, with measured tails behind them. Raising them is a perf/behaviour trade that needs `./vx perf-smoke` evidence, not a guess. Note the strategy token means only one bot rates per frame, so contention is lower than the audit assumed. |
+| D15 | `navigation_shortenpath` | Real gap, self-contained, ~70 lines. Not attempted. |
+| D27, D28 | Swimming/resurfacing, ladder descent | The largest remaining behavioural gaps. Each is a movetogoal branch of its own rather than a patch. |
+| F10 | `wr_aim` per-slot loop | Inert at one weapon slot; matters for Overkill/dual-wield. |
+| F15 | `findtrajectorywithleading` | Opposite sign (port fires lobbed weapons Base declines). |
+| — | Bot scripting, waypoint editor commands | Tooling, no gameplay effect. |
+
+Two defects were found in the fixes themselves during implementation, both by the tests, both worth recording
+because they are the same shape as the originals: `_lastComboTime` defaulting to 0 froze weapon choice for the
+first second of every map, and the D26 solid-nudge in `Add()` mutated authored waypoint origins (it belongs on
+the derived path only).
+
 ## Part 5 — Suggested sequence
 
 Each stage is independently shippable and independently measurable.

@@ -98,13 +98,19 @@ public sealed class BotNavigation
     /// <summary>QC autocvar_sv_maxspeed — magnitude of emitted wish-move.</summary>
     public float MaxSpeed = 320f;
 
+    /// <summary>
+    /// QC <c>this.aistatus &amp; AI_STATUS_ATTACKING</c> (set at havocbot.qc:137 when the bot has an enemy in
+    /// sight). Base forbids bunnyhopping while it is set (havocbot.qc:217) — a fighting bot needs to be able to
+    /// change direction, not carry committed momentum. The brain stamps this each think.
+    ///
+    /// <para>The port passed <c>attacking: false</c> unconditionally, so bots fought airborne at above run
+    /// speed; combined with corrections steering them off their velocity vector, they slammed into walls and
+    /// overshot waypoints in tight spaces. See planning/bot-ai-parity-2026-08-03.md D13.</para>
+    /// </summary>
+    public bool Attacking;
+
     /// <summary>Set true while steering when an obstacle/up-step needs a jump (QC PHYS_INPUT_BUTTON_JUMP).</summary>
     public bool WantJump { get; private set; }
-
-    /// <summary>Force the jump intent for this frame (QC trigger_hurt jetpack escape sets +jump alongside the
-    /// jetpack so a cl_jetpack_jump host activates the pack). Used by <see cref="BotBrain"/>; Steer overwrites
-    /// WantJump next frame as usual.</summary>
-    public void ForceJump() => WantJump = true;
 
     /// <summary>Set true while steering when traversing a crouch waypoint (QC PHYS_INPUT_BUTTON_CROUCH).</summary>
     public bool WantCrouch { get; private set; }
@@ -155,6 +161,9 @@ public sealed class BotNavigation
     public bool CheckGoalProgress(Entity bot, float now)
     {
         if (_goals.Count == 0)
+            return false;
+        // QC havocbot_checkgoaldistance:346-347 — a bot deliberately holding still to re-orient is not stuck.
+        if (StopMovingTimeout > now)
             return false;
         Vector3 gco = _goals[0].Pos;
         float currZ = MathF.Max(20f, MathF.Abs(bot.Origin.Z - gco.Z));
@@ -350,36 +359,142 @@ public sealed class BotNavigation
         if ((goal.Flags & WaypointFlags.Crouch) != 0)
             WantCrouch = true;
 
-        // ---- jump waypoint: the outgoing link requires a jump (QC WAYPOINTFLAG_JUMP) ----
-        // Jump as we approach the jump-waypoint so the leap carries us along the link.
-        if ((goal.Flags & WaypointFlags.Jump) != 0 && onGround && flat.Length() < 100f)
-            WantJump = true;
-
         // ---- ladder waypoint: climb (QC WAYPOINTFLAG_LADDER) — bias the move upward and don't brake on the
         //      vertical gap, since a ladder lets us ascend without a jump.
         bool onLadder = (goal.Flags & WaypointFlags.Ladder) != 0;
 
-        // ---- obstacle / step-up detection -> jump (QC tracebox jumpobstacle_check block) ----
-        // Probe a little ahead at current and stepped-up heights; if a wall blocks at foot level but the
-        // path opens up when raised by a jump's worth of height, jump.
-        float speed = new Vector2(bot.Velocity.X, bot.Velocity.Y).Length();
-        float reach = MathF.Max(32f, speed * 0.3f);
-        Vector3 ahead = bot.Origin + flatdir * reach;
+        // ---- QC "stop and re-orient" brake (havocbot.qc:1130-1134, consumed at :907-911) ----
+        // A low-skill bot running hard into a sharp turn stops for a moment instead of grinding along the wall
+        // while its yaw slews. Base's primary anti-wall-grind device, and the port had nothing like it: the bot
+        // kept pushing forward through the turn and, because it wasn't closing on the goal, the 0.5 s
+        // no-progress watchdog then destroyed its route mid-corner. See parity report D9.
+        float curSpeed = new Vector2(bot.Velocity.X, bot.Velocity.Y).Length();
+        Vector3 deviation = Vector3.Zero;
+        if (curSpeed < MaxSpeed * 0.2f)
+            curSpeed = MaxSpeed * 0.2f;
+        else
+            deviation = WrapYaw(QMath.VecToAngles(diff) - QMath.VecToAngles(bot.Velocity));
 
-        var trFlat = Trace(bot, bot.Origin, ahead);
-        if (trFlat.Fraction < 1f && trFlat.PlaneNormal.Z < 0.7f)
+        if (Now < StopMovingTimeout)
         {
-            // Wall ahead. Can we walk up it as a step?
-            var step = new Vector3(0f, 0f, StepHeightLive);
-            var trStep = Trace(bot, bot.Origin + step, ahead + step);
-            if (trStep.Fraction < trFlat.Fraction + 0.01f && trStep.PlaneNormal.Z < 0.7f)
+            // QC havocbot.qc:909-911: destorg = origin; diff = dir = '0 0 0' — emit no move at all this frame.
+            LastWorldDir = Vector3.Zero;
+            LastBrake = Vector3.Zero;
+            LastGoalPos = goal.Pos;
+            return Vector3.Zero;
+        }
+        if (Skill + MoveSkill <= 3f && curSpeed > MaxSpeed * 0.9f && MathF.Abs(deviation.Y) > 70f)
+            StopMovingTimeout = Now + 0.4f + (float)_kbRng.NextDouble() * 0.2f;
+
+        // ---- QC look-ahead + corner cut (havocbot.qc:979-1048) ----
+        // The bot does NOT steer at the goal point: it steers at `actual_destorg`, a point one "reaction
+        // distance" ahead along its bearing, scaled by speed and by how far off-heading it currently is. When
+        // it gets within that distance of the current goal it re-aims at the NEXT goal instead, which is what
+        // makes a Xonotic bot round a corner in one smooth arc rather than driving to the node and pivoting.
+        // The port steered straight at the goal centre, so its obstacle probe and jump decision were evaluated
+        // against a direction the bot was not actually going to travel.
+        float offsetLen = MathF.Max(32f, curSpeed * MathF.Cos(deviation.Y * MathF.PI / 180f) * 0.3f);
+        Vector3 offset = flatdir * offsetLen;
+        Vector3 actualDest = bot.Origin + offset;
+        bool turning = false;
+        float flatLen2 = flat.LengthSquared();
+        Goal? next = _goals.Count > 1 ? _goals[1] : null;
+
+        if (HasPrevGoal && PrevGoalWp is not null && PrevGoalWp.HasFlag(WaypointFlags.Jump))
+        {
+            // QC havocbot.qc:993-1009 — the launch AFTER a jump waypoint, not on approach to one. Base fires
+            // the jump once the bot has already LEFT the jump node, is at speed, and is 50-150qu past it; the
+            // port jumped while approaching, which is the opposite phase of the manoeuvre (D19).
+            Vector3 fromPrev = new(bot.Origin.X - PrevGoalPos.X, bot.Origin.Y - PrevGoalPos.Y, 0f);
+            float prevDist = fromPrev.Length();
+            if (Now > StopMovingTimeout && MathF.Abs(deviation.Y) > 20f
+                && curSpeed > MaxSpeed * 0.4f && prevDist < 50f)
+                StopMovingTimeout = Now + 0.1f;
+
+            Vector3 prevToDest = new(destorg.X - PrevGoalPos.X, destorg.Y - PrevGoalPos.Y, 0f);
+            if (curSpeed > MaxSpeed * 0.9f && flatLen2 < prevToDest.LengthSquared()
+                && prevDist > 50f && prevDist < 150f)
+                WantJump = true;
+        }
+        else if (next is null || (goal.Flags & (WaypointFlags.Teleport | WaypointFlags.Ladder)) != 0)
+        {
+            // Last goal, or one that must be entered exactly: aim AT it once inside the look-ahead radius.
+            if (flatLen2 < offsetLen * offsetLen)
             {
-                // Still blocked at step height: try a full jump's height (QC stepheight + jumpheight_vec on ground).
-                var jh = new Vector3(0f, 0f, StepHeightLive + JumpHeightApex);
-                var trJump = Trace(bot, bot.Origin + jh, ahead + jh);
-                if (trJump.Fraction > trStep.Fraction && onGround)
+                if ((goal.Flags & WaypointFlags.Jump) != 0 && next is not null)
+                    WantJump = true;   // QC: oblique warpzones need a jump or bots get stuck
+                else
+                    actualDest = new Vector3(destorg.X, destorg.Y, actualDest.Z);
+            }
+        }
+        else if (flat.Length() < 32f && diff.Z < -16f)
+        {
+            actualDest = new Vector3(destorg.X, destorg.Y, actualDest.Z); // goal directly below: aim at it
+        }
+        else if (flatLen2 < offsetLen * offsetLen)
+        {
+            // CORNER CUT: close to this goal and another follows — steer past it toward the next one.
+            Vector3 nextOrg = next.Value.Pos;
+            Vector3 toNext = new(nextOrg.X - destorg.X, nextOrg.Y - destorg.Y, 0f);
+            Vector3 nextDir = toNext.LengthSquared() > 0f ? QMath.Normalize(toNext) : Vector3.Zero;
+            Vector3 overshoot = new(bot.Origin.X + offset.X - destorg.X, bot.Origin.Y + offset.Y - destorg.Y, 0f);
+            float dist = overshoot.Length();
+            actualDest = dist * dist > toNext.LengthSquared()
+                ? nextOrg                                  // don't aim beyond the next goal
+                : new Vector3(destorg.X, destorg.Y, 0f) + dist * nextDir;
+            actualDest.Z = bot.Origin.Z;
+            turning = true;
+        }
+
+        // ---- obstacle probe -> jump (QC jumpobstacle_check, havocbot.qc:1049-1099) ----
+        // Retried once WITHOUT the corner cut: an obstacle that only exists because we are cutting the corner
+        // is not a reason to jump, it is a reason to stop cutting. QC does this with a goto; the loop is the
+        // same two passes.
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            dir = flatdir = QMath.Normalize(actualDest - bot.Origin);
+
+            bool jumpForbidden = !turning && MathF.Abs(deviation.Y) > 50f;
+            if (!jumpForbidden && WantCrouch)
+            {
+                // QC: a ducked bot that would be stuck standing must not jump.
+                var stand = Trace(bot, bot.Origin, bot.Origin);
+                if (stand.StartSolid) jumpForbidden = true;
+            }
+            if (jumpForbidden) break;
+
+            var trFlat = Trace(bot, bot.Origin, actualDest);
+            if (trFlat.Fraction >= 1f || trFlat.PlaneNormal.Z >= 0.7f) break;
+
+            float s = trFlat.Fraction;
+            var step = new Vector3(0f, 0f, StepHeightLive);
+            var trStep = Trace(bot, bot.Origin + step, actualDest + step);
+            if (trStep.Fraction >= s + 0.01f || trStep.PlaneNormal.Z >= 0.7f) break;
+
+            if (turning && MathF.Abs(deviation.Y) > 5f && attempt == 0)
+            {
+                // The obstacle may be an artefact of the corner cut — re-probe straight at the goal.
+                actualDest = destorg;
+                turning = false;
+                continue;
+            }
+
+            s = trStep.Fraction;
+            // QC havocbot.qc:1081: on the ground use the FULL jump apex; airborne use the reduced
+            // jumpstepheightvec (the "easy jump" reach tracewalk assumes).
+            var jh = new Vector3(0f, 0f, onGround ? StepHeightLive + JumpHeightApex : JumpStepHeightLive);
+            if (Trace(bot, bot.Origin + jh, actualDest + jh).Fraction > s)
+            {
+                WantJump = true;
+            }
+            else
+            {
+                // QC's half-apex fallback: clearing at half height still beats not jumping at all.
+                jh = new Vector3(0f, 0f, StepHeightLive + JumpHeightApex * 0.5f);
+                if (Trace(bot, bot.Origin + jh, actualDest + jh).Fraction > s)
                     WantJump = true;
             }
+            break;
         }
 
         // ---- goal above us -> jump up onto it (unless on a ladder, where we just climb) ----
@@ -413,7 +528,7 @@ public sealed class BotNavigation
         // ~0% at the foot of a ledge with the waypoint overhead, so the bot crept exactly where it was trying
         // to climb and then tripped the 0.5s no-progress watchdog. Vertical intent is carried by WantJump and
         // the ladder bias below, not by shortening the run. See parity report D8.
-        Vector3 worldMove = flatdir;
+        Vector3 worldMove = flatdir;   // the look-ahead / corner-cut bearing settled on above
         // On a ladder, bias the move strongly upward so the climb works (QC pushes +z on ladders).
         if (onLadder && diff.Z > 0f)
             worldMove = QMath.Normalize(worldMove + new Vector3(0f, 0f, 1f));
@@ -429,7 +544,7 @@ public sealed class BotNavigation
         // ledge brake (do_break analogue, above) gates it here; the BotBrain per-frame danger brake (which runs
         // AFTER Steer) gates it by ANDing WantBunnyhop with "no danger this frame" before pressing jump. Result
         // is reported via WantBunnyhop (not WantJump) so the brain owns the final danger-suppression decision.
-        if (brake == Vector3.Zero && Bunnyhop(bot, dir, onGround, goal, attacking: false))
+        if (brake == Vector3.Zero && Bunnyhop(bot, dir, onGround, goal, Attacking))
             WantBunnyhop = true;
 
         return ComposeMove(bot, worldMove + brake, viewYaw, goal.Pos);
@@ -461,6 +576,9 @@ public sealed class BotNavigation
 
     /// <summary>True when the current goal is a graph waypoint (QC <c>goalcurrent.classname == "waypoint"</c>).</summary>
     public bool CurrentIsWaypoint => _goals.Count > 0 && _goals[0].Wp is not null;
+
+    /// <summary>The current goal's waypoint (QC <c>goalcurrent</c>), or null for a bare position goal.</summary>
+    public Waypoint? CurrentWp => _goals.Count > 0 ? _goals[0].Wp : null;
 
     /// <summary>
     /// True when the IMMEDIATE goal is a player (QC <c>IS_PLAYER(this.goalcurrent)</c>). Distinct from
@@ -508,6 +626,22 @@ public sealed class BotNavigation
     /// the midair mutator forces it to 0 on spawn so high-skill bots stop bunnyhopping while keeping aim/reaction.
     /// </summary>
     public float MoveSkill;
+
+    /// <summary>
+    /// QC <c>.bot_stop_moving_timeout</c> (havocbot.qc:1133): until this time the bot emits NO movement, so it
+    /// can stop and let its yaw catch up instead of grinding along a wall through a hard turn. Also suppresses
+    /// the no-progress watchdog (QC havocbot_checkgoaldistance early-returns while it is set, havocbot.qc:346)
+    /// — otherwise a deliberate pause would be read as being stuck.
+    /// </summary>
+    public float StopMovingTimeout;
+
+    /// <summary>Wrap a yaw delta into (-180, 180] (QC's `while (deviation.y &lt; -180) …` idiom).</summary>
+    private static Vector3 WrapYaw(Vector3 a)
+    {
+        while (a.Y < -180f) a.Y += 360f;
+        while (a.Y > 180f) a.Y -= 360f;
+        return a;
+    }
 
     // ---- keyboard-movement emulation state (QC havocbot.qh .havocbot_keyboardtime / .havocbot_keyboard) ----
     private float _keyboardTime;      // QC .havocbot_keyboardtime — next time the keyboard direction may change
@@ -606,6 +740,12 @@ public sealed class BotNavigation
             return false;
         if (WantCrouch || bot.WaterLevel > 1) // WATERLEVEL_WETFEET
             return false;
+        // QC havocbot.qc:217-221: no hop while the immediate goal is a PLAYER (a chase needs manoeuvrability,
+        // not committed momentum), nor on the frame after leaving a JUMP waypoint (that launch is its own move).
+        if (CurrentGoalEntityIsPlayer)
+            return false;
+        if (PrevGoalWp is not null && PrevGoalWp.HasFlag(WaypointFlags.Jump))
+            return false;
         // don't bunnyhop straight into a jump/teleport goal (we handle those explicitly).
         if ((goal.Flags & (WaypointFlags.Jump | WaypointFlags.Teleport)) != 0)
             return false;
@@ -627,7 +767,29 @@ public sealed class BotNavigation
         Vector3 gco = goal.Pos;
         float jumpDistance = 52.661f + 0.606f * vel + (bot.Origin.Z - gco.Z);
         float remaining = new Vector2(gco.X - bot.Origin.X, gco.Y - bot.Origin.Y).Length();
-        return remaining > MathF.Max(0f, jumpDistance);
+        if (remaining > MathF.Max(0f, jumpDistance))
+            return true;
+
+        // QC havocbot.qc:237-255 — the CONTINUATION arm. Too close to this goal to hop over it, but if another
+        // goal lies well beyond and the turn between them is gentle enough at this speed, keep hopping THROUGH
+        // rather than landing and re-accelerating. Without it a high-skill bot stops dead at every waypoint,
+        // which is both slower and visibly choppier. The turn budget tightens as speed rises — the four cvars
+        // that tune it were registered and read by nothing until now (D31).
+        if ((goal.Flags & (WaypointFlags.Jump | WaypointFlags.Teleport)) != 0) return false;
+        if (_goals.Count < 2) return false;
+        Goal nextGoal = _goals[1];
+        if ((nextGoal.Flags & WaypointFlags.Jump) != 0) return false;
+        Vector3 gno = nextGoal.Pos;
+        if (new Vector2(gco.X - gno.X, gco.Y - gno.Y).Length() <= 70f) return false;
+
+        Vector3 ang = QMath.VecToAngles(gco - bot.Origin);
+        float turnDev = WrapDeg(QMath.VecToAngles(gno - gco).Y - velAngles.Y);
+        float maxTurn = Cvars.FloatOr("bot_ai_bunnyhop_turn_angle_max", 80f)
+            - Cvars.FloatOr("bot_ai_bunnyhop_turn_angle_reduction", 40f) * ((vel - MaxSpeed) / MaxSpeed);
+        float minTurn = Cvars.FloatOr("bot_ai_bunnyhop_turn_angle_min", 4f);
+        float downPitch = Cvars.FloatOr("bot_ai_bunnyhop_downward_pitch_max", 30f);
+        return (ang.X < 90f || ang.X > 360f - downPitch)
+               && MathF.Abs(turnDev) < MathF.Max(minTurn, maxTurn);
     }
 
     private static float WrapDeg(float a)
@@ -647,6 +809,35 @@ public sealed class BotNavigation
     /// </summary>
     private bool ReachedGoal(Entity bot, Goal goal)
     {
+        // A TELEPORT goal (teleporter mouth or jumppad trigger) is NOT reached by being near it — it is reached
+        // by the trigger actually having fired. QC navigation.qc:1652 gates the pop on
+        //   lastteleporttime > 0 && TELEPORT_USED(pl, goalcurrent)
+        // where TELEPORT_USED tests the player's hull AT THE MOMENT IT WAS TELEPORTED against the waypoint box
+        // (navigation.qh:65). Popping on proximity alone is how a bot ends up dancing at a jumppad mouth: it
+        // "reaches" the pad, drops the goal, walks off, re-routes back, repeats. The jumppad case additionally
+        // holds the pop for a short random delay, because some pads need an extra run-up and popping instantly
+        // strands the bot on the pad. See planning/bot-ai-parity-2026-08-03.md D18.
+        if ((goal.Flags & WaypointFlags.Teleport) != 0 && goal.Wp is { } tw)
+        {
+            if (bot.LastTeleportTime <= 0f) return false;
+            Vector3 lo = tw.AbsMin, hi = tw.AbsMax;
+            Vector3 pmin = bot.LastTeleportOrigin + Mins, pmax = bot.LastTeleportOrigin + Maxs;
+            bool used = lo.X <= pmax.X && hi.X >= pmin.X
+                     && lo.Y <= pmax.Y && hi.Y >= pmin.Y
+                     && lo.Z <= pmax.Z && hi.Z >= pmin.Z;
+            if (!used) return false;
+
+            // QC navigation.qc:1660-1669: jumppad pop delay (0.1s, halved when already launched fast).
+            if (bot.JumpPadCount > 0)
+            {
+                float maxDelay = new Vector2(bot.Velocity.X, bot.Velocity.Y).Length() > 2f * MaxSpeed
+                    ? 0.05f : 0.1f;
+                if (Now - bot.LastTeleportTime < (float)_kbRng.NextDouble() * maxDelay)
+                    return false;
+            }
+            return true;
+        }
+
         if (goal.Wp is { IsBox: true } wp)
         {
             Vector3 lo = wp.AbsMin, hi = wp.AbsMax;

@@ -66,16 +66,34 @@ public class BotUnstuckTests
         Assert.True(brain.Unstuck.IsStuck);
     }
 
-    /// <summary>QC navigation_unstuck:1910 — the whole mechanism is behind bot_wander_enable.</summary>
+    /// <summary>
+    /// QC navigation_unstuck:1910 — the whole mechanism is behind bot_wander_enable.
+    ///
+    /// <para>RESTORES THE CVAR, and that restore is load-bearing. <c>Cvars</c> is global and this assembly
+    /// runs with <c>DisableTestParallelization</c>, so every test after this one inherits whatever it leaves
+    /// behind — and xunit does not promise an order. Leaking <c>bot_wander_enable 0</c> disabled the unstuck
+    /// mechanism for the rest of the run, which is how
+    /// <c>BotLiveLoopTests.LiveLoop_BotsFill_Move_Fight_AndTrim</c> became flaky ("bot 1 did not move"): a bot
+    /// whose rating pass found no goal could no longer wander out of it. It passed alone, failed ~1 in 3 in a
+    /// full run, and failed reliably on CI, because each of those is a different test ORDER.</para>
+    /// </summary>
     [Fact]
     public void WanderDisabledMeansTheBotNeverEntersTheStuckState()
     {
-        Cvars.Set("bot_wander_enable", "0");
-        var (brain, _) = NewBot(UserGraph());
+        string prev = Cvars.String("bot_wander_enable");
+        try
+        {
+            Cvars.Set("bot_wander_enable", "0");
+            var (brain, _) = NewBot(UserGraph());
 
-        brain.Unstuck.NoteRatingProducedNothing();
+            brain.Unstuck.NoteRatingProducedNothing();
 
-        Assert.False(brain.Unstuck.IsStuck);
+            Assert.False(brain.Unstuck.IsStuck);
+        }
+        finally
+        {
+            Cvars.Set("bot_wander_enable", prev);
+        }
     }
 
     /// <summary>

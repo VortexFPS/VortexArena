@@ -47,7 +47,29 @@ public sealed class BotUnstuck
     private Waypoint? _bestGoal;
     private float _bestGoalRating;
 
+    /// <summary>
+    /// Whether THIS bot currently holds the server-wide scan token. Tracked locally so every exit path can
+    /// hand it back without a delegate call per think, and so "am I holding a lock I am no longer using" is
+    /// answerable at each return rather than inferred.
+    /// </summary>
+    private bool _ownsQueue;
+
     public BotUnstuck(BotBrain brain) => _brain = brain;
+
+    /// <summary>Claim the shared scan token, or confirm we already hold it.</summary>
+    private bool OwnQueue() => _ownsQueue || (_ownsQueue = _brain.TryOwnUnstuckQueue());
+
+    /// <summary>
+    /// Hand the shared scan token back. Idempotent, and safe to call on any path that stops working the
+    /// queue — which is the point: the token is SERVER-WIDE, so one bot keeping it after it has stopped
+    /// scanning wedges every other bot permanently. See <see cref="Clear"/>.
+    /// </summary>
+    private void ReleaseQueue()
+    {
+        if (!_ownsQueue) return;
+        _ownsQueue = false;
+        _brain.ReleaseUnstuckQueue();
+    }
 
     /// <summary>
     /// QC navigation_goalrating_end (navigation.qc:1861-1867): a rating pass that produced no goal entity puts
@@ -61,12 +83,24 @@ public sealed class BotUnstuck
         Reset();
     }
 
-    /// <summary>QC <c>aistatus &amp;= ~AI_STATUS_STUCK</c>: the bot found somewhere to go.</summary>
+    /// <summary>
+    /// QC <c>aistatus &amp;= ~AI_STATUS_STUCK</c>: the bot found somewhere to go.
+    ///
+    /// <para>RELEASES THE SCAN TOKEN, and that is the whole bug this method used to have. A bot that claimed
+    /// the token, then stopped being stuck part-way through its scan, left <c>_unstuckQueueOwner</c> pointing
+    /// at itself forever — the claim hook only steals it back when the holder's <c>Bot.IsFreed</c>. Every
+    /// other bot that wedged afterwards failed <c>TryOwnUnstuckQueue</c> on every think and could never run
+    /// the scan that would free it, so it stood still for the rest of the match. Intermittent, because it
+    /// needs one bot to clear mid-scan; it surfaced as a flaky
+    /// <c>BotLiveLoopTests.LiveLoop_BotsFill_Move_Fight_AndTrim</c> ("bot 1 did not move") that failed ~1 in 3
+    /// runs without maps and reliably on CI.</para>
+    /// </summary>
     public void Clear()
     {
         if (!IsStuck) return;
         IsStuck = false;
         Reset();
+        ReleaseQueue();
     }
 
     private void Reset()
@@ -85,14 +119,16 @@ public sealed class BotUnstuck
     /// </summary>
     public bool Think(Player bot, WaypointNetwork? net, BotNavigation nav)
     {
-        if (!IsStuck || net is null || net.Count == 0) return false;
-        if (!Cvars.Bool("bot_wander_enable")) { Clear(); return false; }
+        // Every early-out hands the token back first. It is server-wide, so "return without releasing" is
+        // not a missed optimisation — it is a permanent denial of the unstuck scan to every other bot.
+        if (!IsStuck || net is null || net.Count == 0) { ReleaseQueue(); return false; }
+        if (!Cvars.Bool("bot_wander_enable")) { Clear(); return false; }   // Clear releases
 
         // QC navigation.qc:1913-1920: bail unless the map has at least one hand-authored waypoint.
-        if (!net.HasUserWaypoints) return false;
+        if (!net.HasUserWaypoints) { ReleaseQueue(); return false; }
 
         // QC: only the queue owner works the scan; others wait their turn (one scan across the server).
-        if (!_brain.TryOwnUnstuckQueue()) return false;
+        if (!OwnQueue()) return false;
 
         if (_queue.Count == 0)
         {
@@ -100,7 +136,7 @@ public sealed class BotUnstuck
             if (_queue.Count == 0)
             {
                 // QC "stuck, cannot walk to any waypoint at all" — release the token so another bot can try.
-                _brain.ReleaseUnstuckQueue();
+                ReleaseQueue();
                 return false;
             }
         }
@@ -145,7 +181,7 @@ public sealed class BotUnstuck
                 // a teammate steps aside, a door opens), and let another bot have the token meanwhile.
                 Reset();
             }
-            _brain.ReleaseUnstuckQueue();
+            ReleaseQueue();
         }
         return true;
     }

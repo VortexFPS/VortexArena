@@ -573,6 +573,18 @@ public sealed class BotBrain
         {
             using (VortexArena.Common.Diagnostics.Prof.Sample("bot.unstuck"))
                 Unstuck.Think(bot, Network, Nav);
+            // CONSUME THE TOKEN, for exactly the reason the observer/frozen/dead branches above do. QC
+            // havocbot_ai:103 sets bot_strategytoken_taken = true UNCONDITIONALLY when this bot holds the
+            // token; this port defers it to the end of the strategy block, and that block is skipped while
+            // AI_STATUS_STUCK is set (the short-circuit below). So a STUCK token-holder used to consume
+            // nothing: _tokenTaken stayed false, RotateStrategyToken never rotated, and the WHOLE population
+            // stopped re-rating goals until that one bot unwedged itself. Every other bot kept whatever goal
+            // it had — or none — and simply stood there.
+            //
+            // That is the second half of the flaky BotLiveLoopTests "bot 1 did not move": the first half was
+            // BotUnstuck holding the scan token across Clear(). Fixing only that took the failure from ~1 in 3
+            // to ~1 in 10, because this one starves the population independently.
+            if (StrategyTokenHeld) OnStrategyTokenUsed?.Invoke();
         }
 
         // QC navigation_goalrating_start/_end short-circuit entirely while AI_STATUS_STUCK is set

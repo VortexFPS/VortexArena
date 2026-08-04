@@ -129,6 +129,13 @@ public class BotLiveLoopTests
         Cvars.Set("bot_join_empty", "1");
         Cvars.Set("bot_number", "2");
         Cvars.Set("skill", "8");
+        // Stated rather than inherited. Cvars is global and this assembly runs with
+        // DisableTestParallelization, so an earlier test's leftovers are this test's starting state — and
+        // xunit does not promise an order. A leaked `bot_wander_enable 0` (BotUnstuckTests, since fixed to
+        // restore it) disabled the unstuck mechanism here and wedged a bot that found no goal, which read as
+        // a flaky "bot N did not move". Pinning what this scenario DEPENDS on is what makes it order-proof;
+        // the other test's restore is the fix, this is the belt.
+        Cvars.Set("bot_wander_enable", "1");
 
         // (c) the time<2.5 sentinel: nothing fills early (QC bot.qc:712-716).
         RunTo(world, 2.0f);
@@ -153,6 +160,14 @@ public class BotLiveLoopTests
         // run the match: the bots must move under their own input and at least one must pull the trigger
         // (ButtonAttack1 through the human WeaponFireDriver path — enemies have clear LOS on a flat floor).
         bool anyAttack = false, anyEnemy = false;
+        // FURTHEST displacement reached during the match, not the displacement at the final frame. The
+        // property under test is "the bots move under their own input"; final position does not measure that,
+        // because a bot that runs out and fights its way back is indistinguishable from one that never left.
+        // That is not hypothetical — it is what made this test flaky: an observed failure had bot 1 at
+        // (-297.5, -22.6, 62.1) from a spawn at (-256, 0, 32), i.e. displacement 56 against a threshold of
+        // 64, and a z of 62 vs 32 means it was mid-air at the time. A wedged bot still fails this: it never
+        // leaves its spawn, so its MAXIMUM stays at zero too.
+        var maxDisp = new float[2];
         RunTo(world, 12f, () =>
         {
             foreach (BotBrain b in world.Bots.Brains)
@@ -160,13 +175,18 @@ public class BotLiveLoopTests
                 anyAttack |= b.LastInput.ButtonAttack1;
                 anyEnemy |= b.Enemy is not null;
             }
+            for (int i = 0; i < world.Bots.Brains.Count && i < 2; i++)
+            {
+                float d = (world.Bots.Brains[i].Bot.Origin - spawnOrigins[i]).Length();
+                if (d > maxDisp[i]) maxDisp[i] = d;
+            }
         });
-        for (int i = 0; i < world.Bots.Brains.Count; i++)
+        for (int i = 0; i < world.Bots.Brains.Count && i < 2; i++)
         {
             Player bot = world.Bots.Brains[i].Bot;
             if (bot.IsDead) continue; // a mid-fight corpse is parked; the living must have moved
-            Assert.True((bot.Origin - spawnOrigins[System.Math.Min(i, 1)]).Length() > 64f,
-                $"bot {i} did not move (at {bot.Origin})");
+            Assert.True(maxDisp[i] > 64f,
+                $"bot {i} never moved (furthest {maxDisp[i]:F0}u from spawn {spawnOrigins[i]}, now at {bot.Origin})");
         }
         Assert.True(anyEnemy, "no bot ever acquired an enemy");
         Assert.True(anyAttack, "no bot ever pressed attack");

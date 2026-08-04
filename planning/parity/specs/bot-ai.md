@@ -1,7 +1,7 @@
 # Bot AI (havocbot) — parity spec
 
 **Base refs:** `server/bot/default/{bot,aim,navigation,scripting,waypoints}.qc` · `server/bot/default/havocbot/{havocbot,roles}.qc` · `server/bot/default/cvars.qh` · `server/bot/api.{qc,qh}`
-**Port refs:** `src/VortexArena.Server/Bot/{BotBrain,BotAim,BotNavigation,BotDanger,BotRoles,BotObjectiveRoles,BotController,BotPopulation,BotTracewalk,Waypoint}.cs` · `src/VortexArena.Server/GameWorld.cs` (live seam) · `src/VortexArena.Server/ClientManager.cs`
+**Port refs:** `src/VortexArena.Server/Bot/{BotBrain,BotAim,BotNavigation,BotDanger,BotRoles,BotObjectiveRoles,BotPopulation,BotTracewalk,Waypoint}.cs` · `src/VortexArena.Server/GameWorld.cs` (live seam) · `src/VortexArena.Server/ClientManager.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview

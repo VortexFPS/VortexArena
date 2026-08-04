@@ -1,7 +1,7 @@
 # sv-spawnpoints — parity spec
 
 **Base refs:** `server/spawnpoints.qc` · `server/spawnpoints.qh` · `common/mapobjects/target/spawnpoint.qh` · `client/spawnpoints.qc` (presentation) · `common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc` · `common/mutators/mutator/spawn_unique/sv_spawn_unique.qc` · `server/race.qc:trigger_race_checkpoint_spawn_evalfunc`
-**Port refs:** `src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs` · `.../Player/EntitySpawnPointState.cs` · `.../Mutators/SpawnNearTeammateMutator.cs` · `.../Mutators/SpawnUniqueMutator.cs` · `src/VortexArena.Server/ClientManager.cs:Spawn` · `src/VortexArena.Server/Bot/BotController.cs` · `game/client/SpawnPointParticles.cs`
+**Port refs:** `src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs` · `.../Player/EntitySpawnPointState.cs` · `.../Mutators/SpawnNearTeammateMutator.cs` · `.../Mutators/SpawnUniqueMutator.cs` · `src/VortexArena.Server/ClientManager.cs:Spawn` · `src/VortexArena.Server/Bot/BotPopulation.cs` · `game/client/SpawnPointParticles.cs`
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
 ## Overview
@@ -111,7 +111,7 @@ far-pick `(lower=1, upper=5000, exponent=5)`, near-pick `(1,1,1)`. Cvars:
 ## Port mapping
 | Base feature | Port symbol | Notes |
 |---|---|---|
-| `SelectSpawnPoint` | `SpawnSystem.SelectSpawnPoint` | live via `ClientManager.Spawn`, `BotController`, `MatchController.Spawn` |
+| `SelectSpawnPoint` | `SpawnSystem.SelectSpawnPoint` | live via `ClientManager.Spawn`, `BotPopulation`, `MatchController.Spawn` |
 | `Spawn_Score` | `SpawnSystem.ScoreSpot` | distance-to-nearest + prio + mutator hook |
 | `Spawn_FilterOutBadSpots` | inline in `SelectSpawnPoint` (the `prio >= 0` filter) | + a `tracebox` startsolid drop the port adds |
 | `Spawn_WeightedPoint` + RandomSelection | `SpawnSystem.WeightedPick` | reservoir + `(score>=lower)*0.5 + prio` priority |
@@ -166,7 +166,7 @@ NetGame rather than the SpawnEvent — an intended net-layer divergence (already
 **Audio — missing.** No SND_SPAWN on spawn (see presentation). This is the only audio cue this unit owns.
 
 **Liveness.** `SelectSpawnPoint` + `PutPlayerInServer` are LIVE — `ClientManager.Spawn` (every
-join/respawn on the listen/dedicated path), `BotController` (bot spawns), and `MatchController.Spawn`
+join/respawn on the listen/dedicated path), `BotPopulation` (bot spawns), and `MatchController.Spawn`
 (headless/sim path) all call them. The mutator hooks (spawn_near_teammate, spawn_unique) are LIVE behind
 their enable cvars (registered `[Mutator]`, hooked into `MutatorHooks.SpawnScore`/`PlayerSpawn` which
 `ScoreSpot`/`ClientManager.Spawn` fire). `target_spawnpoint`'s setter is live but its **reader is dead**.

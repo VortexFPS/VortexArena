@@ -638,7 +638,7 @@ features:
     port_refs:
       - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleFreezeTag (664-689)"
       - "src/VortexArena.Server/Bot/BotRoles.cs:128 (ChooseRole \"freezetag\"/\"ft\" → RoleFreezeTag)"
-      - "src/VortexArena.Server/Bot/BotController.cs:101 (AddBot → Role = ChooseRole)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:550 (RegisterBot → Role = ChooseRole)"
       - "src/VortexArena.Server/Bot/BotBrain.cs:1093 (ShouldAttack frozen-target skip)"
     constants:
       - { name: "role timeout", base: "time + 10..20 s (random)", port: "none (RoleFreezeTag assigned once at AddBot, no re-roll)", match: false }
@@ -656,9 +656,9 @@ features:
       - "Role-timeout re-pick (10-20 s random) not implemented: Base periodically re-evaluates the role; the port assigns RoleFreezeTag once at spawn. Cosmetic for FT because freeing+offense is always the right combined role. Only values: partial for this."
       - "BotBrain.FtRoleTimeout field absent — does not affect observable FT behaviour at stock settings."
     verification:
-      - { kind: code-read, ref: "BotObjectiveRoles.RoleFreezeTag (BotObjectiveRoles.cs:664-689) rates frozen same-team players at RatingFrozenTeammate=20000 (BotObjectiveRoles.cs:655) plus offense goals (items 10000, enemies 7000, roam 3000); BotRoles.ChooseRole (BotRoles.cs:128) maps \"freezetag\"/\"ft\" → RoleFreezeTag, assigned at BotController.AddBot (BotController.cs:101). BotBrain.ShouldAttack returns false for a Frozen-status target (BotBrain.cs:1093). Only the 10-20 s role-timeout re-roll is absent.", result: pass }
+      - { kind: code-read, ref: "BotObjectiveRoles.RoleFreezeTag (BotObjectiveRoles.cs:664-689) rates frozen same-team players at RatingFrozenTeammate=20000 (BotObjectiveRoles.cs:655) plus offense goals (items 10000, enemies 7000, roam 3000); BotRoles.ChooseRole (BotRoles.cs:128) maps \"freezetag\"/\"ft\" → RoleFreezeTag, assigned at BotPopulation.RegisterBot (BotPopulation.cs:550). BotBrain.ShouldAttack returns false for a Frozen-status target (BotBrain.cs:1093). Only the 10-20 s role-timeout re-roll is absent.", result: pass }
     confidence: high
-    notes: "FIX (registry drift): BotObjectiveRoles.RoleFreezeTag (BotObjectiveRoles.cs:664-689) implements both the freeing role (rates frozen same-team players at 20000 — dominant over items/enemies) and the offense goals (items 10000, enemies 7000, roam 3000). BotRoles.ChooseRole (BotRoles.cs:128) dispatches \"freezetag\" or \"ft\" → RoleFreezeTag, wired in BotController.AddBot (BotController.cs:101). The frozen-target attack gate (ShouldAttack BotBrain.cs:1093) is also live. The prior 'logic: partial/values: missing' entry was written before RoleFreezeTag landed. Role-timeout randomisation (10-20 s) is absent (Base re-rolls the role; port uses a static per-session assignment) — cosmetic for FT since the combined freeing+offense role is always appropriate."
+    notes: "FIX (registry drift): BotObjectiveRoles.RoleFreezeTag (BotObjectiveRoles.cs:664-689) implements both the freeing role (rates frozen same-team players at 20000 — dominant over items/enemies) and the offense goals (items 10000, enemies 7000, roam 3000). BotRoles.ChooseRole (BotRoles.cs:128) dispatches \"freezetag\" or \"ft\" → RoleFreezeTag, wired in BotPopulation.RegisterBot (BotPopulation.cs:550). The frozen-target attack gate (ShouldAttack BotBrain.cs:1093) is also live. The prior 'logic: partial/values: missing' entry was written before RoleFreezeTag landed. Role-timeout randomisation (10-20 s) is absent (Base re-rolls the role; port uses a static per-session assignment) — cosmetic for FT since the combined freeing+offense role is always appropriate."
 
   - id: freezetag.spawn.late
     name: "Mid-round joiner spawns AS FROZEN (PlayerSpawn → SPAWN_LATE)"

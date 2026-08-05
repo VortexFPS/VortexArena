@@ -12921,6 +12921,13 @@ public sealed partial class NetGame : Node3D
         // grid-lit, since ModelLighting.HasGrid is what that decision reads. A map with no lump 15 leaves the
         // binding off and models fall back to the per-entity CPU sample exactly as before.
         Client.ModelLighting.ApplyMap(_bsp?.LightGrid);
+        // (F4) load this map authored world lights (.rtlights, else the map light entities).
+        if (_render is not null && GodotObject.IsInstanceValid(_render) && _render.WorldLights is not null)
+        {
+            _render.WorldLights.Assets = _assets;
+            _render.WorldLights.LoadForMap(_map, _bsp);
+        }
+
         // (F5) mode 1 throws the blob along the map baked light direction; hand the same grid over.
         if (_render is not null && GodotObject.IsInstanceValid(_render) && _render.FakeShadows is not null)
             _render.FakeShadows.Grid = _bsp?.LightGrid;
@@ -12969,6 +12976,9 @@ public sealed partial class NetGame : Node3D
         // Map-declared colour tint baseline (worldspawn "_map_tint"/"_scene_tint"); identity if unset. Live cvars
         // and the C# API can override it at runtime (VortexArena.Game.WorldTint).
         VortexArena.Game.WorldTint.ApplyWorldspawn(_bsp);
+
+        // (N3/N9) Volumetric fog + SDFGI ride the same Environment; both default off and are polled live.
+        Client.SceneLightingSettings.Attach(env);
 
         _worldEnv = env; // kept so a pure client can swap in the real map's sky/fog/tint once its BSP loads (ApplyMapSky)
         AddChild(new WorldEnvironment { Name = "WorldEnvironment", Environment = env });

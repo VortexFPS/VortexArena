@@ -64,6 +64,9 @@ public partial class ClientWorld : Node3D
     /// BSP for mode 1 to throw along the baked light direction.</summary>
     public FakeShadowRenderer FakeShadows { get; private set; } = null!;
 
+    /// <summary>(F4) The .rtlights world-light renderer. Call <c>LoadForMap</c> when the BSP is known.</summary>
+    public WorldLightRenderer WorldLights { get; private set; } = null!;
+
     /// <summary>func_pointparticles / func_sparks persistent emitters (T48; ambient-facade scan).</summary>
     public MapParticleEmitters MapEmitters { get; private set; } = null!;
 
@@ -479,6 +482,15 @@ public partial class ClientWorld : Node3D
         // light direction.
         FakeShadows = new FakeShadowRenderer { Name = "FakeShadows" };
         AddChild(FakeShadows);
+
+        // (F2) r_coronas - flares on lights that author one. On in every Xonotic preset, so this is
+        // default-look parity rather than an extra; it stays inert until a light asks for a corona.
+        AddChild(new CoronaRenderer { Name = "Coronas" });
+
+        // (F4/F7) .rtlights world lights. Inert until r_shadow_realtime_world 1, which is also where
+        // Xonotic leaves it below the ultra preset.
+        WorldLights = new WorldLightRenderer { Name = "WorldLights" };
+        AddChild(WorldLights);
         MapEmitters = new MapParticleEmitters { Name = "MapEmitters", Effects = Effects };
         AddChild(MapEmitters);
 
@@ -1309,6 +1321,8 @@ public partial class ClientWorld : Node3D
         WorldTint.PollCvars();
         // F1-B: r_model_lightgrid / r_model_light_scale, live like the tint cvars next door.
         ModelLighting.PollCvars();
+        // (N3/N9) r_volumetricfog* / r_gi*, live like the tint cvars next door.
+        SceneLightingSettings.Poll();
         // Live-poll the projectile client-side prediction toggle so a console `set cl_projectile_prediction 0`
         // flips back to the old ease (A/B feel-testing) at once. Default on = CSQC-style snap+extrapolate.
         Projectiles.Predict = CvarF("cl_projectile_prediction", 1f) != 0f;

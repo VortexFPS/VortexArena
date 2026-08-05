@@ -157,6 +157,10 @@ global uniform vec3 map_tint;
 // RenderingServer.GlobalShaderParameterSet reaches every world surface; 0 restores the pre-dlight look
 // exactly, since the baked term lives in EMISSION and is unaffected either way.
 global uniform float world_dlight;
+// (F4) DP r_shadow_realtime_world_lightmaps: while realtime WORLD lighting is on, the baked lightmaps are
+// re-admitted at this brightness (DP default 0 = fully replaced by the authored lights; its own help text
+// suggests 0.5 for a tenebrae-like look). 1 when the mode is off, so the normal path is untouched.
+global uniform float world_lightmap_scale;
 
 // Per-surface tangent frame (DP VectorS/T/R = tangent/binormal/normal), captured in modelspace so the
 // modelspace deluxe light direction can be rotated into it without a view-space mismatch.
@@ -242,11 +246,11 @@ void fragment() {
         lm *= diffuse;   // SHADEDIFFUSE: re-modulate the light by the (possibly normal-mapped) diffuse term.
     }
 
-    lm *= lightmap_scale;
+    lm *= lightmap_scale * world_lightmap_scale;
     // Self-illumination (DP shader_glsl.h: color.rgb += Texture_Glow * Color_Glow): added on top of the lit
     // diffuse and NOT modulated by the lightmap, so light fixtures glow at full intensity regardless of how
     // lit their own luxels are. Without this, lightmapped lights render as a dim diffuse×lightmap and look dark.
-    vec3 combined = albedo * lm + spec_accum * lightmap_scale + glow * glow_scale;
+    vec3 combined = albedo * lm + spec_accum * lightmap_scale * world_lightmap_scale + glow * glow_scale;
     combined *= map_tint;   // dynamic whole-map tint (identity (1,1,1) when no tint is active).
     // In sRGB mode combined is linear (let Godot encode it). In the default gamma-space mode it's the
     // display-ready value, so pre-encode it to linear to cancel Godot's linear->sRGB output transform.

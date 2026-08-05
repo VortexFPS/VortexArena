@@ -537,6 +537,37 @@ public static class ClientSettings
         c.Register("r_fakeshadows_darken", "0.5");            // DP r_shadows_darken
         c.Register("r_fakeshadows_throwdistance", "500");     // DP r_shadows_throwdistance
         c.Register("r_fakeshadows_size", "1");                // port-only: blob radius scale
+        // ---- (N3) Volumetric fog + light shafts. Port-only; DP has no volumetric anything. OFF by
+        // default and absent from the low/med/normal presets: it is a per-frame froxel volume pass, and
+        // fog that hides players is a gameplay change, not a graphics one.
+        c.Register("r_volumetricfog", "0");
+        c.Register("r_volumetricfog_density", "0.015");
+        c.Register("r_volumetricfog_shafts", "1");
+        // ---- (N9) Real-time global illumination (SDFGI). Port-only; DP has a bounce grid but no Xonotic
+        // preset ever enables it. Needs no bake, which is what makes it usable on a map pool nobody is
+        // going to re-bake. Far above the frame budget outside an ultra preset.
+        c.Register("r_gi", "0");
+        c.Register("r_gi_cascades", "4");
+        c.Register("r_gi_energy", "1");
+        c.Register("r_gi_bounces", "1");
+        // ---- (F2) Coronas. r_coronas 1 is set in EVERY Xonotic effects preset including low and omg, so
+        // this is default-look parity, not a high-end extra. Only lights that AUTHOR a corona flare, which
+        // in practice means .rtlights world lights; effect lights get none, and that is DP data rather than
+        // a simplification (effectinfo.txt authors no coronas). The occlusion cvar keeps the DP name even
+        // though the mechanism differs - a trace, because Godot exposes no per-object occlusion query.
+        c.Register("r_coronas", "1");
+        c.Register("r_coronas_occlusionquery", "1");
+        // ---- (F4/F7) Realtime WORLD lighting from a map .rtlights file, and its cubemap light filters.
+        // OFF by default, which is where Xonotic leaves it below the ultra preset - and only six stock maps
+        // ship a .rtlights file at all, so this is fidelity for the maps that authored it rather than a
+        // prerequisite for looking like Xonotic.
+        c.Register("r_shadow_realtime_world", "0");
+        // How bright the baked lightmaps stay while the mode is on. DP default 0 = the authored lights fully
+        // replace them; DP own help suggests 0.5 for a tenebrae-like look.
+        c.Register("r_shadow_realtime_world_lightmaps", "0");
+        // Fall back to the map own light entities when no .rtlights exists (DP default 1).
+        c.Register("r_shadow_realtime_world_importlightentitiesfrommap", "1");
+        c.Register("r_editlights_quakelightsizescale", "1");
     }
 
     /// <summary>

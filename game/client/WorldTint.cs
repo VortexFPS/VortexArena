@@ -119,6 +119,8 @@ public static class WorldTint
         // every global the skin shader declares is added in ONE place, before the first shader compiles —
         // a global a shader declares but nothing registered is a compile error, not a silent default.
         Client.ModelLighting.EnsureRegistered();
+        // (F4) the realtime-world lightmap dimmer, registered here for the same reason.
+        Client.WorldLightRenderer.EnsureRegistered();
         _mapApplied = _entityApplied = Vector3.One;
         _gammaApplied = 0f;
     }

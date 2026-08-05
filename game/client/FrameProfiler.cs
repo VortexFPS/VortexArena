@@ -95,6 +95,10 @@ public partial class FrameProfiler : CanvasLayer
           // (F5) r_fakeshadows: the per-frame trace + blob placement. Inert while the cvar is 0 (it early-
           // outs before touching anything), but scoped so turning it on shows its own cost.
           "fakeshadows",
+          // (F2) r_coronas: the per-frame flare placement + occlusion traces.
+          "coronas",
+          // (F4) r_shadow_realtime_world: the per-frame gate + light-style animation over world lights.
+          "worldlights",
           // the messagemode chat prompt's caret-blink _Process (only ticks while the prompt is open — it disables
           // its own _Process when closed — but scoped so the open-window cost is attributed, not proc:other).
           "chat",

@@ -70,6 +70,12 @@ public sealed partial class LightBudget : Node
         public bool OwnerVisible = true;
         /// <summary>Set by the owner when the light must never cast regardless of budget (DP PFLAGS_NOSHADOW).</summary>
         public bool NoShadow;
+        /// <summary>(F2) DP rtlight <c>corona</c> intensity. 0 = no flare, which is the default and what
+        /// every effect light gets - Xonotic authors coronas on map/world lights only, and its own CSQC code
+        /// says of the flame dlight "no PFLAGS_CORONA, it looks bad".</summary>
+        public float Corona;
+        /// <summary>(F2) DP rtlight <c>coronasizescale</c> - flare radius as a fraction of light radius.</summary>
+        public float CoronaSize = 0.25f;
         public float Rank;
     }
 
@@ -99,7 +105,8 @@ public sealed partial class LightBudget : Node
     /// updates its role. The budget does NOT own the node: the caller still frees it, and
     /// <see cref="Unregister"/> (or simply freeing it) drops it from the roster.
     /// </summary>
-    public static void Register(Light3D? light, Role role, bool noShadow = false)
+    public static void Register(Light3D? light, Role role, bool noShadow = false,
+                                float corona = 0f, float coronaSize = 0.25f)
     {
         if (light is null || Instance is null || !GodotObject.IsInstanceValid(light))
             return;
@@ -108,9 +115,11 @@ public sealed partial class LightBudget : Node
         {
             e.Role = role;
             e.NoShadow = noShadow;
+            e.Corona = corona;
+            e.CoronaSize = coronaSize;
             return;
         }
-        e = new Entry { Light = light, Id = id, Role = role, NoShadow = noShadow };
+        e = new Entry { Light = light, Id = id, Role = role, NoShadow = noShadow, Corona = corona, CoronaSize = coronaSize };
         Instance._byId[id] = e;
         Instance._lights.Add(e);
     }
@@ -256,6 +265,20 @@ public sealed partial class LightBudget : Node
     {
         string s = MenuState.Cvars.GetString(name);
         return string.IsNullOrWhiteSpace(s) ? fallback : MenuState.Cvars.GetFloat(name);
+    }
+
+    /// <summary>
+    /// (F2) The lights that are visible this frame AND carry a corona, for the flare renderer. Yields the
+    /// budget's OWN view of visibility, so a light the cap hid does not keep flaring.
+    /// </summary>
+    public IEnumerable<(Light3D Light, float Corona, float Size)> Coronas()
+    {
+        foreach (Entry e in _ranked)
+        {
+            if (e.Corona <= 0f || !GodotObject.IsInstanceValid(e.Light) || !e.Light.Visible)
+                continue;
+            yield return (e.Light, e.Corona, e.CoronaSize);
+        }
     }
 
     /// <summary>One-line status for the console (`r_lightbudget`) and the perf HUD.</summary>

@@ -576,7 +576,7 @@ public sealed class Devastator : Weapon
     // the grave"): on (re)spawn / round reset, clear this slot's still-live rocket reference and re-arm the
     // rl_release latch so the first primary press after respawn launches (instead of trying to guide a rocket
     // that belonged to a previous life). QC clears lastrocket + rl_release on the weaponentity; the port dispatches
-    // WrResetPlayer per populated slot (SpawnSystem), so the per-slot clear here is the full reset. (Explode/
+    // WrResetPlayer per weapon per slot (SpawnSystem), so the per-slot clear here is the full reset. (Explode/
     // DoRemoteExplode already call Unregister per-rocket, and OnThink's owner-alive gate stops a dead owner's
     // guiding — this adds the proactive respawn-time clear QC does.)
     public override void WrResetPlayer(Entity actor, WeaponSlot slot)

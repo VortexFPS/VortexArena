@@ -531,13 +531,24 @@ public sealed class Vortex : Weapon
         return tr.Fraction >= 1f;
     }
 
-    // METHOD(Vortex, wr_setup / wr_resetplayer) — seed the per-slot charge + chargepool.
-    // NOTE: QC seeds these in wr_resetplayer (on respawn, vortex.qc:299-311); the port has no respawn-reset
-    // weapon hook, so the seed runs on switch-in (wr_setup) — a switch away+back also re-seeds (deviation,
-    // pre-existing for the charge; the pool seed follows the same convention).
+    // METHOD(Vortex, wr_setup) — vortex.qc:277-280. ONLY the impressive-streak reset. The charge is
+    // deliberately NOT touched here: Base seeds it in wr_resetplayer (respawn) alone, so switching away from
+    // the Vortex and back PRESERVES whatever charge you had built up.
+    //
+    // This used to also re-seed VortexCharge = charge_start, which made every switch-in cost up to 25% of the
+    // shot: charge_start 0.5 gives a charge factor of 0.5 + 0.5*0.5 = 0.75, i.e. 60 dmg / 150 force instead of
+    // 80 / 200 (a 300 u/s push where Base lands 400), taking (1 - 0.5)/charge_rate = 0.83 s to climb back.
     public override void WrSetup(Entity actor, WeaponSlot slot)
     {
-        SetLastHit(actor, 0); // QC wr_setup/wr_resetplayer: actor.vortex_lasthit = 0 (impressive streak reset)
+        SetLastHit(actor, 0); // QC wr_setup: actor.vortex_lasthit = 0 (impressive streak reset)
+    }
+
+    // METHOD(Vortex, wr_resetplayer) — vortex.qc:299-311: seed the per-slot charge + chargepool and clear the
+    // impressive streak, on RESPAWN only. QC's wr_resetplayer takes no weaponentity and loops MAX_WEAPONSLOTS
+    // itself; the port's hook is per-slot and SpawnSystem drives the slot loop, so seed the slot handed in.
+    public override void WrResetPlayer(Entity actor, WeaponSlot slot)
+    {
+        SetLastHit(actor, 0);
         if (!Cvars.Charge) return;
         var st = actor.WeaponState(slot);
         st.VortexCharge = Cvars.ChargeStart;

@@ -1171,27 +1171,22 @@ public static class SpawnSystem
         // aim reset and fixangle/v_angle are client-render / bot-AI concerns handled by the renderer and bot
         // agents; the server-authoritative owned-weapon set + the player model (above) are applied here.
 
-        // QC wr_resetplayer (server/client.qc:800 FOREACH(Weapons, true, it.wr_resetplayer(...))): Base runs
-        // wr_resetplayer for EVERY registered weapon on respawn, not just the held one (e.g. Hagar clears loaded
-        // rockets, porto clears porto_current). The held-weapon dispatch below covers the common case; the porto
-        // latch in particular must be cleared on respawn even when the player isn't holding porto (a placed/queued
-        // porto from a prior life would otherwise keep the single-portal latch set), so dispatch porto's reset
-        // unconditionally for an owned-but-not-held porto.
-        Weapon? current = null;
-        for (int slot = 0; slot < WeaponFireDriver.MaxWeaponSlots; ++slot)
-        {
-            Weapon? wep = null;
-            if (slot == 0)
-                wep = current = Inventory.CurrentWeapon(p); // the active weapon after SwitchToBest above
-            // Slot 0 is populated; higher slots (future dual-wield) are empty. Call WrResetPlayer for all populated slots.
-            if (wep is not null)
-            {
-                var weaponentity = new WeaponSlot(slot);
-                wep.WrResetPlayer(p, weaponentity);
-            }
-        }
-        if (Registry<Weapon>.ByName("porto") is { } porto && porto != current)
-            porto.WrResetPlayer(p, new WeaponSlot(0));
+        // QC wr_resetplayer (server/client.qc:802 FOREACH(Weapons, true, it.wr_resetplayer(it, this))): Base runs
+        // wr_resetplayer for EVERY registered weapon on respawn, not just the held one — the state a weapon parks
+        // on the player outlives the life that created it (Hagar's loaded rockets, porto's single-portal latch,
+        // the Vortex's charge), so resetting only what happens to be in hand leaves the rest carrying over.
+        //
+        // This used to dispatch the HELD weapon only, plus an unconditional porto special-case bolted on for the
+        // one latch that visibly broke. Running the full registry (as Base does) subsumes that special-case and
+        // is what makes Vortex.WrResetPlayer reachable at all: you respawn holding the Blaster, so a held-only
+        // dispatch would never seed the Vortex charge for the life that follows.
+        //
+        // QC's wr_resetplayer takes no weaponentity and loops MAX_WEAPONSLOTS internally; the port's hook is
+        // per-slot, so the slot loop lives here. Higher slots are unpopulated today (future dual-wield) but are
+        // reset anyway — that IS the QC behaviour, and a reset of empty per-slot state is a no-op.
+        foreach (Weapon wep in Registry<Weapon>.All)
+            for (int slot = 0; slot < WeaponFireDriver.MaxWeaponSlots; ++slot)
+                wep.WrResetPlayer(p, new WeaponSlot(slot));
     }
 
     /// <summary>

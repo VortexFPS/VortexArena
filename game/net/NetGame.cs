@@ -3094,6 +3094,16 @@ public sealed partial class NetGame : Node3D
             _viewModel.SetGridLight(false, Vector3.One, Vector3.Zero, Vector3.Up);
             return;
         }
+        // F1-B: with a GPU grid bound the gun samples it PER PIXEL through lobe 1, so lobe 2 must contribute
+        // nothing here or the map's light would be counted twice. The muzzle-flash pop ViewModel folds into
+        // lobe 2's ambient still lands on top, which is what we want - it is a transient the grid cannot know
+        // about. Without a GPU grid, fall through to the per-entity CPU sample below (the pre-F1-B path).
+        if (Client.ModelLighting.HasGrid)
+        {
+            _viewModel.SetGridLight(true, Vector3.Zero, Vector3.Zero, Vector3.Up);
+            return;
+        }
+
         System.Numerics.Vector3 eye = Coords.ToQuake(_camera.GlobalPosition);
         grid.Sample(eye, out System.Numerics.Vector3 amb, out System.Numerics.Vector3 dir, out System.Numerics.Vector3 dirn);
         string scaleCvar = MenuState.Cvars.GetString("r_model_light_scale");
@@ -12906,6 +12916,12 @@ public sealed partial class NetGame : Node3D
 
     private void AddLight()
     {
+        // F1-B: bind this map's baked lightgrid as a GPU 3-D texture, so every model samples it per pixel
+        // (DP mod_q3bsp_lightgrid_texture, its default). Must run BEFORE the model renderers mark instances
+        // grid-lit, since ModelLighting.HasGrid is what that decision reads. A map with no lump 15 leaves the
+        // binding off and models fall back to the per-entity CPU sample exactly as before.
+        Client.ModelLighting.ApplyMap(_bsp?.LightGrid);
+
         // (draws 2026-08-02) The sun's shadow map was pure waste: 4 PSSM cascades into a 4096^2 atlas every
         // frame whose output BOTH consumer shaders discard — LightmapShader's light() drops directional light
         // (the world is lightmapped) and the grid-lit player path writes EMISSION with ALBEDO zeroed. That is
@@ -12970,6 +12986,9 @@ public sealed partial class NetGame : Node3D
             _worldEnv.Sky = sky;
         VortexArena.Game.MapLoader.ApplyFog(_worldEnv, _bsp);
         VortexArena.Game.WorldTint.ApplyWorldspawn(_bsp);
+        // F1-B: a pure --connect client only learns the map here, so this is where its lightgrid binds. The
+        // listen-server path binds in AddLight; both funnel through ModelLighting so there is one owner.
+        Client.ModelLighting.ApplyMap(_bsp.LightGrid);
     }
 
     /// <summary>

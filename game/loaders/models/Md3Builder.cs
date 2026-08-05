@@ -223,7 +223,7 @@ public partial class Md3Morph : Node3D
                         autospriteAxial = axial;
                     }
                 }
-                material ??= _assets.ResolveMaterial(shader);
+                material ??= _assets.ResolveModelMaterial(shader);
             }
             _surfaces.Add((surface, material, visible, autospriteAxial));
         }

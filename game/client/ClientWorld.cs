@@ -1293,6 +1293,8 @@ public partial class ClientWorld : Node3D
         // testing path); when the strength cvars are 0 this is a couple of cheap reads and leaves the map/code
         // baseline in place. See VortexArena.Game.WorldTint.
         WorldTint.PollCvars();
+        // F1-B: r_model_lightgrid / r_model_light_scale, live like the tint cvars next door.
+        ModelLighting.PollCvars();
         // Live-poll the projectile client-side prediction toggle so a console `set cl_projectile_prediction 0`
         // flips back to the old ease (A/B feel-testing) at once. Default on = CSQC-style snap+extrapolate.
         Projectiles.Predict = CvarF("cl_projectile_prediction", 1f) != 0f;
@@ -2544,6 +2546,18 @@ public partial class ClientWorld : Node3D
     }
 
     private void TryAttachModel(Entity entity, EntityNode node)
+    {
+        TryAttachModelCore(entity, node);
+        // F1-B: every model this port draws is lit from the map's baked light grid, the way DarkPlaces lights
+        // every model. Done HERE, once, after whichever of the attach paths below ran, rather than in each of
+        // them - the method has five separate returns and a per-path call would rot the first time a sixth is
+        // added. Unconditional: grid_lit 1 is a REQUEST the shader honours only while a grid texture is bound,
+        // so this is right whether the model attaches before or after the map binds one, and it survives
+        // r_model_lightgrid being toggled under a live match.
+        ModelTint.EnableGridLight(node, true);
+    }
+
+    private void TryAttachModelCore(Entity entity, EntityNode node)
     {
         // FORCEMODEL (csqcmodel_hooks.qc:204-235): cl_forcemyplayermodel (friend) / cl_forceplayermodels swaps the
         // player's model+skin to the forced one before it's built. When a force applies AND the forced model

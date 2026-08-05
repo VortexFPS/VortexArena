@@ -333,7 +333,7 @@ public static class DpmBuilder
         var arrayMesh = new ArrayMesh();
         arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
 
-        Material? material = assets?.ResolveMaterial(mesh.ShaderName);
+        Material? material = assets?.ResolveModelMaterial(mesh.ShaderName);
         if (material is not null)
             arrayMesh.SurfaceSetMaterial(0, material);
 

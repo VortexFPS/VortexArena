@@ -818,7 +818,7 @@ public static class IqmBuilder
     {
         if (assets is null || string.IsNullOrEmpty(materialName))
             return null;
-        return assets.ResolveMaterial(materialName);
+        return assets.ResolveModelMaterial(materialName);
     }
 
     /// <summary>A normalized clip definition independent of whether it came from an IQM anim or a framegroup.</summary>

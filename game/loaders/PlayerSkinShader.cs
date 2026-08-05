@@ -68,14 +68,27 @@ public static class PlayerSkinShader
     /// instead of Godot's scene lights. Default 0 = the PBR path (also the no-grid-map fallback).</summary>
     public static readonly StringName GridLitUniform = "grid_lit";
 
-    /// <summary>Instance uniform: lightgrid ambient RGB at the entity origin (DP scale: 1.0 ≈ grid byte 128).</summary>
+    /// <summary>Instance uniform: the PER-ENTITY ambient RGB (lobe 2). Carries the CPU lightgrid sample when
+    /// the map has no GPU grid texture, and the dynamic-light probe's ambient term when it does.</summary>
     public static readonly StringName GridAmbientUniform = "grid_ambient";
 
-    /// <summary>Instance uniform: lightgrid directed RGB (drives the N·L lobe AND the colored specular).</summary>
+    /// <summary>Instance uniform: the PER-ENTITY directed RGB (lobe 2) — drives its N·L lobe AND its specular.</summary>
     public static readonly StringName GridDiffuseUniform = "grid_diffuse";
 
-    /// <summary>Instance uniform: lightgrid light direction, normalized, GODOT world axes, pointing AT the light.</summary>
+    /// <summary>Instance uniform: lobe 2's light direction, normalized, GODOT world axes, pointing AT the light.</summary>
     public static readonly StringName GridDirUniform = "grid_dir";
+
+    // ---- F1-B: the global GPU lightgrid (DP mod_q3bsp_lightgrid_texture) ----------------------------------
+
+    /// <summary>Global shader param: the packed lightgrid 3-D texture (see <see cref="LightGridTexture"/>).</summary>
+    public static readonly StringName LightGridTexUniform = "lightgrid_tex";
+
+    /// <summary>Global shader param: Godot world position → lightgrid texture coordinate (mat4).</summary>
+    public static readonly StringName LightGridMatrixUniform = "lightgrid_matrix";
+
+    /// <summary>Global shader param: <c>(zmin, zmax, scale, enabled)</c> for the grid sample. <c>enabled</c>
+    /// 0 means no grid texture is bound and lobe 1 contributes nothing.</summary>
+    public static readonly StringName LightGridParamsUniform = "lightgrid_params";
 
     /// <summary>Global shader param behind <c>r_model_light_gamma</c>: 1 = DP-faithful gamma-space light
     /// response on grid-lit models, 0 = plain linear multiply. Registered/polled by <c>WorldTint</c>.</summary>
@@ -131,17 +144,47 @@ instance uniform vec3 shirt_color : source_color = vec3(0.0);
 instance uniform vec3 pants_color : source_color = vec3(0.0);
 instance uniform vec3 colormod : source_color = vec3(1.0);
 instance uniform vec3 glowmod : source_color = vec3(1.0);
-// Lightgrid model lighting (playtest r14 experiments B/C): DP lights every model from ONE source — the BSP
-// lightgrid sample at the entity origin (Mod_Q3BSP_LightPoint -> MODE_LIGHTDIRECTION). When grid_lit is on,
-// this branch reproduces that formula and bypasses Godot's scene lights entirely (EMISSION-only output):
+// Lightgrid model lighting: DP lights every model from the BSP lightgrid -> MODE_LIGHTDIRECTION. When
+// grid_lit is on, this branch reproduces that formula and bypasses Godot's scene lights entirely
+// (EMISSION-only output):
 //    tex x ambient  +  tex x diffuse x max(0,N.L)  +  gloss.rgb x diffuse x pow(max(0,N.H), 1+32*gloss.a)
 //    + glow                                            (DP gl_rmain.c R_SetupShader_Surface, glsl default.glsl)
 // Values are DP scale (1.0 = grid byte 128) and may exceed 1 — q3map overbright is what turns the near-black
 // weapon albedos into readable gunmetal. NOT source_color: the C# side passes raw floats, no sRGB decode.
+//
+// TWO LOBES (F1-B + N2). The formula above is evaluated for two independent (ambient, diffuse, direction)
+// triples and summed:
+//   * lobe 1 = the PER-PIXEL sample of the map's baked lightgrid 3-D texture (DP's default
+//     mod_q3bsp_lightgrid_texture path). Contributes nothing when no grid texture is bound.
+//   * lobe 2 = the PER-ENTITY instance uniforms below. On a map with a grid texture these carry the
+//     DYNAMIC-light probe (N2 — the nearest live dlights accumulated into one lobe, the same first-order
+//     combine DP's R_CompleteLightPoint does for its LP_DYNLIGHT term); on a map WITHOUT one they carry the
+//     CPU lightgrid sample, which is the pre-F1-B behaviour bit for bit.
+// One code path serves both, so the no-grid fallback can never drift from the grid path's shading structure.
+// 0 = PBR path. 1 = grid-lit IF a grid texture is bound, otherwise fall back to PBR - the default for
+// players, items and props, which are attached before the map binds its grid and can have it dropped under
+// them by r_model_lightgrid, so ""grid-lit"" has to be a request rather than an assertion. 2 = grid-lit
+// unconditionally, for the one caller that always supplies its own lobe-2 terms (the viewmodel CPU sample).
 instance uniform float grid_lit = 0.0;
-instance uniform vec3 grid_ambient = vec3(1.0);
+// Lobe 2 defaults to NOTHING, not to white. It is additive on top of lobe 1 now, so a grid-lit instance that
+// nobody pushes per-entity values to is lit purely by the map's grid — which is the common case after F1-B
+// (players, items, gibs). A white default here would flood every such model with full ambient.
+instance uniform vec3 grid_ambient = vec3(0.0);
 instance uniform vec3 grid_diffuse = vec3(0.0);
 instance uniform vec3 grid_dir = vec3(0.0, 1.0, 0.0); // Godot WORLD axes, points AT the light
+
+// ---- F1-B: the map's baked lightgrid as a 3-D texture, sampled PER PIXEL --------------------------------
+// The port of DP's MODE_LIGHTGRID (shader_glsl.h:1567-1590). Layout, matrix and encoding are built by
+// LightGridTexture.cs — see that file for the block/padding scheme. Three stacked z-blocks: ambient at
+// [0,1/3), directed at [1/3,2/3), bent-normal direction at [2/3,1].
+// `repeat_disable` is NOT optional: DP relies on clamp-to-edge here, and a repeating grid tiles the map's
+// lighting across the whole scene.
+global uniform sampler3D lightgrid_tex : filter_linear, repeat_disable;
+global uniform mat4 lightgrid_matrix;
+// x = z clamp min, y = z clamp max (the first/last DATA slice of block 0 — see below), z = value scale
+// (255/128 x r_model_light_scale, matching the CPU path's raw-byte/128 DP scale), w = 1 when a grid is bound.
+global uniform vec4 lightgrid_params;
+varying vec3 lightgrid_tc;
 // DP first-person viewmodel depth hack (MATERIALFLAG_SHORTDEPTHRANGE = GL_DepthRange(0, 0.0625),
 // gl_rmain.c:6214/8581): RENDER_VIEWMODEL entities compress their depth into the nearest 1/16 of the depth
 // buffer with depth TESTING still on — the gun keeps its own self-occlusion but always beats world geometry,
@@ -191,6 +234,10 @@ void vertex() {
     // compressed depth. Computed from the (possibly morphed) VERTEX.
     POSITION = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
     POSITION.z = mix(POSITION.z, POSITION.w, 1.0 - viewmodel_depth_range);
+    // Lightgrid texture coordinate, from the (possibly morphed) WORLD position — DP computes the same thing
+    // in its vertex stage (shader_glsl.h:1344, LightGridTC = LightGridMatrix * Attrib_Position). The matrix
+    // already folds in the Quake<->Godot axis swap, so this is one mat4 multiply and nothing per fragment.
+    lightgrid_tc = (lightgrid_matrix * vec4((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz, 1.0)).xyz;
 }
 
 void fragment() {
@@ -205,7 +252,10 @@ void fragment() {
     // NOTE: deliberately NOT writing ALPHA — see the opaque-skin note in the render_mode header. base.a is a
     // spec/mask channel here, not transparency, and writing it would force the transparent (no-depth) pass.
 
-    if (grid_lit > 0.5) {
+    // grid_lit is a REQUEST, not an assertion (see the uniform above): 1 asks for grid lighting and settles
+    // for the PBR path when no grid texture is bound, 2 insists because the caller supplies lobe 2 itself.
+    bool grid_on = grid_lit > 1.5 || (grid_lit > 0.5 && lightgrid_params.w > 0.5);
+    if (grid_on) {
         // ---- DP lightgrid model lighting (playtest r14 B/C/A) ----
         // Normal-mapping applied manually: NORMAL_MAP feeds Godot's scene-light path, which this branch
         // bypasses (missing/zero tangents degrade toward the vertex normal — same binding contract as
@@ -216,15 +266,46 @@ void fragment() {
             if (norm_rg) { nm.z = sqrt(max(0.0, 1.0 - dot(nm.xy, nm.xy))); }
             nrm = normalize(TANGENT * nm.x + BINORMAL * nm.y + NORMAL * nm.z);
         }
+        vec4 gloss_px = has_gloss ? texture(gloss_tex, UV) : vec4(0.0);
+        float spec_pow = 1.0 + 32.0 * gloss_px.a;
+        vec3 glow = has_glow ? texture(glow_tex, UV).rgb * glowmod : vec3(0.0);
+
+        // ---- lobe 1: the per-pixel lightgrid texture sample (F1-B) ----
+        // Zero when no grid is bound (lightgrid_params.w == 0), so the whole lobe folds away and this is
+        // exactly the lobe-2-only shading the pre-F1-B build did.
+        vec3 amb1 = vec3(0.0), dif1 = vec3(0.0);
+        float ndl1 = 0.0, spc1 = 0.0;
+        if (lightgrid_params.w > 0.5) {
+            // Clamp z into block 0's DATA range before the +1/3 and +2/3 offsets, so all three samples stay
+            // inside their own block. DP only clamps the TOP (min(z, 1/3), shader_glsl.h:1573) and leans on
+            // clamp-to-edge for the rest — which is correct for the base sample but lets a position BELOW the
+            // grid shift the offset samples into the wrong block. Clamping both ends costs nothing and cannot
+            // be wrong: outside the grid we land on the neutral padding slices (black light, no direction),
+            // which is DP's intended ""the grid does not cover this"" degradation.
+            vec3 LGTC = vec3(lightgrid_tc.xy, clamp(lightgrid_tc.z, lightgrid_params.x, lightgrid_params.y));
+            amb1 = texture(lightgrid_tex, LGTC).rgb * lightgrid_params.z;
+            dif1 = texture(lightgrid_tex, LGTC + vec3(0.0, 0.0, 0.3333333)).rgb * lightgrid_params.z;
+            // The direction is stored in QUAKE axes as x*127+127; decode, then swap to Godot
+            // (godot = (qx, qz, -qy), the Coords.ToGodot mapping).
+            vec3 dq = texture(lightgrid_tex, LGTC + vec3(0.0, 0.0, 0.6666667)).rgb * 2.0 - 1.0;
+            vec3 dw = vec3(dq.x, dq.z, -dq.y);
+            // A padding/unlit cell decodes to ~0; normalize() of that is a NaN that would blacken the pixel.
+            if (dot(dw, dw) > 1e-6) {
+                vec3 l1 = normalize((VIEW_MATRIX * vec4(dw, 0.0)).xyz);
+                ndl1 = max(dot(nrm, l1), 0.0);
+                spc1 = pow(max(dot(nrm, normalize(l1 + VIEW)), 0.0), spec_pow);
+            }
+        }
+
+        // ---- lobe 2: the per-entity instance uniforms ----
+        // On a grid-texture map this is the dynamic-light probe (N2); otherwise it is the CPU grid sample.
+        // DP specular: Blinn half-vector against the light direction, exponent
+        // 1 + r_shadow_glossexponent(32) * gloss.a, colored by gloss.rgb x the directed term
+        // (default.glsl MODE_LIGHTDIRECTION; no N.L gate — DP has none, the high exponent handles it).
         vec3 ldir = normalize((VIEW_MATRIX * vec4(grid_dir, 0.0)).xyz);
         float ndl = max(dot(nrm, ldir), 0.0);
-        // DP specular: Blinn half-vector against the BAKED light direction, exponent
-        // 1 + r_shadow_glossexponent(32) * gloss.a, colored by gloss.rgb x the directed grid term
-        // (default.glsl MODE_LIGHTDIRECTION; no N.L gate — DP has none, the high exponent handles it).
-        vec4 gloss_px = has_gloss ? texture(gloss_tex, UV) : vec4(0.0);
-        vec3 half_v = normalize(ldir + VIEW);
-        float spec = pow(max(dot(nrm, half_v), 0.0), 1.0 + 32.0 * gloss_px.a);
-        vec3 glow = has_glow ? texture(glow_tex, UV).rgb * glowmod : vec3(0.0);
+        float spec = pow(max(dot(nrm, normalize(ldir + VIEW)), 0.0), spec_pow);
+
         vec3 lit;
         if (model_light_gamma > 0.5) {
             // Gamma-faithful (A): rebuild the authored gamma texels ((a*b)^(1/g) == a^(1/g)*b^(1/g), so the
@@ -234,13 +315,15 @@ void fragment() {
             vec3 g_tex = pow(max(tinted, vec3(0.0)), vec3(1.0 / 2.2));
             vec3 g_gloss = pow(max(gloss_px.rgb, vec3(0.0)), vec3(1.0 / 2.2));
             vec3 g_glow = pow(max(glow, vec3(0.0)), vec3(1.0 / 2.2));
-            vec3 res_g = g_tex * grid_ambient + g_tex * grid_diffuse * ndl
-                       + g_gloss * grid_diffuse * spec + g_glow;
+            vec3 res_g = g_tex * (amb1 + grid_ambient)
+                       + g_tex * (dif1 * ndl1 + grid_diffuse * ndl)
+                       + g_gloss * (dif1 * spc1 + grid_diffuse * spec) + g_glow;
             lit = pow(clamp(res_g, vec3(0.0), vec3(1.0)), vec3(2.2));
         } else {
             // Linear variant (r_model_light_gamma 0): same structure, straight multiply in linear space.
-            lit = tinted * grid_ambient + tinted * grid_diffuse * ndl
-                + gloss_px.rgb * grid_diffuse * spec + glow;
+            lit = tinted * (amb1 + grid_ambient)
+                + tinted * (dif1 * ndl1 + grid_diffuse * ndl)
+                + gloss_px.rgb * (dif1 * spc1 + grid_diffuse * spec) + glow;
         }
         // EMISSION-only output: scene lights must not double-light the grid-lit surface.
         ALBEDO = vec3(0.0);

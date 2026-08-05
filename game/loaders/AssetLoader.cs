@@ -763,6 +763,10 @@ public sealed class AssetLoader
     /// <summary>Resolve a Q3/DP shader name to a Godot <see cref="Material"/> through the shared compiler.</summary>
     public Material ResolveMaterial(string shaderName) => _assets.ResolveMaterial(shaderName);
 
+    /// <summary>Resolve a material for MODEL geometry (see <see cref="AssetSystem.ResolveModelMaterial"/>):
+    /// the plain-texture fallback compiles to the grid-lightable skin shader instead of a StandardMaterial3D.</summary>
+    public Material ResolveModelMaterial(string shaderName) => _assets.ResolveModelMaterial(shaderName);
+
     /// <summary>Get a UI/HUD font by logical name (e.g. "xolonium"), loaded from the font packs. Null on miss.</summary>
     public FontFile? GetFont(string name) => _fonts.GetFont(name);
 

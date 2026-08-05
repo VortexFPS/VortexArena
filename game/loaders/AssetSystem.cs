@@ -296,14 +296,41 @@ public sealed class AssetSystem
     /// cached by name and is <b>never null</b> — if nothing resolves, a magenta checkerboard fallback is
     /// returned so a missing asset is loud but non-fatal.
     /// </summary>
-    public Material ResolveMaterial(string nameOrTexture)
+    public Material ResolveMaterial(string nameOrTexture) => ResolveMaterial(nameOrTexture, forModel: false);
+
+    /// <summary>
+    /// Resolve a material for MODEL geometry (players, weapons, items, gibs, props) rather than world
+    /// surfaces. Identical to <see cref="ResolveMaterial(string)"/> except that the plain-texture fallback
+    /// compiles to <see cref="PlayerSkinShader"/> instead of a <see cref="StandardMaterial3D"/>.
+    ///
+    /// <para><b>Why models need their own entry point (F1-B).</b> DarkPlaces lights every model from the BSP
+    /// light grid. In this port only the skin shader can sample that grid, and the skin shader was only built
+    /// for skins carrying <c>_shirt</c>/<c>_pants</c>/<c>_reflect</c> companions — which player models have and
+    /// a health pickup does not. So before this, an item on the floor could not be grid-lit no matter what the
+    /// renderer pushed at it: its material had nowhere to put the light. Routing model geometry here gives
+    /// every model a material that <i>can</i> be grid-lit; whether it <i>is</i> stays a per-instance decision
+    /// (<c>grid_lit</c>).</para>
+    ///
+    /// <para>World surfaces deliberately keep the old path: they are lit by their baked lightmap through
+    /// <see cref="LightmapShader"/>, and a non-lightmapped world face has no reason to grow a model shader.
+    /// Q3-shader-driven materials (blendFunc, tcMod, animmap) also still compile through
+    /// <see cref="ShaderCompiler"/> in both modes — those carry render state a skin material cannot express.</para>
+    /// </summary>
+    public Material ResolveModelMaterial(string nameOrTexture) => ResolveMaterial(nameOrTexture, forModel: true);
+
+    private Material ResolveMaterial(string nameOrTexture, bool forModel)
     {
         if (string.IsNullOrEmpty(nameOrTexture))
             return FallbackMaterial();
 
         string key = StripShaderExtension(nameOrTexture);
+        // Model and world resolutions of the same name can differ (see ResolveModelMaterial), so they cannot
+        // share a cache slot. The suffix keeps one dictionary rather than two parallel ones + two gates; the
+        // leading space makes it unambiguous against a real asset name. Only the CACHE key carries it - every
+        // lookup below (the shader table, the texture loads) uses the clean name.
+        string cacheKey = forModel ? key + " model" : key;
         lock (_materialCacheGate)
-            if (_materialCache.TryGetValue(key, out Material? cached))
+            if (_materialCache.TryGetValue(cacheKey, out Material? cached))
                 return cached;
 
         Material result;
@@ -312,11 +339,11 @@ public sealed class AssetSystem
             // Compile OUTSIDE the lock so a slow shader build never blocks another material's lookup.
             if (_shaders.TryGetValue(key, out ShaderDef? def))
             {
-                result = ShaderCompiler.Compile(def, this) ?? BuildPlainMaterial(key);
+                result = ShaderCompiler.Compile(def, this) ?? BuildPlainMaterial(key, forModel);
             }
             else
             {
-                result = BuildPlainMaterial(key);
+                result = BuildPlainMaterial(key, forModel);
             }
         }
         catch (Exception ex)
@@ -334,9 +361,9 @@ public sealed class AssetSystem
             // documented "materials and textures are cached and shared" contract. Reachable since the menu
             // warm began resolving materials on a worker while a match resolves the same names on the main
             // thread, over the same AssetSystem.
-            if (_materialCache.TryGetValue(key, out Material? raced))
+            if (_materialCache.TryGetValue(cacheKey, out Material? raced))
                 return raced;
-            _materialCache[key] = result;
+            _materialCache[cacheKey] = result;
         }
         return result;
     }
@@ -419,7 +446,7 @@ public sealed class AssetSystem
     /// (inverted: gloss is the opposite of roughness), <c>_glow</c>→emission. Falls back to the magenta
     /// material if even the base albedo is missing.
     /// </summary>
-    private Material BuildPlainMaterial(string textureBase)
+    private Material BuildPlainMaterial(string textureBase, bool forModel = false)
     {
         Texture2D? albedo = LoadTexture(textureBase);
         if (albedo == null)
@@ -428,7 +455,13 @@ public sealed class AssetSystem
         // A texture with team-colorable (_shirt/_pants) or reflective (_reflect) masks must compile to the
         // dedicated skin shader — StandardMaterial3D cannot express the tinted additive masks. This covers
         // the (extensionless, shaderless) model skins Xonotic loads straight by texture name.
-        ShaderMaterial? skin = TryBuildSkinMaterial(textureBase, albedo);
+        //
+        // MODEL geometry takes that shader unconditionally (forModel, F1-B): it is the only material here that
+        // can sample the map's baked light grid, and DarkPlaces lights every model from the grid. A plain
+        // pickup skin has no masks, so without this it would be stuck on StandardMaterial3D and could not be
+        // grid-lit however hard the renderer tried. With no masks bound they contribute nothing (the shader
+        // defaults them to black), so the rendered result is the same material minus that limitation.
+        ShaderMaterial? skin = TryBuildSkinMaterial(textureBase, albedo, alwaysBuild: forModel);
         if (skin != null)
             return skin;
 
@@ -519,7 +552,7 @@ public sealed class AssetSystem
     /// <c>_reflect</c> companions are bound as uniforms so the skin keeps its normal/gloss/glow; the shirt and
     /// pants colors default to black (no contribution) until a caller drives them from the player colormap.
     /// </summary>
-    internal ShaderMaterial? TryBuildSkinMaterial(string baseName, Texture2D? albedo)
+    internal ShaderMaterial? TryBuildSkinMaterial(string baseName, Texture2D? albedo, bool alwaysBuild = false)
     {
         if (string.IsNullOrEmpty(baseName))
             return null;
@@ -532,8 +565,11 @@ public sealed class AssetSystem
         Texture2D? shirt = LoadTexture(baseName + "_shirt");
         Texture2D? pants = LoadTexture(baseName + "_pants");
         Texture2D? reflect = LoadTexture(baseName + "_reflect");
-        if (shirt == null && pants == null && reflect == null)
-            return null; // not a team-colorable / reflective skin → ordinary material
+        // alwaysBuild (model geometry, F1-B): build the skin material even with no masks, so the model has a
+        // shader that CAN be grid-lit. Unbound masks default to black and add nothing, so this costs a branch
+        // the GPU takes uniformly, not a look change.
+        if (!alwaysBuild && shirt == null && pants == null && reflect == null)
+            return null; // not a team-colorable / reflective skin, and not model geometry -> ordinary material
 
         var mat = new ShaderMaterial { Shader = PlayerSkinShader.Shader, ResourceName = baseName + "/skin" };
         mat.SetShaderParameter(PlayerSkinShader.AlbedoUniform, albedo ?? WhiteTexture());

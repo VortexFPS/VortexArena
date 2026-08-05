@@ -115,6 +115,10 @@ public static class WorldTint
             "editor_bake_range", RenderingServer.GlobalShaderParameterType.Float, 48f);
         RenderingServer.GlobalShaderParameterAdd(
             "editor_deluxe", RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // F1-B: the map's baked lightgrid as a GPU 3-D texture, plus its sample scalars. Registered here so
+        // every global the skin shader declares is added in ONE place, before the first shader compiles —
+        // a global a shader declares but nothing registered is a compile error, not a silent default.
+        Client.ModelLighting.EnsureRegistered();
         _mapApplied = _entityApplied = Vector3.One;
         _gammaApplied = 0f;
     }

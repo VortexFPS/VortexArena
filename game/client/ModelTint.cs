@@ -80,11 +80,29 @@ public static class ModelTint
             return;
         foreach (MeshInstance3D mi in Meshes(root))
         {
-            mi.SetInstanceShaderParameter(PlayerSkinShader.GridLitUniform, on ? 1f : 0f);
+            mi.SetInstanceShaderParameter(PlayerSkinShader.GridLitUniform, on ? 2f : 0f);
             mi.SetInstanceShaderParameter(PlayerSkinShader.GridAmbientUniform, ambient);
             mi.SetInstanceShaderParameter(PlayerSkinShader.GridDiffuseUniform, diffuse);
             mi.SetInstanceShaderParameter(PlayerSkinShader.GridDirUniform, dir);
         }
+    }
+
+    /// <summary>
+    /// Switch every mesh under <paramref name="root"/> onto the DP grid-lit branch with NO per-entity light
+    /// terms - the F1-B default for players, items, gibs and props on a map that has a GPU light grid bound.
+    /// Lobe 1 (the per-pixel grid sample) does all the work; lobe 2 stays at its zero default until the
+    /// dynamic-light probe pushes something into it.
+    ///
+    /// <para>Call this instead of <see cref="ApplyGridLight"/> when there is nothing per-entity to say. It is
+    /// a no-op on surfaces that compiled to a plain <see cref="StandardMaterial3D"/> (no such uniform), which
+    /// after the ResolveModelMaterial change should be nothing that counts as model geometry.</para>
+    /// </summary>
+    public static void EnableGridLight(Node root, bool on)
+    {
+        if (root is null)
+            return;
+        foreach (MeshInstance3D mi in Meshes(root))
+            mi.SetInstanceShaderParameter(PlayerSkinShader.GridLitUniform, on ? 1f : 0f);
     }
 
     /// <summary>

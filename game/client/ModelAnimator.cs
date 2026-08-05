@@ -222,7 +222,7 @@ public partial class ModelAnimator : Node3D
                 else if (!string.IsNullOrEmpty(remap))
                     shader = remap;
             }
-            Material? material = visible ? _assets?.ResolveMaterial(shader) : null;
+            Material? material = visible ? _assets?.ResolveModelMaterial(shader) : null;
             _surfaces.Add((surface, material, visible));
         }
     }

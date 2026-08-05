@@ -73,7 +73,7 @@ public static class ModelLoader
                 }
                 if (!visible)
                     continue;
-                material = assets.ResolveMaterial(shader);
+                material = assets.ResolveModelMaterial(shader);
             }
 
             // Clamp the requested frame into this surface's available frames.

@@ -34,6 +34,20 @@ public sealed class LightGridData
     private readonly byte[] _cells;
 
     /// <summary>
+    /// The raw cell bytes — 8 per grid point (<c>ambient RGB, directed RGB, pitch, yaw</c>), ordered x-fastest
+    /// then y then z. Exposed so the GPU packer (<c>LightGridTexture</c>) can walk the grid in its own layout
+    /// without re-running <see cref="Sample"/> per texel; every consumer that wants a *value* should use
+    /// <see cref="Sample"/> instead, which does the trilinear blend and the direction decode.
+    /// </summary>
+    public ReadOnlySpan<byte> Cells => _cells;
+
+    /// <summary>One raw cell byte by absolute index into <see cref="Cells"/>.</summary>
+    public byte CellByte(int index) => _cells[index];
+
+    /// <summary>Total number of grid points (<c>Nx·Ny·Nz</c>).</summary>
+    public int CellCount => Nx * Ny * Nz;
+
+    /// <summary>
     /// The map's average lit-cell intensity (mean of <c>ambient + 0.5·directed</c> luma over every NON-BLACK
     /// cell, 0..255 scale). Black cells are skipped — they're the grid points inside the void/solid, which
     /// dominate most maps and would drag the average toward zero. Callers normalize their samples by this so
@@ -124,9 +138,14 @@ public sealed class LightGridData
             directed += w * new Vector3(_cells[o + 3], _cells[o + 4], _cells[o + 5]);
 
             // Direction bytes: longitude/latitude on a unit sphere (ioq3 R_SetupEntityLightingGrid:
-            // lat = data[7]·2π/255, lng = data[6]·2π/255; dir = (cos lat·sin lng, sin lat·sin lng, cos lng)).
-            float lng = _cells[o + 6] * (MathF.PI * 2f / 255f);
-            float lat = _cells[o + 7] * (MathF.PI * 2f / 255f);
+            // lat = data[7], lng = data[6]; dir = (cos lat·sin lng, sin lat·sin lng, cos lng)).
+            // The divisor is 2π/256, not /255: both ioquake3 and DarkPlaces index a 256-entry sine table with
+            // the raw byte (DP's mod_md3_sin[i] = sin(i·2π/256), model_alias.c:201), so a full turn is 256
+            // steps. The /255 this used to carry skewed every direction by up to ~1.4°, and — more to the
+            // point — disagreed with the GPU packer in LightGridTexture, which has to match DP bit-for-bit
+            // because it feeds the ported MODE_LIGHTGRID shader.
+            float lng = _cells[o + 6] * (MathF.PI * 2f / 256f);
+            float lat = _cells[o + 7] * (MathF.PI * 2f / 256f);
             direction += w * new Vector3(
                 MathF.Cos(lat) * MathF.Sin(lng),
                 MathF.Sin(lat) * MathF.Sin(lng),

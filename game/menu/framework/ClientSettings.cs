@@ -514,6 +514,10 @@ public static class ClientSettings
         // same rationale as the tints: live-tuning knobs.
         c.Register("r_model_light_gamma", "0");
         c.Register("r_model_light_scale", "1");
+        // (F1-B) r_model_lightgrid = DP mod_q3bsp_lightgrid_texture (default 1 there too): 1 samples the
+        // map grid PER PIXEL from a 3-D texture, 0 falls back to the per-entity CPU sample. The A/B lever
+        // for the per-pixel path, and the escape hatch if a driver dislikes the 3-D texture.
+        c.Register("r_model_lightgrid", "1");
     }
 
     /// <summary>

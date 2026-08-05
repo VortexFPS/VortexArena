@@ -518,6 +518,25 @@ public static class ClientSettings
         // map grid PER PIXEL from a 3-D texture, 0 falls back to the per-entity CPU sample. The A/B lever
         // for the per-pixel path, and the escape hatch if a driver dislikes the 3-D texture.
         c.Register("r_model_lightgrid", "1");
+        // ---- Real-time lights and shadows (N6 budget, F3-A dynamic shadows, F5 fake shadows) ----
+        // DP names where DP has one, and DP/Xonotic defaults where Xonotic ships one. The two that decide
+        // the frame cost default OFF, matching every Xonotic preset below ultimate: an omni shadow is SIX
+        // shadow-map renders of every caster in range, so it is opt-in, budgeted, and never a free-for-all.
+        c.Register("r_shadow_realtime_dlight", "1");          // master gate (Xonotic: 1 at med and above)
+        c.Register("r_shadow_realtime_dlight_shadows", "0");  // Xonotic: 1 only at ultra/ultimate
+        c.Register("r_shadow_dlight_shadow_budget", "4");     // port-only: how many may cast at once
+        c.Register("r_shadow_dlight_max", "0");               // port-only: cap on visible dlights (0 = off)
+        // World geometry casting into those shadows. Separate from the above because it is the OTHER half of
+        // the cost (every world cell becomes a shadow caster) and because it was explicitly retired on
+        // 2026-08-02 as unconsumed; it comes back only when something actually casts.
+        c.Register("r_shadow_world_casts", "0");
+        // (F5) r_fakeshadows = DP r_shadows: cheap projected blob shadows under models, with no shadow map.
+        // Named for what it is rather than DP r_shadows, which reads like the master shadow switch and is not.
+        // 0 = off (DP default too), 1 = throw along the model light direction, 2 = straight down.
+        c.Register("r_fakeshadows", "0");
+        c.Register("r_fakeshadows_darken", "0.5");            // DP r_shadows_darken
+        c.Register("r_fakeshadows_throwdistance", "500");     // DP r_shadows_throwdistance
+        c.Register("r_fakeshadows_size", "1");                // port-only: blob radius scale
     }
 
     /// <summary>

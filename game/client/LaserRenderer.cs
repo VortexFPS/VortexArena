@@ -130,6 +130,8 @@ public partial class LaserRenderer : Node3D
             OmniRange = 50f,
             ShadowEnabled = false,
         };
+        // (N6) The laser endpoint light is persistent and re-aimed per frame; register once here.
+        LightBudget.Register(light, LightBudget.Role.Dynamic);
         root.AddChild(light);
 
         AddChild(root);
@@ -159,7 +161,7 @@ public partial class LaserRenderer : Node3D
         if (e.Active != MapMover.ActiveActive)
         {
             b.Segment.Hide();
-            b.Light.Visible = false;
+            LightBudget.SetOwnerVisible(b.Light, false);
             return;
         }
 
@@ -178,7 +180,7 @@ public partial class LaserRenderer : Node3D
         else if (finite)
         {
             b.Segment.Hide(); // FINITE with no resolved endpoint: nothing to draw yet
-            b.Light.Visible = false;
+            LightBudget.SetOwnerVisible(b.Light, false);
             return;
         }
         else
@@ -208,14 +210,14 @@ public partial class LaserRenderer : Node3D
         if (width <= 0f)
         {
             b.Segment.Hide();
-            b.Light.Visible = false;
+            LightBudget.SetOwnerVisible(b.Light, false);
             return;
         }
 
         if ((end - start).Length() < 1f)
         {
             b.Segment.Hide();
-            b.Light.Visible = false;
+            LightBudget.SetOwnerVisible(b.Light, false);
             return;
         }
 
@@ -246,7 +248,7 @@ public partial class LaserRenderer : Node3D
             // dlight: radius 50*modelscale (the QC wire decode base), color beam_color*5 (clamped to a hue+energy).
             if (e.BeamColor != NVec3.Zero && e.ModelScale > 0f)
             {
-                b.Light.Visible = true;
+                LightBudget.SetOwnerVisible(b.Light, true);
                 b.Light.Position = b.Root.ToLocal(Coords.ToGodot(end + hitNormal * 1f));
                 b.Light.OmniRange = Mathf.Clamp(50f * e.ModelScale, 1f, 512f);
                 float maxc = MathF.Max(1f, MathF.Max(color.R, MathF.Max(color.G, color.B)) * 5f);
@@ -255,7 +257,7 @@ public partial class LaserRenderer : Node3D
             }
             else
             {
-                b.Light.Visible = false;
+                LightBudget.SetOwnerVisible(b.Light, false);
             }
 
             // particles: Draw_Laser spawns the cnt-effect burst EVERY frame at count = drawframetime*1000
@@ -271,7 +273,7 @@ public partial class LaserRenderer : Node3D
         }
         else
         {
-            b.Light.Visible = false;
+            LightBudget.SetOwnerVisible(b.Light, false);
         }
     }
 }

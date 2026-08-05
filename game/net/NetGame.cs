@@ -12921,6 +12921,9 @@ public sealed partial class NetGame : Node3D
         // grid-lit, since ModelLighting.HasGrid is what that decision reads. A map with no lump 15 leaves the
         // binding off and models fall back to the per-entity CPU sample exactly as before.
         Client.ModelLighting.ApplyMap(_bsp?.LightGrid);
+        // (F5) mode 1 throws the blob along the map baked light direction; hand the same grid over.
+        if (_render is not null && GodotObject.IsInstanceValid(_render) && _render.FakeShadows is not null)
+            _render.FakeShadows.Grid = _bsp?.LightGrid;
 
         // (draws 2026-08-02) The sun's shadow map was pure waste: 4 PSSM cascades into a 4096^2 atlas every
         // frame whose output BOTH consumer shaders discard — LightmapShader's light() drops directional light

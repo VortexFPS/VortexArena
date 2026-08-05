@@ -107,11 +107,19 @@ shader_type spatial;
 // ALBEDO carries the plain diffuse purely so the light() below has something to modulate.
 // `ambient_light_disabled` is essential: the scene's ambient/sky would otherwise be added on top of a
 // lightmap that already accounts for all of it, washing every map out.
-// `shadows_disabled` (2026-08-02): the world RECEIVES no shadow map — the light() below discards
+// (F3-A) `shadows_disabled` is GONE from render_mode. It was retired on 2026-08-02 because nothing cast:
+// the light() below discards directional light (the lightmap already owns it) and no omni had shadows on,
+// so the per-pixel PCF tap chain at 4x MSAA bought nothing. With the light budget able to grant shadows to
+// dynamic lights that reasoning no longer holds - a muzzle flash SHOULD be occluded by the pillar between
+// you and it. Godot only samples a shadow map for lights that actually have shadows enabled and reach the
+// cluster, so with the default r_shadow_realtime_dlight_shadows 0 this costs nothing measurable; the cost
+// arrives with the cvar, which is where it belongs. ATTENUATION in light() carries the shadow term, so the
+// dynamic contribution below is shadowed for free once a light casts.
+// (historical) the old note read: the world RECEIVES no shadow map — the light() below discards
 // directional light entirely (the lightmap already owns it) and no omni here casts — so paying the
 // per-pixel PCF tap chain at 4x MSAA bought nothing. If a future feature wants the world shadowed,
 // remove this together with the r_sun_shadow default (they were retired as a pair).
-render_mode cull_back, depth_draw_opaque, ambient_light_disabled, shadows_disabled;
+render_mode cull_back, depth_draw_opaque, ambient_light_disabled;
 
 // NOTE: albedo/lightmap are sampled RAW (no source_color) — the stock Xonotic config renders in gamma space.
 // The srgb_color path decodes them explicitly. See LightmapShader's type doc.

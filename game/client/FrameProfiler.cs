@@ -88,6 +88,13 @@ public partial class FrameProfiler : CanvasLayer
           // (M2/M3) the newer client render nodes: nade-orb followers + dynamic-light spawns — scoped so their
           // per-frame CPU is attributed instead of leaking into proc:other.
           "nadeorbs", "dynlights",
+          // (N6) the light budget: the per-frame rank+grant pass over every registered dynamic/world light.
+          // Scoped because it is the one place that can make lights expensive on the CPU, so if it ever does
+          // it should show as its own line rather than as proc:other.
+          "lightbudget",
+          // (F5) r_fakeshadows: the per-frame trace + blob placement. Inert while the cvar is 0 (it early-
+          // outs before touching anything), but scoped so turning it on shows its own cost.
+          "fakeshadows",
           // the messagemode chat prompt's caret-blink _Process (only ticks while the prompt is open — it disables
           // its own _Process when closed — but scoped so the open-window cost is attributed, not proc:other).
           "chat",

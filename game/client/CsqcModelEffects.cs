@@ -303,6 +303,8 @@ public static class CsqcModelEffects
             while (st.Lights.Count <= i || !GodotObject.IsInstanceValid(st.Lights[i]))
             {
                 var l = new OmniLight3D { Name = $"csqc_fx_light{st.Lights.Count}" };
+            // (N6) Player aura lights (flames, powerups, speed trails) join the pool the budget ranks.
+            LightBudget.Register(l, LightBudget.Role.Dynamic);
                 root.AddChild(l);
                 if (st.Lights.Count <= i) st.Lights.Add(l);
                 else st.Lights[i] = l;
@@ -311,7 +313,7 @@ public static class CsqcModelEffects
             LightSpec spec = specs[i];
             // DP light colors exceed 1 (e.g. '3 3 3'); split into a unit hue + energy like EffectSystem.SpawnInfoLight.
             float maxc = Mathf.Max(1f, Mathf.Max(spec.Color.R, Mathf.Max(spec.Color.G, spec.Color.B)));
-            light.Visible = true;
+            LightBudget.SetOwnerVisible(light, true);
             light.OmniRange = Mathf.Clamp(spec.Range, 1f, 2000f);
             light.LightColor = new Color(spec.Color.R / maxc, spec.Color.G / maxc, spec.Color.B / maxc);
             light.LightEnergy = Mathf.Min(8f, maxc);
@@ -321,7 +323,7 @@ public static class CsqcModelEffects
         // Hide any pool slots not used this frame (effect bits cleared).
         for (int i = specs.Count; i < st.Lights.Count; i++)
             if (GodotObject.IsInstanceValid(st.Lights[i]))
-                st.Lights[i].Visible = false;
+                LightBudget.SetOwnerVisible(st.Lights[i], false);
     }
 
     /// <summary>Stop any jetpack loop + free the pooled lights when the model is torn down (the caller calls this on remove).</summary>
@@ -334,7 +336,10 @@ public static class CsqcModelEffects
         }
         foreach (OmniLight3D light in st.Lights)
             if (GodotObject.IsInstanceValid(light))
+            {
+                LightBudget.Unregister(light);
                 light.QueueFree();
+            }
         st.Lights.Clear();
     }
 

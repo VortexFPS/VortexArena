@@ -2140,6 +2140,9 @@ public partial class EffectSystem : Node3D
         }
         var node = new OmniLight3D { Name = "fx_light", Visible = false };
         AddChild(node);
+        // (N6) Pool members register once and live for the process; the budget sees a stable roster and the
+        // per-flash on/off rides SetOwnerVisible below.
+        LightBudget.Register(node, LightBudget.Role.Dynamic);
         return new FxLight { Node = node };
     }
 
@@ -2160,7 +2163,7 @@ public partial class EffectSystem : Node3D
         l.Node.LightColor = new Color(lcol.R / maxc, lcol.G / maxc, lcol.B / maxc);
         l.Energy0 = MathF.Min(8f, maxc);
         l.Node.LightEnergy = l.Energy0;
-        l.Node.Visible = true;
+        LightBudget.SetOwnerVisible(l.Node, true);
         // Fade the flash: lightradiusfade is radius-units/sec, so the flash lasts ~radius/fade seconds.
         l.Duration = info.LightRadiusFade > 0f
             ? Math.Clamp(info.LightRadius / info.LightRadiusFade, 0.05f, 1.5f)
@@ -2186,7 +2189,7 @@ public partial class EffectSystem : Node3D
             float frac = l.Duration > 0f ? 1f - l.Age / l.Duration : 0f;
             if (frac <= 0f)
             {
-                l.Node.Visible = false;
+                LightBudget.SetOwnerVisible(l.Node, false);
                 _liveFxLights.RemoveAt(i);
                 _freeFxLights.Enqueue(l);
                 continue;

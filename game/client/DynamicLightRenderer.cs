@@ -98,8 +98,7 @@ public partial class DynamicLightRenderer : Node3D
                 }
                 if (!culler!.ClusterVisibleFromView(ln.PvsCluster))
                 {
-                    if (GodotObject.IsInstanceValid(ln.Light))
-                        ln.Light.Visible = false;
+                    LightBudget.SetOwnerVisible(ln.Light, false);
                     continue;
                 }
             }
@@ -130,7 +129,10 @@ public partial class DynamicLightRenderer : Node3D
             foreach (Entity e in dead)
             {
                 if (GodotObject.IsInstanceValid(_lights[e].Light))
+                {
+                    LightBudget.Unregister(_lights[e].Light);
                     _lights[e].Light.QueueFree();
+                }
                 _lights.Remove(e);
             }
         }
@@ -148,6 +150,9 @@ public partial class DynamicLightRenderer : Node3D
             OmniRange = 200f,
         };
         AddChild(light);
+        // (N6) Under the budget: a map can scatter many dynlights, and with F3-A they are candidates for a
+        // shadow. NOSHADOW is passed through as the DP PFLAGS_NOSHADOW default this used to hardcode.
+        LightBudget.Register(light, LightBudget.Role.MapLight, noShadow: false);
         return new LightNode { Entity = e, Light = light };
     }
 
@@ -164,11 +169,11 @@ public partial class DynamicLightRenderer : Node3D
         // Off when toggled inactive (dynlight_use/setactive set light_lev=0) or radius is zero.
         if (e.Active != MapMover.ActiveActive || e.LightLev <= 0f)
         {
-            ln.Light.Visible = false;
+            LightBudget.SetOwnerVisible(ln.Light, false);
             return;
         }
 
-        ln.Light.Visible = true;
+        LightBudget.SetOwnerVisible(ln.Light, true);
         ln.Light.Position = Coords.ToGodot(e.Origin);          // follows path travel / FOLLOW / tag-attach
 
         // QC .style lightstyle animation (server/world.qc:882-920 installs the named flicker/pulse/candle/strobe
@@ -181,7 +186,7 @@ public partial class DynamicLightRenderer : Node3D
         if (ln.Light.OmniRange <= 0f)
         {
             // a style frame at full dark ('a') turns the light fully off this frame.
-            ln.Light.Visible = false;
+            LightBudget.SetOwnerVisible(ln.Light, false);
             return;
         }
 

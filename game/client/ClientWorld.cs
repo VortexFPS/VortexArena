@@ -60,6 +60,10 @@ public partial class ClientWorld : Node3D
     /// <summary>dynlight realtime-light renderer (the DP engine-driven light; ambient-facade scan).</summary>
     public DynamicLightRenderer DynamicLights { get; private set; } = null!;
 
+    /// <summary>(F5) The r_fakeshadows blob renderer. Set <see cref="FakeShadowRenderer.Grid"/> from the map
+    /// BSP for mode 1 to throw along the baked light direction.</summary>
+    public FakeShadowRenderer FakeShadows { get; private set; } = null!;
+
     /// <summary>func_pointparticles / func_sparks persistent emitters (T48; ambient-facade scan).</summary>
     public MapParticleEmitters MapEmitters { get; private set; } = null!;
 
@@ -463,8 +467,18 @@ public partial class ClientWorld : Node3D
             Lasers.TextureLoader = _assets.LoadTexture;
         AddChild(Lasers);
         // dynlight realtime light — the consumer DarkPlaces drives from the engine reading light_lev/color.
+        // (N6) The light arbiter goes in FIRST: every light-owning system below registers with it on
+        // creation, and Register() is a no-op until Instance exists.
+        AddChild(new LightBudget { Name = "LightBudget" });
+
         DynamicLights = new DynamicLightRenderer { Name = "DynamicLights" };
         AddChild(DynamicLights);
+
+        // (F5) r_fakeshadows - cheap projected ground blobs under players and pickups. Inert at the default
+        // r_fakeshadows 0; ClientWorld/NetGame hands it the map grid so mode 1 can throw along the baked
+        // light direction.
+        FakeShadows = new FakeShadowRenderer { Name = "FakeShadows" };
+        AddChild(FakeShadows);
         MapEmitters = new MapParticleEmitters { Name = "MapEmitters", Effects = Effects };
         AddChild(MapEmitters);
 

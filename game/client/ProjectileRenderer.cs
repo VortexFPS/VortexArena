@@ -159,6 +159,9 @@ public partial class ProjectileRenderer : Node3D
         }
 
         OmniLight3D? light = (DynamicLights && desc.HasLight) ? BuildLight(desc) : null;
+        // (N6) Projectile glows are the most numerous transient light in a firefight, so they go under the
+        // budget like the effect flashes. Registration is a no-op outside a match (no LightBudget node).
+        LightBudget.Register(light, LightBudget.Role.Dynamic);
         if (light is not null) root.AddChild(light);
 
         Vector3 startPos = Coords.ToGodot(entity.Origin);

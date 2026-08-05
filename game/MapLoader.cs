@@ -27,6 +27,15 @@ namespace VortexArena.Game;
 /// </summary>
 public static class MapLoader
 {
+    /// <summary>(F3-A) <c>r_shadow_world_casts</c>: may world geometry cast into dynamic-light shadow
+    /// maps? Read once per map build, not per frame — a change needs a map reload, which is the honest
+    /// cost of flipping every world cell between caster and non-caster.</summary>
+    private static bool WorldCastsShadows()
+    {
+        string s = VortexArena.Game.Menu.MenuState.Cvars.GetString("r_shadow_world_casts");
+        return !string.IsNullOrWhiteSpace(s) && VortexArena.Game.Menu.MenuState.Cvars.GetFloat("r_shadow_world_casts") != 0f;
+    }
+
     // -------------------------------------------------------------------------------------------------
     //  Render geometry
     // -------------------------------------------------------------------------------------------------
@@ -338,7 +347,14 @@ public static class MapLoader
             {
                 Name = $"Geometry_{cellKv.Key.X}_{cellKv.Key.Y}_{cellKv.Key.Z}",
                 Mesh = cellMesh,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // (F3-A) The world casts only when something is actually going to receive it. Off is still
+                // the default: making every world cell a shadow caster is the OTHER half of the dynamic-
+                // shadow cost (the first half is the six cube faces per light), and on 2026-08-02 this was
+                // measured as pure waste while nothing cast. r_shadow_world_casts 1 turns it back on for
+                // the people who enable r_shadow_realtime_dlight_shadows.
+                CastShadow = WorldCastsShadows()
+                    ? GeometryInstance3D.ShadowCastingSetting.On
+                    : GeometryInstance3D.ShadowCastingSetting.Off,
             };
             root.AddChild(cellInstance);
             cellClusters.TryGetValue(cellKv.Key, out HashSet<int>? clusters);

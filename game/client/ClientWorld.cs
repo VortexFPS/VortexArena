@@ -161,6 +161,11 @@ public partial class ClientWorld : Node3D
         public bool WasDead;          // last frame's dead test (to capture the death instant)
         public float DeathTime;       // client-observed time the model went dead (cl_deathglow fade origin)
         public bool IsPlayerModel;    // a skeletal/MD3 player model (gets the appearance/deathglow pass)
+        /// <summary>(N2) Last dynamic-light probe pushed onto this entity lobe 2, so an unchanged probe
+        /// costs no interop. Change-gated exactly like ItemTintSpecApplied and ModelTint.TintCache.</summary>
+        public ModelLightProbe.ProbeCache LightProbe;
+        /// <summary>(N8) Last rim-light state pushed onto this model.</summary>
+        public RimLight.RimCache Rim;
         public ItemDespawnFx? Despawn; // loot despawn animation (lazily created when ITS_EXPIRING first seen)
         public bool ItemFaded;        // a despawn/ghost transparency is currently applied (reset to opaque on the way back)
         public NVec3 TrailTail;       // Quake-space tail of the last emitted CSQC-model trail segment (EF_BRIGHTFIELD / jetpack MF_ROCKET) — csqcmodel_hooks.qc trailparticles continuation
@@ -1567,6 +1572,13 @@ public partial class ClientWorld : Node3D
         {
             CsqcState st = CsqcStateFor(e);
 
+            // (N2) Dynamic lights on grid-lit models. The baked grid knows where the map lamps are and
+            // nothing else, so without this an explosion lights the wall behind a player and leaves the
+            // player exactly as dim as before. Feeds the skin shader lobe 2, which the per-pixel grid leaves
+            // free; no-op when no grid is bound (lobe 2 then belongs to the CPU sample).
+            ModelLightProbe.Apply(CsqcModelEffects.GetCachedMeshes(st.Effects, node),
+                node.GlobalPosition, ref st.LightProbe);
+
             // (1) APPEARANCE (player models only): the FORCECOLORS reassignment + glowmod from the colormap +
             //     the cl_deathglow death fade. MUST run before LOD in QC; here LOD is a no-op swap so order is
             //     moot, but we keep it first.
@@ -1589,6 +1601,10 @@ public partial class ClientWorld : Node3D
                 // Change-gated (§11 R8): the uniform pushes only happen when the computed colors or the mesh
                 // list changed (colors only move while dead-fading or on a rainbow palette nibble).
                 ModelTint.ApplyAppearance(meshes, colormap, dead, st.DeathTime, ghost, ref st.Effects.Tint);
+
+                // (N8) Gameplay rim light: team identity, or a pulse on a powerup carrier. Off by default -
+                // it makes a player easier to see, which is a balance decision rather than a look one.
+                RimLight.Apply(meshes, colormap, CarriesPowerup(e), Now(), ref st.Rim);
 
                 // QC ENT_CLIENT_STATUSEFFECTS frozen overlay: a frozen player renders icy-blue (the remote analogue
                 // of the freeze tint). Multiply the model's colormod toward ice ON TOP of the team appearance just
@@ -2353,6 +2369,15 @@ public partial class ClientWorld : Node3D
 
     /// <summary>True when <paramref name="e"/> currently carries the given networked status effect (decoded onto the
     /// proxy by ClientEntityView). Null-def safe — returns false if the effect isn't registered on this client.</summary>
+    /// <summary>(N8) True while this entity carries any of the four Xonotic powerups (strength / shield /
+    /// speed / invisibility). Buffs deliberately do not count - there are a dozen of them and a rim that
+    /// lights up for every one says nothing.</summary>
+    private static bool CarriesPowerup(Entity e) =>
+        HasStatusEffect(e, StatusEffectsCatalog.ByName("strength"))
+        || HasStatusEffect(e, StatusEffectsCatalog.ByName("shield"))
+        || HasStatusEffect(e, StatusEffectsCatalog.ByName("speed"))
+        || HasStatusEffect(e, StatusEffectsCatalog.ByName("invisibility"));
+
     private static bool HasStatusEffect(Entity e, StatusEffectDef? def)
         => def is not null && StatusEffectsCatalog.Has(e, def);
 

@@ -268,6 +268,27 @@ public sealed partial class LightBudget : Node
     }
 
     /// <summary>
+    /// (N2) The lights that are actually lit this frame, with their reach - for the per-entity dynamic-light
+    /// probe. Yields the budget OWN view of visibility, so a light the cap hid does not keep contributing.
+    /// </summary>
+    public IEnumerable<(Light3D Light, float Range)> Lit()
+    {
+        foreach (Entry e in _ranked)
+        {
+            if (!GodotObject.IsInstanceValid(e.Light) || !e.Light.Visible)
+                continue;
+            float range = e.Light switch
+            {
+                OmniLight3D o => o.OmniRange,
+                SpotLight3D s => s.SpotRange,
+                _ => 0f,
+            };
+            if (range > 0f)
+                yield return (e.Light, range);
+        }
+    }
+
+    /// <summary>
     /// (F2) The lights that are visible this frame AND carry a corona, for the flare renderer. Yields the
     /// budget's OWN view of visibility, so a light the cap hid does not keep flaring.
     /// </summary>

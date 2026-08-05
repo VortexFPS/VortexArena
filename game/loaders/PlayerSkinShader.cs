@@ -172,6 +172,13 @@ instance uniform float grid_lit = 0.0;
 instance uniform vec3 grid_ambient = vec3(0.0);
 instance uniform vec3 grid_diffuse = vec3(0.0);
 instance uniform vec3 grid_dir = vec3(0.0, 1.0, 0.0); // Godot WORLD axes, points AT the light
+// (N8) Gameplay rim light: a thin band along the silhouette, coloured by something the player needs to know
+// at a glance - a teammate is teal, a powerup carrier pulses. Delivering that through the LIGHTING rather
+// than through more HUD is the whole argument for it in a game where target identification happens in a
+// fraction of a second. Black (the default) is off, and every driver of it is a cvar, because this is a
+// competitive-information change and not a cosmetic one.
+instance uniform vec3 rim_color = vec3(0.0);
+instance uniform float rim_power = 2.5;
 
 // ---- F1-B: the map's baked lightgrid as a 3-D texture, sampled PER PIXEL --------------------------------
 // The port of DP's MODE_LIGHTGRID (shader_glsl.h:1567-1590). Layout, matrix and encoding are built by
@@ -325,6 +332,10 @@ void fragment() {
                 + tinted * (dif1 * ndl1 + grid_diffuse * ndl)
                 + gloss_px.rgb * (dif1 * spc1 + grid_diffuse * spec) + glow;
         }
+        // (N8) Rim: brightest where the surface turns away from the eye. Added AFTER the light terms so it
+        // survives a dark room - the entire point is that it is readable when the model is not.
+        lit += rim_color * pow(1.0 - max(dot(nrm, VIEW), 0.0), rim_power);
+
         // EMISSION-only output: scene lights must not double-light the grid-lit surface.
         ALBEDO = vec3(0.0);
         ROUGHNESS = 1.0;
@@ -374,8 +385,12 @@ void fragment() {
         ROUGHNESS = rough;
         METALLIC = metal;
 
+        // (N8) Rim light on the PBR fallback path too, so a map with no light grid still gets it.
+        vec3 rim_n = has_normal ? NORMAL : normalize(NORMAL);
+        vec3 rim = rim_color * pow(1.0 - max(dot(rim_n, VIEW), 0.0), rim_power);
+
         // Emission composes the additive cubemap reflection with the _glow map (DP adds both over the lit surface).
-        vec3 emis = reflect_add;
+        vec3 emis = reflect_add + rim;
         if (has_glow) {
             // glowmod: per-entity glow tint (DP render_glowmod); viewmodels/players use the pants color.
             emis += texture(glow_tex, UV).rgb * glowmod;

@@ -568,6 +568,19 @@ public static class ClientSettings
         // Fall back to the map own light entities when no .rtlights exists (DP default 1).
         c.Register("r_shadow_realtime_world_importlightentitiesfrommap", "1");
         c.Register("r_editlights_quakelightsizescale", "1");
+        // ---- (N2) Do dynamic lights reach GRID-LIT models? Port-only, and a real gap in DP: a light-grid
+        // entity in DarkPlaces never samples dlights, so an explosion lights the walls and leaves the player
+        // standing in it exactly as dim as before. ON by default because the alternative reads as a bug.
+        c.Register("r_model_dlight", "1");
+        c.Register("r_model_dlight_scale", "1");
+        // ---- (N8) Gameplay rim light. Vortex-original. OFF by default: a rim makes a player easier to see
+        // in the dark and around cover edges, which is a BALANCE decision, not a look one - so it ships off,
+        // every driver toggles independently, and a server that wants it uniform can force these.
+        c.Register("cl_rimlight", "0");
+        c.Register("cl_rimlight_strength", "0.6");
+        c.Register("cl_rimlight_teams", "1");
+        c.Register("cl_rimlight_powerup", "1");
+        c.Register("cl_rimlight_power", "2.5");
     }
 
     /// <summary>

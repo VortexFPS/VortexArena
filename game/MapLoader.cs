@@ -168,6 +168,7 @@ public static class MapLoader
         bool deluxe = EffectiveDeluxemapped(bsp, assets, mapName);
 
         // --- bucket polygon/mesh faces ---
+        using (LoadTimeline.Phase("map.faces"))
         for (int fi = 0; fi < bsp.Faces.Length; fi++)
         {
             BspFace face = bsp.Faces[fi];
@@ -216,6 +217,7 @@ public static class MapLoader
             patchJobs.Add((fi, face.TextureIndex, LightmapKeyForFace(bsp, assets, face)));
         }
         if (patchJobs.Count > 0)
+        using (LoadTimeline.Phase("map.patches"))
         {
             var tessResults = new BezierPatch.Tessellation?[patchJobs.Count];
             System.Threading.Tasks.Parallel.For(0, patchJobs.Count, j =>
@@ -235,13 +237,17 @@ public static class MapLoader
         // the render mesh, NOT brushes — finalrage alone has ~17.6k bevel-padded solid brushes (hundreds of k
         // of tris) vs ~24k render tris, and the render surface is both lower-poly and guaranteed conservative.
         // Built unconditionally (cheap, load-time only) so the cvar can A/B-toggle without a map reload.
-        Occluder3D? worldOccluder = BuildWorldOccluder(bsp, assets, surfaces);
+        Occluder3D? worldOccluder;
+        using (LoadTimeline.Phase("map.occluder"))
+            worldOccluder = BuildWorldOccluder(bsp, assets, surfaces);
 
         // --- (§12.5 R5b) lightmap atlas: pack every USED page (+ its deluxe pair) into one gutter-padded
         // texture so lightmapped surfaces no longer split per page — materials (and with the regroup below,
         // draw calls) collapse from textures × pages to just textures. Null when the map has no loadable
         // pages; lit keys then degrade exactly like today's null-lightmap path.
-        LightmapAtlas? atlas = BuildLightmapAtlas(bsp, assets, mapName, deluxe, surfaces.Keys);
+        LightmapAtlas? atlas;
+        using (LoadTimeline.Phase("map.lightmap-atlas"))
+            atlas = BuildLightmapAtlas(bsp, assets, mapName, deluxe, surfaces.Keys);
 
         // --- (§12.5 R5a+b) regroup: split every triangle into a spatial CELL (frustum culling — the old
         // single MeshInstance3D drew the whole map every frame) and merge the per-page lightmap buckets onto
@@ -250,17 +256,29 @@ public static class MapLoader
         // cells the map compiler PROVED can't be seen from the camera's cluster (occlusion the frustum can't).
         // Cluster labels are DP's EXACT per-surface vis — the union of clusters of every leaf that references a
         // face (lump-5 leaffaces) — not a sampled point, so no face is mislabeled into solid (the old bug).
-        var pvs = new VortexArena.Formats.Bsp.BspPvs(bsp);
-        int[][]? faceClusters = pvs.HasVis ? pvs.BuildFaceClusterSets() : null;
-        float cellSize = ResolveCellSize(bsp);
-        var cells = RegroupIntoCells(surfaces, atlas, faceClusters, cellSize,
-            out Dictionary<CellKey, HashSet<int>> cellClusters);
+        // pvs and cellSize are both read again further down (the PVS culler wiring, the cell-size log), so
+        // they are declared out here rather than inside the timing scope.
+        VortexArena.Formats.Bsp.BspPvs pvs;
+        float cellSize;
+        Dictionary<CellKey, HashSet<int>> cellClusters;
+        var cells = default(System.Collections.Generic.IEnumerable<
+            KeyValuePair<CellKey, Dictionary<SurfaceKey, SurfaceBuilder>>>)!;
+        using (LoadTimeline.Phase("map.pvs+regroup"))
+        {
+            pvs = new VortexArena.Formats.Bsp.BspPvs(bsp);
+            int[][]? faceClusters = pvs.HasVis ? pvs.BuildFaceClusterSets() : null;
+            cellSize = ResolveCellSize(bsp);
+            cells = RegroupIntoCells(surfaces, atlas, faceClusters, cellSize, out cellClusters);
+        }
 
         // --- pack each cell into its own ArrayMesh + MeshInstance3D, sharing materials across cells ---
         int nLit = 0, nLitMissing = 0, nVtx = 0, nPlain = 0, nGlow = 0, nTrans = 0, nNormal = 0; // surface-material tally (logged below)
         var materialCache = new Dictionary<SurfaceKey, Material>();
         var pvsCells = new List<(MeshInstance3D Node, int[] Clusters)>();
         int cellCount = 0, drawSurfaces = 0;
+        // O5: the mesh-pack + material-resolve loop — ArrayMesh.AddSurfaceFromArrays plus the scene-tree
+        // adds. This is the block T1 would chunk and the one whose off-thread feasibility is untested.
+        using (LoadTimeline.Phase("map.cell-meshes"))
         foreach (var cellKv in cells)
         {
             var cellMesh = new ArrayMesh();

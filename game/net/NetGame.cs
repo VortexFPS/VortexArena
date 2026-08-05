@@ -611,13 +611,17 @@ public sealed partial class NetGame : Node3D
         // gracefully when a stage runs longer than expected, instead of one "Loading…" → snap-to-1 jump.
         // (Async void so a TeardownGame mid-load just leaves this coroutine to fall off the tree-check below.)
 
+        // O5: wall-clock accounting for the load blocks (see LoadTimeline for why this is not Prof.Sample).
+        LoadTimeline.Begin(_isListenServer ? $"host {_map}" : $"connect {_host}");
+
         if (_isListenServer)
         {
             LoadingScreen?.BeginStage("Loading map…", 0.30f, 4.0f);
             await YieldForLoadingFrame();
             if (!IsInsideTree()) return;
 
-            StartListenServer();
+            using (LoadTimeline.Phase("server.start"))
+                StartListenServer();
 
             LoadingScreen?.BeginStage("Booting world…", 0.42f, 0.5f);
             await YieldForLoadingFrame();
@@ -629,7 +633,8 @@ public sealed partial class NetGame : Node3D
             await YieldForLoadingFrame();
             if (!IsInsideTree()) return;
 
-            BootClientFacade();
+            using (LoadTimeline.Phase("client.boot"))
+                BootClientFacade();
 
             LoadingScreen?.BeginStage("Resolving server…", 0.42f, 0.5f);
             await YieldForLoadingFrame();
@@ -651,8 +656,10 @@ public sealed partial class NetGame : Node3D
         // tree (and its per-frame drive) never gets built.
         if (!_dedicatedNoClient)
         {
-            SetupRender();
-            SetupCameraAndHud();
+            using (LoadTimeline.Phase("render.setup"))
+                SetupRender();
+            using (LoadTimeline.Phase("camera.hud"))
+                SetupCameraAndHud();
         }
 
         // Dev capture: `--fx-demo [effect]` rides on the live ClientWorld to burst a named effect in front of the
@@ -678,7 +685,8 @@ public sealed partial class NetGame : Node3D
         // Dedicated-slim: skipped — music playback is pure client presentation (a decoded music track alone is
         // tens of MB), and connecting clients resolve the cdtrack from their OWN mapinfo parse.
         if (!_dedicatedSlim)
-            SetupMusic();
+            using (LoadTimeline.Phase("music"))
+                SetupMusic();
 
         LoadingScreen?.BeginStage("Precaching weapon models…", 0.82f, 3.0f);
         await YieldForLoadingFrame();
@@ -688,7 +696,9 @@ public sealed partial class NetGame : Node3D
         // first switch/pickup of a weapon in combat doesn't hitch reading+decoding the model and its textures on
         // the main thread (DP precaches weapon models at map load). Runs after _assets is built above.
         // The async variant yields every few weapons so the bar visibly ticks through this stage.
+        LoadTimeline.Handle weaponPhase = LoadTimeline.Open("precache.weapons");
         await PrecacheWeaponModelsAsync();
+        weaponPhase.Close();
         if (!IsInsideTree()) return;
 
         // Warm the combat-sound decode cache + common player models (A3) so the first shot/explosion and the
@@ -699,7 +709,9 @@ public sealed partial class NetGame : Node3D
             LoadingScreen?.BeginStage("Precaching sounds…", 0.87f, 1.5f);
             await YieldForLoadingFrame();
             if (!IsInsideTree()) return;
+            LoadTimeline.Handle soundPhase = LoadTimeline.Open("precache.sounds+models");
             await PrecacheCombatSoundsAndModelsAsync();
+            soundPhase.Close();
             if (!IsInsideTree()) return;
         }
 
@@ -729,6 +741,10 @@ public sealed partial class NetGame : Node3D
 
         // _Process can safely run its full body now (camera/HUD/render/client all built above).
         _readyComplete = true;
+
+        // O5: the phase table. Reported HERE, at the end of the synchronous load, not at first spawn — what
+        // follows is handshake/network wait, which is a different question and is already logged separately.
+        LoadTimeline.Report();
     }
 
     /// <summary>Yield one process_frame so the LoadingScreen's _Process can repaint with whatever stage
@@ -750,7 +766,9 @@ public sealed partial class NetGame : Node3D
     {
         // --- collision: load the map's BSP collision if we can resolve it, else a flat test floor. ---
         CollisionWorld collision;
-        VortexArena.Formats.Bsp.BspData? bsp = TryLoadMapBsp(_map);
+        VortexArena.Formats.Bsp.BspData? bsp;
+        using (LoadTimeline.Phase("bsp.parse"))
+            bsp = TryLoadMapBsp(_map);
         BspCollisionBuilder.Result? built = null;
         if (bsp is not null)
         {
@@ -804,7 +822,8 @@ public sealed partial class NetGame : Node3D
             }
             else
             {
-                built = BspCollisionBuilder.Build(bsp, _droppedSubmodels);
+                using (LoadTimeline.Phase("collision.build"))
+                    built = BspCollisionBuilder.Build(bsp, _droppedSubmodels);
                 collision = built.World;
             }
         }
@@ -887,7 +906,8 @@ public sealed partial class NetGame : Node3D
 
         // Boot the world: publishes Api.Services, activates the gametype, loads the cfg tree, spawns the map's
         // entities (spawn points + jump-pads/items/doors), registers brush models + surfaces + PVS.
-        _serverWorld.Boot(_gametype);
+        using (LoadTimeline.Phase("world.boot"))
+            _serverWorld.Boot(_gametype);
 
         // DS-8: on a dedicated/headless host, back the ban list with a file so bans survive a restart (g_banned_list
         // has no Save flag and a dedicated host doesn't reliably write config.cfg). Seeds the cvar from the file
@@ -1890,16 +1910,21 @@ public sealed partial class NetGame : Node3D
             // so skip the warm-up entirely.
             if (!_dedicatedSlim)
             {
-            _render.Effects.Warmup();
+            using (LoadTimeline.Phase("fx.warmup"))
+                _render.Effects.Warmup();
             // Likewise pre-build the shared per-type projectile-trail Resources so the first rocket/plasma/grenade
             // doesn't construct its trail material on its render frame (see ProjectileRenderer.WarmupTrails).
-            _render.Projectiles.WarmupTrails();
+            using (LoadTimeline.Phase("fx.trails"))
+                _render.Projectiles.WarmupTrails();
             // A2: render one hidden instance of every effect/projectile material family in a tiny offscreen viewport
             // so the GPU compiles their shader pipelines NOW (during load) — the first real explosion/rocket/gib in
             // play then hits a warm pipeline instead of stalling the frame. Self-frees after a few frames.
             // The map-item / pickup MD3 models render through the entity feed (PVS-culled until first-seen), so warm
             // them here too — built from the item registry + the same AssetLoader the live entity build uses.
-            VortexArena.Game.Client.GpuWarmPass.Run(_render, _render.Effects, _render.Projectiles, BuildItemWarmupInstances());
+            // Timed as the SYNCHRONOUS build only (item instances + pass setup). The pipeline compilation this
+            // kicks off happens over the following frames and self-frees, so it is not in this span.
+            using (LoadTimeline.Phase("gpu.warm-items(build)"))
+                VortexArena.Game.Client.GpuWarmPass.Run(_render, _render.Effects, _render.Projectiles, BuildItemWarmupInstances());
             }
 
         // CSQC appearance context (FORCEMODEL/FORCECOLORS need the local player + gametype): read live each frame.
@@ -1912,7 +1937,8 @@ public sealed partial class NetGame : Node3D
         // Render the world geometry + PVS entity-cull + client particle/decal collision from the loaded BSP.
         // On a listen server _bsp is already set (StartListenServer); a pure --connect client has no BSP here and
         // attaches this later — once the server's map name arrives — via LoadClientMapFromServer. No-op until then.
-        AttachWorldRender();
+        using (LoadTimeline.Phase("world.attach"))
+            AttachWorldRender();
 
         // Dedicated-slim: no entity render nodes (ClientEntityView would rebuild a placeholder per networked
         // entity every snapshot) and no effect/sound playback — the handlers stay unsubscribed, so every
@@ -1940,6 +1966,7 @@ public sealed partial class NetGame : Node3D
         // cl_editor_grid is set: it is a full-screen pass that costs nothing while invisible, and having it
         // resident means the `editor_grid` bind works instantly instead of building a shader on first toggle
         // (which would be a pipeline-compile hitch at exactly the wrong moment).
+        LoadTimeline.Handle editorNodes = LoadTimeline.Open("editor.nodes");
         var editorGrid = new Vmap.EditorGrid();
         AddChild(editorGrid);
 
@@ -1958,8 +1985,10 @@ public sealed partial class NetGame : Node3D
         AddChild(_editorOrtho);
         _editor.Ortho = _editorOrtho;
         editorGrid.Attach(_editor);
+        editorNodes.Close();
 
-        AddLight();
+        using (LoadTimeline.Phase("light"))
+            AddLight();
     }
 
     /// <summary>
@@ -1989,21 +2018,32 @@ public sealed partial class NetGame : Node3D
         // The client draws the worldmodel it loaded locally (DP VF_DRAWWORLD=1 + renderscene(); the server ships
         // no geometry). Reuses the SAME BSP + gametype submodel filter the collision was built from — render and
         // collision MUST agree (GameDemo.cs:134/181). The map name resolves external lm_NNNN lightmaps.
-        _mapRoot = MapLoader.BuildMap(_bsp, _assets.Assets, _map, _droppedSubmodels);
+        using (LoadTimeline.Phase("map.build"))
+            _mapRoot = MapLoader.BuildMap(_bsp, _assets.Assets, _map, _droppedSubmodels);
         AddChild(_mapRoot);
 
         // (§12.8) The render world's PVS so it DP-faithfully culls remote entities behind walls (r_pvs_cull_entities).
-        _render.Pvs = new VortexArena.Formats.Bsp.BspPvs(_bsp);
+        // NOTE (O5): this is the map's THIRD BspPvs construction on a listen server — StartListenServer builds one
+        // for the server (checkpvs) and MapLoader.BuildMap builds another for its cell cluster sets. Measured
+        // separately so the duplication is visible rather than inferred.
+        using (LoadTimeline.Phase("render.pvs(dup)"))
+            _render.Pvs = new VortexArena.Formats.Bsp.BspPvs(_bsp);
 
         // Client-side collision for the particle systems: decal splats conform to the real brush faces (DP
         // R_DecalSystem — else marks fall back to flat quads). A pure client already built the world for its
         // prediction collision (LoadClientMapFromServer) and passes it in, so we don't build the same brush world a
         // SECOND time on the connect frame — both the prediction trace and these effect traces are main-thread, so
         // sharing one instance is safe. The listen path builds a fresh one (GameWorld owns the server collision).
-        CollisionWorld effectsWorld = sharedEffectsWorld ?? MapLoader.BuildCollision(_bsp, _assets.Assets);
+        // NOTE (O5): on the LISTEN path this builds a SECOND full collision world (StartListenServer already
+        // built the authoritative one). Timed separately — `collision.build` measured 228-277 ms, so if this
+        // twin costs the same it is a large share of what was unaccounted for in render.setup.
+        CollisionWorld effectsWorld;
+        using (LoadTimeline.Phase("effects.collision(dup)"))
+            effectsWorld = sharedEffectsWorld ?? MapLoader.BuildCollision(_bsp, _assets.Assets);
         _render.Effects.SetCollisionWorld(effectsWorld);
         // Splats clip against the RENDER triangles (DP's actual target) — marks roll over visible trim/patch edges.
-        _render.Effects.SetDecalGeometry(_bsp);
+        using (LoadTimeline.Phase("decal.geometry"))
+            _render.Effects.SetDecalGeometry(_bsp);
 
         // Chunked-SDF collision field for modern particles (planning/particles-dual-system.md §A). Built only in a
         // modern-collision mode (cl_particles_modern 1/2) — mode 0 (the faithful default) needs no SDF, so the
@@ -3282,11 +3322,17 @@ public sealed partial class NetGame : Node3D
             var kept = new System.Collections.Generic.HashSet<Node3D>();
             foreach ((Node3D Node, Transform3D Attach) v in _viewEquipCache.Values)
                 kept.Add(v.Node);
+            // O5: the PSO half, measured separately from the asset half above. This is the span that decides
+            // whether the precache stages are still asset work (which the menu warm can hoist) or pipeline
+            // compilation (which it structurally cannot). WarmNodes renders for a few frames, so this is a
+            // cross-frame span — Open/Close, not a using.
+            LoadTimeline.Handle pso = LoadTimeline.Open("precache.weapons.pso-warm");
             VortexArena.Game.Client.GpuWarmPass.WarmNodes(this, weaponWarmRoots, () =>
             {
                 foreach (Node3D r in weaponWarmRoots)
                     if (!kept.Contains(r) && GodotObject.IsInstanceValid(r))
                         r.QueueFree();
+                pso.Close();
             });
         }
         GD.Print($"[NetGame] precached {warmed} weapon models, skipped {skipped} (lazy), {muzzles} muzzle tags.");
@@ -3373,12 +3419,16 @@ public sealed partial class NetGame : Node3D
         // WarmNodes use. Textures are shared-cached, so holding the roster's scene nodes briefly is a small,
         // bounded peak. No-op/immediate-free headless.
         if (warmRoots.Count > 0)
+        {
+            LoadTimeline.Handle pso = LoadTimeline.Open("precache.models.pso-warm");   // O5: see the weapon twin
             VortexArena.Game.Client.GpuWarmPass.WarmNodes(this, warmRoots, () =>
             {
                 foreach (Node3D r in warmRoots)
                     if (GodotObject.IsInstanceValid(r))
                         r.QueueFree();
+                pso.Close();
             });
+        }
         GD.Print($"[NetGame] precached {sounds} combat sounds, {modelsWarmed} player models (rendered for pipeline warm).");
         // Cold-cache forensics (perf 2026-08-02): name exactly what the roster warm parsed on which loader, so a
         // later mid-match parse MISS (the ~600-860 ms t≈23 stall class) can be read against this line directly.

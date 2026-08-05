@@ -10,6 +10,10 @@ This is deliberately a **map**, not a duplicate. The detail lives in:
 - [texture-compression-and-caching-2026-07-31.md](texture-compression-and-caching-2026-07-31.md) — how
   DarkPlaces compresses and caches, what the port does, the measured CPU-compression cost, options and ranked
   recommendations.
+- [interactive-loading-screen-2026-08-04.md](interactive-loading-screen-2026-08-04.md) — can the loading
+  screen stay interactive (chat while loading)? The chunking cost model, whether going WIDE would be faster,
+  a survey of the remaining prewarm surface, and **§6b: the first real per-phase load measurement**, which
+  overturned two standing assumptions (see below).
 - [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md) §13.3 — the standing perf backlog (item 4 now closed).
 
 ---
@@ -43,6 +47,21 @@ measures it, and the texture pipeline it exercises.
 
 In-match A/B stayed neutral across every change (`ASSET-BUILD` hitches 4 vs 4, p50 4.1 vs 4.2 ms). Suite
 3973/3973 throughout.
+
+## Two corrections from the 2026-08-04 load measurement
+
+Both are load-path facts this thread had been reasoning about incorrectly. Detail in
+[interactive-loading-screen-2026-08-04.md](interactive-loading-screen-2026-08-04.md) §6b.
+
+1. **"79% of the load is precache" describes the COLD path, and every CLI capture is cold.**
+   `StartMenuAssetWarm()` runs only on a plain menu boot — `--map`/`--host`/`--connect` skip it
+   (`Shell.cs:353` vs `:363`). Measured on stormkeep: cold load **15738 ms**, warm-cache load **1746 ms**,
+   with the two precache stages going 12405 → **526 ms** (−96%). The menu warm's premise is validated; the
+   figure everyone was quoting was the worst case.
+2. **On a warm load the long pole is `render.setup` (46%) and `collision.build` (13%)** — neither reachable
+   by the menu warm. `map.pvs+regroup` does not cache at all (103.5 → 102.9 ms). And **PSO cannot be measured
+   headless** (`dummy_video` gives `GpuWarmPass` nothing to compile); the real weapon PSO warm is ~1.0 s,
+   from a windowed run.
 
 ## The four things worth remembering
 
@@ -138,10 +157,22 @@ Normal/gloss companions that previously resolved to *nothing* now load. stormkee
 is a fidelity change across all maps and deserves eyes on a handful.
 
 ### 4. Remaining map-load → menu-warm candidates
-From the earlier survey, still unmoved and all map-independent:
+Full survey in [interactive-loading-screen-2026-08-04.md](interactive-loading-screen-2026-08-04.md) §5.
+Still unmoved and all map-independent:
+- **`effectinfo.txt` + the `effectinfo_xg.txt` style overlay** — ✅ **DONE 2026-08-04.** 9374 lines / 169 KB
+  of pure text parse (831 blocks → 314 distinct effects), no Godot types, now parsed once per process into a
+  shared catalog instead of once per match. Note the correction recorded in that doc: this is a **load-time**
+  cost, not the mid-match cost the `EffectSystem` doc comment implies — `NetGame.cs:1893` forces it via
+  `Effects.Warmup()` at map load. Expect tens of ms, not hundreds. Verified by counting cold parses in a
+  menu-warm-then-match process: exactly 1. Suite 4159/4159. `./vx perf-smoke` not run.
+- **`ParticleFont` UV table + pre-cropped cells.** The atlas texture is already warmed; the parse and the
+  `AtlasTexture` cells are not. Held back deliberately — those are Godot `Resource`s, a different sharing risk
+  from a parsed dictionary.
+- **`PlayerSoundResolver.Install`** (`NetGame.cs:581`) — `.sounds` manifest parse, free to hoist.
 - **Player-model PSO warm.** The warm deliberately skips it (viewport-variant specific per
   `godot-pipeline-compile-internals`), so the per-match `GpuWarmPass` still builds + renders the roster.
   Given two "known limits" in this area turned out false this session, **re-test the claim** before accepting it.
+  Now suspected to be the *dominant* remaining cost of both precache stages — the highest-value measurement.
 - Map-dependent work is only reachable via the unimplemented **O3 menu-time prewarm** (BSP parse, collision
   build, map textures/lightmaps, waypoints, music) — the map is knowable at Create-Game selection, and the
   process-lifetime cache that blocked it now exists.

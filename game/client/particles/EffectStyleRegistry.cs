@@ -23,7 +23,8 @@ namespace VortexArena.Game.Client.Particles;
 /// </summary>
 public sealed class EffectStyleRegistry
 {
-    private readonly EffectInfoOverlay _overlay = new();
+    // Not readonly: LoadShared swaps this for the process-lifetime instance so every match reads one parse.
+    private EffectInfoOverlay _overlay = new();
 
     /// <summary>The wrapped overlay (exposed for tests / introspection — e.g. <c>Overlay.Count</c>).</summary>
     public EffectInfoOverlay Overlay => _overlay;
@@ -45,8 +46,26 @@ public sealed class EffectStyleRegistry
         return _overlay.Load(vpath);
     }
 
-    /// <summary>Parse overlay text directly (no I/O) — the unit-test entry point.</summary>
-    public void Parse(string text) => _overlay.Parse(text);
+    /// <summary>
+    /// Adopt the PROCESS-LIFETIME overlay for <paramref name="vpath"/> instead of parsing a private one, so a
+    /// menu-warmed parse (or an earlier match's) is reused rather than repeated. Same return contract as
+    /// <see cref="Load"/>. This is what <c>EffectSystem.EnsureInfoLoaded</c> calls; <see cref="Load"/> stays
+    /// for hosts that want their own copy.
+    /// </summary>
+    public bool LoadShared(Func<string, string?>? textLoader, string vpath = EffectInfoOverlay.DefaultVPath)
+    {
+        _overlay = EffectInfoOverlay.GetShared(vpath, textLoader);
+        return _overlay.Loaded;
+    }
+
+    /// <summary>Parse overlay text directly (no I/O) — the unit-test entry point. Always parses into a
+    /// PRIVATE overlay: this is the one mutating entry point, and after <see cref="LoadShared"/> the wrapped
+    /// instance may be shared with every other match, which must never be written through.</summary>
+    public void Parse(string text)
+    {
+        _overlay = new EffectInfoOverlay();
+        _overlay.Parse(text);
+    }
 
     /// <summary>
     /// The authored routing record for <paramref name="effectName"/>, or <see cref="EffectStyleEntry.Default"/>

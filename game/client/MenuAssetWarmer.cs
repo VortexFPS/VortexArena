@@ -132,6 +132,34 @@ public partial class MenuAssetWarmer : Node
 
         AssetLoader assets = _assets;
 
+        // --- the effect catalogs, FIRST. effectinfo.txt is ~9.4k lines / 169 KB expanding into ~1000 layered
+        //     emitter blocks grouped under ~314 names; the effectinfo_xg.txt style overlay is the same shape.
+        //     Both are map-independent pure text parse touching no Godot types, and both were re-parsed by
+        //     EVERY match — EffectSystem.EnsureInfoLoaded is forced at map load by NetGame's Effects.Warmup(),
+        //     so this is load-time cost, not the mid-match hitch the EffectSystem doc comment implies.
+        //     GetShared publishes into a process-lifetime cache the match's EnsureInfoLoaded then hits.
+        //
+        //     Queued FIRST deliberately. The warm is strictly serial (MaxUnitsInFlight = 1, see below), so
+        //     queue position is arrival time: last would put it ~360 units and several seconds deep, i.e.
+        //     after a player who clicks Start promptly. It is also the one unit EVERY match needs no matter
+        //     which map, gametype or weapon set it picks — unlike any individual model — and it is cheap, so
+        //     it delays the rest by almost nothing. ---
+        Func<string, string?> effectText = v =>
+        {
+            try { return assets.Vfs.ReadText(v); }
+            catch { return null; }
+        };
+        _pending.Enqueue(done => _streamer.Request(
+            () =>
+            {
+                EffectInfo info = EffectInfo.GetShared(EffectInfo.DefaultVPath, effectText);
+                Particles.EffectInfoOverlay.GetShared(
+                    Particles.EffectInfoOverlay.DefaultVPath, effectText);
+                return info.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            },
+            _ => done(),
+            BackgroundAssetStreamer.Priority.Low, "menu-warm effectinfo"));
+
         // --- models: every weapon v_ view-model + its sibling h_ hand rig, and the stock player roster. ---
         // WeaponVModelPath is NetGame's shared key so the later real load hits the SAME cache entry; the
         // v_→h_ rewrite mirrors PrecacheWeaponModelsAsync.
@@ -211,7 +239,8 @@ public partial class MenuAssetWarmer : Node
         StartPendingUnits();
 
         Log.Info($"[MenuWarmer] warming {weapons} weapon models + {players} player models + {world} world " +
-                 $"models + {textures} textures + {sounds} sounds into the shared cache (background, menu-time).");
+                 $"models + {textures} textures + {sounds} sounds + the effect catalogs into the shared " +
+                 "cache (background, menu-time).");
     }
 
     /// <summary>

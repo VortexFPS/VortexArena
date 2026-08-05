@@ -69,6 +69,80 @@ public sealed class EffectInfo
         return Loaded;
     }
 
+    // ================================================================================================
+    //  Process-lifetime shared catalog (menu warm)
+    // ================================================================================================
+
+    private static readonly object SharedGate = new();
+    private static readonly Dictionary<string, EffectInfo> SharedByVPath =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The parsed catalog for <paramref name="vpath"/>, parsed once per process and shared by every match.
+    /// Returns a catalog even on a read miss (empty, <see cref="Loaded"/> false) so callers keep their
+    /// heuristic fallback and a miss is not re-probed on every map load.
+    ///
+    /// <para><b>Why this exists.</b> effectinfo.txt is ~9.4k lines / 169 KB that expand into ~1000 layered
+    /// emitter blocks, it is entirely map-independent, and it was re-parsed from scratch by every match
+    /// (<c>EffectSystem.EnsureInfoLoaded</c>, forced at map load by <c>NetGame</c>'s
+    /// <c>Effects.Warmup()</c>). Sharing lets <see cref="Client.MenuAssetWarmer"/> pay it once during menu
+    /// dwell, and makes every subsequent map change / server switch a cache hit — the same shape as the
+    /// process-lifetime <c>AssetLoader</c> from Phase 1 of the loading-speed work.</para>
+    ///
+    /// <para><b>Thread-safety.</b> Callable from the streamer's worker lane (the menu warm) or the main
+    /// thread (a match's own load). The parse runs OUTSIDE the lock so two callers never serialize behind
+    /// one 169 KB tokenise, then the winner is published under a re-check — the same publish pattern
+    /// <c>AssetSystem.WarmTextureOffThread</c> uses. A loser discards its own parse and returns the winner,
+    /// so every caller sees one instance.</para>
+    ///
+    /// <para><b>Sharing is safe because the catalog is immutable after parse.</b> <see cref="Parse"/> is the
+    /// only writer of <c>_byName</c>, a cached instance is never re-loaded, and <see cref="TextLoader"/> is
+    /// read only inside <see cref="Load"/>. The one standing assumption is that consumers do not mutate the
+    /// <see cref="EffectInfoEmitter"/> blocks handed back by <see cref="Get"/> — already true today, since
+    /// those blocks are shared across every spawn of an effect within a match.</para>
+    ///
+    /// <para><b>Mount lifetime.</b> Keyed by vpath only, so this assumes the content mounts do not change
+    /// under a running process (they are established at boot). <see cref="ClearShared"/> exists for a host
+    /// that remounts.</para>
+    /// </summary>
+    public static EffectInfo GetShared(string vpath, Func<string, string?>? textLoader)
+    {
+        string key = vpath ?? DefaultVPath;
+        lock (SharedGate)
+        {
+            if (SharedByVPath.TryGetValue(key, out EffectInfo? hit))
+                return hit;
+        }
+
+        // Parse outside the lock — 169 KB of tokenising should not block another thread that only wants a
+        // catalog that is already built.
+        var built = new EffectInfo { TextLoader = textLoader };
+        try { built.Load(key); }
+        catch { /* leave empty; callers fall back to the heuristic classifier */ }
+
+        lock (SharedGate)
+        {
+            if (SharedByVPath.TryGetValue(key, out EffectInfo? raced))
+                return raced;   // someone else won; drop ours so every caller sees one instance
+            SharedByVPath[key] = built;
+        }
+
+        // Printed on the COLD parse only, so "did the sharing actually work" is observable rather than
+        // assumed: this must appear exactly ONCE per process, before/independent of the per-match
+        // "[EffectSystem] effectinfo: N effects" line, which prints on every match either way. A second
+        // occurrence means a match missed the cache. (GD.Print off the main thread follows
+        // AssetSystem.WarmTextureOffThread's precedent — this can run on the streamer's worker lane.)
+        GD.Print($"[EffectInfo] parsed '{key}': {built.Count} effects (process-lifetime, shared by every match).");
+        return built;
+    }
+
+    /// <summary>Drop every shared catalog — for a host that remounts content under a running process.</summary>
+    public static void ClearShared()
+    {
+        lock (SharedGate)
+            SharedByVPath.Clear();
+    }
+
     private string? TryReadText(string vpath)
     {
         // 1) host-supplied loader (the real VFS).

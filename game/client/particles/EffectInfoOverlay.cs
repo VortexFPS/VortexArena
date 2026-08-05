@@ -112,6 +112,49 @@ public sealed class EffectInfoOverlay
         return Loaded;
     }
 
+    // ================================================================================================
+    //  Process-lifetime shared overlay (menu warm) — mirrors EffectInfo.GetShared; see that method for the
+    //  rationale, the thread-safety argument and the immutable-after-parse assumption. Worth sharing even
+    //  though no overlay ships in data/core.pk3dir today: the MISS is what every match currently repeats
+    //  (a VFS probe plus the disk-path fallback walk), and this caches it.
+    // ================================================================================================
+
+    private static readonly object SharedGate = new();
+    private static readonly Dictionary<string, EffectInfoOverlay> SharedByVPath =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The parsed overlay for <paramref name="vpath"/>, parsed once per process and shared by every
+    /// match. Returns an overlay even on a miss (empty, <see cref="Loaded"/> false) — every lookup then
+    /// answers the Auto default, exactly as an unparsed overlay does.</summary>
+    public static EffectInfoOverlay GetShared(string vpath, Func<string, string?>? textLoader)
+    {
+        string key = vpath ?? DefaultVPath;
+        lock (SharedGate)
+        {
+            if (SharedByVPath.TryGetValue(key, out EffectInfoOverlay? hit))
+                return hit;
+        }
+
+        var built = new EffectInfoOverlay { TextLoader = textLoader };
+        try { built.Load(key); }
+        catch { /* leave empty; Auto everywhere */ }
+
+        lock (SharedGate)
+        {
+            if (SharedByVPath.TryGetValue(key, out EffectInfoOverlay? raced))
+                return raced;
+            SharedByVPath[key] = built;
+            return built;
+        }
+    }
+
+    /// <summary>Drop every shared overlay — for a host that remounts content under a running process.</summary>
+    public static void ClearShared()
+    {
+        lock (SharedGate)
+            SharedByVPath.Clear();
+    }
+
     private string? TryReadText(string vpath)
     {
         // 1) host-supplied loader (the real VFS).

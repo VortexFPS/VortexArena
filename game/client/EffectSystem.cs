@@ -102,10 +102,19 @@ public partial class EffectSystem : Node3D
     /// <summary>
     /// The parsed effectinfo.txt catalog. When an effect name is present here, the burst is built from the
     /// REAL parameters (type/color/size/alpha/count/velocity/jitter/gravity/blend/light) rather than the
-    /// name-classified heuristic. Loaded lazily on first use; a miss leaves it empty (heuristic fallback).
-    /// Exposed so the host can inject a VFS text loader (<see cref="EffectInfo.TextLoader"/>) before use.
+    /// name-classified heuristic. A miss leaves it empty (heuristic fallback). Exposed so the host can inject
+    /// a VFS text loader (<see cref="EffectInfo.TextLoader"/>) before use.
+    ///
+    /// <para>Filled by <see cref="EnsureInfoLoaded"/>, which is lazy in the sense that any Spawn triggers it —
+    /// but in a real match it never gets that far, because <c>NetGame</c> calls <see cref="Warmup"/> at map
+    /// load. It is a LOAD-time cost, not a first-explosion cost. (The old wording here said "loaded lazily on
+    /// first use", which read as the opposite and cost an investigation.)</para>
+    ///
+    /// <para>Backed by <see cref="EffectInfo.GetShared"/>, so the ~169 KB parse is paid once per PROCESS — by
+    /// the menu warm during menu dwell, or by whichever match loads first — rather than once per match. Starts
+    /// as a private empty catalog so every lookup is safe before the load runs.</para>
     /// </summary>
-    public EffectInfo Info { get; } = new();
+    public EffectInfo Info { get; private set; } = new();
 
     /// <summary>
     /// The DP particle-texture atlas (particles/particlefont.tga + .txt). Built lazily from the host loaders
@@ -392,10 +401,10 @@ public partial class EffectSystem : Node3D
 
         // Source effectinfo.txt straight from the mounted VFS when the host wired a text loader (so the
         // override/ precedence applies); otherwise the parser's disk fallback finds the content repo copy.
-        if (VfsTextLoader is not null)
-            Info.TextLoader = VfsTextLoader;
-        try { Info.Load(); }
-        catch { /* leave empty; heuristic fallback covers it */ }
+        // PROCESS-LIFETIME: GetShared parses once and every later match reuses it, so the menu warm can pay
+        // this during menu dwell (MenuAssetWarmer) and a map change / server switch is a straight cache hit.
+        // Never throws — a read miss returns an empty catalog and the heuristic classifier covers it.
+        Info = EffectInfo.GetShared(EffectInfo.DefaultVPath, VfsTextLoader);
 
         // Build the particle-texture atlas once. A miss leaves Font not-loaded and callers fall back to the
         // solid-quad/disc path, so this never blocks rendering.
@@ -414,7 +423,9 @@ public partial class EffectSystem : Node3D
             Splats.Font = Font;
         if (ModernParticles is not null)
             ModernParticles.Font = Font;
-        try { Styles.Load(VfsTextLoader); }
+        // Shared for the same reason as Info above. No overlay ships today, so what this actually caches is
+        // the MISS — the VFS probe plus the disk-path fallback walk every match otherwise repeats.
+        try { Styles.LoadShared(VfsTextLoader); }
         catch { /* no overlay => Auto everywhere */ }
 
         int mode = (int)VortexArena.Game.Menu.MenuState.Cvars.GetFloat(ParticleCvars.Modern);

@@ -32,12 +32,6 @@ namespace VortexArena.Game.Client;
 /// </summary>
 public sealed partial class MotionBlurOverlay : CanvasLayer
 {
-    /// <summary>Frame time the strength is normalised against (~60 fps). See the framerate note above.</summary>
-    private const float ReferenceFrameTime = 1f / 60f;
-
-    /// <summary>Hard cap on the smear in UV units, so a teleport or a respawn cannot streak the whole screen.</summary>
-    private const float MaxOffset = 0.05f;
-
     private static readonly StringName OffsetUniform = "blur_offset";
 
     private ColorRect _rect = null!;
@@ -95,35 +89,22 @@ public sealed partial class MotionBlurOverlay : CanvasLayer
             return;
         }
 
-        // Screen-space motion from the two poses. Rotation dominates what a player perceives (a mouse flick),
-        // so it is measured directly as an angle; translation is converted to an angle at a nominal distance
-        // so a strafe smears too, without needing per-pixel depth.
+        // The arithmetic lives in VortexArena.Engine.Rendering.MotionBlurMath so it can be unit-tested: the
+        // first version of this was correctly signed and about a tenth as strong as it needed to be, which no
+        // screenshot could catch (the pass hides itself whenever the view is still). See MotionBlurMathTests.
         Vector3 fwdNow = -now.Basis.Z, fwdPrev = -_lastXform.Basis.Z;
-        float yaw = Mathf.Atan2(fwdNow.X, fwdNow.Z) - Mathf.Atan2(fwdPrev.X, fwdPrev.Z);
-        yaw = Mathf.Wrap(yaw, -Mathf.Pi, Mathf.Pi);
-        float pitch = Mathf.Asin(Mathf.Clamp(fwdNow.Y, -1f, 1f)) - Mathf.Asin(Mathf.Clamp(fwdPrev.Y, -1f, 1f));
-
         Vector3 move = now.Origin - _lastXform.Origin;
-        // Sideways/vertical translation, expressed as an angle at 512 units - roughly "how far a mid-distance
-        // wall slid across the screen". Forward motion is deliberately ignored: it produces a zoom blur, which
-        // at these speeds reads as a rendering fault rather than as motion.
-        float sideAngle = now.Basis.X.Dot(move) / 512f;
-        float upAngle = now.Basis.Y.Dot(move) / 512f;
-
         _lastXform = now;
 
-        // Normalise to the reference frame time so the setting means the same thing at any framerate.
-        float dt = MathF.Max((float)delta, 1e-4f);
-        float norm = ReferenceFrameTime / dt;
-        var offset = new Vector2((yaw + sideAngle) * norm, (pitch + upAngle) * norm) * strength * 0.5f;
+        System.Numerics.Vector2 o = VortexArena.Engine.Rendering.MotionBlurMath.Offset(
+            N(fwdPrev), N(fwdNow), N(now.Basis.X), N(now.Basis.Y), N(move), (float)delta, strength);
+        var offset = new Vector2(o.X, o.Y);
 
-        if (offset.Length() < 0.0005f)
+        if (offset.Length() < VortexArena.Engine.Rendering.MotionBlurMath.MinOffset)
         {
             _rect.Visible = false;   // standing still: skip the pass entirely rather than blur by ~zero
             return;
         }
-        if (offset.Length() > MaxOffset)
-            offset = offset.Normalized() * MaxOffset;
 
         _mat.SetShaderParameter(OffsetUniform, offset);
         if (!_rect.Visible)
@@ -135,8 +116,12 @@ public sealed partial class MotionBlurOverlay : CanvasLayer
                 // Once per session, on the first frame the blur actually draws. "Is motion blur on?" is
                 // otherwise unanswerable without a video: the pass hides itself whenever the view is still,
                 // so a screenshot of a stationary player looks identical either way.
+                // Report the MEASURED smear, not just "on": the question a player actually has is whether it
+                // is doing anything, and a percentage of screen width answers that where a boolean does not.
                 VortexArena.Common.Diagnostics.Log.Info(
-                    $"[motionblur] engaged (r_motionblur {Cvar("r_motionblur", 0f)}).");
+                    $"[motionblur] engaged: r_motionblur {Cvar("r_motionblur", 0f):0.##}, "
+                    + $"smear {offset.Length() * 100f:0.0}% of screen width "
+                    + $"(cap {VortexArena.Engine.Rendering.MotionBlurMath.MaxOffset * 100f:0}%).");
             }
         }
     }
@@ -151,7 +136,7 @@ uniform vec2 blur_offset = vec2(0.0);
 void fragment() {
     // Symmetric taps about the current pixel: a one-sided smear drags the whole image in the direction of
     // travel, which reads as the view lagging rather than as motion.
-    const int TAPS = 5;
+    const int TAPS = 9;
     vec3 sum = vec3(0.0);
     for (int i = 0; i < TAPS; i++) {
         float t = float(i) / float(TAPS - 1) - 0.5;   // -0.5 .. +0.5
@@ -160,6 +145,9 @@ void fragment() {
     COLOR = vec4(sum / float(TAPS), 1.0);
 }
 ";
+
+    /// <summary>Godot vector to System.Numerics, for the shared (Godot-free, testable) math above.</summary>
+    private static System.Numerics.Vector3 N(Vector3 v) => new(v.X, v.Y, v.Z);
 
     private static float Cvar(string name, float fallback)
     {

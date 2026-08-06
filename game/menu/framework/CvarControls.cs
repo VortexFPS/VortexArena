@@ -133,10 +133,22 @@ public partial class CvarCheckBox : CheckBox
         // An UNSET cvar reads as 0 everywhere else in the port - every reader's fallback, and GetFloat itself.
         // The widget has to agree, or an INVERTED checkbox (on = "0", e.g. "Use lightmaps" over
         // mod_q3bsp_nolightmaps) shows unchecked for a cvar whose effective value is exactly its on-value.
-        // That mismatch is invisible until something reads the cvar, which is how it survived this long.
         if (string.IsNullOrEmpty(v))
             v = "0";
-        ButtonPressed = v == _on || (_on == "1" && CvarUi.Cvars.GetFloat(_cvar) != 0f);
+
+        // "Checked" means NOT the off-value - not "exactly the on-value". The difference matters whenever a
+        // checkbox shares its cvar with a slider (QC makeXonoticSliderCheckBox: "Motion blur" over
+        // r_motionblur, "Extra postprocessing effects" over hud_postprocessing_maxbluralpha). The checkbox
+        // writes one representative on-value, the slider writes a range, and an exact match unticked the box
+        // the moment the slider moved off that one number - which read as the toggle fighting the slider.
+        // Exact string match stays as the fast path so a non-numeric on/off pair still works.
+        if (v == _on)
+        {
+            ButtonPressed = true;
+            return;
+        }
+        float off = float.TryParse(_off, NumberStyles.Float, CultureInfo.InvariantCulture, out float o2) ? o2 : 0f;
+        ButtonPressed = !Mathf.IsEqualApprox(CvarUi.Cvars.GetFloat(_cvar), off);
         _updating = false;
     }
 

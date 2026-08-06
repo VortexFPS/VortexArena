@@ -289,6 +289,10 @@ public partial class Shell : Node
             Loaders.MissingTextures.RegisterCommand(
                 MenuState.Interp!, sharedAssets, () => _netGame?.CurrentMap ?? string.Empty);
 
+        // r_restart / vid_restart need the same answer: which map is the CLIENT in? Same resolver, because
+        // the "mapname" cvar lives on the listen server's private store and never reaches the console's.
+        VortexArena.Game.Console.ConsoleOverlay.CurrentMapResolver = () => _netGame?.CurrentMap ?? string.Empty;
+
         // `r_vram_census [N]` — inventory the RESIDENT texture cache by category + top offenders (perf
         // 2026-08-02: names where the ~3.4 GB actually lives; gl_texturecompression measured ~0 delta, so the
         // bulk is outside the compressible classes). Prefers the live match's cache (the resident set),

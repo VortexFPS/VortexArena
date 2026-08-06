@@ -255,14 +255,29 @@ public partial class ConsoleOverlay : CanvasLayer
     /// r_subdivisions_tolerance at patch tessellation, r_shadow_world_casts at world-cell creation) are all
     /// consumed while the map is built, and nothing short of rebuilding it re-applies them.
     /// </summary>
+    /// <summary>
+    /// Resolves the map the CLIENT is in. Wired by the Shell to <c>NetGame.CurrentMap</c>, the same source the
+    /// missing-textures command uses. NOT the "mapname" cvar: that is set on the listen SERVER's private store
+    /// (NetGame sets it on _serverWorld.Services.Cvars), which the shared menu/console store never sees - so
+    /// reading it here reported "no map loaded" while standing on one.
+    /// </summary>
+    public static Func<string>? CurrentMapResolver { get; set; }
+
     private void ResetRenderer(string who)
     {
-        string map = MenuState.Cvars.GetString("mapname");
+        string map = CurrentMapResolver?.Invoke() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(map))
+            map = MenuState.Cvars.GetString("mapname");   // fallback: a store that happens to carry it
         if (string.IsNullOrWhiteSpace(map))
         {
-            Print($"{who}: no map loaded - these settings apply the next time a map loads.");
+            // Distinguish the two ways this can be empty, because they need different fixes: the resolver
+            // never being installed is a wiring bug, whereas it returning empty just means no match is running.
+            Print(CurrentMapResolver is null
+                ? $"{who}: no map resolver installed (wiring bug - Shell should set CurrentMapResolver)."
+                : $"{who}: no map loaded - these settings apply the next time a map loads.");
             return;
         }
+
         Print($"{who}: reloading {map} to re-apply the map-build render settings.");
         MenuCommand.StartMap?.Invoke(map);
     }

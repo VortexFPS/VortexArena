@@ -70,7 +70,8 @@ public static class ClientSettings
         {
             if (name.StartsWith("gl_texturecompression", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("gl_picmip", StringComparison.OrdinalIgnoreCase)
-                || name.StartsWith("r_texture_dds_", StringComparison.OrdinalIgnoreCase))
+                || name.StartsWith("r_texture_dds_", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("r_texturecompression_cpubudget", StringComparison.OrdinalIgnoreCase))
                 PushTextureCompression(c);
         };
     }
@@ -134,6 +135,12 @@ public static class ClientSettings
         // cache is the difference between a 15 s and a 118 s load and both default ON.
         Formats.Vfs.VirtualFileSystem.PreferDds = CvarOn(c, "r_texture_dds_load");
         Loaders.AssetSystem.DdsSave = CvarOn(c, "r_texture_dds_save");
+        // (C2) How much of the machine encoding may take. Same 0..1 contract as the editor bake's CPU
+        // budget; unset keeps 0.75. Caps the S3TC path (a CPU codec on our own streamer threads); BC7 is
+        // serialised inside Godot's Betsy compressor and is beyond this knob either way.
+        string budget = c.GetString("r_texturecompression_cpubudget");
+        Loaders.AssetSystem.CompressCpuBudget = string.IsNullOrWhiteSpace(budget)
+            ? 0.75f : c.GetFloat("r_texturecompression_cpubudget");
         int mask = 0;
         foreach ((string cvar, TexCategory category, _) in TextureCompressionCategories)
             if (c.GetFloat(cvar) != 0f)
@@ -539,6 +546,7 @@ public static class ClientSettings
         // (C1) DP r_texture_dds_load / _save - the DDS cache. Default 1 here, unlike DP's 0: DP got its
         // compression free from the GL driver, this port has to encode, and the cache is what makes that
         // a one-time cost instead of ~100 s every launch.
+        c.Register("r_texturecompression_cpubudget", "0.75");
         c.Register("r_texture_dds_load", "1");
         c.Register("r_texture_dds_save", "1");
         c.Register("r_model_lightgrid", "1");

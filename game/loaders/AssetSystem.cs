@@ -1140,6 +1140,57 @@ public sealed class AssetSystem
     /// <see cref="TextureCompression"/>.
     /// </summary>
     public static bool DdsSave { get; set; } = true;
+
+    /// <summary>
+    /// Share of the machine texture compression may claim, 0..1 (<c>r_texturecompression_cpubudget</c>).
+    /// Same contract as the editor bake's <c>EditorLightBake.CpuBudget</c>, and for the same reason: this is
+    /// the other job here that can make a desktop unusable while it runs, and "how much of my computer does
+    /// this get" belongs to whoever is sitting at it.
+    ///
+    /// <para><b>What it can and cannot do — measured, not assumed.</b> It caps how many textures encode
+    /// CONCURRENTLY. Today that changes nothing, and the reason is worth writing down: at budget 1.0 vs 0.25
+    /// a cold-cache stormkeep load measured 20,711 ms vs 20,821 ms, and the encode thread-time 7,596 ms vs
+    /// 7,767 ms. Identical. Compression is not running wide in the first place — the asset streamer feeds
+    /// textures through essentially one at a time, so there is never more than about one encode in flight for
+    /// a cap to bite on.</para>
+    ///
+    /// <para>So this is a RAIL, not a speed-up: it bounds the worst case if the streamer ever widens, and it
+    /// is the honest place for the setting to live. The thing that would actually make encoding parallel is
+    /// widening the streamer, not this knob.</para>
+    ///
+    /// <para>BC7 is beyond it either way. BPTC does not run on our threads at all: Godot routes it to Betsy,
+    /// a compute-shader compressor owning ONE RenderingDevice on ONE background thread, so every BC7 call in
+    /// the process serialises there regardless of callers. Measured: 107 s of thread-time inside a 121 s load
+    /// is a ratio of 0.89 — one thread's worth.</para>
+    /// </summary>
+    public static float CompressCpuBudget
+    {
+        get => _compressCpuBudget;
+        set
+        {
+            float v = Math.Clamp(value, 0f, 1f);
+            if (Math.Abs(v - _compressCpuBudget) < 0.001f)
+                return;
+            _compressCpuBudget = v;
+            _compressGate?.Dispose();
+            _compressGate = new System.Threading.SemaphoreSlim(BudgetWidth, BudgetWidth);
+        }
+    }
+
+    private static float _compressCpuBudget = 0.75f;
+
+    /// <summary>Concurrent encodes for the current budget: at least one, never more than the machine has.</summary>
+    private static int BudgetWidth =>
+        Math.Clamp((int)MathF.Round(System.Environment.ProcessorCount * _compressCpuBudget), 1,
+            System.Environment.ProcessorCount);
+
+    /// <summary>
+    /// Admission gate for encodes. A semaphore rather than a dedicated thread pool because the callers are
+    /// already threads we do not own — the asset streamer's workers, which arrive here mid-decode. Throttling
+    /// them where they are keeps the budget honest without a second scheduler and without moving the work off
+    /// the thread that is holding the decoded image.
+    /// </summary>
+    private static System.Threading.SemaphoreSlim? _compressGate;
     private static int _s3tcAvailable = -1, _bptcAvailable = -1;
     private static bool _noEncoderWarned;
 
@@ -1195,6 +1246,15 @@ public sealed class AssetSystem
 
     private static void MaybeCompress(string vpath, Image image)
     {
+        // Cheap pre-check before taking the gate: the great majority of calls bail immediately (compression
+        // off, already compressed, category disabled), and queueing those behind the budget would serialise
+        // work that costs nothing.
+        if (TextureCompression <= 0 || image.IsCompressed() || image.IsEmpty() || !image.HasMipmaps())
+            return;
+
+        System.Threading.SemaphoreSlim gate =
+            _compressGate ??= new System.Threading.SemaphoreSlim(BudgetWidth, BudgetWidth);
+        gate.Wait();
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         try { MaybeCompressCore(vpath, image); }
         finally
@@ -1202,6 +1262,7 @@ public sealed class AssetSystem
             System.Threading.Interlocked.Add(ref _compressMicros,
                 (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1_000_000L
                 / System.Diagnostics.Stopwatch.Frequency);
+            gate.Release();
         }
     }
 

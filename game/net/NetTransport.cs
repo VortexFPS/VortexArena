@@ -170,6 +170,23 @@ public abstract class NetTransport : IDisposable
     }
 
     /// <summary>
+    /// The underlying <see cref="ENetConnection"/>, or null when inactive.
+    ///
+    /// <para>Exposed for ONE caller: <c>ServerNet.EnableLanDiscovery</c>, which installs an out-of-band
+    /// handler on it so <c>getinfo</c> and rcon are answered on the game port instead of on a second socket
+    /// (<c>tools/engine-patches/godot-4.6.3-enet-oob-intercept.patch</c>).</para>
+    ///
+    /// <para>Deliberately NOT wrapped in <c>EnterTransport</c>/<c>ExitTransport</c>, and that is safe only
+    /// because of how the one caller uses it. <c>set_oob_handler</c> is called once, at startup, on the main
+    /// thread, before any client exists. The handler it installs then fires from inside
+    /// <c>ENetConnection.service()</c>, which is reached through <see cref="Poll"/> — already inside the
+    /// guard. Anything else reaching for this to touch the host off-thread would defeat the guard the rest
+    /// of this class maintains, so do not widen the use without re-reading the threading note on
+    /// <see cref="EnterTransport"/>.</para>
+    /// </summary>
+    public ENetConnection? Host => Peer?.Host;
+
+    /// <summary>
     /// Send <paramref name="payload"/> to <paramref name="targetPeerId"/> (use <see cref="ServerPeerId"/> from
     /// a client, or a client's id / <see cref="Godot.MultiplayerPeer.TargetPeerBroadcast"/> from the server)
     /// on the reliable or unreliable channel. Sets the transfer mode + channel + target on the peer, then

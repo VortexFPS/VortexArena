@@ -909,7 +909,9 @@ public sealed class ServerNet : IDisposable
             return; // already discoverable (EnableMasterServer bound a link)
 
         // One port if the engine can hand us its game socket; the +1..+8 probe below only if it cannot.
-        if (TryAttachOobToGameSocket(host, gamePort))
+        // Defaulting to the live transport's host is what makes this the DEFAULT path rather than an
+        // opt-in: NetGame calls EnableLanDiscovery(_port) and gets one port wherever the engine allows it.
+        if (TryAttachOobToGameSocket(host ?? _transport.Host, gamePort))
             return;
 
         for (int candidate = gamePort + 1; candidate <= gamePort + 8; candidate++)

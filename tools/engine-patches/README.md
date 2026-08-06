@@ -6,26 +6,66 @@ happened to have installed. The editor and C# tooling stay stock; only the templ
 embeds is ours. Three of the four presets in `export_presets.cfg` set `custom_template/release`;
 `macos-client` is a declared exception, below.
 
-Only the **Windows** template differs from stock in behaviour: the patch set touches
-`platform/windows/` exclusively, so the Linux and macOS templates carry none of it and are equivalent
-to the official builds. Linux is pinned for **provenance**, which is weaker than the Windows guarantee
-but not nothing: a build from known inputs whose hash we can check.
+**The patch set is not Windows-only, and has not been since 2026-08-02.** Exactly one of the three
+patches is confined to `platform/windows/`; the other two touch modules every platform compiles:
 
-That asymmetry decides what can be verified where, and the differences are real rather than an
-unfinished job:
+| Patch | Touches | Windows-only |
+| --- | --- | --- |
+| `godot-4.6.3-pr109639-mouse-input-backport.patch` | `platform/windows/` | yes |
+| `godot-4.6.3-etcpak-runtime-encode.patch` | `modules/etcpak/` | **no** |
+| `godot-4.6.3-enet-oob-intercept.patch` | `modules/enet/` | **no** |
+
+This section used to say the patch set touched `platform/windows/` exclusively and that "the Linux and
+macOS templates carry none of it and are equivalent to the official builds". That stopped being true
+when the etcpak patch landed and nobody revisited the paragraph; the ENet patch makes it doubly false.
+Recorded rather than quietly corrected, because the claim it made is exactly the kind that gets relied
+on: it is the reason Linux was described as pinned only for **provenance**, and provenance is a much
+weaker thing to want than "the engine is stock".
+
+That matters more than it sounds, because of where the verification is weakest:
 
 | | Windows | Linux | macOS |
 | --- | --- | --- | --- |
 | template fetched + sha256 checked | yes | yes | n/a, not consumed |
 | `custom_template/release` gated before export | yes | yes | no, declared gap |
 | **shipped binary's content proves which engine** | **yes** | **no, and cannot** | **no, and cannot** |
+| carries the ENet OOB hook | yes | yes | yes |
 
-There is no marker that could tell our Linux template from a stock one, because there is nothing
-different to find; requiring one would fail a perfectly good binary. So `verify-engine-template.py`
-prints `NOT CONTENT-VERIFIED` on those platforms and qualifies its summary line rather than implying a
-check it did not run. What covers Linux instead is the pre-export gate plus Godot's hard abort on a
-populated-but-missing template path, leaving only "Godot ignored a valid path" uncovered, versus the
-empty-field case, which is the one that fails silently.
+`verify-engine-template.py` prints `NOT CONTENT-VERIFIED` on Linux and macOS and qualifies its summary
+line rather than implying a check it did not run. What covers Linux instead is the pre-export gate plus
+Godot's hard abort on a populated-but-missing template path, leaving only "Godot ignored a valid path"
+uncovered, versus the empty-field case, which is the one that fails silently.
+
+"No, and cannot" is now a statement about the marker, not about the binary. It was once both: with only
+the Windows patch there was genuinely nothing different to find in a Linux template, so requiring a
+marker would have failed a perfectly good binary. Today a Linux template does differ from stock — it
+carries the etcpak encoders and the ENet hook — so a marker is possible in principle and the row stays
+"cannot" only because none has been added.
+
+### The ENet patch lands on the platform that cannot be content-verified
+
+**Linux is where the dedicated server runs, and Linux is the row that says "no, and cannot".** A Linux
+dedicated build exported from a stock template loses the OOB hook, and `verify-engine-template.py`
+cannot see that from the binary.
+
+It does not break: `ServerNet.TryAttachOobToGameSocket` checks for `set_oob_handler` at runtime and
+falls back to the historical discovery socket on `gamePort+1..+8`. The server runs, and needs two
+ports instead of one. But nothing at build time distinguishes the two outcomes, so the difference
+surfaces only as a log line and a port that quietly moved — and a firewall written for one port would
+then be wrong.
+
+Two things follow, and both are the operator's protection rather than the build's:
+
+- The server logs which path it took at startup, in as many words. `OOB on the game port` means the
+  hook is present; `LAN discovery: answering getinfo on UDP <n>` means it fell back and this build was
+  made from a stock template.
+- A published Linux dedicated artifact should be treated as pinned-or-nothing. The pre-export gate
+  (`--preset-config linux-dedicated`) is what makes the pinned template a build-time requirement, and
+  it is the only thing standing between a release and a silently stock engine.
+
+The honest summary: for the Windows-only patches, "Linux is pinned for provenance" was a weaker
+guarantee that cost nothing, because the Linux template had no behaviour of ours to lose. That is no
+longer true, and closing it properly would mean giving the Linux template a detectable marker.
 
 ### macOS is not pinned, and pinning it as published would break the build
 

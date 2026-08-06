@@ -196,6 +196,12 @@ public partial class DialogSettingsVideo : SettingsTab
 
         box.AddChild(Ui.Spacer());
         box.AddChild(applyButton); // "Apply immediately" — vid_restart
+
+        // Live until resolution / fullscreen / borderless / process priority drift from what is running:
+        // those recreate or resize the window and genuinely need the apply. Vsync, the fps cap and the
+        // jitter fix are re-applied the moment they change (ClientSettings.InstallLiveVideoCvars), so they
+        // are deliberately NOT in the set - listing them would light the button for an already-applied change.
+        PendingApply.Bind(applyButton, ClientSettings.VideoApplyCvars, string.Empty);
     }
 
     /// <summary>Render an fps value with the QC "%s fps" suffix.</summary>

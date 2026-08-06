@@ -114,6 +114,10 @@ public partial class DialogSettingsAudio : SettingsTab
 
         box.AddChild(Ui.Spacer());
         box.AddChild(apply); // "Apply immediately" — snd_restart
+
+        // ClientSettings.ApplyAudio runs at boot and from this button and nowhere else, so every volume it
+        // pushes is genuinely deferred and the button is genuinely useful here.
+        PendingApply.Bind(apply, ClientSettings.AudioApplyCvars, string.Empty);
     }
 
     /// <summary>Render a linear 0..1 volume as a percentage (the readout in place of the QC dB display).</summary>

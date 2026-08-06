@@ -84,12 +84,52 @@ Five port-only controls were added below them, kept together and after the Base-
 reads as Xonotic's: *Light models from the map*, *Dynamic lights on models*, *Ground shadows*, *World casts
 shadows*, *Team rim light*.
 
-**Still inert, and honestly so.** These remain bound-but-dead because no render path exists:
-`r_shadow_realtime_world_shadows` (world lights do not yet get their own shadow grants separate from the
-dynamic budget), `r_shadow_shadowmapping` (Godot's shadow filter quality is not exposed per-light),
-`r_glsl_offsetmapping` / `_reliefmapping`, `r_shadow_gloss` and `r_shadow_usenormalmap` (both data-driven —
-on wherever the texture exists). The right follow-up is the one the 2026-06-14 audit named: grey them out
-rather than let the tab keep implying they do something.
+**Still inert — and now greyed rather than merely documented.** Six controls are bound to real cvars that
+nothing in this renderer reads, so toggling them could never do anything. They are now permanently disabled
+via `Dependent.Unsupported`, which greys the widget and appends the reason to its tooltip:
+
+| control | cvar | why it cannot work here |
+|---|---|---|
+| Gloss | `r_shadow_gloss` | data-driven: applied wherever a `_gloss` companion exists, decided at material build |
+| Use normal maps | `r_shadow_usenormalmap` | same, for `_norm` |
+| Offset mapping | `r_glsl_offsetmapping` | no offset/parallax path exists at all |
+| Relief mapping | `r_glsl_offsetmapping_reliefmapping` | ditto |
+| Shadows (under Realtime world lights) | `r_shadow_realtime_world_shadows` | world lights draw shadow grants from the same ranked budget as dynamic lights |
+| Soft shadows | `r_shadow_shadowmapping` | DP picks shadow maps over stencil volumes; Godot has no stencil path, and filtering is renderer-wide |
+
+The cvars are deliberately NOT deleted — they are inherited from Xonotic and must keep parsing, so a player
+carrying an Xonotic autoexec gets no "unknown command" spam and a preset that sets one still applies cleanly.
+What was wrong was the menu implying they did something. The widget stays, shows the cvar's real current
+value (Gloss and normal maps read as checked-but-greyed, which is honest), and explains itself.
+
+Where a control had an ordinary `Dependent.Bind`, that bind was **removed** rather than left alongside: two
+Dependents on one target fight, and which wins depends on which cvar changed last.
+
+### The Apply button
+
+"Apply immediately" now reflects whether there is anything to apply, instead of being permanently live.
+`AppliedState` records what is actually running (the appliers themselves record it, so a `vid_restart` typed
+at the console counts, and the boot-time apply seeds it); `PendingApply` enables the button only while a cvar
+that its action consumes has drifted from that.
+
+| tab | deferred set | button |
+|---|---|---|
+| **Video** | `vid_width`, `vid_height`, `vid_fullscreen`, `vid_borderless`, `sys_priority_boost` | live only when one has drifted |
+| **Audio** | `mastervolume`, `bgmvolume`, `snd_channel{0,1,2,7}volume` | live only when one has drifted |
+| **Effects** | *(empty)* | permanently greyed, with the reason |
+
+`vid_vsync`, `cl_maxfps` and `cl_engine_jitterfix` are deliberately absent from the Video set: they are
+re-applied the moment they change (`ClientSettings.InstallLiveVideoCvars`), so listing them would light the
+button up for a change that had already happened.
+
+The Effects set is empty because **every Effects cvar with a reader is polled live** — a change is visible
+the instant you make it. The one exception is `r_shadow_world_casts`, read once when the map geometry is
+built; a `vid_restart` would not apply that either, so it says "takes effect on the next map load" in its own
+tooltip rather than claiming the button.
+
+The argument for bothering: an always-live Apply button teaches players that settings need applying, which on
+these tabs is mostly false. It becomes a ritual — pressed after every change — and then carries no signal on
+the rare occasion it genuinely matters. Greying it makes the button the answer to "did that take effect?".
 
 **Video tab.** Untouched by this work; its open items (MSAA and anisotropy hardwired in `project.godot`,
 shadow atlas size / filter quality / max distance unexposed) are unchanged and still listed in the

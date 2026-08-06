@@ -711,6 +711,24 @@ public static class ClientSettings
     }
 
     /// <summary>
+    /// The video cvars that only take effect on an explicit apply, because applying them resizes or
+    /// recreates the window. Everything else video-ish is LIVE and deliberately absent from this list:
+    /// <c>vid_vsync</c>, <c>cl_maxfps</c> and <c>cl_engine_jitterfix</c> are re-applied the moment they
+    /// change (see <see cref="InstallLiveVideoCvars"/>), so listing them here would light the Apply button
+    /// up for a change that has already happened.
+    /// </summary>
+    public static readonly string[] VideoApplyCvars =
+        { "vid_width", "vid_height", "vid_fullscreen", "vid_borderless", "sys_priority_boost" };
+
+    /// <summary>
+    /// The audio cvars that only take effect on an explicit apply. <see cref="ApplyAudio"/> is called at boot
+    /// and from the Apply button and nowhere else, so every volume it pushes is genuinely deferred.
+    /// </summary>
+    public static readonly string[] AudioApplyCvars =
+        { "mastervolume", "bgmvolume", "snd_channel0volume", "snd_channel1volume",
+          "snd_channel2volume", "snd_channel7volume" };
+
+    /// <summary>
     /// Resolution + fullscreen + borderless + vsync from the <c>vid_*</c> cvars onto the window (QC vid_restart).
     /// </summary>
     public static void ApplyVideo()
@@ -793,6 +811,11 @@ public static class ClientSettings
             // but say so (an invisible no-op here would read as "the boost is on" when it isn't).
             VortexArena.Common.Diagnostics.Log.Info($"[video] process priority boost unavailable: {ex.Message}");
         }
+
+        // Record what is now RUNNING, so the settings screen can grey its Apply button until one of these
+        // drifts again (AppliedState / PendingApply). Done here rather than in the menu because this is the
+        // only place that knows an apply actually happened - including a vid_restart typed at the console.
+        AppliedState.Record(VideoApplyCvars);
     }
 
     /// <summary>
@@ -848,6 +871,8 @@ public static class ClientSettings
         SetBusVolume("Player", ChannelVol(c, "snd_channel7volume"));
         // Ambient inherits from the general effects channel (snd_channel0volume).
         SetBusVolume("Ambient", ChannelVol(c, "snd_channel0volume"));
+
+        AppliedState.Record(AudioApplyCvars);   // see the note in ApplyVideo
     }
 
     /// <summary>

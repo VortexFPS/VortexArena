@@ -641,6 +641,7 @@ public sealed partial class Dependent : Node
     private float _min, _max;
     private bool _negate;
     private string? _stringNotEqual; // non-null → string-compare mode (enabled while cvar != this value)
+    private bool _unsupported;      // true -> permanently disabled, whatever any cvar says
 
     /// <summary>Enable <paramref name="target"/> only while <paramref name="cvar"/> ∈ [min,max] (or ∉, if negate).</summary>
     public static void Bind(Control target, string cvar, float min, float max, bool negate = false)
@@ -663,6 +664,33 @@ public sealed partial class Dependent : Node
         target.AddChild(dep);
     }
 
+    /// <summary>
+    /// Permanently disable <paramref name="target"/> and say why in its tooltip: the control is bound to a
+    /// real cvar that this renderer has no reader for, so toggling it would do nothing.
+    ///
+    /// <para><b>Why disable rather than delete.</b> These cvars are inherited from Xonotic and must keep
+    /// parsing from a config -- a player carrying their Xonotic autoexec should not get "unknown command"
+    /// spam, and a preset that sets one should still apply cleanly. What is wrong is not that the cvar
+    /// exists, it is that the MENU implies the cvar does something here. So the widget stays, shows the
+    /// cvar's real current value, and is greyed with an explanation.</para>
+    ///
+    /// <para>Implemented as an always-false <see cref="Dependent"/> rather than a one-shot
+    /// <c>SetEnabledRecursive</c> call so it re-applies every time the dialog enters the tree, and so it
+    /// cannot be quietly undone by another Dependent on the same control re-enabling it. A control that gets
+    /// this should have its ordinary Bind removed -- two Dependents on one target fight, and which one wins
+    /// depends on which cvar changed last.</para>
+    /// </summary>
+    /// <param name="why">One phrase, user-facing: what is missing, not an internal excuse.</param>
+    public static void Unsupported(Control target, string why)
+    {
+        string tip = target.TooltipText ?? string.Empty;
+        string note = Localization.Tr("Not available in this build:") + " " + Localization.Tr(why);
+        target.TooltipText = tip.Length > 0 ? tip + "\n\n" + note : note;
+
+        var dep = new Dependent { _target = target, _unsupported = true, Name = "Unsupported" };
+        target.AddChild(dep);
+    }
+
     public override void _EnterTree() { CvarUi.Cvars.Changed += OnChanged; Evaluate(); }
     public override void _ExitTree() { CvarUi.Cvars.Changed -= OnChanged; }
 
@@ -670,6 +698,12 @@ public sealed partial class Dependent : Node
 
     private void Evaluate()
     {
+        if (_unsupported)
+        {
+            CvarUi.SetEnabledRecursive(_target, false);
+            return;
+        }
+
         bool enabled;
         if (_stringNotEqual is not null)
         {
@@ -682,5 +716,127 @@ public sealed partial class Dependent : Node
             enabled = _negate ? !inRange : inRange;
         }
         CvarUi.SetEnabledRecursive(_target, enabled);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------
+
+/// <summary>
+/// What the renderer/audio engine is currently RUNNING, as opposed to what the cvars now say. An "Apply"
+/// button is only meaningful when those two have drifted apart, and <see cref="PendingApply"/> uses this to
+/// decide whether the button should be live or greyed.
+///
+/// <para>Recorded by the appliers themselves (<c>ClientSettings.ApplyVideo</c> / <c>ApplyAudio</c>) rather
+/// than by the menu, because they are the only things that know an apply actually happened. That also means a
+/// <c>vid_restart</c> typed at the console updates it, and the boot-time apply seeds it — so opening the
+/// settings screen for the first time correctly shows nothing pending even if a config set an odd value.</para>
+/// </summary>
+public static class AppliedState
+{
+    private static readonly Dictionary<string, string> Applied = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Event raised after a <see cref="Record"/>, so bound buttons can re-evaluate.</summary>
+    public static event Action? Changed;
+
+    /// <summary>Snapshot the current values of <paramref name="cvars"/> as "this is what is running now".</summary>
+    public static void Record(params string[] cvars)
+    {
+        foreach (string c in cvars)
+            Applied[c] = MenuState.Cvars.GetString(c) ?? string.Empty;
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// True when <paramref name="cvar"/> has been changed since it was last applied. A cvar nobody has ever
+    /// recorded is NOT pending: an un-snapshotted cvar means no applier claims it, and reporting that as
+    /// "needs applying" would light the button up forever.
+    /// </summary>
+    public static bool IsPending(string cvar) =>
+        Applied.TryGetValue(cvar, out string? was)
+        && !string.Equals(was, MenuState.Cvars.GetString(cvar) ?? string.Empty, StringComparison.Ordinal);
+}
+
+/// <summary>
+/// Drives an "Apply immediately" button from the set of cvars its action actually consumes: live while at
+/// least one of them has been changed since it was last applied, greyed otherwise, and greyed permanently
+/// when the set is empty because everything on that tab takes effect the moment it is changed.
+///
+/// <para><b>Why this is worth building rather than leaving the button always-on.</b> An always-live Apply
+/// button teaches the player that settings need applying, which on most of these tabs is false — the great
+/// majority of this port's render cvars are polled every frame and change what you see instantly. The button
+/// then becomes a ritual: people press it after every change, and when it genuinely IS needed there is no
+/// signal to distinguish that case. Greying it turns the button into the answer to "did that take effect?".</para>
+///
+/// <para>The tooltip carries the reasoning, and NAMES the pending cvars when there are some, so the button
+/// can be trusted rather than guessed at.</para>
+/// </summary>
+public sealed partial class PendingApply : Node
+{
+    private Button _target = null!;
+    private string[] _deferred = Array.Empty<string>();
+    private string _liveTip = "";
+
+    /// <summary>
+    /// Bind <paramref name="target"/> to the cvars its command applies. Pass an EMPTY
+    /// <paramref name="deferredCvars"/> when the tab has nothing deferred; <paramref name="nothingDeferredTip"/>
+    /// is then shown permanently and should say why (not merely that the button is off).
+    /// </summary>
+    public static void Bind(Button target, string[] deferredCvars, string nothingDeferredTip)
+    {
+        var pa = new PendingApply
+        {
+            _target = target,
+            _deferred = deferredCvars,
+            _liveTip = nothingDeferredTip,
+            Name = "PendingApply",
+        };
+        target.AddChild(pa);
+    }
+
+    public override void _EnterTree()
+    {
+        CvarUi.Cvars.Changed += OnCvarChanged;
+        AppliedState.Changed += Evaluate;
+        // The button's own Pressed handler runs the command; ours is connected after it, so by the time this
+        // fires the applier has already run and recorded, and the re-evaluate sees the button go grey.
+        _target.Pressed += Evaluate;
+        Evaluate();
+    }
+
+    public override void _ExitTree()
+    {
+        CvarUi.Cvars.Changed -= OnCvarChanged;
+        AppliedState.Changed -= Evaluate;
+        _target.Pressed -= Evaluate;
+    }
+
+    private void OnCvarChanged(string name)
+    {
+        foreach (string c in _deferred)
+            if (string.Equals(c, name, StringComparison.OrdinalIgnoreCase))
+            {
+                Evaluate();
+                return;
+            }
+    }
+
+    private void Evaluate()
+    {
+        if (_deferred.Length == 0)
+        {
+            CvarUi.SetEnabledRecursive(_target, false);
+            _target.TooltipText = Localization.Tr(_liveTip);
+            return;
+        }
+
+        var pending = new List<string>();
+        foreach (string c in _deferred)
+            if (AppliedState.IsPending(c))
+                pending.Add(c);
+
+        CvarUi.SetEnabledRecursive(_target, pending.Count > 0);
+        _target.TooltipText = pending.Count > 0
+            ? Localization.Tr("Apply the changed settings:") + " " + string.Join(", ", pending)
+            : Localization.Tr("Nothing to apply - every setting here already matches what is running.");
     }
 }

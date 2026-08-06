@@ -79,16 +79,26 @@ public partial class DialogSettingsEffects : SettingsTab
         var gloss = Widgets.CheckBox("r_shadow_gloss", "Gloss",
             "Enable the use of glossmaps on textures supporting it");
         box.AddChild(gloss);
-        Dependent.Bind(gloss, "mod_q3bsp_nolightmaps", 0, 0); // setDependent(e,"mod_q3bsp_nolightmaps",0,0)
-        // (QC also setDependentAND on r_glsl_deluxemapping / vid_gl20 — primary dependency kept above.)
+        // INERT (F9 audit). Gloss here is data-driven, not switchable: a surface gets its specular term
+        // wherever a _gloss companion texture exists, decided at material build time in AssetSystem /
+        // ShaderCompiler. There is nothing for the checkbox to turn off. The QC dependency on
+        // mod_q3bsp_nolightmaps goes with it - a second Dependent on this control would fight the
+        // Unsupported one and win whenever its own cvar changed.
+        Dependent.Unsupported(gloss, "gloss is applied wherever the texture provides it, and cannot be toggled.");
 
-        box.AddChild(Widgets.CheckBox("r_glsl_offsetmapping", "Offset mapping",
-            "Offset mapping effect that will make textures with bumpmaps appear like they \"pop out\" of the flat 2D surface"));
+        // INERT (F9 audit): this renderer has no offset/parallax mapping path at all. Both controls stay
+        // bound so an inherited Xonotic config still parses; neither does anything yet.
+        var offsetMap = Widgets.CheckBox("r_glsl_offsetmapping", "Offset mapping",
+            "Offset mapping effect that will make textures with bumpmaps appear like they \"pop out\" of the flat 2D surface");
+        box.AddChild(offsetMap);
+        Dependent.Unsupported(offsetMap, "this renderer has no offset/parallax mapping path.");
 
         var relief = Widgets.CheckBox("r_glsl_offsetmapping_reliefmapping", "Relief mapping",
             "Higher quality offset mapping, which also has a huge impact on performance");
         box.AddChild(relief);
-        Dependent.Bind(relief, "r_glsl_offsetmapping", 1, 1); // setDependent(e,"r_glsl_offsetmapping",1,1)
+        // The QC setDependent on r_glsl_offsetmapping goes too: with the parent inert there is nothing to
+        // depend on, and leaving it would re-enable this control whenever that cvar changed.
+        Dependent.Unsupported(relief, "this renderer has no offset/parallax mapping path.");
 
         box.AddChild(Ui.Spacer());
 
@@ -148,16 +158,31 @@ public partial class DialogSettingsEffects : SettingsTab
         var worldShadows = Widgets.CheckBox("r_shadow_realtime_world_shadows", "Shadows",
             "Shadows cast by realtime world lights");
         box.AddChild(worldShadows);
-        Dependent.Bind(worldShadows, "r_shadow_realtime_world", 1, 1); // setDependent(...,1,1)
+        // INERT (F9 audit): world lights DO cast, but they draw their shadow grants from the same ranked
+        // budget as dynamic lights (LightBudget), so what actually governs them is
+        // r_shadow_realtime_dlight_shadows plus r_shadow_dlight_shadow_budget. Giving world lights their own
+        // grant pool is the follow-up that would make this control mean something.
+        Dependent.Unsupported(worldShadows,
+            "world lights share the dynamic-light shadow budget; use Shadows under Realtime dynamic lights.");
 
         var normalMaps = Widgets.CheckBox("r_shadow_usenormalmap", "Use normal maps",
             "Directional shading of certain textures to simulate interaction of realtime light with a bumpy surface");
         box.AddChild(normalMaps);
-        Dependent.Bind(normalMaps, "r_shadow_realtime_dlight", 1, 1); // setDependent + setDependentOR(world)
+        // INERT (F9 audit): like gloss, normal mapping here is data-driven - a surface is normal-mapped
+        // wherever a _norm companion exists, bound at material build time. The QC dependency on
+        // r_shadow_realtime_dlight goes for the same reason as gloss's.
+        Dependent.Unsupported(normalMaps,
+            "normal maps are applied wherever the texture provides them, and cannot be toggled.");
 
-        // QC setDependentWeird(e, someShadowCvarIsEnabled): enabled when a dlight- or world-shadow combo is on.
-        // No "weird" predicate dependency in the toolkit — left always enabled (note).
-        box.AddChild(Widgets.CheckBox("r_shadow_shadowmapping", "Soft shadows"));
+        // INERT (F9 audit): DP's r_shadow_shadowmapping picks shadow MAPS over stencil shadow volumes and
+        // brings a filter-quality family with it. Godot has no stencil-volume path to choose between, and its
+        // shadow filtering is a renderer-wide setting rather than a per-light one, so there is nothing here to
+        // switch. (The QC setDependentWeird predicate this used to carry a note about is moot for the same
+        // reason, and the note is gone with it.)
+        var softShadows = Widgets.CheckBox("r_shadow_shadowmapping", "Soft shadows");
+        box.AddChild(softShadows);
+        Dependent.Unsupported(softShadows,
+            "shadow filtering is a renderer-wide setting here, not a per-light one.");
 
         var corona = Widgets.Slider("r_coronas", 0, 1.5f, 0.1f, "Flare effects around certain lights");
         box.AddChild(Ui.Row("Corona brightness:", corona));
@@ -185,7 +210,7 @@ public partial class DialogSettingsEffects : SettingsTab
 
         var worldCasts = Widgets.CheckBox("r_shadow_world_casts", "World casts shadows",
             "Let map geometry cast into dynamic-light shadows. This is the expensive half of realtime "
-            + "shadows - it makes every world cell a shadow caster.");
+            + "shadows - it makes every world cell a shadow caster. Takes effect on the next map load.");
         box.AddChild(worldCasts);
         Dependent.Bind(worldCasts, "r_shadow_realtime_dlight_shadows", 1, 1);
 
@@ -251,5 +276,14 @@ public partial class DialogSettingsEffects : SettingsTab
 
         box.AddChild(Ui.Spacer());
         box.AddChild(applyButton); // "Apply immediately" — vid_restart
+
+        // Nothing on the Effects tab is deferred: every cvar here that has a reader is polled live, so a
+        // change is visible the instant you make it. The one exception is r_shadow_world_casts, which is
+        // read once when the map geometry is built - and a vid_restart would not apply that either, so it
+        // says so in its own tooltip rather than claiming this button. An empty set greys the button
+        // permanently with the explanation, which beats an always-live button that teaches players to
+        // press it after every change and gives them no signal on the rare occasion it matters.
+        PendingApply.Bind(applyButton, System.Array.Empty<string>(),
+            "Nothing to apply - every effect setting on this tab takes effect the moment you change it.");
     }
 }

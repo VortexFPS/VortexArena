@@ -113,6 +113,10 @@ internal static class LoadTimeline
         var sb = new System.Text.StringBuilder();
         sb.Append("[LoadTimeline] ").Append(_label).Append(" — load begin → ready, ")
           .Append(totalMs.ToString("0", CultureInfo.InvariantCulture)).AppendLine(" ms total");
+        // Texture compression is deliberately NOT a phase: it runs on the streamer's worker threads,
+        // interleaved through several phases, so wrapping it in a scope would double-count. It gets its own
+        // line instead, because leaving it unnamed is how ~100 s hid inside phases named after other work.
+        sb.Append("    ").AppendLine(Loaders.AssetSystem.CompressionTimeReport());
         foreach (Entry e in snapshot)
         {
             string indented = new string(' ', e.Depth * 2) + e.Name;

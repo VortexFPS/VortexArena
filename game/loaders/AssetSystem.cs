@@ -1126,6 +1126,10 @@ public sealed class AssetSystem
     // Compression engagement counters (drained into the session census — a build where the feature silently
     // no-ops must name itself). _s3tcAvailable: -1 unprobed, 0 absent (template build), 1 present (editor).
     private static int _compressOk, _compressFellBack, _compressFailed;
+    // Wall time spent inside MaybeCompress, summed across every worker that ran one. Interlocked because the
+    // asset streamer compresses on several threads at once; the sum is therefore CPU-time-across-threads, not
+    // elapsed - which is the honest number to report for a parallel stage, and is labelled as such.
+    private static long _compressMicros;
     private static int _s3tcAvailable = -1, _bptcAvailable = -1;
     private static bool _noEncoderWarned;
 
@@ -1180,6 +1184,39 @@ public sealed class AssetSystem
     }
 
     private static void MaybeCompress(string vpath, Image image)
+    {
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        try { MaybeCompressCore(vpath, image); }
+        finally
+        {
+            System.Threading.Interlocked.Add(ref _compressMicros,
+                (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1_000_000L
+                / System.Diagnostics.Stopwatch.Frequency);
+        }
+    }
+
+    /// <summary>
+    /// One line naming what texture compression cost this session, for the load timeline.
+    ///
+    /// <para>It exists because the cost was INVISIBLE: gl_texturecompression turns ~290 textures into a
+    /// multi-thread encode on every launch, and nothing in the loading stages said so - the time simply
+    /// appeared inside precache.weapons and render.setup, which are named after something else entirely.
+    /// Measured on this box: mode 2 (BC7) adds ~100 s to a map load, mode 1 (S3TC) ~4 s.</para>
+    /// </summary>
+    public static string CompressionTimeReport()
+    {
+        int n = _compressOk + _compressFellBack + _compressFailed;
+        if (n == 0)
+            return TextureCompression > 0
+                ? $"textures.compress: nothing compressed (gl_texturecompression {TextureCompression}, no eligible textures)"
+                : "textures.compress: off (gl_texturecompression 0)";
+        double ms = System.Threading.Interlocked.Read(ref _compressMicros) / 1000.0;
+        string what = TextureCompression >= 2 ? "BC7/BPTC, high quality" : "S3TC/DXT, fast";
+        return $"textures.compress: {ms:0} ms of thread-time over {n} textures "
+             + $"(gl_texturecompression {TextureCompression} - {what})";
+    }
+
+    private static void MaybeCompressCore(string vpath, Image image)
     {
         int mode = TextureCompression;
         if (mode <= 0 || image.IsCompressed() || image.IsEmpty() || !image.HasMipmaps())

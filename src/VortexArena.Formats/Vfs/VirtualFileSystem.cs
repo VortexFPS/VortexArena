@@ -43,6 +43,8 @@ public sealed class VirtualFileSystem : IDisposable
     private readonly object _mountLock = new();
     private bool _disposed;
 
+    public VirtualFileSystem() => ResolveCachesDirty += OnResolveCachesDirty;
+
     // The mount CALLS that built the current search path, in call order. Recorded so Rescan() can replay
     // them; a replay is what makes a rescanned path identical to a freshly-booted one instead of an
     // approximation of it. Guarded by _mountLock (written on mount, read on rescan).
@@ -74,6 +76,13 @@ public sealed class VirtualFileSystem : IDisposable
     // every mount change is sufficient and matches the class's stated threading model.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _existsCache = new(StringComparer.Ordinal);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string?> _resolveImageCache = new(StringComparer.Ordinal);
+
+    /// <summary>Subscribed to <see cref="ResolveCachesDirty"/> so a PreferDds flip re-resolves every stem.</summary>
+    private void OnResolveCachesDirty()
+    {
+        _resolveImageCache.Clear();
+        _existsCache.Clear();
+    }
 
     /// <summary>Mount paths in priority order, highest first. Mainly for diagnostics/logging.</summary>
     public IReadOnlyList<string> MountedPaths => _mounts.Select(m => m.SourcePath).ToList();
@@ -584,9 +593,46 @@ public sealed class VirtualFileSystem : IDisposable
         return resolved;
     }
 
+    /// <summary>
+    /// DarkPlaces <c>r_texture_dds_load</c>: prefer a pre-compressed <c>dds/&lt;name&gt;.dds</c> over the
+    /// original .tga/.png/.jpg when both exist.
+    ///
+    /// <para>This is the difference between using Xonotic's shipped compression and redoing it. The stock maps
+    /// pack carries 3,207 files under <c>dds/</c> — already block-compressed, ready to hand straight to the
+    /// GPU — but the probe order below put .tga first, so the uncompressed original won every time and the
+    /// engine then spent ~366 ms per texture re-encoding what it had just declined to use. It is also what
+    /// makes the write-side cache (r_texture_dds_save) visible on the next launch.</para>
+    ///
+    /// <para>A plain static because the resolver is static and the value is a process-wide render setting;
+    /// the setter clears the resolve cache, since flipping it changes what every stem resolves to.</para>
+    /// </summary>
+    public static bool PreferDds
+    {
+        get => _preferDds;
+        set
+        {
+            if (_preferDds == value)
+                return;
+            _preferDds = value;
+            ResolveCachesDirty?.Invoke();
+        }
+    }
+
+    private static bool _preferDds = true;
+
+    /// <summary>Raised when <see cref="PreferDds"/> changes so live instances can drop their resolve caches.</summary>
+    public static event Action? ResolveCachesDirty;
+
     /// <summary>The ordered candidate vpaths <see cref="ResolveImage"/> probes, for a normalized stem.</summary>
     private static IEnumerable<string> ImageCandidates(string stem)
     {
+        // Pre-compressed first when r_texture_dds_load is on — see PreferDds for why this ordering matters.
+        if (_preferDds)
+        {
+            yield return "dds/" + stem + ".dds";
+            yield return stem + ".dds";
+            yield return stem + ".tga.dds";
+        }
         // override/ takes absolute priority (DP imageformats_other / _textures lead with it).
         yield return "override/" + stem + ".tga";
         yield return "override/" + stem + ".png";
@@ -598,10 +644,14 @@ public sealed class VirtualFileSystem : IDisposable
         yield return stem + ".jpg";
 
         // Precompressed DDS forms Xonotic uses (dds/ cache dir, bare .dds, and the ".tga.dds"
-        // convention where DDS is appended to the original extension — see gl_textures.c).
-        yield return "dds/" + stem + ".dds";
-        yield return stem + ".dds";
-        yield return stem + ".tga.dds";
+        // convention where DDS is appended to the original extension — see gl_textures.c). Already emitted
+        // above when PreferDds is on; repeating them here would only cost a duplicate miss.
+        if (!_preferDds)
+        {
+            yield return "dds/" + stem + ".dds";
+            yield return stem + ".dds";
+            yield return stem + ".tga.dds";
+        }
 
         // DP imageformats_other: a bare, un-pathed model-shader name (e.g. a_shells.md3's "Box01"
         // surface, shader "shellsammo", which has no .shader entry) is also searched under
@@ -674,6 +724,7 @@ public sealed class VirtualFileSystem : IDisposable
 
     public void Dispose()
     {
+        ResolveCachesDirty -= OnResolveCachesDirty;
         if (_disposed)
             return;
         lock (_mountLock)

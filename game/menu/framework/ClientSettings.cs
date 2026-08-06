@@ -69,7 +69,8 @@ public static class ClientSettings
         c.Changed += name =>
         {
             if (name.StartsWith("gl_texturecompression", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("gl_picmip", StringComparison.OrdinalIgnoreCase))
+                || name.Equals("gl_picmip", StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("r_texture_dds_", StringComparison.OrdinalIgnoreCase))
                 PushTextureCompression(c);
         };
     }
@@ -113,12 +114,26 @@ public static class ClientSettings
     /// fields. Recomputes the whole mask on any change rather than patching one bit, so the field a worker
     /// reads is always a complete, self-consistent set.
     /// </summary>
+    /// <summary>A 0/1 cvar where UNSET means ON (the DP "engine cvar the cfg tree never sets" pattern).</summary>
+    private static bool CvarOn(CvarService c, string name)
+    {
+        string s = c.GetString(name);
+        return string.IsNullOrWhiteSpace(s) || c.GetFloat(name) != 0f;
+    }
+
     private static void PushTextureCompression(CvarService c)
     {
         Loaders.AssetSystem.TextureCompression = (int)c.GetFloat("gl_texturecompression");
         // (F9 wiring) gl_picmip rides the same push: clamp the menu's joke/offset values (1337 = Xonotic's
         // "Lowest"; negatives meant upscale offsets in Base) into an honest 0..4 halving count.
         Loaders.AssetSystem.Picmip = Math.Clamp((int)c.GetFloat("gl_picmip"), 0, 4);
+        // (C1) The DDS cache, DarkPlaces' own answer to encode cost. r_texture_dds_load prefers a
+        // pre-compressed dds/<name>.dds over the original (Xonotic SHIPS 3,207 of them); r_texture_dds_save
+        // banks anything we did have to encode so the next launch reads blocks instead. DP defaults both to
+        // 0 because its GL driver compressed for free during upload - Vulkan removed that path, so here the
+        // cache is the difference between a 15 s and a 118 s load and both default ON.
+        Formats.Vfs.VirtualFileSystem.PreferDds = CvarOn(c, "r_texture_dds_load");
+        Loaders.AssetSystem.DdsSave = CvarOn(c, "r_texture_dds_save");
         int mask = 0;
         foreach ((string cvar, TexCategory category, _) in TextureCompressionCategories)
             if (c.GetFloat(cvar) != 0f)
@@ -521,6 +536,11 @@ public static class ClientSettings
         // (F1-B) r_model_lightgrid = DP mod_q3bsp_lightgrid_texture (default 1 there too): 1 samples the
         // map grid PER PIXEL from a 3-D texture, 0 falls back to the per-entity CPU sample. The A/B lever
         // for the per-pixel path, and the escape hatch if a driver dislikes the 3-D texture.
+        // (C1) DP r_texture_dds_load / _save - the DDS cache. Default 1 here, unlike DP's 0: DP got its
+        // compression free from the GL driver, this port has to encode, and the cache is what makes that
+        // a one-time cost instead of ~100 s every launch.
+        c.Register("r_texture_dds_load", "1");
+        c.Register("r_texture_dds_save", "1");
         c.Register("r_model_lightgrid", "1");
         // ---- Real-time lights and shadows (N6 budget, F3-A dynamic shadows, F5 fake shadows) ----
         // DP names where DP has one, and DP/Xonotic defaults where Xonotic ships one. The two that decide

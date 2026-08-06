@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using VortexArena.Formats.Materials;
+using VortexArena.Formats.Images;
 using VortexArena.Formats.Vfs;
 
 namespace VortexArena.Game.Loaders;
@@ -1130,6 +1131,15 @@ public sealed class AssetSystem
     // asset streamer compresses on several threads at once; the sum is therefore CPU-time-across-threads, not
     // elapsed - which is the honest number to report for a parallel stage, and is labelled as such.
     private static long _compressMicros;
+    private static int _ddsSaved, _ddsSaveFailed;
+
+    /// <summary>
+    /// DarkPlaces <c>r_texture_dds_save</c>: after compressing a texture, write it to
+    /// <c>&lt;userdir&gt;/data/dds/&lt;name&gt;.dds</c> so the next launch loads the blocks instead of
+    /// re-encoding them. Set by ClientSettings; a plain static for the same worker-thread reason as
+    /// <see cref="TextureCompression"/>.
+    /// </summary>
+    public static bool DdsSave { get; set; } = true;
     private static int _s3tcAvailable = -1, _bptcAvailable = -1;
     private static bool _noEncoderWarned;
 
@@ -1212,8 +1222,61 @@ public sealed class AssetSystem
                 : "textures.compress: off (gl_texturecompression 0)";
         double ms = System.Threading.Interlocked.Read(ref _compressMicros) / 1000.0;
         string what = TextureCompression >= 2 ? "BC7/BPTC, high quality" : "S3TC/DXT, fast";
+        string cache = _ddsSaved > 0
+            ? $"; cached {_ddsSaved} to dds/ - next launch skips this"
+            : (DdsSave ? "" : "; dds cache OFF (r_texture_dds_save 0)");
+        if (_ddsSaveFailed > 0)
+            cache += $" ({_ddsSaveFailed} cache writes failed)";
         return $"textures.compress: {ms:0} ms of thread-time over {n} textures "
-             + $"(gl_texturecompression {TextureCompression} - {what})";
+             + $"(gl_texturecompression {TextureCompression} - {what}){cache}";
+    }
+
+    /// <summary>
+    /// Persist a just-compressed image as DDS beside the user gamedir's <c>dds/</c> tree, which the VFS mounts
+    /// and (with r_texture_dds_load) prefers on the next run.
+    ///
+    /// <para>Writes to the USER gamedir, never into mounted content: a cache must not mutate a shipped pk3dir,
+    /// and the user dir is already the highest-priority mount, so what we write is what gets found. Failures
+    /// are counted and swallowed — a read-only disk or a full one should cost the cache, not the load.</para>
+    /// </summary>
+    private static void SaveDdsCache(string vpath, Image image)
+    {
+        string? fourCc = null;
+        uint dxgi = 0;
+        int blockBytes;
+        switch (image.GetFormat())
+        {
+            case Image.Format.Dxt1: fourCc = DdsWriter.FourCcDxt1; blockBytes = 8; break;
+            case Image.Format.Dxt3: fourCc = DdsWriter.FourCcDxt3; blockBytes = 16; break;
+            case Image.Format.Dxt5: fourCc = DdsWriter.FourCcDxt5; blockBytes = 16; break;
+            case Image.Format.RgtcR: fourCc = DdsWriter.FourCcBc4; blockBytes = 8; break;
+            case Image.Format.RgtcRg: fourCc = DdsWriter.FourCcBc5; blockBytes = 16; break;
+            case Image.Format.BptcRgba: fourCc = DdsWriter.Dx10; dxgi = DdsWriter.DxgiBc7Unorm; blockBytes = 16; break;
+            default: return;   // not a block format we can express; nothing to cache
+        }
+
+        try
+        {
+            string stem = AssetPaths.StripImageExtension(AssetPaths.Normalize(vpath));
+            string rel = System.IO.Path.Combine("dds", stem.Replace('/', System.IO.Path.DirectorySeparatorChar)) + ".dds";
+            string full = System.IO.Path.Combine(UserPaths.GameDir, rel);
+            string? dir = System.IO.Path.GetDirectoryName(full);
+            if (dir is null)
+                return;
+            System.IO.Directory.CreateDirectory(dir);
+
+            byte[] dds = DdsWriter.Write(image.GetWidth(), image.GetHeight(),
+                Math.Max(1, image.GetMipmapCount() + 1), fourCc, dxgi, image.GetData(), blockBytes);
+            // Write-then-move so a crash mid-write cannot leave a truncated file the next run would trust.
+            string tmp = full + ".tmp";
+            System.IO.File.WriteAllBytes(tmp, dds);
+            System.IO.File.Move(tmp, full, overwrite: true);
+            System.Threading.Interlocked.Increment(ref _ddsSaved);
+        }
+        catch
+        {
+            System.Threading.Interlocked.Increment(ref _ddsSaveFailed);
+        }
     }
 
     private static void MaybeCompressCore(string vpath, Image image)
@@ -1298,6 +1361,9 @@ public sealed class AssetSystem
             else
             {
                 _compressOk++;
+                // r_texture_dds_save: bank the result so the next launch reads blocks instead of encoding.
+                if (DdsSave)
+                    SaveDdsCache(vpath, image);
             }
         }
         catch (Exception ex)

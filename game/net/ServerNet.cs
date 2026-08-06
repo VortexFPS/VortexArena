@@ -899,13 +899,17 @@ public sealed class ServerNet : IDisposable
         return true;
     }
 
-    public void EnableLanDiscovery(int gamePort)
+    /// <param name="host">The ENet host backing the game port, from
+    /// <c>ENetMultiplayerPeer.GetHost()</c> in <see cref="NetTransport"/>. When supplied AND the engine
+    /// carries the OOB patch this server needs ONE port instead of two. Null, or a stock engine, takes
+    /// the historical +1..+8 discovery socket.</param>
+    public void EnableLanDiscovery(int gamePort, Godot.ENetConnection host = null)
     {
         if (_master is not null)
             return; // already discoverable (EnableMasterServer bound a link)
 
         // One port if the engine can hand us its game socket; the +1..+8 probe below only if it cannot.
-        if (TryAttachOobToGameSocket(_enetHost, gamePort))
+        if (TryAttachOobToGameSocket(host, gamePort))
             return;
 
         for (int candidate = gamePort + 1; candidate <= gamePort + 8; candidate++)
